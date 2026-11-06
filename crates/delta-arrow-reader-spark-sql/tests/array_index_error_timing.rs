@@ -672,6 +672,970 @@ fn whole_expression_array_errors_keep_native_generic_and_conditional_policies() 
     Ok(())
 }
 
+#[test]
+fn string_argument_hof_preserves_reached_array_errors() -> TestResult {
+    use arrow::array::{BooleanArray, StringArray};
+    use arrow::datatypes::{DataType, Field, Schema};
+    use arrow::record_batch::RecordBatch;
+    use datafusion::common::{
+        DFSchema, DataFusionError, ScalarValue, config::ConfigOptions, tree_node::TreeNode,
+    };
+    use datafusion::functions::expr_fn::coalesce;
+    use datafusion::logical_expr::execution_props::ExecutionProps;
+    use datafusion::logical_expr::expr::{HigherOrderFunction, Lambda};
+    use datafusion::logical_expr::expr_fn::when;
+    use datafusion::logical_expr::simplify::{SimplifyContext, SparkArrayIndexError};
+    use datafusion::logical_expr::{
+        ColumnarValue, Expr, HigherOrderUDF, ScalarUDF, Volatility, cast, col, create_udf, lit,
+    };
+    use datafusion::optimizer::simplify_expressions::ExprSimplifier;
+    use datafusion::physical_expr::create_physical_expr;
+    use sail_function::scalar::misc::raise_error::RaiseError;
+    use sail_function::scalar::string::spark_substring::SparkSubstring;
+    use sail_plan::expression_errors::SparkSqlExpressionSemantics;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&calls);
+    let position = create_udf(
+        "argument_position",
+        vec![],
+        DataType::Int64,
+        Volatility::Volatile,
+        Arc::new(move |_| {
+            observed.fetch_add(1, Ordering::SeqCst);
+            Ok(ColumnarValue::Scalar(ScalarValue::Int64(Some(0))))
+        }),
+    );
+    let source_message = "[INVALID_ARRAY_INDEX] reached source";
+    let source = cast(
+        ScalarUDF::from(RaiseError::new_array_index_error()).call(vec![lit(source_message)]),
+        DataType::Utf8,
+    );
+    let lambda = |body| Expr::Lambda(Lambda::new(vec!["unused".into()], body));
+    let arguments = Expr::HigherOrderFunction(HigherOrderFunction::new(
+        Arc::new(HigherOrderUDF::new_from_impl(SparkSubstring::new())),
+        vec![
+            lambda(source.clone()),
+            lambda(position.call(vec![])),
+            lambda(lit(1_i64)),
+        ],
+    ));
+    let schema = Arc::new(DFSchema::try_from(Schema::new(vec![
+        Field::new("selected", DataType::Boolean, false),
+        Field::new("value", DataType::Utf8, true),
+    ]))?);
+    let batch = RecordBatch::try_new(
+        Arc::new(schema.as_arrow().clone()),
+        vec![
+            Arc::new(BooleanArray::from(vec![false])),
+            Arc::new(StringArray::from(vec!["kept"])),
+        ],
+    )?;
+    for spark in [false, true] {
+        let mut options = ConfigOptions::default();
+        if spark {
+            options
+                .extensions
+                .insert(SparkSqlExpressionSemantics::default());
+        }
+        let simplifier = ExprSimplifier::new(
+            SimplifyContext::builder()
+                .with_schema(Arc::clone(&schema))
+                .with_config_options(Arc::new(options))
+                .build(),
+        );
+        let error = match simplifier.simplify(arguments.clone()) {
+            Err(error) if spark => error,
+            Err(error) => return Err(format!("native simplification raised early: {error}").into()),
+            Ok(actual) => {
+                let physical = create_physical_expr(&actual, &schema, &ExecutionProps::new())?;
+                match physical.evaluate(&batch) {
+                    Err(error) => error,
+                    Ok(value) => {
+                        return Err(
+                            format!("spark={spark}: lost reached source error: {value:?}").into(),
+                        );
+                    }
+                }
+            }
+        };
+        assert!(SparkArrayIndexError::is(&error), "spark={spark}: {error}");
+        let DataFusionError::External(cause) = error.find_root() else {
+            return Err(format!("spark={spark}: missing typed source cause: {error}").into());
+        };
+        assert_eq!(cause.to_string(), source_message, "spark={spark}");
+        assert_eq!(calls.load(Ordering::SeqCst), 0, "spark={spark}");
+        for (conditional, expected) in [
+            (
+                when(col("selected"), arguments.clone()).otherwise(lit("fallback"))?,
+                "fallback",
+            ),
+            (coalesce(vec![col("value"), arguments.clone()]), "kept"),
+        ] {
+            let actual = simplifier.simplify(conditional)?;
+            assert_eq!(
+                actual.exists(|node| Ok(node == &source))?,
+                !spark,
+                "spark={spark}"
+            );
+            let physical = create_physical_expr(&actual, &schema, &ExecutionProps::new())?;
+            let values = physical.evaluate(&batch)?.into_array(batch.num_rows())?;
+            assert_eq!(
+                ScalarValue::try_from_array(values.as_ref(), 0)?,
+                ScalarValue::Utf8(Some(expected.into())),
+                "spark={spark}"
+            );
+        }
+        assert_eq!(calls.load(Ordering::SeqCst), 0, "spark={spark}");
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn string_array_preparation_preserves_public_failure_boundaries() -> TestResult {
+    use datafusion::logical_expr::simplify::SparkArrayIndexError;
+    use datafusion::physical_plan::collect;
+    use delta_arrow_reader_spark_sql::{SparkSqlOptions, plan_query};
+
+    let inputs = json!({"inputs":[{"name":"bounds_rows","schema":{"type":"struct","fields":[
+        {"name":"id","type":"long","nullable":false,"metadata":{}}
+    ]},"rows":[["0"],["1"]]}]});
+    // Fresh Spark #1022 captures supply outcomes; native declaration differences stay explicit.
+    let cases = [
+        (
+            "bad_rand",
+            "SELECT substring(CAST(ARRAY(7)[1] AS STRING),CAST(rand() AS INT),1) AS r FROM VALUES(1) AS t(k)",
+            Some("INVALID_ARRAY_INDEX"),
+            json!([[null]]),
+            true,
+            true,
+        ),
+        (
+            "unused",
+            "SELECT 'kept' AS r FROM (SELECT substring(CAST(ARRAY(7)[1] AS STRING),CAST(rand() AS INT),1) AS unused FROM VALUES(1) AS t(k)) AS unused_projection",
+            Some("INVALID_ARRAY_INDEX"),
+            json!([["kept"]]),
+            false,
+            false,
+        ),
+        (
+            "good_rand",
+            "SELECT substring(CAST(ARRAY(7)[0] AS STRING),CAST(rand() AS INT),1) AS r FROM VALUES(1) AS t(k)",
+            None,
+            json!([["7"]]),
+            true,
+            true,
+        ),
+        (
+            "null_source",
+            "SELECT substring(CAST(NULL AS STRING),CAST(rand() AS INT),ARRAY(7)[1]) AS r FROM VALUES(1) AS t(k)",
+            None,
+            json!([[null]]),
+            true,
+            true,
+        ),
+        (
+            "case",
+            "SELECT CASE WHEN id=0 THEN substring(CAST(ARRAY(7)[1] AS STRING),CAST(rand() AS INT),1) ELSE 'fallback' END AS r FROM bounds_rows ORDER BY id",
+            None,
+            json!([[null], ["fallback"]]),
+            true,
+            true,
+        ),
+        (
+            "coalesce",
+            "SELECT COALESCE(CASE WHEN id=0 THEN CAST(NULL AS STRING) ELSE 'kept' END,substring(CAST(ARRAY(7)[1] AS STRING),CAST(rand() AS INT),1)) AS r FROM bounds_rows ORDER BY id",
+            None,
+            json!([[null], ["kept"]]),
+            true,
+            true,
+        ),
+        (
+            "dead_case",
+            "SELECT CASE WHEN false THEN substring(CAST(ARRAY(7)[1] AS STRING),CAST(rand() AS INT),1) ELSE 'kept' END AS r FROM VALUES(1) AS t(k)",
+            // Spark physical nullable=true; retain the measured native false facet.
+            None,
+            json!([["kept"]]),
+            true,
+            false,
+        ),
+        (
+            "bad_source_before_null",
+            "SELECT substring(CAST(ARRAY(7)[1] AS STRING), CAST(rand() AS BIGINT)+1, CAST(NULL AS BIGINT)) AS r FROM VALUES(1) AS t(k)",
+            Some("INVALID_ARRAY_INDEX"),
+            json!([[null]]),
+            true,
+            true,
+        ),
+        (
+            "volatile_source_bad_position",
+            "SELECT substring(CAST(rand() AS STRING), CAST(ARRAY(7)[1] AS BIGINT), 1L) AS r FROM VALUES(1) AS t(k)",
+            // Spark analyzed nullable=false; retain the measured native true facet.
+            Some("INVALID_ARRAY_INDEX"),
+            json!([[null]]),
+            true,
+            true,
+        ),
+        (
+            "null_position",
+            "SELECT substring(CAST(rand() AS STRING), CAST(NULL AS BIGINT), CAST(ARRAY(7)[1] AS BIGINT)) AS r FROM VALUES(1) AS t(k)",
+            None,
+            json!([[null]]),
+            true,
+            true,
+        ),
+        (
+            "nested_reached_array",
+            "SELECT substring(substring(CAST(ARRAY(7)[1] AS STRING),CAST(rand() AS INT),1),1,1) AS r FROM VALUES(1) AS t(k)",
+            Some("INVALID_ARRAY_INDEX"),
+            json!([[null]]),
+            true,
+            true,
+        ),
+        (
+            "nested_unused_array",
+            "SELECT 'kept' AS r FROM (SELECT substring(substring(CAST(ARRAY(7)[1] AS STRING),CAST(rand() AS INT),1),1,1) AS unused FROM VALUES(1) AS t(k)) AS q",
+            Some("INVALID_ARRAY_INDEX"),
+            json!([["kept"]]),
+            false,
+            false,
+        ),
+        (
+            "outer_null_source_skips_nested_position",
+            "SELECT substring(CAST(NULL AS STRING),CAST(substring(CAST(ARRAY(7)[1] AS STRING),CAST(rand() AS INT),1) AS BIGINT),1) AS r FROM VALUES(1) AS t(k)",
+            None,
+            json!([[null]]),
+            true,
+            true,
+        ),
+        (
+            "dead_case_skips_nested_array",
+            "SELECT CASE WHEN false THEN substring(substring(CAST(ARRAY(7)[1] AS STRING),CAST(rand() AS INT),1),1,1) ELSE 'kept' END AS r FROM VALUES(1) AS t(k)",
+            // The same measured native dead-CASE nullable facet applies here.
+            None,
+            json!([["kept"]]),
+            true,
+            false,
+        ),
+        (
+            "nested_valid_array",
+            "SELECT substring(substring(CAST(ARRAY(7)[0] AS STRING),CAST(rand() AS INT),1),1,1) AS r FROM VALUES(1) AS t(k)",
+            None,
+            json!([["7"]]),
+            true,
+            true,
+        ),
+        (
+            "nested_null_source_skips_array",
+            "SELECT substring(substring(CAST(NULL AS STRING),CAST(ARRAY(7)[1] AS INT),CAST(rand() AS INT)+1),1,1) AS r FROM VALUES(1) AS t(k)",
+            None,
+            json!([[null]]),
+            true,
+            true,
+        ),
+        (
+            "nested_reached_array_position",
+            "SELECT substring(substring('abcd',CAST(ARRAY(7)[1] AS INT),CAST(rand() AS INT)+1),1,1) AS r FROM VALUES(1) AS t(k)",
+            Some("INVALID_ARRAY_INDEX"),
+            json!([[null]]),
+            true,
+            true,
+        ),
+        (
+            "nested_array_before_later_null",
+            "SELECT substring(substring(CAST(ARRAY(7)[1] AS STRING),CAST(rand() AS INT),1),1,CAST(NULL AS INT)) AS r FROM VALUES(1) AS t(k)",
+            Some("INVALID_ARRAY_INDEX"),
+            json!([[null]]),
+            true,
+            true,
+        ),
+        (
+            "conditional_skips_nested_array",
+            "SELECT CASE WHEN id=0 THEN substring(substring(CAST(ARRAY(7)[1] AS STRING),CAST(rand() AS INT),1),1,1) ELSE 'fallback' END AS r FROM bounds_rows ORDER BY id",
+            None,
+            json!([[null], ["fallback"]]),
+            true,
+            true,
+        ),
+        (
+            "composed_null_source_before_nested_array",
+            "SELECT substring(substring(CAST(NULL AS STRING),CAST(rand() AS INT),1),CAST(substring(CAST(ARRAY(7)[1] AS STRING),CAST(rand() AS INT),1) AS BIGINT),1) AS r FROM VALUES(1) AS t(k)",
+            None,
+            json!([[null]]),
+            true,
+            true,
+        ),
+        (
+            "composed_null_position_before_array_length",
+            "SELECT substring(CAST(rand() AS STRING),CAST(substring(CAST(NULL AS STRING),CAST(rand() AS INT),1) AS BIGINT),CAST(ARRAY(7)[1] AS INT)) AS r FROM VALUES(1) AS t(k)",
+            None,
+            json!([[null]]),
+            true,
+            true,
+        ),
+        (
+            "composed_null_arithmetic_position_before_array_length",
+            "SELECT substring(CAST(rand() AS STRING),CAST(substring(CAST(NULL AS STRING),CAST(rand() AS INT),1) AS BIGINT)+1L,CAST(ARRAY(7)[1] AS INT)) AS r FROM VALUES(1) AS t(k)",
+            None,
+            json!([[null]]),
+            true,
+            true,
+        ),
+        (
+            "composed_null_right_arithmetic_position_before_array_length",
+            "SELECT substring(CAST(rand() AS STRING),1L+CAST(substring(CAST(NULL AS STRING),CAST(rand() AS INT),1) AS BIGINT),CAST(ARRAY(7)[1] AS INT)) AS r FROM VALUES(1) AS t(k)",
+            None,
+            json!([[null]]),
+            true,
+            true,
+        ),
+        (
+            "composed_null_coalesce_position_before_array_length",
+            "SELECT substring(CAST(rand() AS STRING),COALESCE(CAST(substring(CAST(NULL AS STRING),CAST(rand() AS INT),1) AS BIGINT),CAST(NULL AS BIGINT)),CAST(ARRAY(7)[1] AS INT)) AS r FROM VALUES(1) AS t(k)",
+            None,
+            json!([[null]]),
+            true,
+            true,
+        ),
+        (
+            "composed_null_case_position_before_array_length",
+            "SELECT substring(CAST(rand() AS STRING),CAST(CASE WHEN rand()<0.5 THEN substring(CAST(NULL AS STRING),CAST(rand() AS INT),1) ELSE CAST(NULL AS STRING) END AS BIGINT),CAST(ARRAY(7)[1] AS INT)) AS r FROM VALUES(1) AS t(k)",
+            None,
+            json!([[null]]),
+            true,
+            true,
+        ),
+        (
+            "composed_null_not_position_before_array_length",
+            "SELECT substring(CAST(rand() AS STRING),CAST(NOT CAST(substring(CAST(NULL AS STRING),CAST(rand() AS INT),1) AS BOOLEAN) AS INT),CAST(ARRAY(7)[1] AS INT)) AS r FROM VALUES(1) AS t(k)",
+            None,
+            json!([[null]]),
+            true,
+            true,
+        ),
+        (
+            "composed_null_like_subject_position_before_array_length",
+            "SELECT substring(CAST(rand() AS STRING),CAST((substring(CAST(NULL AS STRING),CAST(rand() AS INT),1) LIKE 'x') AS INT),CAST(ARRAY(7)[1] AS INT)) AS r FROM VALUES(1) AS t(k)",
+            None,
+            json!([[null]]),
+            true,
+            true,
+        ),
+        (
+            "composed_null_like_pattern_position_before_array_length",
+            "SELECT substring(CAST(rand() AS STRING),CAST(('x' LIKE substring(CAST(NULL AS STRING),CAST(rand() AS INT),1)) AS INT),CAST(ARRAY(7)[1] AS INT)) AS r FROM VALUES(1) AS t(k)",
+            None,
+            json!([[null]]),
+            true,
+            true,
+        ),
+        (
+            "composed_null_negative_position_before_array_length",
+            "SELECT substring(CAST(rand() AS STRING),-CAST(substring(CAST(NULL AS STRING),CAST(rand() AS INT),1) AS BIGINT),CAST(ARRAY(7)[1] AS INT)) AS r FROM VALUES(1) AS t(k)",
+            None,
+            json!([[null]]),
+            true,
+            true,
+        ),
+        (
+            "composed_null_float_position_before_array_length",
+            "SELECT substring(CAST(rand() AS STRING),CAST(CAST(substring(CAST(NULL AS STRING),CAST(rand() AS INT),1) AS DOUBLE) AS BIGINT),CAST(ARRAY(7)[1] AS INT)) AS r FROM VALUES(1) AS t(k)",
+            None,
+            json!([[null]]),
+            true,
+            true,
+        ),
+        (
+            "composed_null_boolean_position_before_array_length",
+            "SELECT substring(CAST(rand() AS STRING),CAST(CAST(substring(CAST(NULL AS STRING),CAST(rand() AS INT),1) AS BOOLEAN) AS BIGINT),CAST(ARRAY(7)[1] AS INT)) AS r FROM VALUES(1) AS t(k)",
+            None,
+            json!([[null]]),
+            true,
+            true,
+        ),
+        (
+            "composed_null_decimal_position_before_array_length",
+            "SELECT substring(CAST(rand() AS STRING),CAST(CAST(substring(CAST(NULL AS STRING),CAST(rand() AS INT),1) AS DECIMAL(10,2)) AS BIGINT),CAST(ARRAY(7)[1] AS INT)) AS r FROM VALUES(1) AS t(k)",
+            None,
+            json!([[null]]),
+            true,
+            true,
+        ),
+        (
+            "composed_null_source_before_array_length",
+            "SELECT substring(substring(CAST(NULL AS STRING),CAST(rand() AS INT),1),1,CAST(ARRAY(7)[1] AS INT)) AS r FROM VALUES(1) AS t(k)",
+            None,
+            json!([[null]]),
+            true,
+            true,
+        ),
+        (
+            "case_null_source_before_array_position",
+            "SELECT substring(CASE WHEN true THEN substring(CAST(NULL AS STRING),CAST(rand() AS INT),1) ELSE 'kept' END,CAST(ARRAY(7)[1] AS INT),1) AS r FROM VALUES(1) AS t(k)",
+            None,
+            json!([[null]]),
+            true,
+            true,
+        ),
+        (
+            "derived_cast_before_array_source",
+            "SELECT substring(CAST(ARRAY(7)[1] AS STRING),CAST(rand() AS INT),1) AS r FROM (SELECT CAST('bad' AS INT) AS k FROM VALUES(1) AS v(x)) AS q",
+            Some("CAST_INVALID_INPUT"),
+            json!([[null]]),
+            true,
+            true,
+        ),
+        (
+            "derived_divide_before_array_source",
+            "SELECT substring(CAST(ARRAY(7)[1] AS STRING),CAST(rand() AS INT),1) AS r FROM (SELECT 1 DIV 0 AS k FROM VALUES(1) AS v(x)) AS q",
+            Some("DIVIDE_BY_ZERO"),
+            json!([[null]]),
+            true,
+            true,
+        ),
+        (
+            "derived_cast_before_unused_array",
+            "SELECT 'kept' AS r FROM (SELECT substring(CAST(ARRAY(7)[1] AS STRING),CAST(rand() AS INT),1) AS unused FROM (SELECT CAST('bad' AS INT) AS k FROM VALUES(1) AS v(x)) AS q) AS z",
+            Some("CAST_INVALID_INPUT"),
+            json!([["kept"]]),
+            false,
+            false,
+        ),
+        (
+            "empty_derived_input_array_source",
+            "SELECT substring(CAST(ARRAY(7)[1] AS STRING),CAST(rand() AS INT),1) AS r FROM (SELECT 1 AS k FROM VALUES(1) AS v(x) WHERE false) AS q",
+            None,
+            json!([]),
+            true,
+            true,
+        ),
+        (
+            "composed_array_source_before_null_length",
+            "SELECT substring(substring(CAST(ARRAY(7)[1] AS STRING),CAST(rand() AS INT),1),1,CAST(NULL AS INT)) AS r FROM VALUES(1) AS t(k)",
+            Some("INVALID_ARRAY_INDEX"),
+            json!([[null]]),
+            true,
+            true,
+        ),
+        (
+            "filter_cast_error_before_array",
+            "SELECT substring(CAST(ARRAY(7)[1] AS STRING),CAST(rand() AS INT),1) AS r FROM (SELECT 1 AS k FROM VALUES(1) AS v(x) WHERE CAST('bad' AS INT)=1) AS q",
+            Some("CAST_INVALID_INPUT"),
+            json!([]),
+            true,
+            true,
+        ),
+        (
+            "computed_empty_filter_before_array",
+            "SELECT substring(CAST(ARRAY(7)[1] AS STRING),CAST(rand() AS INT),1) AS r FROM (SELECT 1 AS k FROM VALUES(1) AS v(x) WHERE CAST('false' AS BOOLEAN)) AS q",
+            None,
+            json!([]),
+            true,
+            true,
+        ),
+        (
+            "constant_false_comparison_before_array",
+            "SELECT substring(CAST(ARRAY(7)[1] AS STRING),CAST(rand() AS INT),1) AS r FROM (SELECT 1 AS k FROM VALUES(1) AS v(x) WHERE 1=0) AS q",
+            None,
+            json!([]),
+            true,
+            true,
+        ),
+    ];
+    let bounds_cause = "[INVALID_ARRAY_INDEX] The index 1 is out of bounds. The array has 1 elements. Use the SQL function `get()` to tolerate accessing element at invalid index and return NULL instead.";
+    for batch_size in [1, 32] {
+        let session = session(batch_size);
+        spark_inputs::register_recorded_inputs_with_partition_count(
+            &session, &inputs, batch_size, 1,
+        )?;
+        for ansi in [true, false] {
+            for (id, sql, ansi_error, expected_rows, analyzed_nullable, physical_nullable) in &cases
+            {
+                let query = plan_query(
+                    &session,
+                    sql,
+                    &SparkSqlOptions {
+                        ansi_mode: ansi,
+                        session_timezone: "UTC".into(),
+                        ..Default::default()
+                    },
+                )
+                .await?;
+                let expected_schema = json!({"type":"struct","fields":[{
+                    "name":"r","type":"string","nullable":analyzed_nullable,"metadata":{}
+                }]});
+                assert_eq!(
+                    spark_results::capture_schema(
+                        query.logical_plan.schema().fields(),
+                        Some(&query.column_names)
+                    )?,
+                    expected_schema,
+                    "{id} ansi={ansi} batch={batch_size} analyzed"
+                );
+                let physical = query.create_physical_plan(&session).await;
+                if let Some(condition) = (*ansi_error).filter(|_| ansi) {
+                    let Err(error) = physical else {
+                        return Err(format!(
+                            "{id}: required {condition} was deferred past physical planning"
+                        )
+                        .into());
+                    };
+                    match condition {
+                        "INVALID_ARRAY_INDEX" => {
+                            assert!(
+                                SparkArrayIndexError::is(&error),
+                                "{id} ansi={ansi}: {error}"
+                            );
+                            let datafusion::common::DataFusionError::External(cause) =
+                                error.find_root()
+                            else {
+                                return Err(
+                                    format!("{id}: missing typed bounds cause: {error}").into()
+                                );
+                            };
+                            assert_eq!(
+                                cause.to_string(),
+                                bounds_cause,
+                                "{id} ansi={ansi} batch={batch_size}"
+                            );
+                        }
+                        "CAST_INVALID_INPUT" => {
+                            assert!(
+                                !SparkArrayIndexError::is(&error),
+                                "{id}: later ARRAY error won: {error}"
+                            );
+                            assert!(
+                                error.to_string().contains("[CAST_INVALID_INPUT]"),
+                                "{id}: {error}"
+                            );
+                            assert!(
+                                error
+                                    .to_string()
+                                    .contains("Cannot cast string 'bad' to value of Int32 type"),
+                                "{id}: {error}"
+                            );
+                        }
+                        "DIVIDE_BY_ZERO" => {
+                            // Retain the existing native Arrow cause; Spark's identifier is separate #865 debt.
+                            assert!(
+                                matches!(error.find_root(), datafusion::common::DataFusionError::ArrowError(cause, _)
+                                if matches!(cause.as_ref(), arrow::error::ArrowError::DivideByZero)),
+                                "{id}: {error}"
+                            );
+                        }
+                        other => return Err(format!("unknown expected condition: {other}").into()),
+                    }
+                    continue;
+                }
+                let physical = physical?;
+                let expected_schema = json!({"type":"struct","fields":[{
+                    "name":"r","type":"string","nullable":physical_nullable,"metadata":{}
+                }]});
+                assert_eq!(
+                    spark_results::capture_schema(physical.schema().fields(), None)?,
+                    expected_schema,
+                    "{id} ansi={ansi} batch={batch_size} physical"
+                );
+                let mut rows = Vec::new();
+                for batch in collect(physical, session.task_ctx()).await? {
+                    for row in 0..batch.num_rows() {
+                        rows.push(vec![spark_results::encode_value(
+                            batch.column(0).as_ref(),
+                            row,
+                        )?]);
+                    }
+                }
+                assert_eq!(
+                    json!(rows),
+                    *expected_rows,
+                    "{id} ansi={ansi} batch={batch_size}"
+                );
+            }
+            // This CASE prefix already reports CAST during execution before #1022.
+            // Preserve its error priority without requiring that existing phase difference.
+            let query = plan_query(
+                &session,
+                "SELECT substring(CAST(rand() AS STRING),CASE WHEN CAST('bad' AS INT)>0 THEN CAST(substring(CAST(NULL AS STRING),CAST(rand() AS INT),1) AS BIGINT) ELSE CAST(NULL AS BIGINT) END,CAST(ARRAY(7)[1] AS INT)) AS r FROM VALUES(1) AS t(k)",
+                &SparkSqlOptions {
+                    ansi_mode: ansi,
+                    session_timezone: "UTC".into(),
+                    ..Default::default()
+                },
+            ).await?;
+            let expected_schema = json!({"type":"struct","fields":[{
+                "name":"r","type":"string","nullable":true,"metadata":{}
+            }]});
+            assert_eq!(
+                spark_results::capture_schema(
+                    query.logical_plan.schema().fields(),
+                    Some(&query.column_names)
+                )?,
+                expected_schema,
+                "CASE prefix ansi={ansi} batch={batch_size} analyzed"
+            );
+            let result = match query.create_physical_plan(&session).await {
+                Ok(physical) => {
+                    assert_eq!(
+                        spark_results::capture_schema(physical.schema().fields(), None)?,
+                        expected_schema,
+                        "CASE prefix ansi={ansi} batch={batch_size} physical"
+                    );
+                    collect(physical, session.task_ctx()).await
+                }
+                Err(error) => Err(error),
+            };
+            if ansi {
+                let error = result
+                    .err()
+                    .ok_or("required CASE prefix CAST failure was lost")?;
+                assert!(
+                    !SparkArrayIndexError::is(&error),
+                    "later ARRAY error won: {error}"
+                );
+                let message = error.to_string();
+                assert!(message.contains("[CAST_INVALID_INPUT]"), "{error}");
+                assert!(
+                    message.contains("Cannot cast string 'bad' to value of Int32 type"),
+                    "{error}"
+                );
+                assert!(!message.contains("[INVALID_ARRAY_INDEX]"), "{error}");
+            } else {
+                let batches = result?;
+                assert_eq!(
+                    batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
+                    1
+                );
+                for batch in batches {
+                    for row in 0..batch.num_rows() {
+                        assert_eq!(
+                            spark_results::encode_value(batch.column(0).as_ref(), row)?,
+                            Value::Null
+                        );
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn array_preparation_reuses_folded_string_arguments() -> TestResult {
+    use arrow::datatypes::DataType;
+    use datafusion::logical_expr::simplify::SparkArrayIndexError;
+    use datafusion::logical_expr::{Volatility, create_udf};
+    use datafusion::physical_plan::collect;
+    use delta_arrow_reader_spark_sql::{SparkSqlOptions, plan_query};
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    let session = session(1);
+    let source_calls = Arc::new(AtomicUsize::new(0));
+    let position_calls = Arc::new(AtomicUsize::new(0));
+    for (name, data_type, calls, volatility) in [
+        (
+            "folded_source",
+            DataType::Utf8,
+            &source_calls,
+            Volatility::Immutable,
+        ),
+        (
+            "folded_position",
+            DataType::Int64,
+            &position_calls,
+            Volatility::Immutable,
+        ),
+        (
+            "volatile_source",
+            DataType::Utf8,
+            &source_calls,
+            Volatility::Volatile,
+        ),
+        (
+            "volatile_position",
+            DataType::Int64,
+            &position_calls,
+            Volatility::Volatile,
+        ),
+    ] {
+        let calls = Arc::clone(calls);
+        session.register_udf(create_udf(
+            name,
+            vec![data_type.clone()],
+            data_type,
+            volatility,
+            Arc::new(move |args| {
+                calls.fetch_add(1, Ordering::SeqCst);
+                Ok(args[0].clone())
+            }),
+        ));
+    }
+    for (sql, expected, prepared_counts, collected_counts) in [
+        (
+            "SELECT substring(folded_source('abcd'),folded_position(CAST(ARRAY(1)[0] AS BIGINT)),CAST(rand() AS BIGINT)+1) AS r FROM VALUES(1) AS t(k)",
+            json!("a"),
+            [1, 1],
+            [1, 1],
+        ),
+        (
+            "SELECT substring(substring(folded_source('abcd'),folded_position(CAST(ARRAY(1)[0] AS BIGINT)),CAST(rand() AS BIGINT)+1),1,1) AS r FROM VALUES(1) AS t(k)",
+            json!("a"),
+            [1, 1],
+            [1, 1],
+        ),
+        (
+            "SELECT substring(CASE WHEN true THEN CAST(NULL AS STRING) ELSE folded_source('abcd') END,folded_position(CAST(ARRAY(7)[1] AS BIGINT)),CAST(rand() AS BIGINT)+1) AS r FROM VALUES(1) AS t(k)",
+            Value::Null,
+            [0, 0],
+            [0, 0],
+        ),
+        (
+            "SELECT CASE WHEN false THEN substring(volatile_source('abcd'),volatile_position(CAST(ARRAY(7)[1] AS BIGINT)),CAST(rand() AS BIGINT)+1) ELSE 'kept' END AS r FROM VALUES(1) AS t(k)",
+            json!("kept"),
+            [0, 0],
+            [0, 0],
+        ),
+        (
+            "SELECT substring(volatile_source('abcd'),CAST(substring(CAST(NULL AS STRING),CAST(rand() AS INT),1) AS BIGINT),folded_position(CAST(ARRAY(7)[1] AS BIGINT))) AS r FROM VALUES(1) AS t(k)",
+            Value::Null,
+            [0, 0],
+            [1, 0],
+        ),
+    ] {
+        source_calls.store(0, Ordering::SeqCst);
+        position_calls.store(0, Ordering::SeqCst);
+        let query = plan_query(&session, sql, &SparkSqlOptions::default()).await?;
+        assert_eq!(
+            [
+                source_calls.load(Ordering::SeqCst),
+                position_calls.load(Ordering::SeqCst)
+            ],
+            [0, 0],
+            "resolve: {sql}"
+        );
+        let physical = query.create_physical_plan(&session).await?;
+        assert_eq!(
+            [
+                source_calls.load(Ordering::SeqCst),
+                position_calls.load(Ordering::SeqCst)
+            ],
+            prepared_counts,
+            "prepare: {sql}"
+        );
+        let batches = collect(physical, session.task_ctx()).await?;
+        assert_eq!(
+            batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
+            1
+        );
+        assert_eq!(
+            spark_results::encode_value(batches[0].column(0).as_ref(), 0)?,
+            expected,
+            "{sql}"
+        );
+        assert_eq!(
+            [
+                source_calls.load(Ordering::SeqCst),
+                position_calls.load(Ordering::SeqCst)
+            ],
+            collected_counts,
+            "collect replayed a prepared producer: {sql}"
+        );
+    }
+    for (sql, column, expected_value, physical_nullable) in [
+        (
+            "SELECT note,substring(CAST(ARRAY(7)[0] AS STRING),CAST(rand() AS INT),1) AS r FROM (SELECT note,k FROM VALUES(1,CAST(NULL AS STRING)) AS v(k,note) WHERE folded_source('true')='true') AS q",
+            "note",
+            Value::Null,
+            true,
+        ),
+        (
+            "SELECT s,substring(CAST(ARRAY(7)[0] AS STRING),CAST(rand() AS INT),1) AS r FROM (SELECT folded_source('kept') AS s FROM VALUES(1) AS v(x)) AS q",
+            "s",
+            json!("kept"),
+            false,
+        ),
+    ] {
+        source_calls.store(0, Ordering::SeqCst);
+        position_calls.store(0, Ordering::SeqCst);
+        let query = plan_query(&session, sql, &SparkSqlOptions::default()).await?;
+        let expected_schema = json!({"type":"struct","fields":[
+            {"name":column,"type":"string","nullable":true,"metadata":{}},
+            {"name":"r","type":"string","nullable":true,"metadata":{}}
+        ]});
+        assert_eq!(
+            spark_results::capture_schema(
+                query.logical_plan.schema().fields(),
+                Some(&query.column_names)
+            )?,
+            expected_schema
+        );
+        assert_eq!(source_calls.load(Ordering::SeqCst), 0);
+        let physical = query.create_physical_plan(&session).await?;
+        eprintln!(
+            "STRING_ARRAY_INPUT_CALLBACK_COUNT column={column} after_prepare={}",
+            source_calls.load(Ordering::SeqCst)
+        );
+        assert_eq!(source_calls.load(Ordering::SeqCst), 1);
+        let mut physical_schema = expected_schema;
+        physical_schema["fields"][0]["nullable"] = json!(physical_nullable);
+        assert_eq!(
+            spark_results::capture_schema(physical.schema().fields(), None)?,
+            physical_schema
+        );
+        let batches = collect(physical, session.task_ctx()).await?;
+        let mut rows = Vec::new();
+        for batch in batches {
+            for row in 0..batch.num_rows() {
+                rows.push(
+                    batch
+                        .columns()
+                        .iter()
+                        .map(|column| spark_results::encode_value(column.as_ref(), row))
+                        .collect::<TestResult<Vec<_>>>()?,
+                );
+            }
+        }
+        eprintln!(
+            "STRING_ARRAY_INPUT_CALLBACK_COUNT column={column} after_collect={}",
+            source_calls.load(Ordering::SeqCst)
+        );
+        assert_eq!(json!(rows), json!([[expected_value, "7"]]));
+        assert_eq!(
+            [
+                source_calls.load(Ordering::SeqCst),
+                position_calls.load(Ordering::SeqCst)
+            ],
+            [1, 0]
+        );
+    }
+    for sql in [
+        "SELECT s,substring(CAST(ARRAY(7)[0] AS STRING),CAST(rand() AS INT),1) AS r FROM (SELECT folded_source('kept') AS s FROM VALUES(1) AS v(x) WHERE false) AS q",
+        "SELECT s,substring(CAST(ARRAY(7)[0] AS STRING),CAST(rand() AS INT),1) AS r FROM (SELECT folded_source('kept') AS s FROM VALUES(1) AS v(x) WHERE 1=0) AS q",
+        "SELECT s,substring(CAST(ARRAY(7)[0] AS STRING),CAST(rand() AS INT),1) AS r FROM (SELECT folded_source('kept') AS s FROM VALUES(1) AS v(x) LIMIT 0) AS q",
+    ] {
+        source_calls.store(0, Ordering::SeqCst);
+        position_calls.store(0, Ordering::SeqCst);
+        let query = plan_query(&session, sql, &SparkSqlOptions::default()).await?;
+        let physical = query.create_physical_plan(&session).await?;
+        eprintln!(
+            "STRING_ARRAY_EMPTY_INPUT_CALLBACK_COUNT after_prepare={} sql={sql}",
+            source_calls.load(Ordering::SeqCst)
+        );
+        assert_eq!(source_calls.load(Ordering::SeqCst), 0, "{sql}");
+        let batches = collect(physical, session.task_ctx()).await?;
+        assert_eq!(
+            batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
+            0,
+            "{sql}"
+        );
+        assert_eq!(
+            [
+                source_calls.load(Ordering::SeqCst),
+                position_calls.load(Ordering::SeqCst)
+            ],
+            [0, 0],
+            "{sql}"
+        );
+    }
+    source_calls.store(0, Ordering::SeqCst);
+    position_calls.store(0, Ordering::SeqCst);
+    let query = plan_query(&session,
+        "SELECT substring(CAST(CAST(folded_source('bad') AS INT) AS STRING),folded_position(CAST(ARRAY(7)[1] AS BIGINT)),CAST(rand() AS BIGINT)+1) AS r FROM VALUES(1) AS t(k)",
+        &SparkSqlOptions::default()).await?;
+    assert_eq!(
+        [
+            source_calls.load(Ordering::SeqCst),
+            position_calls.load(Ordering::SeqCst)
+        ],
+        [0, 0]
+    );
+    let Err(error) = query.create_physical_plan(&session).await else {
+        return Err("required prefix CAST error was lost".into());
+    };
+    assert!(
+        !SparkArrayIndexError::is(&error),
+        "later ARRAY error won: {error}"
+    );
+    assert!(
+        error.to_string().contains("[CAST_INVALID_INPUT]"),
+        "{error}"
+    );
+    assert!(
+        error
+            .to_string()
+            .contains("Cannot cast string 'bad' to value of Int32 type"),
+        "{error}"
+    );
+    assert_eq!(
+        [
+            source_calls.load(Ordering::SeqCst),
+            position_calls.load(Ordering::SeqCst)
+        ],
+        [1, 0]
+    );
+    source_calls.store(0, Ordering::SeqCst);
+    position_calls.store(0, Ordering::SeqCst);
+    let query = plan_query(&session,
+        "SELECT substring(CAST(CAST(volatile_source('bad') AS INT) AS STRING),CAST(substring(CAST(NULL AS STRING),CAST(rand() AS INT),1) AS BIGINT),folded_position(CAST(ARRAY(7)[1] AS BIGINT))) AS r FROM VALUES(1) AS t(k)",
+        &SparkSqlOptions::default()).await?;
+    let physical = query.create_physical_plan(&session).await?;
+    assert_eq!(
+        [
+            source_calls.load(Ordering::SeqCst),
+            position_calls.load(Ordering::SeqCst)
+        ],
+        [0, 0]
+    );
+    let Err(error) = collect(physical, session.task_ctx()).await else {
+        return Err("NULL result erased earlier volatile CAST work".into());
+    };
+    assert!(
+        !SparkArrayIndexError::is(&error),
+        "later ARRAY error won: {error}"
+    );
+    assert!(
+        error.to_string().contains("[CAST_INVALID_INPUT]"),
+        "{error}"
+    );
+    assert!(
+        error
+            .to_string()
+            .contains("Cannot cast string 'bad' to value of Int32 type"),
+        "{error}"
+    );
+    assert_eq!(
+        [
+            source_calls.load(Ordering::SeqCst),
+            position_calls.load(Ordering::SeqCst)
+        ],
+        [1, 0]
+    );
+    let query = plan_query(&session,
+        "SELECT ts=current_timestamp() AND ts<>TIMESTAMP '1970-01-01 00:00:00' AS same,substring(CAST(ARRAY(7)[0] AS STRING),CAST(rand() AS INT),1) AS r FROM (SELECT current_timestamp() AS ts FROM VALUES(1) AS v(x)) AS q",
+        &SparkSqlOptions::default()).await?;
+    let physical = query.create_physical_plan(&session).await?;
+    let batches = collect(physical, session.task_ctx()).await?;
+    assert_eq!(
+        batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
+        1
+    );
+    assert_eq!(
+        spark_results::encode_value(batches[0].column(0).as_ref(), 0)?,
+        json!("true")
+    );
+    assert_eq!(
+        spark_results::encode_value(batches[0].column(1).as_ref(), 0)?,
+        json!("7")
+    );
+    Ok(())
+}
+
 #[tokio::test]
 async fn array_preparation_preserves_callback_boundaries_and_live_errors() -> TestResult {
     use arrow::datatypes::DataType;
@@ -802,6 +1766,94 @@ async fn array_preparation_preserves_callback_boundaries_and_live_errors() -> Te
                     "{sql}, {volatility:?}, fold={fold}"
                 );
             }
+        }
+        for ansi_mode in [true, false] {
+            CALLS.store(0, Ordering::SeqCst);
+            let query = plan_query(&session,
+                "SELECT substring(CAST(NULL AS STRING),CAST(substring(CAST(ARRAY(7)[1] AS STRING),CAST(rand() AS INT),1) AS BIGINT),bounds_producer(1)) AS r FROM VALUES(1) AS t(k)",
+                &SparkSqlOptions { ansi_mode, ..Default::default() }).await?;
+            assert_eq!(
+                CALLS.load(Ordering::SeqCst),
+                0,
+                "NULL source resolve: {volatility:?}, fold={fold}"
+            );
+            let physical = query.create_physical_plan(&session).await?;
+            assert_eq!(
+                CALLS.load(Ordering::SeqCst),
+                0,
+                "NULL source prepare: {volatility:?}, fold={fold}"
+            );
+            let batches = collect(physical, session.task_ctx()).await?;
+            assert_eq!(
+                batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
+                1
+            );
+            assert_eq!(
+                spark_results::encode_value(batches[0].column(0).as_ref(), 0)?,
+                Value::Null
+            );
+            assert_eq!(
+                CALLS.load(Ordering::SeqCst),
+                0,
+                "NULL source collect: {volatility:?}, fold={fold}"
+            );
+            CALLS.store(0, Ordering::SeqCst);
+            let query = plan_query(&session,
+                "SELECT substring(CAST(bounds_producer(7) AS STRING),CAST(ARRAY(1)[0] AS BIGINT),CAST(rand() AS BIGINT)+1) AS r FROM VALUES(1) AS t(k)",
+                &SparkSqlOptions { ansi_mode, ..Default::default() }).await?;
+            assert_eq!(
+                CALLS.load(Ordering::SeqCst),
+                0,
+                "resolve: {volatility:?}, fold={fold}"
+            );
+            let physical = query.create_physical_plan(&session).await?;
+            assert_eq!(
+                CALLS.load(Ordering::SeqCst),
+                0,
+                "prepare: {volatility:?}, fold={fold}"
+            );
+            let batches = collect(physical, session.task_ctx()).await?;
+            assert_eq!(
+                batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
+                1
+            );
+            assert_eq!(
+                spark_results::encode_value(batches[0].column(0).as_ref(), 0)?,
+                json!("7")
+            );
+            assert_eq!(
+                CALLS.load(Ordering::SeqCst),
+                1,
+                "collect: {volatility:?}, fold={fold}"
+            );
+            CALLS.store(0, Ordering::SeqCst);
+            let query = plan_query(&session,
+                "SELECT note,substring(CAST(ARRAY(7)[0] AS STRING),CAST(rand() AS INT),1) AS r FROM (SELECT note,k FROM VALUES(1,CAST(NULL AS STRING)) AS v(k,note) WHERE bounds_producer(1)=1) AS q",
+                &SparkSqlOptions { ansi_mode, ..Default::default() }).await?;
+            let physical = query.create_physical_plan(&session).await?;
+            assert_eq!(
+                CALLS.load(Ordering::SeqCst),
+                0,
+                "input prepare: {volatility:?}, fold={fold}"
+            );
+            let batches = collect(physical, session.task_ctx()).await?;
+            assert_eq!(
+                batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
+                1
+            );
+            assert_eq!(
+                spark_results::encode_value(batches[0].column(0).as_ref(), 0)?,
+                Value::Null
+            );
+            assert_eq!(
+                spark_results::encode_value(batches[0].column(1).as_ref(), 0)?,
+                json!("7")
+            );
+            assert_eq!(
+                CALLS.load(Ordering::SeqCst),
+                1,
+                "input collect: {volatility:?}, fold={fold}"
+            );
         }
         for sql in [
             "SELECT CASE WHEN true THEN ARRAY(7)[1] ELSE bounds_producer(7) END AS r",

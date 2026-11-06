@@ -266,7 +266,7 @@ pub(crate) async fn capture_observation_with_state(
     }
     let physical = match state {
         Some(mut state) => {
-            sail_plan::like_errors::set_spark_like_query_clock(&mut state);
+            sail_plan::like_errors::set_spark_query_start_time(&mut state);
             DataFrame::new(state, query.logical_plan.clone())
                 .create_physical_plan()
                 .await

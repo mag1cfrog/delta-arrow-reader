@@ -34,7 +34,7 @@ fn matches_error(case: &Value, error: &str) -> bool {
             ) {
                 (Some(count), Some(index)) => error.lines().any(|line| {
                     line.ends_with(&format!(
-                        "Expects group index between 0 and {count}, but got {index}"
+                        "Spark `regexp_extract` function: [INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX] Expects group index between 0 and {count}, but got {index}"
                     ))
                 }),
                 _ => false,
@@ -45,7 +45,7 @@ fn matches_error(case: &Value, error: &str) -> bool {
 }
 
 #[test]
-fn regexp_extract_error_matcher_requires_complete_group_numbers() -> TestResult {
+fn regexp_extract_error_matcher_requires_condition_and_complete_group_numbers() -> TestResult {
     let records = include_str!("fixtures/regexp-extract-spark.jsonl")
         .lines()
         .map(serde_json::from_str::<Value>)
@@ -60,12 +60,24 @@ fn regexp_extract_error_matcher_requires_complete_group_numbers() -> TestResult 
             .ok_or("missing group error reference")?;
         let diagnostic = |range, supplied| {
             format!(
-                "execute: Execution error: Spark `regexp_extract` function: Expects group index between 0 and {range}, but got {supplied}"
+                "execute: Execution error: Spark `regexp_extract` function: [INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX] Expects group index between 0 and {range}, but got {supplied}"
             )
         };
-        assert!(matches_error(case, &diagnostic("1", index)));
+        let correct = diagnostic("1", index);
+        assert!(matches_error(case, &correct));
         assert!(!matches_error(case, &diagnostic("1", wrong_index)));
         assert!(!matches_error(case, &diagnostic("11", index)));
+        for invalid in [
+            correct.replace("[INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX] ", ""),
+            correct.replace("REGEX_GROUP_INDEX", "PATTERN"),
+            correct.replace("`regexp_extract`", "`regexp_extract_all`"),
+            format!(
+                "[INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX]\n{}",
+                correct.replace("[INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX] ", "")
+            ),
+        ] {
+            assert!(!matches_error(case, &invalid), "{invalid}");
+        }
     }
     Ok(())
 }
