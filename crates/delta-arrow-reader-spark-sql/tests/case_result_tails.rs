@@ -28,6 +28,7 @@ const RANGE_SUBQUERY: &str = include_str!("fixtures/case-result-tails-range-subq
 const VOLATILE_FLOATS: &str =
     include_str!("fixtures/case-result-tails-volatile-floats-spark.jsonl");
 const RAW_FLOATS: &str = include_str!("fixtures/case-result-tails-raw-floats-spark.jsonl");
+const SPARK_IF: &str = include_str!("fixtures/conditional-nested-if-spark.jsonl");
 
 fn references(source: &str, count: usize) -> TestResult<Vec<Value>> {
     let records = source
@@ -115,6 +116,11 @@ async fn case_volatile_float_tails_match_spark() -> TestResult {
 #[tokio::test]
 async fn case_raw_float_tails_match_spark() -> TestResult {
     compare_references(RAW_FLOATS, 4).await
+}
+
+#[tokio::test]
+async fn spark_case_tail_rules_preserve_spark_if() -> TestResult {
+    compare_references(SPARK_IF, 4).await
 }
 
 #[test]
@@ -274,7 +280,7 @@ fn case_tail_result_identity_uses_spark_floats_and_preserves_metadata() -> TestR
 }
 
 #[tokio::test]
-async fn spark_case_tail_rules_preserve_native_case_and_if() -> TestResult {
+async fn spark_case_tail_rules_preserve_native_case() -> TestResult {
     let records = references(REFERENCE, 44)?;
     let native = SessionContext::new();
     let configured = SessionContext::new_with_state(
@@ -301,7 +307,6 @@ async fn spark_case_tail_rules_preserve_native_case_and_if() -> TestResult {
             "SELECT CASE WHEN 1/id=0 THEN required ELSE required END AS r FROM case_parent_mixed",
             "SELECT CASE WHEN id=0 THEN CAST(NULL AS INT) END AS r FROM case_parent_mixed",
             "SELECT CASE id WHEN 0 THEN v ELSE v END AS r FROM case_parent_mixed",
-            "SELECT if(id=0,v,v) AS r FROM case_parent_mixed",
         ] {
             let expected = spark_results::capture_native_query_observation(&native, sql).await?;
             let actual = spark_results::capture_native_query_observation(&configured, sql).await?;

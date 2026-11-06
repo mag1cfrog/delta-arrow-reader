@@ -137,7 +137,11 @@ guard controls, both STRING casts and direct DOUBLE outputs, retain the selected
 THEN sign in Spark's recorded rows and optimized plans. UUID result cases observe LENGTH 36 rather than
 requiring random UUID sample equality; their field stages remain exact.
 Separate algebraic and native SQL controls cover volatility, literal identity,
-metadata and unchanged native CASE/IF behavior, retaining complete raw diagnostics.
+metadata and unchanged native CASE behavior, retaining complete raw diagnostics.
+A separate Spark-planner IF control reuses the four unchanged
+[conditional-nested-if-spark.jsonl](conditional-nested-if-spark.jsonl) records for
+eight batch contexts, checking exact nested result fields and rows through the
+reachable `if_expr` path. Its existing header retains the independent provenance.
 
 ## Integer-day DATE arithmetic
 
