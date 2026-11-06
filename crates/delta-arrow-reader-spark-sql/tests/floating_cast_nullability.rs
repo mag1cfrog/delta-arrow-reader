@@ -1349,6 +1349,23 @@ async fn literal_substring_float_overflows_fail_during_preparation() -> TestResu
             .build(),
         );
         for case in &cases {
+            let query = plan_query(
+                &session,
+                case["sql"].as_str().ok_or("missing SQL")?,
+                &SparkSqlOptions {
+                    ansi_mode: true,
+                    session_timezone: "UTC".into(),
+                    ..SparkSqlOptions::default()
+                },
+            ).await?;
+            eprintln!(
+                "LITERAL_SUBSTRING_RESOLVED_DEBUG {}",
+                json!({
+                    "id":case["id"],"ansi":case["ansi"],"batch":batch_size,
+                    "logical_plan_debug":format!("{:#?}", query.logical_plan),
+                    "public_schema_debug":format!("{:?}", query.logical_plan.schema()),
+                })
+            );
             let actual =
                 spark_results::compare_exact_spark_query_stages_with_optimized(&session, case)
                     .await?;

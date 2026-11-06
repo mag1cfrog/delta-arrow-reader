@@ -346,7 +346,9 @@ fn substring_lambdas(expression: expr::Expr) -> PlanResult<Transformed<expr::Exp
 
 fn literal_substring_overflow(arguments: &[expr::Expr]) -> PlanResult<bool> {
     fn literal_cast(expression: &expr::Expr) -> bool {
-        match expression {
+        // CAST resolution adds a private metadata envelope. Inspect its value
+        // while retaining the original argument and declaration in the plan.
+        match without_metadata_annotations(expression) {
             expr::Expr::Literal(_, _) => true,
             expr::Expr::Cast(cast)
                 if matches!(
@@ -376,7 +378,10 @@ fn literal_substring_overflow(arguments: &[expr::Expr]) -> PlanResult<bool> {
             _ => false,
         }
     }
-    let [expr::Expr::Literal(source, _), position, length] = arguments else {
+    let [source, position, length] = arguments else {
+        return Ok(false);
+    };
+    let expr::Expr::Literal(source, _) = without_metadata_annotations(source) else {
         return Ok(false);
     };
     if source.is_null()
@@ -1304,6 +1309,8 @@ fn substring_logical_visibility_and_runtime_lowering_do_not_invoke_operands()
     use datafusion_expr::{Expr, ScalarUDFImpl, Volatility, col, create_udf};
     use sail_function::scalar::collection::spark_concat::SparkConcat;
 
+    use crate::function::common::drop_inherited_column_metadata;
+
     let calls = Arc::new(AtomicUsize::new(0));
     let observed = Arc::clone(&calls);
     let permitted = create_udf(
@@ -1370,8 +1377,10 @@ fn substring_logical_visibility_and_runtime_lowering_do_not_invoke_operands()
     assert_eq!(calls.load(Ordering::SeqCst), 0);
 
     for (source_type, text) in [(DataType::Float32, "NaN"), (DataType::Float64, "Infinity")] {
-        let floating = ScalarUDF::from(SparkCastStringToFloat::try_new(source_type, false)?)
-            .call(vec![lit(text)]);
+        let floating = drop_inherited_column_metadata(
+            ScalarUDF::from(SparkCastStringToFloat::try_new(source_type, false)?)
+                .call(vec![lit(text)]),
+        );
         let integer = |ansi, is_try| -> datafusion_common::Result<Expr> {
             Ok(cast(
                 ScalarUDF::from(SparkCastNumericToInteger::try_new(
@@ -1429,7 +1438,11 @@ fn substring_logical_visibility_and_runtime_lowering_do_not_invoke_operands()
             vec![lit("abcdef"), integer(false, false)?, length.clone()],
             vec![lit("abcdef"), integer(true, true)?, length.clone()],
             vec![lit("abcdef"), nullable_position, position.clone()],
-            vec![lit("abcdef"), position, permitted.call(vec![lit(2_i64)])],
+            vec![
+                lit("abcdef"),
+                position,
+                drop_inherited_column_metadata(permitted.call(vec![lit(2_i64)])),
+            ],
         ] {
             assert!(
                 substring_lambdas(function.call(arguments))
