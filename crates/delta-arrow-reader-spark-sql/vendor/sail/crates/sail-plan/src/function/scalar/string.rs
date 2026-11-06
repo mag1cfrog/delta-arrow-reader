@@ -375,8 +375,10 @@ pub(crate) fn lower_runtime_regexp_extract(
                 _ => index,
             };
             matches!(index, expr::Expr::ScalarFunction(conversion)
-            if conversion.func.inner().downcast_ref::<SparkCastBigintToInt>()
-                .is_some_and(|conversion| !conversion.is_try())
+            if conversion.func.inner().downcast_ref::<SparkCastNumericToInteger>()
+                .is_some_and(|conversion| {
+                    conversion.target_type() == &DataType::Int32 && !conversion.is_try()
+                })
             && matches!(conversion.args.as_slice(), [expr::Expr::Literal(ScalarValue::Int64(Some(_)), _)]))
         }
         _ => false,
@@ -1045,8 +1047,12 @@ pub(super) fn list_built_in_string_functions() -> Vec<(&'static str, ScalarFunct
 #[test]
 fn regexp_extract_mandatory_literal_int_cast_keeps_preparation_error() -> PlanResult<()> {
     for explicit in [true, false] {
-        let index =
-            ScalarUDF::from(SparkCastBigintToInt::new(true, false)).call(vec![lit(4294967296_i64)]);
+        let index = ScalarUDF::from(SparkCastNumericToInteger::try_new(
+            DataType::Int32,
+            true,
+            false,
+        )?)
+        .call(vec![lit(4294967296_i64)]);
         let index = cast(
             if explicit {
                 cast(index, DataType::Int32)
@@ -1074,6 +1080,22 @@ fn regexp_extract_mandatory_literal_int_cast_keeps_preparation_error() -> PlanRe
             "{error}"
         );
         assert!(lower_runtime_regexp_extract(expression, true)?.transformed);
+        for (target, value) in [
+            (DataType::Int32, ScalarValue::Float32(Some(f32::NAN))),
+            (DataType::Int32, ScalarValue::Float64(Some(f64::NAN))),
+            (DataType::Int8, ScalarValue::Float64(Some(f64::NAN))),
+            (DataType::Int16, ScalarValue::Float64(Some(f64::NAN))),
+            (DataType::Int64, ScalarValue::Float64(Some(f64::NAN))),
+        ] {
+            let index = ScalarUDF::from(SparkCastNumericToInteger::try_new(target, true, false)?)
+                .call(vec![lit(value)]);
+            let expression = ScalarUDF::from(extract.clone()).call(vec![
+                lit("ab"),
+                lit("(a)"),
+                cast(index, DataType::Int64),
+            ]);
+            assert!(lower_runtime_regexp_extract(expression, false)?.transformed);
+        }
         for arguments in [
             vec![datafusion_expr::col("s"), lit("(a)"), index],
             vec![lit("ab"), lit("(a)"), cast(lit(f64::NAN), DataType::Int64)],
@@ -1081,7 +1103,7 @@ fn regexp_extract_mandatory_literal_int_cast_keeps_preparation_error() -> PlanRe
                 lit("ab"),
                 lit("(a)"),
                 cast(
-                    ScalarUDF::from(SparkCastBigintToInt::new(true, true))
+                    ScalarUDF::from(SparkCastNumericToInteger::try_new(DataType::Int32, true, true)?)
                         .call(vec![lit(4294967296_i64)]),
                     DataType::Int64,
                 ),
@@ -1090,8 +1112,12 @@ fn regexp_extract_mandatory_literal_int_cast_keeps_preparation_error() -> PlanRe
                 lit("ab"),
                 lit("(a)"),
                 cast(
-                    ScalarUDF::from(SparkCastBigintToInt::new(true, false))
-                        .call(vec![datafusion_expr::col("i")]),
+                    ScalarUDF::from(SparkCastNumericToInteger::try_new(
+                        DataType::Int32,
+                        true,
+                        false,
+                    )?)
+                    .call(vec![datafusion_expr::col("i")]),
                     DataType::Int64,
                 ),
             ],
