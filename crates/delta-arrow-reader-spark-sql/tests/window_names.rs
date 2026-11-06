@@ -162,6 +162,396 @@ fn matches_window_boolean_parameter_error(observation: &Value) -> bool {
         })
 }
 
+/// Compare all schema stages, allowing only (field index, prior native nullable flag).
+fn window_schemas_match_reference(
+    case: &Value,
+    observation: &Value,
+    retained_nullability: Option<(usize, bool)>,
+) -> bool {
+    observation["optimized_observation"]["names_match"] == true
+        && [
+            ("analyzed", "public_schema"),
+            ("optimized", "optimized_schema"),
+            ("executed_before_collect", "before_collect"),
+            ("executed", "physical_schema"),
+        ]
+        .into_iter()
+        .all(|(stage, key)| {
+            let Some(expected) = case["schema_stages"].get(stage) else {
+                return false;
+            };
+            let Some(mut actual) = observation.get(key).cloned() else {
+                return false;
+            };
+            if let Some((field, nullable)) = retained_nullability {
+                if actual["fields"][field]["nullable"] != nullable
+                    || expected["fields"][field]["nullable"] != false
+                {
+                    return false;
+                }
+                actual["fields"][field]["nullable"] = expected["fields"][field]["nullable"].clone();
+            }
+            actual == *expected
+        })
+}
+
+/// Require exact errors and phase, with all schema and row observations present as JSON null.
+fn matches_unmaterialized_window_error(observation: &Value, error: &str, phase: &str) -> bool {
+    observation["native_phase"] == phase
+        && observation["error"] == error
+        && observation["optimized_error"] == error
+        && [
+            "public_schema",
+            "before_collect",
+            "physical_schema",
+            "rows",
+            "rows_raw",
+            "optimized_schema",
+            "optimized_observation",
+        ]
+        .into_iter()
+        .all(|key| observation.get(key).is_some_and(Value::is_null))
+}
+
+/// Match an exact input and its frozen native facet; reachable labels still use Spark references.
+fn matched_window_gap_owner(
+    case: &Value,
+    observation: &Value,
+    controls: &[Value],
+) -> Option<String> {
+    let control = controls.iter().find(|control| {
+        ["corpus", "id", "ansi", "sql"]
+            .into_iter()
+            .all(|key| control[key] == case[key])
+            && control["reference_condition"] == case["expected"]["condition"]
+    })?;
+    let owner = control["owner"].as_str()?;
+    let error = control["error"].as_str().unwrap_or("");
+    let phase = control["phase"].as_str().unwrap_or("");
+    let success = observation["native_phase"] == "encode"
+        && observation.get("error").is_some_and(Value::is_null)
+        && observation
+            .get("optimized_error")
+            .is_some_and(Value::is_null)
+        && observation["rows"].is_array()
+        && observation["rows_raw"].is_array()
+        && observation["ordered_rows_match"] == true;
+    let matches = match (control["kind"].as_str()?, owner) {
+        ("parser_error", "#744") => {
+            case["expected"]["rows"].is_array()
+                && phase == "resolve"
+                && error.starts_with("External error: error in SQL parser: ")
+                && matches_unmaterialized_window_error(observation, error, phase)
+        }
+        ("boolean_error", "#1045") => {
+            case["expected"]["condition"] == "INVALID_PARAMETER_VALUE.BOOLEAN"
+                && phase == "resolve"
+                && matches_unmaterialized_window_error(observation, error, phase)
+        }
+        ("date_rows", "#747") => {
+            success
+                && window_schemas_match_reference(case, observation, None)
+                && observation["rows"] == control["rows"]
+        }
+        ("lag_nullability", "#1044") => {
+            let field = usize::try_from(control["nullable_field"].as_u64()?).ok()?;
+            let nullable = control["nullable"].as_bool()?;
+            success
+                && window_schemas_match_reference(case, observation, Some((field, nullable)))
+                && observation["rows"] == case["expected"]["rows"]
+        }
+        ("offset_null_rows", "#1048") => {
+            case["expected"]["condition"] == "INTERNAL_ERROR"
+                && case["spark_error_phase"] == "collect"
+                && success
+                && window_schemas_match_reference(case, observation, None)
+                && observation["rows"] == control["rows"]
+        }
+        ("offset_frame_error", "#1048") => {
+            matches_unmaterialized_window_error(observation, error, phase)
+        }
+        ("offset_cast_phase", "#1048") => {
+            let fields = observation["public_schema"]["fields"].as_array()?;
+            let native = control["native_public_fields"].as_array()?;
+            let names = control["name_control"]["names"].as_array()?;
+            case["expected"]["condition"] == "CAST_INVALID_INPUT"
+                && case["spark_error_phase"] == "sql"
+                && phase == "create_physical_plan"
+                && observation["native_phase"] == phase
+                && observation["error"] == error
+                && observation["optimized_error"] == error
+                && observation["public_schema"]["type"] == "struct"
+                && fields.len() == native.len()
+                && fields.len() == names.len()
+                && fields
+                    .iter()
+                    .zip(native)
+                    .zip(names)
+                    .all(|((field, expected), name)| {
+                        let mut nonname = field.clone();
+                        if let Some(field) = nonname.as_object_mut() {
+                            field.remove("name");
+                        }
+                        field["name"] == *name && nonname == *expected
+                    })
+                && [
+                    "before_collect",
+                    "physical_schema",
+                    "rows",
+                    "rows_raw",
+                    "optimized_schema",
+                    "optimized_observation",
+                ]
+                .into_iter()
+                .all(|key| observation.get(key).is_some_and(Value::is_null))
+        }
+        _ => false,
+    };
+    matches.then(|| owner.to_string())
+}
+
+fn matches_window_int32_negation_overflow(case: &Value, observation: &Value) -> bool {
+    let error = "External error: error in DataFusion: Execution error: Int32 overflow on negative(-2147483648)";
+    case["ansi"] == true
+        && case["expected"]["condition"] == "ARITHMETIC_OVERFLOW"
+        && case["spark_error_phase"] == "sql"
+        && case["spark_error_details"]["sql_state"] == "22003"
+        && matches!(
+            case["sql"].as_str(),
+            Some(
+                "SELECT LAG(v,-2147483648) OVER (ORDER BY id) FROM inputs"
+                    | "SELECT LAG(v,CAST(-2147483648 AS INT)) OVER (ORDER BY id) FROM inputs"
+                    | "SELECT id,LAG(v,CAST(-2147483648 AS INT),-99) OVER (ORDER BY id) FROM inputs ORDER BY id"
+            )
+        )
+        && matches_unmaterialized_window_error(observation, error, "resolve")
+}
+
+#[test]
+fn window_gap_checks_reject_changes_outside_owned_facets() -> TestResult {
+    let retained: Value =
+        serde_json::from_str(include_str!("fixtures/window-name-retained-facets.json"))?;
+    let controls = retained["controls"]
+        .as_array()
+        .ok_or("missing retained facets")?;
+    let mut references = window_name_references()?;
+    references.extend(
+        include_str!("fixtures/window-name-boundaries-spark.jsonl")
+            .lines()
+            .skip(1)
+            .map(serde_json::from_str::<Value>)
+            .collect::<Result<Vec<_>, _>>()?,
+    );
+    for control in controls {
+        let case = references
+            .iter()
+            .find(|case| {
+                ["corpus", "id", "ansi", "sql"]
+                    .into_iter()
+                    .all(|key| case[key] == control[key])
+            })
+            .ok_or("missing retained reference")?;
+        let mut observation = json!({
+            "public_schema":case["schema_stages"]["analyzed"],
+            "optimized_schema":case["schema_stages"]["optimized"],
+            "before_collect":case["schema_stages"]["executed_before_collect"],
+            "physical_schema":case["schema_stages"]["executed"],
+            "optimized_observation":{"names_match":true},"optimized_error":null,
+            "rows":case["expected"]["rows"],"rows_raw":case["expected"]["rows"],
+            "native_phase":"encode","error":null,"ordered_rows_match":true,
+        });
+        match control["kind"].as_str().ok_or("missing retained kind")? {
+            "parser_error" | "boolean_error" | "offset_frame_error" | "offset_cast_phase" => {
+                for key in [
+                    "public_schema",
+                    "optimized_schema",
+                    "before_collect",
+                    "physical_schema",
+                    "rows",
+                    "rows_raw",
+                    "optimized_observation",
+                ] {
+                    observation[key] = Value::Null;
+                }
+                observation["error"] = control["error"].clone();
+                observation["optimized_error"] = control["error"].clone();
+                observation["native_phase"] = control["phase"].clone();
+                if control["kind"] == "offset_cast_phase" {
+                    let fields = control["native_public_fields"]
+                        .as_array()
+                        .ok_or("missing native fields")?
+                        .iter()
+                        .zip(
+                            control["name_control"]["names"]
+                                .as_array()
+                                .ok_or("missing name control")?,
+                        )
+                        .map(|(field, name)| {
+                            let mut field = field.clone();
+                            field["name"] = name.clone();
+                            field
+                        })
+                        .collect::<Vec<_>>();
+                    observation["public_schema"] = json!({"type":"struct","fields":fields});
+                }
+            }
+            "date_rows" | "offset_null_rows" => {
+                observation["rows"] = control["rows"].clone();
+                observation["rows_raw"] = control["rows"].clone();
+            }
+            "lag_nullability" => {
+                let field = usize::try_from(
+                    control["nullable_field"]
+                        .as_u64()
+                        .ok_or("missing nullable field")?,
+                )?;
+                for key in [
+                    "public_schema",
+                    "optimized_schema",
+                    "before_collect",
+                    "physical_schema",
+                ] {
+                    observation[key]["fields"][field]["nullable"] = control["nullable"].clone();
+                }
+            }
+            _ => return Err("unexpected retained kind".into()),
+        }
+        assert_eq!(
+            matched_window_gap_owner(case, &observation, controls).as_deref(),
+            control["owner"].as_str()
+        );
+        for (key, value) in [
+            ("error", json!("different cause")),
+            ("native_phase", json!("different phase")),
+            ("rows", json!([["different value"]])),
+        ] {
+            let mut changed = observation.clone();
+            changed[key] = value;
+            assert!(
+                matched_window_gap_owner(case, &changed, controls).is_none(),
+                "{} {key}",
+                control["id"]
+            );
+        }
+        for schema in [
+            "public_schema",
+            "optimized_schema",
+            "before_collect",
+            "physical_schema",
+        ] {
+            let mut changed = observation.clone();
+            if changed[schema].is_null() {
+                changed[schema] = json!({"unexpected":"schema"});
+            } else {
+                changed[schema]["fields"][0]["metadata"] = json!({"unexpected":"metadata"});
+            }
+            assert!(
+                matched_window_gap_owner(case, &changed, controls).is_none(),
+                "{} {schema}",
+                control["id"]
+            );
+        }
+        if !observation["public_schema"].is_null() {
+            for (key, value) in [
+                ("name", json!("wrong label")),
+                ("type", json!("wrong type")),
+                (
+                    "nullable",
+                    json!(
+                        !observation["public_schema"]["fields"][0]["nullable"]
+                            .as_bool()
+                            .ok_or("missing nullable")?
+                    ),
+                ),
+            ] {
+                let mut changed = observation.clone();
+                changed["public_schema"]["fields"][0][key] = value;
+                assert!(
+                    matched_window_gap_owner(case, &changed, controls).is_none(),
+                    "{} {key}",
+                    control["id"]
+                );
+            }
+        }
+        let mut changed_case = case.clone();
+        changed_case["sql"] = json!("SELECT 1");
+        assert!(matched_window_gap_owner(&changed_case, &observation, controls).is_none());
+    }
+    Ok(())
+}
+
+#[test]
+fn window_negation_overflow_requires_exact_input_operation_type_and_phase() -> TestResult {
+    let cases = include_str!("fixtures/window-name-boundaries-spark.jsonl")
+        .lines()
+        .skip(1)
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    let error = "External error: error in DataFusion: Execution error: Int32 overflow on negative(-2147483648)";
+    let observation = json!({"native_phase":"resolve","error":error,"optimized_error":error,
+        "public_schema":null,"optimized_schema":null,"before_collect":null,"physical_schema":null,
+        "rows":null,"rows_raw":null,"optimized_observation":null});
+    let minimum_cases = cases
+        .iter()
+        .filter(|case| {
+            case["ansi"] == true && case["expected"]["condition"] == "ARITHMETIC_OVERFLOW"
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(minimum_cases.len(), 3);
+    for case in minimum_cases {
+        assert!(matches_window_int32_negation_overflow(case, &observation));
+        for wrong_error in [
+            error.replace("Int32", "Int64"),
+            error.replace("negative", "add"),
+            error.replace("-2147483648", "-2147483647"),
+            format!("{error}\nother cause"),
+        ] {
+            let mut changed = observation.clone();
+            changed["error"] = json!(wrong_error);
+            changed["optimized_error"] = changed["error"].clone();
+            assert!(!matches_window_int32_negation_overflow(case, &changed));
+        }
+        let mut changed = observation.clone();
+        changed["native_phase"] = json!("collect");
+        assert!(!matches_window_int32_negation_overflow(case, &changed));
+        let mut changed = observation.clone();
+        changed["public_schema"] = json!({"type":"struct","fields":[]});
+        assert!(!matches_window_int32_negation_overflow(case, &changed));
+        for (key, value) in [
+            ("ansi", json!(false)),
+            (
+                "sql",
+                json!(
+                    case["sql"]
+                        .as_str()
+                        .ok_or("missing SQL")?
+                        .replace("-2147483648", "-2147483647")
+                ),
+            ),
+        ] {
+            let mut changed = case.clone();
+            changed[key] = value;
+            assert!(!matches_window_int32_negation_overflow(
+                &changed,
+                &observation
+            ));
+        }
+        let mut changed = case.clone();
+        changed["expected"]["condition"] = json!("CAST_INVALID_INPUT");
+        assert!(!matches_window_int32_negation_overflow(
+            &changed,
+            &observation
+        ));
+        let mut changed = case.clone();
+        changed["spark_error_phase"] = json!("collect");
+        assert!(!matches_window_int32_negation_overflow(
+            &changed,
+            &observation
+        ));
+    }
+    Ok(())
+}
+
 #[test]
 fn window_parameter_errors_require_the_specific_boolean_cause_during_resolution() {
     let error = "[INVALID_PARAMETER_VALUE.BOOLEAN] The value of parameter(s) `ignoreNulls` in `nth_value` is invalid: expects a boolean literal, but got \"CAST(true AS BOOLEAN)\".";
@@ -182,8 +572,13 @@ fn window_parameter_errors_require_the_specific_boolean_cause_during_resolution(
 }
 
 #[tokio::test]
-async fn generated_window_names_match_spark() -> TestResult {
+async fn generated_window_names_check_spark_and_retained_facets() -> TestResult {
     let records = window_name_references()?;
+    let retained: Value =
+        serde_json::from_str(include_str!("fixtures/window-name-retained-facets.json"))?;
+    let controls = retained["controls"]
+        .as_array()
+        .ok_or("missing retained facets")?;
     assert_eq!(records[0]["spark_version"], "4.2.0");
     assert_eq!(records[0]["timezone"], "UTC");
     let mut identities = BTreeSet::new();
@@ -220,6 +615,22 @@ async fn generated_window_names_match_spark() -> TestResult {
             let matches = actual.as_ref().is_ok_and(|result| {
                 result["matches"] == true && result["optimized_matches"] == true
             }) && cause_matches;
+            let gap_owner = if matches {
+                None
+            } else {
+                actual
+                    .as_ref()
+                    .ok()
+                    .and_then(|result| matched_window_gap_owner(case, result, controls))
+            };
+            let accepted = matches || gap_owner.is_some();
+            let disposition = if matches {
+                "spark_match"
+            } else if gap_owner.is_some() {
+                "retained_prior_native_facets"
+            } else {
+                "unexpected_difference"
+            };
             if report_path.is_some() {
                 observations.push(json!({
                     "corpus":case["corpus"], "id":case["id"],
@@ -227,9 +638,10 @@ async fn generated_window_names_match_spark() -> TestResult {
                     "actual":actual.as_ref().map_or_else(
                         |error| json!({"error":error.to_string()}), |result| result.clone()),
                     "cause_matches":cause_matches, "matches":matches,
+                    "accepted":accepted,"disposition":disposition,"owned_gap":gap_owner,
                 }));
             }
-            if !matches {
+            if !accepted {
                 differences.push(format!(
                     "{}:{} ANSI={} batch={batch_size} cause_matches={cause_matches}: {actual:?}",
                     case["corpus"], case["id"], case["ansi"]
@@ -311,6 +723,11 @@ async fn generated_interval_window_names_match_original_spark_stages() -> TestRe
 
 #[tokio::test]
 async fn generated_window_names_cover_source_boundaries() -> TestResult {
+    let retained: Value =
+        serde_json::from_str(include_str!("fixtures/window-name-retained-facets.json"))?;
+    let controls = retained["controls"]
+        .as_array()
+        .ok_or("missing retained facets")?;
     let records = include_str!("fixtures/window-name-boundaries-spark.jsonl")
         .lines()
         .map(serde_json::from_str::<Value>)
@@ -400,10 +817,33 @@ async fn generated_window_names_cover_source_boundaries() -> TestResult {
                     && result["optimized_matches"] == true
                     && matches_spark_int32_cast_input(case, result)
             });
+            let negation_overflow_matches = actual
+                .as_ref()
+                .is_ok_and(|result| matches_window_int32_negation_overflow(case, result));
+            let gap_owner = if matches || negation_overflow_matches {
+                None
+            } else {
+                actual
+                    .as_ref()
+                    .ok()
+                    .and_then(|result| matched_window_gap_owner(case, result, controls))
+            };
+            let accepted = matches || negation_overflow_matches || gap_owner.is_some();
+            let disposition = if matches {
+                "spark_match"
+            } else if negation_overflow_matches {
+                "equivalent_int32_negation_overflow"
+            } else if gap_owner.is_some() {
+                "retained_prior_native_facets"
+            } else {
+                "unexpected_difference"
+            };
             observations.push(json!({
                 "id":case["id"], "ansi":case["ansi"], "batch":batch_size,
                 "reference":case, "matches":matches,
                 "actual":actual.map_or_else(|error| json!({"error":error.to_string()}), |result| result),
+                "accepted":accepted,"disposition":disposition,"owned_gap":gap_owner,
+                "negation_overflow_matches":negation_overflow_matches,
             }));
         }
     }
@@ -415,7 +855,7 @@ async fn generated_window_names_cover_source_boundaries() -> TestResult {
     }
     let differences = observations
         .iter()
-        .filter(|observation| observation["matches"] != true)
+        .filter(|observation| observation["accepted"] != true)
         .collect::<Vec<_>>();
     assert!(differences.is_empty(), "{differences:#?}");
     Ok(())
@@ -593,6 +1033,10 @@ async fn offset_window_names_respect_folding_permission_and_evaluate_once() -> T
                 ("volatile", "volatile_offset()"),
                 ("throwing", "throwing_offset()"),
                 ("divide", "CAST(1/0 AS INT)"),
+                (
+                    "higher_order",
+                    "AGGREGATE(ARRAY(1),0,(acc,x)->folded_offset())",
+                ),
             ] {
                 let call = if kind == "arity" {
                     format!("LAG(v,{offset},0,0)")
@@ -634,6 +1078,8 @@ async fn offset_window_names_respect_folding_permission_and_evaluate_once() -> T
                 "unfolded_offset()",
                 "1 + unfolded_offset()",
                 "volatile_offset()",
+                "AGGREGATE(ARRAY(1),0,(acc,x)->folded_offset())",
+                "1 + AGGREGATE(ARRAY(1),0,(acc,x)->folded_offset())",
             ] {
                 for explicit in [false, true] {
                     let frame = if !explicit {

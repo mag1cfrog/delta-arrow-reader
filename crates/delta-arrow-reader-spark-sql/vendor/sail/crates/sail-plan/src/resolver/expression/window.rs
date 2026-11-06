@@ -325,8 +325,15 @@ impl PlanResolver<'_> {
             || offset.contains_outer()
             || offset.contains_scalar_subquery()
             || offset.exists(|expression| {
-                Ok(matches!(expression, expr::Expr::ScalarFunction(function)
-                    if !function.func.inner().supports_constant_folding()))
+                Ok(match expression {
+                    expr::Expr::ScalarFunction(function) => {
+                        !function.func.inner().supports_constant_folding()
+                    }
+                    expr::Expr::HigherOrderFunction(function) => {
+                        !function.func.supports_constant_folding()
+                    }
+                    _ => false,
+                })
             })?
         {
             return Err(mismatch());
