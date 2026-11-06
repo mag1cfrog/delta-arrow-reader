@@ -746,6 +746,19 @@ failing stages at batch sizes 1 and 32. See the [temporal fixture
 notes](temporal-contracts/README.md) for the inputs, accepted parser messages,
 the retained differences and their owners, and the capture command.
 
+## UTC timestamp conversions
+
+`utc-timestamp-conversions/utc-timestamp-conversions-spark.jsonl` contains 4,356
+Spark 4.2.0 observations of TO_UTC_TIMESTAMP and FROM_UTC_TIMESTAMP around the 2024
+Los Angeles spring gap and fall overlap and the Havana midnight changes (#154), with
+TIMESTAMP_NTZ, TIMESTAMP, STRING and DATE inputs, literal and registered-column
+values and zones, UTC and fixed-offset controls and NULL, invalid and legacy zones,
+in both ANSI modes and UTC, America/Los_Angeles and America/Havana sessions.
+`utc_timestamp_conversions.rs` compares names, fields at each stage, the executed
+zone, typed instants and failing stages at batch sizes 1 and 32. See the [UTC
+conversion fixture notes](utc-timestamp-conversions/README.md) for the retained
+differences and their owners, and the capture command.
+
 ## Interval qualifiers and generated names
 
 `interval-qualifiers/interval-qualifiers-spark.jsonl` contains 1948 Spark 4.2.0
