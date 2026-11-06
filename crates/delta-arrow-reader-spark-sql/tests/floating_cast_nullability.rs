@@ -644,8 +644,11 @@ fn floating_integer_scoped_contract_matches(
     batch: usize,
     facets: &Value,
 ) -> TestResult<bool> {
-    if case["ansi"] == true && matches!(case["id"].as_str(),
-        Some("float_nan_substring" | "double_infinity_substring"))
+    if case["ansi"] == true
+        && matches!(
+            case["id"].as_str(),
+            Some("float_nan_substring" | "double_infinity_substring")
+        )
     {
         // Keep all inherited facets as history. These four calls now require
         // the complete measured preparation result, including unavailable stages.
@@ -655,9 +658,15 @@ fn floating_integer_scoped_contract_matches(
         let current: Value = serde_json::from_str(include_str!(
             "fixtures/substring-literal-preparation-current-native.json"
         ))?;
-        return Ok(current["floating"].as_array().ok_or("missing current preparation controls")?
-            .iter().any(|record| record["reference"] == *case && record["batch"] == batch
-                && record["observation"] == *actual));
+        return Ok(current["floating"]
+            .as_array()
+            .ok_or("missing current preparation controls")?
+            .iter()
+            .any(|record| {
+                record["reference"] == *case
+                    && record["batch"] == batch
+                    && record["observation"] == *actual
+            }));
     }
     let Some(control) = facets["contexts"]
         .as_array()
@@ -1104,22 +1113,32 @@ fn floating_integer_retained_facets_reject_unowned_changes() -> TestResult {
     let current: Value = serde_json::from_str(include_str!(
         "fixtures/substring-literal-preparation-current-native.json"
     ))?;
-    for record in current["floating"].as_array().ok_or("missing preparation controls")? {
+    for record in current["floating"]
+        .as_array()
+        .ok_or("missing preparation controls")?
+    {
         let case = &record["reference"];
         assert!(records.iter().any(|original| original == case));
         let batch = record["batch"].as_u64().ok_or("missing batch")? as usize;
         let actual = &record["observation"];
-        assert!(floating_integer_scoped_contract_matches(case, actual, batch, &facets)?);
+        assert!(floating_integer_scoped_contract_matches(
+            case, actual, batch, &facets
+        )?);
         for key in actual.as_object().ok_or("missing observation")?.keys() {
             let mut changed = actual.clone();
             changed.as_object_mut().ok_or("missing object")?.remove(key);
-            assert!(!floating_integer_scoped_contract_matches(case, &changed, batch, &facets)?);
+            assert!(!floating_integer_scoped_contract_matches(
+                case, &changed, batch, &facets
+            )?);
         }
         for (pointer, wrong) in [
             ("/public_schema/fields/0/name", json!("wrong")),
             ("/public_schema/fields/0/type", json!("integer")),
             ("/public_schema/fields/0/nullable", json!(false)),
-            ("/public_schema/fields/0/metadata", json!({"wrong":"metadata"})),
+            (
+                "/public_schema/fields/0/metadata",
+                json!({"wrong":"metadata"}),
+            ),
             ("/native_phase", json!("collect")),
             ("/before_collect", actual["public_schema"].clone()),
             ("/physical_schema", actual["public_schema"].clone()),
@@ -1131,25 +1150,45 @@ fn floating_integer_retained_facets_reject_unowned_changes() -> TestResult {
             ("/optimized_matches", json!(false)),
         ] {
             let mut changed = actual.clone();
-            *changed.pointer_mut(pointer).ok_or("missing preparation facet")? = wrong;
-            assert!(!floating_integer_scoped_contract_matches(case, &changed, batch, &facets)?);
+            *changed
+                .pointer_mut(pointer)
+                .ok_or("missing preparation facet")? = wrong;
+            assert!(!floating_integer_scoped_contract_matches(
+                case, &changed, batch, &facets
+            )?);
         }
-        let error = actual["error"].as_str().ok_or("missing preparation error")?;
-        for wrong in [error.replace("[CAST_OVERFLOW]", ""), error.replace("Int32", "Int64"),
+        let error = actual["error"]
+            .as_str()
+            .ok_or("missing preparation error")?;
+        for wrong in [
+            error.replace("[CAST_OVERFLOW]", ""),
+            error.replace("Int32", "Int64"),
             error.replace("NaN", "0").replace("inf", "0"),
-            error.replace("Optimizer rule 'simplify_expressions' failed", "different wrapper")]
-        {
+            error.replace(
+                "Optimizer rule 'simplify_expressions' failed",
+                "different wrapper",
+            ),
+        ] {
             assert_ne!(wrong, error);
             for key in ["error", "optimized_error"] {
                 let mut changed = actual.clone();
                 changed[key] = json!(wrong);
-                assert!(!floating_integer_scoped_contract_matches(case, &changed, batch, &facets)?);
+                assert!(!floating_integer_scoped_contract_matches(
+                    case, &changed, batch, &facets
+                )?);
             }
         }
         let mut changed_case = case.clone();
         changed_case["sql"] = json!("SELECT 99");
-        assert!(!floating_integer_scoped_contract_matches(&changed_case, actual, batch, &facets)?);
-        assert!(!floating_integer_scoped_contract_matches(case, actual, 2, &facets)?);
+        assert!(!floating_integer_scoped_contract_matches(
+            &changed_case,
+            actual,
+            batch,
+            &facets
+        )?);
+        assert!(!floating_integer_scoped_contract_matches(
+            case, actual, 2, &facets
+        )?);
     }
 
     let case = records
@@ -1326,7 +1365,8 @@ async fn literal_substring_float_overflows_fail_during_preparation() -> TestResu
                     session_timezone: "UTC".into(),
                     ..SparkSqlOptions::default()
                 },
-            ).await?;
+            )
+            .await?;
             eprintln!(
                 "LITERAL_SUBSTRING_RESOLVED_DEBUG {}",
                 json!({

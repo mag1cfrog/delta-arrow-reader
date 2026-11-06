@@ -116,10 +116,18 @@ fn overflow_notation_comparison_is_literal_specific_and_keeps_strict_failure() -
         // Infinity substring uses a whole current observation. The other
         // notation controls retain their historical synthetic mutation inputs.
         let mut actual = if id == "double_infinity_substring" {
-            current["substring"].as_array().ok_or("missing current substring controls")?
-                .iter().find(|record| record["id"] == id && record["ansi"] == true
-                    && record["representation"] == 0 && record["batch_size"] == 1)
-                .ok_or("missing measured Infinity preparation")?["actual"].clone()
+            current["substring"]
+                .as_array()
+                .ok_or("missing current substring controls")?
+                .iter()
+                .find(|record| {
+                    record["id"] == id
+                        && record["ansi"] == true
+                        && record["representation"] == 0
+                        && record["batch_size"] == 1
+                })
+                .ok_or("missing measured Infinity preparation")?["actual"]
+                .clone()
         } else {
             json!({
                 "analyzed_schema":{"type":"struct","fields":[{"name":"r","type":kind,"nullable":true,"metadata":{}}]},
@@ -136,31 +144,44 @@ fn overflow_notation_comparison_is_literal_specific_and_keeps_strict_failure() -
         if id == "double_infinity_substring" {
             for key in ["status", "phase"] {
                 let mut changed = case.clone();
-                changed["expected"].as_object_mut().ok_or("missing expected object")?.remove(key);
+                changed["expected"]
+                    .as_object_mut()
+                    .ok_or("missing expected object")?
+                    .remove(key);
                 assert!(!substring::matches_meaningful_contract(&changed, &actual));
             }
-            for (key, wrong) in [("status", json!("ok")), ("status", json!(true)),
-                ("phase", json!("collect"))]
-            {
+            for (key, wrong) in [
+                ("status", json!("ok")),
+                ("status", json!(true)),
+                ("phase", json!("collect")),
+            ] {
                 let mut changed = case.clone();
                 changed["expected"][key] = wrong;
                 assert!(!substring::matches_meaningful_contract(&changed, &actual));
             }
             for key in ["physical_schema", "physical_arrow_schema"] {
                 let mut changed = actual.clone();
-                changed.as_object_mut().ok_or("missing actual object")?.remove(key);
+                changed
+                    .as_object_mut()
+                    .ok_or("missing actual object")?
+                    .remove(key);
                 assert!(!substring::matches_meaningful_contract(case, &changed));
             }
-            for (component, wrong) in [("nullable", json!(false)), ("name", json!("wrong")),
-                ("type", json!("integer")), ("metadata", json!({"wrong":"metadata"}))]
-            {
+            for (component, wrong) in [
+                ("nullable", json!(false)),
+                ("name", json!("wrong")),
+                ("type", json!("integer")),
+                ("metadata", json!({"wrong":"metadata"})),
+            ] {
                 let mut changed = actual.clone();
                 changed["analyzed_schema"]["fields"][0][component] = wrong;
                 assert!(!substring::matches_meaningful_contract(case, &changed));
             }
             let mut late = actual.clone();
             late["error_stage"] = json!("execute");
-            late["error"] = json!("execute: [CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value inf to type Int32");
+            late["error"] = json!(
+                "execute: [CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value inf to type Int32"
+            );
             late["physical_schema"] = actual["analyzed_schema"].clone();
             late["physical_arrow_schema"] = actual["analyzed_arrow_schema"].clone();
             assert!(!substring::matches_meaningful_contract(case, &late));

@@ -194,7 +194,8 @@ pub(crate) fn known_difference(case: &Value, actual: &Value) -> Option<&'static 
         let physical_matches = if direct {
             actual["physical_schema"].is_null()
         } else {
-            expected["status"] == "error" && expected["phase"] == "optimized_schema"
+            expected["status"] == "error"
+                && expected["phase"] == "optimized_schema"
                 && actual.get("physical_schema") == Some(&Value::Null)
                 && actual.get("physical_arrow_schema") == Some(&Value::Null)
         };
