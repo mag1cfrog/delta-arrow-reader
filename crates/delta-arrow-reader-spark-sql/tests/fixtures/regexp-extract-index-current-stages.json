@@ -45,20 +45,25 @@
       "reviewed": true,
       "condition": "CAST_OVERFLOW",
       "spark_phase": "optimized_schema",
-      "native_stage": "execute",
+      "native_stage": "physical",
       "availability": {
         "analyzed_schema": "available",
         "analyzed_arrow_schema": "available",
-        "physical_schema": "available",
-        "physical_arrow_schema": "available",
+        "physical_schema": "null",
+        "physical_arrow_schema": "null",
         "rows": "absent"
       },
       "evidence": {
         "capture_family": "original_bigint",
         "raw_log_line": 660,
-        "frozen_reference_line": 2
+        "frozen_reference_line": 2,
+        "capture_source_head": "028c10625608053b34b76421379b6dc2df1c5756",
+        "capture_manifest": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate-manifest.json",
+        "capture_manifest_sha256": "0e230dc4623d919c7f5db8c73f8933e236aeee5e70006f78039e37729f004077",
+        "raw_log_file": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate.log",
+        "raw_log_sha256": "f468e28bf7ce7635bbd6876e0aa192aee25f8de591df5a031ea50dbc1829c8d6"
       },
-      "rationale": "Observed native execute boundary; Spark reports optimized_schema. Exact cause, identifier and phase remain separate comparisons."
+      "rationale": "Mandatory literal BIGINT-to-INT conversion now fails during physical preparation. Cause, identifier and phase remain separate comparisons."
     },
     {
       "fixture": "regexp-extract-index-original-spark.jsonl",
@@ -70,20 +75,25 @@
       "reviewed": true,
       "condition": "CAST_OVERFLOW",
       "spark_phase": "optimized_schema",
-      "native_stage": "execute",
+      "native_stage": "physical",
       "availability": {
         "analyzed_schema": "available",
         "analyzed_arrow_schema": "available",
-        "physical_schema": "available",
-        "physical_arrow_schema": "available",
+        "physical_schema": "null",
+        "physical_arrow_schema": "null",
         "rows": "absent"
       },
       "evidence": {
         "capture_family": "original_bigint",
         "raw_log_line": 661,
-        "frozen_reference_line": 3
+        "frozen_reference_line": 3,
+        "capture_source_head": "028c10625608053b34b76421379b6dc2df1c5756",
+        "capture_manifest": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate-manifest.json",
+        "capture_manifest_sha256": "0e230dc4623d919c7f5db8c73f8933e236aeee5e70006f78039e37729f004077",
+        "raw_log_file": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate.log",
+        "raw_log_sha256": "f468e28bf7ce7635bbd6876e0aa192aee25f8de591df5a031ea50dbc1829c8d6"
       },
-      "rationale": "Observed native execute boundary; Spark reports optimized_schema. Exact cause, identifier and phase remain separate comparisons."
+      "rationale": "Mandatory literal BIGINT-to-INT conversion now fails during physical preparation. Cause, identifier and phase remain separate comparisons."
     },
     {
       "fixture": "regexp-extract-index-original-spark.jsonl",
@@ -95,20 +105,25 @@
       "reviewed": true,
       "condition": "CAST_OVERFLOW",
       "spark_phase": "optimized_schema",
-      "native_stage": "execute",
+      "native_stage": "physical",
       "availability": {
         "analyzed_schema": "available",
         "analyzed_arrow_schema": "available",
-        "physical_schema": "available",
-        "physical_arrow_schema": "available",
+        "physical_schema": "null",
+        "physical_arrow_schema": "null",
         "rows": "absent"
       },
       "evidence": {
         "capture_family": "original_bigint",
         "raw_log_line": 662,
-        "frozen_reference_line": 4
+        "frozen_reference_line": 4,
+        "capture_source_head": "028c10625608053b34b76421379b6dc2df1c5756",
+        "capture_manifest": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate-manifest.json",
+        "capture_manifest_sha256": "0e230dc4623d919c7f5db8c73f8933e236aeee5e70006f78039e37729f004077",
+        "raw_log_file": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate.log",
+        "raw_log_sha256": "f468e28bf7ce7635bbd6876e0aa192aee25f8de591df5a031ea50dbc1829c8d6"
       },
-      "rationale": "Observed native execute boundary; Spark reports optimized_schema. Exact cause, identifier and phase remain separate comparisons."
+      "rationale": "Mandatory literal BIGINT-to-INT conversion now fails during physical preparation. Cause, identifier and phase remain separate comparisons."
     },
     {
       "fixture": "regexp-extract-index-original-spark.jsonl",
@@ -120,20 +135,25 @@
       "reviewed": true,
       "condition": "CAST_OVERFLOW",
       "spark_phase": "optimized_schema",
-      "native_stage": "execute",
+      "native_stage": "physical",
       "availability": {
         "analyzed_schema": "available",
         "analyzed_arrow_schema": "available",
-        "physical_schema": "available",
-        "physical_arrow_schema": "available",
+        "physical_schema": "null",
+        "physical_arrow_schema": "null",
         "rows": "absent"
       },
       "evidence": {
         "capture_family": "original_bigint",
         "raw_log_line": 663,
-        "frozen_reference_line": 5
+        "frozen_reference_line": 5,
+        "capture_source_head": "028c10625608053b34b76421379b6dc2df1c5756",
+        "capture_manifest": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate-manifest.json",
+        "capture_manifest_sha256": "0e230dc4623d919c7f5db8c73f8933e236aeee5e70006f78039e37729f004077",
+        "raw_log_file": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate.log",
+        "raw_log_sha256": "f468e28bf7ce7635bbd6876e0aa192aee25f8de591df5a031ea50dbc1829c8d6"
       },
-      "rationale": "Observed native execute boundary; Spark reports optimized_schema. Exact cause, identifier and phase remain separate comparisons."
+      "rationale": "Mandatory literal BIGINT-to-INT conversion now fails during physical preparation. Cause, identifier and phase remain separate comparisons."
     },
     {
       "fixture": "regexp-extract-index-original-spark.jsonl",
@@ -195,20 +215,25 @@
       "reviewed": true,
       "condition": "CAST_OVERFLOW",
       "spark_phase": "optimized_schema",
-      "native_stage": "execute",
+      "native_stage": "physical",
       "availability": {
         "analyzed_schema": "available",
         "analyzed_arrow_schema": "available",
-        "physical_schema": "available",
-        "physical_arrow_schema": "available",
+        "physical_schema": "null",
+        "physical_arrow_schema": "null",
         "rows": "absent"
       },
       "evidence": {
         "capture_family": "original_bigint",
         "raw_log_line": 671,
-        "frozen_reference_line": 2
+        "frozen_reference_line": 2,
+        "capture_source_head": "028c10625608053b34b76421379b6dc2df1c5756",
+        "capture_manifest": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate-manifest.json",
+        "capture_manifest_sha256": "0e230dc4623d919c7f5db8c73f8933e236aeee5e70006f78039e37729f004077",
+        "raw_log_file": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate.log",
+        "raw_log_sha256": "f468e28bf7ce7635bbd6876e0aa192aee25f8de591df5a031ea50dbc1829c8d6"
       },
-      "rationale": "Observed native execute boundary; Spark reports optimized_schema. Exact cause, identifier and phase remain separate comparisons."
+      "rationale": "Mandatory literal BIGINT-to-INT conversion now fails during physical preparation. Cause, identifier and phase remain separate comparisons."
     },
     {
       "fixture": "regexp-extract-index-original-spark.jsonl",
@@ -220,20 +245,25 @@
       "reviewed": true,
       "condition": "CAST_OVERFLOW",
       "spark_phase": "optimized_schema",
-      "native_stage": "execute",
+      "native_stage": "physical",
       "availability": {
         "analyzed_schema": "available",
         "analyzed_arrow_schema": "available",
-        "physical_schema": "available",
-        "physical_arrow_schema": "available",
+        "physical_schema": "null",
+        "physical_arrow_schema": "null",
         "rows": "absent"
       },
       "evidence": {
         "capture_family": "original_bigint",
         "raw_log_line": 672,
-        "frozen_reference_line": 3
+        "frozen_reference_line": 3,
+        "capture_source_head": "028c10625608053b34b76421379b6dc2df1c5756",
+        "capture_manifest": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate-manifest.json",
+        "capture_manifest_sha256": "0e230dc4623d919c7f5db8c73f8933e236aeee5e70006f78039e37729f004077",
+        "raw_log_file": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate.log",
+        "raw_log_sha256": "f468e28bf7ce7635bbd6876e0aa192aee25f8de591df5a031ea50dbc1829c8d6"
       },
-      "rationale": "Observed native execute boundary; Spark reports optimized_schema. Exact cause, identifier and phase remain separate comparisons."
+      "rationale": "Mandatory literal BIGINT-to-INT conversion now fails during physical preparation. Cause, identifier and phase remain separate comparisons."
     },
     {
       "fixture": "regexp-extract-index-original-spark.jsonl",
@@ -245,20 +275,25 @@
       "reviewed": true,
       "condition": "CAST_OVERFLOW",
       "spark_phase": "optimized_schema",
-      "native_stage": "execute",
+      "native_stage": "physical",
       "availability": {
         "analyzed_schema": "available",
         "analyzed_arrow_schema": "available",
-        "physical_schema": "available",
-        "physical_arrow_schema": "available",
+        "physical_schema": "null",
+        "physical_arrow_schema": "null",
         "rows": "absent"
       },
       "evidence": {
         "capture_family": "original_bigint",
         "raw_log_line": 673,
-        "frozen_reference_line": 4
+        "frozen_reference_line": 4,
+        "capture_source_head": "028c10625608053b34b76421379b6dc2df1c5756",
+        "capture_manifest": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate-manifest.json",
+        "capture_manifest_sha256": "0e230dc4623d919c7f5db8c73f8933e236aeee5e70006f78039e37729f004077",
+        "raw_log_file": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate.log",
+        "raw_log_sha256": "f468e28bf7ce7635bbd6876e0aa192aee25f8de591df5a031ea50dbc1829c8d6"
       },
-      "rationale": "Observed native execute boundary; Spark reports optimized_schema. Exact cause, identifier and phase remain separate comparisons."
+      "rationale": "Mandatory literal BIGINT-to-INT conversion now fails during physical preparation. Cause, identifier and phase remain separate comparisons."
     },
     {
       "fixture": "regexp-extract-index-original-spark.jsonl",
@@ -270,20 +305,25 @@
       "reviewed": true,
       "condition": "CAST_OVERFLOW",
       "spark_phase": "optimized_schema",
-      "native_stage": "execute",
+      "native_stage": "physical",
       "availability": {
         "analyzed_schema": "available",
         "analyzed_arrow_schema": "available",
-        "physical_schema": "available",
-        "physical_arrow_schema": "available",
+        "physical_schema": "null",
+        "physical_arrow_schema": "null",
         "rows": "absent"
       },
       "evidence": {
         "capture_family": "original_bigint",
         "raw_log_line": 674,
-        "frozen_reference_line": 5
+        "frozen_reference_line": 5,
+        "capture_source_head": "028c10625608053b34b76421379b6dc2df1c5756",
+        "capture_manifest": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate-manifest.json",
+        "capture_manifest_sha256": "0e230dc4623d919c7f5db8c73f8933e236aeee5e70006f78039e37729f004077",
+        "raw_log_file": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate.log",
+        "raw_log_sha256": "f468e28bf7ce7635bbd6876e0aa192aee25f8de591df5a031ea50dbc1829c8d6"
       },
-      "rationale": "Observed native execute boundary; Spark reports optimized_schema. Exact cause, identifier and phase remain separate comparisons."
+      "rationale": "Mandatory literal BIGINT-to-INT conversion now fails during physical preparation. Cause, identifier and phase remain separate comparisons."
     },
     {
       "fixture": "regexp-extract-index-original-spark.jsonl",
@@ -345,20 +385,25 @@
       "reviewed": true,
       "condition": "CAST_OVERFLOW",
       "spark_phase": "optimized_schema",
-      "native_stage": "execute",
+      "native_stage": "physical",
       "availability": {
         "analyzed_schema": "available",
         "analyzed_arrow_schema": "available",
-        "physical_schema": "available",
-        "physical_arrow_schema": "available",
+        "physical_schema": "null",
+        "physical_arrow_schema": "null",
         "rows": "absent"
       },
       "evidence": {
         "capture_family": "original_bigint",
         "raw_log_line": 682,
-        "frozen_reference_line": 2
+        "frozen_reference_line": 2,
+        "capture_source_head": "028c10625608053b34b76421379b6dc2df1c5756",
+        "capture_manifest": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate-manifest.json",
+        "capture_manifest_sha256": "0e230dc4623d919c7f5db8c73f8933e236aeee5e70006f78039e37729f004077",
+        "raw_log_file": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate.log",
+        "raw_log_sha256": "f468e28bf7ce7635bbd6876e0aa192aee25f8de591df5a031ea50dbc1829c8d6"
       },
-      "rationale": "Observed native execute boundary; Spark reports optimized_schema. Exact cause, identifier and phase remain separate comparisons."
+      "rationale": "Mandatory literal BIGINT-to-INT conversion now fails during physical preparation. Cause, identifier and phase remain separate comparisons."
     },
     {
       "fixture": "regexp-extract-index-original-spark.jsonl",
@@ -370,20 +415,25 @@
       "reviewed": true,
       "condition": "CAST_OVERFLOW",
       "spark_phase": "optimized_schema",
-      "native_stage": "execute",
+      "native_stage": "physical",
       "availability": {
         "analyzed_schema": "available",
         "analyzed_arrow_schema": "available",
-        "physical_schema": "available",
-        "physical_arrow_schema": "available",
+        "physical_schema": "null",
+        "physical_arrow_schema": "null",
         "rows": "absent"
       },
       "evidence": {
         "capture_family": "original_bigint",
         "raw_log_line": 683,
-        "frozen_reference_line": 3
+        "frozen_reference_line": 3,
+        "capture_source_head": "028c10625608053b34b76421379b6dc2df1c5756",
+        "capture_manifest": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate-manifest.json",
+        "capture_manifest_sha256": "0e230dc4623d919c7f5db8c73f8933e236aeee5e70006f78039e37729f004077",
+        "raw_log_file": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate.log",
+        "raw_log_sha256": "f468e28bf7ce7635bbd6876e0aa192aee25f8de591df5a031ea50dbc1829c8d6"
       },
-      "rationale": "Observed native execute boundary; Spark reports optimized_schema. Exact cause, identifier and phase remain separate comparisons."
+      "rationale": "Mandatory literal BIGINT-to-INT conversion now fails during physical preparation. Cause, identifier and phase remain separate comparisons."
     },
     {
       "fixture": "regexp-extract-index-original-spark.jsonl",
@@ -395,20 +445,25 @@
       "reviewed": true,
       "condition": "CAST_OVERFLOW",
       "spark_phase": "optimized_schema",
-      "native_stage": "execute",
+      "native_stage": "physical",
       "availability": {
         "analyzed_schema": "available",
         "analyzed_arrow_schema": "available",
-        "physical_schema": "available",
-        "physical_arrow_schema": "available",
+        "physical_schema": "null",
+        "physical_arrow_schema": "null",
         "rows": "absent"
       },
       "evidence": {
         "capture_family": "original_bigint",
         "raw_log_line": 684,
-        "frozen_reference_line": 4
+        "frozen_reference_line": 4,
+        "capture_source_head": "028c10625608053b34b76421379b6dc2df1c5756",
+        "capture_manifest": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate-manifest.json",
+        "capture_manifest_sha256": "0e230dc4623d919c7f5db8c73f8933e236aeee5e70006f78039e37729f004077",
+        "raw_log_file": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate.log",
+        "raw_log_sha256": "f468e28bf7ce7635bbd6876e0aa192aee25f8de591df5a031ea50dbc1829c8d6"
       },
-      "rationale": "Observed native execute boundary; Spark reports optimized_schema. Exact cause, identifier and phase remain separate comparisons."
+      "rationale": "Mandatory literal BIGINT-to-INT conversion now fails during physical preparation. Cause, identifier and phase remain separate comparisons."
     },
     {
       "fixture": "regexp-extract-index-original-spark.jsonl",
@@ -420,20 +475,25 @@
       "reviewed": true,
       "condition": "CAST_OVERFLOW",
       "spark_phase": "optimized_schema",
-      "native_stage": "execute",
+      "native_stage": "physical",
       "availability": {
         "analyzed_schema": "available",
         "analyzed_arrow_schema": "available",
-        "physical_schema": "available",
-        "physical_arrow_schema": "available",
+        "physical_schema": "null",
+        "physical_arrow_schema": "null",
         "rows": "absent"
       },
       "evidence": {
         "capture_family": "original_bigint",
         "raw_log_line": 685,
-        "frozen_reference_line": 5
+        "frozen_reference_line": 5,
+        "capture_source_head": "028c10625608053b34b76421379b6dc2df1c5756",
+        "capture_manifest": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate-manifest.json",
+        "capture_manifest_sha256": "0e230dc4623d919c7f5db8c73f8933e236aeee5e70006f78039e37729f004077",
+        "raw_log_file": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate.log",
+        "raw_log_sha256": "f468e28bf7ce7635bbd6876e0aa192aee25f8de591df5a031ea50dbc1829c8d6"
       },
-      "rationale": "Observed native execute boundary; Spark reports optimized_schema. Exact cause, identifier and phase remain separate comparisons."
+      "rationale": "Mandatory literal BIGINT-to-INT conversion now fails during physical preparation. Cause, identifier and phase remain separate comparisons."
     },
     {
       "fixture": "regexp-extract-index-original-spark.jsonl",
@@ -495,20 +555,25 @@
       "reviewed": true,
       "condition": "CAST_OVERFLOW",
       "spark_phase": "optimized_schema",
-      "native_stage": "execute",
+      "native_stage": "physical",
       "availability": {
         "analyzed_schema": "available",
         "analyzed_arrow_schema": "available",
-        "physical_schema": "available",
-        "physical_arrow_schema": "available",
+        "physical_schema": "null",
+        "physical_arrow_schema": "null",
         "rows": "absent"
       },
       "evidence": {
         "capture_family": "original_bigint",
         "raw_log_line": 693,
-        "frozen_reference_line": 2
+        "frozen_reference_line": 2,
+        "capture_source_head": "028c10625608053b34b76421379b6dc2df1c5756",
+        "capture_manifest": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate-manifest.json",
+        "capture_manifest_sha256": "0e230dc4623d919c7f5db8c73f8933e236aeee5e70006f78039e37729f004077",
+        "raw_log_file": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate.log",
+        "raw_log_sha256": "f468e28bf7ce7635bbd6876e0aa192aee25f8de591df5a031ea50dbc1829c8d6"
       },
-      "rationale": "Observed native execute boundary; Spark reports optimized_schema. Exact cause, identifier and phase remain separate comparisons."
+      "rationale": "Mandatory literal BIGINT-to-INT conversion now fails during physical preparation. Cause, identifier and phase remain separate comparisons."
     },
     {
       "fixture": "regexp-extract-index-original-spark.jsonl",
@@ -520,20 +585,25 @@
       "reviewed": true,
       "condition": "CAST_OVERFLOW",
       "spark_phase": "optimized_schema",
-      "native_stage": "execute",
+      "native_stage": "physical",
       "availability": {
         "analyzed_schema": "available",
         "analyzed_arrow_schema": "available",
-        "physical_schema": "available",
-        "physical_arrow_schema": "available",
+        "physical_schema": "null",
+        "physical_arrow_schema": "null",
         "rows": "absent"
       },
       "evidence": {
         "capture_family": "original_bigint",
         "raw_log_line": 694,
-        "frozen_reference_line": 3
+        "frozen_reference_line": 3,
+        "capture_source_head": "028c10625608053b34b76421379b6dc2df1c5756",
+        "capture_manifest": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate-manifest.json",
+        "capture_manifest_sha256": "0e230dc4623d919c7f5db8c73f8933e236aeee5e70006f78039e37729f004077",
+        "raw_log_file": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate.log",
+        "raw_log_sha256": "f468e28bf7ce7635bbd6876e0aa192aee25f8de591df5a031ea50dbc1829c8d6"
       },
-      "rationale": "Observed native execute boundary; Spark reports optimized_schema. Exact cause, identifier and phase remain separate comparisons."
+      "rationale": "Mandatory literal BIGINT-to-INT conversion now fails during physical preparation. Cause, identifier and phase remain separate comparisons."
     },
     {
       "fixture": "regexp-extract-index-original-spark.jsonl",
@@ -545,20 +615,25 @@
       "reviewed": true,
       "condition": "CAST_OVERFLOW",
       "spark_phase": "optimized_schema",
-      "native_stage": "execute",
+      "native_stage": "physical",
       "availability": {
         "analyzed_schema": "available",
         "analyzed_arrow_schema": "available",
-        "physical_schema": "available",
-        "physical_arrow_schema": "available",
+        "physical_schema": "null",
+        "physical_arrow_schema": "null",
         "rows": "absent"
       },
       "evidence": {
         "capture_family": "original_bigint",
         "raw_log_line": 695,
-        "frozen_reference_line": 4
+        "frozen_reference_line": 4,
+        "capture_source_head": "028c10625608053b34b76421379b6dc2df1c5756",
+        "capture_manifest": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate-manifest.json",
+        "capture_manifest_sha256": "0e230dc4623d919c7f5db8c73f8933e236aeee5e70006f78039e37729f004077",
+        "raw_log_file": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate.log",
+        "raw_log_sha256": "f468e28bf7ce7635bbd6876e0aa192aee25f8de591df5a031ea50dbc1829c8d6"
       },
-      "rationale": "Observed native execute boundary; Spark reports optimized_schema. Exact cause, identifier and phase remain separate comparisons."
+      "rationale": "Mandatory literal BIGINT-to-INT conversion now fails during physical preparation. Cause, identifier and phase remain separate comparisons."
     },
     {
       "fixture": "regexp-extract-index-original-spark.jsonl",
@@ -570,20 +645,25 @@
       "reviewed": true,
       "condition": "CAST_OVERFLOW",
       "spark_phase": "optimized_schema",
-      "native_stage": "execute",
+      "native_stage": "physical",
       "availability": {
         "analyzed_schema": "available",
         "analyzed_arrow_schema": "available",
-        "physical_schema": "available",
-        "physical_arrow_schema": "available",
+        "physical_schema": "null",
+        "physical_arrow_schema": "null",
         "rows": "absent"
       },
       "evidence": {
         "capture_family": "original_bigint",
         "raw_log_line": 696,
-        "frozen_reference_line": 5
+        "frozen_reference_line": 5,
+        "capture_source_head": "028c10625608053b34b76421379b6dc2df1c5756",
+        "capture_manifest": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate-manifest.json",
+        "capture_manifest_sha256": "0e230dc4623d919c7f5db8c73f8933e236aeee5e70006f78039e37729f004077",
+        "raw_log_file": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate.log",
+        "raw_log_sha256": "f468e28bf7ce7635bbd6876e0aa192aee25f8de591df5a031ea50dbc1829c8d6"
       },
-      "rationale": "Observed native execute boundary; Spark reports optimized_schema. Exact cause, identifier and phase remain separate comparisons."
+      "rationale": "Mandatory literal BIGINT-to-INT conversion now fails during physical preparation. Cause, identifier and phase remain separate comparisons."
     },
     {
       "fixture": "regexp-extract-index-original-spark.jsonl",
@@ -645,20 +725,25 @@
       "reviewed": true,
       "condition": "CAST_OVERFLOW",
       "spark_phase": "optimized_schema",
-      "native_stage": "execute",
+      "native_stage": "physical",
       "availability": {
         "analyzed_schema": "available",
         "analyzed_arrow_schema": "available",
-        "physical_schema": "available",
-        "physical_arrow_schema": "available",
+        "physical_schema": "null",
+        "physical_arrow_schema": "null",
         "rows": "absent"
       },
       "evidence": {
         "capture_family": "original_bigint",
         "raw_log_line": 704,
-        "frozen_reference_line": 2
+        "frozen_reference_line": 2,
+        "capture_source_head": "028c10625608053b34b76421379b6dc2df1c5756",
+        "capture_manifest": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate-manifest.json",
+        "capture_manifest_sha256": "0e230dc4623d919c7f5db8c73f8933e236aeee5e70006f78039e37729f004077",
+        "raw_log_file": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate.log",
+        "raw_log_sha256": "f468e28bf7ce7635bbd6876e0aa192aee25f8de591df5a031ea50dbc1829c8d6"
       },
-      "rationale": "Observed native execute boundary; Spark reports optimized_schema. Exact cause, identifier and phase remain separate comparisons."
+      "rationale": "Mandatory literal BIGINT-to-INT conversion now fails during physical preparation. Cause, identifier and phase remain separate comparisons."
     },
     {
       "fixture": "regexp-extract-index-original-spark.jsonl",
@@ -670,20 +755,25 @@
       "reviewed": true,
       "condition": "CAST_OVERFLOW",
       "spark_phase": "optimized_schema",
-      "native_stage": "execute",
+      "native_stage": "physical",
       "availability": {
         "analyzed_schema": "available",
         "analyzed_arrow_schema": "available",
-        "physical_schema": "available",
-        "physical_arrow_schema": "available",
+        "physical_schema": "null",
+        "physical_arrow_schema": "null",
         "rows": "absent"
       },
       "evidence": {
         "capture_family": "original_bigint",
         "raw_log_line": 705,
-        "frozen_reference_line": 3
+        "frozen_reference_line": 3,
+        "capture_source_head": "028c10625608053b34b76421379b6dc2df1c5756",
+        "capture_manifest": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate-manifest.json",
+        "capture_manifest_sha256": "0e230dc4623d919c7f5db8c73f8933e236aeee5e70006f78039e37729f004077",
+        "raw_log_file": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate.log",
+        "raw_log_sha256": "f468e28bf7ce7635bbd6876e0aa192aee25f8de591df5a031ea50dbc1829c8d6"
       },
-      "rationale": "Observed native execute boundary; Spark reports optimized_schema. Exact cause, identifier and phase remain separate comparisons."
+      "rationale": "Mandatory literal BIGINT-to-INT conversion now fails during physical preparation. Cause, identifier and phase remain separate comparisons."
     },
     {
       "fixture": "regexp-extract-index-original-spark.jsonl",
@@ -695,20 +785,25 @@
       "reviewed": true,
       "condition": "CAST_OVERFLOW",
       "spark_phase": "optimized_schema",
-      "native_stage": "execute",
+      "native_stage": "physical",
       "availability": {
         "analyzed_schema": "available",
         "analyzed_arrow_schema": "available",
-        "physical_schema": "available",
-        "physical_arrow_schema": "available",
+        "physical_schema": "null",
+        "physical_arrow_schema": "null",
         "rows": "absent"
       },
       "evidence": {
         "capture_family": "original_bigint",
         "raw_log_line": 706,
-        "frozen_reference_line": 4
+        "frozen_reference_line": 4,
+        "capture_source_head": "028c10625608053b34b76421379b6dc2df1c5756",
+        "capture_manifest": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate-manifest.json",
+        "capture_manifest_sha256": "0e230dc4623d919c7f5db8c73f8933e236aeee5e70006f78039e37729f004077",
+        "raw_log_file": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate.log",
+        "raw_log_sha256": "f468e28bf7ce7635bbd6876e0aa192aee25f8de591df5a031ea50dbc1829c8d6"
       },
-      "rationale": "Observed native execute boundary; Spark reports optimized_schema. Exact cause, identifier and phase remain separate comparisons."
+      "rationale": "Mandatory literal BIGINT-to-INT conversion now fails during physical preparation. Cause, identifier and phase remain separate comparisons."
     },
     {
       "fixture": "regexp-extract-index-original-spark.jsonl",
@@ -720,20 +815,25 @@
       "reviewed": true,
       "condition": "CAST_OVERFLOW",
       "spark_phase": "optimized_schema",
-      "native_stage": "execute",
+      "native_stage": "physical",
       "availability": {
         "analyzed_schema": "available",
         "analyzed_arrow_schema": "available",
-        "physical_schema": "available",
-        "physical_arrow_schema": "available",
+        "physical_schema": "null",
+        "physical_arrow_schema": "null",
         "rows": "absent"
       },
       "evidence": {
         "capture_family": "original_bigint",
         "raw_log_line": 707,
-        "frozen_reference_line": 5
+        "frozen_reference_line": 5,
+        "capture_source_head": "028c10625608053b34b76421379b6dc2df1c5756",
+        "capture_manifest": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate-manifest.json",
+        "capture_manifest_sha256": "0e230dc4623d919c7f5db8c73f8933e236aeee5e70006f78039e37729f004077",
+        "raw_log_file": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate.log",
+        "raw_log_sha256": "f468e28bf7ce7635bbd6876e0aa192aee25f8de591df5a031ea50dbc1829c8d6"
       },
-      "rationale": "Observed native execute boundary; Spark reports optimized_schema. Exact cause, identifier and phase remain separate comparisons."
+      "rationale": "Mandatory literal BIGINT-to-INT conversion now fails during physical preparation. Cause, identifier and phase remain separate comparisons."
     },
     {
       "fixture": "regexp-extract-index-original-spark.jsonl",
@@ -795,20 +895,25 @@
       "reviewed": true,
       "condition": "CAST_OVERFLOW",
       "spark_phase": "optimized_schema",
-      "native_stage": "execute",
+      "native_stage": "physical",
       "availability": {
         "analyzed_schema": "available",
         "analyzed_arrow_schema": "available",
-        "physical_schema": "available",
-        "physical_arrow_schema": "available",
+        "physical_schema": "null",
+        "physical_arrow_schema": "null",
         "rows": "absent"
       },
       "evidence": {
         "capture_family": "original_bigint",
         "raw_log_line": 715,
-        "frozen_reference_line": 2
+        "frozen_reference_line": 2,
+        "capture_source_head": "028c10625608053b34b76421379b6dc2df1c5756",
+        "capture_manifest": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate-manifest.json",
+        "capture_manifest_sha256": "0e230dc4623d919c7f5db8c73f8933e236aeee5e70006f78039e37729f004077",
+        "raw_log_file": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate.log",
+        "raw_log_sha256": "f468e28bf7ce7635bbd6876e0aa192aee25f8de591df5a031ea50dbc1829c8d6"
       },
-      "rationale": "Observed native execute boundary; Spark reports optimized_schema. Exact cause, identifier and phase remain separate comparisons."
+      "rationale": "Mandatory literal BIGINT-to-INT conversion now fails during physical preparation. Cause, identifier and phase remain separate comparisons."
     },
     {
       "fixture": "regexp-extract-index-original-spark.jsonl",
@@ -820,20 +925,25 @@
       "reviewed": true,
       "condition": "CAST_OVERFLOW",
       "spark_phase": "optimized_schema",
-      "native_stage": "execute",
+      "native_stage": "physical",
       "availability": {
         "analyzed_schema": "available",
         "analyzed_arrow_schema": "available",
-        "physical_schema": "available",
-        "physical_arrow_schema": "available",
+        "physical_schema": "null",
+        "physical_arrow_schema": "null",
         "rows": "absent"
       },
       "evidence": {
         "capture_family": "original_bigint",
         "raw_log_line": 716,
-        "frozen_reference_line": 3
+        "frozen_reference_line": 3,
+        "capture_source_head": "028c10625608053b34b76421379b6dc2df1c5756",
+        "capture_manifest": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate-manifest.json",
+        "capture_manifest_sha256": "0e230dc4623d919c7f5db8c73f8933e236aeee5e70006f78039e37729f004077",
+        "raw_log_file": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate.log",
+        "raw_log_sha256": "f468e28bf7ce7635bbd6876e0aa192aee25f8de591df5a031ea50dbc1829c8d6"
       },
-      "rationale": "Observed native execute boundary; Spark reports optimized_schema. Exact cause, identifier and phase remain separate comparisons."
+      "rationale": "Mandatory literal BIGINT-to-INT conversion now fails during physical preparation. Cause, identifier and phase remain separate comparisons."
     },
     {
       "fixture": "regexp-extract-index-original-spark.jsonl",
@@ -845,20 +955,25 @@
       "reviewed": true,
       "condition": "CAST_OVERFLOW",
       "spark_phase": "optimized_schema",
-      "native_stage": "execute",
+      "native_stage": "physical",
       "availability": {
         "analyzed_schema": "available",
         "analyzed_arrow_schema": "available",
-        "physical_schema": "available",
-        "physical_arrow_schema": "available",
+        "physical_schema": "null",
+        "physical_arrow_schema": "null",
         "rows": "absent"
       },
       "evidence": {
         "capture_family": "original_bigint",
         "raw_log_line": 717,
-        "frozen_reference_line": 4
+        "frozen_reference_line": 4,
+        "capture_source_head": "028c10625608053b34b76421379b6dc2df1c5756",
+        "capture_manifest": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate-manifest.json",
+        "capture_manifest_sha256": "0e230dc4623d919c7f5db8c73f8933e236aeee5e70006f78039e37729f004077",
+        "raw_log_file": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate.log",
+        "raw_log_sha256": "f468e28bf7ce7635bbd6876e0aa192aee25f8de591df5a031ea50dbc1829c8d6"
       },
-      "rationale": "Observed native execute boundary; Spark reports optimized_schema. Exact cause, identifier and phase remain separate comparisons."
+      "rationale": "Mandatory literal BIGINT-to-INT conversion now fails during physical preparation. Cause, identifier and phase remain separate comparisons."
     },
     {
       "fixture": "regexp-extract-index-original-spark.jsonl",
@@ -870,20 +985,25 @@
       "reviewed": true,
       "condition": "CAST_OVERFLOW",
       "spark_phase": "optimized_schema",
-      "native_stage": "execute",
+      "native_stage": "physical",
       "availability": {
         "analyzed_schema": "available",
         "analyzed_arrow_schema": "available",
-        "physical_schema": "available",
-        "physical_arrow_schema": "available",
+        "physical_schema": "null",
+        "physical_arrow_schema": "null",
         "rows": "absent"
       },
       "evidence": {
         "capture_family": "original_bigint",
         "raw_log_line": 718,
-        "frozen_reference_line": 5
+        "frozen_reference_line": 5,
+        "capture_source_head": "028c10625608053b34b76421379b6dc2df1c5756",
+        "capture_manifest": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate-manifest.json",
+        "capture_manifest_sha256": "0e230dc4623d919c7f5db8c73f8933e236aeee5e70006f78039e37729f004077",
+        "raw_log_file": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate.log",
+        "raw_log_sha256": "f468e28bf7ce7635bbd6876e0aa192aee25f8de591df5a031ea50dbc1829c8d6"
       },
-      "rationale": "Observed native execute boundary; Spark reports optimized_schema. Exact cause, identifier and phase remain separate comparisons."
+      "rationale": "Mandatory literal BIGINT-to-INT conversion now fails during physical preparation. Cause, identifier and phase remain separate comparisons."
     },
     {
       "fixture": "regexp-extract-index-original-spark.jsonl",
@@ -8585,5 +8705,28 @@
       },
       "rationale": "Observed native physical boundary; Spark reports optimized_schema. Exact cause, identifier and phase remain separate comparisons."
     }
-  ]
+  ],
+  "literal_preparation_refresh": {
+    "product_source_head": "028c10625608053b34b76421379b6dc2df1c5756",
+    "product_source_tree": "da82213cc6b7ab458d7f2ded0bef70e09c4551b3",
+    "previous_actual_product": "62eb816375d867fc23015b35eb36d63707f21d62",
+    "main_manifest": {
+      "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/main/candidate-manifest.json",
+      "sha256": "0e230dc4623d919c7f5db8c73f8933e236aeee5e70006f78039e37729f004077"
+    },
+    "scalar_manifest": {
+      "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/bigint-repair-runtime/scalar-parent/candidate/capture.manifest.json",
+      "sha256": "19597a89045f7b37b3b048c399b11b7240940f62a02cf11b1533c8a146f13420"
+    },
+    "previous_main_manifest": {
+      "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/array-staging-runtime/main/candidate-manifest.json",
+      "sha256": "45f6343587c78426b5a3aa9bfd952c1ff61f3e8a6088b29f306e0e0bd5c410b7"
+    },
+    "focused_24_sha256": "1b87d644eef49dab92bd904815393b96d3e126e2e76c5edf159b47c47fab4c9f",
+    "changed_contexts": 24,
+    "main_contexts": 1082,
+    "providers": 99,
+    "separate_scalar_contexts": 24,
+    "new_negative_or_phase_allowance": false
+  }
 }
