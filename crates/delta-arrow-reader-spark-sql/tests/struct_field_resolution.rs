@@ -8,6 +8,7 @@ use datafusion::catalog::CatalogProvider;
 use datafusion::catalog::memory::{MemoryCatalogProvider, MemorySchemaProvider};
 use datafusion::error::DataFusionError;
 use datafusion::execution::SessionStateBuilder;
+use datafusion::logical_expr::simplify::SparkArrayIndexError;
 use datafusion::physical_plan::collect;
 use datafusion::prelude::{SessionConfig, SessionContext};
 use delta_arrow_reader_spark_sql::{
@@ -258,17 +259,36 @@ async fn check_execution_error(
 }
 
 fn matches_array_index_error(error: &DataFusionError) -> bool {
-    matches!(error.find_root(), DataFusionError::Execution(message)
-        if message.starts_with("[INVALID_ARRAY_INDEX] The index ")
-            && message.contains(" is out of bounds. The array has "))
+    const EXPECTED: &str = "[INVALID_ARRAY_INDEX] The index 9 is out of bounds. The array has 2 elements. Use the SQL function `get()` to tolerate accessing element at invalid index and return NULL instead.";
+    match error.find_root() {
+        DataFusionError::Execution(message) => message == EXPECTED,
+        DataFusionError::External(source) => source
+            .downcast_ref::<SparkArrayIndexError>()
+            .is_some_and(|error| error.to_string() == EXPECTED),
+        _ => false,
+    }
 }
 
 #[test]
-fn array_index_condition_requires_the_execution_cause() {
-    let message = "[INVALID_ARRAY_INDEX] The index 9 is out of bounds. The array has 2 elements.";
+fn array_index_condition_requires_exact_runtime_cause() {
+    let message = "[INVALID_ARRAY_INDEX] The index 9 is out of bounds. The array has 2 elements. Use the SQL function `get()` to tolerate accessing element at invalid index and return NULL instead.";
     assert!(matches_array_index_error(
         &DataFusionError::Execution(message.into()).context("collect")
     ));
+    assert!(matches_array_index_error(
+        &DataFusionError::External(Box::new(SparkArrayIndexError::new(message.into())))
+            .context("collect")
+    ));
+    let wrapped = DataFusionError::ArrowError(
+        Box::new(arrow::error::ArrowError::ExternalError(Box::new(
+            DataFusionError::Shared(Arc::new(
+                DataFusionError::External(Box::new(SparkArrayIndexError::new(message.into())))
+                    .context("collect"),
+            )),
+        ))),
+        None,
+    );
+    assert!(matches_array_index_error(&wrapped));
     assert!(!matches_array_index_error(&DataFusionError::Plan(
         message.into()
     )));
@@ -278,6 +298,19 @@ fn array_index_condition_requires_the_execution_cause() {
     assert!(!matches_array_index_error(
         &DataFusionError::Execution("unrelated failure".into()).context(message)
     ));
+    for wrong_cause in [
+        message.replace("index 9", "index 8"),
+        message.replace("2 elements", "3 elements"),
+        message.replace("Use the SQL function `get()`", "Use another function"),
+        format!("unrelated context: {message}"),
+    ] {
+        assert!(!matches_array_index_error(&DataFusionError::Execution(
+            wrong_cause.clone()
+        )));
+        assert!(!matches_array_index_error(&DataFusionError::External(
+            Box::new(SparkArrayIndexError::new(wrong_cause))
+        )));
+    }
 }
 
 async fn compare_cases(source: &str, count: usize) -> TestResult {

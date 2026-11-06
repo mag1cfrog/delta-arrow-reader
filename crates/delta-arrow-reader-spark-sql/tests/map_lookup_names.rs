@@ -43,6 +43,90 @@ const NATIVE_CONTROLS: [(&str, &str); 4] = [
     ),
 ];
 
+fn matches_retained_map_observation(case: &Value, observed: &Value, retained: &Value) -> bool {
+    if observed == retained {
+        return true;
+    }
+    if case["expected"]["condition"] != "INVALID_ARRAY_INDEX" || retained["native_phase"] != "collect"
+    {
+        return false;
+    }
+    let Some(cause) = retained["error"].as_str().and_then(|error| {
+        error.strip_prefix("Execution error: [INVALID_ARRAY_INDEX] The index ")
+    }) else {
+        return false;
+    };
+    // The typed ARRAY carrier changes only this wrapper in the captured baseline.
+    if observed["error"] != format!("External error: [INVALID_ARRAY_INDEX] The index {cause}") {
+        return false;
+    }
+    let mut observed = observed.clone();
+    observed["error"] = retained["error"].clone();
+    observed == *retained
+}
+
+#[test]
+fn retained_array_carrier_keeps_the_complete_observation_strict() {
+    let case = json!({"expected": {"condition": "INVALID_ARRAY_INDEX"}});
+    let retained = json!({
+        "error": "Execution error: [INVALID_ARRAY_INDEX] The index 0 is out of bounds. The array has 0 elements.",
+        "native_phase": "collect", "public_schema": {"fields": []},
+        "optimized_schema": null, "before_collect": null, "physical_schema": null,
+        "optimized_error": null, "rows": null, "rows_raw": null,
+    });
+    let mut observed = retained.clone();
+    observed["error"] = json!(retained["error"].as_str().unwrap().replacen(
+        "Execution error: ",
+        "External error: ",
+        1,
+    ));
+    assert!(matches_retained_map_observation(&case, &observed, &retained));
+    for (key, value) in [
+        (
+            "error",
+            json!(observed["error"].as_str().unwrap().replace("index 0", "index 1")),
+        ),
+        (
+            "error",
+            json!(observed["error"].as_str().unwrap().replace("0 elements", "1 elements")),
+        ),
+        (
+            "error",
+            json!(format!("unrelated context: {}", observed["error"])),
+        ),
+        ("native_phase", json!("optimized")),
+        ("public_schema", json!({"fields": [{"nullable": true}]})),
+        ("optimized_schema", json!({"fields": []})),
+        ("before_collect", json!({"fields": []})),
+        ("physical_schema", json!({"fields": []})),
+        ("optimized_error", json!("another failure")),
+        ("rows", json!([[null]])),
+        ("rows_raw", json!([[null]])),
+    ] {
+        let mut changed = observed.clone();
+        changed[key] = value;
+        assert!(
+            !matches_retained_map_observation(&case, &changed, &retained),
+            "{key}"
+        );
+    }
+    let generic_case = json!({"expected": {"condition": "USER_RAISED_EXCEPTION"}});
+    assert!(!matches_retained_map_observation(
+        &generic_case,
+        &observed,
+        &retained
+    ));
+    let mut generic_retained = retained.clone();
+    generic_retained["error"] = json!("Execution error: user failure");
+    let mut generic_observed = generic_retained.clone();
+    generic_observed["error"] = json!("External error: user failure");
+    assert!(!matches_retained_map_observation(
+        &case,
+        &generic_observed,
+        &generic_retained
+    ));
+}
+
 #[tokio::test]
 async fn map_lookup_names_match_recorded_contracts() -> TestResult {
     let records = REFERENCE
@@ -134,7 +218,7 @@ async fn map_lookup_names_match_recorded_contracts() -> TestResult {
             let contract_matches = if let Some(control) = control {
                 assert_eq!(control["reference"], *case);
                 assert!(preserved.insert((id.to_string(), ansi, batch_size)));
-                observed == control["retained_observation"]
+                matches_retained_map_observation(case, &observed, &control["retained_observation"])
             } else {
                 spark_success_matches
             };
