@@ -17,6 +17,8 @@ const REQUEST: &str = include_str!("fixtures/null-range-754-cases.json");
 const REFERENCE: &str = include_str!("fixtures/null-range-754-spark.jsonl");
 const ORIGINAL_REQUEST: &str = include_str!("fixtures/date-range-747-cases.json");
 const ORIGINAL_REFERENCE: &str = include_str!("fixtures/date-range-747-spark.jsonl");
+const BOUNDARY_REQUEST: &str = include_str!("fixtures/null-range-754-boundary-cases.json");
+const BOUNDARY_REFERENCE: &str = include_str!("fixtures/null-range-754-boundary-spark.jsonl");
 const PRIOR_ROWS_REJECTIONS: &str =
     include_str!("fixtures/null-range-754-prior-rows-rejections.json");
 const ROWS_REJECTION_IDS: [&str; 4] = [
@@ -228,89 +230,96 @@ fn validate_null_range_references(request: &Value, records: &[Value]) -> TestRes
                 return Err("original independent NULL RANGE outcome changed".into());
             }
         }
-        let schemas = case["schema_stages"]
-            .as_object()
-            .ok_or("missing schema stages")?;
-        let availability = case["schema_stage_availability"]
-            .as_object()
-            .ok_or("missing schema availability")?;
-        if availability.len() != STAGES.len()
-            || schemas
-                .keys()
-                .any(|stage| !STAGES.iter().any(|(name, _)| *name == stage.as_str()))
-        {
-            return Err("NULL RANGE schema stage inventory differs".into());
-        }
-        for (stage, _) in STAGES {
-            let state = &case["schema_stage_availability"][stage];
-            match state["available"].as_bool() {
-                Some(true) if complete_schema(&case["schema_stages"][stage]) => {}
-                Some(false)
-                    if case["status"] == "error"
-                        && !schemas.contains_key(stage)
-                        && state["reason"]
-                            .as_str()
-                            .is_some_and(|reason| !reason.is_empty()) => {}
-                _ => return Err(format!("incomplete NULL RANGE stage {stage}: {key:?}").into()),
-            }
-        }
-        if case["status"] == "ok" {
-            let width = case["schema_stages"]["public"]["fields"]
-                .as_array()
-                .ok_or("missing public Fields")?
-                .len();
-            if schemas.len() != STAGES.len()
-                || case["expected"]["schema"] != case["schema_stages"]["public"]
-                || case["expected"].get("condition").is_some()
-                || ["rows_raw", "rows_multiset"].iter().any(|field| {
-                    !case[*field].as_array().is_some_and(|rows| {
-                        rows.iter().all(|row| {
-                            row.as_array().is_some_and(|row| {
-                                row.len() == width
-                                    && row.iter().all(|value| value.is_null() || value.is_string())
-                            })
-                        })
-                    })
-                })
-                || multiset(&case["rows_raw"])? != case["rows_multiset"]
-                || case["expected"].get("rows")
-                    != Some(if case["ordered"] == true {
-                        &case["rows_raw"]
-                    } else {
-                        &case["rows_multiset"]
-                    })
-            {
-                return Err(format!("incomplete NULL RANGE success or rows: {key:?}").into());
-            }
-        } else {
-            let details = &case["spark_error_details"];
-            if !case["expected"]["condition"].is_string()
-                || case["expected"].get("rows").is_some()
-                || !case["spark_error_phase"].is_string()
-                || details["condition"] != case["expected"]["condition"]
-                || details["phase"] != case["spark_error_phase"]
-                || !details["message"].is_string()
-                || !details["java_causes"].as_array().is_some_and(|causes| {
-                    !causes.is_empty()
-                        && causes.iter().all(|cause| {
-                            cause["class"].is_string()
-                                && cause["message"].is_string()
-                                && cause["parameters"].is_object()
-                                && cause.get("condition").is_some()
-                                && cause.get("sql_state").is_some()
-                        })
-                })
-                || details["cause_chain_complete"] != true
-                || ["parameters", "sql_state", "python_class"]
-                    .iter()
-                    .any(|field| details.get(*field).is_none())
-            {
-                return Err(format!("incomplete NULL RANGE failure: {key:?}").into());
-            }
-        }
+        validate_spark_reference_result(case)?;
     }
     if seen.len() != definitions.len() || originals.len() != 14 || original_count != 14 {
         return Err("missing original or supplementary NULL RANGE reference identity".into());
+    }
+    Ok(())
+}
+
+fn validate_spark_reference_result(spark_reference: &Value) -> TestResult {
+    let case = spark_reference;
+    let key = case_identity(case)?;
+    let schemas = case["schema_stages"]
+        .as_object()
+        .ok_or("missing schema stages")?;
+    let availability = case["schema_stage_availability"]
+        .as_object()
+        .ok_or("missing schema availability")?;
+    if availability.len() != STAGES.len()
+        || schemas
+            .keys()
+            .any(|stage| !STAGES.iter().any(|(name, _)| *name == stage.as_str()))
+    {
+        return Err("NULL RANGE schema stage inventory differs".into());
+    }
+    for (stage, _) in STAGES {
+        let state = &case["schema_stage_availability"][stage];
+        match state["available"].as_bool() {
+            Some(true) if complete_schema(&case["schema_stages"][stage]) => {}
+            Some(false)
+                if case["status"] == "error"
+                    && !schemas.contains_key(stage)
+                    && state["reason"]
+                        .as_str()
+                        .is_some_and(|reason| !reason.is_empty()) => {}
+            _ => return Err(format!("incomplete NULL RANGE stage {stage}: {key:?}").into()),
+        }
+    }
+    if case["status"] == "ok" {
+        let width = case["schema_stages"]["public"]["fields"]
+            .as_array()
+            .ok_or("missing public Fields")?
+            .len();
+        if schemas.len() != STAGES.len()
+            || case["expected"]["schema"] != case["schema_stages"]["public"]
+            || case["expected"].get("condition").is_some()
+            || ["rows_raw", "rows_multiset"].iter().any(|field| {
+                !case[*field].as_array().is_some_and(|rows| {
+                    rows.iter().all(|row| {
+                        row.as_array().is_some_and(|row| {
+                            row.len() == width
+                                && row.iter().all(|value| value.is_null() || value.is_string())
+                        })
+                    })
+                })
+            })
+            || multiset(&case["rows_raw"])? != case["rows_multiset"]
+            || case["expected"].get("rows")
+                != Some(if case["ordered"] == true {
+                    &case["rows_raw"]
+                } else {
+                    &case["rows_multiset"]
+                })
+        {
+            return Err(format!("incomplete NULL RANGE success or rows: {key:?}").into());
+        }
+    } else {
+        let details = &case["spark_error_details"];
+        if !case["expected"]["condition"].is_string()
+            || case["expected"].get("rows").is_some()
+            || !case["spark_error_phase"].is_string()
+            || details["condition"] != case["expected"]["condition"]
+            || details["phase"] != case["spark_error_phase"]
+            || !details["message"].is_string()
+            || !details["java_causes"].as_array().is_some_and(|causes| {
+                !causes.is_empty()
+                    && causes.iter().all(|cause| {
+                        cause["class"].is_string()
+                            && cause["message"].is_string()
+                            && cause["parameters"].is_object()
+                            && cause.get("condition").is_some()
+                            && cause.get("sql_state").is_some()
+                    })
+            })
+            || details["cause_chain_complete"] != true
+            || ["parameters", "sql_state", "python_class"]
+                .iter()
+                .any(|field| details.get(*field).is_none())
+        {
+            return Err(format!("incomplete NULL RANGE failure: {key:?}").into());
+        }
     }
     Ok(())
 }
@@ -394,6 +403,220 @@ fn prior_rows_rejection_matches(
     })
 }
 
+fn native_result_matches_spark_reference(native_result: &Value, spark_reference: &Value) -> bool {
+    native_result["matches"] == true
+        && native_result["optimized_matches"] == true
+        && STAGES.iter().all(|(stage, observed)| {
+            match spark_reference["schema_stages"].get(*stage) {
+                Some(expected) => native_result.get(*observed) == Some(expected),
+                None => native_result.get(*observed).is_some_and(Value::is_null),
+            }
+        })
+}
+
+fn validate_float_decimal_references(request: &Value, records: &[Value]) -> TestResult {
+    let corpora = request["corpora"]
+        .as_array()
+        .ok_or("missing boundary corpora")?;
+    let [corpus] = corpora.as_slice() else {
+        return Err("expected one float/decimal boundary corpus".into());
+    };
+    let header = records.first().ok_or("missing boundary capture header")?;
+    let definitions = corpus["cases"].as_array().ok_or("missing boundary cases")?;
+    if request["issue"] != 754
+        || request["expected_record_count"] != 16
+        || request["spark_version"] != "4.2.0"
+        || request["spark_revision"] != "32f7299601108917fb01920a54e084595b7b3bf8"
+        || definitions.len() != 16
+        || records.len() != 17
+        || corpus["corpus"] != "null-range-boundary-754-controls"
+        || corpus["metadata"]["inputs"] != json!([])
+        || corpus["metadata"]["spark_version"] != request["spark_version"]
+        || corpus["metadata"]["timezone"] != "UTC"
+        || header["issue"] != 754
+        || header["expected_record_count"] != 16
+        || header["spark_only"] != true
+        || header["reads_expected_outputs"] != false
+        || header["spark_version"] != request["spark_version"]
+        || header["effective_settings"]["spark.sql.session.timeZone"] != "UTC"
+        || header["spark_build"]["SPARK_REVISION"]["value"] != request["spark_revision"]
+        || header["schema_stage_protocol"] != json!(STAGES.map(|(name, _)| name))
+        || header["corpora"]
+            .as_array()
+            .is_none_or(|corpora| corpora.len() != 1)
+        || ["corpus", "source", "metadata"]
+            .iter()
+            .any(|field| header["corpora"][0][*field] != corpus[*field])
+        || header["corpora"][0]["registered_inputs"] != json!([])
+    {
+        return Err("float/decimal source or capture inventory differs".into());
+    }
+    let mut expected = BTreeSet::new();
+    let mut sql_modes = BTreeMap::<String, BTreeSet<bool>>::new();
+    for definition in definitions {
+        let key = case_identity(definition)?;
+        let sql = definition["sql"].as_str().ok_or("missing boundary SQL")?;
+        if definition["corpus"] != corpus["corpus"]
+            || definition["ordered"] != true
+            || !definition["coverage"].is_object()
+            || !expected.insert(key.clone())
+        {
+            return Err("duplicate or incomplete boundary source identity".into());
+        }
+        sql_modes.entry(sql.into()).or_default().insert(key.2);
+    }
+    if sql_modes.len() != 8
+        || sql_modes
+            .values()
+            .any(|modes| *modes != BTreeSet::from([false, true]))
+    {
+        return Err("boundary sources require eight ordered SQL queries in both ANSI modes".into());
+    }
+    let mut seen = BTreeSet::new();
+    for case in &records[1..] {
+        let key = case_identity(case)?;
+        let definition = definitions
+            .iter()
+            .find(|definition| case_identity(definition).ok().as_ref() == Some(&key))
+            .ok_or("unexpected boundary reference identity")?;
+        if !seen.insert(key.clone())
+            || case["status"] != "ok"
+            || case.get("capture_failure").is_some()
+            || case.get("spark_error_details").is_some()
+            || ["sql", "ordered", "coverage"]
+                .iter()
+                .any(|field| case.get(*field) != definition.get(*field))
+        {
+            return Err("boundary reference differs from source or capture failed".into());
+        }
+        let settings = case["effective_settings"]
+            .as_object()
+            .ok_or("missing boundary settings")?;
+        let header_settings = header["effective_settings"]
+            .as_object()
+            .ok_or("missing boundary header settings")?;
+        if settings.len() != 8
+            || header_settings.len() != 8
+            || settings.iter().any(|(name, value)| {
+                if name == "spark.sql.ansi.enabled" {
+                    value.as_str() != Some(if key.2 { "true" } else { "false" })
+                } else {
+                    header_settings.get(name) != Some(value)
+                }
+            })
+        {
+            return Err("boundary actual settings differ from source ANSI/runtime".into());
+        }
+        validate_spark_reference_result(case)?;
+    }
+    if seen != expected {
+        return Err("missing float/decimal boundary reference identity".into());
+    }
+    Ok(())
+}
+
+fn parse_float_decimal_fixture() -> TestResult<(Value, Vec<Value>)> {
+    let request = serde_json::from_str(BOUNDARY_REQUEST)?;
+    let records = BOUNDARY_REFERENCE
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    validate_float_decimal_references(&request, &records)?;
+    Ok((request, records))
+}
+
+#[tokio::test]
+async fn null_range_float_and_decimal_boundaries_match_spark() -> TestResult {
+    let (request, records) = parse_float_decimal_fixture()?;
+    let mut completed = BTreeSet::new();
+    let mut differences = Vec::new();
+    for batch in [1, 32] {
+        let session = SessionContext::new_with_state(
+            configure_spark_sql(
+                SessionStateBuilder::new()
+                    .with_default_features()
+                    .with_config(
+                        SessionConfig::new()
+                            .with_batch_size(batch)
+                            .with_target_partitions(2),
+                    ),
+            )
+            .build(),
+        );
+        spark_inputs::register_recorded_inputs(
+            &session,
+            &request["corpora"][0]["metadata"],
+            batch,
+        )?;
+        for case in &records[1..] {
+            let observation = compare_exact_spark_query_stages_with_optimized(&session, case)
+                .await
+                .unwrap_or_else(|error| json!({"observer_error":error.to_string()}));
+            let matches = native_result_matches_spark_reference(&observation, case);
+            let unique = completed.insert((case_identity(case)?, batch));
+            if !matches || !unique {
+                differences.push(format!(
+                    "{} ANSI={} batch={batch}",
+                    case["id"], case["ansi"]
+                ));
+            }
+            eprintln!(
+                "NULL_RANGE_BOUNDARY_OBSERVATION {}",
+                json!({
+                    "issue":754,"corpus":case["corpus"],"id":case["id"],"ansi":case["ansi"],
+                    "batch":batch,"target_partitions":2,"reference":case,
+                    "observation":observation,"spark_matches":matches
+                })
+            );
+        }
+    }
+    assert_eq!(completed.len(), 32);
+    assert!(
+        differences.is_empty(),
+        "float/decimal NULL RANGE differences:\n{}",
+        differences.join("\n")
+    );
+    Ok(())
+}
+
+#[test]
+fn float_decimal_references_reject_identity_fields_and_order_loss() -> TestResult {
+    let (request, records) = parse_float_decimal_fixture()?;
+    let mut missing = records.clone();
+    missing.pop();
+    assert!(validate_float_decimal_references(&request, &missing).is_err());
+    let mut duplicate = records.clone();
+    duplicate[2] = duplicate[1].clone();
+    assert!(validate_float_decimal_references(&request, &duplicate).is_err());
+    for pointer in [
+        "/schema_stages/public/fields/0/metadata",
+        "/schema_stage_availability/executed/available",
+        "/rows_raw",
+    ] {
+        let mut changed = records.clone();
+        *changed[1]
+            .pointer_mut(pointer)
+            .ok_or("missing boundary fault target")? = Value::Null;
+        assert!(
+            validate_float_decimal_references(&request, &changed).is_err(),
+            "accepted lost {pointer}"
+        );
+    }
+    let mut changed = records.clone();
+    changed[1]["ordered"] = json!(false);
+    assert!(validate_float_decimal_references(&request, &changed).is_err());
+    let mut changed = records.clone();
+    changed[1]["expected"]["rows"]
+        .as_array_mut()
+        .ok_or("missing ordered boundary rows")?
+        .reverse();
+    assert!(validate_float_decimal_references(&request, &changed).is_err());
+    let mut changed = records.clone();
+    changed[1]["capture_failure"] = json!({"message":"observer failed"});
+    assert!(validate_float_decimal_references(&request, &changed).is_err());
+    Ok(())
+}
+
 #[tokio::test]
 async fn null_range_frames_match_spark_and_rows_bounds_reject() -> TestResult {
     let (request, records) = parse_null_range_fixture()?;
@@ -434,14 +657,7 @@ async fn null_range_frames_match_spark_and_rows_bounds_reject() -> TestResult {
                         .await
                         .unwrap_or_else(|error| json!({"observer_error":error.to_string()})),
                 };
-                let matches = observation["matches"] == true
-                    && observation["optimized_matches"] == true
-                    && STAGES.iter().all(|(stage, observed)| {
-                        match case["schema_stages"].get(*stage) {
-                            Some(expected) => observation.get(*observed) == Some(expected),
-                            None => observation.get(*observed).is_some_and(Value::is_null),
-                        }
-                    });
+                let matches = native_result_matches_spark_reference(&observation, case);
                 // Validated source identities cannot abort observation collection on a query difference.
                 let unique = completed.insert(identity);
                 let unsupported_rows = is_unsupported_rows_case(case);
@@ -881,8 +1097,12 @@ async fn null_range_producer_arithmetic_survives_analyzer_coercion() -> TestResu
             ("k", "INT", true, true),
             ("CAST(k AS BIGINT)", "BIGINT", true, true),
             ("DATE_ADD(DATE '2020-01-01',k)", "INT", true, true),
-            ("CAST(k AS DOUBLE)", "DOUBLE", true, false),
-            ("CAST(k AS DECIMAL(12,2))", "DECIMAL(12,2)", true, false),
+            ("CAST(k AS FLOAT)", "FLOAT", true, true),
+            ("CAST(k AS DOUBLE)", "DOUBLE", true, true),
+            ("CAST(k AS DECIMAL(12,2))", "DECIMAL(12,2)", true, true),
+            ("CAST(k AS FLOAT)", "FLOAT", false, false),
+            ("CAST(k AS DOUBLE)", "DOUBLE", false, false),
+            ("CAST(k AS DECIMAL(12,2))", "DECIMAL(12,2)", false, false),
             ("k", "INT", false, false),
             ("DATE_ADD(DATE '2020-01-01',k)", "INT", false, false),
         ] {

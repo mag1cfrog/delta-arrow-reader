@@ -1,0 +1,439 @@
+{
+  "version": 1,
+  "issue": 754,
+  "purpose": "Source-only inline VALUES boundary queries; all statuses, conditions, phases, Fields, and rows come from actual Spark.",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "expected_record_count": 16,
+  "corpora": [
+    {
+      "corpus": "null-range-boundary-754-controls",
+      "source": {
+        "kind": "independent source-only inline VALUES boundary inventory"
+      },
+      "metadata": {
+        "spark_version": "4.2.0",
+        "timezone": "UTC",
+        "inputs": []
+      },
+      "cases": [
+        {
+          "corpus": "null-range-boundary-754-controls",
+          "id": "decimal38_max_following",
+          "ansi": true,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS LAST RANGE BETWEEN CAST(NULL AS DECIMAL(38,0)) PRECEDING AND CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0)) FOLLOWING) AS n FROM VALUES (0,CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0))),(1,CAST(NULL AS DECIMAL(38,0))) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "coverage": {
+            "key_type": "DECIMAL(38,0)",
+            "order": "ASC NULLS LAST",
+            "frame": "RANGE BETWEEN CAST(NULL AS DECIMAL(38,0)) PRECEDING AND CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0)) FOLLOWING",
+            "inline_values": [
+              [
+                0,
+                "CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0))"
+              ],
+              [
+                1,
+                "CAST(NULL AS DECIMAL(38,0))"
+              ]
+            ]
+          }
+        },
+        {
+          "corpus": "null-range-boundary-754-controls",
+          "id": "decimal38_max_following",
+          "ansi": false,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS LAST RANGE BETWEEN CAST(NULL AS DECIMAL(38,0)) PRECEDING AND CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0)) FOLLOWING) AS n FROM VALUES (0,CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0))),(1,CAST(NULL AS DECIMAL(38,0))) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "coverage": {
+            "key_type": "DECIMAL(38,0)",
+            "order": "ASC NULLS LAST",
+            "frame": "RANGE BETWEEN CAST(NULL AS DECIMAL(38,0)) PRECEDING AND CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0)) FOLLOWING",
+            "inline_values": [
+              [
+                0,
+                "CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0))"
+              ],
+              [
+                1,
+                "CAST(NULL AS DECIMAL(38,0))"
+              ]
+            ]
+          }
+        },
+        {
+          "corpus": "null-range-boundary-754-controls",
+          "id": "decimal38_max_following_nulls_first",
+          "ansi": true,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN CAST(NULL AS DECIMAL(38,0)) PRECEDING AND CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0)) FOLLOWING) AS n FROM VALUES (0,CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0))),(1,CAST(NULL AS DECIMAL(38,0))) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "coverage": {
+            "key_type": "DECIMAL(38,0)",
+            "order": "ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN CAST(NULL AS DECIMAL(38,0)) PRECEDING AND CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0)) FOLLOWING",
+            "inline_values": [
+              [
+                0,
+                "CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0))"
+              ],
+              [
+                1,
+                "CAST(NULL AS DECIMAL(38,0))"
+              ]
+            ]
+          }
+        },
+        {
+          "corpus": "null-range-boundary-754-controls",
+          "id": "decimal38_max_following_nulls_first",
+          "ansi": false,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN CAST(NULL AS DECIMAL(38,0)) PRECEDING AND CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0)) FOLLOWING) AS n FROM VALUES (0,CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0))),(1,CAST(NULL AS DECIMAL(38,0))) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "coverage": {
+            "key_type": "DECIMAL(38,0)",
+            "order": "ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN CAST(NULL AS DECIMAL(38,0)) PRECEDING AND CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0)) FOLLOWING",
+            "inline_values": [
+              [
+                0,
+                "CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0))"
+              ],
+              [
+                1,
+                "CAST(NULL AS DECIMAL(38,0))"
+              ]
+            ]
+          }
+        },
+        {
+          "corpus": "null-range-boundary-754-controls",
+          "id": "decimal38_max_lower_following_nulls_last",
+          "ansi": true,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS LAST RANGE BETWEEN CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0)) FOLLOWING AND CAST(NULL AS DECIMAL(38,0)) PRECEDING) AS n FROM VALUES (0,CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0))),(1,CAST(NULL AS DECIMAL(38,0))) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "coverage": {
+            "key_type": "DECIMAL(38,0)",
+            "order": "ASC NULLS LAST",
+            "frame": "RANGE BETWEEN CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0)) FOLLOWING AND CAST(NULL AS DECIMAL(38,0)) PRECEDING",
+            "inline_values": [
+              [
+                0,
+                "CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0))"
+              ],
+              [
+                1,
+                "CAST(NULL AS DECIMAL(38,0))"
+              ]
+            ]
+          }
+        },
+        {
+          "corpus": "null-range-boundary-754-controls",
+          "id": "decimal38_max_lower_following_nulls_last",
+          "ansi": false,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS LAST RANGE BETWEEN CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0)) FOLLOWING AND CAST(NULL AS DECIMAL(38,0)) PRECEDING) AS n FROM VALUES (0,CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0))),(1,CAST(NULL AS DECIMAL(38,0))) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "coverage": {
+            "key_type": "DECIMAL(38,0)",
+            "order": "ASC NULLS LAST",
+            "frame": "RANGE BETWEEN CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0)) FOLLOWING AND CAST(NULL AS DECIMAL(38,0)) PRECEDING",
+            "inline_values": [
+              [
+                0,
+                "CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0))"
+              ],
+              [
+                1,
+                "CAST(NULL AS DECIMAL(38,0))"
+              ]
+            ]
+          }
+        },
+        {
+          "corpus": "null-range-boundary-754-controls",
+          "id": "decimal38_max_lower_following_nulls_first",
+          "ansi": true,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0)) FOLLOWING AND CAST(NULL AS DECIMAL(38,0)) PRECEDING) AS n FROM VALUES (0,CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0))),(1,CAST(NULL AS DECIMAL(38,0))) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "coverage": {
+            "key_type": "DECIMAL(38,0)",
+            "order": "ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0)) FOLLOWING AND CAST(NULL AS DECIMAL(38,0)) PRECEDING",
+            "inline_values": [
+              [
+                0,
+                "CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0))"
+              ],
+              [
+                1,
+                "CAST(NULL AS DECIMAL(38,0))"
+              ]
+            ]
+          }
+        },
+        {
+          "corpus": "null-range-boundary-754-controls",
+          "id": "decimal38_max_lower_following_nulls_first",
+          "ansi": false,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0)) FOLLOWING AND CAST(NULL AS DECIMAL(38,0)) PRECEDING) AS n FROM VALUES (0,CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0))),(1,CAST(NULL AS DECIMAL(38,0))) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "coverage": {
+            "key_type": "DECIMAL(38,0)",
+            "order": "ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0)) FOLLOWING AND CAST(NULL AS DECIMAL(38,0)) PRECEDING",
+            "inline_values": [
+              [
+                0,
+                "CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0))"
+              ],
+              [
+                1,
+                "CAST(NULL AS DECIMAL(38,0))"
+              ]
+            ]
+          }
+        },
+        {
+          "corpus": "null-range-boundary-754-controls",
+          "id": "float_infinity_following",
+          "ansi": true,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN CAST(NULL AS FLOAT) PRECEDING AND CAST('Infinity' AS FLOAT) FOLLOWING) AS n FROM VALUES (0,CAST(NULL AS FLOAT)),(1,CAST('-Infinity' AS FLOAT)),(2,CAST('0' AS FLOAT)),(3,CAST('Infinity' AS FLOAT)),(4,CAST('NaN' AS FLOAT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "coverage": {
+            "key_type": "FLOAT",
+            "order": "ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN CAST(NULL AS FLOAT) PRECEDING AND CAST('Infinity' AS FLOAT) FOLLOWING",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS FLOAT)"
+              ],
+              [
+                1,
+                "CAST('-Infinity' AS FLOAT)"
+              ],
+              [
+                2,
+                "CAST('0' AS FLOAT)"
+              ],
+              [
+                3,
+                "CAST('Infinity' AS FLOAT)"
+              ],
+              [
+                4,
+                "CAST('NaN' AS FLOAT)"
+              ]
+            ]
+          }
+        },
+        {
+          "corpus": "null-range-boundary-754-controls",
+          "id": "float_infinity_following",
+          "ansi": false,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN CAST(NULL AS FLOAT) PRECEDING AND CAST('Infinity' AS FLOAT) FOLLOWING) AS n FROM VALUES (0,CAST(NULL AS FLOAT)),(1,CAST('-Infinity' AS FLOAT)),(2,CAST('0' AS FLOAT)),(3,CAST('Infinity' AS FLOAT)),(4,CAST('NaN' AS FLOAT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "coverage": {
+            "key_type": "FLOAT",
+            "order": "ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN CAST(NULL AS FLOAT) PRECEDING AND CAST('Infinity' AS FLOAT) FOLLOWING",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS FLOAT)"
+              ],
+              [
+                1,
+                "CAST('-Infinity' AS FLOAT)"
+              ],
+              [
+                2,
+                "CAST('0' AS FLOAT)"
+              ],
+              [
+                3,
+                "CAST('Infinity' AS FLOAT)"
+              ],
+              [
+                4,
+                "CAST('NaN' AS FLOAT)"
+              ]
+            ]
+          }
+        },
+        {
+          "corpus": "null-range-boundary-754-controls",
+          "id": "double_infinity_following",
+          "ansi": true,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN CAST(NULL AS DOUBLE) PRECEDING AND CAST('Infinity' AS DOUBLE) FOLLOWING) AS n FROM VALUES (0,CAST(NULL AS DOUBLE)),(1,CAST('-Infinity' AS DOUBLE)),(2,CAST('0' AS DOUBLE)),(3,CAST('Infinity' AS DOUBLE)),(4,CAST('NaN' AS DOUBLE)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "coverage": {
+            "key_type": "DOUBLE",
+            "order": "ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN CAST(NULL AS DOUBLE) PRECEDING AND CAST('Infinity' AS DOUBLE) FOLLOWING",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS DOUBLE)"
+              ],
+              [
+                1,
+                "CAST('-Infinity' AS DOUBLE)"
+              ],
+              [
+                2,
+                "CAST('0' AS DOUBLE)"
+              ],
+              [
+                3,
+                "CAST('Infinity' AS DOUBLE)"
+              ],
+              [
+                4,
+                "CAST('NaN' AS DOUBLE)"
+              ]
+            ]
+          }
+        },
+        {
+          "corpus": "null-range-boundary-754-controls",
+          "id": "double_infinity_following",
+          "ansi": false,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN CAST(NULL AS DOUBLE) PRECEDING AND CAST('Infinity' AS DOUBLE) FOLLOWING) AS n FROM VALUES (0,CAST(NULL AS DOUBLE)),(1,CAST('-Infinity' AS DOUBLE)),(2,CAST('0' AS DOUBLE)),(3,CAST('Infinity' AS DOUBLE)),(4,CAST('NaN' AS DOUBLE)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "coverage": {
+            "key_type": "DOUBLE",
+            "order": "ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN CAST(NULL AS DOUBLE) PRECEDING AND CAST('Infinity' AS DOUBLE) FOLLOWING",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS DOUBLE)"
+              ],
+              [
+                1,
+                "CAST('-Infinity' AS DOUBLE)"
+              ],
+              [
+                2,
+                "CAST('0' AS DOUBLE)"
+              ],
+              [
+                3,
+                "CAST('Infinity' AS DOUBLE)"
+              ],
+              [
+                4,
+                "CAST('NaN' AS DOUBLE)"
+              ]
+            ]
+          }
+        },
+        {
+          "corpus": "null-range-boundary-754-controls",
+          "id": "float_negated_nan_following",
+          "ansi": true,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN CAST(NULL AS FLOAT) PRECEDING AND (-CAST('NaN' AS FLOAT)) FOLLOWING) AS n FROM VALUES (0,CAST(NULL AS FLOAT)),(1,CAST('0' AS FLOAT)),(2,CAST('NaN' AS FLOAT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "coverage": {
+            "key_type": "FLOAT",
+            "order": "ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN CAST(NULL AS FLOAT) PRECEDING AND (-CAST('NaN' AS FLOAT)) FOLLOWING",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS FLOAT)"
+              ],
+              [
+                1,
+                "CAST('0' AS FLOAT)"
+              ],
+              [
+                2,
+                "CAST('NaN' AS FLOAT)"
+              ]
+            ]
+          }
+        },
+        {
+          "corpus": "null-range-boundary-754-controls",
+          "id": "float_negated_nan_following",
+          "ansi": false,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN CAST(NULL AS FLOAT) PRECEDING AND (-CAST('NaN' AS FLOAT)) FOLLOWING) AS n FROM VALUES (0,CAST(NULL AS FLOAT)),(1,CAST('0' AS FLOAT)),(2,CAST('NaN' AS FLOAT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "coverage": {
+            "key_type": "FLOAT",
+            "order": "ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN CAST(NULL AS FLOAT) PRECEDING AND (-CAST('NaN' AS FLOAT)) FOLLOWING",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS FLOAT)"
+              ],
+              [
+                1,
+                "CAST('0' AS FLOAT)"
+              ],
+              [
+                2,
+                "CAST('NaN' AS FLOAT)"
+              ]
+            ]
+          }
+        },
+        {
+          "corpus": "null-range-boundary-754-controls",
+          "id": "double_negated_nan_following",
+          "ansi": true,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN CAST(NULL AS DOUBLE) PRECEDING AND (-CAST('NaN' AS DOUBLE)) FOLLOWING) AS n FROM VALUES (0,CAST(NULL AS DOUBLE)),(1,CAST('0' AS DOUBLE)),(2,CAST('NaN' AS DOUBLE)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "coverage": {
+            "key_type": "DOUBLE",
+            "order": "ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN CAST(NULL AS DOUBLE) PRECEDING AND (-CAST('NaN' AS DOUBLE)) FOLLOWING",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS DOUBLE)"
+              ],
+              [
+                1,
+                "CAST('0' AS DOUBLE)"
+              ],
+              [
+                2,
+                "CAST('NaN' AS DOUBLE)"
+              ]
+            ]
+          }
+        },
+        {
+          "corpus": "null-range-boundary-754-controls",
+          "id": "double_negated_nan_following",
+          "ansi": false,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN CAST(NULL AS DOUBLE) PRECEDING AND (-CAST('NaN' AS DOUBLE)) FOLLOWING) AS n FROM VALUES (0,CAST(NULL AS DOUBLE)),(1,CAST('0' AS DOUBLE)),(2,CAST('NaN' AS DOUBLE)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "coverage": {
+            "key_type": "DOUBLE",
+            "order": "ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN CAST(NULL AS DOUBLE) PRECEDING AND (-CAST('NaN' AS DOUBLE)) FOLLOWING",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS DOUBLE)"
+              ],
+              [
+                1,
+                "CAST('0' AS DOUBLE)"
+              ],
+              [
+                2,
+                "CAST('NaN' AS DOUBLE)"
+              ]
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -4264,6 +4264,14 @@ duplicate rows. It requires 1148 strict Spark comparisons and 16 unchanged nativ
 NULL ROWS rejections from `null-range-754-prior-rows-rejections.json`.
 [The ROWS admission issue](https://github.com/mag1cfrog/delta-arrow-reader/issues/1085)
 owns those unsupported bounds; their original Spark records remain visible and
-are not reported as parity. Compare a fresh capture with
+are not reported as parity.
+
+`null-range-754-boundary-cases.json` and `null-range-754-boundary-spark.jsonl`
+retain eight ordered inline-VALUES queries in both ANSI modes. Their separate
+32-context replay checks FLOAT/DOUBLE Infinity and NaN targets and Decimal38
+extremes, including complete schema stages and exact ordered rows. Every boundary
+context requires strict Spark agreement.
+
+Compare a fresh capture with
 `null-range-754-spark.jsonl` before refreshing references, preserving the original
 source metadata, historical native profiles and separate native controls.

@@ -1415,11 +1415,15 @@ and coercion. The SQL unparser retains an explicit typed NULL expression or
 returns the existing checked type-conversion error.
 
 Sail assigns `RangeOffsetArithmetic::Spark` only to admitted explicit NULL frames
-on signed-integer or DATE keys. Integer target addition and sign negation check
-overflow in ANSI mode and wrap otherwise; DATE day addition wraps in both modes.
+on signed integer, DATE, FLOAT/DOUBLE or Decimal128 keys. Integer sign negation
+and target addition check overflow in ANSI mode and wrap otherwise; DATE day
+addition wraps in both modes.
 Minimum PRECEDING offsets retain their SQL or optimizer failure phase. Remaining
 checked arithmetic runs only for a consumed bound comparison. Plain finite and
 native frames keep the DataFusion policy, including their existing arithmetic.
+FLOAT/DOUBLE targets compare NaNs and signed zeros with Spark's ordering
+equivalence. Decimal128 operands use widened Decimal256 comparison targets without
+changing output Fields; native Decimal256 keys keep the DataFusion policy.
 
 Aggregate and frame-aware builtin windows with explicit NULL targets buffer the
 whole partition, so memory grows with partition size. These frames are non-causal,
