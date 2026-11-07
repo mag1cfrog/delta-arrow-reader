@@ -2,12 +2,14 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use datafusion::arrow::datatypes::DataType;
+use datafusion::arrow::array::timezone::Tz;
+use datafusion::arrow::datatypes::{DataType, FieldRef};
 use datafusion::catalog::TableFunctionArgs;
 use datafusion::datasource::{TableProvider, provider_as_source, source_as_provider};
-use datafusion_common::{DFSchema, ScalarValue, TableReference};
+use datafusion_common::{Column, DFSchema, ScalarValue, TableReference};
 use datafusion_expr::{
-    Expr, LogicalPlan, LogicalPlanBuilder, ScalarUDF, TableScan, TableSource, col, lit,
+    Expr, LogicalPlan, LogicalPlanBuilder, Projection, ScalarUDF, TableScan, TableSource, cast,
+    col, lit,
 };
 use rand::{RngExt, rng};
 use sail_common::spec;
@@ -263,6 +265,8 @@ impl PlanResolver<'_> {
         )
     }
 
+    /// Scan a table source with registered field names, its TIMESTAMP columns annotated with
+    /// the session time zone.
     pub(super) fn resolve_table_source_with_rename(
         &self,
         table_source: Arc<dyn TableSource>,
@@ -302,11 +306,83 @@ impl PlanResolver<'_> {
             fetch,
         )?);
 
-        if !has_duplicates {
+        let plan = if !has_duplicates {
             let names = state.register_fields(table_scan.schema().fields());
-            Ok(rename_logical_plan(table_scan, &names)?)
+            rename_logical_plan(table_scan, &names)?
         } else {
-            Ok(table_scan)
+            table_scan
+        };
+        self.annotate_with_session_time_zone(plan)
+    }
+
+    /// Spark evaluates every TIMESTAMP in the session time zone, but a source can annotate
+    /// its columns with another zone, such as UTC for Delta. Relabel them, including nested
+    /// fields, with the session zone so zone-dependent functions see it. The stored instants
+    /// do not change.
+    fn annotate_with_session_time_zone(&self, plan: LogicalPlan) -> PlanResult<LogicalPlan> {
+        let timezone = &self.config.session_timezone;
+        // Spark also accepts zone IDs such as `Z`, `PST` and `GMT+08:00` that Arrow cannot
+        // parse (#1029); a column keeps its own zone in such a session.
+        if timezone.parse::<Tz>().is_err() {
+            return Ok(plan);
         }
+        let mut annotated = false;
+        let expr = plan
+            .schema()
+            .iter()
+            .map(|(qualifier, field)| {
+                let column = Expr::Column(Column::from((qualifier, field)));
+                match session_time_zone_type(field.data_type(), timezone) {
+                    Some(data_type) => {
+                        annotated = true;
+                        cast(column, data_type).alias_qualified(qualifier.cloned(), field.name())
+                    }
+                    None => column,
+                }
+            })
+            .collect::<Vec<_>>();
+        if !annotated {
+            return Ok(plan);
+        }
+        Ok(LogicalPlan::Projection(Projection::try_new(
+            expr,
+            Arc::new(plan),
+        )?))
+    }
+}
+
+/// The type with each TIMESTAMP that names a zone other than `timezone` annotated with
+/// `timezone`, or `None` when no such TIMESTAMP occurs. TIMESTAMP values are found inside
+/// lists, maps and structs; other encodings, such as dictionaries, are left unchanged.
+fn session_time_zone_type(data_type: &DataType, timezone: &Arc<str>) -> Option<DataType> {
+    let field = |field: &FieldRef| {
+        session_time_zone_type(field.data_type(), timezone)
+            .map(|data_type| Arc::new(field.as_ref().clone().with_data_type(data_type)))
+    };
+    match data_type {
+        DataType::Timestamp(unit, Some(zone)) if zone != timezone => {
+            Some(DataType::Timestamp(*unit, Some(Arc::clone(timezone))))
+        }
+        DataType::List(item) => field(item).map(DataType::List),
+        DataType::LargeList(item) => field(item).map(DataType::LargeList),
+        DataType::FixedSizeList(item, size) => {
+            field(item).map(|item| DataType::FixedSizeList(item, *size))
+        }
+        DataType::Map(entries, sorted) => {
+            field(entries).map(|entries| DataType::Map(entries, *sorted))
+        }
+        DataType::Struct(fields) => {
+            let annotated = fields.iter().map(field).collect::<Vec<_>>();
+            annotated.iter().any(Option::is_some).then(|| {
+                DataType::Struct(
+                    fields
+                        .iter()
+                        .zip(annotated)
+                        .map(|(field, annotated)| annotated.unwrap_or_else(|| Arc::clone(field)))
+                        .collect(),
+                )
+            })
+        }
+        _ => None,
     }
 }

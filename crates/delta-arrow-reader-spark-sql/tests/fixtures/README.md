@@ -759,7 +759,8 @@ equality, NULLIF, BETWEEN and ON/USING joins share the reference checks.
 The capture's registered-table inputs are also registered as Arrow arrays by
 `comparison_coercion.rs`. Their LTZ column carries UTC while the session can use
 Phoenix or another zone. Comparisons must interpret DATE/NTZ in the session zone;
-NULLIF must retain its first input's original value, type and timezone annotation.
+NULLIF must retain its first input's original value and type, with the LTZ column
+annotated with the session zone as for any registered TIMESTAMP (#1012).
 The native DataFusion control retains its UTC interpretation. Runtime unit tests
 cover Date32/Date64/NTZ scalars, array slices, NULLs and empty inputs; volatile
 counters check that conversion does not repeat the original expression.
@@ -778,7 +779,8 @@ outside the i64-nanosecond range.
 
 `timestamp_precision.rs` checks both operand orders and ANSI modes, two batch
 sizes, sliced arrays, NULLs, empty results, all comparison operators, NULLIF,
-BETWEEN and ON/USING joins. NULLIF retains the original ticks, type and timezone.
+BETWEEN and ON/USING joins. NULLIF retains the original ticks and unit; a zoned
+input is annotated with the session zone (#1012).
 Local inputs outside the reused timezone converter's range fail explicitly;
 they must not silently become NULL. Equal-unit instants retain native comparison.
 
@@ -2479,11 +2481,30 @@ its historical 888-match result. The index fixtures `regexp-extract-index-curren
 `regexp-extract-index-native-stages.json` retain those historical objects and
 source attributions. The separate literal
 preparation supplement checks 46 SQL/ANSI cases in 276 query contexts and 552
-provider receipts, with 204 strict matches and 72 complete native regression
-controls. Those controls include local VALUES group failures tracked by #1049,
-which remains required before #1036/#788 can close. Preserved differences receive
-no Spark-match credit. These focused results do not establish full C06 acceptance
-or complete raw diagnostic parity; `full_compatibility_pass` remains false.
+provider receipts. The authenticated `f69b1cb1` capture has 228 strict Spark
+matches and 48 remaining differences: 36 physical-schema differences, six
+phase/diagnostic/availability differences and six status/row differences.
+
+All 72 historical native controls remain unchanged. The separate
+`regexp-extract-literal-preparation-current-native.jsonl` fixture copies 30
+complete native objects from product `f69b1cb1`, execution `84818105`, and its
+archived full-276 executable: 24 newly strict local VALUES group-error contexts
+and six Legacy NaN contexts with the observed internal aliased input plan. Its
+SHA-256 is `9a613f2e6128ccd8cf77114381e3f4ca48b815f0225dc466056f97a4fe412025`.
+The original consumer uses those 30 current objects and the other 42 historical
+objects as exact whole-object controls. The selected local-producer consumer
+checks all 132 contexts and 324 provider receipts, with 126 strict matches and
+six explicit physical-schema differences using the same current NaN objects.
+Both consumers retain independent Spark facet checks alongside the native
+controls. Native Fields, plans and diagnostics come from the actual capture.
+
+These measured #1049 gains replace the historical pending group-error outcomes.
+Remaining differences receive no Spark-match credit. Source faults, restored
+passes, complete regression gates and final review are required before #1049
+readiness. The archived full-276 capture exited 101 against the obsolete grade;
+both repaired consumers still require passing runs. These focused results do not
+establish full C06 acceptance or complete raw diagnostic parity;
+`full_compatibility_pass` remains false.
 
 The main capture includes 74 controls beside the index corpus: 32 selection,
 six async, 24 NoFold and 12 alias observations. The 62 native-only callback
@@ -4201,9 +4222,10 @@ against `date-range-747-spark.jsonl`. A reference refresh must also update the
 owner controls' reference records, while preserving their native observations
 and the separate native control file.
 
-`date_range_frames.rs` requires 984 primary comparisons at batch sizes 1 and 32
-with two target partitions, including 12 TIMESTAMP control contexts. It also
-replays the exact original query and frame consumers separately in 108 contexts.
+`date_range_frames.rs` requires 1012 primary comparisons at batch sizes 1 and 32
+with two target partitions, including 28 explicit-NULL-offset and 12 TIMESTAMP
+control contexts. It also replays the exact original query and frame consumers
+separately in 108 contexts.
 All five schema stages retain complete names, types, nullability and metadata
 when available. Failures retain the condition, phase and available Fields;
 ordered queries retain raw output order, and unordered comparisons preserve
@@ -4214,10 +4236,64 @@ matching order reuses it, while opposite DATE order requires a sort.
 
 `date-range-747-prior-owner-controls.json` freezes 112 complete earlier DAR
 observations: 28 explicit-NULL-offset contexts under #754 and 84 DATE interval
-contexts under #749/#947. The test requires their prior profiles to remain
-unchanged, including existing Spark differences assigned to those issues. Only
-raw row order for unordered SQL may be canonicalized; Fields, causes, phases and
-row multiplicity stay fixed. `date-range-747-prior-native-controls.json` preserves
-six native SQL control pairs for DATE intervals, TIMESTAMP intervals and INT
-keys at both batch sizes, comparing configured and unconfigured sessions with
-their frozen complete observations.
+contexts under #749/#947. This file and the source manifest's ownership labels
+and `primary_record_count` retain their capture-time meaning. The replay compares
+all 28 NULL-offset contexts strictly with Spark and requires the 84 active interval
+profiles to stay unchanged. The historical NULL native observations remain as
+capture history, rather than current runtime expectations. Only raw row order for
+unordered SQL may be canonicalized; Fields, causes, phases and row multiplicity
+stay fixed.
+`date-range-747-prior-native-controls.json` preserves six native SQL control pairs
+for DATE intervals, TIMESTAMP intervals and INT keys at both batch sizes, comparing
+configured and unconfigured sessions with their frozen complete observations.
+
+### Explicit NULL RANGE bounds
+
+`null-range-754-cases.json` contains the 14 original DATE NULL-offset requests and
+568 supplementary requests. The source inventory has 582 unique corpus/ID/ANSI
+identities and 24 ordered queries. Providers, SQL, ANSI flags and ordering flags
+come from this source-only file. The capture validates the original requests
+against the sibling `date-range-747-cases.json`; historical absolute paths in its
+provenance metadata are not opened.
+
+Use the Python, Java and Spark revision specified above:
+
+```sh
+python3 tests/fixtures/capture_null_range_754_spark.py --self-check
+null_range_capture_dir="$(mktemp -d)"
+TZ=UTC PYTHONDONTWRITEBYTECODE=1 \
+  python3 tests/fixtures/capture_null_range_754_spark.py \
+  "$null_range_capture_dir/null-range-754-spark.jsonl"
+cargo +1.96.0 test --workspace --no-fail-fast --locked \
+  --test null_range_frames -- --nocapture --test-threads=1
+```
+
+The self-check validates the source inventory and exercises the shared capture
+protocol with fake objects, without importing Spark or starting a JVM. A capture
+requires fresh output and lifecycle paths, rejects an existing gateway and records
+registered provider schemas and source rows. It captures each of the five schema
+stages when available, structured error causes and phases, raw ordered rows and
+row multisets. It shuts
+down and reaps its owned JVM; cleanup failure makes the capture fail.
+
+`null_range_frames.rs` replays all 1164 case/batch contexts with batch sizes 1 and
+32, two provider partitions and two target partitions. It prints every native
+observation before asserting differences. Complete public, analyzed, optimized
+and physical Fields are required when available; unavailable error stages remain
+explicit. Ordered queries compare raw sequences, and unordered queries retain
+duplicate rows. It requires 1148 strict Spark comparisons and 16 unchanged native
+NULL ROWS rejections from `null-range-754-prior-rows-rejections.json`.
+[The ROWS admission issue](https://github.com/mag1cfrog/delta-arrow-reader/issues/1085)
+owns those unsupported bounds; their original Spark records remain visible and
+are not reported as parity.
+
+`null-range-754-boundary-cases.json` and `null-range-754-boundary-spark.jsonl`
+retain eight ordered inline-VALUES queries in both ANSI modes. Their separate
+32-context replay checks FLOAT/DOUBLE Infinity and NaN targets and Decimal38
+extremes, including complete schema stages and exact ordered rows. Every boundary
+context requires strict Spark agreement.
+
+The capture script records both source files in one run, for 598 observations.
+Compare each corpus with its corresponding checked-in reference before
+refreshing it. Preserve the original source metadata, historical native profiles
+and separate native controls.

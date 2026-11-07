@@ -23,7 +23,7 @@ use std::ops::Range;
 use std::sync::Arc;
 
 use super::{StandardWindowFunctionExpr, WindowExpr};
-use crate::window::window_expr::{WindowFn, get_orderby_values};
+use crate::window::window_expr::{WindowFn, get_orderby_values, is_end_bound_safe};
 use crate::window::{PartitionBatches, PartitionWindowAggStates, WindowState};
 use crate::{EquivalenceProperties, PhysicalExpr};
 
@@ -197,6 +197,19 @@ impl WindowExpr for StandardWindowExpr {
             values.extend(order_bys);
             let order_bys_ref = &values[n_args..];
 
+            let most_recent_order_bys = if evaluator.uses_window_frame()
+                && self.window_frame.has_null_offset()
+            {
+                partition_batch_state
+                    .most_recent_row
+                    .as_ref()
+                    .map(|batch| self.order_by_columns(batch))
+                    .transpose()?
+                    .map(get_orderby_values)
+            } else {
+                None
+            };
+
             // We iterate on each row to perform a running calculation.
             let record_batch = &partition_batch_state.record_batch;
             let num_rows = record_batch.num_rows();
@@ -239,7 +252,23 @@ impl WindowExpr for StandardWindowExpr {
                     && !is_causal
                     && !partition_batch_state.is_end
                 {
-                    break;
+                    let safe = if self.window_frame.has_null_offset() {
+                        match state.window_frame_ctx.as_ref() {
+                            Some(context) => is_end_bound_safe(
+                                context,
+                                order_bys_ref,
+                                most_recent_order_bys.as_deref(),
+                                &self.order_by,
+                                idx,
+                            )?,
+                            None => false,
+                        }
+                    } else {
+                        false
+                    };
+                    if !safe {
+                        break;
+                    }
                 }
                 // Update last range
                 state.window_frame_range = frame_range;
@@ -286,7 +315,8 @@ impl WindowExpr for StandardWindowExpr {
         if let Ok(evaluator) = self.expr.create_evaluator() {
             evaluator.supports_bounded_execution()
                 && (!evaluator.uses_window_frame()
-                    || !self.window_frame.end_bound.is_unbounded())
+                    || (!self.window_frame.has_null_offset()
+                        && !self.window_frame.end_bound.is_unbounded()))
         } else {
             false
         }

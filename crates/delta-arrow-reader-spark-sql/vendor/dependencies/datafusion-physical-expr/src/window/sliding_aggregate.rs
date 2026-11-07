@@ -1,3 +1,4 @@
+// Modified for the DAR Spark SQL runtime. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -149,7 +150,8 @@ impl WindowExpr for SlidingAggregateWindowExpr {
     }
 
     fn uses_bounded_memory(&self) -> bool {
-        !self.window_frame.end_bound.is_unbounded()
+        !self.window_frame.has_null_offset()
+            && !self.window_frame.end_bound.is_unbounded()
     }
 
     fn with_new_expressions(

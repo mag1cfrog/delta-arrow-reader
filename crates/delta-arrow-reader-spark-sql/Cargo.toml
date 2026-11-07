@@ -123,6 +123,7 @@ sail-plan = { path = "vendor/sail/crates/sail-plan" }
 sail-sql-analyzer = { path = "vendor/sail/crates/sail-sql-analyzer" }
 
 [dev-dependencies]
+async-trait = { workspace = true }
 arrow = "=58.4.0"
 datasketches = { workspace = true }
 delta-arrow-reader = { path = "../delta-arrow-reader-core", features = ["datafusion"] }
@@ -162,4 +163,5 @@ datafusion-physical-expr = { path = "vendor/dependencies/datafusion-physical-exp
 datafusion-physical-expr-common = { path = "vendor/dependencies/datafusion-physical-expr-common" }
 datafusion-physical-optimizer = { path = "vendor/dependencies/datafusion-physical-optimizer" }
 datafusion-physical-plan = { path = "vendor/dependencies/datafusion-physical-plan" }
+datafusion-sql = { path = "vendor/dependencies/datafusion-sql" }
 lexical-parse-float = { path = "vendor/dependencies/lexical-parse-float" }

@@ -24,6 +24,13 @@ use string_binary::{TestResult, capture_observation, capture_schema, register_in
 mod regexp_diagnostics;
 use regexp_diagnostics::{availability, error_cause, group_error_suffix_matches};
 
+#[path = "../vendor/sail/crates/sail-plan/src/test_utils/regexp_literal_producer.rs"]
+mod literal_producer;
+#[path = "support/spark_inputs.rs"]
+mod spark_inputs;
+#[path = "support/spark_results.rs"]
+mod spark_results;
+
 fn assert_query_marker_absent(session: &SessionContext) {
     assert!(
         session
@@ -195,7 +202,10 @@ async fn provider(session: &SessionContext, name: &str) -> TestResult<Value> {
     let mut rows = Vec::new();
     let mut batches = Vec::new();
     for b in session
-        .sql(&format!("SELECT * FROM {name} ORDER BY k"))
+        .sql(&format!(
+            "SELECT * FROM {name} ORDER BY {}",
+            schema.field(0).name()
+        ))
         .await?
         .collect()
         .await?
@@ -219,10 +229,31 @@ async fn provider(session: &SessionContext, name: &str) -> TestResult<Value> {
             );
         }
     }
+    let actual_schema = if schema
+        .fields()
+        .iter()
+        .any(|field| matches!(field.data_type(), DataType::Float32 | DataType::Float64))
+    {
+        spark_results::capture_schema(schema.fields(), None)?
+    } else {
+        capture_schema(schema.fields(), None)?
+    };
     Ok(json!({"name":name,"fields":fields(schema.fields(),None),
-        "schema":capture_schema(schema.fields(),None)?,"raw_schema":format!("{schema:?}"),"rows":rows,"batches":batches}))
+        "schema":actual_schema,"raw_schema":format!("{schema:?}"),"rows":rows,"batches":batches}))
 }
 async fn observe(session: &SessionContext, sql: &str, ansi: bool) -> TestResult<Value> {
+    observe_with_producer(session, sql, ansi, None).await
+}
+
+async fn observe_with_producer(
+    session: &SessionContext,
+    sql: &str,
+    ansi: bool,
+    producer: Option<&literal_producer::Counts>,
+) -> TestResult<Value> {
+    if let Some(counts) = producer {
+        counts.phase.store(0, std::sync::atomic::Ordering::SeqCst);
+    }
     let mut actual = json!({"analyzed_schema":null,"analyzed_fields":null,
         "analyzed_arrow_schema":null,"analyzed_plan":null,"query_column_names":null,"physical_schema":null,
         "physical_fields":null,"physical_arrow_schema":null,"physical_plan":null,
@@ -252,6 +283,9 @@ async fn observe(session: &SessionContext, sql: &str, ansi: bool) -> TestResult<
     actual["analyzed_fields"] = fields(query.logical_plan.schema().fields(), None);
     actual["analyzed_arrow_schema"] = json!(format!("{:?}", query.logical_plan.schema()));
     actual["analyzed_plan"] = json!(format!("{:?}", query.logical_plan));
+    if let Some(counts) = producer {
+        counts.phase.store(1, std::sync::atomic::Ordering::SeqCst);
+    }
     let physical = match query.create_physical_plan(session).await {
         Ok(p) => p,
         Err(e) => {
@@ -264,6 +298,9 @@ async fn observe(session: &SessionContext, sql: &str, ansi: bool) -> TestResult<
     actual["physical_arrow_schema"] = json!(format!("{:?}", physical.schema()));
     actual["physical_plan"] = json!(format!("{physical:?}"));
     let captured_physical_schema = physical.schema();
+    if let Some(counts) = producer {
+        counts.phase.store(2, std::sync::atomic::Ordering::SeqCst);
+    }
     let batches = match datafusion::physical_plan::collect(physical, session.task_ctx()).await {
         Ok(b) => b,
         Err(e) => {
@@ -356,6 +393,121 @@ fn literal_controls() -> TestResult<BTreeMap<String, Value>> {
     }
     assert_eq!(controls.len(), 72);
     Ok(controls)
+}
+
+// These measured overrides preserve the original 72 controls as historical data.
+const LITERAL_CURRENT_CONTROLS: &str =
+    include_str!("fixtures/regexp-extract-literal-preparation-current-native.jsonl");
+
+fn literal_current_controls_from(fixture: &str) -> TestResult<BTreeMap<String, Value>> {
+    let mut records = fixture.lines().map(serde_json::from_str::<Value>);
+    let header = records.next().ok_or("missing current native header")??;
+    if header
+        != json!({
+            "kind":"complete-directly-captured-current-native-observations-not-Spark-oracle",
+            "source_product":"f69b1cb1755ea82cef8dbedc3679cc0ce4620f28",
+            "source_execution":"84818105dc4566a8b036aced33c49edd2bf7b54d",
+            "observations":30,"frozen72_unchanged":true,
+            "native_actuals_derived_from_expected_JSON":false
+        })
+    {
+        return Err("invalid current native source attribution".into());
+    }
+    let (_, cases) = literal_catalog()?;
+    let mut expected = literal_controls()?
+        .into_iter()
+        .filter(|(_, control)| {
+            matches!(
+                control["context"]["id"].as_str(),
+                Some("values_literal_group_error" | "values_literal_group_error_limit_zero")
+            ) || (control["context"]["id"] == "values_literal_double_nan"
+                && control["context"]["ansi"] == false)
+        })
+        .collect::<BTreeMap<_, _>>();
+    if expected.len() != 30 {
+        return Err("invalid historical inventory for current controls".into());
+    }
+    let record_keys = BTreeSet::from([
+        "context",
+        "actual",
+        "false_facets",
+        "strict_Spark_facets",
+        "source_product",
+        "source_execution",
+        "raw_log",
+        "raw_log_sha256",
+        "raw_log_line",
+        "archived_executable_sha256",
+        "classification",
+        "Spark_oracle_credit",
+        "frozen_historical_actual_modified",
+    ]);
+    let mut controls = BTreeMap::new();
+    let mut lines = BTreeSet::new();
+    for record in records {
+        let control = record?;
+        let key = literal_key(&control["context"])?;
+        let historical = expected
+            .remove(&key)
+            .ok_or("unknown or duplicate current control")?;
+        let case = cases
+            .iter()
+            .find(|case| {
+                case["sql"] == control["context"]["sql"]
+                    && case["ansi"] == control["context"]["ansi"]
+            })
+            .ok_or("unknown current Spark reference")?;
+        let strict = control["context"]["id"] != "values_literal_double_nan";
+        let false_facets = if strict {
+            json!([])
+        } else {
+            json!(["physical_schema"])
+        };
+        let classification = if strict {
+            "measured required preparation gain with strict Spark facets"
+        } else {
+            "existing physical nullability difference; exact retained aliased input plan observed"
+        };
+        if control
+            .as_object()
+            .map(|value| value.keys().map(String::as_str).collect::<BTreeSet<_>>())
+            != Some(record_keys.clone())
+            || control["context"] != historical["context"]
+            || control["actual"] == historical["actual"]
+            || control["false_facets"] != false_facets
+            || control["strict_Spark_facets"] != strict
+            || control["source_product"] != header["source_product"]
+            || control["source_execution"] != header["source_execution"]
+            || control["raw_log"]
+                != "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/1049-current-candidate-runtime-r3-final/native/full276/capture.log"
+            || control["raw_log_sha256"]
+                != "0a7f00c9767ec5636654d2c667c19043a48b2d851f15ee23c30faee19ca37266"
+            || control["archived_executable_sha256"]
+                != "26139c50aa41e13aa61d5f11ab55aae415cce3adfe5361d081bdf9f0e5f72965"
+            || !control["raw_log_line"]
+                .as_u64()
+                .is_some_and(|line| line > 0 && lines.insert(line))
+            || control["classification"] != classification
+            || control["Spark_oracle_credit"] != false
+            || control["frozen_historical_actual_modified"] != false
+            || !literal_satisfied(
+                &control["actual"],
+                &literal_comparison(&control["actual"], &case["expected"]),
+                Some(&control),
+            )
+        {
+            return Err("invalid complete current native control".into());
+        }
+        controls.insert(key, control);
+    }
+    if !expected.is_empty() || controls.len() != 30 {
+        return Err("missing current native controls".into());
+    }
+    Ok(controls)
+}
+
+fn literal_current_controls() -> TestResult<BTreeMap<String, Value>> {
+    literal_current_controls_from(LITERAL_CURRENT_CONTROLS)
 }
 
 fn literal_fields_match(actual: &Value, physical: bool) -> bool {
@@ -615,6 +767,8 @@ fn literal_provider_matches(actual: &Value, expected: &Value, representation: us
         && fields.iter().zip(declared).all(|(field, declared)| {
             let storage = match declared["type"].as_str() {
                 Some("integer") => "Int32",
+                Some("float") => "Float32",
+                Some("double") => "Float64",
                 Some("string") => ["Utf8", "LargeUtf8", "Utf8View"][representation],
                 _ => return false,
             };
@@ -705,10 +859,7 @@ fn literal_catalog() -> TestResult<(Value, Vec<Value>)> {
     Ok((inputs, cases))
 }
 
-#[tokio::test]
-async fn literal_preparation_references_keep_fields_stages_and_native_limits() -> TestResult {
-    let (inputs, cases) = literal_catalog()?;
-    let mut controls = literal_controls()?;
+fn literal_input_metadata(inputs: &Value) -> TestResult<Value> {
     let mut definitions = Vec::new();
     for input in inputs["providers"]
         .as_array()
@@ -742,12 +893,23 @@ async fn literal_preparation_references_keep_fields_stages_and_native_limits() -
             json!({"name":input["name"],"schema":{"type":"struct","fields":declared},"rows":rows}),
         );
     }
-    let metadata = json!({"registered_inputs":definitions});
+    Ok(json!({"registered_inputs":definitions}))
+}
+
+#[tokio::test]
+async fn literal_preparation_references_keep_fields_stages_and_native_limits() -> TestResult {
+    let (inputs, cases) = literal_catalog()?;
+    let mut controls = literal_controls()?;
+    let mut current_controls = literal_current_controls()?;
+    let metadata = literal_input_metadata(&inputs)?;
     let mut seen = HashSet::new();
     let mut providers = HashSet::new();
     let mut failures = Vec::new();
     let mut strict = 0;
-    let mut retained = 0;
+    let mut historical_seen = 0;
+    let mut current_overrides = 0;
+    let mut unchanged_historical = 0;
+    let mut remaining = BTreeMap::<BTreeSet<String>, usize>::new();
     for representation in 0..3 {
         for batch_size in [1, 32] {
             let session = SessionContext::new_with_state(
@@ -796,11 +958,22 @@ async fn literal_preparation_references_keep_fields_stages_and_native_limits() -
                 .await?;
                 assert_query_marker_absent(&session);
                 let comparison = literal_comparison(&actual, &case["expected"]);
-                let control = controls.remove(&key);
-                if let Some(control) = &control {
+                let historical = controls.remove(&key);
+                let current = current_controls.remove(&key);
+                if current.is_some() {
+                    assert!(
+                        historical.is_some(),
+                        "current control without historical identity"
+                    );
+                }
+                historical_seen += usize::from(historical.is_some());
+                current_overrides += usize::from(current.is_some());
+                unchanged_historical += usize::from(historical.is_some() && current.is_none());
+                let control = current.as_ref().or(historical.as_ref());
+                if let Some(control) = control {
                     assert_eq!(control["context"], context);
                 }
-                let satisfied = literal_satisfied(&actual, &comparison, control.as_ref());
+                let satisfied = literal_satisfied(&actual, &comparison, control);
                 let false_facets = literal_false_facets(&comparison)?;
                 let strict_match = false_facets.is_empty();
                 if strict_match && case["expected"]["condition"] == "CAST_OVERFLOW" {
@@ -814,17 +987,21 @@ async fn literal_preparation_references_keep_fields_stages_and_native_limits() -
                     }
                 }
                 strict += usize::from(strict_match);
-                retained += usize::from(control.is_some());
+                if !strict_match {
+                    *remaining.entry(false_facets.clone()).or_default() += 1;
+                }
                 eprintln!(
                     "c06 literal preparation reference: {}",
                     json!({
                         "context":context,"actual":actual,"comparison":comparison,
                         "required_spark_facts":case["expected"],
-                        "native_regression_contract":control.as_ref(),
+                        "native_regression_contract":control,
                         "strict_reference_match":strict_match,"native_regression_satisfied":satisfied,
                         "remaining_differences":false_facets,
                         "retained_native_control":control.is_some(),
-                        "native_control_classification":control.as_ref().map(|control| &control["classification"]),
+                        "historical_native_control":historical.as_ref(),
+                        "measured_current_override":current.is_some(),
+                        "native_control_classification":control.map(|control| &control["classification"]),
                         "actual_phase":actual.get("error_stage"),
                         "native_optimized_schema_available":actual.get("optimized_schema").is_some(),
                         "full_compatibility_pass":false
@@ -839,7 +1016,32 @@ async fn literal_preparation_references_keep_fields_stages_and_native_limits() -
     assert_eq!(seen.len(), 276);
     assert_eq!(providers.len(), 552);
     assert!(controls.is_empty());
-    assert_eq!((strict, retained), (204, 72));
+    assert!(current_controls.is_empty());
+    assert_eq!(
+        (
+            strict,
+            historical_seen,
+            current_overrides,
+            unchanged_historical
+        ),
+        (228, 72, 30, 42)
+    );
+    assert_eq!(
+        remaining,
+        BTreeMap::from([
+            (BTreeSet::from(["physical_schema".to_owned()]), 36),
+            (
+                BTreeSet::from([
+                    "diagnostic_identifier".to_owned(),
+                    "phase".to_owned(),
+                    "terminal_stage_availability".to_owned()
+                ]),
+                6
+            ),
+            (BTreeSet::from(["rows".to_owned(), "status".to_owned()]), 6),
+        ])
+    );
+    assert_eq!(remaining.values().sum::<usize>(), 48);
     assert!(failures.is_empty(), "{}", failures.join("\n"));
     Ok(())
 }
@@ -935,6 +1137,696 @@ fn literal_preparation_contracts_reject_changed_facets() -> TestResult {
             assert_eq!(comparison["facets"]["diagnostic_identifier"], false);
             assert_eq!(comparison["facets"]["meaningful_cause"], true);
             assert!(!literal_satisfied(&changed, &comparison, Some(control)));
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn literal_current_controls_reject_changed_records_and_actuals() -> TestResult {
+    let controls = literal_current_controls()?;
+    let historical = literal_controls()?;
+    let (_, cases) = literal_catalog()?;
+    let records = LITERAL_CURRENT_CONTROLS
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    let encode = |records: &[Value]| {
+        records
+            .iter()
+            .map(Value::to_string)
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let mut malformed = Vec::new();
+    let mut changed = records.clone();
+    changed[0]["source_product"] = json!("unknown");
+    malformed.push(changed);
+    let mut changed = records.clone();
+    changed.remove(1);
+    malformed.push(changed);
+    let mut changed = records.clone();
+    changed.push(records[1].clone());
+    malformed.push(changed);
+    for (field, value) in [
+        ("id", json!("unknown")),
+        ("sql", json!("SELECT 'unknown'")),
+        ("ansi", Value::Null),
+        ("representation", json!(3)),
+        ("batch_size", json!(2)),
+        ("unexpected", json!(true)),
+    ] {
+        let mut changed = records.clone();
+        changed[1]["context"][field] = value;
+        malformed.push(changed);
+    }
+    for (field, value) in [
+        ("false_facets", json!(["physical_schema"])),
+        ("strict_Spark_facets", json!(false)),
+        ("source_product", json!("unknown")),
+        ("source_execution", json!("unknown")),
+        ("raw_log", json!("unknown")),
+        ("raw_log_sha256", json!("unknown")),
+        ("archived_executable_sha256", json!("unknown")),
+        ("raw_log_line", json!(0)),
+        ("Spark_oracle_credit", json!(true)),
+        ("unexpected", json!(true)),
+    ] {
+        let mut changed = records.clone();
+        changed[1][field] = value;
+        malformed.push(changed);
+    }
+    let mut changed = records.clone();
+    changed[1]["actual"] = historical
+        .get(&literal_key(&records[1]["context"])?)
+        .ok_or("missing reverted fixture control")?["actual"]
+        .clone();
+    malformed.push(changed);
+    let mut changed = records.clone();
+    changed[1]["actual"]["unexpected"] = json!(true);
+    malformed.push(changed);
+    let mut changed = records.clone();
+    changed[1]["actual"]
+        .as_object_mut()
+        .unwrap()
+        .remove("status");
+    malformed.push(changed);
+    let mut changed = records.clone();
+    changed[2]["raw_log_line"] = changed[1]["raw_log_line"].clone();
+    malformed.push(changed);
+    for changed in malformed {
+        assert!(literal_current_controls_from(&encode(&changed)).is_err());
+    }
+    for (key, control) in controls {
+        let case = cases
+            .iter()
+            .find(|case| {
+                case["sql"] == control["context"]["sql"]
+                    && case["ansi"] == control["context"]["ansi"]
+            })
+            .ok_or("unknown current mutation reference")?;
+        let actual = &control["actual"];
+        let comparison = literal_comparison(actual, &case["expected"]);
+        assert!(literal_satisfied(actual, &comparison, Some(&control)));
+        let previous = &historical
+            .get(&key)
+            .ok_or("missing historical mutation control")?["actual"];
+        assert_ne!(actual, previous);
+        assert!(!literal_satisfied(
+            previous,
+            &literal_comparison(previous, &case["expected"]),
+            Some(&control)
+        ));
+        let mut faults = producer_actual_faults(actual, &case["expected"], Some(&control));
+        for field in [
+            "analyzed_plan",
+            "analyzed_arrow_schema",
+            "physical_plan",
+            "physical_arrow_schema",
+        ] {
+            let mut changed = actual.clone();
+            changed[field] = json!(format!("{} changed", actual[field]));
+            faults.push(changed);
+        }
+        for field in ["name", "type", "nullable", "metadata"] {
+            let mut changed = actual.clone();
+            changed["analyzed_fields"][0][field] = if field == "nullable" {
+                json!(!actual["analyzed_fields"][0][field].as_bool().unwrap())
+            } else if field == "metadata" {
+                json!({"changed":"metadata"})
+            } else {
+                json!("changed")
+            };
+            faults.push(changed);
+        }
+        let mut changed = actual.clone();
+        changed.as_object_mut().unwrap().remove("status");
+        faults.push(changed);
+        if actual["status"] == "error" {
+            let mut changed = actual.clone();
+            changed["error_debug"] = json!(format!("{} changed", actual["error_debug"]));
+            faults.push(changed);
+            let mut changed = actual.clone();
+            changed["error_chain"].as_array_mut().unwrap().reverse();
+            assert_ne!(changed, *actual);
+            faults.push(changed);
+            let mut changed = actual.clone();
+            changed["physical_plan"] = json!("unexpected available plan");
+            faults.push(changed);
+        } else {
+            for (field, value) in [
+                ("rows", json!([["changed"], ["a"]])),
+                ("batches", json!([])),
+                ("error_stage", json!("execute")),
+            ] {
+                let mut changed = actual.clone();
+                changed[field] = value;
+                faults.push(changed);
+            }
+            for (field, value) in [
+                ("rows", json!(2)),
+                ("metadata", json!({"changed":"metadata"})),
+                ("raw_schema", json!("changed batch schema")),
+            ] {
+                let mut changed = actual.clone();
+                changed["batches"][0][field] = value;
+                faults.push(changed);
+            }
+        }
+        for changed in faults {
+            assert_ne!(changed, *actual, "mutation must change its source object");
+            assert!(
+                !literal_satisfied(
+                    &changed,
+                    &literal_comparison(&changed, &case["expected"]),
+                    Some(&control)
+                ),
+                "current control accepted an unrelated difference: {}",
+                control["context"]
+            );
+        }
+    }
+    Ok(())
+}
+
+// Exact producer priority is separate from the retained historical native profiles.
+fn producer_comparison(actual: &Value, expected: &Value) -> Value {
+    let mut comparison = literal_comparison(actual, expected);
+    if expected["condition"] != "CAST_INVALID_INPUT" {
+        return comparison;
+    }
+    let parameters = &expected["parameters"];
+    let cause = actual["error_chain"]
+        .as_array()
+        .and_then(|chain| chain.last())
+        .and_then(Value::as_str);
+    let input =
+        json!({"expected":expected,"spark_error_details":{"message_parameters":parameters}});
+    let meaningful = parameters["sourceType"] == "\"STRING\""
+        && parameters["targetType"] == "\"INT\""
+        && spark_results::matches_spark_int32_cast_input(&input, actual)
+        && cause.is_some_and(|cause| {
+            parameters["expression"].as_str().is_some_and(|value| {
+                cause == format!("Cast error: Cannot cast string {value} to value of Int32 type")
+            })
+        });
+    let identifier = cause.is_some_and(|cause| {
+        let tagged = format!("[CAST_INVALID_INPUT]\ncaused by\nArrow error: {cause}");
+        actual["error"]
+            .as_str()
+            .is_some_and(|message| message.ends_with(&tagged))
+            && actual["error_chain"].as_array().is_some_and(|chain| {
+                chain
+                    .iter()
+                    .any(|value| value.as_str() == Some(tagged.as_str()))
+            })
+    });
+    comparison["facets"]["meaningful_cause"] = json!(meaningful);
+    comparison["facets"]["diagnostic_identifier"] = json!(identifier);
+    comparison
+}
+
+fn producer_catalog() -> TestResult<(Value, Vec<Value>)> {
+    let (inputs, original) = literal_catalog()?;
+    let local: Value = serde_json::from_str(include_str!(
+        "fixtures/regexp-extract-local-values-inputs.json"
+    ))?;
+    let local_keys = local["cases"]
+        .as_array()
+        .ok_or("missing local cases")?
+        .iter()
+        .map(|case| json!([case["sql"], case["ansi"]]).to_string())
+        .collect::<HashSet<_>>();
+    let mut cases = original
+        .into_iter()
+        .filter(|case| local_keys.contains(&json!([case["sql"], case["ansi"]]).to_string()))
+        .collect::<Vec<_>>();
+    assert_eq!(cases.len(), 12);
+    let providers = include_str!("fixtures/regexp-extract-local-priority-providers.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(providers.len(), 30);
+    for line in include_str!("fixtures/regexp-extract-local-priority-spark.jsonl").lines() {
+        let observation: Value = serde_json::from_str(line)?;
+        assert_eq!(observation["issue"], 1049);
+        let receipts = providers
+            .iter()
+            .filter(|provider| {
+                provider["id"] == observation["id"] && provider["ansi"] == observation["ansi"]
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        assert_eq!(receipts.len(), 3);
+        cases.push(
+            json!({"id":observation["id"],"sql":observation["sql"],"ansi":observation["ansi"],
+            "expected":observation["actual"],"capture_observation":observation,
+            "capture_providers":receipts}),
+        );
+    }
+    let identities = cases
+        .iter()
+        .map(|case| json!([case["sql"], case["ansi"]]).to_string())
+        .collect::<HashSet<_>>();
+    assert_eq!(cases.len(), 22);
+    assert_eq!(identities.len(), 22);
+    for case in &cases {
+        assert_eq!(case["expected"], case["capture_observation"]["actual"]);
+        assert_eq!(case["sql"], case["capture_observation"]["sql"]);
+        assert_eq!(case["ansi"], case["capture_observation"]["ansi"]);
+        let receipts = case["capture_providers"]
+            .as_array()
+            .ok_or("missing provider receipts")?;
+        let names = receipts
+            .iter()
+            .map(|p| p["name"].as_str())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(names.len(), receipts.len());
+        for receipt in receipts {
+            assert_eq!(receipt["id"], case["id"]);
+            assert_eq!(receipt["ansi"], case["ansi"]);
+        }
+    }
+    Ok((inputs, cases))
+}
+
+#[expect(
+    clippy::unwrap_used,
+    reason = "Fault mutations require concrete observation shapes; malformed fixtures must fail."
+)]
+fn producer_actual_faults(actual: &Value, expected: &Value, control: Option<&Value>) -> Vec<Value> {
+    let mut faults = Vec::new();
+    let mut changed = actual.clone();
+    changed["unexpected_key"] = json!(true);
+    faults.push(changed);
+    let mut changed = actual.clone();
+    changed["analyzed_schema"]["fields"][0]["metadata"] = json!({"wrong":"metadata"});
+    faults.push(changed);
+    let mut changed = actual.clone();
+    changed["analyzed_fields"][0]["nullable"] =
+        json!(!actual["analyzed_fields"][0]["nullable"].as_bool().unwrap());
+    faults.push(changed);
+    let mut changed = actual.clone();
+    changed["analyzed_schema"]["fields"][0]["name"] = json!("wrong");
+    faults.push(changed);
+    if actual["status"] == "error" {
+        for (from, to) in [
+            ("REGEX_GROUP_INDEX", "WRONG_CONDITION"),
+            ("regexp_extract", "regexp_extract_all"),
+            ("between 0 and 1", "between 0 and 8"),
+            ("got 2", "got 9"),
+            ("CAST_INVALID_INPUT", "WRONG_CONDITION"),
+            ("'bad'", "'wrong'"),
+            ("Int32", "Int64"),
+        ] {
+            if !actual["error"].as_str().unwrap().contains(from) {
+                continue;
+            }
+            let mut changed = actual.clone();
+            changed["error"] = json!(actual["error"].as_str().unwrap().replace(from, to));
+            changed["error_chain"] = json!(
+                actual["error_chain"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|cause| cause.as_str().unwrap().replace(from, to))
+                    .collect::<Vec<_>>()
+            );
+            faults.push(changed);
+        }
+        let tag = format!("[{}]", expected["condition"].as_str().unwrap());
+        for detached in [false, true] {
+            let mut changed = actual.clone();
+            let bare = actual["error"].as_str().unwrap().replace(&tag, "");
+            changed["error"] = json!(if detached {
+                format!("{tag}\n{bare}")
+            } else {
+                bare
+            });
+            changed["error_chain"] = json!(
+                actual["error_chain"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|cause| cause.as_str().unwrap().replace(&tag, ""))
+                    .collect::<Vec<_>>()
+            );
+            faults.push(changed);
+        }
+        let mut changed = actual.clone();
+        changed["error"] = json!(format!(
+            "{} changed cause",
+            actual["error"].as_str().unwrap()
+        ));
+        faults.push(changed);
+        let mut changed = actual.clone();
+        changed["error_stage"] = json!("execute");
+        faults.push(changed);
+        let mut changed = actual.clone();
+        changed["physical_fields"] = json!([]);
+        faults.push(changed);
+        let mut changed = actual.clone();
+        changed["rows"] = json!([]);
+        faults.push(changed);
+    } else {
+        let mut changed = actual.clone();
+        changed["rows"] = if actual["rows"] == json!([]) {
+            json!([[null]])
+        } else {
+            json!([])
+        };
+        faults.push(changed);
+        let mut changed = actual.clone();
+        changed["physical_schema"]["fields"][0]["metadata"] = json!({"wrong":"metadata"});
+        faults.push(changed);
+    }
+    for fault in &faults {
+        assert!(
+            !literal_satisfied(fault, &producer_comparison(fault, expected), control),
+            "fault accepted: {fault}"
+        );
+    }
+    faults
+}
+
+#[tokio::test]
+async fn local_regexp_producer_references_keep_all_132_contexts() -> TestResult {
+    let (inputs, cases) = producer_catalog()?;
+    let metadata = literal_input_metadata(&inputs)?;
+    let floating: Value = serde_json::from_str(include_str!(
+        "fixtures/regexp-extract-local-priority-inputs.json"
+    ))?;
+    // Validate all 30 measured controls before selecting the declared six-key subset.
+    let mut refinements = literal_current_controls()?
+        .into_iter()
+        .filter(|(_, control)| {
+            control["context"]["id"] == "values_literal_double_nan"
+                && control["context"]["ansi"] == false
+        })
+        .collect::<BTreeMap<_, _>>();
+    assert_eq!(refinements.len(), 6);
+    for control in refinements.values() {
+        assert_eq!(control["false_facets"], json!(["physical_schema"]));
+    }
+    let mut seen = HashSet::new();
+    let mut receipts = HashSet::new();
+    let mut failures = Vec::new();
+    let mut captured = Vec::new();
+    let mut strict = 0;
+    let mut differences = BTreeMap::<BTreeSet<String>, usize>::new();
+    for representation in 0..3 {
+        for batch_size in [1, 32] {
+            let session = SessionContext::new_with_state(
+                configure_spark_sql(
+                    SessionStateBuilder::new()
+                        .with_default_features()
+                        .with_config(
+                            SessionConfig::new()
+                                .with_batch_size(batch_size)
+                                .with_target_partitions(2),
+                        ),
+                )
+                .build(),
+            );
+            register_inputs(&session, &metadata, representation, batch_size)?;
+            spark_inputs::register_recorded_inputs(&session, &floating, batch_size)?;
+            for case in &cases {
+                let context = json!({"id":case["id"],"sql":case["sql"],"ansi":case["ansi"],
+                    "representation":representation,"batch_size":batch_size});
+                let key = literal_key(&context)?;
+                assert!(seen.insert(key.clone()));
+                for receipt in case["capture_providers"]
+                    .as_array()
+                    .ok_or("missing providers")?
+                {
+                    let name = receipt["name"].as_str().ok_or("missing provider name")?;
+                    assert!(receipts.insert((key.clone(), name.to_owned())));
+                    let actual = provider(&session, name).await?;
+                    let matches =
+                        literal_provider_matches(&actual, &receipt["actual"], representation);
+                    eprintln!(
+                        "c06 local producer provider: {}",
+                        json!({"context":context,"name":name,
+                        "actual":actual,"matches_reference":matches})
+                    );
+                    if !matches {
+                        failures.push(format!("provider {name}: {context}"));
+                    }
+                }
+                assert_query_marker_absent(&session);
+                let actual = observe(
+                    &session,
+                    case["sql"].as_str().ok_or("missing SQL")?,
+                    case["ansi"].as_bool().ok_or("missing ANSI")?,
+                )
+                .await?;
+                assert_query_marker_absent(&session);
+                let comparison = producer_comparison(&actual, &case["expected"]);
+                let control = refinements.remove(&key);
+                if let Some(control) = &control {
+                    assert_eq!(control["context"], context);
+                }
+                let satisfied = literal_satisfied(&actual, &comparison, control.as_ref());
+                let remaining = literal_false_facets(&comparison)?;
+                strict += usize::from(remaining.is_empty());
+                if !remaining.is_empty() {
+                    *differences.entry(remaining.clone()).or_default() += 1;
+                }
+                eprintln!(
+                    "c06 local producer reference: {}",
+                    json!({"context":context,"actual":actual,
+                    "comparison":comparison,"required_spark_facts":case["expected"],
+                    "strict_reference_match":remaining.is_empty(),"remaining_differences":remaining,
+                    "native_regression_satisfied":satisfied,"whole_native_control":control,
+                    "compatibility_credit":false})
+                );
+                if !satisfied {
+                    failures.push(format!("query: {context}"));
+                }
+                captured.push((actual, case.clone(), control, satisfied));
+            }
+        }
+    }
+    assert_eq!(seen.len(), 132);
+    assert_eq!(receipts.len(), 324);
+    assert!(refinements.is_empty());
+    assert_eq!(strict, 126);
+    assert_eq!(
+        differences,
+        BTreeMap::from([(BTreeSet::from(["physical_schema".to_owned()]), 6),])
+    );
+    // All observations exist before fault checks or semantic failure assertions.
+    let mut faults = 0;
+    for (actual, case, control, satisfied) in &captured {
+        if *satisfied {
+            faults += producer_actual_faults(actual, &case["expected"], control.as_ref()).len();
+        }
+    }
+    eprintln!(
+        "c06 local producer summary: {}",
+        json!({"observations":seen.len(),"providers":receipts.len(),
+        "faults_checked":faults,"failures":failures,"compatibility_credit":false})
+    );
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+    Ok(())
+}
+
+// This records native baselines, including unresolved async outcomes. It does
+// not grant an exception to a Spark reference or predict a baseline profile.
+#[tokio::test]
+async fn local_literal_producer_native_profiles() -> TestResult {
+    use literal_producer::{Kind, producer};
+    let mut seen = HashSet::new();
+    for kind in [
+        Kind::ImmutableNoFold,
+        Kind::VolatileFold,
+        Kind::AsyncFold,
+        Kind::ImmutableFold,
+    ] {
+        for ansi in [true, false] {
+            let session = SessionContext::new_with_state(
+                configure_spark_sql(
+                    SessionStateBuilder::new()
+                        .with_default_features()
+                        .with_config(
+                            SessionConfig::new()
+                                .with_batch_size(32)
+                                .with_target_partitions(1),
+                        ),
+                )
+                .build(),
+            );
+            let (callback, counts) = producer(kind);
+            let name = callback.name().to_owned();
+            assert_eq!(
+                callback.inner().supports_constant_folding(),
+                kind != Kind::ImmutableNoFold
+            );
+            assert_eq!(
+                callback.signature().volatility == datafusion::logical_expr::Volatility::Volatile,
+                kind == Kind::VolatileFold
+            );
+            assert_eq!(callback.as_async().is_some(), kind == Kind::AsyncFold);
+            session.register_udf(callback);
+            let (index, limit) = if kind == Kind::ImmutableFold {
+                (1, "")
+            } else {
+                (2, " LIMIT 0")
+            };
+            let produced = if kind == Kind::ImmutableFold {
+                ", produced"
+            } else {
+                ""
+            };
+            let sql = format!(
+                "SELECT regexp_extract('a','(a)',{index}) AS r{produced} FROM \
+                (SELECT {name}(k) AS produced FROM VALUES(1) AS t(k)) AS q{limit}"
+            );
+            assert!(seen.insert((name.clone(), ansi)));
+            assert_query_marker_absent(&session);
+            let actual = observe_with_producer(&session, &sql, ansi, Some(&counts)).await?;
+            assert_query_marker_absent(&session);
+            let snapshot = counts.snapshot();
+            let events = snapshot["events"]
+                .as_array()
+                .ok_or("missing actual producer events")?;
+            let phase_calls = (0..3)
+                .map(|phase| {
+                    events
+                        .iter()
+                        .filter(|event| event["phase"] == phase)
+                        .count()
+                })
+                .collect::<Vec<_>>();
+            eprintln!(
+                "c06 local literal producer native profile: {}",
+                json!({
+                "kind":format!("{kind:?}"),"sql":sql,"ansi":ansi,"actual":actual,
+                "availability":availability_record(&actual),"counts":snapshot,
+                "calls_by_phase_resolve_physical_execute":phase_calls,
+                "native_baseline_profile_required":true,"compatibility_credit":false})
+            );
+        }
+    }
+    assert_eq!(seen.len(), 8);
+    Ok(())
+}
+
+fn availability_record(actual: &Value) -> Value {
+    let mut values = serde_json::Map::new();
+    for key in [
+        "analyzed_schema",
+        "analyzed_fields",
+        "analyzed_arrow_schema",
+        "analyzed_plan",
+        "physical_schema",
+        "physical_fields",
+        "physical_arrow_schema",
+        "physical_plan",
+        "rows",
+        "batches",
+        "optimized_schema",
+    ] {
+        values.insert(key.to_owned(), json!(availability(actual, key)));
+    }
+    Value::Object(values)
+}
+
+#[test]
+fn local_producer_diagnostics_reject_changed_real_causes() -> TestResult {
+    let (_, cases) = producer_catalog()?;
+    let samples = include_str!("fixtures/regexp-extract-local-producer-diagnostic-samples.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(samples.len(), 2);
+    for sample in samples {
+        assert_eq!(
+            sample["product_commit"],
+            "5ca1b9d461dcaec1c883f17e9a0ae1212a5a8f23"
+        );
+        assert_eq!(
+            sample["execution_commit"],
+            "3b0c5fd1b98a88ae93a7a7d228f50e7ae8a33d50"
+        );
+        let record = &sample["raw_complete_observation"];
+        let expected = &cases
+            .iter()
+            .find(|case| case["sql"] == record["sql"] && case["ansi"] == record["ansi"])
+            .ok_or("missing exact sample reference")?["expected"];
+        let actual = &record["actual"];
+        let comparison = producer_comparison(actual, expected);
+        assert_eq!(comparison["complete_actual"], true);
+        assert_eq!(comparison["facets"]["meaningful_cause"], true);
+        assert_eq!(comparison["facets"]["diagnostic_identifier"], true);
+        let condition = expected["condition"].as_str().ok_or("missing condition")?;
+        let tag = format!("[{condition}]");
+        for replacement in ["", "[WRONG_CONDITION]"] {
+            let mut changed = actual.clone();
+            changed["error"] = json!(actual["error"].as_str().unwrap().replace(&tag, replacement));
+            changed["error_chain"] = json!(
+                actual["error_chain"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|cause| cause.as_str().unwrap().replace(&tag, replacement))
+                    .collect::<Vec<_>>()
+            );
+            assert_eq!(
+                producer_comparison(&changed, expected)["facets"]["diagnostic_identifier"],
+                false
+            );
+        }
+        let mut detached = actual.clone();
+        detached["error_chain"] = json!(
+            actual["error_chain"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|cause| cause.as_str().unwrap().replace(&tag, ""))
+                .collect::<Vec<_>>()
+        );
+        detached["error"] = json!(format!(
+            "{tag}\n{}",
+            detached["error_chain"][0].as_str().unwrap()
+        ));
+        detached["error_chain"][0] = detached["error"].clone();
+        assert_eq!(
+            producer_comparison(&detached, expected)["facets"]["diagnostic_identifier"],
+            false
+        );
+        let replacements = if condition == "CAST_INVALID_INPUT" {
+            vec![("'bad'", "'wrong'"), ("Int32", "Int64")]
+        } else {
+            vec![
+                ("regexp_extract", "regexp_extract_all"),
+                ("between 0 and 1", "between 0 and 8"),
+                ("got 2", "got 9"),
+            ]
+        };
+        for (from, to) in replacements {
+            assert!(actual["error"].as_str().unwrap().contains(from));
+            let mut changed = actual.clone();
+            changed["error"] = json!(actual["error"].as_str().unwrap().replace(from, to));
+            changed["error_chain"] = json!(
+                actual["error_chain"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|cause| cause.as_str().unwrap().replace(from, to))
+                    .collect::<Vec<_>>()
+            );
+            assert_eq!(
+                producer_comparison(&changed, expected)["facets"]["meaningful_cause"],
+                false
+            );
+        }
+        if condition == "CAST_INVALID_INPUT" {
+            assert!(literal_false_facets(&comparison)?.is_empty());
+            assert!(!producer_actual_faults(actual, expected, None).is_empty());
+        } else {
+            // This real before-repair group sample still has an execution-phase gap.
+            assert_eq!(comparison["facets"]["phase"], false);
         }
     }
     Ok(())

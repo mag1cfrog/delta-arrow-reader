@@ -26,7 +26,7 @@ are recorded in Git rather than rewriting the accepted source checksums.
 
 ## Dependency forks
 
-Fourteen dependencies have local source overrides in this crate's Cargo.toml:
+Fifteen dependencies have local source overrides in this crate's Cargo.toml:
 
 | Source | Version | Retained changes |
 | --- | --- | --- |
@@ -34,6 +34,7 @@ Fourteen dependencies have local source overrides in this crate's Cargo.toml:
 | DataFusion expression and execution crates | 54.1.0 | Spark coercion and nullability, subquery preparation, filtering and sorting, and accepted arithmetic execution changes |
 | DataFusion aggregate functions | 54.1.0 | Clear cached sliding MIN/MAX values when no contributing value remains; expose shallow MovingMin queue buffer accounting |
 | DataFusion datasource | 54.1.0 | Supply the owned complete table schema width when unprojecting filters, including custom file sources |
+| DataFusion SQL | 54.1.0 | Unparse explicit NULL RANGE bounds as typed expressions and preserve native UNBOUNDED sentinels |
 | Arrow array, arithmetic and cast crates | 58.4.0 | Accepted cast, checked arithmetic, buffer handling and logical List child validation changes |
 | lexical-parse-float | 1.0.6 | Hexadecimal floating-point parsing used by Spark string casts |
 
@@ -459,6 +460,22 @@ Spark's DST gap/overlap rules. The [reference cases](tests/fixtures/README.md#co
 cover temporal coercion, lazy fallbacks, modes and timezones.
 Named-zone conversion retains ConvertTz's documented Chrono range limit; full
 i64-microsecond timestamp parity remains separate work.
+
+Registered TIMESTAMP columns are read in the session time zone. When a table or table
+function annotates a TIMESTAMP with another zone, such as UTC for a Delta column, the scan
+gets a projection that annotates it with the session zone. TIMESTAMP fields inside
+structs, lists and maps are annotated the same way. The cast changes only the annotation
+and reuses the value buffers, so the stored instants do not change. Field extraction,
+DATE_FORMAT, casts, truncation and date functions then follow the session zone as for
+literals, and TIMESTAMP results carry the session zone, as in Spark's Arrow output. A
+session zone Spark accepts but Arrow cannot parse, such as `Z` or `PST`, leaves columns
+with their own zone until #1029 resolves such IDs. A comparison with a TIMESTAMP literal
+still reaches the scan as a predicate on the stored column, because DataFusion's
+unwrap-cast rule removes the cast. `IS NULL` reaches it with the cast, which the Delta
+provider cannot prune with, and `BETWEEN` and `IN` also push redundant cast copies (#1096).
+Native DataFusion SQL keeps each column's own annotation. The
+[session-zone column references](tests/fixtures/session-zone-columns/README.md) cover
+these functions in UTC and Los Angeles over UTC, named-zone and fixed-offset annotations.
 
 TO_UTC_TIMESTAMP and FROM_UTC_TIMESTAMP convert TIMESTAMP_NTZ and DATE arguments to
 the session zone with that same builder, so a local time or midnight skipped by a DST
@@ -1388,12 +1405,15 @@ remains a special boundary distinct from numeric zero. It builds the complete
 Spark output name before normalizing the physical frame. Existing interval
 bounds keep their Interval or Duration representation and arithmetic.
 
-ANSI minimum-INT PRECEDING negation fails during resolution when admission
-compares two expression endpoints. With a special endpoint, the bound check
-retains the original key Field and fails during optimization, after public and
-analyzed Fields are available. DESC minimum-INT FOLLOWING negation fails only
-when execution evaluates a non-NULL DATE key, including a constant key; empty
-and all-NULL keys succeed. These checks use the query's Spark ANSI setting.
+ANSI minimum-INT PRECEDING negation fails during resolution when endpoint
+comparison reaches that expression. A NULL lower endpoint can skip the upper
+comparison; that bound check runs during optimization, after public and analyzed
+Fields are available. CURRENT ROW and UNBOUNDED endpoints also defer this check.
+The check retains the original key Field. DESC minimum-INT FOLLOWING negation
+fails during execution. In an explicit NULL frame, it checks a non-NULL DATE key
+only when the consumed input range requires a comparison. Empty searches and
+NULL keys skip that execution check. These checks use the query's Spark ANSI
+setting.
 
 Shared frame state adds signed INT days with i32 wrapping in both ANSI modes.
 For a nonzero DATE offset, it computes the upper cursor first and limits the
@@ -1401,7 +1421,33 @@ lower cursor to input already consumed by the upper cursor. Completion checks
 use the same target arithmetic. Finite wrapping ends require per-row completion
 proofs. Frame-aware builtins defer a row when its unfinished frame reaches the
 end of buffered input. Such ends also invalidate causal output-order inference,
-and either wrapping bound prevents
-plan reversal. Integer keys and interval bounds keep their existing decisions.
+and either wrapping bound prevents plan reversal. Integer keys and interval bounds
+keep their existing decisions.
 The [DATE RANGE references](tests/fixtures/README.md#numeric-date-range-bounds)
 cover these consumers, error stages and separate-owner controls.
+
+Explicit NULL RANGE offsets on numeric keys, and INT NULL offsets on DATE keys,
+use `PrecedingNullOffset` and `FollowingNullOffset` comparison targets. Analyzer
+coercion preserves their admitted offset type. Native DataFusion
+`Preceding(typed NULL)` and `Following(typed NULL)` remain unbounded sentinels.
+DATE Interval/Duration NULL bounds keep their existing temporal representation
+and coercion. The SQL unparser retains an explicit typed NULL expression or
+returns the existing checked type-conversion error.
+
+Sail assigns `RangeOffsetArithmetic::Spark` only to admitted explicit NULL frames
+on signed integer, DATE, FLOAT/DOUBLE or Decimal128 keys. Integer sign negation
+and target addition check overflow in ANSI mode and wrap otherwise; DATE day
+addition wraps in both modes.
+Minimum PRECEDING offsets retain their SQL or optimizer failure phase. Remaining
+checked arithmetic runs only for a consumed bound comparison. Plain finite and
+native frames keep the DataFusion policy, including their existing arithmetic.
+FLOAT/DOUBLE targets compare NaNs and signed zeros with Spark's ordering
+equivalence. Decimal128 operands use widened Decimal256 comparison targets without
+changing output Fields; native Decimal256 keys keep the DataFusion policy.
+
+Aggregate and frame-aware builtin windows with explicit NULL targets buffer the
+whole partition, so memory grows with partition size. These frames are non-causal,
+disable aggregate-result ordering inference and prevent plan reversal to reuse
+opposite input ordering. The
+[NULL RANGE references](tests/fixtures/README.md#explicit-null-range-bounds)
+record their membership, consumer Fields, failure phases and ordered outer queries.
