@@ -277,7 +277,7 @@ fn session(batch_size: usize) -> SessionContext {
     )
 }
 
-async fn native_controls(session: &SessionContext) -> TestResult<Value> {
+async fn native_controls(session: &SessionContext, context: Value) -> TestResult<Value> {
     let mut results = Vec::new();
     for sql in [
         "SELECT regexp_replace('abc123','([0-9]+)','<$1>') AS r",
@@ -285,7 +285,16 @@ async fn native_controls(session: &SessionContext) -> TestResult<Value> {
     ] {
         results.push(spark_results::capture_native_query_observation(session, sql).await?);
     }
-    Ok(json!(results))
+    let actual = json!(results);
+    eprintln!(
+        "c06 replacement native preparation controls: {}",
+        json!({"context":context,"actual":actual,
+            "observation_scope":"normalized_fields_rows_and_stage_errors",
+            "arrow_representation":"not_recorded_by_this_observer",
+            "batch_layout":"not_recorded_by_this_observer",
+        })
+    );
+    Ok(actual)
 }
 
 // Provider readback uses native DataFusion and retains each actual string carrier.
@@ -368,7 +377,7 @@ async fn replacement_preparation_matches_all_34_independent_references() -> Test
     let registration = json!({"registered_inputs":declarations.iter().map(|p| {
         json!({"name":p["name"],"schema":{"type":"struct","fields":p["fields"]},"rows":p["rows"]})
     }).collect::<Vec<_>>()});
-    let native = native_controls(&SessionContext::new()).await?;
+    let native = native_controls(&SessionContext::new(), json!({"phase":"plain"})).await?;
     let mut differences = Vec::new();
     let mut observations = BTreeSet::new();
     let mut provider_receipts = BTreeSet::new();
@@ -377,7 +386,7 @@ async fn replacement_preparation_matches_all_34_independent_references() -> Test
             let session = session(batch_size);
             string_binary::register_inputs(&session, &registration, representation, batch_size)?;
             assert!(marker_absent(&session));
-            assert_eq!(native_controls(&session).await?, native);
+            assert_eq!(native_controls(&session, json!({"phase":"before","representation":representation,"batch_size":batch_size})).await?, native);
             for case in references.inputs["cases"]
                 .as_array()
                 .ok_or("missing cases")?
@@ -439,7 +448,7 @@ async fn replacement_preparation_matches_all_34_independent_references() -> Test
                     ));
                 }
             }
-            assert_eq!(native_controls(&session).await?, native);
+            assert_eq!(native_controls(&session, json!({"phase":"after","representation":representation,"batch_size":batch_size})).await?, native);
             assert!(marker_absent(&session));
         }
     }
@@ -579,7 +588,11 @@ async fn replacement_preparation_evaluates_foldable_immutable_arguments_once() -
                 assert_eq!(calls.load(Ordering::SeqCst), 1, "{sql}");
                 assert_eq!(query.logical_plan.schema(), &resolved);
                 let physical_schema = physical.as_ref().ok().map(|p| format!("{:?}", p.schema()));
+                let physical_fields = physical.as_ref().ok()
+                    .map(|plan| string_binary::capture_schema(plan.schema().fields(), None))
+                    .transpose()?;
                 let error = physical.as_ref().err().map(ToString::to_string);
+                let mut result = Value::Null;
                 if invalid_group {
                     let error = error.as_deref().ok_or("missing preparation error")?;
                     assert!(error.contains("[INVALID_REGEXP_REPLACE]"));
@@ -590,6 +603,7 @@ async fn replacement_preparation_evaluates_foldable_immutable_arguments_once() -
                         batches.iter().map(|b| b.num_rows()).sum::<usize>(),
                         usize::from(!local_values_limit)
                     );
+                    result = string_binary::capture_batches(&batches)?;
                     for batch in batches {
                         for row in 0..batch.num_rows() {
                             assert_eq!(
@@ -607,7 +621,9 @@ async fn replacement_preparation_evaluates_foldable_immutable_arguments_once() -
                         "local_values_limit":local_values_limit,
                         "analyzed_schema":string_binary::capture_schema(resolved.fields(), Some(&query.column_names))?,
                         "analyzed_raw_schema":format!("{resolved:?}"),"physical_raw_schema":physical_schema,
-                        "preparation_error":error,"calls":calls.load(Ordering::SeqCst),"Spark_custom_UDF_oracle":false
+                        "physical_schema":physical_fields,
+                        "preparation_error":error,"result":result,
+                        "calls":calls.load(Ordering::SeqCst),"Spark_custom_UDF_oracle":false
                     })
                 );
             }

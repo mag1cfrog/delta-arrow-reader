@@ -66,6 +66,14 @@ async fn regexp_replace_rejects_async_positions_at_resolve() -> TestResult {
             // These shared counters observe inner entries, not native wrapper entries.
             assert_eq!(counts.snapshot(), json!({"calls":0,"events":[]}));
             assert_eq!(immutable_counts.snapshot(), json!({"calls":0,"events":[]}));
+            eprintln!(
+                "c06 replacement async position: {}",
+                json!({"sql":sql,"ansi":ansi,"actual":actual,
+                    "asynchronous_inner_after_resolve":counts.snapshot(),
+                    "immutable_inner_after_resolve":immutable_counts.snapshot(),
+                    "spark_custom_udf_oracle":false,
+                })
+            );
         }
     }
     Ok(())
@@ -99,6 +107,7 @@ async fn regexp_replace_preserves_async_string_arguments_and_native_dispatch() -
             let (asynchronous, counts) = producer(Kind::AsyncFold);
             assert!(asynchronous.as_async().is_some());
             session.register_udf(asynchronous);
+            let mut actual = json!({});
             let physical = if native {
                 let frame = session.sql(sql).await?;
                 assert_eq!(
@@ -106,6 +115,9 @@ async fn regexp_replace_preserves_async_string_arguments_and_native_dispatch() -
                     &Schema::new(vec![Field::new("r", DataType::Utf8, false)])
                 );
                 assert_eq!(counts.snapshot(), json!({"calls":0,"events":[]}));
+                actual["analyzed_schema"] = string_binary::capture_schema(frame.schema().fields(), None)?;
+                actual["analyzed_arrow_schema"] = json!(format!("{:?}", frame.schema()));
+                actual["inner_after_resolve"] = counts.snapshot();
                 counts.phase.store(1, Ordering::SeqCst);
                 frame.create_physical_plan().await?
             } else {
@@ -124,12 +136,18 @@ async fn regexp_replace_preserves_async_string_arguments_and_native_dispatch() -
                     &Schema::new(vec![Field::new("#0", DataType::Utf8, false)])
                 );
                 assert_eq!(counts.snapshot(), json!({"calls":0,"events":[]}));
+                actual["analyzed_schema"] = string_binary::capture_schema(query.logical_plan.schema().fields(), Some(&query.column_names))?;
+                actual["analyzed_arrow_schema"] = json!(format!("{:?}", query.logical_plan.schema()));
+                actual["inner_after_resolve"] = counts.snapshot();
                 counts.phase.store(1, Ordering::SeqCst);
                 query.create_physical_plan(&session).await?
             };
             let schema = Arc::new(Schema::new(vec![Field::new("r", DataType::Utf8, false)]));
             assert_eq!(physical.schema(), schema);
             assert_eq!(counts.snapshot(), json!({"calls":0,"events":[]}));
+            actual["physical_schema"] = string_binary::capture_schema(physical.schema().fields(), None)?;
+            actual["physical_arrow_schema"] = json!(format!("{:?}", physical.schema()));
+            actual["inner_after_physical"] = counts.snapshot();
             counts.phase.store(2, Ordering::SeqCst);
             let batches = datafusion::physical_plan::collect(physical, session.task_ctx()).await?;
             assert_eq!(batches.len(), 1, "{sql} ANSI={ansi_mode}");
@@ -149,6 +167,13 @@ async fn regexp_replace_preserves_async_string_arguments_and_native_dispatch() -
                     "return_field":format!("{field:?}"),
                 }]}),
                 "{sql} ANSI={ansi_mode}"
+            );
+            actual["result"] = string_binary::capture_batches(&batches)?;
+            actual["inner_after_execute"] = counts.snapshot();
+            eprintln!(
+                "c06 replacement async argument: {}",
+                json!({"sql":sql,"ansi":ansi_mode,"native":native,"actual":actual,
+                    "spark_custom_udf_oracle":false})
             );
         }
     }
