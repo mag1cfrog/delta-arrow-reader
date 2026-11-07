@@ -1,6 +1,7 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 pub mod convert_tz;
 pub mod format;
+pub(crate) mod local_time;
 pub mod negate_duration;
 pub mod spark_date;
 pub mod spark_date_day_arithmetic;
@@ -19,6 +20,7 @@ pub mod spark_time_diff;
 pub mod spark_time_trunc;
 pub mod spark_timestamp;
 pub mod spark_timestamp_diff;
+pub mod spark_timestamp_to_ntz;
 pub mod spark_unix_timestamp;
 pub mod spark_window_buckets;
 pub mod spark_year;

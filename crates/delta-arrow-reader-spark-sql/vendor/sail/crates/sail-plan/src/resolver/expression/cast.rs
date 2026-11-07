@@ -34,7 +34,9 @@ use crate::error::{PlanError, PlanResult};
 use crate::formatter::SparkPlanFormatter;
 use crate::function::common::drop_inherited_column_metadata;
 use crate::function::is_spark_compatible_arrow_fixed_offset;
-use crate::function::temporal_coercion::cast_local_timestamp_expr_to_ltz;
+use crate::function::temporal_coercion::{
+    cast_local_timestamp_expr_to_ltz, ltz_expr_to_local_timestamp,
+};
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
 use crate::resolver::state::PlanResolverState;
@@ -163,6 +165,23 @@ impl PlanResolver<'_> {
                 ScalarUDF::new_from_impl(SparkIntervalTruncate::new(unit_length)).call(vec![expr]);
             return Ok((
                 NamedExpr::new(name, drop_inherited_column_metadata(expr)),
+                named_input,
+            ));
+        }
+        // Spark reads each instant's local date-time in the session time zone; Arrow's cast
+        // keeps its UTC date-time.
+        if cast_to_type == DataType::Timestamp(TimeUnit::Microsecond, None)
+            && let DataType::Timestamp(unit, Some(zone)) = &expr_type
+            && let Some(local) = ltz_expr_to_local_timestamp(
+                expr.clone(),
+                *unit,
+                zone,
+                &self.config.session_timezone,
+                is_try,
+            )
+        {
+            return Ok((
+                NamedExpr::new(name, drop_inherited_column_metadata(local)),
                 named_input,
             ));
         }
