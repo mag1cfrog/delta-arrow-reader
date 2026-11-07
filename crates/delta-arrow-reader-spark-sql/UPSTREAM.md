@@ -1453,6 +1453,28 @@ opposite input ordering. The
 [NULL RANGE references](tests/fixtures/README.md#explicit-null-range-bounds)
 record their membership, consumer Fields, failure phases and ordered outer queries.
 
+### NULL ROWS bounds
+
+Sail retains each evaluated ROWS expression's source type until both bounds have
+passed NULL admission. Bare PRECEDING NULL has Spark's unary-minus type DOUBLE;
+bare FOLLOWING NULL has type VOID. The type error identifies the actual lower or
+upper bound. For a frame containing a NULL expression, lower type admission,
+upper type admission and invalid UNBOUNDED sides precede the typed-INT-NULL
+rejection. A non-NULL lower offset still converts before upper resolution, using
+the existing signed and zero normalization. A NULL lower checks its type first;
+an admitted INT NULL lower resolves the upper expression without converting it to
+an integer, so invalid upper STRING bounds report a type error before conversion.
+Value/API sentinels and GROUPS keep their existing behavior.
+
+Typed INT NULL is intentionally rejected during resolution with
+`External error: not supported: NULL ROWS frame lower bound` or the corresponding
+`upper bound` message. Neither native Fields nor rows are available at that
+phase. The pinned Spark capture instead reports an internal collection error on
+nonempty input, and successful empty rows on empty input, with all five Fields
+available in both cases. The [NULL ROWS references](tests/fixtures/README.md#null-rows-bound-admission)
+retain those outcomes and label the earlier native rejection as an intentional
+difference. RANGE planning, native DataFusion frames and execution are unchanged.
+
 ### Signed-integer RANGE bounds
 
 For TINYINT, SMALLINT, INT and BIGINT keys, the resolver compares signed expression

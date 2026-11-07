@@ -4281,11 +4281,11 @@ down and reaps its owned JVM; cleanup failure makes the capture fail.
 observation before asserting differences. Complete public, analyzed, optimized
 and physical Fields are required when available; unavailable error stages remain
 explicit. Ordered queries compare raw sequences, and unordered queries retain
-duplicate rows. It requires 1148 strict Spark comparisons and 16 unchanged native
-NULL ROWS rejections from `null-range-754-prior-rows-rejections.json`.
-[The ROWS admission issue](https://github.com/mag1cfrog/delta-arrow-reader/issues/1085)
-owns those unsupported bounds; their original Spark records remain visible and
-are not reported as parity.
+duplicate rows. It requires 1156 strict Spark comparisons, including the eight
+bare-NULL ROWS contexts, and eight explicit typed-NULL ROWS rejections described
+below. The original eight nonempty Spark records remain unchanged. The 16 old
+native profiles in `null-range-754-prior-rows-rejections.json` remain checked as
+historical evidence; the current replay no longer requires their generic error.
 
 `null-range-754-boundary-cases.json` and `null-range-754-boundary-spark.jsonl`
 retain eight ordered inline-VALUES queries in both ANSI modes. Their separate
@@ -4297,6 +4297,62 @@ The capture script records both source files in one run, for 598 observations.
 Compare each corpus with its corresponding checked-in reference before
 refreshing it. Preserve the original source metadata, historical native profiles
 and separate native controls.
+
+### NULL ROWS bound admission
+
+`null-rows-1085-cases.json` supplies 46 SQL texts in both ANSI modes, including
+copies of the eight original nonempty requests above. The other 84 requests
+cover empty input, paired bounds, typed and folded NULL expressions, opposite
+PRECEDING/FOLLOWING directions, and function-specific frame and ordering checks.
+The source-only driver reuses the shared capture protocol and the original
+matching-schema empty and 78-row providers. The separate
+`null-rows-1085-string-partner-*` source/reference pair adds four SQL texts and
+eight observations. They establish that a bare lower NULL reports lower DOUBLE
+before an invalid STRING upper can cast, and a typed INT NULL lower reports the
+upper STRING type error. Both errors occur during SQL analysis with no Fields.
+
+`null-rows-1085-spark.jsonl` retains all 92 independent observations: 72 fail during
+SQL analysis with no available Fields; ten nonempty typed-INT-NULL requests fail
+during collection with `INTERNAL_ERROR` and all five Fields available; ten empty
+typed-INT-NULL requests succeed with zero rows and all five Fields available.
+These empty successes are part of the Spark reference.
+
+The native planner reports the bare-NULL type error with its actual lower or
+upper location: PRECEDING NULL has source type DOUBLE, while FOLLOWING NULL has
+source type VOID. Both bound types and invalid UNBOUNDED sides take precedence
+over the intentional typed-INT-NULL rejection. That rejection is
+`External error: not supported: NULL ROWS frame lower bound` or the corresponding
+`upper bound` message, during resolution with no available Fields. It applies to
+empty and nonempty input. The native planner does not reproduce Spark's internal
+failure or its empty typed-NULL result.
+
+```sh
+python3.12 tests/fixtures/capture_null_rows_1085_spark.py --self-check
+python3.12 tests/fixtures/capture_null_rows_1085_string_partner_spark.py --self-check
+null_rows_capture_dir="$(mktemp -d)"
+TZ=UTC PYTHONDONTWRITEBYTECODE=1 \
+  python3.12 tests/fixtures/capture_null_rows_1085_spark.py \
+  "$null_rows_capture_dir/null-rows-1085-spark.jsonl"
+TZ=UTC PYTHONDONTWRITEBYTECODE=1 \
+  python3.12 tests/fixtures/capture_null_rows_1085_string_partner_spark.py \
+  "$null_rows_capture_dir/null-rows-1085-string-partner-spark.jsonl"
+cargo +1.96.0 test --workspace --no-fail-fast --locked \
+  --test null_rows_frames --test null_range_frames -- --nocapture --test-threads=1
+```
+
+`null_rows_frames.rs` replays all 200 native contexts at batch sizes 1 and 32,
+with two provider and target partitions. It requires 160 Spark admission
+agreements and 40 intentional typed-NULL differences, checking exact native
+diagnostics, phase, and every unavailable Field and row observation. Of the 160
+admission agreements, 144 satisfy the generic strict Spark comparator. The other
+16 retain the existing ROW_NUMBER and LAG diagnostic aliases:
+`WINDOW_FRAME_MISMATCH` and `WINDOW_OFFSET_FRAME_MISMATCH` for Spark's
+`_LEGACY_ERROR_TEMP_1036` and `_LEGACY_ERROR_TEMP_1035`. The raw comparator flags
+and the explicit admission agreements are printed separately.
+The test also rejects wrong types, locations and messages, later failures,
+returned empty rows, lost observations and observer failures. Native
+`SessionContext::sql` controls and a lower-bound conversion failure check protect
+the existing planner and evaluation order.
 
 ### Signed-integer RANGE bounds
 

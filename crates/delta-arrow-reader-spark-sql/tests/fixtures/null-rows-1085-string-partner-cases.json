@@ -1,0 +1,688 @@
+{
+  "version": 1,
+  "issue": 1085,
+  "purpose": "Source-only NULL lower plus invalid STRING upper admission probes. Outcomes are unknown until independent capture. Existing 92-record evidence is unchanged.",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "batch_sizes": [
+    1,
+    32
+  ],
+  "target_partitions": 2,
+  "provider_partitions": 2,
+  "expected_record_count": 8,
+  "sql_source_count": 4,
+  "source_manifest": {
+    "file": "null-rows-1085-cases.json",
+    "sha256": "4cd4cae766c207a497b4ca8f5b9b3aaebc0f3923ad1c8202b491ffb5dfaca64c"
+  },
+  "corpora": [
+    {
+      "corpus": "null-rows-1085-string-partner",
+      "source": "Issue 1085 NULL/STRING upper conversion precedence probes",
+      "metadata": {
+        "spark_version": "4.2.0",
+        "timezone": "UTC",
+        "inputs": [
+          {
+            "name": "null_range_mixed",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "g",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "v",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "0",
+                null,
+                null
+              ],
+              [
+                "1",
+                "0",
+                "-4",
+                null
+              ],
+              [
+                "2",
+                "0",
+                "0",
+                "0"
+              ],
+              [
+                "3",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "4",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "5",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "6",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "7",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "8",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "9",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "10",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "11",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "12",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "13",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "14",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "15",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "16",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "17",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "18",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "19",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "20",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "21",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "22",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "23",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "24",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "25",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "26",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "27",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "28",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "29",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "30",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "31",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "32",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "33",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "34",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "35",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "36",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "37",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "38",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "39",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "40",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "41",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "42",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "43",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "44",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "45",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "46",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "47",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "48",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "49",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "50",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "51",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "52",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "53",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "54",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "55",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "56",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "57",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "58",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "59",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "60",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "61",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "62",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "63",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "64",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "65",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "66",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "67",
+                "0",
+                "1",
+                "10"
+              ],
+              [
+                "68",
+                "0",
+                "3",
+                null
+              ],
+              [
+                "69",
+                "0",
+                "7",
+                "70"
+              ],
+              [
+                "70",
+                "0",
+                null,
+                null
+              ],
+              [
+                "71",
+                "1",
+                null,
+                null
+              ],
+              [
+                "72",
+                "1",
+                "0",
+                "0"
+              ],
+              [
+                "73",
+                "1",
+                "7",
+                "70"
+              ],
+              [
+                "74",
+                "2",
+                null,
+                null
+              ],
+              [
+                "75",
+                "2",
+                null,
+                null
+              ],
+              [
+                "76",
+                null,
+                "-4",
+                null
+              ],
+              [
+                "77",
+                null,
+                "1",
+                "10"
+              ]
+            ]
+          },
+          {
+            "name": "null_range_empty",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "g",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "v",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": []
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "null-rows-1085-string-partner",
+          "id": "bare_null_lower_string_upper_mixed",
+          "ansi": true,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ROWS BETWEEN NULL PRECEDING AND 'not_an_integer' FOLLOWING) AS n FROM null_range_mixed",
+          "ordered": false,
+          "ownership": "null_rows_bound_admission",
+          "coverage": {
+            "family": "string_partner_precedence",
+            "provider": "null_range_mixed",
+            "shape": "bare_null_lower_string_upper",
+            "window": "ORDER BY k ROWS BETWEEN NULL PRECEDING AND 'not_an_integer' FOLLOWING",
+            "empty": false
+          }
+        },
+        {
+          "corpus": "null-rows-1085-string-partner",
+          "id": "bare_null_lower_string_upper_mixed",
+          "ansi": false,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ROWS BETWEEN NULL PRECEDING AND 'not_an_integer' FOLLOWING) AS n FROM null_range_mixed",
+          "ordered": false,
+          "ownership": "null_rows_bound_admission",
+          "coverage": {
+            "family": "string_partner_precedence",
+            "provider": "null_range_mixed",
+            "shape": "bare_null_lower_string_upper",
+            "window": "ORDER BY k ROWS BETWEEN NULL PRECEDING AND 'not_an_integer' FOLLOWING",
+            "empty": false
+          }
+        },
+        {
+          "corpus": "null-rows-1085-string-partner",
+          "id": "bare_null_lower_string_upper_empty",
+          "ansi": true,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ROWS BETWEEN NULL PRECEDING AND 'not_an_integer' FOLLOWING) AS n FROM null_range_empty",
+          "ordered": false,
+          "ownership": "null_rows_bound_admission",
+          "coverage": {
+            "family": "string_partner_precedence",
+            "provider": "null_range_empty",
+            "shape": "bare_null_lower_string_upper",
+            "window": "ORDER BY k ROWS BETWEEN NULL PRECEDING AND 'not_an_integer' FOLLOWING",
+            "empty": true
+          }
+        },
+        {
+          "corpus": "null-rows-1085-string-partner",
+          "id": "bare_null_lower_string_upper_empty",
+          "ansi": false,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ROWS BETWEEN NULL PRECEDING AND 'not_an_integer' FOLLOWING) AS n FROM null_range_empty",
+          "ordered": false,
+          "ownership": "null_rows_bound_admission",
+          "coverage": {
+            "family": "string_partner_precedence",
+            "provider": "null_range_empty",
+            "shape": "bare_null_lower_string_upper",
+            "window": "ORDER BY k ROWS BETWEEN NULL PRECEDING AND 'not_an_integer' FOLLOWING",
+            "empty": true
+          }
+        },
+        {
+          "corpus": "null-rows-1085-string-partner",
+          "id": "typed_null_lower_string_upper_mixed",
+          "ansi": true,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ROWS BETWEEN CAST(NULL AS INT) PRECEDING AND 'not_an_integer' FOLLOWING) AS n FROM null_range_mixed",
+          "ordered": false,
+          "ownership": "null_rows_bound_admission",
+          "coverage": {
+            "family": "string_partner_precedence",
+            "provider": "null_range_mixed",
+            "shape": "typed_null_lower_string_upper",
+            "window": "ORDER BY k ROWS BETWEEN CAST(NULL AS INT) PRECEDING AND 'not_an_integer' FOLLOWING",
+            "empty": false
+          }
+        },
+        {
+          "corpus": "null-rows-1085-string-partner",
+          "id": "typed_null_lower_string_upper_mixed",
+          "ansi": false,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ROWS BETWEEN CAST(NULL AS INT) PRECEDING AND 'not_an_integer' FOLLOWING) AS n FROM null_range_mixed",
+          "ordered": false,
+          "ownership": "null_rows_bound_admission",
+          "coverage": {
+            "family": "string_partner_precedence",
+            "provider": "null_range_mixed",
+            "shape": "typed_null_lower_string_upper",
+            "window": "ORDER BY k ROWS BETWEEN CAST(NULL AS INT) PRECEDING AND 'not_an_integer' FOLLOWING",
+            "empty": false
+          }
+        },
+        {
+          "corpus": "null-rows-1085-string-partner",
+          "id": "typed_null_lower_string_upper_empty",
+          "ansi": true,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ROWS BETWEEN CAST(NULL AS INT) PRECEDING AND 'not_an_integer' FOLLOWING) AS n FROM null_range_empty",
+          "ordered": false,
+          "ownership": "null_rows_bound_admission",
+          "coverage": {
+            "family": "string_partner_precedence",
+            "provider": "null_range_empty",
+            "shape": "typed_null_lower_string_upper",
+            "window": "ORDER BY k ROWS BETWEEN CAST(NULL AS INT) PRECEDING AND 'not_an_integer' FOLLOWING",
+            "empty": true
+          }
+        },
+        {
+          "corpus": "null-rows-1085-string-partner",
+          "id": "typed_null_lower_string_upper_empty",
+          "ansi": false,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ROWS BETWEEN CAST(NULL AS INT) PRECEDING AND 'not_an_integer' FOLLOWING) AS n FROM null_range_empty",
+          "ordered": false,
+          "ownership": "null_rows_bound_admission",
+          "coverage": {
+            "family": "string_partner_precedence",
+            "provider": "null_range_empty",
+            "shape": "typed_null_lower_string_upper",
+            "window": "ORDER BY k ROWS BETWEEN CAST(NULL AS INT) PRECEDING AND 'not_an_integer' FOLLOWING",
+            "empty": true
+          }
+        }
+      ]
+    }
+  ]
+}
