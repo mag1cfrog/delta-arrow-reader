@@ -2302,11 +2302,30 @@ its historical 888-match result. The index fixtures `regexp-extract-index-curren
 `regexp-extract-index-native-stages.json` retain those historical objects and
 source attributions. The separate literal
 preparation supplement checks 46 SQL/ANSI cases in 276 query contexts and 552
-provider receipts, with 204 strict matches and 72 complete native regression
-controls. Those controls include local VALUES group failures tracked by #1049,
-which remains required before #1036/#788 can close. Preserved differences receive
-no Spark-match credit. These focused results do not establish full C06 acceptance
-or complete raw diagnostic parity; `full_compatibility_pass` remains false.
+provider receipts. The authenticated `f69b1cb1` capture has 228 strict Spark
+matches and 48 remaining differences: 36 physical-schema differences, six
+phase/diagnostic/availability differences and six status/row differences.
+
+All 72 historical native controls remain unchanged. The separate
+`regexp-extract-literal-preparation-current-native.jsonl` fixture copies 30
+complete native objects from product `f69b1cb1`, execution `84818105`, and its
+archived full-276 executable: 24 newly strict local VALUES group-error contexts
+and six Legacy NaN contexts with the observed internal aliased input plan. Its
+SHA-256 is `9a613f2e6128ccd8cf77114381e3f4ca48b815f0225dc466056f97a4fe412025`.
+The original consumer uses those 30 current objects and the other 42 historical
+objects as exact whole-object controls. The selected local-producer consumer
+checks all 132 contexts and 324 provider receipts, with 126 strict matches and
+six explicit physical-schema differences using the same current NaN objects.
+Both consumers retain independent Spark facet checks alongside the native
+controls. Native Fields, plans and diagnostics come from the actual capture.
+
+These measured #1049 gains replace the historical pending group-error outcomes.
+Remaining differences receive no Spark-match credit. Source faults, restored
+passes, complete regression gates and final review are required before #1049
+readiness. The archived full-276 capture exited 101 against the obsolete grade;
+both repaired consumers still require passing runs. These focused results do not
+establish full C06 acceptance or complete raw diagnostic parity;
+`full_compatibility_pass` remains false.
 
 The main capture includes 74 controls beside the index corpus: 32 selection,
 six async, 24 NoFold and 12 alias observations. The 62 native-only callback
