@@ -477,6 +477,16 @@ Native DataFusion SQL keeps each column's own annotation. The
 [session-zone column references](tests/fixtures/session-zone-columns/README.md) cover
 these functions in UTC and Los Angeles over UTC, named-zone and fixed-offset annotations.
 
+TIMESTAMP_SECONDS, TIMESTAMP_MILLIS and TIMESTAMP_MICROS annotate their result with the
+session time zone like any Spark TIMESTAMP, so HOUR, DATE_FORMAT and casts over it read the
+local date-time where they read UTC before; the instants are unchanged. A session zone Arrow
+cannot parse keeps UTC (#1029). Their arguments still convert as before: DOUBLE and DECIMAL
+seconds are truncated to whole seconds, an overflowing argument wraps instead of failing,
+a DOUBLE literal gives a NOT NULL result, and TIMESTAMP_MICROS accepts STRING and DATE
+arguments, which Spark rejects, reading them in UTC as before (#1111). The
+[epoch function references](tests/fixtures/timestamp-from-epoch/README.md) record the
+checks.
+
 CAST and TRY_CAST from TIMESTAMP to TIMESTAMP_NTZ, one-argument TO_TIMESTAMP_NTZ and the
 TIMESTAMP argument of CONVERT_TIMEZONE take each instant's local date-time in the session
 time zone, whatever zone its type names. Arrow's cast kept the UTC date-time. The offsets
