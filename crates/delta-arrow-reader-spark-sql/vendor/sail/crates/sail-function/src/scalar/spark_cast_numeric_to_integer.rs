@@ -24,7 +24,7 @@ enum CastMode {
     Try,
 }
 
-/// Mode-aware FLOAT/DOUBLE-to-integer and BIGINT-to-INT conversion.
+/// Mode-aware FLOAT/DOUBLE-to-integer conversion and signed integer narrowing.
 /// Spark conservatively declares analyzed floating casts nullable; folding may refine them later.
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkCastNumericToInteger {
@@ -92,7 +92,7 @@ impl SparkCastNumericToInteger {
         make_scalar_function(
             move |arrays| {
                 let input = &arrays[0];
-                // JVM byte/short conversions first saturate to INT, then keep low bits.
+                // JVM floating byte/short conversions first saturate to INT, then keep low bits.
                 let result: ArrayRef = match (input.data_type(), &target) {
                     (DataType::Float32, DataType::Int8) => Arc::new(
                         input
@@ -134,6 +134,31 @@ impl SparkCastNumericToInteger {
                             .as_primitive::<Float64Type>()
                             .unary::<_, Int64Type>(|value| value as i64),
                     ),
+                    (DataType::Int16, DataType::Int8) => Arc::new(
+                        input
+                            .as_primitive::<Int16Type>()
+                            .unary::<_, Int8Type>(|value| value as i8),
+                    ),
+                    (DataType::Int32, DataType::Int8) => Arc::new(
+                        input
+                            .as_primitive::<Int32Type>()
+                            .unary::<_, Int8Type>(|value| value as i8),
+                    ),
+                    (DataType::Int64, DataType::Int8) => Arc::new(
+                        input
+                            .as_primitive::<Int64Type>()
+                            .unary::<_, Int8Type>(|value| value as i8),
+                    ),
+                    (DataType::Int32, DataType::Int16) => Arc::new(
+                        input
+                            .as_primitive::<Int32Type>()
+                            .unary::<_, Int16Type>(|value| value as i16),
+                    ),
+                    (DataType::Int64, DataType::Int16) => Arc::new(
+                        input
+                            .as_primitive::<Int64Type>()
+                            .unary::<_, Int16Type>(|value| value as i16),
+                    ),
                     (DataType::Int64, DataType::Int32) => Arc::new(
                         input
                             .as_primitive::<Int64Type>()
@@ -169,10 +194,17 @@ impl ScalarUDFImpl for SparkCastNumericToInteger {
 
     fn coerce_types(&self, arguments: &[DataType]) -> Result<Vec<DataType>> {
         if !(matches!(arguments, [DataType::Float32 | DataType::Float64])
-            || (self.target == DataType::Int32 && matches!(arguments, [DataType::Int64])))
+            || matches!(
+                (arguments, &self.target),
+                (
+                    [DataType::Int16 | DataType::Int32 | DataType::Int64],
+                    DataType::Int8
+                ) | ([DataType::Int32 | DataType::Int64], DataType::Int16)
+                    | ([DataType::Int64], DataType::Int32)
+            ))
         {
             return exec_err!(
-                "numeric CAST to {} expects FLOAT/DOUBLE, or BIGINT for INT, got {arguments:?}",
+                "numeric CAST to {} expects FLOAT/DOUBLE or a wider signed integer, got {arguments:?}",
                 self.target
             );
         }
@@ -226,8 +258,24 @@ mod tests {
             for (ansi, is_try) in [(false, false), (true, false), (true, true)] {
                 let cast = SparkCastNumericToInteger::try_new(target.clone(), ansi, is_try)?;
                 assert_eq!(cast.target_type(), &target);
-                for source in [DataType::Float32, DataType::Float64, DataType::Int64] {
-                    let allowed = source != DataType::Int64 || target == DataType::Int32;
+                for source in [
+                    DataType::Float32,
+                    DataType::Float64,
+                    DataType::Int8,
+                    DataType::Int16,
+                    DataType::Int32,
+                    DataType::Int64,
+                ] {
+                    let allowed = matches!(
+                        (&source, &target),
+                        (DataType::Float32 | DataType::Float64, _)
+                            | (
+                                DataType::Int16 | DataType::Int32 | DataType::Int64,
+                                DataType::Int8
+                            )
+                            | (DataType::Int32 | DataType::Int64, DataType::Int16)
+                            | (DataType::Int64, DataType::Int32)
+                    );
                     if !allowed {
                         assert!(cast.coerce_types(&[source]).is_err());
                         continue;
@@ -246,16 +294,18 @@ mod tests {
                         assert_eq!(result.data_type(), &target);
                         assert_eq!(
                             result.is_nullable(),
-                            source != DataType::Int64 || nullable || is_try
+                            matches!(source, DataType::Float32 | DataType::Float64)
+                                || nullable
+                                || is_try
                         );
                         assert!(result.metadata().is_empty());
                     }
                 }
                 for source in [
-                    DataType::Int32,
                     DataType::UInt64,
                     DataType::Utf8,
                     DataType::Null,
+                    DataType::Date32,
                 ] {
                     assert!(cast.coerce_types(&[source]).is_err());
                 }
@@ -274,6 +324,117 @@ mod tests {
         }
         for target in [DataType::UInt32, DataType::Float64, DataType::Utf8] {
             assert!(SparkCastNumericToInteger::try_new(target, false, false).is_err());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn signed_integer_narrowing_keeps_wrapping_checked_and_try_modes() -> Result<()> {
+        for (source_type, target, positive, negative, low, high) in [
+            (
+                DataType::Int16,
+                DataType::Int8,
+                128_i64,
+                -129_i64,
+                ScalarValue::Int8(Some(-128)),
+                ScalarValue::Int8(Some(127)),
+            ),
+            (
+                DataType::Int32,
+                DataType::Int8,
+                128,
+                -129,
+                ScalarValue::Int8(Some(-128)),
+                ScalarValue::Int8(Some(127)),
+            ),
+            (
+                DataType::Int64,
+                DataType::Int8,
+                128,
+                -129,
+                ScalarValue::Int8(Some(-128)),
+                ScalarValue::Int8(Some(127)),
+            ),
+            (
+                DataType::Int32,
+                DataType::Int16,
+                32768,
+                -32769,
+                ScalarValue::Int16(Some(-32768)),
+                ScalarValue::Int16(Some(32767)),
+            ),
+            (
+                DataType::Int64,
+                DataType::Int16,
+                32768,
+                -32769,
+                ScalarValue::Int16(Some(-32768)),
+                ScalarValue::Int16(Some(32767)),
+            ),
+            (
+                DataType::Int64,
+                DataType::Int32,
+                2147483648,
+                -2147483649,
+                ScalarValue::Int32(Some(-2147483648)),
+                ScalarValue::Int32(Some(2147483647)),
+            ),
+        ] {
+            let storage = ScalarValue::iter_to_array(
+                [Some(0), Some(positive), Some(negative), None, Some(1)]
+                    .into_iter()
+                    .map(|value| ScalarValue::Int64(value).cast_to(&source_type))
+                    .collect::<Result<Vec<_>>>()?,
+            )?;
+            let input = storage.slice(1, 4);
+            let null = ScalarValue::try_new_null(&target)?;
+            let expected = [
+                low,
+                high,
+                null.clone(),
+                ScalarValue::Int64(Some(1)).cast_to(&target)?,
+            ];
+            for (ansi, is_try) in [(false, false), (true, false), (false, true), (true, true)] {
+                let cast = SparkCastNumericToInteger::try_new(target.clone(), ansi, is_try)?;
+                for (index, legacy) in expected.iter().enumerate() {
+                    let value = ScalarValue::try_from_array(&input, index)?;
+                    let result = cast.cast_value(&ColumnarValue::Scalar(value));
+                    if ansi && !is_try && index < 2 {
+                        let Err(error) = result else {
+                            return exec_err!("signed narrowing failed to check overflow");
+                        };
+                        assert!(error.to_string().contains("[CAST_OVERFLOW]"));
+                        assert_eq!(
+                            error.find_root().to_string(),
+                            format!(
+                                "Arrow error: Cast error: Can't cast value {} to type {target:?}",
+                                if index == 0 { positive } else { negative },
+                            )
+                        );
+                    } else {
+                        let expected = if is_try && index < 2 { &null } else { legacy };
+                        assert!(
+                            matches!(result?, ColumnarValue::Scalar(actual) if &actual == expected)
+                        );
+                    }
+                }
+                let result = cast.cast_value(&ColumnarValue::Array(input.clone()));
+                if ansi && !is_try {
+                    let Err(error) = result else {
+                        return exec_err!("array narrowing failed to check overflow");
+                    };
+                    assert!(error.to_string().contains("[CAST_OVERFLOW]"));
+                } else {
+                    let ColumnarValue::Array(result) = result? else {
+                        return exec_err!("array narrowing changed shape");
+                    };
+                    assert_eq!(result.len(), 4);
+                    for (index, legacy) in expected.iter().enumerate() {
+                        let expected = if is_try && index < 2 { &null } else { legacy };
+                        assert_eq!(&ScalarValue::try_from_array(&result, index)?, expected);
+                    }
+                }
+            }
         }
         Ok(())
     }

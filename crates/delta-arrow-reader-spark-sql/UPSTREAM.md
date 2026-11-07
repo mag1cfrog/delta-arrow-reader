@@ -1421,8 +1421,8 @@ lower cursor to input already consumed by the upper cursor. Completion checks
 use the same target arithmetic. Finite wrapping ends require per-row completion
 proofs. Frame-aware builtins defer a row when its unfinished frame reaches the
 end of buffered input. Such ends also invalidate causal output-order inference,
-and either wrapping bound prevents plan reversal. Integer keys and interval bounds
-keep their existing decisions.
+and either wrapping bound prevents plan reversal. Interval bounds keep their
+existing decisions.
 The [DATE RANGE references](tests/fixtures/README.md#numeric-date-range-bounds)
 cover these consumers, error stages and separate-owner controls.
 
@@ -1434,20 +1434,55 @@ DATE Interval/Duration NULL bounds keep their existing temporal representation
 and coercion. The SQL unparser retains an explicit typed NULL expression or
 returns the existing checked type-conversion error.
 
-Sail assigns `RangeOffsetArithmetic::Spark` only to admitted explicit NULL frames
-on signed integer, DATE, FLOAT/DOUBLE or Decimal128 keys. Integer sign negation
-and target addition check overflow in ANSI mode and wrap otherwise; DATE day
-addition wraps in both modes.
-Minimum PRECEDING offsets retain their SQL or optimizer failure phase. Remaining
-checked arithmetic runs only for a consumed bound comparison. Plain finite and
-native frames keep the DataFusion policy, including their existing arithmetic.
+Sail assigns `RangeOffsetArithmetic::Spark` to admitted explicit NULL frames
+on signed integer, DATE, FLOAT/DOUBLE or Decimal128 keys, and to ordinary nonzero
+signed-integer RANGE frames. For signed-integer keys, PRECEDING expressions
+negate at the source width before conversion to the ORDER key type. Signed narrowing wraps in legacy
+mode and raises `CAST_OVERFLOW` in ANSI mode. Minimum PRECEDING negation and
+checked casts retain their SQL or optimizer failure phase. Integer target
+addition checks overflow in ANSI mode and wraps otherwise; DATE day addition
+wraps in both modes. Execution checks run only for a consumed bound comparison.
+Native frames keep the DataFusion policy. So do signed frames containing only
+zero expressions or special boundaries, and DATE, FLOAT/DOUBLE and Decimal128
+frames without an explicit NULL offset.
 FLOAT/DOUBLE targets compare NaNs and signed zeros with Spark's ordering
 equivalence. Decimal128 operands use widened Decimal256 comparison targets without
 changing output Fields; native Decimal256 keys keep the DataFusion policy.
 
-Aggregate and frame-aware builtin windows with explicit NULL targets buffer the
-whole partition, so memory grows with partition size. These frames are non-causal,
+Aggregate and frame-aware builtin windows with explicit NULL targets use
+`WindowAggExec`, which buffers the whole physical execution input partition,
+including all SQL PARTITION BY groups assigned to it. These frames are non-causal,
 disable aggregate-result ordering inference and prevent plan reversal to reuse
 opposite input ordering. The
 [NULL RANGE references](tests/fixtures/README.md#explicit-null-range-bounds)
 record their membership, consumer Fields, failure phases and ordered outer queries.
+
+### Signed-integer RANGE bounds
+
+For TINYINT, SMALLINT, INT and BIGINT keys, the resolver compares signed expression
+endpoints after key-type conversion. CURRENT ROW and true UNBOUNDED boundaries
+skip that expression comparison; an expression zero remains distinct during
+admission. After validation, signed zero displacements become CURRENT ROW for
+native planning. Their original display names and deferred negation or cast checks
+remain intact. Invalid UNBOUNDED directions, nonfoldable bounds and finite frames
+with multiple ORDER keys retain their admission errors. Deferred checks preserve
+the original ORDER key Field.
+
+Ordinary nonzero signed frames compute the upper cursor first and cap the lower search at
+input already consumed by the upper cursor. Forward cursors and pruning retain
+Spark's behavior when a target wraps. Frames without explicit NULL targets can use
+the existing bounded executor for finite upper endpoints; row-specific completion
+proofs let sparse partitions advance.
+A failed speculative target proof defers completion without creating a comparison
+error. These frames disable causal output-order inference and plan reversal.
+Retention still depends on peer groups, lookahead and open partitions.
+While a row waits for more input, execution can repeat searches over earlier
+batches. Single-row batches and a large unfinished peer group can require
+quadratic comparison work and retain the whole group. This inherited limit is
+tracked in [#1099](https://github.com/mag1cfrog/delta-arrow-reader/issues/1099).
+
+With matching window and outer ordering, the bounded executor can absorb a LIMIT
+and stop evaluating unrequested output rows while retaining frame lookahead.
+LIMIT 0 can prune a deferred upper-bound check before it folds. The
+[signed-integer RANGE references](tests/fixtures/README.md#signed-integer-range-bounds)
+cover source-width conversion, membership, Fields, error phases and limited output.

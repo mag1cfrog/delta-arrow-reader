@@ -1,0 +1,838 @@
+{
+  "version": 1,
+  "issue": 1086,
+  "purpose": "Separate source-only signed-integer finite RANGE narrowing observations. Capture actual Spark source-offset conversion, wrapping or errors, and preparation phase before any rule change. No statuses, rows, or error conditions are authored.",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "expected_record_count": 24,
+  "sql_source_count": 12,
+  "narrowing_pairs": [
+    {
+      "key_type": "TINYINT",
+      "source_offset_type": "SMALLINT",
+      "positive_offset": "128"
+    },
+    {
+      "key_type": "TINYINT",
+      "source_offset_type": "INT",
+      "positive_offset": "128"
+    },
+    {
+      "key_type": "TINYINT",
+      "source_offset_type": "BIGINT",
+      "positive_offset": "128"
+    },
+    {
+      "key_type": "SMALLINT",
+      "source_offset_type": "INT",
+      "positive_offset": "32768"
+    },
+    {
+      "key_type": "SMALLINT",
+      "source_offset_type": "BIGINT",
+      "positive_offset": "32768"
+    },
+    {
+      "key_type": "INT",
+      "source_offset_type": "BIGINT",
+      "positive_offset": "2147483648"
+    }
+  ],
+  "frozen_prior_requests": [
+    {
+      "path": "new1086-oracle-requests-v1.json",
+      "sha256": "e4d0fc47801a667224180372684a1f6c0533b80d0a9ac054b20f8f1e230480ec",
+      "records": 188
+    },
+    {
+      "path": "new1086-limited-oracle-requests-v1.json",
+      "sha256": "e5df831211af7076e94650003c4cb103ef1d899ae13fa4dd65ff1f0fd6c4330b",
+      "records": 8
+    }
+  ],
+  "ownership_policy": "Labels identify narrowing controls; every source receives the unchanged five-stage capture, full Fields and availability, raw and multiset rows, eight actual settings, and complete actual error details.",
+  "corpora": [
+    {
+      "corpus": "finite-range-1086-narrowing-controls",
+      "source": {
+        "kind": "independent issue1086 narrowing source-only SQL inventory"
+      },
+      "metadata": {
+        "spark_version": "4.2.0",
+        "timezone": "UTC",
+        "inputs": []
+      },
+      "cases": [
+        {
+          "corpus": "finite-range-1086-narrowing-controls",
+          "id": "narrow_tinyint_smallint_128_unbounded",
+          "ansi": true,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CAST(128 AS SMALLINT) FOLLOWING) AS n FROM VALUES (0,CAST(-1 AS TINYINT)),(1,CAST(0 AS TINYINT)),(2,CAST(1 AS TINYINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_narrowing_control",
+          "coverage": {
+            "family": "narrowing_coercion",
+            "key_type": "TINYINT",
+            "source_offset_type": "SMALLINT",
+            "positive_offset": "128",
+            "shape": "unbounded",
+            "inline_values": [
+              [
+                0,
+                "CAST(-1 AS TINYINT)"
+              ],
+              [
+                1,
+                "CAST(0 AS TINYINT)"
+              ],
+              [
+                2,
+                "CAST(1 AS TINYINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN UNBOUNDED PRECEDING AND CAST(128 AS SMALLINT) FOLLOWING",
+            "outer_order": "id"
+          }
+        },
+        {
+          "corpus": "finite-range-1086-narrowing-controls",
+          "id": "narrow_tinyint_smallint_128_unbounded",
+          "ansi": false,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CAST(128 AS SMALLINT) FOLLOWING) AS n FROM VALUES (0,CAST(-1 AS TINYINT)),(1,CAST(0 AS TINYINT)),(2,CAST(1 AS TINYINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_narrowing_control",
+          "coverage": {
+            "family": "narrowing_coercion",
+            "key_type": "TINYINT",
+            "source_offset_type": "SMALLINT",
+            "positive_offset": "128",
+            "shape": "unbounded",
+            "inline_values": [
+              [
+                0,
+                "CAST(-1 AS TINYINT)"
+              ],
+              [
+                1,
+                "CAST(0 AS TINYINT)"
+              ],
+              [
+                2,
+                "CAST(1 AS TINYINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN UNBOUNDED PRECEDING AND CAST(128 AS SMALLINT) FOLLOWING",
+            "outer_order": "id"
+          }
+        },
+        {
+          "corpus": "finite-range-1086-narrowing-controls",
+          "id": "narrow_tinyint_smallint_128_zero_following",
+          "ansi": true,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN CAST(0 AS SMALLINT) FOLLOWING AND CAST(128 AS SMALLINT) FOLLOWING) AS n FROM VALUES (0,CAST(-1 AS TINYINT)),(1,CAST(0 AS TINYINT)),(2,CAST(1 AS TINYINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_narrowing_control",
+          "coverage": {
+            "family": "narrowing_coercion",
+            "key_type": "TINYINT",
+            "source_offset_type": "SMALLINT",
+            "positive_offset": "128",
+            "shape": "zero_following",
+            "inline_values": [
+              [
+                0,
+                "CAST(-1 AS TINYINT)"
+              ],
+              [
+                1,
+                "CAST(0 AS TINYINT)"
+              ],
+              [
+                2,
+                "CAST(1 AS TINYINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN CAST(0 AS SMALLINT) FOLLOWING AND CAST(128 AS SMALLINT) FOLLOWING",
+            "outer_order": "id"
+          }
+        },
+        {
+          "corpus": "finite-range-1086-narrowing-controls",
+          "id": "narrow_tinyint_smallint_128_zero_following",
+          "ansi": false,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN CAST(0 AS SMALLINT) FOLLOWING AND CAST(128 AS SMALLINT) FOLLOWING) AS n FROM VALUES (0,CAST(-1 AS TINYINT)),(1,CAST(0 AS TINYINT)),(2,CAST(1 AS TINYINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_narrowing_control",
+          "coverage": {
+            "family": "narrowing_coercion",
+            "key_type": "TINYINT",
+            "source_offset_type": "SMALLINT",
+            "positive_offset": "128",
+            "shape": "zero_following",
+            "inline_values": [
+              [
+                0,
+                "CAST(-1 AS TINYINT)"
+              ],
+              [
+                1,
+                "CAST(0 AS TINYINT)"
+              ],
+              [
+                2,
+                "CAST(1 AS TINYINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN CAST(0 AS SMALLINT) FOLLOWING AND CAST(128 AS SMALLINT) FOLLOWING",
+            "outer_order": "id"
+          }
+        },
+        {
+          "corpus": "finite-range-1086-narrowing-controls",
+          "id": "narrow_tinyint_int_128_unbounded",
+          "ansi": true,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CAST(128 AS INT) FOLLOWING) AS n FROM VALUES (0,CAST(-1 AS TINYINT)),(1,CAST(0 AS TINYINT)),(2,CAST(1 AS TINYINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_narrowing_control",
+          "coverage": {
+            "family": "narrowing_coercion",
+            "key_type": "TINYINT",
+            "source_offset_type": "INT",
+            "positive_offset": "128",
+            "shape": "unbounded",
+            "inline_values": [
+              [
+                0,
+                "CAST(-1 AS TINYINT)"
+              ],
+              [
+                1,
+                "CAST(0 AS TINYINT)"
+              ],
+              [
+                2,
+                "CAST(1 AS TINYINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN UNBOUNDED PRECEDING AND CAST(128 AS INT) FOLLOWING",
+            "outer_order": "id"
+          }
+        },
+        {
+          "corpus": "finite-range-1086-narrowing-controls",
+          "id": "narrow_tinyint_int_128_unbounded",
+          "ansi": false,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CAST(128 AS INT) FOLLOWING) AS n FROM VALUES (0,CAST(-1 AS TINYINT)),(1,CAST(0 AS TINYINT)),(2,CAST(1 AS TINYINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_narrowing_control",
+          "coverage": {
+            "family": "narrowing_coercion",
+            "key_type": "TINYINT",
+            "source_offset_type": "INT",
+            "positive_offset": "128",
+            "shape": "unbounded",
+            "inline_values": [
+              [
+                0,
+                "CAST(-1 AS TINYINT)"
+              ],
+              [
+                1,
+                "CAST(0 AS TINYINT)"
+              ],
+              [
+                2,
+                "CAST(1 AS TINYINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN UNBOUNDED PRECEDING AND CAST(128 AS INT) FOLLOWING",
+            "outer_order": "id"
+          }
+        },
+        {
+          "corpus": "finite-range-1086-narrowing-controls",
+          "id": "narrow_tinyint_int_128_zero_following",
+          "ansi": true,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN CAST(0 AS INT) FOLLOWING AND CAST(128 AS INT) FOLLOWING) AS n FROM VALUES (0,CAST(-1 AS TINYINT)),(1,CAST(0 AS TINYINT)),(2,CAST(1 AS TINYINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_narrowing_control",
+          "coverage": {
+            "family": "narrowing_coercion",
+            "key_type": "TINYINT",
+            "source_offset_type": "INT",
+            "positive_offset": "128",
+            "shape": "zero_following",
+            "inline_values": [
+              [
+                0,
+                "CAST(-1 AS TINYINT)"
+              ],
+              [
+                1,
+                "CAST(0 AS TINYINT)"
+              ],
+              [
+                2,
+                "CAST(1 AS TINYINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN CAST(0 AS INT) FOLLOWING AND CAST(128 AS INT) FOLLOWING",
+            "outer_order": "id"
+          }
+        },
+        {
+          "corpus": "finite-range-1086-narrowing-controls",
+          "id": "narrow_tinyint_int_128_zero_following",
+          "ansi": false,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN CAST(0 AS INT) FOLLOWING AND CAST(128 AS INT) FOLLOWING) AS n FROM VALUES (0,CAST(-1 AS TINYINT)),(1,CAST(0 AS TINYINT)),(2,CAST(1 AS TINYINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_narrowing_control",
+          "coverage": {
+            "family": "narrowing_coercion",
+            "key_type": "TINYINT",
+            "source_offset_type": "INT",
+            "positive_offset": "128",
+            "shape": "zero_following",
+            "inline_values": [
+              [
+                0,
+                "CAST(-1 AS TINYINT)"
+              ],
+              [
+                1,
+                "CAST(0 AS TINYINT)"
+              ],
+              [
+                2,
+                "CAST(1 AS TINYINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN CAST(0 AS INT) FOLLOWING AND CAST(128 AS INT) FOLLOWING",
+            "outer_order": "id"
+          }
+        },
+        {
+          "corpus": "finite-range-1086-narrowing-controls",
+          "id": "narrow_tinyint_bigint_128_unbounded",
+          "ansi": true,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CAST(128 AS BIGINT) FOLLOWING) AS n FROM VALUES (0,CAST(-1 AS TINYINT)),(1,CAST(0 AS TINYINT)),(2,CAST(1 AS TINYINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_narrowing_control",
+          "coverage": {
+            "family": "narrowing_coercion",
+            "key_type": "TINYINT",
+            "source_offset_type": "BIGINT",
+            "positive_offset": "128",
+            "shape": "unbounded",
+            "inline_values": [
+              [
+                0,
+                "CAST(-1 AS TINYINT)"
+              ],
+              [
+                1,
+                "CAST(0 AS TINYINT)"
+              ],
+              [
+                2,
+                "CAST(1 AS TINYINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN UNBOUNDED PRECEDING AND CAST(128 AS BIGINT) FOLLOWING",
+            "outer_order": "id"
+          }
+        },
+        {
+          "corpus": "finite-range-1086-narrowing-controls",
+          "id": "narrow_tinyint_bigint_128_unbounded",
+          "ansi": false,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CAST(128 AS BIGINT) FOLLOWING) AS n FROM VALUES (0,CAST(-1 AS TINYINT)),(1,CAST(0 AS TINYINT)),(2,CAST(1 AS TINYINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_narrowing_control",
+          "coverage": {
+            "family": "narrowing_coercion",
+            "key_type": "TINYINT",
+            "source_offset_type": "BIGINT",
+            "positive_offset": "128",
+            "shape": "unbounded",
+            "inline_values": [
+              [
+                0,
+                "CAST(-1 AS TINYINT)"
+              ],
+              [
+                1,
+                "CAST(0 AS TINYINT)"
+              ],
+              [
+                2,
+                "CAST(1 AS TINYINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN UNBOUNDED PRECEDING AND CAST(128 AS BIGINT) FOLLOWING",
+            "outer_order": "id"
+          }
+        },
+        {
+          "corpus": "finite-range-1086-narrowing-controls",
+          "id": "narrow_tinyint_bigint_128_zero_following",
+          "ansi": true,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN CAST(0 AS BIGINT) FOLLOWING AND CAST(128 AS BIGINT) FOLLOWING) AS n FROM VALUES (0,CAST(-1 AS TINYINT)),(1,CAST(0 AS TINYINT)),(2,CAST(1 AS TINYINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_narrowing_control",
+          "coverage": {
+            "family": "narrowing_coercion",
+            "key_type": "TINYINT",
+            "source_offset_type": "BIGINT",
+            "positive_offset": "128",
+            "shape": "zero_following",
+            "inline_values": [
+              [
+                0,
+                "CAST(-1 AS TINYINT)"
+              ],
+              [
+                1,
+                "CAST(0 AS TINYINT)"
+              ],
+              [
+                2,
+                "CAST(1 AS TINYINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN CAST(0 AS BIGINT) FOLLOWING AND CAST(128 AS BIGINT) FOLLOWING",
+            "outer_order": "id"
+          }
+        },
+        {
+          "corpus": "finite-range-1086-narrowing-controls",
+          "id": "narrow_tinyint_bigint_128_zero_following",
+          "ansi": false,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN CAST(0 AS BIGINT) FOLLOWING AND CAST(128 AS BIGINT) FOLLOWING) AS n FROM VALUES (0,CAST(-1 AS TINYINT)),(1,CAST(0 AS TINYINT)),(2,CAST(1 AS TINYINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_narrowing_control",
+          "coverage": {
+            "family": "narrowing_coercion",
+            "key_type": "TINYINT",
+            "source_offset_type": "BIGINT",
+            "positive_offset": "128",
+            "shape": "zero_following",
+            "inline_values": [
+              [
+                0,
+                "CAST(-1 AS TINYINT)"
+              ],
+              [
+                1,
+                "CAST(0 AS TINYINT)"
+              ],
+              [
+                2,
+                "CAST(1 AS TINYINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN CAST(0 AS BIGINT) FOLLOWING AND CAST(128 AS BIGINT) FOLLOWING",
+            "outer_order": "id"
+          }
+        },
+        {
+          "corpus": "finite-range-1086-narrowing-controls",
+          "id": "narrow_smallint_int_32768_unbounded",
+          "ansi": true,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CAST(32768 AS INT) FOLLOWING) AS n FROM VALUES (0,CAST(-1 AS SMALLINT)),(1,CAST(0 AS SMALLINT)),(2,CAST(1 AS SMALLINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_narrowing_control",
+          "coverage": {
+            "family": "narrowing_coercion",
+            "key_type": "SMALLINT",
+            "source_offset_type": "INT",
+            "positive_offset": "32768",
+            "shape": "unbounded",
+            "inline_values": [
+              [
+                0,
+                "CAST(-1 AS SMALLINT)"
+              ],
+              [
+                1,
+                "CAST(0 AS SMALLINT)"
+              ],
+              [
+                2,
+                "CAST(1 AS SMALLINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN UNBOUNDED PRECEDING AND CAST(32768 AS INT) FOLLOWING",
+            "outer_order": "id"
+          }
+        },
+        {
+          "corpus": "finite-range-1086-narrowing-controls",
+          "id": "narrow_smallint_int_32768_unbounded",
+          "ansi": false,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CAST(32768 AS INT) FOLLOWING) AS n FROM VALUES (0,CAST(-1 AS SMALLINT)),(1,CAST(0 AS SMALLINT)),(2,CAST(1 AS SMALLINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_narrowing_control",
+          "coverage": {
+            "family": "narrowing_coercion",
+            "key_type": "SMALLINT",
+            "source_offset_type": "INT",
+            "positive_offset": "32768",
+            "shape": "unbounded",
+            "inline_values": [
+              [
+                0,
+                "CAST(-1 AS SMALLINT)"
+              ],
+              [
+                1,
+                "CAST(0 AS SMALLINT)"
+              ],
+              [
+                2,
+                "CAST(1 AS SMALLINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN UNBOUNDED PRECEDING AND CAST(32768 AS INT) FOLLOWING",
+            "outer_order": "id"
+          }
+        },
+        {
+          "corpus": "finite-range-1086-narrowing-controls",
+          "id": "narrow_smallint_int_32768_zero_following",
+          "ansi": true,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN CAST(0 AS INT) FOLLOWING AND CAST(32768 AS INT) FOLLOWING) AS n FROM VALUES (0,CAST(-1 AS SMALLINT)),(1,CAST(0 AS SMALLINT)),(2,CAST(1 AS SMALLINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_narrowing_control",
+          "coverage": {
+            "family": "narrowing_coercion",
+            "key_type": "SMALLINT",
+            "source_offset_type": "INT",
+            "positive_offset": "32768",
+            "shape": "zero_following",
+            "inline_values": [
+              [
+                0,
+                "CAST(-1 AS SMALLINT)"
+              ],
+              [
+                1,
+                "CAST(0 AS SMALLINT)"
+              ],
+              [
+                2,
+                "CAST(1 AS SMALLINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN CAST(0 AS INT) FOLLOWING AND CAST(32768 AS INT) FOLLOWING",
+            "outer_order": "id"
+          }
+        },
+        {
+          "corpus": "finite-range-1086-narrowing-controls",
+          "id": "narrow_smallint_int_32768_zero_following",
+          "ansi": false,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN CAST(0 AS INT) FOLLOWING AND CAST(32768 AS INT) FOLLOWING) AS n FROM VALUES (0,CAST(-1 AS SMALLINT)),(1,CAST(0 AS SMALLINT)),(2,CAST(1 AS SMALLINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_narrowing_control",
+          "coverage": {
+            "family": "narrowing_coercion",
+            "key_type": "SMALLINT",
+            "source_offset_type": "INT",
+            "positive_offset": "32768",
+            "shape": "zero_following",
+            "inline_values": [
+              [
+                0,
+                "CAST(-1 AS SMALLINT)"
+              ],
+              [
+                1,
+                "CAST(0 AS SMALLINT)"
+              ],
+              [
+                2,
+                "CAST(1 AS SMALLINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN CAST(0 AS INT) FOLLOWING AND CAST(32768 AS INT) FOLLOWING",
+            "outer_order": "id"
+          }
+        },
+        {
+          "corpus": "finite-range-1086-narrowing-controls",
+          "id": "narrow_smallint_bigint_32768_unbounded",
+          "ansi": true,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CAST(32768 AS BIGINT) FOLLOWING) AS n FROM VALUES (0,CAST(-1 AS SMALLINT)),(1,CAST(0 AS SMALLINT)),(2,CAST(1 AS SMALLINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_narrowing_control",
+          "coverage": {
+            "family": "narrowing_coercion",
+            "key_type": "SMALLINT",
+            "source_offset_type": "BIGINT",
+            "positive_offset": "32768",
+            "shape": "unbounded",
+            "inline_values": [
+              [
+                0,
+                "CAST(-1 AS SMALLINT)"
+              ],
+              [
+                1,
+                "CAST(0 AS SMALLINT)"
+              ],
+              [
+                2,
+                "CAST(1 AS SMALLINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN UNBOUNDED PRECEDING AND CAST(32768 AS BIGINT) FOLLOWING",
+            "outer_order": "id"
+          }
+        },
+        {
+          "corpus": "finite-range-1086-narrowing-controls",
+          "id": "narrow_smallint_bigint_32768_unbounded",
+          "ansi": false,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CAST(32768 AS BIGINT) FOLLOWING) AS n FROM VALUES (0,CAST(-1 AS SMALLINT)),(1,CAST(0 AS SMALLINT)),(2,CAST(1 AS SMALLINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_narrowing_control",
+          "coverage": {
+            "family": "narrowing_coercion",
+            "key_type": "SMALLINT",
+            "source_offset_type": "BIGINT",
+            "positive_offset": "32768",
+            "shape": "unbounded",
+            "inline_values": [
+              [
+                0,
+                "CAST(-1 AS SMALLINT)"
+              ],
+              [
+                1,
+                "CAST(0 AS SMALLINT)"
+              ],
+              [
+                2,
+                "CAST(1 AS SMALLINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN UNBOUNDED PRECEDING AND CAST(32768 AS BIGINT) FOLLOWING",
+            "outer_order": "id"
+          }
+        },
+        {
+          "corpus": "finite-range-1086-narrowing-controls",
+          "id": "narrow_smallint_bigint_32768_zero_following",
+          "ansi": true,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN CAST(0 AS BIGINT) FOLLOWING AND CAST(32768 AS BIGINT) FOLLOWING) AS n FROM VALUES (0,CAST(-1 AS SMALLINT)),(1,CAST(0 AS SMALLINT)),(2,CAST(1 AS SMALLINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_narrowing_control",
+          "coverage": {
+            "family": "narrowing_coercion",
+            "key_type": "SMALLINT",
+            "source_offset_type": "BIGINT",
+            "positive_offset": "32768",
+            "shape": "zero_following",
+            "inline_values": [
+              [
+                0,
+                "CAST(-1 AS SMALLINT)"
+              ],
+              [
+                1,
+                "CAST(0 AS SMALLINT)"
+              ],
+              [
+                2,
+                "CAST(1 AS SMALLINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN CAST(0 AS BIGINT) FOLLOWING AND CAST(32768 AS BIGINT) FOLLOWING",
+            "outer_order": "id"
+          }
+        },
+        {
+          "corpus": "finite-range-1086-narrowing-controls",
+          "id": "narrow_smallint_bigint_32768_zero_following",
+          "ansi": false,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN CAST(0 AS BIGINT) FOLLOWING AND CAST(32768 AS BIGINT) FOLLOWING) AS n FROM VALUES (0,CAST(-1 AS SMALLINT)),(1,CAST(0 AS SMALLINT)),(2,CAST(1 AS SMALLINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_narrowing_control",
+          "coverage": {
+            "family": "narrowing_coercion",
+            "key_type": "SMALLINT",
+            "source_offset_type": "BIGINT",
+            "positive_offset": "32768",
+            "shape": "zero_following",
+            "inline_values": [
+              [
+                0,
+                "CAST(-1 AS SMALLINT)"
+              ],
+              [
+                1,
+                "CAST(0 AS SMALLINT)"
+              ],
+              [
+                2,
+                "CAST(1 AS SMALLINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN CAST(0 AS BIGINT) FOLLOWING AND CAST(32768 AS BIGINT) FOLLOWING",
+            "outer_order": "id"
+          }
+        },
+        {
+          "corpus": "finite-range-1086-narrowing-controls",
+          "id": "narrow_int_bigint_2147483648_unbounded",
+          "ansi": true,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CAST(2147483648 AS BIGINT) FOLLOWING) AS n FROM VALUES (0,CAST(-1 AS INT)),(1,CAST(0 AS INT)),(2,CAST(1 AS INT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_narrowing_control",
+          "coverage": {
+            "family": "narrowing_coercion",
+            "key_type": "INT",
+            "source_offset_type": "BIGINT",
+            "positive_offset": "2147483648",
+            "shape": "unbounded",
+            "inline_values": [
+              [
+                0,
+                "CAST(-1 AS INT)"
+              ],
+              [
+                1,
+                "CAST(0 AS INT)"
+              ],
+              [
+                2,
+                "CAST(1 AS INT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN UNBOUNDED PRECEDING AND CAST(2147483648 AS BIGINT) FOLLOWING",
+            "outer_order": "id"
+          }
+        },
+        {
+          "corpus": "finite-range-1086-narrowing-controls",
+          "id": "narrow_int_bigint_2147483648_unbounded",
+          "ansi": false,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CAST(2147483648 AS BIGINT) FOLLOWING) AS n FROM VALUES (0,CAST(-1 AS INT)),(1,CAST(0 AS INT)),(2,CAST(1 AS INT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_narrowing_control",
+          "coverage": {
+            "family": "narrowing_coercion",
+            "key_type": "INT",
+            "source_offset_type": "BIGINT",
+            "positive_offset": "2147483648",
+            "shape": "unbounded",
+            "inline_values": [
+              [
+                0,
+                "CAST(-1 AS INT)"
+              ],
+              [
+                1,
+                "CAST(0 AS INT)"
+              ],
+              [
+                2,
+                "CAST(1 AS INT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN UNBOUNDED PRECEDING AND CAST(2147483648 AS BIGINT) FOLLOWING",
+            "outer_order": "id"
+          }
+        },
+        {
+          "corpus": "finite-range-1086-narrowing-controls",
+          "id": "narrow_int_bigint_2147483648_zero_following",
+          "ansi": true,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN CAST(0 AS BIGINT) FOLLOWING AND CAST(2147483648 AS BIGINT) FOLLOWING) AS n FROM VALUES (0,CAST(-1 AS INT)),(1,CAST(0 AS INT)),(2,CAST(1 AS INT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_narrowing_control",
+          "coverage": {
+            "family": "narrowing_coercion",
+            "key_type": "INT",
+            "source_offset_type": "BIGINT",
+            "positive_offset": "2147483648",
+            "shape": "zero_following",
+            "inline_values": [
+              [
+                0,
+                "CAST(-1 AS INT)"
+              ],
+              [
+                1,
+                "CAST(0 AS INT)"
+              ],
+              [
+                2,
+                "CAST(1 AS INT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN CAST(0 AS BIGINT) FOLLOWING AND CAST(2147483648 AS BIGINT) FOLLOWING",
+            "outer_order": "id"
+          }
+        },
+        {
+          "corpus": "finite-range-1086-narrowing-controls",
+          "id": "narrow_int_bigint_2147483648_zero_following",
+          "ansi": false,
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN CAST(0 AS BIGINT) FOLLOWING AND CAST(2147483648 AS BIGINT) FOLLOWING) AS n FROM VALUES (0,CAST(-1 AS INT)),(1,CAST(0 AS INT)),(2,CAST(1 AS INT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_narrowing_control",
+          "coverage": {
+            "family": "narrowing_coercion",
+            "key_type": "INT",
+            "source_offset_type": "BIGINT",
+            "positive_offset": "2147483648",
+            "shape": "zero_following",
+            "inline_values": [
+              [
+                0,
+                "CAST(-1 AS INT)"
+              ],
+              [
+                1,
+                "CAST(0 AS INT)"
+              ],
+              [
+                2,
+                "CAST(1 AS INT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN CAST(0 AS BIGINT) FOLLOWING AND CAST(2147483648 AS BIGINT) FOLLOWING",
+            "outer_order": "id"
+          }
+        }
+      ]
+    }
+  ]
+}
+
