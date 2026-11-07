@@ -3246,11 +3246,11 @@ fn native_window_without_fetch_preserves_known_statistics_with_unknown_row_count
     )?);
     let input: Arc<dyn ExecutionPlan> = Arc::new(ProjectionExec::try_new(
         vec![
-            (col("id", &source_schema)?, "id"),
-            (col("p", &source_schema)?, "p"),
-            (col("k", &source_schema)?, "k"),
-            (lit(7i32), "constant"),
-            (lit(ScalarValue::Int32(None)), "null_constant"),
+            (col("id", &source_schema)?, "id".to_owned()),
+            (col("p", &source_schema)?, "p".to_owned()),
+            (col("k", &source_schema)?, "k".to_owned()),
+            (lit(7i32), "constant".to_owned()),
+            (lit(ScalarValue::Int32(None)), "null_constant".to_owned()),
         ],
         source,
     )?);
