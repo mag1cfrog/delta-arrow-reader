@@ -658,6 +658,14 @@ impl TreeNodeRewriter for ConstEvaluator<'_> {
                     {
                         return Err(err);
                     }
+                    // Functions that fold like Spark's constant folding fail during optimization
+                    // unless a conditional branch may skip them.
+                    if let Expr::ScalarFunction(ScalarFunction { ref func, .. }) = expr
+                        && func.inner().propagates_constant_folding_errors()
+                        && !conditional
+                    {
+                        return Err(err);
+                    }
                     // For other expressions (like CASE, COALESCE), preserve the original
                     // to allow short-circuit evaluation at execution time
                     Ok(Transformed::yes(expr))

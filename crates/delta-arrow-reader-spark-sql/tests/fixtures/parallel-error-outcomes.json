@@ -14,14 +14,14 @@
     "status": "execution_error"
   },
   "replay/cast-empty-group-scalar-cases/1449/only_int_union_exists_true": {
-    "error": "Arrow error: Cast error: Cannot cast string 'bad' to value of Int32 type",
+    "error": "[CAST_INVALID_INPUT]\ncaused by\nArrow error: Cast error: Cannot cast string 'bad' to value of Int32 type",
     "output_names": [
       "r"
     ],
     "status": "execution_error"
   },
   "replay/cast-empty-group-scalar-cases/1450/only_int_union_count_true": {
-    "error": "Arrow error: Cast error: Cannot cast string 'bad' to value of Int32 type",
+    "error": "[CAST_INVALID_INPUT]\ncaused by\nArrow error: Cast error: Cannot cast string 'bad' to value of Int32 type",
     "output_names": [
       "r"
     ],
