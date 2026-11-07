@@ -1561,22 +1561,39 @@ fn regexp_extract_known_null_pruning_keeps_local_order_and_type_validation() -> 
     Ok(())
 }
 
+#[cfg(test)]
+#[expect(dead_code, reason = "Substring reuses only the native async producer.")]
+#[path = "../../test_utils/regexp_literal_producer.rs"]
+mod substring_literal_producer;
+
 #[test]
 fn substring_preserves_coerced_null_length_without_invoking_operands() -> PlanResult<()> {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
+    use datafusion::arrow::array::StringArray;
     use datafusion::arrow::datatypes::{Field, Schema};
+    use datafusion::arrow::record_batch::RecordBatch;
+    use datafusion::physical_expr::create_physical_expr;
     use datafusion::prelude::SessionContext;
+    use datafusion_expr::execution_props::ExecutionProps;
     use datafusion_expr::{Volatility, col, create_udf};
 
     use crate::config::PlanConfig;
     use crate::function::common::FunctionContextInput;
+    use substring_literal_producer::{Kind, producer};
 
     let session = SessionContext::new();
     let schema = Arc::new(DFSchema::try_from(Schema::new(vec![
         Field::new("s", DataType::Utf8, true),
         Field::new("n", DataType::Utf8, true),
     ]))?);
+    let batch = RecordBatch::try_new(
+        Arc::clone(schema.inner()),
+        vec![
+            Arc::new(StringArray::from(vec!["abcdef", "ghijkl"])),
+            Arc::new(StringArray::from(vec![None::<&str>, None])),
+        ],
+    )?;
     let calls = Arc::new(AtomicUsize::new(0));
     let observed = Arc::clone(&calls);
     let position = create_udf(
@@ -1593,14 +1610,16 @@ fn substring_preserves_coerced_null_length_without_invoking_operands() -> PlanRe
     let info = SimplifyContext::builder()
         .with_schema(Arc::clone(&schema))
         .build();
+    let (asynchronous, async_counts) = producer(Kind::AsyncFold);
+    assert!(asynchronous.as_async().is_some());
     for ansi_mode in [true, false] {
         let config = Arc::new(PlanConfig {
             ansi_mode,
             ..Default::default()
         });
-        let resolve = |length| {
+        let resolve = |value, position, length| {
             substr(ScalarFunctionInput {
-                arguments: vec![col("s"), position.clone(), length],
+                arguments: vec![value, position, length],
                 function_context: FunctionContextInput {
                     argument_display_names: &[],
                     plan_config: &config,
@@ -1609,17 +1628,53 @@ fn substring_preserves_coerced_null_length_without_invoking_operands() -> PlanRe
                 },
             })
         };
-        let expression = resolve(cast(lit(ScalarValue::Null), DataType::Utf8))?;
-        let expr::Expr::ScalarFunction(function) = &expression else {
-            return Err(PlanError::internal("expected logical substring"));
-        };
-        assert_eq!(function.args[2], lit(ScalarValue::Int64(None)));
-        let lowered = substring_lambdas(expression.clone(), false)?;
-        assert!(!lowered.transformed);
-        assert_eq!(lowered.data, expression);
-        let simplified = ExprSimplifier::new(info.clone()).simplify(expression)?;
-        assert!(matches!(simplified, expr::Expr::Literal(value, _) if value.is_null()));
-        assert!(substring_lambdas(resolve(col("n"))?, false)?.transformed);
+        for length in [
+            lit(ScalarValue::Utf8(None)),
+            lit(ScalarValue::LargeUtf8(None)),
+            lit(ScalarValue::Utf8View(None)),
+            cast(lit(ScalarValue::Null), DataType::Utf8),
+        ] {
+            for (source, is_async) in [
+                (col("s"), false),
+                (asynchronous.call(vec![col("s")]), true),
+            ] {
+                let expression = resolve(
+                    source,
+                    if is_async { lit(2_i64) } else { position.clone() },
+                    length.clone(),
+                )?;
+                let expr::Expr::ScalarFunction(function) = &expression else {
+                    return Err(PlanError::internal("expected logical substring"));
+                };
+                if is_async {
+                    assert_ne!(function.args[2], lit(ScalarValue::Int64(None)));
+                } else {
+                    assert_eq!(function.args[2], lit(ScalarValue::Int64(None)));
+                }
+                let lowered = substring_lambdas(expression.clone(), false)?;
+                assert!(!lowered.transformed);
+                assert_eq!(lowered.data, expression);
+                let expression = expression.alias("r");
+                let (_, declared) = expression.to_field(&schema)?;
+                assert_eq!(declared.name(), "r");
+                assert_eq!(declared.data_type(), &DataType::Utf8);
+                assert!(declared.is_nullable());
+                assert!(declared.metadata().is_empty());
+                let simplified = ExprSimplifier::new(info.clone()).simplify(expression)?;
+                let physical = create_physical_expr(&simplified, &schema, &ExecutionProps::new())?;
+                let field = physical.return_field(schema.inner())?;
+                assert_eq!(field.data_type(), declared.data_type());
+                assert_eq!(field.is_nullable(), declared.is_nullable());
+                assert_eq!(field.metadata(), declared.metadata());
+                let values = physical.evaluate(&batch)?.to_array(batch.num_rows())?;
+                assert_eq!(values.data_type(), &DataType::Utf8);
+                assert_eq!(values.len(), 2);
+                assert_eq!(values.null_count(), 2);
+                assert_eq!(calls.load(Ordering::SeqCst), 0);
+                assert_eq!(async_counts.calls.load(Ordering::SeqCst), 0);
+            }
+        }
+        assert!(substring_lambdas(resolve(col("s"), position.clone(), col("n"))?, false)?.transformed);
         assert_eq!(calls.load(Ordering::SeqCst), 0);
     }
     Ok(())
