@@ -802,9 +802,8 @@ impl PlanResolver<'_> {
                                     .call(vec![datafusion_expr::lit(value.clone())])
                             });
                     let value = range_offset_displacement(&value, preceding)?;
-                    let value = if value.data_type() == DataType::Int64
-                        && data_type == DataType::Int32
-                    {
+                    let cast = SparkCastNumericToInteger::try_new(data_type.clone(), false, false)?;
+                    let value = if cast.coerce_types(&[value.data_type()]).is_ok() {
                         if self.config.ansi_mode && value.cast_to(&data_type).is_err() {
                             let source = deferred_check
                                 .take()
@@ -819,8 +818,7 @@ impl PlanResolver<'_> {
                             );
                         }
                         let ColumnarValue::Scalar(value) =
-                            SparkCastNumericToInteger::try_new(data_type.clone(), false, false)?
-                                .cast_value(&ColumnarValue::Scalar(value))?
+                            cast.cast_value(&ColumnarValue::Scalar(value))?
                         else {
                             return Err(PlanError::invalid("scalar RANGE boundary expected"));
                         };
