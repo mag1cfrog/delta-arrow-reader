@@ -56,15 +56,15 @@ enum ResolvedOffsetBoundary {
 
 impl ResolvedOffsetBoundary {
     fn validate_rows_type(&self, location: &str) -> PlanResult<()> {
-        if let Self::Expression { source_type, .. } = self {
-            if *source_type != DataType::Int32 {
-                let data_type = SparkPlanFormatter
-                    .data_type_to_simple_string(source_type)?
-                    .to_ascii_uppercase();
-                return Err(PlanError::invalid(format!(
-                    "[DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE] The data type of the {location} bound \"{data_type}\" does not match the expected data type \"INT\"."
-                )));
-            }
+        if let Self::Expression { source_type, .. } = self
+            && *source_type != DataType::Int32
+        {
+            let data_type = SparkPlanFormatter
+                .data_type_to_simple_string(source_type)?
+                .to_ascii_uppercase();
+            return Err(PlanError::invalid(format!(
+                "[DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE] The data type of the {location} bound \"{data_type}\" does not match the expected data type \"INT\"."
+            )));
         }
         Ok(())
     }
