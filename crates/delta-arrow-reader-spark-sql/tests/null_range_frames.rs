@@ -11,7 +11,10 @@ use serde_json::{Value, json};
 mod spark_inputs;
 #[path = "support/spark_results.rs"]
 mod spark_results;
-use spark_results::{TestResult, compare_exact_spark_query_stages_with_optimized};
+use spark_results::{
+    STAGES, TestResult, case_identity, compare_exact_spark_query_stages_with_optimized,
+    native_result_matches_spark_reference, validate_spark_reference_result,
+};
 
 const REQUEST: &str = include_str!("fixtures/null-range-754-cases.json");
 const REFERENCE: &str = include_str!("fixtures/null-range-754-spark.jsonl");
@@ -27,41 +30,6 @@ const ROWS_REJECTION_IDS: [&str; 4] = [
     "admission_rows_lower_bare_null",
     "admission_rows_upper_bare_null",
 ];
-const STAGES: [(&str, &str); 5] = [
-    ("public", "public_schema"),
-    ("analyzed", "public_schema"),
-    ("optimized", "optimized_schema"),
-    ("executed_before_collect", "before_collect"),
-    ("executed", "physical_schema"),
-];
-
-fn case_identity(case: &Value) -> TestResult<(String, String, bool)> {
-    Ok((
-        case["corpus"].as_str().ok_or("missing corpus")?.into(),
-        case["id"].as_str().ok_or("missing ID")?.into(),
-        case["ansi"].as_bool().ok_or("missing ANSI")?,
-    ))
-}
-
-fn multiset(rows: &Value) -> TestResult<Value> {
-    let mut rows = rows.as_array().ok_or("missing rows")?.clone();
-    rows.sort_by_key(Value::to_string);
-    Ok(json!(rows))
-}
-
-fn complete_schema(schema: &Value) -> bool {
-    schema["type"] == "struct"
-        && schema["fields"].as_array().is_some_and(|fields| {
-            !fields.is_empty()
-                && fields.iter().all(|field| {
-                    field["name"].is_string()
-                        && field["type"].is_string()
-                        && field["nullable"].is_boolean()
-                        && field["metadata"].is_object()
-                })
-        })
-}
-
 fn validate_null_range_references(request: &Value, records: &[Value]) -> TestResult {
     if request["issue"] != 754
         || request["expected_record_count"] != 582
@@ -238,92 +206,6 @@ fn validate_null_range_references(request: &Value, records: &[Value]) -> TestRes
     Ok(())
 }
 
-fn validate_spark_reference_result(spark_reference: &Value) -> TestResult {
-    let case = spark_reference;
-    let key = case_identity(case)?;
-    let schemas = case["schema_stages"]
-        .as_object()
-        .ok_or("missing schema stages")?;
-    let availability = case["schema_stage_availability"]
-        .as_object()
-        .ok_or("missing schema availability")?;
-    if availability.len() != STAGES.len()
-        || schemas
-            .keys()
-            .any(|stage| !STAGES.iter().any(|(name, _)| *name == stage.as_str()))
-    {
-        return Err("NULL RANGE schema stage inventory differs".into());
-    }
-    for (stage, _) in STAGES {
-        let state = &case["schema_stage_availability"][stage];
-        match state["available"].as_bool() {
-            Some(true) if complete_schema(&case["schema_stages"][stage]) => {}
-            Some(false)
-                if case["status"] == "error"
-                    && !schemas.contains_key(stage)
-                    && state["reason"]
-                        .as_str()
-                        .is_some_and(|reason| !reason.is_empty()) => {}
-            _ => return Err(format!("incomplete NULL RANGE stage {stage}: {key:?}").into()),
-        }
-    }
-    if case["status"] == "ok" {
-        let width = case["schema_stages"]["public"]["fields"]
-            .as_array()
-            .ok_or("missing public Fields")?
-            .len();
-        if schemas.len() != STAGES.len()
-            || case["expected"]["schema"] != case["schema_stages"]["public"]
-            || case["expected"].get("condition").is_some()
-            || ["rows_raw", "rows_multiset"].iter().any(|field| {
-                !case[*field].as_array().is_some_and(|rows| {
-                    rows.iter().all(|row| {
-                        row.as_array().is_some_and(|row| {
-                            row.len() == width
-                                && row.iter().all(|value| value.is_null() || value.is_string())
-                        })
-                    })
-                })
-            })
-            || multiset(&case["rows_raw"])? != case["rows_multiset"]
-            || case["expected"].get("rows")
-                != Some(if case["ordered"] == true {
-                    &case["rows_raw"]
-                } else {
-                    &case["rows_multiset"]
-                })
-        {
-            return Err(format!("incomplete NULL RANGE success or rows: {key:?}").into());
-        }
-    } else {
-        let details = &case["spark_error_details"];
-        if !case["expected"]["condition"].is_string()
-            || case["expected"].get("rows").is_some()
-            || !case["spark_error_phase"].is_string()
-            || details["condition"] != case["expected"]["condition"]
-            || details["phase"] != case["spark_error_phase"]
-            || !details["message"].is_string()
-            || !details["java_causes"].as_array().is_some_and(|causes| {
-                !causes.is_empty()
-                    && causes.iter().all(|cause| {
-                        cause["class"].is_string()
-                            && cause["message"].is_string()
-                            && cause["parameters"].is_object()
-                            && cause.get("condition").is_some()
-                            && cause.get("sql_state").is_some()
-                    })
-            })
-            || details["cause_chain_complete"] != true
-            || ["parameters", "sql_state", "python_class"]
-                .iter()
-                .any(|field| details.get(*field).is_none())
-        {
-            return Err(format!("incomplete NULL RANGE failure: {key:?}").into());
-        }
-    }
-    Ok(())
-}
-
 fn parse_null_range_fixture() -> TestResult<(Value, Vec<Value>)> {
     let request = serde_json::from_str(REQUEST)?;
     let records = REFERENCE
@@ -401,17 +283,6 @@ fn prior_rows_rejection_matches(
             && control["batch"] == batch
             && control["observation"] == *observation
     })
-}
-
-fn native_result_matches_spark_reference(native_result: &Value, spark_reference: &Value) -> bool {
-    native_result["matches"] == true
-        && native_result["optimized_matches"] == true
-        && STAGES.iter().all(|(stage, observed)| {
-            match spark_reference["schema_stages"].get(*stage) {
-                Some(expected) => native_result.get(*observed) == Some(expected),
-                None => native_result.get(*observed).is_some_and(Value::is_null),
-            }
-        })
 }
 
 fn validate_float_decimal_references(request: &Value, records: &[Value]) -> TestResult {
