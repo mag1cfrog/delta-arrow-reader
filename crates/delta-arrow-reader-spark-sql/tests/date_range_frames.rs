@@ -725,7 +725,14 @@ async fn preordered_date_providers_preserve_recorded_range_results() -> TestResu
         for batch_size in [1, 32] {
             for opposite in [false, true] {
                 assert!(completed.insert((id.to_owned(), ansi, batch_size, opposite)));
-                let session = new_spark_session(batch_size);
+                // Memory-source repartitioning drops its advertised ordering; keep this source intact.
+                let session = SessionContext::new_with_state(
+                    configure_spark_sql(
+                        SessionStateBuilder::new().with_default_features().with_config(
+                            SessionConfig::new().with_batch_size(batch_size).with_target_partitions(1),
+                        ),
+                    ).build(),
+                );
                 let options = SortOptions {
                     descending: descending != opposite,
                     nulls_first: nulls_first != opposite,
@@ -751,6 +758,7 @@ async fn preordered_date_providers_preserve_recorded_range_results() -> TestResu
                     .output_ordering()
                     .ok_or("source ordering was not registered")?;
                 assert_eq!(source_order[0].options, options);
+                assert_eq!(source.properties().output_partitioning().partition_count(), 1);
                 session.register_table("reversal_inputs", Arc::new(table))?;
                 let query = plan_query(
                     &session,
@@ -774,7 +782,7 @@ async fn preordered_date_providers_preserve_recorded_range_results() -> TestResu
                 eprintln!(
                     "DATE_RANGE_PREORDERED_OBSERVATION {}",
                     json!({
-                        "id":id,"ansi":ansi,"batch":batch_size,"target_partitions":2,
+                        "id":id,"ansi":ansi,"batch":batch_size,"target_partitions":1,
                         "provider_partitions":1,"opposite":opposite,"sort_retained":sort_retained,
                         "plan":plan,"reference":case,"observation":actual,
                     })
