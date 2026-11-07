@@ -274,8 +274,6 @@ enum RetainedDifference {
     /// #1087: calendar functions fail on 0001-01-02 and 9999-12-31, outside Arrow's
     /// nanosecond range, which fails the whole query.
     NanosecondRange,
-    /// #1088: WEEKDAY returns -1 for Sunday instead of 6.
-    SundayWeekday,
     /// #1089: DATE_TRUNC to MINUTE truncates the UTC minute under Los Angeles local mean
     /// time, whose offset has seconds.
     UtcMinuteTruncation,
@@ -343,8 +341,6 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
         .any(|(range_id, _)| *range_id == id)
     {
         Some(RetainedDifference::NanosecondRange)
-    } else if id == "weekday" {
-        Some(RetainedDifference::SundayWeekday)
     } else if id == "date_trunc_minute" && timezone == "America/Los_Angeles" {
         Some(RetainedDifference::UtcMinuteTruncation)
     } else if id == "greatest_hour" {
@@ -470,18 +466,6 @@ fn current_expectation(
                 .as_object_mut()
                 .ok_or("missing schema stages")?
                 .remove("executed");
-        }
-        RetainedDifference::SundayWeekday => {
-            let rows = current["expected"]["rows"]
-                .as_array_mut()
-                .ok_or("missing rows")?;
-            let sundays = rows.iter().filter(|row| row[1] == "6").count();
-            if sundays == 0 {
-                return Err("expected a Sunday".into());
-            }
-            for row in rows.iter_mut().filter(|row| row[1] == "6") {
-                row[1] = json!("-1");
-            }
         }
         RetainedDifference::UtcMinuteTruncation => {
             let instants = registered_instants(metadata)?;
@@ -706,7 +690,6 @@ async fn timestamp_columns_follow_the_session_zone_like_spark() -> TestResult {
         retained,
         BTreeMap::from([
             (RetainedDifference::NanosecondRange, 48),
-            (RetainedDifference::SundayWeekday, 4),
             (RetainedDifference::UtcMinuteTruncation, 2),
             (RetainedDifference::NullableGreatest, 4),
             (RetainedDifference::UnparsedSessionZone, 12),
