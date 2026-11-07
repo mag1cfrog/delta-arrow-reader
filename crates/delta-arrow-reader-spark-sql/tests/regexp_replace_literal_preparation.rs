@@ -18,6 +18,10 @@ use serde_json::{Value, json};
 mod string_binary;
 use string_binary::{TestResult, capture_observation};
 
+#[expect(
+    dead_code,
+    reason = "This target registers string carriers with the shared string observer."
+)]
 #[path = "support/spark_inputs.rs"]
 mod spark_inputs;
 #[path = "support/spark_results.rs"]
@@ -213,9 +217,9 @@ fn matches_reference(actual: &Value, expected: &Value) -> bool {
         || expected
             .get("schema")
             .is_some_and(|schema| actual.get("analyzed_schema") != Some(schema))
-        || !actual["analyzed_arrow_schema"]
+        || actual["analyzed_arrow_schema"]
             .as_str()
-            .is_some_and(|s| !s.is_empty())
+            .is_none_or(|s| s.is_empty())
     {
         return false;
     }
