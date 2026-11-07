@@ -141,7 +141,7 @@ fn session(batch_size: usize) -> SessionContext {
     )
 }
 
-async fn native_controls(session: &SessionContext) -> TestResult<Value> {
+async fn native_controls(session: &SessionContext, context: Value) -> TestResult<Value> {
     let mut observations = Vec::new();
     for sql in [
         "SELECT regexp_replace('abc123','([0-9]+)','<$1>') AS r",
@@ -149,7 +149,16 @@ async fn native_controls(session: &SessionContext) -> TestResult<Value> {
     ] {
         observations.push(spark_results::capture_native_query_observation(session, sql).await?);
     }
-    Ok(json!(observations))
+    let actual = json!(observations);
+    eprintln!(
+        "c06 pattern native preparation controls: {}",
+        json!({"context":context,"actual":actual,
+            "observation_scope":"normalized_fields_rows_and_stage_errors",
+            "arrow_representation":"not_recorded_by_this_observer",
+            "batch_layout":"not_recorded_by_this_observer",
+        })
+    );
+    Ok(actual)
 }
 
 async fn compare_cases(
@@ -159,7 +168,11 @@ async fn compare_cases(
     expected_key: &str,
     differences: &mut Vec<String>,
 ) -> TestResult<usize> {
-    let native = native_controls(&SessionContext::new()).await?;
+    let native = native_controls(
+        &SessionContext::new(),
+        json!({"corpus":corpus,"provider_inputs":header.is_some(),"phase":"plain"}),
+    )
+    .await?;
     let mut compared = BTreeSet::new();
     for representation in 0..3 {
         for batch_size in [1, 32] {
@@ -191,7 +204,7 @@ async fn compare_cases(
                 }
             }
             assert!(marker_absent(&session));
-            assert_eq!(native_controls(&session).await?, native);
+            assert_eq!(native_controls(&session, json!({"corpus":corpus,"provider_inputs":header.is_some(),"phase":"before","representation":representation,"batch_size":batch_size})).await?, native);
             for case in cases {
                 assert!(marker_absent(&session));
                 let actual = capture_observation(&session, case).await?;
@@ -214,7 +227,7 @@ async fn compare_cases(
                     ));
                 }
             }
-            assert_eq!(native_controls(&session).await?, native);
+            assert_eq!(native_controls(&session, json!({"corpus":corpus,"provider_inputs":header.is_some(),"phase":"after","representation":representation,"batch_size":batch_size})).await?, native);
             assert!(marker_absent(&session));
         }
     }
