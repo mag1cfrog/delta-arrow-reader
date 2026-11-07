@@ -3784,6 +3784,39 @@ comparison helpers and have no negative profiles. Together with the original
 660-context gate. The retained preexecution phase mappings keep full family
 compatibility incomplete.
 
+## REGEXP operator names
+
+`regexp-operator-names-spark.jsonl` retains 22 independent Spark 4.2.0
+observations: 11 queries in both ANSI modes. They cover literal and column
+operators, mixed projections, explicit aliases, nested names, outer-query column
+binding, nullable and empty providers, and constant and runtime invalid patterns.
+RLIKE, REGEXP_LIKE, LIKE and ILIKE remain adjacent controls. Source metadata
+detects leaks into generated and explicit aliases.
+
+`regexp_operator_names.rs` replays every reference with Utf8, LargeUtf8 and
+Utf8View inputs at batch sizes 1 and 32. All 132 contexts compare complete
+public, analyzed, optimized and physical Fields at each available Spark stage,
+plus ordered rows or the required malformed-pattern cause. Unavailable Spark
+stages stay unavailable; reached native Fields remain in their own observations.
+The capture header and per-case settings retain runtime and input provenance.
+The existing `like-names-spark.jsonl` reference stays unchanged.
+
+The 12 constant invalid-pattern contexts retain a separate #1079 timing gap:
+Spark fails when obtaining its optimized schema; DAR fails during collection.
+Their raw `strict_spark_matches` grades remain false. The two target controls in
+`regexp-operator-names-inherited-contracts.jsonl` preserve each complete
+inherited observation with only the #1060 names and their schema grades updated
+to Spark requirements. They are expected contracts, not post-change captures.
+Any other field, raw error, phase, reference or grade change fails until the
+controls are deliberately retired. The other 120 contexts require strict
+comparison, including all runtime malformed-pattern contexts. Full regex
+compatibility remains incomplete while #1079 is open.
+
+A separate native SQL test retains all 30 plain and configured DataFusion
+observations across the six layout and batch combinations. It requires complete
+observation equality, successful status for valid queries, and the known native
+malformed-pattern cause and phase for the invalid control.
+
 ## LIKE escapes and pattern evaluation
 
 `like-escapes-spark.jsonl` retains all 196 LIKE/ILIKE observations from the
@@ -3808,9 +3841,8 @@ case sensitivity and escaped string literal settings. SparkContext settings
 separately record the master and default parallelism.
 
 The regexp control preserves the REGEXP operator's explicit `regexp_alias`
-and the other five expressions' unaliased names. The unaliased REGEXP operator's
-default name remains a separate #1060 difference: DAR uses `REGEXP(ab, (a))`,
-while Spark uses `RLIKE(ab, (a))`.
+and the other five expressions' unaliased names. The separate
+[REGEXP operator references](#regexp-operator-names) cover its unaliased names.
 
 `like-evaluation-spark.jsonl` adds 288 independent observations for mixed,
 all-NULL and empty registered inputs. It distinguishes literal from

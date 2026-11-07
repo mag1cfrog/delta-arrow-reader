@@ -1,4 +1,4 @@
-//! REGEXP operator names retain Spark fields, rows and required pattern errors.
+//! REGEXP names match Spark while exact inherited folded-error phases stay visible.
 
 use std::collections::BTreeSet;
 
@@ -20,6 +20,8 @@ use spark_results::{capture_native_query_observation, capture_spark_optimized_ob
 use string_binary::{TestResult, capture_observation, register_inputs};
 
 const REFERENCE: &str = include_str!("fixtures/regexp-operator-names-spark.jsonl");
+const INHERITED_CONTRACTS: &str =
+    include_str!("fixtures/regexp-operator-names-inherited-contracts.jsonl");
 
 fn session(batch_size: usize) -> SessionContext {
     SessionContext::new_with_state(
@@ -58,6 +60,17 @@ fn required_pattern_error_matches(expected: &Value, actual: &Value) -> bool {
         })
 }
 
+fn inherited_folded_error_contract_matches(observation: &Value, controls: &[Value]) -> Option<bool> {
+    let control = controls.iter().find(|control| {
+        control["id"] == observation["id"] && control["ansi"] == observation["ansi"]
+    })?;
+    let mut observed = observation.clone();
+    let fields = observed.as_object_mut()?;
+    fields.remove("representation");
+    fields.remove("batch_size");
+    Some(observed == *control)
+}
+
 #[test]
 fn required_pattern_errors_reject_wrong_phase_pattern_and_cause() -> TestResult {
     let records = REFERENCE
@@ -91,7 +104,7 @@ fn required_pattern_errors_reject_wrong_phase_pattern_and_cause() -> TestResult 
 }
 
 #[tokio::test]
-async fn regexp_operator_names_match_independent_spark_stages() -> TestResult {
+async fn regexp_operator_names_match_spark_and_preserve_tracked_error_contract() -> TestResult {
     let records = REFERENCE
         .lines()
         .map(serde_json::from_str::<Value>)
@@ -121,6 +134,31 @@ async fn regexp_operator_names_match_independent_spark_stages() -> TestResult {
             );
         }
     }
+    // #1079 owns these exact inherited phases; target names still come from Spark.
+    let inherited = INHERITED_CONTRACTS
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(inherited.len(), 3);
+    assert_eq!(inherited[0]["issue"], 1079);
+    assert_eq!(inherited[0]["kind"], "expected_target_contracts_not_captured_observations");
+    assert_eq!(inherited[0]["context_fields_removed"], json!(["representation", "batch_size"]));
+    assert_eq!(inherited[0]["contexts_per_control"], 6);
+    let controls = &inherited[1..];
+    let control_identities = controls
+        .iter()
+        .map(|control| {
+            Ok((
+                control["id"].as_str().ok_or("missing control ID")?,
+                control["ansi"].as_bool().ok_or("missing control ANSI")?,
+            ))
+        })
+        .collect::<TestResult<BTreeSet<_>>>()?;
+    assert_eq!(control_identities.len(), controls.len(), "duplicate inherited phase control");
+    assert_eq!(control_identities, BTreeSet::from([
+        ("regexp_operator_invalid_folded", false),
+        ("regexp_operator_invalid_folded", true),
+    ]));
     let mut observations = Vec::new();
     let mut differences = Vec::new();
     let mut successes = 0;
@@ -184,19 +222,23 @@ async fn regexp_operator_names_match_independent_spark_stages() -> TestResult {
                     .ok_or("missing comparison")?
                     .values()
                     .all(|facet| facet == true);
-                let observation = json!({
+                let mut observation = json!({
                     "id":id, "ansi":ansi, "representation":representation, "batch_size":batch_size,
                     "reference":case, "actual":actual, "optimized":optimized,
-                    "comparison":comparison, "required_contract_matches":matches,
+                    "comparison":comparison, "strict_spark_matches":matches,
                     "raw_error_text_equality":if expected["status"] == "error" {json!(actual["error"] == expected["message"])} else {Value::Null},
                     "available_reference_stages":{
                         "public":expected["schema"].is_object(), "analyzed":expected["analyzed_schema"].is_object(),
                         "optimized":expected["optimized_schema"].is_object(), "physical":expected["physical_schema"].is_object(),
                     },
                 });
+                let preserved = inherited_folded_error_contract_matches(&observation, controls);
+                let required_contract_matches = preserved.unwrap_or(matches);
+                observation["inherited_phase_preserved"] = json!(preserved);
+                observation["required_contract_matches"] = json!(required_contract_matches);
                 eprintln!("regexp operator observation: {observation}");
                 observations.push(observation);
-                if !matches {
+                if !required_contract_matches {
                     differences.push(format!(
                         "{id} ANSI={ansi} representation={representation} batch={batch_size}"
                     ));
@@ -243,6 +285,16 @@ async fn regexp_operator_names_match_independent_spark_stages() -> TestResult {
     assert_eq!(successes, 108);
     assert_eq!(errors, 24);
     assert_eq!(original_mixed, 12);
+    assert_eq!(
+        observations.iter().filter(|observed| observed["strict_spark_matches"] == true).count(),
+        120,
+        "#1079: retire repaired controls and update the strict inventory"
+    );
+    assert_eq!(
+        observations.iter().filter(|observed| observed["inherited_phase_preserved"] == true).count(),
+        12,
+        "#1079: retire repaired controls and update the tracked phase inventory"
+    );
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }
@@ -353,5 +405,86 @@ async fn regexp_operator_repair_preserves_native_sql() -> TestResult {
     assert_eq!(observed_contexts, expected_contexts);
     assert_eq!(observations.len(), 30);
     assert!(differences.is_empty(), "{}", differences.join("\n"));
+    Ok(())
+}
+
+#[test]
+fn inherited_folded_error_contract_requires_complete_observation_and_spark_names() -> TestResult {
+    let inherited = INHERITED_CONTRACTS
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    let controls = &inherited[1..];
+    for control in controls {
+        let mut observed = control.clone();
+        observed["representation"] = json!(2);
+        observed["batch_size"] = json!(32);
+        assert_eq!(inherited_folded_error_contract_matches(&observed, controls), Some(true));
+        assert_eq!(observed["strict_spark_matches"], false);
+        assert_eq!(observed["comparison"]["public_schema"], true);
+        assert_eq!(observed["comparison"]["analyzed_schema"], true);
+        assert_eq!(observed["comparison"]["required_error_cause_and_stage"], false);
+        let expected = &observed["reference"]["expected"];
+        assert_eq!(observed["actual"]["analyzed_schema"], expected["analyzed_schema"]);
+        assert_eq!(expected["phase"], "optimized_schema");
+        assert_eq!(observed["actual"]["error_stage"], "execute");
+        assert!(expected["optimized_schema"].is_null());
+        assert!(expected["physical_schema"].is_null());
+        for pointer in [
+            "/reference/sql",
+            "/reference/expected/java_causes/1/message",
+            "/reference/expected/phase",
+            "/reference/expected/analyzed_schema/fields/0/name",
+            "/actual/analyzed_schema/fields/0/name",
+            "/actual/analyzed_schema/fields/0/type",
+            "/actual/analyzed_schema/fields/0/nullable",
+            "/actual/analyzed_schema/fields/0/metadata",
+            "/actual/analyzed_arrow_schema",
+            "/actual/physical_schema/fields/0/name",
+            "/actual/physical_schema/fields/0/type",
+            "/actual/physical_schema/fields/0/nullable",
+            "/actual/physical_schema/fields/0/metadata",
+            "/actual/physical_arrow_schema",
+            "/actual/error",
+            "/actual/error_stage",
+            "/optimized",
+            "/comparison/required_error_cause_and_stage",
+            "/strict_spark_matches",
+            "/available_reference_stages/physical",
+        ] {
+            let mut changed = observed.clone();
+            *changed.pointer_mut(pointer).ok_or("missing mutation target")? = json!("changed");
+            assert_eq!(inherited_folded_error_contract_matches(&changed, controls), Some(false), "{pointer}");
+        }
+        // A real phase fix must require retiring this inherited contract.
+        let mut improved = observed.clone();
+        improved["strict_spark_matches"] = json!(true);
+        improved["comparison"]["required_error_cause_and_stage"] = json!(true);
+        improved["actual"]["error_stage"] = json!("physical");
+        let error = observed["actual"]["error"]
+            .as_str()
+            .ok_or("missing inherited error")?
+            .strip_prefix("execute: ")
+            .ok_or("missing inherited execute prefix")?;
+        improved["actual"]["error"] = json!(format!("physical: {error}"));
+        improved["actual"]["physical_schema"] = Value::Null;
+        improved["actual"]["physical_arrow_schema"] = Value::Null;
+        assert!(required_pattern_error_matches(expected, &improved["actual"]));
+        assert!(improved["comparison"]
+            .as_object()
+            .ok_or("missing improved comparison")?
+            .values()
+            .all(|facet| facet == true));
+        assert_eq!(inherited_folded_error_contract_matches(&improved, controls), Some(false));
+        let mut with_rows = observed.clone();
+        with_rows["actual"]["rows"] = json!([]);
+        assert_eq!(inherited_folded_error_contract_matches(&with_rows, controls), Some(false));
+        let mut old_name = observed.clone();
+        old_name["actual"]["analyzed_schema"]["fields"][0]["name"] = json!("REGEXP(ab, [)");
+        assert_eq!(inherited_folded_error_contract_matches(&old_name, controls), Some(false));
+        let mut other = observed.clone();
+        other["id"] = json!("regexp_operator_invalid_runtime");
+        assert_eq!(inherited_folded_error_contract_matches(&other, controls), None);
+    }
     Ok(())
 }

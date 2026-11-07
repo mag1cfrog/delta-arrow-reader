@@ -1298,6 +1298,16 @@ incompatible observations remain frozen as history. Shared RAND/STRING-cast
 declarations remain current differences.
 
 
+### REGEXP operator names
+
+REGEXP and RLIKE operators share the analyzer's existing `rlike` lowering.
+Canonicalizing the operator here gives projections, nested expressions and
+outer-query binding the same RLIKE name. The predicate registry already maps
+both spellings to one implementation, and the formatter uses the canonical
+function name. Explicit aliases and function calls keep their existing paths.
+The [operator references](tests/fixtures/README.md#regexp-operator-names) cover
+these consumers and retain the separate #1079 constant-pattern timing gap.
+
 ### REGEXP_REPLACE position INT coercion
 
 Foldable positions reuse the substring adapter's native STRING, Decimal and
