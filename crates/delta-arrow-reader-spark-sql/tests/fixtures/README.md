@@ -4170,3 +4170,49 @@ capture/request hashes remain per-run receipts in the fixture header. After
 normal shutdown, the script prints its owned JVM lifecycle receipt to stderr.
 If the gateway exceeds its shutdown timeout, the script kills and reaps that
 owned process and reports the timeout as a failed capture.
+
+## Numeric DATE RANGE bounds
+
+From this standalone crate, use Python 3.12, Java 21 and PySpark 4.2.0 at revision
+`32f7299601108917fb01920a54e084595b7b3bf8`. The capture script verifies the loaded
+revision and records actual runtime artifacts and settings. It reads the sibling
+source-only manifest and writes a fresh JSONL plus an owned-JVM lifecycle receipt.
+
+```sh
+python3 tests/fixtures/capture_date_range_747_spark.py --self-check
+date_range_capture_dir="$(mktemp -d)"
+TZ=UTC PYTHONDONTWRITEBYTECODE=1 \
+  python3 tests/fixtures/capture_date_range_747_spark.py \
+  "$date_range_capture_dir/date-range-747-spark.jsonl"
+cargo +1.96.0 test --workspace --no-fail-fast --locked \
+  --test date_range_frames --test native_window_frame_state \
+  --test linear_window_completion --test window_names \
+  -- --nocapture --test-threads=1
+```
+
+`date-range-747-cases.json` preserves 548 original SQL/ANSI identities and seven
+provider contexts, including the original five-column providers. Its historical
+source paths and hashes identify where those inputs came from; recapture does
+not open or rehash the absent historical corpora. The new capture hashes the
+manifest and helper files it actually uses. Every result comes from Spark.
+Review the new capture's complete available Fields, error phases, rows, ordering
+and runtime provenance against `date-range-747-spark.jsonl` before replacing it.
+
+`date_range_frames.rs` requires 984 primary comparisons at batch sizes 1 and 32
+with two target partitions, including 12 TIMESTAMP control contexts. It also
+replays the exact original query and frame consumers separately in 108 contexts.
+All five schema stages retain complete names, types, nullability and metadata
+when available. Failures retain the condition, phase and available Fields;
+ordered queries retain raw output order, and unordered comparisons preserve
+duplicates. The capture self-check exercises partial stages, row ordering and
+owned-process cleanup without importing Spark.
+
+`date-range-747-prior-owner-controls.json` freezes 112 complete earlier DAR
+observations: 28 explicit-NULL-offset contexts under #754 and 84 DATE interval
+contexts under #749/#947. The test requires their prior profiles to remain
+unchanged, including existing Spark differences assigned to those issues. Only
+raw row order for unordered SQL may be canonicalized; Fields, causes, phases and
+row multiplicity stay fixed. `date-range-747-prior-native-controls.json` preserves
+six native SQL control pairs for DATE intervals, TIMESTAMP intervals and INT
+keys at both batch sizes, comparing configured and unconfigured sessions with
+their frozen complete observations.

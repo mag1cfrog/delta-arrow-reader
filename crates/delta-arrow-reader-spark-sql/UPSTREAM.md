@@ -645,7 +645,8 @@ cover results, errors, incremental work bounds and repeatable timing cases.
 
 Spark window resolution validates required ordering, function-specific frames
 and DISTINCT before planning can prune empty input. Native DataFusion supplies
-the bound-order validator and execution kernels. A whole-partition RANGE frame
+the general bound-order validator and execution kernels; numeric DATE bounds use
+the [Spark-specific rules below](#numeric-date-range-bounds). A whole-partition RANGE frame
 without ordering lowers to its equivalent ROWS frame. The
 [window admission references](tests/fixtures/README.md#window-admission)
 preserve Spark's expression-sensitive offset-frame rules and valid controls.
@@ -655,9 +656,10 @@ lexicographical comparator, matching the arrays and sort options used by the
 physical sort. One comparator is reused while those arrays are unchanged and
 released when window state is pruned. The shared analyzer admits RANGE frames
 whose bounds are only CURRENT ROW or unbounded without coercing an arithmetic
-offset. Actual offsets retain native type validation and checked arithmetic.
+offset. Offsets other than numeric DATE bounds retain native type validation and checked arithmetic.
 Incremental RANGE and GROUPS completion also compares batch edges through Arrow;
-CURRENT ROW and PRECEDING completion checks are reused within each evaluation.
+CURRENT ROW and PRECEDING completion checks are reused within each evaluation,
+except for potentially wrapping DATE offsets.
 The [nested frame references](tests/fixtures/README.md#nested-range-frames)
 cover this shared native repair.
 
@@ -1373,3 +1375,29 @@ scalar NULL masks and once-only evaluation paths retain their existing code.
 Internal CONCAT lambdas keep their dummy parameter and selected-row cardinality
 API. The [nested lambda references](tests/fixtures/README.md#nested-lambda-capture-positions)
 cover all original and supplemental cases plus CASE and connected consumers.
+
+### Numeric DATE RANGE bounds
+
+Spark numeric DATE RANGE bounds require INT day offsets. The resolver compares
+signed expression endpoints before DESC execution negation, while CURRENT ROW
+remains a special boundary distinct from numeric zero. It builds the complete
+Spark output name before normalizing the physical frame. Existing interval
+bounds keep their Interval or Duration representation and arithmetic.
+
+ANSI minimum-INT PRECEDING negation fails during resolution when admission
+compares two expression endpoints. With a special endpoint, the bound check
+retains the original key Field and fails during optimization, after public and
+analyzed Fields are available. DESC minimum-INT FOLLOWING negation fails only
+when execution evaluates a non-NULL DATE key, including a constant key; empty
+and all-NULL keys succeed. These checks use the query's Spark ANSI setting.
+
+Shared frame state adds signed INT days with i32 wrapping in both ANSI modes.
+For a nonzero DATE offset, it computes the upper cursor first and limits the
+lower cursor to input already consumed by the upper cursor. Completion checks
+use the same target arithmetic. Finite wrapping ends require per-row completion
+proofs. Frame-aware builtins defer a row when its unfinished frame reaches the
+end of buffered input. Such ends also invalidate causal output-order inference,
+and either wrapping bound prevents
+plan reversal. Integer keys and interval bounds keep their existing decisions.
+The [DATE RANGE references](tests/fixtures/README.md#numeric-date-range-bounds)
+cover these consumers, error stages and separate-owner controls.
