@@ -23,9 +23,7 @@
       "spark.sql.caseSensitive": "false",
       "spark.sql.parser.escapedStringLiterals": "false",
       "spark.sql.variable.substitute": "true"
-    },
-    "capture_sha256": "147e872d7dde61c51252c7b1993a253c1c9752756c553ff1b7e8e1271ef2f9e5",
-    "request_sha256": "329605ddb37a3cf4d6050e194b47ab16ca01093d6ccc7bd80a52335cd3fccad3"
+    }
   },
   "inputs": [
     {
