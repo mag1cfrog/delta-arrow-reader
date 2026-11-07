@@ -124,14 +124,15 @@ fn public_native_observation(actual: &Value) -> TestResult<Value> {
     Ok(Value::Object(public))
 }
 
-// This verifies a frozen native regression profile, never Spark compatibility.
+// This checks active native expectations; the captured receipts remain unchanged.
 fn matches_retained_native_negative(
     context: &Value,
     case: &Value,
     actual: &Value,
     profiles: &[Value],
 ) -> TestResult<bool> {
-    if matches_reference(case, actual)?
+    if !is_active_native_negative_context(context)
+        || matches_reference(case, actual)?
         || matches_local_preexecution_divide(case, actual)
         || !has_arrow_receipt(actual, "analyzed_arrow_schema")
         || !has_arrow_receipt(actual, "physical_arrow_schema")
@@ -158,7 +159,22 @@ fn matches_retained_native_negative(
     {
         return Ok(false);
     }
-    Ok(public_native_observation(actual)? == public_native_observation(&captured["actual"])?)
+    let mut expected = public_native_observation(&captured["actual"])?;
+    if context["matrix"] == "one_partition_rng"
+        && context["id"] == "rng_885_one_partition_direct"
+        && context["batch_size"] == 1
+    {
+        // #838 repairs the declaration while the captured seeded-row gap remains.
+        for stage in ["analyzed_schema", "physical_schema"] {
+            if expected[stage]["fields"][1]["nullable"] != true
+                || case["expected"][stage]["fields"][1]["nullable"] != false
+            {
+                return Ok(false);
+            }
+            expected[stage]["fields"][1]["nullable"] = json!(false);
+        }
+    }
+    Ok(public_native_observation(actual)? == expected)
 }
 
 fn runtime_control_context(
@@ -173,9 +189,9 @@ fn runtime_control_context(
         "target_partitions":partitions,"timezone":"UTC"})
 }
 
-fn is_frozen_negative_context(context: &Value) -> bool {
+fn is_active_native_negative_context(context: &Value) -> bool {
     if context["matrix"] == "one_partition_rng" {
-        context["batch_size"] == 1 || context["id"] == "rng_885_one_partition_direct"
+        context["batch_size"] == 1
     } else {
         (context["id"] == "concat_885_seeded_random_before_mask" && context["batch_size"] == 1)
             || (context["id"] == "concat_885_competing_cast_before_division"
@@ -338,7 +354,7 @@ async fn run_runtime_control_matrix(rng: bool) -> TestResult {
             for case in &records[1..] {
                 let context = runtime_control_context(matrix, case, representation, batch_size);
                 let key = context.to_string();
-                if is_frozen_negative_context(&context) {
+                if is_active_native_negative_context(&context) {
                     expected_negative_keys.insert(key.clone());
                 }
                 let observation_key =
@@ -411,12 +427,15 @@ async fn run_runtime_control_matrix(rng: bool) -> TestResult {
     }
     let profile_keys = profiles
         .iter()
-        .filter(|profile| profile["context"]["matrix"] == matrix)
+        .filter(|profile| {
+            profile["context"]["matrix"] == matrix
+                && is_active_native_negative_context(&profile["context"])
+        })
         .map(|profile| profile["context"].to_string())
         .collect::<Vec<_>>();
     let unique_profile_keys = profile_keys.iter().cloned().collect::<HashSet<_>>();
     let expected_counts = if rng {
-        [4, 0, 0, 8, 0]
+        [6, 0, 0, 6, 0]
     } else {
         [54, 21, 12, 9, 0]
     };
@@ -467,11 +486,37 @@ fn retained_runtime_profiles_reject_changed_public_results_and_contexts() -> Tes
         .collect::<Result<Vec<_>, _>>()?;
     let profiles = &records[1..];
     assert_eq!(profiles.len(), 17);
+    let mut retired_rng_profiles = 0;
     for profile in profiles {
         // These are mutations of real captured native receipts, not new engine observations.
         let context = &profile["context"];
         let case = &profile["captured_observation"];
-        let actual = &case["actual"];
+        let mut active_actual = case["actual"].clone();
+        if context["matrix"] == "one_partition_rng"
+            && context["id"] == "rng_885_one_partition_direct"
+        {
+            assert!(!matches_retained_native_negative(
+                context,
+                case,
+                &active_actual,
+                profiles
+            )?);
+            // Current Fields come from Spark; captured rows and raw receipts stay exact.
+            active_actual["analyzed_schema"] = case["expected"]["analyzed_schema"].clone();
+            active_actual["physical_schema"] = case["expected"]["physical_schema"].clone();
+        }
+        let actual = &active_actual;
+        if !is_active_native_negative_context(context) {
+            assert_eq!(context["matrix"], "one_partition_rng");
+            assert_eq!(context["id"], "rng_885_one_partition_direct");
+            assert_eq!(context["batch_size"], 32);
+            assert!(matches_reference(case, actual)?);
+            assert!(!matches_retained_native_negative(
+                context, case, actual, profiles
+            )?);
+            retired_rng_profiles += 1;
+            continue;
+        }
         assert!(!matches_reference(case, actual)?);
         assert!(matches_retained_native_negative(
             context, case, actual, profiles
@@ -627,6 +672,7 @@ fn retained_runtime_profiles_reject_changed_public_results_and_contexts() -> Tes
         )?);
     }
 
+    assert_eq!(retired_rng_profiles, 2);
     let local = &records[0]["local_preexecution_control"];
     let actual = &local["actual"];
     assert!(!matches_reference(local, actual)?);

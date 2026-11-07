@@ -165,6 +165,60 @@ arguments keep their separate pruning boundary. Distinct source columns and sepa
 a shared materialized UUID remains a reference to that stored value. Guards
 remain for the existing CASE pruning rule to handle.
 
+## RAND comparison bounds
+
+Four independent references cover RAND's half-open range [0, 1):
+
+- [rand-comparison-bounds-spark.jsonl](rand-comparison-bounds-spark.jsonl) has 130
+  observations for ordering bounds, operand orders, seed forms, equality and
+  other volatile-function controls, required errors, and output names.
+- [rand-comparison-bounds-operands-spark.jsonl](rand-comparison-bounds-operands-spark.jsonl)
+  adds 70 observations for NULL/NaN operands, throwing seeds and bounds, both
+  original equal-result CASE guard orders, and required error controls.
+- [rand-comparison-bounds-admission-spark.jsonl](rand-comparison-bounds-admission-spark.jsonl)
+  adds 50 observations for infinities, seed type/arity/foldability admission,
+  live throwing seeds, and scalar-subquery errors.
+- [rand-comparison-bounds-subqueries-spark.jsonl](rand-comparison-bounds-subqueries-spark.jsonl)
+  adds four observations for constant bounds after OneRow scalar-subquery
+  inlining, with both operand orders and ANSI modes.
+
+Each file's first-line header is the source for its capture settings and
+provenance: Spark 4.2.0 revision
+`32f7299601108917fb01920a54e084595b7b3bf8`, UTC, original input schemas, metadata
+and rows, and capture-script and manifest hashes. Each record retains its SQL,
+ANSI mode, observed fields, rows or error, and available plans. The real
+`case_parent_mixed` provider includes id 0, which is required by the division
+guards. The references remain unchanged.
+
+[rand_comparison_bounds.rs](../rand_comparison_bounds.rs) compares the recorded
+declarations, rows and required errors at batch sizes 1 and 32. Two ANSI-false
+records require a random-domain contract: `live_seed_error_normal`
+(`rand(1 DIV 0)>0.5D`) and `live_seed_error_swapped`
+(`0.5D<rand(1 DIV 0)`). Their NULL seeds use the existing unseeded path. Across
+the two batch sizes, these four contexts require exact analyzed, optimized,
+before-collect and executed fields, no error, and exactly three single-column,
+nonnull Boolean rows. Their original sampled rowsets remain in the references;
+cross-engine RNG sample equality is not a stream contract.
+
+The regression gate permits only the missing condition IDs tracked by
+[#865](https://github.com/mag1cfrog/delta-arrow-reader/issues/865) and
+[#1067](https://github.com/mag1cfrog/delta-arrow-reader/issues/1067) at the recorded
+fixture positions. It still requires the exact native cause, error phase,
+available fields and no returned rows. Raw comparison flags and
+`contract_matches` remain visible; `regression_matches` can include these
+diagnostic fallbacks and does not imply complete Spark parity. All nullable
+fields remain exact. Both original CASE guard orders and the implicit-NULL case
+still require strict matches in all 12 contexts.
+
+The accepted replay correction for
+`replay/existing-nonansi-zero-cases/112/volatile_divisor_true` requires one
+analyzer context before the original Arrow divide cause after the RAND bound
+folds. It stores `spark_decimal_null_propagation`, the replay's existing canonical
+name for `preserve_spark_expression_errors`. The `execution_error` status and `r`
+output name stay exact. On staging `c7a3545c`, this query fails during collection;
+with #838 it fails during physical preparation. The original Spark record reports
+only `execution_error`; it does not identify a finer Spark phase.
+
 ## Integer-day DATE arithmetic
 
 `date-day-arithmetic-spark.jsonl` contains 296 independent Spark 4.2.0
@@ -3475,13 +3529,18 @@ contexts. CSE and local VALUES keep their required errors. Local VALUES reports
 DIVIDE_BY_ZERO at Spark `optimized_schema` and native `physical`; the tests keep
 those stage names separate and compare the exact cause and available fields.
 
-`concat-runtime-native-negative-profiles.jsonl` preserves 17 native R3 receipts
-with their original source hashes, commands, settings and log identities. Nine
-supplementary and eight matched RNG results remain strict Spark differences.
-The seeded value differences are tracked by #901, and direct RAND nullability
-by #875. Three supplementary receipts retain competing errors on different rows
-of an unordered query. Their checks pin complete public fields, exact values,
-row IDs, causes, stages and context without granting compatibility credit.
+`concat-runtime-native-negative-profiles.jsonl` preserves all 17 native R3 receipts
+with their original source hashes, commands, settings and log identities. The
+active expectations cover nine supplementary and six matched RNG negative
+contexts. Both direct RAND contexts at batch size 32 require complete strict
+Spark fields and rows. For the two direct RAND contexts at batch size 1, #838
+updates only the current analyzed and physical `r.nullable` expectations to false.
+Their captured rows, original nullable declarations and Arrow receipts stay
+unchanged. The remaining seeded value differences are tracked by #901.
+These direct RAND contexts cover only part of #875; the issue remains open.
+Three supplementary receipts retain competing errors on different rows of an
+unordered query. Their checks pin complete public fields, exact values, row IDs,
+causes, stages and context without granting compatibility credit.
 Raw Arrow receipts remain available; internal analyzer aliases are not public
 field names. The matched RNG inputs use one real native partition and Spark
 local[1], with batch sizes 1 and 32.
@@ -3557,24 +3616,27 @@ pinned coordinate encoding/error helpers through relative paths.
 original frozen outcomes, stage maps, SQL and provider inputs. The new header
 records its own source and manifest hashes and the original capture lineage.
 
-The case regression gate also retains 126 complete current native negative
-receipts: 96 preexisting TRY_CAST field differences under #802, 24 preexisting
-RAND-range row differences under #838, and six unordered inner LIMIT/OFFSET
-selection contexts. The last six are exactly both ANSI modes, three storage
-representations and batch size 1; batch size 32 remains strict. Outer ORDER BY
-does not constrain the inner unordered selection. This is a retained support
-boundary, with no relational defect asserted.
+The case regression gate retains 102 complete current native negative
+receipts: 96 preexisting TRY_CAST field differences under #802 and six unordered
+inner LIMIT/OFFSET selection contexts. The last six are exactly both ANSI modes,
+three storage representations and batch size 1; batch size 32 remains strict.
+Outer ORDER BY does not constrain the inner unordered selection. This is a
+retained support boundary, with no relational defect asserted.
 
 Every negative requires its complete fixture/SQL/ANSI/storage/batch identity and
 actual analyzed fields, physical fields and rows. It keeps `strict_spark_match`
 and `full_compatibility_pass` false. Changed results, unexpected errors and any
 other case fail. The #802 fields are unchanged from the baseline while some
-case values improved; these profiles retain actual R2 values. All 24 #838 public
-receipts match the baseline exactly. The active #775 numeric profiles remain
-separate and unchanged. Together they retain 150 success differences.
+case values improved; these profiles retain actual R2 values. The active #775
+numeric profiles remain separate and unchanged. Together they retain 126 success
+differences.
+
+The 24 #838 contexts for `producer_single_volatile_lower` and
+`producer_single_volatile_upper` require strict matches in both ANSI modes,
+all three representations and both batch sizes. They have no negative fallback.
 
 A passing regression gate does not complete #792's first acceptance criterion
-or close #802/#838. All original references remain in the output. No new genuine
+or close #802. All original references remain in the output. No new genuine
 or unaliased positive is eligible for a negative fallback.
 
 `case-conversion-producer-genuine-volatile-spark.jsonl` and its `plan-trace`

@@ -312,10 +312,9 @@ fn retained_case_negative_profiles() -> TestResult<Vec<Value>> {
         .lines()
         .map(serde_json::from_str::<Value>)
         .collect::<Result<Vec<_>, _>>()?;
-    assert_eq!(records.len(), 127);
-    assert_eq!(records[0]["profile_count"], 126);
+    assert_eq!(records.len(), 103);
+    assert_eq!(records[0]["profile_count"], 102);
     assert_eq!(records[0]["owner_counts"]["#802"], 96);
-    assert_eq!(records[0]["owner_counts"]["#838"], 24);
     assert_eq!(
         records[0]["owner_counts"]["unordered-limit-selection-support-boundary"],
         6
@@ -565,8 +564,8 @@ async fn case_conversion_results_and_dependency_profiles() -> TestResult {
     }
     assert_eq!(compared, 226 * 6);
     assert_eq!(errors_compared, 4 * 6);
-    assert_eq!(strict_successes, 1206);
-    assert_eq!(native_negative_matches, 126);
+    assert_eq!(strict_successes, 1230);
+    assert_eq!(native_negative_matches, 102);
     eprintln!("C06 compared {compared}, mismatches {}", differences.len());
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
