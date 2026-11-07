@@ -1569,6 +1569,7 @@ name = "delta-arrow-reader-spark-sql"
 version = "0.1.0"
 dependencies = [
  "arrow",
+ "async-trait",
  "datafusion",
  "datasketches",
  "delta-arrow-reader",

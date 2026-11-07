@@ -42,6 +42,14 @@ fn fixture_temporal_type((unit, timezone): &(String, Option<String>)) -> TestRes
     ))
 }
 
+/// A registered TIMESTAMP is read in the session zone with its unit and ticks (#1012).
+fn in_session_zone(data_type: &DataType, timezone: &str) -> DataType {
+    match data_type {
+        DataType::Timestamp(unit, Some(_)) => DataType::Timestamp(*unit, Some(timezone.into())),
+        other => other.clone(),
+    }
+}
+
 fn temporal_column(data_type: &DataType, values: &[Option<i64>]) -> TestResult<ArrayRef> {
     // Keep a nonzero offset so comparison and NULLIF also exercise sliced validity.
     let ticks = Int64Array::from_iter([Some(0)].into_iter().chain(values.iter().copied()));
@@ -140,10 +148,18 @@ async fn mixed_timestamps_match_independent_precision_and_timezone_reference() -
                             values.extend(batch.column(column).as_boolean().iter());
                         }
                         for (column, expected_type, values) in [
-                            (8, &left_type, &mut original_left),
-                            (9, &right_type, &mut original_right),
+                            (
+                                8,
+                                in_session_zone(&left_type, &case.timezone),
+                                &mut original_left,
+                            ),
+                            (
+                                9,
+                                in_session_zone(&right_type, &case.timezone),
+                                &mut original_right,
+                            ),
                         ] {
-                            assert_eq!(batch.column(column).data_type(), expected_type);
+                            assert_eq!(batch.column(column).data_type(), &expected_type);
                             let ticks =
                                 arrow::compute::cast(batch.column(column), &DataType::Int64)?;
                             values.extend(ticks.as_primitive::<Int64Type>().iter());

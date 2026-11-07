@@ -461,6 +461,22 @@ cover temporal coercion, lazy fallbacks, modes and timezones.
 Named-zone conversion retains ConvertTz's documented Chrono range limit; full
 i64-microsecond timestamp parity remains separate work.
 
+Registered TIMESTAMP columns are read in the session time zone. When a table or table
+function annotates a TIMESTAMP with another zone, such as UTC for a Delta column, the scan
+gets a projection that annotates it with the session zone. TIMESTAMP fields inside
+structs, lists and maps are annotated the same way. The cast changes only the annotation
+and reuses the value buffers, so the stored instants do not change. Field extraction,
+DATE_FORMAT, casts, truncation and date functions then follow the session zone as for
+literals, and TIMESTAMP results carry the session zone, as in Spark's Arrow output. A
+session zone Spark accepts but Arrow cannot parse, such as `Z` or `PST`, leaves columns
+with their own zone until #1029 resolves such IDs. A comparison with a TIMESTAMP literal
+still reaches the scan as a predicate on the stored column, because DataFusion's
+unwrap-cast rule removes the cast. `IS NULL` reaches it with the cast, which the Delta
+provider cannot prune with, and `BETWEEN` and `IN` also push redundant cast copies (#1096).
+Native DataFusion SQL keeps each column's own annotation. The
+[session-zone column references](tests/fixtures/session-zone-columns/README.md) cover
+these functions in UTC and Los Angeles over UTC, named-zone and fixed-offset annotations.
+
 TO_UTC_TIMESTAMP and FROM_UTC_TIMESTAMP convert TIMESTAMP_NTZ and DATE arguments to
 the session zone with that same builder, so a local time or midnight skipped by a DST
 change moves forward and a repeated one takes its earlier instant, where Arrow's cast

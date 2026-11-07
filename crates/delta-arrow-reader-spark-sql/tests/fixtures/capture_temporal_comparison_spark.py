@@ -71,7 +71,7 @@ def registered_table_queries():
             first, second = (right, left) if reverse else (left, right)
             for operation in ["equal", "nullif"]:
                 expression = f"{first}={second}" if operation == "equal" else f"NULLIF({first},{second})"
-                yield f"external_{name}_{reverse}_{operation}", f"SELECT {expression} AS r FROM external_temporal ORDER BY k", operation == "nullif" and first == "ltz"
+                yield f"external_{name}_{reverse}_{operation}", f"SELECT {expression} AS r FROM external_temporal ORDER BY k"
 
 
 def main():
@@ -119,14 +119,12 @@ def main():
             spark.conf.set("spark.sql.session.timeZone", timezone)
             for ansi in [True, False]:
                 spark.conf.set("spark.sql.ansi.enabled", str(ansi).lower())
-                for name, sql, original_ltz in registered_table_queries():
+                for name, sql in registered_table_queries():
                     frame = spark.sql(sql)
                     schema = frame.schema.jsonValue()
                     values = [[encode_reference_value(row[0], schema["fields"][0]["type"])] for row in frame.collect()]
                     record = {"id": name, "sql": sql, "ansi": ansi, "timezone": timezone,
                               "expected": {"status": "ok", "schema": schema, "rows": values}}
-                    if original_ltz:
-                        record["result_timezone"] = "UTC"
                     records.append(record)
         assert len({(r["id"], r["ansi"], r["timezone"]) for r in records}) == len(records)
         metadata={"external_input": external_input, "spark_version":spark.version,"java_version":spark.sparkContext._jvm.java.lang.System.getProperty("java.version"),"timestamp_encoding":"microseconds since 1970-01-01; TIMESTAMP in UTC, TIMESTAMP_NTZ in wall time"}
