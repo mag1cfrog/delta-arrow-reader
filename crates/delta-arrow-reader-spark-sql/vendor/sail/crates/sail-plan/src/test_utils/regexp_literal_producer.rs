@@ -15,6 +15,10 @@ use datafusion::logical_expr::{
 use serde_json::{Value, json};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[expect(
+    clippy::enum_variant_names,
+    reason = "Variant Debug names are frozen observation labels."
+)]
 pub(crate) enum Kind {
     ImmutableNoFold,
     VolatileFold,
@@ -29,6 +33,10 @@ pub(crate) struct Counts {
     events: Mutex<Vec<Value>>,
 }
 impl Counts {
+    #[expect(
+        clippy::expect_used,
+        reason = "A poisoned instrumentation mutex must fail the test."
+    )]
     pub(crate) fn snapshot(&self) -> Value {
         json!({"calls":self.calls.load(Ordering::SeqCst),
             "events":self.events.lock().expect("producer event mutex").clone()})

@@ -1410,6 +1410,10 @@ fn producer_catalog() -> TestResult<(Value, Vec<Value>)> {
     Ok((inputs, cases))
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Fault mutations require concrete observation shapes; malformed fixtures must fail."
+)]
 fn producer_actual_faults(actual: &Value, expected: &Value, control: Option<&Value>) -> Vec<Value> {
     let mut faults = Vec::new();
     let mut changed = actual.clone();
