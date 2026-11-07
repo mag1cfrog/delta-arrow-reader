@@ -469,12 +469,11 @@ impl PlanResolver<'_> {
             if let (Some(start), Some(end)) = (
                 expression_type(&frame.start_bound),
                 expression_type(&frame.end_bound),
-            ) {
-                if start != end {
-                    return Err(PlanError::invalid(
-                        "[DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_DIFF_TYPES] expression frame bounds require the same type",
-                    ));
-                }
+            ) && start != end
+            {
+                return Err(PlanError::invalid(
+                    "[DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_DIFF_TYPES] expression frame bounds require the same type",
+                ));
             }
         }
         if self.config.ansi_mode
