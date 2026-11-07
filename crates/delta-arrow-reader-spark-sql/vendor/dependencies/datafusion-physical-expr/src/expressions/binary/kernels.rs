@@ -21,8 +21,8 @@ use arrow::array::*;
 use arrow::buffer::{MutableBuffer, NullBuffer};
 use arrow::compute::kernels::bitwise::{
     bitwise_and, bitwise_and_scalar, bitwise_or, bitwise_or_scalar, bitwise_shift_left,
-    bitwise_shift_left_scalar, bitwise_shift_right, bitwise_shift_right_scalar, bitwise_xor,
-    bitwise_xor_scalar,
+    bitwise_shift_left_scalar, bitwise_shift_right, bitwise_shift_right_scalar,
+    bitwise_xor, bitwise_xor_scalar,
 };
 use arrow::compute::kernels::boolean::not;
 use arrow::compute::kernels::comparison::{regexp_is_match, regexp_is_match_scalar};
@@ -109,7 +109,10 @@ macro_rules! call_scalar_kernel {
 /// downcasts left / right to the appropriate integral type and calls the kernel
 macro_rules! create_left_integral_dyn_scalar_kernel {
     ($FUNC:ident, $KERNEL:ident) => {
-        pub(crate) fn $FUNC(array: &dyn Array, scalar: ScalarValue) -> Option<Result<ArrayRef>> {
+        pub(crate) fn $FUNC(
+            array: &dyn Array,
+            scalar: ScalarValue,
+        ) -> Option<Result<ArrayRef>> {
             let result = match array.data_type() {
                 DataType::Int8 => {
                     call_scalar_kernel!(array, scalar, $KERNEL, Int8Array, i8)
@@ -149,8 +152,14 @@ macro_rules! create_left_integral_dyn_scalar_kernel {
 create_left_integral_dyn_scalar_kernel!(bitwise_and_dyn_scalar, bitwise_and_scalar);
 create_left_integral_dyn_scalar_kernel!(bitwise_or_dyn_scalar, bitwise_or_scalar);
 create_left_integral_dyn_scalar_kernel!(bitwise_xor_dyn_scalar, bitwise_xor_scalar);
-create_left_integral_dyn_scalar_kernel!(bitwise_shift_right_dyn_scalar, bitwise_shift_right_scalar);
-create_left_integral_dyn_scalar_kernel!(bitwise_shift_left_dyn_scalar, bitwise_shift_left_scalar);
+create_left_integral_dyn_scalar_kernel!(
+    bitwise_shift_right_dyn_scalar,
+    bitwise_shift_right_scalar
+);
+create_left_integral_dyn_scalar_kernel!(
+    bitwise_shift_left_dyn_scalar,
+    bitwise_shift_left_scalar
+);
 
 /// Concatenates two `StringViewArray`s element-wise.
 /// If either element is `Null`, the result element is also `Null`.
