@@ -1,0 +1,614 @@
+[
+  {
+    "key_type": "DATE",
+    "batch": 1,
+    "target_partitions": 2,
+    "sql": "SELECT COUNT(*) OVER (ORDER BY k RANGE BETWEEN INTERVAL '1 day' PRECEDING AND CURRENT ROW) AS n FROM (VALUES (DATE '2020-01-01'),(DATE '2020-01-02'),(DATE '2020-01-04')) inputs(k) ORDER BY k",
+    "native_observation": {
+      "public_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "n",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "before_collect": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "n",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "physical_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "n",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "1"
+        ],
+        [
+          "1"
+        ],
+        [
+          "2"
+        ]
+      ],
+      "error": null,
+      "phase": "encode"
+    },
+    "configured_observation": {
+      "public_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "n",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "before_collect": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "n",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "physical_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "n",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "1"
+        ],
+        [
+          "1"
+        ],
+        [
+          "2"
+        ]
+      ],
+      "error": null,
+      "phase": "encode"
+    }
+  },
+  {
+    "key_type": "TIMESTAMP",
+    "batch": 1,
+    "target_partitions": 2,
+    "sql": "SELECT COUNT(*) OVER (ORDER BY k RANGE BETWEEN INTERVAL '1 day' PRECEDING AND CURRENT ROW) AS n FROM (VALUES (TIMESTAMP '2020-01-01'),(TIMESTAMP '2020-01-02'),(TIMESTAMP '2020-01-04')) inputs(k) ORDER BY k",
+    "native_observation": {
+      "public_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "n",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "before_collect": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "n",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "physical_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "n",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "1"
+        ],
+        [
+          "1"
+        ],
+        [
+          "2"
+        ]
+      ],
+      "error": null,
+      "phase": "encode"
+    },
+    "configured_observation": {
+      "public_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "n",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "before_collect": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "n",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "physical_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "n",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "1"
+        ],
+        [
+          "1"
+        ],
+        [
+          "2"
+        ]
+      ],
+      "error": null,
+      "phase": "encode"
+    }
+  },
+  {
+    "key_type": "INT",
+    "batch": 1,
+    "target_partitions": 2,
+    "sql": "SELECT COUNT(*) OVER (ORDER BY k RANGE BETWEEN 1 PRECEDING AND CURRENT ROW) AS n FROM (VALUES (1),(2),(4)) inputs(k) ORDER BY k",
+    "native_observation": {
+      "public_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "n",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "before_collect": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "n",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "physical_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "n",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "1"
+        ],
+        [
+          "1"
+        ],
+        [
+          "2"
+        ]
+      ],
+      "error": null,
+      "phase": "encode"
+    },
+    "configured_observation": {
+      "public_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "n",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "before_collect": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "n",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "physical_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "n",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "1"
+        ],
+        [
+          "1"
+        ],
+        [
+          "2"
+        ]
+      ],
+      "error": null,
+      "phase": "encode"
+    }
+  },
+  {
+    "key_type": "DATE",
+    "batch": 32,
+    "target_partitions": 2,
+    "sql": "SELECT COUNT(*) OVER (ORDER BY k RANGE BETWEEN INTERVAL '1 day' PRECEDING AND CURRENT ROW) AS n FROM (VALUES (DATE '2020-01-01'),(DATE '2020-01-02'),(DATE '2020-01-04')) inputs(k) ORDER BY k",
+    "native_observation": {
+      "public_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "n",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "before_collect": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "n",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "physical_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "n",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "1"
+        ],
+        [
+          "1"
+        ],
+        [
+          "2"
+        ]
+      ],
+      "error": null,
+      "phase": "encode"
+    },
+    "configured_observation": {
+      "public_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "n",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "before_collect": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "n",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "physical_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "n",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "1"
+        ],
+        [
+          "1"
+        ],
+        [
+          "2"
+        ]
+      ],
+      "error": null,
+      "phase": "encode"
+    }
+  },
+  {
+    "key_type": "TIMESTAMP",
+    "batch": 32,
+    "target_partitions": 2,
+    "sql": "SELECT COUNT(*) OVER (ORDER BY k RANGE BETWEEN INTERVAL '1 day' PRECEDING AND CURRENT ROW) AS n FROM (VALUES (TIMESTAMP '2020-01-01'),(TIMESTAMP '2020-01-02'),(TIMESTAMP '2020-01-04')) inputs(k) ORDER BY k",
+    "native_observation": {
+      "public_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "n",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "before_collect": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "n",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "physical_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "n",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "1"
+        ],
+        [
+          "1"
+        ],
+        [
+          "2"
+        ]
+      ],
+      "error": null,
+      "phase": "encode"
+    },
+    "configured_observation": {
+      "public_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "n",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "before_collect": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "n",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "physical_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "n",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "1"
+        ],
+        [
+          "1"
+        ],
+        [
+          "2"
+        ]
+      ],
+      "error": null,
+      "phase": "encode"
+    }
+  },
+  {
+    "key_type": "INT",
+    "batch": 32,
+    "target_partitions": 2,
+    "sql": "SELECT COUNT(*) OVER (ORDER BY k RANGE BETWEEN 1 PRECEDING AND CURRENT ROW) AS n FROM (VALUES (1),(2),(4)) inputs(k) ORDER BY k",
+    "native_observation": {
+      "public_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "n",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "before_collect": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "n",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "physical_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "n",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "1"
+        ],
+        [
+          "1"
+        ],
+        [
+          "2"
+        ]
+      ],
+      "error": null,
+      "phase": "encode"
+    },
+    "configured_observation": {
+      "public_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "n",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "before_collect": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "n",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "physical_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "n",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "1"
+        ],
+        [
+          "1"
+        ],
+        [
+          "2"
+        ]
+      ],
+      "error": null,
+      "phase": "encode"
+    }
+  }
+]

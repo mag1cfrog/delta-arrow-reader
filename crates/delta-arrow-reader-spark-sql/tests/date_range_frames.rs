@@ -35,6 +35,76 @@ fn case_identity(case: &Value) -> TestResult<(String, String, bool)> {
     ))
 }
 
+fn validate_prior_owner_controls(records: &[Value], controls: &[Value]) -> TestResult {
+    let mut expected = BTreeSet::new();
+    for case in &records[1..] {
+        if matches!(case["ownership"].as_str(), Some("null_offset_owner" | "date_interval_owner")) {
+            for batch in [1, 32] {
+                expected.insert((case_identity(case)?, batch));
+            }
+        }
+    }
+    let mut seen = BTreeSet::new();
+    for control in controls {
+        let key = case_identity(control)?;
+        let batch = control["batch"].as_u64().ok_or("missing prior batch")?;
+        if !seen.insert((key.clone(), batch)) {
+            return Err("duplicate prior owner identity/batch".into());
+        }
+        let reference = records[1..].iter().find(|case| case_identity(case).ok().as_ref() == Some(&key))
+            .ok_or("missing prior owner reference")?;
+        if control["reference"] != *reference || control["primary"] != false
+            || control["replay_scope"] != "all" || control["target_partitions"] != 2
+            || control["provider_partitions"] != 2 || control["ownership"] != reference["ownership"]
+            || !control["observation"].is_object() || control["observation"].get("observer_error").is_some()
+        {
+            return Err("prior owner reference or observation profile differs".into());
+        }
+    }
+    if controls.len() != 112 || expected.len() != 112 || seen != expected {
+        return Err("prior owner corpus/ANSI/batch inventory differs".into());
+    }
+    Ok(())
+}
+
+fn prior_owner_observation_matches(actual: &Value, control: &Value) -> TestResult<bool> {
+    let mut actual = actual.clone();
+    let mut control = control.clone();
+    if actual["reference"]["ordered"] == false && control["reference"]["ordered"] == false {
+        for record in [&mut actual, &mut control] {
+            if record["observation"]["rows_raw"].is_array() {
+                record["observation"]["rows_raw"] = multiset(&record["observation"]["rows_raw"])?;
+            }
+        }
+    }
+    Ok(actual == control)
+}
+
+fn parse_prior_native_controls() -> TestResult<Vec<Value>> {
+    let controls: Vec<Value> = serde_json::from_str(include_str!("fixtures/date-range-747-prior-native-controls.json"))?;
+    let expected = ["DATE", "TIMESTAMP", "INT"].into_iter()
+        .flat_map(|kind| [1, 32].map(move |batch| (kind.to_owned(), batch))).collect::<BTreeSet<_>>();
+    let mut seen = BTreeSet::new();
+    for control in &controls {
+        let key = (control["key_type"].as_str().ok_or("missing native key type")?.to_owned(),
+            control["batch"].as_u64().ok_or("missing native batch")?);
+        if !seen.insert(key) || control["target_partitions"] != 2 || !control["sql"].is_string()
+            || ["native_observation", "configured_observation"].iter().any(|profile| {
+                let profile = &control[*profile];
+                profile["phase"] != "encode" || profile["error"] != Value::Null
+                    || !profile["rows"].is_array()
+                    || ["public_schema", "before_collect", "physical_schema"].iter().any(|stage| !complete_schema(&profile[*stage]))
+            })
+        {
+            return Err("prior native profile is missing or incomplete".into());
+        }
+    }
+    if controls.len() != 6 || seen != expected {
+        return Err("prior native type/batch inventory differs".into());
+    }
+    Ok(controls)
+}
+
 fn complete_schema(schema: &Value) -> bool {
     schema["type"] == "struct"
         && schema["fields"].as_array().is_some_and(|fields| {
@@ -332,6 +402,10 @@ fn new_spark_session(batch_size: usize) -> SessionContext {
 
 async fn replay_date_range_cases(original_consumers_only: bool) -> TestResult {
     let (manifest, records) = parse_date_range_fixture()?;
+    let owner_controls: Vec<Value> = serde_json::from_str(include_str!("fixtures/date-range-747-prior-owner-controls.json"))?;
+    validate_prior_owner_controls(&records, &owner_controls)?;
+    let mut owner_differences = Vec::new();
+    let mut owner_contexts = 0;
     let mut primary_contexts = 0;
     let mut completed = BTreeSet::new();
     let mut primary_differences = Vec::new();
@@ -377,6 +451,16 @@ async fn replay_date_range_cases(original_consumers_only: bool) -> TestResult {
                     "spark_matches":matches,"primary":!independent_owner,
                 });
                 eprintln!("DATE_RANGE_OBSERVATION {observation}");
+                if independent_owner {
+                    owner_contexts += 1;
+                    let control = owner_controls.iter().find(|control| {
+                        control["corpus"] == case["corpus"] && control["id"] == case["id"]
+                            && control["ansi"] == case["ansi"] && control["batch"] == batch_size
+                    }).ok_or("missing prior owner context")?;
+                    if !prior_owner_observation_matches(&observation, control)? {
+                        owner_differences.push(format!("{source}:{id} ANSI={ansi} batch={batch_size}"));
+                    }
+                }
                 if !independent_owner && !matches {
                     primary_differences
                         .push(format!("{source}:{id} ANSI={ansi} batch={batch_size}"));
@@ -391,10 +475,11 @@ async fn replay_date_range_cases(original_consumers_only: bool) -> TestResult {
         primary_contexts,
         if original_consumers_only { 108 } else { 984 }
     );
+    assert_eq!(owner_contexts, if original_consumers_only { 0 } else { 112 });
     assert!(
-        primary_differences.is_empty(),
-        "{}",
-        primary_differences.join("\n")
+        primary_differences.is_empty() && owner_differences.is_empty(),
+        "primary differences:\n{}\nprior owner changes:\n{}",
+        primary_differences.join("\n"), owner_differences.join("\n"),
     );
     Ok(())
 }
@@ -411,6 +496,7 @@ async fn date_range_original_consumers_match_spark() -> TestResult {
 
 #[tokio::test]
 async fn native_range_controls_match_unconfigured_session() -> TestResult {
+    let controls = parse_prior_native_controls()?;
     for batch_size in [1, 32] {
         let native = SessionContext::new_with_config(
             SessionConfig::new()
@@ -437,13 +523,14 @@ async fn native_range_controls_match_unconfigured_session() -> TestResult {
             let native_observation = capture_native_query_observation(&native, &sql).await?;
             let configured_observation =
                 capture_native_query_observation(&configured, &sql).await?;
-            eprintln!(
-                "NATIVE_DATE_RANGE_CONTROL {}",
-                json!({
-                    "key_type":key_type,"batch":batch_size,"target_partitions":2,"sql":sql,
-                    "native_observation":native_observation,"configured_observation":configured_observation,
-                })
-            );
+            let observation = json!({
+                "key_type":key_type,"batch":batch_size,"target_partitions":2,"sql":sql,
+                "native_observation":native_observation,"configured_observation":configured_observation,
+            });
+            eprintln!("NATIVE_DATE_RANGE_CONTROL {observation}");
+            let control = controls.iter().find(|control| control["key_type"] == key_type && control["batch"] == batch_size)
+                .ok_or("missing prior native context")?;
+            assert_eq!(&observation, control, "native prior profile {key_type} batch={batch_size}");
             assert_eq!(
                 native_observation, configured_observation,
                 "{key_type} batch={batch_size}"
@@ -476,5 +563,37 @@ async fn native_range_controls_match_unconfigured_session() -> TestResult {
             }
         }
     }
+    Ok(())
+}
+
+#[test]
+fn prior_owner_controls_reject_changes_and_only_relax_unordered_raw_rows() -> TestResult {
+    let (_, records) = parse_date_range_fixture()?;
+    let controls: Vec<Value> = serde_json::from_str(include_str!("fixtures/date-range-747-prior-owner-controls.json"))?;
+    validate_prior_owner_controls(&records, &controls)?;
+    let mut missing = controls.clone(); missing.pop();
+    assert!(validate_prior_owner_controls(&records, &missing).is_err());
+    let mut duplicate = controls.clone(); duplicate[1] = duplicate[0].clone();
+    assert!(validate_prior_owner_controls(&records, &duplicate).is_err());
+    let control = controls.iter().find(|control| control["observation"]["rows_raw"].as_array().is_some_and(|rows| rows.len() > 2))
+        .ok_or("missing unordered prior rows")?;
+    let mut reordered = control.clone();
+    reordered["observation"]["rows_raw"].as_array_mut().ok_or("missing raw rows")?.reverse();
+    assert!(prior_owner_observation_matches(&reordered, control)?);
+    for pointer in ["/observation/public_schema", "/observation/optimized_schema", "/observation/before_collect", "/observation/physical_schema", "/observation/error", "/observation/native_phase", "/reference/sql"] {
+        let mut changed = control.clone();
+        *changed.pointer_mut(pointer).ok_or("missing fault target")? = json!("changed prior facet");
+        assert!(!prior_owner_observation_matches(&changed, control)?, "accepted changed {pointer}");
+    }
+    let mut duplicate_row = control.clone();
+    let row = duplicate_row["observation"]["rows_raw"][0].clone();
+    duplicate_row["observation"]["rows_raw"].as_array_mut().ok_or("missing raw rows")?.push(row);
+    assert!(!prior_owner_observation_matches(&duplicate_row, control)?);
+    let mut changed_reference = control.clone();
+    changed_reference["reference"]["rows_raw"].as_array_mut().ok_or("missing Spark raw rows")?.reverse();
+    assert!(!prior_owner_observation_matches(&changed_reference, control)?);
+    let mut ordered = control.clone(); ordered["reference"]["ordered"] = json!(true);
+    let mut reordered = ordered.clone(); reordered["observation"]["rows_raw"].as_array_mut().ok_or("missing raw rows")?.reverse();
+    assert!(!prior_owner_observation_matches(&reordered, &ordered)?);
     Ok(())
 }
