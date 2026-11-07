@@ -677,3 +677,79 @@ fn prior_owner_controls_reject_changes_and_only_relax_unordered_raw_rows() -> Te
     assert!(!prior_owner_observation_matches(&reordered, &ordered)?);
     Ok(())
 }
+
+#[tokio::test]
+async fn preordered_date_providers_preserve_recorded_range_results() -> TestResult {
+    use std::sync::Arc;
+
+    use arrow::compute::{SortOptions, sort_to_indices, take_record_batch};
+    use datafusion::common::ScalarValue;
+    use datafusion::datasource::{MemTable, TableProvider};
+    use datafusion::logical_expr::{Operator, ScalarUDF, lit};
+    use datafusion::physical_plan::displayable;
+    use datafusion::prelude::col;
+    use delta_arrow_reader_spark_sql::{SparkSqlOptions, plan_query};
+    use sail_function::scalar::datetime::spark_date_day_arithmetic::SparkDateDayArithmetic;
+
+    let (manifest, records) = parse_date_range_fixture()?;
+    let corpus = manifest["corpora"].as_array().ok_or("missing corpora")?.iter()
+        .find(|corpus| corpus["corpus"] == "date-range-admission-probes-spark")
+        .ok_or("missing admission corpus")?;
+    let input = corpus["metadata"]["inputs"].as_array().ok_or("missing inputs")?.iter()
+        .find(|input| input["name"] == "reversal_inputs").ok_or("missing reversal provider")?;
+    let batch = spark_inputs::decode_recorded_batch(input)?;
+    let key = batch.schema().index_of("k")?;
+    let cases = records[1..].iter().filter(|case| {
+        case["corpus"] == corpus["corpus"] && case["id"].as_str().is_some_and(|id| id.starts_with("reversal_"))
+    }).collect::<Vec<_>>();
+    assert_eq!(cases.len(), 8);
+    let mut completed = BTreeSet::new();
+    for case in cases {
+        let id = case["id"].as_str().ok_or("missing reversal ID")?;
+        let ansi = case["ansi"].as_bool().ok_or("missing ANSI")?;
+        let descending = id.contains("DESC");
+        let nulls_first = id.ends_with("FIRST");
+        for batch_size in [1, 32] {
+            for opposite in [false, true] {
+                assert!(completed.insert((id.to_owned(), ansi, batch_size, opposite)));
+                let session = new_spark_session(batch_size);
+                let options = SortOptions {
+                    descending: descending != opposite,
+                    nulls_first: nulls_first != opposite,
+                };
+                let indices = sort_to_indices(batch.column(key), Some(options), None)?;
+                let ordered = take_record_batch(&batch, &indices)?;
+                let batches = (0..ordered.num_rows()).step_by(batch_size).map(|offset| {
+                    ordered.slice(offset, batch_size.min(ordered.num_rows() - offset))
+                }).collect::<Vec<_>>();
+                // On these recorded integer keys, adding epoch day zero preserves this source order.
+                let date_key = ScalarUDF::from(SparkDateDayArithmetic::new(Operator::Plus))
+                    .call(vec![lit(ScalarValue::Date32(Some(0))), col("k")]);
+                let table = MemTable::try_new(batch.schema(), vec![batches])?
+                    .with_sort_order(vec![vec![date_key.sort(!options.descending, options.nulls_first)]]);
+                let source = table.scan(&session.state(), None, &[], None).await?;
+                let source_order = source.properties().output_ordering().ok_or("source ordering was not registered")?;
+                assert_eq!(source_order[0].options, options);
+                session.register_table("reversal_inputs", Arc::new(table))?;
+                let query = plan_query(&session, case["sql"].as_str().ok_or("missing SQL")?, &SparkSqlOptions {
+                    ansi_mode: ansi, session_timezone: "UTC".into(), ..SparkSqlOptions::default()
+                }).await?;
+                let physical = query.create_physical_plan(&session).await?;
+                let plan = displayable(physical.as_ref()).indent(true).to_string();
+                let sort_retained = plan.contains("SortExec:");
+                assert_eq!(sort_retained, opposite, "{id} ANSI={ansi} batch={batch_size} opposite={opposite}: {plan}");
+                let actual = compare_exact_spark_query_stages_with_optimized(&session, case).await?;
+                eprintln!("DATE_RANGE_PREORDERED_OBSERVATION {}", json!({
+                    "id":id,"ansi":ansi,"batch":batch_size,"target_partitions":2,
+                    "provider_partitions":1,"opposite":opposite,"sort_retained":sort_retained,
+                    "plan":plan,"reference":case,"observation":actual,
+                }));
+                assert!(actual["matches"] == true && actual["optimized_matches"] == true
+                    && actual["public_schema"] == case["expected"]["schema"],
+                    "{id} ANSI={ansi} batch={batch_size} opposite={opposite}: {actual}");
+            }
+        }
+    }
+    assert_eq!(completed.len(), 32);
+    Ok(())
+}
