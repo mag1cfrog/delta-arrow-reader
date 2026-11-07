@@ -148,6 +148,10 @@ fn regexp_replace(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     )?;
     if position.is_volatile()
         || !position.column_refs().is_empty()
+        || position.exists(|expression| {
+            Ok(matches!(expression, expr::Expr::ScalarFunction(function)
+                if function.func.as_async().is_some()))
+        })?
         || (coerced_position
             && position.exists(|expression| {
                 Ok(matches!(expression, expr::Expr::ScalarFunction(function)
@@ -181,6 +185,93 @@ fn regexp_replace(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         lit(value)
     });
     Ok(ScalarUDF::from(SparkRegexpReplace::new()).call(arguments))
+}
+
+#[cfg(test)]
+#[path = "../../test_utils/regexp_literal_producer.rs"]
+mod regexp_position_producer;
+
+#[test]
+fn regexp_replace_position_gate_checks_nested_async_after_type_admission() -> PlanResult<()> {
+    use std::sync::atomic::Ordering;
+
+    use datafusion::arrow::datatypes::{Field, Schema};
+    use datafusion::prelude::SessionContext;
+    use datafusion_expr::col;
+
+    use crate::config::PlanConfig;
+    use crate::function::common::FunctionContextInput;
+    use regexp_position_producer::{Kind, producer};
+
+    let session = SessionContext::new();
+    let schema = Arc::new(DFSchema::try_from(Schema::new(vec![
+        Field::new("flag", DataType::Boolean, false),
+        Field::new("k", DataType::Int32, false),
+    ]))?);
+    for ansi_mode in [true, false] {
+        let config = Arc::new(PlanConfig {
+            ansi_mode,
+            ..Default::default()
+        });
+        let resolve = |position| {
+            regexp_replace(ScalarFunctionInput {
+                arguments: vec![lit("a"), lit("(a)"), lit("x"), position],
+                function_context: FunctionContextInput {
+                    argument_display_names: &[],
+                    plan_config: &config,
+                    session_context: &session,
+                    schema: &schema,
+                },
+            })
+        };
+        let (asynchronous, async_counts) = producer(Kind::AsyncFold);
+        let (immutable, immutable_counts) = producer(Kind::ImmutableFold);
+        assert!(asynchronous.as_async().is_some());
+        let position = asynchronous.call(vec![lit(1_i32)]);
+        for position in [
+            position.clone(),
+            position.clone().alias("position"),
+            cast(position.clone().alias("position"), DataType::Int64),
+            immutable.call(vec![position]),
+            asynchronous.call(vec![lit("1")]),
+            asynchronous.call(vec![col("k")]),
+            col("k"),
+        ] {
+            assert!(
+                matches!(resolve(position), Err(PlanError::InvalidArgument(message))
+                if message == "[DATATYPE_MISMATCH.NON_FOLDABLE_INPUT] regexp_replace position must be a foldable INT expression")
+            );
+        }
+        for position in [
+            asynchronous.call(vec![lit(true)]),
+            asynchronous.call(vec![col("flag")]),
+        ] {
+            assert!(
+                matches!(resolve(position), Err(PlanError::InvalidArgument(message))
+                if message == "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] regexp_replace position requires INT, got Boolean")
+            );
+        }
+        assert_eq!(
+            async_counts.snapshot(),
+            serde_json::json!({"calls":0,"events":[]})
+        );
+        assert_eq!(
+            immutable_counts.snapshot(),
+            serde_json::json!({"calls":0,"events":[]})
+        );
+
+        let (volatile, volatile_counts) = producer(Kind::VolatileFold);
+        assert!(
+            matches!(resolve(volatile.call(vec![lit(1_i32)])), Err(PlanError::InvalidArgument(message))
+            if message == "[DATATYPE_MISMATCH.NON_FOLDABLE_INPUT] regexp_replace position must be a foldable INT expression")
+        );
+        assert_eq!(volatile_counts.calls.load(Ordering::SeqCst), 0);
+        // Already-INT NoFold behavior is a separate shared contract under #893.
+        let (no_fold, no_fold_counts) = producer(Kind::ImmutableNoFold);
+        assert!(resolve(no_fold.call(vec![lit(1_i32)])).is_ok());
+        assert_eq!(no_fold_counts.calls.load(Ordering::SeqCst), 1);
+    }
+    Ok(())
 }
 
 fn cast_string_function_int(
