@@ -3602,24 +3602,27 @@ pinned coordinate encoding/error helpers through relative paths.
 original frozen outcomes, stage maps, SQL and provider inputs. The new header
 records its own source and manifest hashes and the original capture lineage.
 
-The case regression gate also retains 126 complete current native negative
-receipts: 96 preexisting TRY_CAST field differences under #802, 24 preexisting
-RAND-range row differences under #838, and six unordered inner LIMIT/OFFSET
-selection contexts. The last six are exactly both ANSI modes, three storage
-representations and batch size 1; batch size 32 remains strict. Outer ORDER BY
-does not constrain the inner unordered selection. This is a retained support
-boundary, with no relational defect asserted.
+The case regression gate retains 102 complete current native negative
+receipts: 96 preexisting TRY_CAST field differences under #802 and six unordered
+inner LIMIT/OFFSET selection contexts. The last six are exactly both ANSI modes,
+three storage representations and batch size 1; batch size 32 remains strict.
+Outer ORDER BY does not constrain the inner unordered selection. This is a
+retained support boundary, with no relational defect asserted.
 
 Every negative requires its complete fixture/SQL/ANSI/storage/batch identity and
 actual analyzed fields, physical fields and rows. It keeps `strict_spark_match`
 and `full_compatibility_pass` false. Changed results, unexpected errors and any
 other case fail. The #802 fields are unchanged from the baseline while some
-case values improved; these profiles retain actual R2 values. All 24 #838 public
-receipts match the baseline exactly. The active #775 numeric profiles remain
-separate and unchanged. Together they retain 150 success differences.
+case values improved; these profiles retain actual R2 values. The active #775
+numeric profiles remain separate and unchanged. Together they retain 126 success
+differences.
+
+The 24 #838 contexts for `producer_single_volatile_lower` and
+`producer_single_volatile_upper` require strict matches in both ANSI modes,
+all three representations and both batch sizes. They have no negative fallback.
 
 A passing regression gate does not complete #792's first acceptance criterion
-or close #802/#838. All original references remain in the output. No new genuine
+or close #802. All original references remain in the output. No new genuine
 or unaliased positive is eligible for a negative fallback.
 
 `case-conversion-producer-genuine-volatile-spark.jsonl` and its `plan-trace`
