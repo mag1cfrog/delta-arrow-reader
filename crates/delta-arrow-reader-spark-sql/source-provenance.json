@@ -111,6 +111,25 @@
         "Cargo.lock",
         "Cargo.toml.orig"
       ]
+    },
+    {
+      "package": "datafusion-sql",
+      "version": "54.1.0",
+      "registry_archive_sha256": "b1d71cb454da682b2af7488e1fc1ddd72ee1b28f19297b8ccad73f0a21ee9a69",
+      "source": "vendor/dependencies/datafusion-sql",
+      "change_summary": "Preserve explicit NULL RANGE offsets as typed SQL expressions while retaining native typed-NULL unbounded sentinels.",
+      "modified_files": [
+        {
+          "path": "src/unparser/expr.rs",
+          "registry_source_sha256": "64628e7d5ba75b777876a60bf8eaeb02af00f28c666a1dd2b4f08643e54eb35e",
+          "vendored_source_sha256": "a983549cfeac48310bedf3a089fdc79f53799b38674a1980605a144f8ac1600d",
+          "change": "Emit an explicit typed CAST for new NULL-offset bounds through the existing checked SQL type converter; retain the DAR modification notice."
+        }
+      ],
+      "excluded_archive_members": [
+        "Cargo.lock",
+        "Cargo.toml.orig"
+      ]
     }
   ],
   "accepted_files": [

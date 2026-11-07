@@ -984,6 +984,8 @@ fn coerce_frame_bound(
         WindowFrameBound::Following(v) => {
             coerce_scalar_range_aware(target_type, &v).map(WindowFrameBound::Following)
         }
+        bound @ (WindowFrameBound::PrecedingNullOffset(_)
+        | WindowFrameBound::FollowingNullOffset(_)) => Ok(bound),
     }
 }
 
@@ -1016,6 +1018,9 @@ fn coerce_window_frame(
     schema: &DFSchema,
     expressions: &[Sort],
 ) -> Result<WindowFrame> {
+    if window_frame.has_null_offset() && window_frame.units != WindowFrameUnits::Range {
+        return plan_err!("explicit NULL offsets require a RANGE window frame");
+    }
     // Peer and unbounded RANGE boundaries do not perform offset arithmetic.
     if window_frame.units == WindowFrameUnits::Range
         && !expressions.is_empty()
