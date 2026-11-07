@@ -153,10 +153,10 @@ compatibility credit. Complete Spark cycle stacks remain in the fixture; the
 native diagnostic comparison does not claim JVM-stack identity.
 
 All 744 contexts require the complete result or meaningful native cause and
-available fields. The strict reference predicate requires 660 matches. It gives
-no strict credit to the 36 phase differences, 24 parser identifier differences,
-or 24 cycle errors whose structured identifier is unavailable. These facets
-remain separate from semantic cause/field comparisons.
+available fields. The strict reference predicate requires 696 matches and zero
+phase differences. It gives no strict credit to the 24 parser identifier
+differences or 24 cycle errors whose structured identifier is unavailable. These
+facets remain separate from semantic cause/field comparisons.
 
 ## Raw nonword boundary
 
