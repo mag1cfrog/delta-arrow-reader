@@ -1074,17 +1074,18 @@ mod range_frame_tests {
 
     use super::*;
 
+    fn require_error_message<T>(
+        result: datafusion_common::Result<T>,
+    ) -> datafusion_common::Result<String> {
+        result
+            .err()
+            .map(|error| error.to_string())
+            .ok_or_else(|| DataFusionError::Internal("expected RANGE failure".into()))
+    }
+
     #[test]
     fn date_range_negation_keeps_declarations_and_spark_failure_phases()
     -> datafusion_common::Result<()> {
-        fn error_message<T>(
-            result: datafusion_common::Result<T>,
-        ) -> datafusion_common::Result<String> {
-            result
-                .err()
-                .map(|error| error.to_string())
-                .ok_or_else(|| DataFusionError::Internal("expected DATE RANGE failure".into()))
-        }
         let key_field = Arc::new(
             Field::new("day", DataType::Date32, true)
                 .with_metadata(HashMap::from([("source".into(), "kept".into())])),
@@ -1124,7 +1125,7 @@ mod range_frame_tests {
             let checked =
                 ScalarUDF::from(WindowKeyWithCheckedOffsetNegation::new(DataType::Date32))
                     .call(vec![key, lit(i32::MIN)]);
-            let error = error_message(simplifier.simplify(checked))?;
+            let error = require_error_message(simplifier.simplify(checked))?;
             assert!(error.contains("[ARITHMETIC_OVERFLOW]"), "{error}");
             assert!(
                 error.contains("Int32 overflow on negative(-2147483648)"),
@@ -1141,7 +1142,7 @@ mod range_frame_tests {
                 config_options: Arc::default(),
             }
         };
-        let error = error_message(
+        let error = require_error_message(
             SparkRangeOffsetNegation::new(DataType::Date32)
                 .invoke_with_args(arguments(ScalarValue::Int64(Some(i64::MIN)))),
         )?;
@@ -1152,7 +1153,7 @@ mod range_frame_tests {
         args.arg_fields.insert(0, key_field.clone());
         args.return_field = key_field;
         assert!(
-            error_message(
+            require_error_message(
                 WindowKeyWithCheckedOffsetNegation::new(DataType::Date32).invoke_with_args(args)
             )?
             .contains("[ARITHMETIC_OVERFLOW]")
@@ -1172,7 +1173,7 @@ mod range_frame_tests {
         );
         let non_null_key = simplifier.simplify(desc_key(lit(ScalarValue::Date32(Some(0)))))?;
         assert!(
-            error_message(LiteralEvaluator::new().evaluate(&non_null_key))?
+            require_error_message(LiteralEvaluator::new().evaluate(&non_null_key))?
                 .contains("[ARITHMETIC_OVERFLOW]")
         );
         let physical =
@@ -1231,10 +1232,7 @@ mod range_frame_tests {
                     let checked =
                         ScalarUDF::from(WindowKeyWithCheckedOffsetNegation::new(key_type.clone()))
                             .call(vec![key, lit(minimum.clone())]);
-                    let error = simplifier
-                        .simplify(checked)
-                        .expect_err("minimum offset must fail");
-                    let message = error.to_string();
+                    let message = require_error_message(simplifier.simplify(checked))?;
                     assert!(
                         message.contains("[ARITHMETIC_OVERFLOW] RANGE offset negation"),
                         "{message}"
