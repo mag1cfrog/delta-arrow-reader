@@ -477,6 +477,35 @@ Native DataFusion SQL keeps each column's own annotation. The
 [session-zone column references](tests/fixtures/session-zone-columns/README.md) cover
 these functions in UTC and Los Angeles over UTC, named-zone and fixed-offset annotations.
 
+CAST and TRY_CAST from TIMESTAMP to TIMESTAMP_NTZ, one-argument TO_TIMESTAMP_NTZ and the
+TIMESTAMP argument of CONVERT_TIMEZONE take each instant's local date-time in the session
+time zone, whatever zone its type names. Arrow's cast kept the UTC date-time. The offsets
+come from `local_time.rs`, which TIMESTAMPDIFF also reads. Beyond Chrono's range it takes
+the offset from a nearer 400-year cycle, so every BIGINT instant converts. Summer instants
+after 2099 still get standard time (#1052). A local date-time beyond BIGINT fails with
+Java's `long overflow`. A constant fails during optimization through
+[constant folding errors](#constant-folding-errors), except inside CONVERT_TIMEZONE, whose
+lazy arguments defer it (#1106). Under TRY_CAST it is NULL. Spark declares the result
+nullable only for a nullable input, so a NOT NULL input fails the query instead, where
+Spark returns -1 (#1106). TO_TIMESTAMP, TRY_TO_TIMESTAMP and TO_TIMESTAMP_LTZ of a
+TIMESTAMP now keep the instant. They used to convert it to local time and back, which
+failed on the reference instants. A session zone Arrow cannot parse keeps the previous
+conversion, and `EST`, `MST` and `HST` parse as regions where Spark uses fixed offsets
+(#1029).
+
+Related cases are still open:
+- casts of arrays, structs and maps convert their TIMESTAMP values with Arrow's cast
+  (#1103);
+- TIMESTAMP_NTZ values beyond Chrono's years are read wrongly (#1104);
+- Spark's optimizer compares a converted value with a TIMESTAMP_NTZ literal by the
+  literal's instant, which DAR does not yet do (#1105);
+- formatted TO_TIMESTAMP and TO_TIMESTAMP_NTZ fail on a TIMESTAMP, and TIMESTAMP() returns
+  TIMESTAMP_NTZ (#1107).
+
+Native DataFusion SQL keeps Arrow's cast. The
+[TIMESTAMP_NTZ conversion references](tests/fixtures/timestamp-ntz-conversion/README.md)
+record the checks.
+
 TO_UTC_TIMESTAMP and FROM_UTC_TIMESTAMP convert TIMESTAMP_NTZ and DATE arguments to
 the session zone with that same builder, so a local time or midnight skipped by a DST
 change moves forward and a repeated one takes its earlier instant, where Arrow's cast
@@ -1096,7 +1125,7 @@ folding, during optimization. A scalar UDF can return `true` from
 `propagates_constant_folding_errors` (default `false`) to fail during optimization, as
 literal CASTs already do. A call inside a short-circuiting expression other than AND and
 OR, such as CASE or COALESCE, still defers its error. `AliasedScalarUDFImpl` forwards the
-choice. Only TIMESTAMPDIFF opts in.
+choice. TIMESTAMPDIFF and the TIMESTAMP to TIMESTAMP_NTZ conversion opt in.
 
 ### ARRAY_COMPACT result fields
 

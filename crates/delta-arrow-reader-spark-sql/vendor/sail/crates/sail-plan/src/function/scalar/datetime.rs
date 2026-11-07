@@ -54,7 +54,9 @@ use crate::function::common::{
     FunctionContextInput, ScalarFunction, ScalarFunctionInput, expr_contains_spark_cast_to_variant,
 };
 use crate::function::common::{literal_value_without_evaluation, without_metadata_annotations};
-use crate::function::temporal_coercion::cast_local_timestamp_expr_to_ltz;
+use crate::function::temporal_coercion::{
+    cast_local_timestamp_expr_to_ltz, ltz_expr_to_local_timestamp,
+};
 
 fn make_ym_interval(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let mut arguments = input.arguments;
@@ -772,9 +774,25 @@ fn timestamp_with_try(
             let udf = ScalarUDF::from(SparkTimestamp::try_new(timezone, ansi_mode, is_try)?);
             Ok(udf.call(vec![expr]))
         } else {
-            // Timestamp-with-tz is re-based to the session zone; other types cast.
+            // A TIMESTAMP_NTZ result is each instant's local date-time in the session zone.
+            if timestamp_ntz
+                && let DataType::Timestamp(unit, Some(zone)) = &expr_type
+                && let Some(local) = ltz_expr_to_local_timestamp(
+                    expr.clone(),
+                    *unit,
+                    zone,
+                    &input.function_context.plan_config.session_timezone,
+                    is_try,
+                )
+            {
+                return Ok(local);
+            }
+            // Spark also accepts session zones that Arrow cannot parse (#1029). A TIMESTAMP
+            // result keeps the instant; other types cast.
             let expr = match expr_type {
-                DataType::Timestamp(_, Some(_)) => expr_fn::to_local_time(vec![expr]),
+                DataType::Timestamp(_, Some(_)) if timestamp_ntz => {
+                    expr_fn::to_local_time(vec![expr])
+                }
                 _ => expr,
             };
             if is_try {
@@ -905,13 +923,22 @@ fn validate_convert_timezone_zone(expr: &Expr, schema: &DFSchemaRef) -> PlanResu
     Ok(())
 }
 
-/// A helper function for processing the input NTZ timestamp.
+/// A helper function for processing the input NTZ timestamp. Spark converts a TIMESTAMP to
+/// its local date-time in the session time zone.
 fn ntz_timestamp_and_unit(
     ts: Expr,
     schema: &DFSchemaRef,
+    session_tz: &Arc<str>,
     ansi_mode: bool,
 ) -> PlanResult<(Expr, TimeUnit)> {
-    match ts.get_type(schema)? {
+    let data_type = ts.get_type(schema)?;
+    if let DataType::Timestamp(unit, Some(zone)) = &data_type
+        && let Some(local) = ltz_expr_to_local_timestamp(ts.clone(), *unit, zone, session_tz, false)
+    {
+        return Ok((local, TimeUnit::Microsecond));
+    }
+    match data_type {
+        // Spark also accepts session zones that Arrow cannot parse (#1029).
         DataType::Timestamp(unit, Some(_)) => Ok((expr_fn::to_local_time(vec![ts]), unit)),
         DataType::Timestamp(unit, None) => Ok((ts, unit)),
         DataType::Null => {
@@ -952,6 +979,7 @@ fn convert_timezone(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let (ts, _unit) = ntz_timestamp_and_unit(
         ts,
         input.function_context.schema,
+        &session_tz,
         input.function_context.plan_config.ansi_mode,
     )?;
     let requires_scalar_evaluation =
