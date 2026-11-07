@@ -702,15 +702,7 @@ impl PlanResolver<'_> {
                 ));
             };
             let field = order_by.expr.to_field(schema)?.1;
-            let mut data_type = field.data_type();
-            while let DataType::Dictionary(_, value_type) = data_type {
-                data_type = value_type;
-            }
-            // The late window rewrite decodes scalar dictionary floats to numeric keys.
-            if matches!(data_type, DataType::Float32 | DataType::Float64) {
-                return Ok(data_type.clone());
-            }
-            Ok(field.data_type().clone())
+            Ok(range_order_key_type(field.data_type()).clone())
         };
 
         let preceding = matches!(value, spec::WindowFrameBoundary::Preceding(_));
@@ -839,6 +831,19 @@ impl PlanResolver<'_> {
     }
 }
 
+// The late window rewrite decodes scalar dictionary floats to numeric keys.
+fn range_order_key_type(data_type: &DataType) -> &DataType {
+    let mut value_type = data_type;
+    while let DataType::Dictionary(_, dictionary_value_type) = value_type {
+        value_type = dictionary_value_type;
+    }
+    if matches!(value_type, DataType::Float32 | DataType::Float64) {
+        value_type
+    } else {
+        data_type
+    }
+}
+
 fn null_range_arithmetic_key_type(
     frame: &WindowFrame,
     order_by: &[expr::Sort],
@@ -851,6 +856,7 @@ fn null_range_arithmetic_key_type(
         return Ok(None);
     };
     let key_type = order.expr.get_type(schema)?;
+    let key_type = range_order_key_type(&key_type);
     Ok(matches!(
         key_type,
         DataType::Int8
@@ -862,7 +868,7 @@ fn null_range_arithmetic_key_type(
             | DataType::Float64
             | DataType::Decimal128(_, _)
     )
-    .then_some(key_type))
+    .then(|| key_type.clone()))
 }
 
 fn is_signed_integer_minimum(value: &ScalarValue) -> bool {

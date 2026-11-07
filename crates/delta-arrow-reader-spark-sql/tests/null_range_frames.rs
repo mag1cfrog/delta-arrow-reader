@@ -618,6 +618,199 @@ fn float_decimal_references_reject_identity_fields_and_order_loss() -> TestResul
 }
 
 #[tokio::test]
+async fn dictionary_float_null_ranges_match_the_recorded_logical_values() -> TestResult {
+    use std::sync::Arc;
+
+    use arrow::array::{Array, ArrayRef, DictionaryArray, Float32Array, Float64Array, Int32Array};
+    use arrow::datatypes::{DataType, Field, Int32Type, Schema};
+    use arrow::record_batch::RecordBatch;
+    use datafusion::datasource::MemTable;
+    use datafusion::logical_expr::window_frame::RangeOffsetArithmetic;
+    use datafusion::physical_optimizer::aggregate_statistics::PreserveAggregateStatisticsSchema;
+    use delta_arrow_reader_spark_sql::{SparkSqlOptions, plan_query};
+    use sail_plan::expression_errors::SparkSqlExpressionSemantics;
+
+    let (_, records) = parse_float_decimal_fixture()?;
+    let mut completed = BTreeSet::new();
+    let mut differences = Vec::new();
+    for batch_size in [1, 32] {
+        let session = SessionContext::new_with_state(
+            configure_spark_sql(
+                SessionStateBuilder::new()
+                    .with_default_features()
+                    .with_config(
+                        SessionConfig::new()
+                            .with_batch_size(batch_size)
+                            .with_target_partitions(2),
+                    ),
+            )
+            .build(),
+        );
+        for reference in records[1..].iter().filter(|case| {
+            matches!(
+                case["coverage"]["key_type"].as_str(),
+                Some("FLOAT" | "DOUBLE")
+            )
+        }) {
+            let kind = reference["coverage"]["key_type"]
+                .as_str()
+                .ok_or("missing float type")?;
+            let ansi_mode = reference["ansi"].as_bool().ok_or("missing ANSI mode")?;
+            let id = reference["id"].as_str().ok_or("missing boundary ID")?;
+            let rows = reference["coverage"]["inline_values"]
+                .as_array()
+                .ok_or("missing source VALUES")?;
+            let suffix = format!(" AS {kind})");
+            let mut ids = Vec::new();
+            let mut values = Vec::new();
+            let mut source_rows = Vec::new();
+            for row in rows {
+                let id: i32 = row[0].as_i64().ok_or("missing source id")?.try_into()?;
+                let expression = row[1].as_str().ok_or("missing source float literal")?;
+                let literal = expression
+                    .strip_prefix("CAST(")
+                    .and_then(|value| value.strip_suffix(&suffix))
+                    .ok_or("unexpected source float cast")?;
+                let value = match literal {
+                    "NULL" => None,
+                    "'-Infinity'" => Some(f64::NEG_INFINITY),
+                    "'0'" => Some(0.0),
+                    "'Infinity'" => Some(f64::INFINITY),
+                    "'NaN'" => Some(f64::NAN),
+                    _ => return Err("unexpected recorded float boundary literal".into()),
+                };
+                ids.push(id);
+                values.push(value);
+                source_rows.push(format!("({id},{expression})"));
+            }
+            let source_clause = format!(
+                " FROM VALUES {} AS t(id,k) ORDER BY id",
+                source_rows.join(",")
+            );
+            let source_sql = reference["sql"].as_str().ok_or("missing Spark SQL")?;
+            let select = source_sql
+                .strip_suffix(&source_clause)
+                .ok_or("recorded VALUES clause changed")?;
+            let window_tail = select
+                .strip_prefix("SELECT id,COUNT(*) OVER (ORDER BY k ")
+                .ok_or("unexpected recorded window key expression")?;
+            let value_type = if kind == "FLOAT" {
+                DataType::Float32
+            } else {
+                DataType::Float64
+            };
+            let primitive_values: ArrayRef = if kind == "FLOAT" {
+                Arc::new(Float32Array::from(
+                    values
+                        .iter()
+                        .map(|value| value.map(|value| value as f32))
+                        .collect::<Vec<_>>(),
+                ))
+            } else {
+                Arc::new(Float64Array::from(values.clone()))
+            };
+            // Each source has one logical NULL. Exercise both Arrow dictionary validity forms.
+            let null_key = id.contains("infinity");
+            let keys = values
+                .iter()
+                .enumerate()
+                .map(|(index, value)| {
+                    if null_key && value.is_none() {
+                        Ok(None)
+                    } else {
+                        Ok(Some(i32::try_from(index)?))
+                    }
+                })
+                .collect::<Result<Vec<_>, std::num::TryFromIntError>>()?;
+            let dictionary: ArrayRef = Arc::new(DictionaryArray::<Int32Type>::try_new(
+                Int32Array::from(keys),
+                primitive_values.clone(),
+            )?);
+            assert_eq!(
+                arrow::compute::cast(dictionary.as_ref(), &value_type)?.to_data(),
+                primitive_values.to_data()
+            );
+            let ids = Arc::new(Int32Array::from(ids));
+            let schema = Arc::new(Schema::new(vec![
+                Field::new("id", DataType::Int32, false),
+                Field::new("k", dictionary.data_type().clone(), true),
+            ]));
+            let input = RecordBatch::try_new(schema.clone(), vec![ids.clone(), dictionary])?;
+            assert_eq!(input.column(0).to_data(), ids.to_data());
+            let mut partitions = vec![Vec::new(); 2];
+            for offset in (0..input.num_rows()).step_by(batch_size) {
+                partitions[(offset / batch_size) % 2]
+                    .push(input.slice(offset, batch_size.min(input.num_rows() - offset)));
+            }
+            let table = format!("dictionary_{id}_{ansi_mode}");
+            session.register_table(&table, Arc::new(MemTable::try_new(schema, partitions)?))?;
+            let encoded_sql = format!("{select} FROM {table} ORDER BY id");
+            let decoded_sql = format!(
+                "SELECT id,COUNT(*) OVER (ORDER BY CAST(k AS {kind}) {window_tail} FROM {table} ORDER BY id"
+            );
+            for (decoded, sql) in [(false, encoded_sql), (true, decoded_sql.clone())] {
+                let query = plan_query(
+                    &session,
+                    &sql,
+                    &SparkSqlOptions {
+                        ansi_mode,
+                        ..Default::default()
+                    },
+                )
+                .await?;
+                let expected_policy = RangeOffsetArithmetic::Spark { ansi_mode };
+                assert_eq!(
+                    find_single_window_frame(&query.logical_plan)?.range_offset_arithmetic(),
+                    expected_policy
+                );
+                let mut state = session.state();
+                let extensions = &mut state.config_mut().options_mut().extensions;
+                extensions.insert(SparkSqlExpressionSemantics::default());
+                extensions.insert(PreserveAggregateStatisticsSchema::default());
+                let analyzed = state.analyzer().execute_and_check(
+                    query.logical_plan,
+                    state.config_options(),
+                    |_, _| {},
+                )?;
+                assert_eq!(
+                    find_single_window_frame(&analyzed)?.range_offset_arithmetic(),
+                    expected_policy
+                );
+
+                // Change only the native input binding; both queries retain the same Spark expectation.
+                let mut native_case = reference.clone();
+                native_case["sql"] = json!(sql);
+                let observation =
+                    compare_exact_spark_query_stages_with_optimized(&session, &native_case)
+                        .await
+                        .unwrap_or_else(|error| json!({"observer_error":error.to_string()}));
+                let matches = native_result_matches_spark_reference(&observation, reference);
+                if !completed.insert((case_identity(reference)?, batch_size, decoded)) || !matches {
+                    differences.push(format!(
+                        "{id} ANSI={ansi_mode} batch={batch_size} decoded={decoded}"
+                    ));
+                }
+                eprintln!(
+                    "DICTIONARY_NULL_RANGE_OBSERVATION {}",
+                    json!({
+                        "id":id,"ansi":ansi_mode,"batch":batch_size,"decoded":decoded,"null_dictionary_key":null_key,
+                        "native_sql":native_case["sql"],"equivalent_decoded_sql":decoded_sql,
+                        "reference":reference,"observation":observation,"spark_matches":matches
+                    })
+                );
+            }
+        }
+    }
+    assert_eq!(completed.len(), 32);
+    assert!(
+        differences.is_empty(),
+        "dictionary NULL RANGE differences:\n{}",
+        differences.join("\n")
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn null_range_frames_match_spark_and_rows_bounds_reject() -> TestResult {
     let (request, records) = parse_null_range_fixture()?;
     let rows_controls: Vec<Value> = serde_json::from_str(PRIOR_ROWS_REJECTIONS)?;
