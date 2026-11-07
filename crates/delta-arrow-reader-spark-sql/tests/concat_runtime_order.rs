@@ -496,7 +496,10 @@ fn retained_runtime_profiles_reject_changed_public_results_and_contexts() -> Tes
             && context["id"] == "rng_885_one_partition_direct"
         {
             assert!(!matches_retained_native_negative(
-                context, case, &active_actual, profiles
+                context,
+                case,
+                &active_actual,
+                profiles
             )?);
             // Current Fields come from Spark; captured rows and raw receipts stay exact.
             active_actual["analyzed_schema"] = case["expected"]["analyzed_schema"].clone();
@@ -508,7 +511,9 @@ fn retained_runtime_profiles_reject_changed_public_results_and_contexts() -> Tes
             assert_eq!(context["id"], "rng_885_one_partition_direct");
             assert_eq!(context["batch_size"], 32);
             assert!(matches_reference(case, actual)?);
-            assert!(!matches_retained_native_negative(context, case, actual, profiles)?);
+            assert!(!matches_retained_native_negative(
+                context, case, actual, profiles
+            )?);
             retired_rng_profiles += 1;
             continue;
         }

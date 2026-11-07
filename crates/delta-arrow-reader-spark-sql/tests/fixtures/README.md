@@ -210,6 +210,15 @@ diagnostic fallbacks and does not imply complete Spark parity. All nullable
 fields remain exact. Both original CASE guard orders and the implicit-NULL case
 still require strict matches in all 12 contexts.
 
+The accepted replay correction for
+`replay/existing-nonansi-zero-cases/112/volatile_divisor_true` requires one
+analyzer context before the original Arrow divide cause after the RAND bound
+folds. It stores `spark_decimal_null_propagation`, the replay's existing canonical
+name for `preserve_spark_expression_errors`. The `execution_error` status and `r`
+output name stay exact. On staging `c7a3545c`, this query fails during collection;
+with #838 it fails during physical preparation. The original Spark record reports
+only `execution_error`; it does not identify a finer Spark phase.
+
 ## Integer-day DATE arithmetic
 
 `date-day-arithmetic-spark.jsonl` contains 296 independent Spark 4.2.0
@@ -3520,13 +3529,18 @@ contexts. CSE and local VALUES keep their required errors. Local VALUES reports
 DIVIDE_BY_ZERO at Spark `optimized_schema` and native `physical`; the tests keep
 those stage names separate and compare the exact cause and available fields.
 
-`concat-runtime-native-negative-profiles.jsonl` preserves 17 native R3 receipts
-with their original source hashes, commands, settings and log identities. Nine
-supplementary and eight matched RNG results remain strict Spark differences.
-The seeded value differences are tracked by #901, and direct RAND nullability
-by #875. Three supplementary receipts retain competing errors on different rows
-of an unordered query. Their checks pin complete public fields, exact values,
-row IDs, causes, stages and context without granting compatibility credit.
+`concat-runtime-native-negative-profiles.jsonl` preserves all 17 native R3 receipts
+with their original source hashes, commands, settings and log identities. The
+active expectations cover nine supplementary and six matched RNG negative
+contexts. Both direct RAND contexts at batch size 32 require complete strict
+Spark fields and rows. For the two direct RAND contexts at batch size 1, #838
+updates only the current analyzed and physical `r.nullable` expectations to false.
+Their captured rows, original nullable declarations and Arrow receipts stay
+unchanged. The remaining seeded value differences are tracked by #901.
+These direct RAND contexts cover only part of #875; the issue remains open.
+Three supplementary receipts retain competing errors on different rows of an
+unordered query. Their checks pin complete public fields, exact values, row IDs,
+causes, stages and context without granting compatibility credit.
 Raw Arrow receipts remain available; internal analyzer aliases are not public
 field names. The matched RNG inputs use one real native partition and Spark
 local[1], with batch sizes 1 and 32.

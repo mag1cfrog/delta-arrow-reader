@@ -606,7 +606,9 @@ async fn rand_divisor_correction_requires_its_wrapper_and_original_cause() -> Te
     let cause = "Arrow error: Divide by zero error";
     assert_eq!(original.expected["error"], cause);
     let mut expected = original.expected.clone();
-    expected["error"] = json!(format!("spark_decimal_null_propagation\ncaused by\n{cause}"));
+    expected["error"] = json!(format!(
+        "spark_decimal_null_propagation\ncaused by\n{cause}"
+    ));
     assert_eq!(corrections.get(&original.id), Some(&expected));
     let mut query = original.clone();
     query.expected = expected;
@@ -620,7 +622,9 @@ async fn rand_divisor_correction_requires_its_wrapper_and_original_cause() -> Te
         ("error", json!(cause)),
         (
             "error",
-            json!(format!("preserve_spark_expression_errors\ncaused by\n{raw_error}")),
+            json!(format!(
+                "preserve_spark_expression_errors\ncaused by\n{raw_error}"
+            )),
         ),
         ("error", json!(format!("{raw_error} (different cause)"))),
         ("status", json!("planning_error")),
@@ -634,6 +638,10 @@ async fn rand_divisor_correction_requires_its_wrapper_and_original_cause() -> Te
     let mut unlisted = original;
     unlisted.id.push_str("/unlisted");
     assert!(!corrections.contains_key(&unlisted.id));
-    assert!(!matches_recorded_outcome(&unlisted, &actual, &parallel_errors));
+    assert!(!matches_recorded_outcome(
+        &unlisted,
+        &actual,
+        &parallel_errors
+    ));
     Ok(())
 }
