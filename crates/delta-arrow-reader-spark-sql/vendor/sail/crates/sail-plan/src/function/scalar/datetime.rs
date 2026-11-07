@@ -1,6 +1,7 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
+use datafusion::arrow::array::timezone::Tz;
 use datafusion::arrow::compute::can_cast_types;
 use datafusion::arrow::datatypes::{
     DataType, IntervalDayTimeType, IntervalUnit, IntervalYearMonthType, TimeUnit,
@@ -867,6 +868,40 @@ fn unix_time_unit(input: ScalarFunctionInput, time_unit: TimeUnit) -> PlanResult
     ))
 }
 
+/// TIMESTAMP_SECONDS, TIMESTAMP_MILLIS and TIMESTAMP_MICROS: the instant `argument` units of
+/// `micros_per_unit` microseconds after the epoch. Like every Spark TIMESTAMP, it is annotated
+/// with the session time zone, so zone-dependent functions read its local date-time there. A
+/// session zone Arrow cannot parse, such as `PST`, keeps UTC (#1029).
+fn timestamp_from_epoch(input: ScalarFunctionInput, micros_per_unit: i64) -> PlanResult<Expr> {
+    let argument = input.arguments.one()?;
+    let session_timezone = &input.function_context.plan_config.session_timezone;
+    let zone = if session_timezone.parse::<Tz>().is_ok() {
+        Arc::clone(session_timezone)
+    } else {
+        "UTC".into()
+    };
+    let data_type = DataType::Timestamp(TimeUnit::Microsecond, Some(zone));
+    if micros_per_unit != 1 {
+        return Ok(cast(
+            cast(argument, DataType::Int64) * lit(micros_per_unit),
+            data_type,
+        ));
+    }
+    let argument_type = argument.get_type(input.function_context.schema)?;
+    Ok(
+        if argument_type.is_integer() || argument_type == DataType::Null {
+            cast(argument, data_type)
+        } else {
+            // Spark rejects other arguments (#1111). Arrow would read a STRING or DATE as a local
+            // date-time in the target zone, so they keep their UTC reading.
+            cast(
+                argument,
+                DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
+            )
+        },
+    )
+}
+
 fn current_timestamp_microseconds(input: ScalarFunctionInput) -> PlanResult<Expr> {
     if input.arguments.is_empty() {
         let timezone = input.function_context.plan_config.session_timezone.clone();
@@ -1497,28 +1532,15 @@ pub(super) fn list_built_in_datetime_functions() -> Vec<(&'static str, ScalarFun
         ("time_to_seconds", F::unknown("time_to_seconds")),
         (
             "timestamp_micros",
-            F::cast(DataType::Timestamp(
-                TimeUnit::Microsecond,
-                Some("UTC".into()),
-            )),
+            F::custom(|input| timestamp_from_epoch(input, 1)),
         ),
         (
             "timestamp_millis",
-            F::unary(|arg| {
-                cast(
-                    cast(arg, DataType::Int64) * lit(1_000_i64),
-                    DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
-                )
-            }),
+            F::custom(|input| timestamp_from_epoch(input, 1_000)),
         ),
         (
             "timestamp_seconds",
-            F::unary(|arg| {
-                cast(
-                    cast(arg, DataType::Int64) * lit(1_000_000_i64),
-                    DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
-                )
-            }),
+            F::custom(|input| timestamp_from_epoch(input, 1_000_000)),
         ),
         ("timestampadd", F::custom(timestampadd)),
         ("timestamp_add", F::custom(timestampadd)),
