@@ -66,13 +66,9 @@ async fn execute_comparison_query(session: &SessionContext, case: &Value) -> Tes
         .zip(schema.fields())
     {
         assert_eq!(logical.data_type(), physical.data_type());
+        // Registered UTC columns are read in the session zone, like TIMESTAMP literals (#1012).
         if let DataType::Timestamp(_, Some(timezone)) = physical.data_type() {
-            assert_eq!(
-                timezone.as_ref(),
-                case["result_timezone"]
-                    .as_str()
-                    .unwrap_or(&options.session_timezone)
-            );
+            assert_eq!(timezone.as_ref(), options.session_timezone.as_ref());
         }
     }
     let mut rows = Vec::new();

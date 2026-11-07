@@ -36,7 +36,7 @@ def queries():
                                            ("equal_reverse", f"{target}={string}"),
                                            ("nullif_string", f"NULLIF({string},{target})"),
                                            ("nullif_temporal", f"NULLIF({target},{string})")]:
-                yield "UTC", f"{column}_{name}_{name_suffix}", f"SELECT {expression} AS r", False
+                yield "UTC", f"{column}_{name}_{name_suffix}", f"SELECT {expression} AS r"
         for timezone, text in [("America/Phoenix", "2026-01-02 00:00:00"),
                                ("+05:45", "2026-01-02 00:00:00"),
                                ("America/New_York", "2026-03-08 02:30:00.123456"),
@@ -45,25 +45,25 @@ def queries():
             for reverse in [False, True]:
                 left, right = (target, f"'{text}'") if reverse else (f"'{text}'", target)
                 for name, expression in [("equal", f"{left}={right}"), ("nullif", f"NULLIF({left},{right})")]:
-                    yield timezone, f"{column}_{text}_{reverse}_{name}", f"SELECT {expression} AS r", False
+                    yield timezone, f"{column}_{text}_{reverse}_{name}", f"SELECT {expression} AS r"
         for timezone in ["UTC", "America/Phoenix", "America/New_York", "+05:45"]:
             for name, expression in [("equal", f"s={column}"), ("reverse", f"{column}=s"),
                                      ("less", f"s<{column}"), ("nullsafe", f"s<=>{column}"),
                                      ("nullif_string", f"NULLIF(s,{column})"),
                                      ("nullif_temporal", f"NULLIF({column},s)")]:
                 for subset in ["", " WHERE k<>1", " WHERE false"]:
-                    yield timezone, f"external_{column}_{name}_{subset}", f"SELECT {expression} AS r FROM external_string_temporal{subset} ORDER BY k", column == "ltz" and name == "nullif_temporal"
+                    yield timezone, f"external_{column}_{name}_{subset}", f"SELECT {expression} AS r FROM external_string_temporal{subset} ORDER BY k"
         source = " FROM VALUES (0,'bad'),(1,CAST(NULL AS STRING)),(2,'2026-01-02') t(k,s)"
         for name, expression in [("known_null_right", f"NULLIF(s,CAST(NULL AS {data_type}))"),
                                  ("known_null_left", f"NULLIF(CAST(NULL AS {data_type}),s)"),
                                  ("equal_null", f"s=CAST(NULL AS {data_type})")]:
             for label, table in [("local", source), ("registered", " FROM external_string_temporal")]:
-                yield "UTC", f"{column}_{name}_{label}", f"SELECT {expression} AS r{table} ORDER BY k", column == "ltz" and name == "known_null_left" and label == "registered"
+                yield "UTC", f"{column}_{name}_{label}", f"SELECT {expression} AS r{table} ORDER BY k"
         for name, expression in [("equal", f"s=CAST('2026-01-02' AS {data_type})"),
                                  ("nullif_string", f"NULLIF(s,CAST('2026-01-02' AS {data_type}))"),
                                  ("nullif_temporal", f"NULLIF(CAST('2026-01-02' AS {data_type}),s)")]:
             for suffix in [" ORDER BY k", " WHERE false", " LIMIT 0"]:
-                yield "UTC", f"{column}_local_{name}_{suffix}", f"SELECT {expression} AS r{source}{suffix}", False
+                yield "UTC", f"{column}_local_{name}_{suffix}", f"SELECT {expression} AS r{source}{suffix}"
         for name, sql in [
             ("unused_case", f"SELECT CASE WHEN false THEN 'bad'={target} ELSE true END AS r"),
             ("empty_literal", f"SELECT 'bad'={target} AS r WHERE false"),
@@ -71,7 +71,7 @@ def queries():
             ("join", f"SELECT x.k AS r FROM external_string_temporal x JOIN external_string_temporal y ON x.s=y.{column} ORDER BY x.k"),
             ("between", f"SELECT k AS r FROM external_string_temporal WHERE s BETWEEN {column} AND {column} ORDER BY k"),
         ]:
-            yield "America/Phoenix", f"{column}_{name}", sql, False
+            yield "America/Phoenix", f"{column}_{name}", sql
         for reverse in [False, True]:
             target = f"CAST('2026-01-02' AS {data_type})"
             left, right = (target, "'bad'") if reverse else ("'bad'", target)
@@ -81,7 +81,7 @@ def queries():
                 ("limit", f"SELECT {expression} AS r LIMIT 0"),
                 ("unused", f"SELECT CASE WHEN false THEN {expression} END AS r"),
             ]:
-                yield "UTC", f"{column}_nullif_literal_{reverse}_{name}", sql, False
+                yield "UTC", f"{column}_nullif_literal_{reverse}_{name}", sql
     for data_type in ["INT", "DOUBLE", "DECIMAL(10,2)", "BOOLEAN"]:
         for reverse in [False, True]:
             target = f"CAST(1 AS {data_type})"
@@ -92,7 +92,7 @@ def queries():
                 ("limit", f"SELECT {expression} AS r LIMIT 0"),
                 ("unused", f"SELECT CASE WHEN false THEN {expression} END AS r"),
             ]:
-                yield "UTC", f"{data_type}_nullif_literal_{reverse}_{name}", sql, False
+                yield "UTC", f"{data_type}_nullif_literal_{reverse}_{name}", sql
     for reverse in [False, True]:
         left, right = ("DATE '2026-01-02'", "'bad'") if reverse else ("'bad'", "DATE '2026-01-02'")
         expression = f"NULLIF({left},{right})"
@@ -106,7 +106,7 @@ def queries():
             ("nested_local_limit", f"SELECT {expression} AS r FROM (SELECT k FROM VALUES (0) t(k) LIMIT 0) t"),
             ("nested_empty", f"SELECT {expression} AS r FROM (SELECT k FROM external_string_temporal WHERE false) t"),
         ]:
-            yield "UTC", f"d_nullif_typed_literal_{reverse}_{name}", sql, False
+            yield "UTC", f"d_nullif_typed_literal_{reverse}_{name}", sql
 
 
 def main():
@@ -127,7 +127,7 @@ def main():
         schema = StructType([StructField("k", IntegerType(), False), StructField("s", StringType()),
                              StructField("d", DateType()), StructField("ntz", TimestampNTZType()), StructField("ltz", TimestampType())])
         spark.createDataFrame(rows, schema).createOrReplaceTempView("external_string_temporal")
-        for timezone, name, sql, original_ltz in queries():
+        for timezone, name, sql in queries():
             spark.conf.set("spark.sql.session.timeZone", timezone)
             for ansi in [True, False]:
                 spark.conf.set("spark.sql.ansi.enabled", str(ansi).lower())
@@ -142,8 +142,6 @@ def main():
                         raise
                     expected = {"status": "error", "condition": condition}
                 record = {"id": name, "sql": sql, "timezone": timezone, "ansi": ansi, "expected": expected}
-                if original_ltz:
-                    record["result_timezone"] = "UTC"
                 if expected["status"] == "error" and name.startswith(("ntz_", "ltz_", "external_ntz_", "external_ltz_")):
                     record["error_representation"] = "timestamp_parser"
                 observations.append(record)
