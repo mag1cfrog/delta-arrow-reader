@@ -115,7 +115,8 @@ async fn regexp_replace_preserves_async_string_arguments_and_native_dispatch() -
                     &Schema::new(vec![Field::new("r", DataType::Utf8, false)])
                 );
                 assert_eq!(counts.snapshot(), json!({"calls":0,"events":[]}));
-                actual["analyzed_schema"] = string_binary::capture_schema(frame.schema().fields(), None)?;
+                actual["analyzed_schema"] =
+                    string_binary::capture_schema(frame.schema().fields(), None)?;
                 actual["analyzed_arrow_schema"] = json!(format!("{:?}", frame.schema()));
                 actual["inner_after_resolve"] = counts.snapshot();
                 counts.phase.store(1, Ordering::SeqCst);
@@ -136,8 +137,12 @@ async fn regexp_replace_preserves_async_string_arguments_and_native_dispatch() -
                     &Schema::new(vec![Field::new("#0", DataType::Utf8, false)])
                 );
                 assert_eq!(counts.snapshot(), json!({"calls":0,"events":[]}));
-                actual["analyzed_schema"] = string_binary::capture_schema(query.logical_plan.schema().fields(), Some(&query.column_names))?;
-                actual["analyzed_arrow_schema"] = json!(format!("{:?}", query.logical_plan.schema()));
+                actual["analyzed_schema"] = string_binary::capture_schema(
+                    query.logical_plan.schema().fields(),
+                    Some(&query.column_names),
+                )?;
+                actual["analyzed_arrow_schema"] =
+                    json!(format!("{:?}", query.logical_plan.schema()));
                 actual["inner_after_resolve"] = counts.snapshot();
                 counts.phase.store(1, Ordering::SeqCst);
                 query.create_physical_plan(&session).await?
@@ -145,7 +150,8 @@ async fn regexp_replace_preserves_async_string_arguments_and_native_dispatch() -
             let schema = Arc::new(Schema::new(vec![Field::new("r", DataType::Utf8, false)]));
             assert_eq!(physical.schema(), schema);
             assert_eq!(counts.snapshot(), json!({"calls":0,"events":[]}));
-            actual["physical_schema"] = string_binary::capture_schema(physical.schema().fields(), None)?;
+            actual["physical_schema"] =
+                string_binary::capture_schema(physical.schema().fields(), None)?;
             actual["physical_arrow_schema"] = json!(format!("{:?}", physical.schema()));
             actual["inner_after_physical"] = counts.snapshot();
             counts.phase.store(2, Ordering::SeqCst);

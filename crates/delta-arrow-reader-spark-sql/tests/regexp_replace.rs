@@ -703,7 +703,10 @@ async fn regexp_replace_preserves_native_sql() -> TestResult {
         "SELECT '${x}' AS literal_x,'${missing}' AS literal_missing,regexp_replace('a','(a)','${x}','g') AS r",
     ] {
         let expected = native_batches(&plain, sql, json!({"phase":"plain"})).await?;
-        assert_eq!(native_batches(&session, sql, json!({"phase":"configured_before"})).await?, expected);
+        assert_eq!(
+            native_batches(&session, sql, json!({"phase":"configured_before"})).await?,
+            expected
+        );
         native.push((sql, expected));
     }
     for ansi in [true, false] {
@@ -715,7 +718,10 @@ async fn regexp_replace_preserves_native_sql() -> TestResult {
             capture_result(&session, &json!({"sql":sql,"ansi":ansi})).await?;
         }
         for (sql, expected) in &native {
-            assert_eq!(native_batches(&session, sql, json!({"phase":"after_spark","ansi":ansi})).await?, *expected);
+            assert_eq!(
+                native_batches(&session, sql, json!({"phase":"after_spark","ansi":ansi})).await?,
+                *expected
+            );
         }
         for enabled in [true, false] {
             let actual = capture_result(&session, &json!({
@@ -727,7 +733,15 @@ async fn regexp_replace_preserves_native_sql() -> TestResult {
                 json!([[if enabled { "configured" } else { "${x}" }]])
             );
             for (sql, expected) in &native {
-                assert_eq!(native_batches(&session, sql, json!({"phase":"after_substitution","ansi":ansi,"enabled":enabled})).await?, *expected);
+                assert_eq!(
+                    native_batches(
+                        &session,
+                        sql,
+                        json!({"phase":"after_substitution","ansi":ansi,"enabled":enabled})
+                    )
+                    .await?,
+                    *expected
+                );
             }
         }
     }
@@ -1035,15 +1049,21 @@ async fn regexp_replace_evaluates_each_volatile_argument_once() -> TestResult {
                             }),
                         ));
                     }
-                    let sql = format!("SELECT k,regexp_replace(count_source(s),count_pattern(re),count_replacement(replacement)) AS r FROM {table} ORDER BY k");
+                    let sql = format!(
+                        "SELECT k,regexp_replace(count_source(s),count_pattern(re),count_replacement(replacement)) AS r FROM {table} ORDER BY k"
+                    );
                     let query = plan_query(
                         &session,
                         &sql,
-                        &SparkSqlOptions { ansi_mode, ..Default::default() },
+                        &SparkSqlOptions {
+                            ansi_mode,
+                            ..Default::default()
+                        },
                     )
                     .await?;
                     let physical = query.create_physical_plan(&session).await?;
-                    let before_collect = evaluated_rows.each_ref().map(|n| n.load(Ordering::SeqCst));
+                    let before_collect =
+                        evaluated_rows.each_ref().map(|n| n.load(Ordering::SeqCst));
                     assert_eq!(before_collect, [0; 3]);
                     let schema = physical.schema();
                     let batches =
@@ -1081,29 +1101,96 @@ async fn regexp_replace_reads_all_referenced_provider_layouts() -> TestResult {
 
     // Bind only providers referenced by these replacement corpora.
     let fixtures: &[(&str, &str, &[&str])] = &[
-        ("regex-line-missing-spark.jsonl", include_str!("fixtures/regex-line-missing-spark.jsonl"), &["rr_line_boundary"]),
-        ("regex-syntax-missing-spark.jsonl", include_str!("fixtures/regex-syntax-missing-spark.jsonl"), &["rr_syntax_boundary", "rr_syntax_empty"]),
-        ("regex-utf16-missing-spark.jsonl", include_str!("fixtures/regex-utf16-missing-spark.jsonl"), &["rr_utf16", "rr_utf16_empty", "rr_nonboundary"]),
-        ("regex-word-categories-spark.jsonl", include_str!("fixtures/regex-word-categories-spark.jsonl"), &["c06_word_categories"]),
-        ("regexp-replace-empty-utf16-spark.jsonl", include_str!("fixtures/regexp-replace-empty-utf16-spark.jsonl"), &["rr_utf16", "rr_utf16_empty", "rr_utf16_errors"]),
-        ("regexp-replace-expanded-spark.jsonl", include_str!("fixtures/regexp-replace-expanded-spark.jsonl"), &["rr_valid", "rr_invalid", "rr_nullable", "rr_empty_required", "rr_empty_nullable", "rr_all_null", "rr_guard"]),
-        ("regexp-replace-nonboundary-spark.jsonl", include_str!("fixtures/regexp-replace-nonboundary-spark.jsonl"), &["rr_nonboundary", "rr_nonboundary_empty"]),
-        ("regexp-replace-position-int-spark.jsonl", include_str!("fixtures/regexp-replace-position-int-spark.jsonl"), &["rp799", "rp799_empty"]),
-        ("regexp-replace-position-type-priority-spark.jsonl", include_str!("fixtures/regexp-replace-position-type-priority-spark.jsonl"), &["type_priority", "type_priority_empty"]),
-        ("regexp-replace-spark.jsonl", include_str!("fixtures/regexp-replace-spark.jsonl"), &["c06_strings_required", "c06_strings_nullable", "c06_strings_empty_required", "c06_strings_empty_nullable", "c06_regex_cases"]),
-        ("sql-variable-substitution-spark.jsonl", include_str!("fixtures/sql-variable-substitution-spark.jsonl"), &["rr789_required", "rr789_nullable"]),
+        (
+            "regex-line-missing-spark.jsonl",
+            include_str!("fixtures/regex-line-missing-spark.jsonl"),
+            &["rr_line_boundary"],
+        ),
+        (
+            "regex-syntax-missing-spark.jsonl",
+            include_str!("fixtures/regex-syntax-missing-spark.jsonl"),
+            &["rr_syntax_boundary", "rr_syntax_empty"],
+        ),
+        (
+            "regex-utf16-missing-spark.jsonl",
+            include_str!("fixtures/regex-utf16-missing-spark.jsonl"),
+            &["rr_utf16", "rr_utf16_empty", "rr_nonboundary"],
+        ),
+        (
+            "regex-word-categories-spark.jsonl",
+            include_str!("fixtures/regex-word-categories-spark.jsonl"),
+            &["c06_word_categories"],
+        ),
+        (
+            "regexp-replace-empty-utf16-spark.jsonl",
+            include_str!("fixtures/regexp-replace-empty-utf16-spark.jsonl"),
+            &["rr_utf16", "rr_utf16_empty", "rr_utf16_errors"],
+        ),
+        (
+            "regexp-replace-expanded-spark.jsonl",
+            include_str!("fixtures/regexp-replace-expanded-spark.jsonl"),
+            &[
+                "rr_valid",
+                "rr_invalid",
+                "rr_nullable",
+                "rr_empty_required",
+                "rr_empty_nullable",
+                "rr_all_null",
+                "rr_guard",
+            ],
+        ),
+        (
+            "regexp-replace-nonboundary-spark.jsonl",
+            include_str!("fixtures/regexp-replace-nonboundary-spark.jsonl"),
+            &["rr_nonboundary", "rr_nonboundary_empty"],
+        ),
+        (
+            "regexp-replace-position-int-spark.jsonl",
+            include_str!("fixtures/regexp-replace-position-int-spark.jsonl"),
+            &["rp799", "rp799_empty"],
+        ),
+        (
+            "regexp-replace-position-type-priority-spark.jsonl",
+            include_str!("fixtures/regexp-replace-position-type-priority-spark.jsonl"),
+            &["type_priority", "type_priority_empty"],
+        ),
+        (
+            "regexp-replace-spark.jsonl",
+            include_str!("fixtures/regexp-replace-spark.jsonl"),
+            &[
+                "c06_strings_required",
+                "c06_strings_nullable",
+                "c06_strings_empty_required",
+                "c06_strings_empty_nullable",
+                "c06_regex_cases",
+            ],
+        ),
+        (
+            "sql-variable-substitution-spark.jsonl",
+            include_str!("fixtures/sql-variable-substitution-spark.jsonl"),
+            &["rr789_required", "rr789_nullable"],
+        ),
     ];
     let mut definitions: Vec<(Value, Vec<&str>)> = Vec::new();
     let mut bindings = 0;
     for (fixture, capture, names) in fixtures {
         let header: Value = serde_json::from_str(capture.lines().next().ok_or("missing header")?)?;
-        let inputs = header.get("registered_inputs").or_else(|| header.get("inputs"))
-            .and_then(Value::as_array).ok_or("missing providers")?;
+        let inputs = header
+            .get("registered_inputs")
+            .or_else(|| header.get("inputs"))
+            .and_then(Value::as_array)
+            .ok_or("missing providers")?;
         for name in *names {
-            let matching = inputs.iter().filter(|input| input["name"] == *name).collect::<Vec<_>>();
+            let matching = inputs
+                .iter()
+                .filter(|input| input["name"] == *name)
+                .collect::<Vec<_>>();
             assert_eq!(matching.len(), 1, "{fixture}/{name}");
             let input = matching[0];
-            if let Some(index) = definitions.iter().position(|(definition, _)| definition == input) {
+            if let Some(index) = definitions
+                .iter()
+                .position(|(definition, _)| definition == input)
+            {
                 definitions[index].1.push(fixture);
             } else {
                 definitions.push((input.clone(), vec![fixture]));
@@ -1119,16 +1206,35 @@ async fn regexp_replace_reads_all_referenced_provider_layouts() -> TestResult {
         for representation in 0..3 {
             for batch_size in [1, 32] {
                 let session = session(batch_size);
-                register_inputs(&session, &json!({"registered_inputs":[input]}), representation, batch_size)?;
+                register_inputs(
+                    &session,
+                    &json!({"registered_inputs":[input]}),
+                    representation,
+                    batch_size,
+                )?;
                 let provider = session.table_provider(name).await?;
                 let schema = provider.schema();
-                assert_eq!(string_binary::capture_schema(schema.fields(), None)?, input["schema"]);
-                for (field, declared) in schema.fields().iter().zip(input["schema"]["fields"].as_array().ok_or("missing fields")?) {
+                assert_eq!(
+                    string_binary::capture_schema(schema.fields(), None)?,
+                    input["schema"]
+                );
+                for (field, declared) in schema.fields().iter().zip(
+                    input["schema"]["fields"]
+                        .as_array()
+                        .ok_or("missing fields")?,
+                ) {
                     let expected = match declared["type"].as_str().ok_or("missing type")? {
                         "integer" => DataType::Int32,
                         "long" => DataType::Int64,
-                        "string" => [DataType::Utf8, DataType::LargeUtf8, DataType::Utf8View][representation].clone(),
-                        "binary" => [DataType::Binary, DataType::LargeBinary, DataType::BinaryView][representation].clone(),
+                        "string" => [DataType::Utf8, DataType::LargeUtf8, DataType::Utf8View]
+                            [representation]
+                            .clone(),
+                        "binary" => [
+                            DataType::Binary,
+                            DataType::LargeBinary,
+                            DataType::BinaryView,
+                        ][representation]
+                            .clone(),
                         other => return Err(format!("unexpected provider type: {other}").into()),
                     };
                     assert_eq!(field.data_type(), &expected, "{name}/{}", field.name());
@@ -1152,10 +1258,31 @@ async fn regexp_replace_reads_all_referenced_provider_layouts() -> TestResult {
                         assert_eq!(batch.schema(), schema);
                     }
                     let result = string_binary::capture_batches(batches)?;
-                    let expected_batches = expected_rows.chunks(batch_size).enumerate()
-                        .filter(|(chunk, _)| chunk % 2 == partition).map(|(_, rows)| rows).collect::<Vec<_>>();
-                    assert_eq!(result["rows"], json!(expected_batches.iter().flat_map(|rows| rows.iter()).collect::<Vec<_>>()));
-                    assert_eq!(batches.iter().map(|batch| batch.num_rows()).collect::<Vec<_>>(), expected_batches.iter().map(|rows| rows.len()).collect::<Vec<_>>());
+                    let expected_batches = expected_rows
+                        .chunks(batch_size)
+                        .enumerate()
+                        .filter(|(chunk, _)| chunk % 2 == partition)
+                        .map(|(_, rows)| rows)
+                        .collect::<Vec<_>>();
+                    assert_eq!(
+                        result["rows"],
+                        json!(
+                            expected_batches
+                                .iter()
+                                .flat_map(|rows| rows.iter())
+                                .collect::<Vec<_>>()
+                        )
+                    );
+                    assert_eq!(
+                        batches
+                            .iter()
+                            .map(|batch| batch.num_rows())
+                            .collect::<Vec<_>>(),
+                        expected_batches
+                            .iter()
+                            .map(|rows| rows.len())
+                            .collect::<Vec<_>>()
+                    );
                     actual.push(json!({"partition":partition,"result":result}));
                 }
                 eprintln!(

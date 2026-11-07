@@ -168,7 +168,11 @@ async fn compare_cases(
     expected_key: &str,
     differences: &mut Vec<String>,
 ) -> TestResult<usize> {
-    let native = native_controls(&SessionContext::new(), json!({"corpus":corpus,"provider_inputs":header.is_some(),"phase":"plain"})).await?;
+    let native = native_controls(
+        &SessionContext::new(),
+        json!({"corpus":corpus,"provider_inputs":header.is_some(),"phase":"plain"}),
+    )
+    .await?;
     let mut compared = BTreeSet::new();
     for representation in 0..3 {
         for batch_size in [1, 32] {

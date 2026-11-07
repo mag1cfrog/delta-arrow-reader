@@ -448,7 +448,14 @@ async fn replacement_preparation_matches_all_34_independent_references() -> Test
                     ));
                 }
             }
-            assert_eq!(native_controls(&session, json!({"phase":"after","representation":representation,"batch_size":batch_size})).await?, native);
+            assert_eq!(
+                native_controls(
+                    &session,
+                    json!({"phase":"after","representation":representation,"batch_size":batch_size})
+                )
+                .await?,
+                native
+            );
             assert!(marker_absent(&session));
         }
     }
@@ -588,7 +595,9 @@ async fn replacement_preparation_evaluates_foldable_immutable_arguments_once() -
                 assert_eq!(calls.load(Ordering::SeqCst), 1, "{sql}");
                 assert_eq!(query.logical_plan.schema(), &resolved);
                 let physical_schema = physical.as_ref().ok().map(|p| format!("{:?}", p.schema()));
-                let physical_fields = physical.as_ref().ok()
+                let physical_fields = physical
+                    .as_ref()
+                    .ok()
                     .map(|plan| string_binary::capture_schema(plan.schema().fields(), None))
                     .transpose()?;
                 let error = physical.as_ref().err().map(ToString::to_string);

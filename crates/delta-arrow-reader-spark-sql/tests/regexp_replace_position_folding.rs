@@ -15,7 +15,10 @@ use datafusion::prelude::{SessionConfig, SessionContext};
 use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
 use serde_json::{Value, json};
 
-#[expect(dead_code, reason = "These controls use schema and collected-batch readback only.")]
+#[expect(
+    dead_code,
+    reason = "These controls use schema and collected-batch readback only."
+)]
 #[path = "support/string_binary.rs"]
 mod string_binary;
 

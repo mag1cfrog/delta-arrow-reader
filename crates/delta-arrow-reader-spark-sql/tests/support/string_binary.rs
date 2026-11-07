@@ -213,7 +213,10 @@ fn encode_value(column: &dyn Array, row: usize) -> TestResult<Value> {
 }
 
 // Read collected batches without planning or evaluating the query again.
-#[allow(dead_code, reason = "Integration tests select individual shared observers.")]
+#[allow(
+    dead_code,
+    reason = "Integration tests select individual shared observers."
+)]
 pub(crate) fn capture_batches(batches: &[RecordBatch]) -> TestResult<Value> {
     let mut rows = Vec::new();
     let mut observed = Vec::new();
@@ -221,7 +224,9 @@ pub(crate) fn capture_batches(batches: &[RecordBatch]) -> TestResult<Value> {
         let mut batch_rows = Vec::new();
         for row in 0..batch.num_rows() {
             batch_rows.push(
-                batch.columns().iter()
+                batch
+                    .columns()
+                    .iter()
                     .map(|column| encode_value(column.as_ref(), row))
                     .collect::<TestResult<Vec<_>>>()?,
             );
