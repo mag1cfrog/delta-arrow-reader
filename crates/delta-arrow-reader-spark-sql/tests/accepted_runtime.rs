@@ -455,10 +455,16 @@ fn integral_cast_corrections_require_the_condition_and_original_contract() -> Te
 fn parallel_error_alternatives_preserve_other_guarantees() -> TestResult {
     let parallel_errors: BTreeMap<String, Value> =
         serde_json::from_str(include_str!("fixtures/parallel-error-outcomes.json"))?;
+    assert_eq!(parallel_errors.len(), 20);
+    let integral_cast_ids = [
+        "replay/cast-empty-group-scalar-cases/1449/only_int_union_exists_true",
+        "replay/cast-empty-group-scalar-cases/1450/only_int_union_count_true",
+    ];
     let reader = std::io::BufReader::new(GzDecoder::new(
         &include_bytes!("fixtures/accepted-runtime.jsonl.gz")[..],
     ));
     let mut checked = 0;
+    let mut checked_integral_casts = 0;
     for line in reader.lines() {
         let mut query: RecordedQuery = serde_json::from_str(&line?)?;
         let Some(alternative) = parallel_errors.get(&query.id) else {
@@ -479,6 +485,21 @@ fn parallel_error_alternatives_preserve_other_guarantees() -> TestResult {
             alternative,
             &parallel_errors
         ));
+
+        if integral_cast_ids.contains(&query.id.as_str()) {
+            let cause = "Arrow error: Cast error: Cannot cast string 'bad' to value of Int32 type";
+            let error = format!("[CAST_INVALID_INPUT]\ncaused by\n{cause}");
+            assert_eq!(alternative["error"], error);
+            for wrong_error in [
+                cause.to_owned(),
+                format!("[CAST_INVALID_INPUT]\ncaused by\n{error}"),
+            ] {
+                let mut wrong = alternative.clone();
+                wrong["error"] = json!(wrong_error);
+                assert!(!matches_recorded_outcome(&query, &wrong, &parallel_errors));
+            }
+            checked_integral_casts += 1;
+        }
 
         for (field, value) in [
             ("status", json!("planning_error")),
@@ -527,5 +548,29 @@ fn parallel_error_alternatives_preserve_other_guarantees() -> TestResult {
         parallel_errors.len(),
         "every exception must identify a captured query"
     );
+    assert_eq!(checked_integral_casts, integral_cast_ids.len());
+    Ok(())
+}
+
+#[tokio::test]
+async fn grouped_integral_cast_keeps_the_parallel_error_envelope() -> TestResult {
+    let parallel_errors: BTreeMap<String, Value> =
+        serde_json::from_str(include_str!("fixtures/parallel-error-outcomes.json"))?;
+    let query = RecordedQuery {
+        id: "grouped_integral_cast_branch".to_owned(),
+        sql: concat!(
+            "SELECT CAST(CASE WHEN id=0 THEN 'bad' ELSE '1' END AS INT) AS r ",
+            "FROM range(3) ",
+            "GROUP BY CAST(CASE WHEN id=0 THEN 'bad' ELSE '1' END AS INT)"
+        )
+        .to_owned(),
+        batch_size: 2,
+        ansi: true,
+        expected: parallel_errors
+            .get("replay/cast-empty-group-scalar-cases/1450/only_int_union_count_true")
+            .ok_or("missing integral cast alternative")?
+            .clone(),
+    };
+    assert_eq!(observe(&query).await?, query.expected);
     Ok(())
 }
