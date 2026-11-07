@@ -759,7 +759,8 @@ equality, NULLIF, BETWEEN and ON/USING joins share the reference checks.
 The capture's registered-table inputs are also registered as Arrow arrays by
 `comparison_coercion.rs`. Their LTZ column carries UTC while the session can use
 Phoenix or another zone. Comparisons must interpret DATE/NTZ in the session zone;
-NULLIF must retain its first input's original value, type and timezone annotation.
+NULLIF must retain its first input's original value and type, with the LTZ column
+annotated with the session zone as for any registered TIMESTAMP (#1012).
 The native DataFusion control retains its UTC interpretation. Runtime unit tests
 cover Date32/Date64/NTZ scalars, array slices, NULLs and empty inputs; volatile
 counters check that conversion does not repeat the original expression.
@@ -778,7 +779,8 @@ outside the i64-nanosecond range.
 
 `timestamp_precision.rs` checks both operand orders and ANSI modes, two batch
 sizes, sliced arrays, NULLs, empty results, all comparison operators, NULLIF,
-BETWEEN and ON/USING joins. NULLIF retains the original ticks, type and timezone.
+BETWEEN and ON/USING joins. NULLIF retains the original ticks and unit; a zoned
+input is annotated with the session zone (#1012).
 Local inputs outside the reused timezone converter's range fail explicitly;
 they must not silently become NULL. Equal-unit instants retain native comparison.
 
