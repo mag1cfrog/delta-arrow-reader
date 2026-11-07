@@ -313,6 +313,43 @@ impl fmt::Debug for WindowFrameStateRange {
     }
 }
 
+/// Whether a nonzero INT day bound can wrap a Date32 RANGE key.
+pub fn date32_range_can_wrap(
+    data_type: &DataType,
+    units: WindowFrameUnits,
+    bound: &WindowFrameBound,
+) -> bool {
+    data_type == &DataType::Date32
+        && units == WindowFrameUnits::Range
+        && matches!(
+            bound,
+            WindowFrameBound::Preceding(ScalarValue::Int32(Some(offset)))
+                | WindowFrameBound::Following(ScalarValue::Int32(Some(offset))) if *offset != 0
+        )
+}
+
+/// Calculates the comparison target for a Date32 key and signed INT day offset.
+/// Spark's DateAdd wraps at the i32 boundary in both ANSI modes.
+/// Returns None for other scalar pairs and preserves NULL date values.
+pub fn date32_range_target(
+    value: &ScalarValue,
+    delta: &ScalarValue,
+    add_offset: bool,
+) -> Option<ScalarValue> {
+    match (value, delta) {
+        (ScalarValue::Date32(days), ScalarValue::Int32(Some(offset))) => {
+            Some(ScalarValue::Date32(days.map(|days| {
+                if add_offset {
+                    days.wrapping_add(*offset)
+                } else {
+                    days.wrapping_sub(*offset)
+                }
+            })))
+        }
+        _ => None,
+    }
+}
+
 impl WindowFrameStateRange {
     /// Create a new object to store the search state.
     fn new(sort_options: Vec<SortOptions>) -> Self {
@@ -335,69 +372,65 @@ impl WindowFrameStateRange {
         length: usize,
         idx: usize,
     ) -> Result<Range<usize>> {
-        let start = match window_frame.start_bound {
-            WindowFrameBound::Preceding(ref n) => {
-                if n.is_null() {
-                    // UNBOUNDED PRECEDING
-                    0
-                } else {
-                    self.calculate_index_of_row::<true, true>(
-                        range_columns,
-                        last_range,
-                        idx,
-                        Some(n),
-                        length,
-                    )?
-                }
-            }
-            WindowFrameBound::CurrentRow => self.calculate_index_of_row::<true, true>(
-                range_columns,
-                last_range,
-                idx,
-                None,
-                length,
-            )?,
-            WindowFrameBound::Following(ref n) => self
-                .calculate_index_of_row::<true, false>(
-                    range_columns,
-                    last_range,
-                    idx,
-                    Some(n),
-                    length,
-                )?,
-        };
-        let end = match window_frame.end_bound {
-            WindowFrameBound::Preceding(ref n) => self
-                .calculate_index_of_row::<false, true>(
-                    range_columns,
-                    last_range,
-                    idx,
-                    Some(n),
-                    length,
-                )?,
-            WindowFrameBound::CurrentRow => self.calculate_index_of_row::<false, false>(
-                range_columns,
-                last_range,
-                idx,
-                None,
-                length,
-            )?,
-            WindowFrameBound::Following(ref n) => {
-                if n.is_null() {
-                    // UNBOUNDED FOLLOWING
-                    length
-                } else {
-                    self.calculate_index_of_row::<false, false>(
-                        range_columns,
-                        last_range,
-                        idx,
-                        Some(n),
-                        length,
-                    )?
-                }
-            }
-        };
+        let date32_wrapping_bound = range_columns.first().is_some_and(|column| {
+            [&window_frame.start_bound, &window_frame.end_bound]
+                .iter()
+                .any(|bound| {
+                    date32_range_can_wrap(column.data_type(), window_frame.units, bound)
+                })
+        });
+        if date32_wrapping_bound {
+            let end = self.calculate_index_of_bound::<false>(
+                &window_frame.end_bound, range_columns, last_range, idx, length,
+            )?;
+            // Spark advances the lower cursor only over input consumed by the upper cursor.
+            let start = self.calculate_index_of_bound::<true>(
+                &window_frame.start_bound, range_columns, last_range, idx, end,
+            )?;
+            return Ok(Range { start, end });
+        }
+        let start = self.calculate_index_of_bound::<true>(
+            &window_frame.start_bound, range_columns, last_range, idx, length,
+        )?;
+        let end = self.calculate_index_of_bound::<false>(
+            &window_frame.end_bound, range_columns, last_range, idx, length,
+        )?;
         Ok(Range { start, end })
+    }
+
+    fn calculate_index_of_bound<const SIDE: bool>(
+        &mut self,
+        bound: &WindowFrameBound,
+        range_columns: &[ArrayRef],
+        last_range: &Range<usize>,
+        idx: usize,
+        length: usize,
+    ) -> Result<usize> {
+        match bound {
+            WindowFrameBound::Preceding(n) if SIDE && n.is_null() => Ok(0),
+            WindowFrameBound::Following(n) if !SIDE && n.is_null() => Ok(length),
+            WindowFrameBound::Preceding(n) => self.calculate_index_of_row::<SIDE, true>(
+                range_columns,
+                last_range,
+                idx,
+                Some(n),
+                length,
+            ),
+            WindowFrameBound::Following(n) => self.calculate_index_of_row::<SIDE, false>(
+                range_columns,
+                last_range,
+                idx,
+                Some(n),
+                length,
+            ),
+            WindowFrameBound::CurrentRow => self.calculate_index_of_row::<SIDE, false>(
+                range_columns,
+                last_range,
+                idx,
+                None,
+                length,
+            ),
+        }
     }
 
     /// This function does the heavy lifting when finding range boundaries. It is meant to be
@@ -473,7 +506,11 @@ impl WindowFrameStateRange {
                     targets.push(value.clone());
                     continue;
                 }
-                let target = if SEARCH_SIDE == is_descending {
+                let target = if let Some(target) =
+                    date32_range_target(value, delta, SEARCH_SIDE == is_descending)
+                {
+                    target
+                } else if SEARCH_SIDE == is_descending {
                     match value.add_checked(delta) {
                         Ok(v) => v,
                         Err(_) => return Ok(unbounded_edge),
@@ -733,10 +770,89 @@ mod tests {
     use super::*;
 
     use arrow::array::{
-        DictionaryArray, Float64Array, Int32Array, ListArray, StringArray,
+        Date32Array, DictionaryArray, Float64Array, Int32Array, ListArray, StringArray,
     };
     use arrow::buffer::OffsetBuffer;
     use arrow::datatypes::{Field, Int32Type};
+
+    #[test]
+    fn test_date_range_wrapping_offsets_keep_unconsumed_rows() -> Result<()> {
+        let max_days = ScalarValue::Int32(Some(i32::MAX));
+        for (days, descending, start, end, expected) in [
+            (
+                vec![-2, -1, 0, 1],
+                false,
+                WindowFrameBound::Preceding(max_days.clone()),
+                WindowFrameBound::CurrentRow,
+                vec![1..1, 1..2, 1..3, 1..4],
+            ),
+            (
+                vec![-2, -1, 0, 1],
+                false,
+                WindowFrameBound::CurrentRow,
+                WindowFrameBound::Following(max_days.clone()),
+                vec![0..4, 1..4, 2..4, 3..4],
+            ),
+            (
+                vec![2, 1, 0, -1, -2],
+                true,
+                WindowFrameBound::Preceding(max_days.clone()),
+                WindowFrameBound::CurrentRow,
+                vec![1..1, 2..2, 2..3, 2..4, 2..5],
+            ),
+            (
+                vec![1, 2],
+                false,
+                WindowFrameBound::CurrentRow,
+                WindowFrameBound::Following(max_days),
+                vec![0..0, 0..0],
+            ),
+        ] {
+            let column: ArrayRef = Arc::new(Date32Array::from(days));
+            let frame =
+                Arc::new(WindowFrame::new_bounds(WindowFrameUnits::Range, start, end));
+            let mut state = WindowFrameContext::new(
+                frame,
+                vec![SortOptions {
+                    descending,
+                    nulls_first: true,
+                }],
+            );
+            let mut last_range = 0..0;
+            for (idx, expected) in expected.into_iter().enumerate() {
+                last_range = state.calculate_range(
+                    std::slice::from_ref(&column),
+                    &last_range,
+                    column.len(),
+                    idx,
+                )?;
+                assert_eq!(last_range, expected);
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_date_zero_offsets_preserve_null_peers() -> Result<()> {
+        for (days, descending, nulls_first) in [
+            (vec![None, Some(0), Some(0), Some(1)], false, true),
+            (vec![Some(1), Some(0), Some(0), None], true, false),
+        ] {
+            let column: ArrayRef = Arc::new(Date32Array::from(days));
+            let frame = Arc::new(WindowFrame::new_bounds(
+                WindowFrameUnits::Range,
+                WindowFrameBound::Preceding(ScalarValue::Int32(Some(0))),
+                WindowFrameBound::Following(ScalarValue::Int32(Some(0))),
+            ));
+            let mut state = WindowFrameContext::new(frame, vec![SortOptions { descending, nulls_first }]);
+            let mut last_range = 0..0;
+            for (idx, expected) in [0..1, 1..3, 1..3, 3..4].into_iter().enumerate() {
+                last_range = state.calculate_range(std::slice::from_ref(&column), &last_range, column.len(), idx)?;
+                assert_eq!(last_range, expected);
+            }
+        }
+        Ok(())
+    }
 
     #[test]
     fn test_range_peer_comparator_reuses_and_releases_batch_arrays() -> Result<()> {

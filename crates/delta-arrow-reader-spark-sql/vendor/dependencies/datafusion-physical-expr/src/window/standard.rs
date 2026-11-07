@@ -1,3 +1,4 @@
+// Modified for the DAR Spark SQL runtime. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -32,7 +33,9 @@ use arrow::record_batch::RecordBatch;
 use datafusion_common::utils::evaluate_partition_ranges;
 use datafusion_common::{Result, ScalarValue};
 use datafusion_expr::WindowFrame;
-use datafusion_expr::window_state::{WindowAggState, WindowFrameContext};
+use datafusion_expr::window_state::{
+    WindowAggState, WindowFrameContext, date32_range_can_wrap,
+};
 use datafusion_physical_expr_common::sort_expr::PhysicalSortExpr;
 
 /// A window expr that takes the form of a [`StandardWindowFunctionExpr`].
@@ -200,6 +203,13 @@ impl WindowExpr for StandardWindowExpr {
             let mut row_wise_results: Vec<ScalarValue> = vec![];
             let is_causal = if evaluator.uses_window_frame() {
                 self.window_frame.is_causal()
+                    && !order_bys_ref.first().is_some_and(|column| {
+                        date32_range_can_wrap(
+                            column.data_type(),
+                            self.window_frame.units,
+                            &self.window_frame.end_bound,
+                        )
+                    })
             } else {
                 evaluator.is_causal()
             };
