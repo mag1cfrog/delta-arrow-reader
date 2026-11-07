@@ -1,6 +1,7 @@
 //! DATE and TIMESTAMP_NTZ values acquire an instant in the session timezone.
 //! For example, midnight on 2026-01-02 in Phoenix becomes 07:00 UTC. Tagged
-//! timestamps already contain instants and only need their common type selected.
+//! timestamps already contain instants and only need their common type selected,
+//! unless they are converted to TIMESTAMP_NTZ, which takes their local date-time.
 // shortcut: named-zone conversion retains ConvertTz's Chrono range; extend it in
 // the full-range timestamp slice before claiming Spark's complete i64 range.
 
@@ -12,6 +13,7 @@ use datafusion_expr::{
     ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, cast, expr, lit,
 };
 use sail_function::scalar::datetime::convert_tz::ConvertTz;
+use sail_function::scalar::datetime::spark_timestamp_to_ntz::SparkTimestampToNtz;
 
 use crate::function::is_spark_compatible_arrow_fixed_offset;
 
@@ -31,6 +33,30 @@ pub(crate) fn cast_local_timestamp_expr_to_ltz(
         timestamp_ntz,
     ]);
     cast(cast(instant, DataType::Int64), timestamp_ltz)
+}
+
+/// Spark's TIMESTAMP to TIMESTAMP_NTZ conversion of `argument`, a TIMESTAMP in `unit` annotated
+/// with `argument_zone`: each instant's local date-time in `session_timezone`, whatever zone
+/// the annotation names. A local date-time beyond the BIGINT range fails, or is NULL for
+/// `null_on_overflow`. `None` when Arrow cannot parse the session zone, such as `Z` or `PST`
+/// (#1029); the caller then keeps its previous conversion.
+pub(crate) fn ltz_expr_to_local_timestamp(
+    argument: expr::Expr,
+    unit: TimeUnit,
+    argument_zone: &Arc<str>,
+    session_timezone: &Arc<str>,
+    null_on_overflow: bool,
+) -> Option<expr::Expr> {
+    let conversion =
+        SparkTimestampToNtz::for_session_zone(Arc::clone(session_timezone), null_on_overflow)?;
+    let argument = match unit {
+        TimeUnit::Microsecond => argument,
+        _ => cast(
+            argument,
+            DataType::Timestamp(TimeUnit::Microsecond, Some(Arc::clone(argument_zone))),
+        ),
+    };
+    Some(ScalarUDF::from(conversion).call(vec![argument]))
 }
 
 pub(crate) fn cast_local_timestamp_value_to_ltz(

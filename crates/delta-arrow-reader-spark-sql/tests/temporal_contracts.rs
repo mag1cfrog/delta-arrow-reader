@@ -279,8 +279,6 @@ enum RetainedDifference {
     /// #1011: DATE and TIMESTAMP strings with years beyond the date library's range behave
     /// like the invalid string 'bad'.
     OutOfRangeStrings,
-    /// #1013: a TIMESTAMP to TIMESTAMP_NTZ cast keeps the UTC wall-clock time.
-    UtcWallClockNtzCast,
     /// #1014: DATE_FORMAT zone names and `O` offsets differ, and DATE and TIMESTAMP_NTZ
     /// inputs show UTC zone tokens.
     ZoneTokenText,
@@ -669,19 +667,6 @@ fn current_expectation(
             retained.insert(RetainedDifference::RequiredDateNtzCast);
         }
     }
-    if section == "convert"
-        && timezone == LOS_ANGELES
-        && operator == "timestamp_to_ntz"
-        && current["expected"]["status"] == "ok"
-    {
-        // The UTC wall-clock time in microseconds is the instant's UNIX_MICROS.
-        let id = text(case, "id")?.replacen("timestamp_to_ntz", "unix_micros", 1);
-        let rows = &references.sibling(case, &id, LOS_ANGELES)?["expected"]["rows"];
-        if current["expected"]["rows"] != *rows {
-            current["expected"]["rows"] = rows.clone();
-            retained.insert(RetainedDifference::UtcWallClockNtzCast);
-        }
-    }
     if section == "formatted"
         && input == "offset"
         && operator == "to_date"
@@ -777,7 +762,6 @@ async fn temporal_contracts_match_spark() -> TestResult {
             (RetainedDifference::RequiredDateNtzCast, 24),
             (RetainedDifference::DarPatternErrors, 324),
             (RetainedDifference::OutOfRangeStrings, 212),
-            (RetainedDifference::UtcWallClockNtzCast, 14),
             (RetainedDifference::ZoneTokenText, 96),
             (RetainedDifference::SkippedLocalTimeAsWritten, 24),
             (RetainedDifference::IgnoredParsedOffset, 4),

@@ -64,8 +64,6 @@ belong to several classes:
 - #1010: 324 invalid patterns fail with DAR's message while collecting rows;
   `#`, `{` and `}` are formatted as text.
 - #1011: 212 strings beyond the date library's range behave like `'bad'`.
-- #1013: 14 TIMESTAMP to TIMESTAMP_NTZ casts keep the UTC wall-clock time, which
-  equals `unix_micros` of the same value.
 - #1014: 96 DATE_FORMAT results print other zone names and `O` offsets, including
   the Los Angeles local mean time offset without its seconds, or UTC zone tokens
   for DATE and TIMESTAMP_NTZ inputs; 24 keep the hour of the
