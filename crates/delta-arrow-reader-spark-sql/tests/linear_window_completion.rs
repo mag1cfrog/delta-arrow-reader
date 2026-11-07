@@ -12,6 +12,9 @@ use arrow::datatypes::{DataType, Field, Int32Type, Schema, SchemaRef, i256};
 use arrow::record_batch::RecordBatch;
 use datafusion::common::ScalarValue;
 use datafusion::common::config::ConfigOptions;
+use datafusion::common::stats::Precision;
+use datafusion::datasource::memory::MemorySourceConfig;
+use datafusion::datasource::source::DataSourceExec;
 use datafusion::execution::TaskContext;
 use datafusion::functions_aggregate::count::count_udaf;
 use datafusion::functions_aggregate::min_max::max_udaf;
@@ -24,13 +27,15 @@ use datafusion::logical_expr::window_state::{
 use datafusion::logical_expr::{
     WindowFrame, WindowFrameBound, WindowFrameUnits, WindowFunctionDefinition,
 };
-use datafusion::physical_expr::expressions::{Literal, col};
+use datafusion::physical_expr::expressions::{Literal, col, lit};
 use datafusion::physical_expr::window::{PartitionBatches, PartitionWindowAggStates, WindowExpr};
 use datafusion::physical_expr::{LexOrdering, PhysicalSortExpr};
 use datafusion::physical_optimizer::PhysicalOptimizerRule;
 use datafusion::physical_optimizer::limit_pushdown::LimitPushdown;
+use datafusion::physical_plan::coalesce_partitions::CoalescePartitionsExec;
 use datafusion::physical_plan::execution_plan::{Boundedness, CardinalityEffect};
 use datafusion::physical_plan::limit::GlobalLimitExec;
+use datafusion::physical_plan::projection::ProjectionExec;
 use datafusion::physical_plan::sorts::sort::SortExec;
 use datafusion::physical_plan::stream::RecordBatchStreamAdapter;
 use datafusion::physical_plan::streaming::{PartitionStream, StreamingTableExec};
@@ -39,7 +44,7 @@ use datafusion::physical_plan::windows::{
     BoundedWindowAggExec, WindowAggExec, create_window_expr, get_best_fitting_window,
 };
 use datafusion::physical_plan::{
-    ExecutionPlan, ExecutionPlanProperties, SendableRecordBatchStream,
+    ExecutionPlan, ExecutionPlanProperties, InputOrderMode, SendableRecordBatchStream,
 };
 use futures_util::{FutureExt, StreamExt, stream};
 
@@ -3129,5 +3134,147 @@ fn spark_finite_integer_fetch_properties_follow_the_limit_and_current_input() ->
         default_rebuilt.cardinality_effect(),
         CardinalityEffect::Equal
     ));
+    Ok(())
+}
+
+#[tokio::test]
+async fn spark_finite_integer_fetch_statistics_sum_physical_partition_outputs() -> TestResult {
+    for (lengths, fetch) in [([3, 3], 1), ([1, 5], 2), ([0, 6], 2), ([0, 0], 2)] {
+        let partitions = lengths
+            .into_iter()
+            .enumerate()
+            .map(|(partition, length)| {
+                let rows = (0..length)
+                    .map(|key| (partition as i32 * 10 + key, partition as i32, key))
+                    .collect::<Vec<_>>();
+                source_batch(&rows, false, false).map(|batch| vec![batch])
+            })
+            .collect::<TestResult<Vec<_>>>()?;
+        let schema = partitions[0][0].schema();
+        let key_order = PhysicalSortExpr {
+            expr: col("k", &schema)?,
+            options: SortOptions::default(),
+        };
+        let ordering = LexOrdering::new(vec![
+            PhysicalSortExpr {
+                expr: col("p", &schema)?,
+                options: SortOptions::default(),
+            },
+            key_order.clone(),
+        ])
+        .ok_or("empty input order")?;
+        let source = MemorySourceConfig::try_new(&partitions, schema.clone(), None)?
+            .try_with_sort_information(vec![ordering])?;
+        let input: Arc<dyn ExecutionPlan> = DataSourceExec::from_data_source(source);
+        let window = create_window_expr(
+            &WindowFunctionDefinition::AggregateUDF(count_udaf()),
+            "n".into(),
+            &[col("id", &schema)?],
+            &[col("p", &schema)?],
+            &[key_order],
+            Arc::new(
+                WindowFrame::new_bounds(
+                    WindowFrameUnits::Range,
+                    WindowFrameBound::CurrentRow,
+                    WindowFrameBound::Following(ScalarValue::Int32(Some(1))),
+                )
+                .with_range_offset_arithmetic(RangeOffsetArithmetic::Spark { ansi_mode: true }),
+            ),
+            schema,
+            false,
+            false,
+            None,
+        )?;
+        // Each physical input contains a different complete logical p group.
+        let plan: Arc<dyn ExecutionPlan> = Arc::new(BoundedWindowAggExec::try_new(
+            vec![window],
+            input,
+            InputOrderMode::Sorted,
+            true,
+        )?);
+        assert_eq!(
+            plan.partition_statistics(None)?.num_rows,
+            Precision::Exact(lengths.into_iter().sum::<i32>() as usize)
+        );
+        let fetched = plan.with_fetch(Some(fetch)).ok_or("fetch unsupported")?;
+        let expected = lengths.map(|length| (length as usize).min(fetch));
+        for (partition, expected) in expected.into_iter().enumerate() {
+            assert_eq!(
+                fetched.partition_statistics(Some(partition))?.num_rows,
+                Precision::Exact(expected)
+            );
+        }
+        let expected_total = expected.into_iter().sum::<usize>();
+        assert_eq!(fetched.output_partitioning().partition_count(), 2);
+        assert_eq!(
+            fetched.partition_statistics(None)?.num_rows,
+            Precision::Exact(expected_total)
+        );
+        let batches =
+            datafusion::physical_plan::collect(fetched.clone(), Arc::new(TaskContext::default()))
+                .await?;
+        assert_eq!(
+            batches.iter().map(RecordBatch::num_rows).sum::<usize>(),
+            expected_total
+        );
+
+        let combined: Arc<dyn ExecutionPlan> = Arc::new(CoalescePartitionsExec::new(fetched));
+        let requested: Arc<dyn ExecutionPlan> =
+            Arc::new(GlobalLimitExec::new(combined, 0, Some(1)));
+        let limited = LimitPushdown::new().optimize(requested, &ConfigOptions::default())?;
+        let batches =
+            datafusion::physical_plan::collect(limited, Arc::new(TaskContext::default())).await?;
+        assert_eq!(
+            batches.iter().map(RecordBatch::num_rows).sum::<usize>(),
+            expected_total.min(1)
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn native_window_without_fetch_preserves_known_statistics_with_unknown_row_count() -> TestResult {
+    let batch = source_batch(&[(0, 0, 0)], false, false)?;
+    let source_schema = batch.schema();
+    let source: Arc<dyn ExecutionPlan> = Arc::new(StreamingTableExec::try_new(
+        source_schema.clone(),
+        vec![Arc::new(PendingIntegerRangeInput(batch))],
+        None,
+        [],
+        true,
+        None,
+    )?);
+    let input: Arc<dyn ExecutionPlan> = Arc::new(ProjectionExec::try_new(
+        vec![
+            (col("id", &source_schema)?, "id"),
+            (col("p", &source_schema)?, "p"),
+            (col("k", &source_schema)?, "k"),
+            (lit(7i32), "constant"),
+            (lit(ScalarValue::Int32(None)), "null_constant"),
+        ],
+        source,
+    )?);
+    let before = input.partition_statistics(None)?;
+    assert_eq!(before.num_rows, Precision::Absent);
+    assert_eq!(
+        before.column_statistics[3].min_value,
+        Precision::Exact(ScalarValue::Int32(Some(7)))
+    );
+    assert_eq!(before.column_statistics[4].byte_size, Precision::Exact(0));
+    let window = count_window(
+        input.schema(),
+        WindowFrameUnits::Range,
+        WindowFrameBound::Following(ScalarValue::Int32(Some(1))),
+        SortOptions::default(),
+    )?;
+    let plan = BoundedWindowAggExec::try_new(vec![window], input, InputOrderMode::Sorted, false)?;
+    assert_eq!(plan.fetch(), None);
+    let after = plan.partition_statistics(None)?;
+    assert_eq!(after.num_rows, Precision::Absent);
+    assert_eq!(
+        &after.column_statistics[..before.column_statistics.len()],
+        before.column_statistics.as_slice()
+    );
+    assert_eq!(after.total_byte_size, Precision::Absent);
     Ok(())
 }

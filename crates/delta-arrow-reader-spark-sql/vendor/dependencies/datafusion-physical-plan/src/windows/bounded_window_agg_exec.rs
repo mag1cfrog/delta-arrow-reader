@@ -239,12 +239,15 @@ impl BoundedWindowAggExec {
         for _ in 0..win_cols {
             column_statistics.push(ColumnStatistics::new_unknown())
         }
-        Statistics {
+        let statistics = Statistics {
             num_rows: statistics.num_rows,
             column_statistics,
             total_byte_size: Precision::Absent,
+        };
+        match self.fetch {
+            Some(fetch) => statistics.with_fetch(Some(fetch), 0, 1),
+            None => Ok(statistics),
         }
-        .with_fetch(self.fetch, 0, 1)
     }
 
     fn with_new_children_and_same_properties(
@@ -381,6 +384,16 @@ impl ExecutionPlan for BoundedWindowAggExec {
     }
 
     fn partition_statistics(&self, partition: Option<usize>) -> Result<Arc<Statistics>> {
+        if partition.is_none() && self.fetch.is_some() {
+            let statistics = (0..self.output_partitioning().partition_count())
+                .map(|partition| self.partition_statistics(Some(partition)))
+                .collect::<Result<Vec<_>>>()?;
+            return Statistics::try_merge_iter(
+                statistics.iter().map(|statistics| statistics.as_ref()),
+                self.schema.as_ref(),
+            )
+            .map(Arc::new);
+        }
         let input_stat = Arc::unwrap_or_clone(self.input.partition_statistics(partition)?);
         Ok(Arc::new(self.statistics_helper(input_stat)?))
     }
