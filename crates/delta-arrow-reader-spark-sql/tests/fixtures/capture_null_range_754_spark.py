@@ -1,6 +1,6 @@
-"""Capture all 582 NULL RANGE requests with pinned Spark; --self-check starts no JVM.
+"""Capture all 598 NULL RANGE requests with pinned Spark; --self-check starts no JVM.
 
-The sibling source-only request and original DATE manifest supply SQL and providers.
+The two sibling source-only requests and original DATE manifest supply SQL and providers.
 Historical source paths are metadata. No recorded query outcomes are opened.
 """
 
@@ -22,6 +22,7 @@ from capture_date_range_747_spark import (
 
 HERE = Path(__file__).resolve().parent
 REQUEST = HERE / "null-range-754-cases.json"
+BOUNDARY_REQUEST = HERE / "null-range-754-boundary-cases.json"
 ORIGINAL_MANIFEST = HERE / "date-range-747-cases.json"
 
 
@@ -79,7 +80,51 @@ def load_capture_requests():
                         assert field["nullable"]
                     else:
                         assert str(int(value)) == value and -(2**31) <= int(value) < 2**31
-    return request
+    boundary_request = json.loads(BOUNDARY_REQUEST.read_text())
+    assert boundary_request["issue"] == 754 and boundary_request["spark_version"] == VERSION
+    assert boundary_request["spark_revision"] == REVISION
+    assert boundary_request["expected_record_count"] == 16
+    boundary, = boundary_request["corpora"]
+    assert boundary["corpus"] == "null-range-boundary-754-controls"
+    assert boundary["metadata"] == {"spark_version": VERSION, "timezone": "UTC", "inputs": []}
+    boundary_cases = boundary["cases"]
+    assert len(boundary_cases) == len({(case["id"], case["ansi"]) for case in boundary_cases}) == 16
+    assert len({case["sql"] for case in boundary_cases}) == 8
+    assert dict(Counter(case["coverage"]["key_type"] for case in boundary_cases)) == {
+        "DECIMAL(38,0)": 8, "FLOAT": 4, "DOUBLE": 4,
+    }
+    for case in boundary_cases:
+        assert set(case) == (source_fields - {"ownership"}) | {"coverage"}
+        assert case["corpus"] == boundary["corpus"] and case["ordered"] is True
+        assert isinstance(case["id"], str) and type(case["ansi"]) is bool
+        peers = [other for other in boundary_cases if other["id"] == case["id"]]
+        assert {other["ansi"] for other in peers} == {True, False}
+        assert len({other["sql"] for other in peers}) == 1
+        coverage = case["coverage"]
+        assert set(coverage) == {"key_type", "order", "frame", "inline_values"}
+        values = coverage["inline_values"]
+        assert isinstance(values, list) and values
+        assert all(isinstance(row, list) and len(row) == 2 and type(row[0]) is int
+                   and isinstance(row[1], str) for row in values)
+        assert [row[0] for row in values] == list(range(len(values)))
+        sql_values = ",".join(f"({row[0]},{row[1]})" for row in values)
+        assert case["sql"] == (
+            f"SELECT id,COUNT(*) OVER (ORDER BY k {coverage['order']} {coverage['frame']}) AS n "
+            f"FROM VALUES {sql_values} AS t(id,k) ORDER BY id")
+    decimal = [case for case in boundary_cases if case["coverage"]["key_type"] == "DECIMAL(38,0)"]
+    maximum = "CAST('" + "9" * 38 + "' AS DECIMAL(38,0))"
+    null = "CAST(NULL AS DECIMAL(38,0))"
+    frames = {f"RANGE BETWEEN {null} PRECEDING AND {maximum} FOLLOWING",
+              f"RANGE BETWEEN {maximum} FOLLOWING AND {null} PRECEDING"}
+    orders = {"ASC NULLS FIRST", "ASC NULLS LAST"}
+    combinations = Counter((case["coverage"]["frame"], case["coverage"]["order"]) for case in decimal)
+    assert combinations == Counter({(frame, order): 2 for frame in frames for order in orders})
+    assert all(case["coverage"]["inline_values"] == [[0, maximum], [1, null]] for case in decimal)
+    all_cases = cases + boundary_cases
+    assert len(all_cases) == len({(case["corpus"], case["id"], case["ansi"]) for case in all_cases}) == 598
+    assert sum(case["ordered"] for case in all_cases) == 40
+    return dict(request, expected_record_count=598, boundary_record_count=16,
+                corpora=request["corpora"] + [boundary])
 
 
 def main():
@@ -110,7 +155,7 @@ def main():
 
     assert SparkContext._gateway is None and SparkContext._active_spark_context is None
     assert SparkSession._instantiatedSession is None and SparkSession._activeSession is None
-    sources = [Path(__file__).resolve(), REQUEST, ORIGINAL_MANIFEST,
+    sources = [Path(__file__).resolve(), REQUEST, BOUNDARY_REQUEST, ORIGINAL_MANIFEST,
                HERE / "capture_date_range_747_spark.py", HERE / "capture_floating_group_keys_spark.py",
                HERE / "capture_window_name_stages_spark.py", HERE / "recapture_string_binary_spark.py"]
     source_receipts = [{"path": str(path), "sha256": file_sha256(path)} for path in sources]
@@ -155,12 +200,13 @@ def main():
             header = {**identity, "issue": 754, "spark_only": True, "reads_expected_outputs": False,
                       "corpora": registered, "schema_stage_protocol": STAGES,
                       "input_request": {"path": str(REQUEST), "sha256": source_receipts[1]["sha256"]},
+                      "input_requests": [source_receipts[1], source_receipts[2]],
                       "capture_files": source_receipts, "requested_settings": SETTINGS,
                       "effective_settings": {key: spark.conf.get(key) for key in OBSERVED_SETTINGS},
                       "master": spark.sparkContext.master,
                       "spark_context_settings": dict(spark.sparkContext.getConf().getAll()),
                       "owned_gateway": {"pid": gateway.proc.pid, "parent_pid": os.getpid()},
-                      "expected_record_count": 582,
+                      "expected_record_count": request["expected_record_count"],
                       "adaptive_policy": "Not explicitly set; actual effective default observed.",
                       "historical_source_provenance": "Source paths and hashes are provenance labels. Validation reads the sibling original DATE manifest; historical source paths are not opened."}
             output.write(json.dumps(header, separators=(",", ":")) + "\n")
@@ -174,11 +220,11 @@ def main():
                     observations.append(observed)
                     output.write(json.dumps(observed, separators=(",", ":")) + "\n")
                     output.flush()
-            assert len(observations) == 582
-            assert len({(row["corpus"], row["id"], row["ansi"]) for row in observations}) == 582
+            assert len(observations) == request["expected_record_count"]
+            assert len({(row["corpus"], row["id"], row["ansi"]) for row in observations}) == request["expected_record_count"]
             assert all(file_sha256(path) == receipt["sha256"] for path, receipt in zip(sources, source_receipts))
             failures = [(row["corpus"], row["id"], row["ansi"]) for row in observations if "capture_failure" in row]
-            print(json.dumps({"output": str(args.output), "observations": 582,
+            print(json.dumps({"output": str(args.output), "observations": len(observations),
                               "capture_failures": failures}), flush=True)
             assert not failures, ("instrumentation failures retained", failures)
             lifecycle["capture_status"] = "completed"

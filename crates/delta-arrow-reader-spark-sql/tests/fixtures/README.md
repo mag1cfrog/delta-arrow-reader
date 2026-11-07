@@ -4272,6 +4272,7 @@ retain eight ordered inline-VALUES queries in both ANSI modes. Their separate
 extremes, including complete schema stages and exact ordered rows. Every boundary
 context requires strict Spark agreement.
 
-Compare a fresh capture with
-`null-range-754-spark.jsonl` before refreshing references, preserving the original
-source metadata, historical native profiles and separate native controls.
+The capture script records both source files in one run, for 598 observations.
+Compare each corpus with its corresponding checked-in reference before
+refreshing it. Preserve the original source metadata, historical native profiles
+and separate native controls.
