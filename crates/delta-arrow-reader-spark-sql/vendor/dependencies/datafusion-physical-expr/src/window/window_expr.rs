@@ -219,6 +219,7 @@ pub trait AggregateWindowExpr: WindowExpr {
             &mut window_frame_ctx,
             0,
             false,
+            None,
         )
     }
 
@@ -250,6 +251,13 @@ pub trait AggregateWindowExpr: WindowExpr {
                 _ => unreachable!(),
             };
             let state = &mut window_state.state;
+            if partition_batch_state
+                .output_end_index
+                .is_some_and(|end| state.last_calculated_index >= end)
+            {
+                state.update(&new_empty_array(out_type), partition_batch_state)?;
+                continue;
+            }
             let record_batch = &partition_batch_state.record_batch;
             let most_recent_row = partition_batch_state.most_recent_row.as_ref();
 
@@ -267,6 +275,7 @@ pub trait AggregateWindowExpr: WindowExpr {
                 window_frame_ctx,
                 state.last_calculated_index,
                 !partition_batch_state.is_end,
+                partition_batch_state.output_end_index,
             )?;
             state.update(&out_col, partition_batch_state)?;
         }
@@ -284,6 +293,7 @@ pub trait AggregateWindowExpr: WindowExpr {
     /// * `window_frame_ctx`: Details about the window frame (see [`WindowFrameContext`]).
     /// * `idx`: The index of the current row in the record batch.
     /// * `not_end`: is the current row not the end of the partition (see [`PartitionBatchState`]).
+    /// * `output_end_index`: optional exclusive output index; comparison lookahead remains unrestricted.
     #[expect(clippy::too_many_arguments)]
     fn get_result_column(
         &self,
@@ -294,6 +304,7 @@ pub trait AggregateWindowExpr: WindowExpr {
         window_frame_ctx: &mut WindowFrameContext,
         mut idx: usize,
         not_end: bool,
+        output_end_index: Option<usize>,
     ) -> Result<ArrayRef> {
         let values = self.evaluate_args(record_batch)?;
 
@@ -326,7 +337,9 @@ pub trait AggregateWindowExpr: WindowExpr {
             };
             accumulator.update_batch(&values)?;
             let value = accumulator.evaluate()?;
-            return value.to_array_of_size(record_batch.num_rows());
+            return value.to_array_of_size(
+                output_end_index.map_or(record_batch.num_rows(), |end| end - idx),
+            );
         }
         let order_bys = get_orderby_values(self.order_by_columns(record_batch)?);
         let most_recent_row_order_bys = most_recent_row
@@ -347,7 +360,7 @@ pub trait AggregateWindowExpr: WindowExpr {
         // A wrapped DATE offset can reach future rows even for PRECEDING.
         let is_causal = self.get_window_frame().is_causal() && !date32_wrapping_end;
         let mut end_bound_safe = None;
-        while idx < length {
+        while idx < output_end_index.unwrap_or(length).min(length) {
             // Start search from the last_range. This squeezes searched range.
             let cur_range =
                 window_frame_ctx.calculate_range(&order_bys, last_range, length, idx)?;
@@ -365,6 +378,9 @@ pub trait AggregateWindowExpr: WindowExpr {
                         )?;
                         // CURRENT ROW and PRECEDING compare the same batch edges for every row.
                         if !self.get_window_frame().has_null_offset()
+                            && !self
+                                .get_window_frame()
+                                .has_nonzero_spark_integer_range_offset()
                             && !date32_wrapping_end
                             && !matches!(
                                 self.get_window_frame().end_bound,
@@ -411,10 +427,7 @@ pub(crate) fn filter_array(array: &ArrayRef, mask: &BooleanArray) -> Result<Arra
 }
 
 /// Filters a list of arrays with the provided boolean mask.
-pub(crate) fn filter_arrays(
-    arrays: &[ArrayRef],
-    mask: &BooleanArray,
-) -> Result<Vec<ArrayRef>> {
+pub(crate) fn filter_arrays(arrays: &[ArrayRef], mask: &BooleanArray) -> Result<Vec<ArrayRef>> {
     arrays.iter().map(|arr| filter_array(arr, mask)).collect()
 }
 
@@ -520,11 +533,32 @@ fn is_end_bound_safe_for_range(
 ) -> Result<bool> {
     let end_bound = &window_frame.end_bound;
     if window_frame.range_offset_arithmetic() != RangeOffsetArithmetic::DataFusion {
-        return Ok(false);
+        if window_frame.has_null_offset()
+            || !window_frame.has_nonzero_spark_integer_range_offset()
+            || !orderby_col.data_type().is_signed_integer()
+        {
+            return Ok(false);
+        }
+        let Some(most_recent_ob_col) = most_recent_ob_col.filter(|col| !col.is_empty()) else {
+            return Ok(false);
+        };
+        let current_key = ScalarValue::try_from_array(orderby_col, idx)?;
+        // Completion must not raise arithmetic errors for an exhausted comparison cursor.
+        let Some(target) = range_bound_target(
+            &current_key,
+            end_bound,
+            sort_options.descending,
+            window_frame.range_offset_arithmetic(),
+        )
+        .ok()
+        .flatten() else {
+            return Ok(false);
+        };
+        let latest = ScalarValue::try_from_array(most_recent_ob_col, 0)?;
+        return compare_rows(&[latest], &[target], &[*sort_options]).map(|order| order.is_gt());
     }
     if window_frame.has_null_offset() {
-        let Some(most_recent_ob_col) = most_recent_ob_col.filter(|col| !col.is_empty())
-        else {
+        let Some(most_recent_ob_col) = most_recent_ob_col.filter(|col| !col.is_empty()) else {
             return Ok(false);
         };
         let current_key = ScalarValue::try_from_array(orderby_col, idx)?;
@@ -538,26 +572,21 @@ fn is_end_bound_safe_for_range(
             return Ok(false);
         };
         let latest = ScalarValue::try_from_array(most_recent_ob_col, 0)?;
-        return compare_rows(&[latest], &[target], &[*sort_options])
-            .map(|order| order.is_gt());
+        return compare_rows(&[latest], &[target], &[*sort_options]).map(|order| order.is_gt());
     }
     if orderby_col.data_type() == &DataType::Date32
-        && let WindowFrameBound::Preceding(delta) | WindowFrameBound::Following(delta) =
-            end_bound
+        && let WindowFrameBound::Preceding(delta) | WindowFrameBound::Following(delta) = end_bound
         && let Some(target) = date32_range_target(
             &ScalarValue::try_from_array(orderby_col, idx)?,
             delta,
-            matches!(end_bound, WindowFrameBound::Preceding(_))
-                == sort_options.descending,
+            matches!(end_bound, WindowFrameBound::Preceding(_)) == sort_options.descending,
         )
     {
-        let Some(most_recent_ob_col) = most_recent_ob_col.filter(|col| !col.is_empty())
-        else {
+        let Some(most_recent_ob_col) = most_recent_ob_col.filter(|col| !col.is_empty()) else {
             return Ok(false);
         };
         let latest = ScalarValue::try_from_array(most_recent_ob_col, 0)?;
-        return compare_rows(&[latest], &[target], &[*sort_options])
-            .map(|order| order.is_gt());
+        return compare_rows(&[latest], &[target], &[*sort_options]).map(|order| order.is_gt());
     }
     match end_bound {
         WindowFrameBound::Preceding(value) => {
@@ -568,15 +597,12 @@ fn is_end_bound_safe_for_range(
                 Ok(true)
             }
         }
-        WindowFrameBound::CurrentRow => {
-            is_row_ahead(orderby_col, most_recent_ob_col, sort_options)
-        }
+        WindowFrameBound::CurrentRow => is_row_ahead(orderby_col, most_recent_ob_col, sort_options),
         WindowFrameBound::Following(delta) => {
             let Some(most_recent_ob_col) = most_recent_ob_col else {
                 return Ok(false);
             };
-            let most_recent_row_value =
-                ScalarValue::try_from_array(most_recent_ob_col, 0)?;
+            let most_recent_row_value = ScalarValue::try_from_array(most_recent_ob_col, 0)?;
             let current_row_value = ScalarValue::try_from_array(orderby_col, idx)?;
 
             if sort_options.descending {
@@ -589,8 +615,9 @@ fn is_end_bound_safe_for_range(
                     .map(|value| most_recent_row_value > value)
             }
         }
-        WindowFrameBound::PrecedingNullOffset(_)
-        | WindowFrameBound::FollowingNullOffset(_) => Ok(false),
+        WindowFrameBound::PrecedingNullOffset(_) | WindowFrameBound::FollowingNullOffset(_) => {
+            Ok(false)
+        }
     }
 }
 
@@ -626,9 +653,7 @@ fn is_end_bound_safe_for_groups(
                 Ok(true)
             }
         }
-        WindowFrameBound::CurrentRow => {
-            is_row_ahead(orderby_col, most_recent_ob_col, sort_options)
-        }
+        WindowFrameBound::CurrentRow => is_row_ahead(orderby_col, most_recent_ob_col, sort_options),
         WindowFrameBound::Following(ScalarValue::UInt64(Some(offset))) => {
             let delta = state.group_end_indices.len() - state.current_group_idx;
             if delta == (*offset as usize) + 1 {
@@ -697,8 +722,7 @@ mod tests {
 
     #[test]
     fn test_is_row_ahead() -> Result<()> {
-        let old_values: ArrayRef =
-            Arc::new(Float64Array::from(vec![5.0, 7.0, 8.0, 9., 10.]));
+        let old_values: ArrayRef = Arc::new(Float64Array::from(vec![5.0, 7.0, 8.0, 9., 10.]));
 
         let new_values1: ArrayRef = Arc::new(Float64Array::from(vec![11.0]));
         let new_values2: ArrayRef = Arc::new(Float64Array::from(vec![10.0]));
