@@ -251,8 +251,14 @@ fn regexp_replace_position_gate_checks_nested_async_after_type_admission() -> Pl
                 if message == "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] regexp_replace position requires INT, got Boolean")
             );
         }
-        assert_eq!(async_counts.snapshot(), serde_json::json!({"calls":0,"events":[]}));
-        assert_eq!(immutable_counts.snapshot(), serde_json::json!({"calls":0,"events":[]}));
+        assert_eq!(
+            async_counts.snapshot(),
+            serde_json::json!({"calls":0,"events":[]})
+        );
+        assert_eq!(
+            immutable_counts.snapshot(),
+            serde_json::json!({"calls":0,"events":[]})
+        );
 
         let (volatile, volatile_counts) = producer(Kind::VolatileFold);
         assert!(

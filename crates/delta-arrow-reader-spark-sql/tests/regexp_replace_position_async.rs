@@ -9,12 +9,18 @@ use datafusion::prelude::{SessionConfig, SessionContext};
 use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
 use serde_json::json;
 
-#[expect(dead_code, reason = "The shared producer also includes synchronous folding controls.")]
+#[expect(
+    dead_code,
+    reason = "The shared producer also includes synchronous folding controls."
+)]
 #[path = "../vendor/sail/crates/sail-plan/src/test_utils/regexp_literal_producer.rs"]
 mod literal_producer;
 use literal_producer::{Kind, producer};
 
-#[expect(dead_code, reason = "This target uses the complete failed-query observer.")]
+#[expect(
+    dead_code,
+    reason = "This target uses the complete failed-query observer."
+)]
 #[path = "support/string_binary.rs"]
 mod string_binary;
 use string_binary::{TestResult, capture_observation};
