@@ -42,6 +42,14 @@ Unmodified files came from those archives, rather than mutable Cargo source cach
 Modified dependency files carry a DAR notice. The source is checked in directly;
 the historical patch files are evidence, not build-time dependencies.
 
+The DataFusion optimizer backports [upstream PR #23704](https://github.com/apache/datafusion/pull/23704)
+from commit `c111f0a9ff9e56da416c162257a31d3355461f56`. It applies the existing
+regex coercion to `SimilarTo`, which Sail uses for REGEXP/RLIKE operators and
+`regexp`, `regexp_like` and `rlike` function aliases. Physical regex dispatch
+returns a checked error for mismatched arrays constructed without the analyzer.
+The [operand tests](tests/regex_operand_coercion.rs) cover string representations,
+NULLs, dictionary behavior, flags, required errors and native SQL admission.
+
 Typed List and LargeList literals retain their complete element fields when
 converted from Arrow rows or cast to a declared list type. For example, an
 element named `kept_element` with `source=constant-coordinate-test` keeps that
