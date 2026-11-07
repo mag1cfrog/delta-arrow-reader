@@ -206,9 +206,9 @@ fn validate_date_range_references(records: &[Value], manifest: &Value) -> TestRe
                 .iter()
                 .any(|field| input[*field] != receipt[*field])
                 || receipt["schema_observed"] != input["schema"]
-                || !receipt["num_partitions"]
+                || receipt["num_partitions"]
                     .as_u64()
-                    .is_some_and(|count| count > 0)
+                    .is_none_or(|count| count == 0)
             {
                 return Err("actual Spark provider receipt differs from original inputs".into());
             }
