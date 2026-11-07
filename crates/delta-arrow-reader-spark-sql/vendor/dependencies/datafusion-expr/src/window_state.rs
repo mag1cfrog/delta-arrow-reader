@@ -30,7 +30,7 @@ use arrow::{
     record_batch::RecordBatch,
 };
 use datafusion_common::{
-    Result, ScalarValue, internal_datafusion_err, internal_err,
+    Result, ScalarValue, exec_datafusion_err, internal_datafusion_err, internal_err,
     utils::{compare_rows, get_row_at_idx, search_in_slice},
 };
 
@@ -424,18 +424,22 @@ impl WindowFrameStateRange {
         });
         if date32_wrapping_bound || window_frame.has_null_offset() {
             let end = self.calculate_index_of_bound::<false>(
+                window_frame,
                 &window_frame.end_bound, range_columns, last_range, idx, length,
             )?;
             // Spark advances the lower cursor only over input consumed by the upper cursor.
             let start = self.calculate_index_of_bound::<true>(
+                window_frame,
                 &window_frame.start_bound, range_columns, last_range, idx, end,
             )?;
             return Ok(Range { start, end });
         }
         let start = self.calculate_index_of_bound::<true>(
+            window_frame,
             &window_frame.start_bound, range_columns, last_range, idx, length,
         )?;
         let end = self.calculate_index_of_bound::<false>(
+            window_frame,
             &window_frame.end_bound, range_columns, last_range, idx, length,
         )?;
         Ok(Range { start, end })
@@ -443,6 +447,7 @@ impl WindowFrameStateRange {
 
     fn calculate_index_of_bound<const SIDE: bool>(
         &mut self,
+        window_frame: &WindowFrame,
         bound: &WindowFrameBound,
         range_columns: &[ArrayRef],
         last_range: &Range<usize>,
@@ -454,6 +459,7 @@ impl WindowFrameStateRange {
             WindowFrameBound::Following(n) if !SIDE && n.is_null() => Ok(length),
             WindowFrameBound::Preceding(_)
             | WindowFrameBound::PrecedingNullOffset(_) => self.calculate_index_of_row::<SIDE, true>(
+                window_frame,
                 range_columns,
                 last_range,
                 idx,
@@ -462,6 +468,7 @@ impl WindowFrameStateRange {
             ),
             WindowFrameBound::Following(_)
             | WindowFrameBound::FollowingNullOffset(_) => self.calculate_index_of_row::<SIDE, false>(
+                window_frame,
                 range_columns,
                 last_range,
                 idx,
@@ -469,6 +476,7 @@ impl WindowFrameStateRange {
                 length,
             ),
             WindowFrameBound::CurrentRow => self.calculate_index_of_row::<SIDE, false>(
+                window_frame,
                 range_columns,
                 last_range,
                 idx,
@@ -483,6 +491,7 @@ impl WindowFrameStateRange {
     /// supplied as true and false, respectively).
     fn calculate_index_of_row<const SIDE: bool, const SEARCH_SIDE: bool>(
         &mut self,
+        window_frame: &WindowFrame,
         range_columns: &[ArrayRef],
         last_range: &Range<usize>,
         idx: usize,
@@ -494,6 +503,9 @@ impl WindowFrameStateRange {
         } else {
             last_range.end
         };
+        if window_frame.has_null_offset() && search_start == length {
+            return Ok(length);
+        }
         if matches!(bound, WindowFrameBound::CurrentRow) {
             // Peer boundaries must use the same nested ordering as the sort.
             if !self.peer_comparator.as_ref().is_some_and(|(columns, _)| {
@@ -547,6 +559,17 @@ impl WindowFrameStateRange {
             let unbounded_edge = if SEARCH_SIDE { search_start } else { length };
             let mut targets = Vec::with_capacity(current_row_values.len());
             for value in &current_row_values {
+                if window_frame.checks_date32_offset_negation()
+                    && matches!(value, ScalarValue::Date32(Some(_)))
+                    && SEARCH_SIDE != is_descending
+                    && let WindowFrameBound::Preceding(ScalarValue::Int32(Some(offset)))
+                        | WindowFrameBound::Following(ScalarValue::Int32(Some(offset))) = bound
+                {
+                    offset.checked_neg().ok_or_else(|| {
+                        exec_datafusion_err!("Int32 overflow on negative({offset})")
+                            .context("[ARITHMETIC_OVERFLOW] DATE RANGE offset negation")
+                    })?;
+                }
                 let Some(target) = range_bound_target(value, bound, is_descending)? else {
                     return Ok(unbounded_edge);
                 };

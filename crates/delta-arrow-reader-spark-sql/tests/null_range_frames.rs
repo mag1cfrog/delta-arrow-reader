@@ -513,6 +513,10 @@ fn null_offset_unparser_keeps_typed_expressions_and_native_unbounded_bounds() ->
             DataType::Decimal128(9, 2),
             ast::DataType::Decimal(ast::ExactNumberInfo::PrecisionAndScale(9, 2)),
         ),
+        (
+            DataType::Dictionary(Box::new(DataType::Int32), Box::new(DataType::Float64)),
+            ast::DataType::Double(ast::ExactNumberInfo::None),
+        ),
     ] {
         for explicit in [false, true] {
             let (start, end) = if explicit {
@@ -561,6 +565,123 @@ fn null_offset_unparser_keeps_typed_expressions_and_native_unbounded_bounds() ->
                         "native unbounded sentinel became an expression"
                     );
                 }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn null_offset_unparser_rejects_unsupported_payload_types() -> TestResult {
+    use arrow::datatypes::DataType;
+    use datafusion::functions_aggregate::count::count_udaf;
+    use datafusion::logical_expr::expr::WindowFunction;
+    use datafusion::logical_expr::{Expr, WindowFrame, WindowFrameBound, WindowFrameUnits, col};
+    use datafusion::sql::unparser::expr_to_sql;
+
+    let mut call = WindowFunction::new(count_udaf(), vec![col("v")]);
+    call.params.order_by = vec![col("k").sort(true, true)];
+    call.params.window_frame = WindowFrame::new_bounds(
+        WindowFrameUnits::Range,
+        WindowFrameBound::PrecedingNullOffset(DataType::BinaryView),
+        WindowFrameBound::CurrentRow,
+    );
+    assert!(expr_to_sql(&Expr::from(call)).is_err_and(|error| {
+        error
+            .to_string()
+            .contains("Unsupported DataType: conversion: BinaryView")
+    }));
+    Ok(())
+}
+
+#[tokio::test]
+async fn date_null_interval_bounds_keep_legacy_representation_and_coercion() -> TestResult {
+    use arrow::datatypes::{DataType, IntervalUnit, TimeUnit};
+    use datafusion::common::tree_node::{TreeNode, TreeNodeRecursion};
+    use datafusion::logical_expr::{Expr, LogicalPlan, WindowFrame, WindowFrameBound};
+    use datafusion::physical_optimizer::aggregate_statistics::PreserveAggregateStatisticsSchema;
+    use delta_arrow_reader_spark_sql::{SparkSqlOptions, plan_query};
+    use sail_plan::expression_errors::SparkSqlExpressionSemantics;
+
+    fn find_single_window_frame(plan: &LogicalPlan) -> TestResult<WindowFrame> {
+        let mut frames = Vec::new();
+        plan.apply(|node| {
+            node.apply_expressions(|expression| {
+                expression.apply(|expression| {
+                    if let Expr::WindowFunction(function) = expression {
+                        frames.push(function.params.window_frame.clone());
+                    }
+                    Ok(TreeNodeRecursion::Continue)
+                })
+            })?;
+            Ok(TreeNodeRecursion::Continue)
+        })?;
+        if frames.len() != 1 {
+            return Err("expected one interval control frame".into());
+        }
+        frames
+            .pop()
+            .ok_or_else(|| "missing interval control frame".into())
+    }
+
+    let (request, _) = parse_null_range_fixture()?;
+    let session = SessionContext::new_with_state(
+        configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
+    );
+    spark_inputs::register_recorded_inputs(&session, &request["corpora"][2]["metadata"], 1)?;
+    for ansi_mode in [true, false] {
+        for (qualifier, offset_type) in [
+            ("YEAR", DataType::Interval(IntervalUnit::YearMonth)),
+            ("DAY TO SECOND", DataType::Duration(TimeUnit::Microsecond)),
+        ] {
+            for upper in ["CURRENT ROW", "INTERVAL '1' DAY FOLLOWING"] {
+                let sql = format!(
+                    "SELECT COUNT(*) OVER (ORDER BY DATE_ADD(DATE '2020-01-01',k) \
+                    RANGE BETWEEN CAST(NULL AS INTERVAL {qualifier}) PRECEDING AND {upper}) AS n \
+                    FROM null_range_no_null_keys"
+                );
+                let query = plan_query(
+                    &session,
+                    &sql,
+                    &SparkSqlOptions {
+                        ansi_mode,
+                        ..SparkSqlOptions::default()
+                    },
+                )
+                .await?;
+                let resolved = find_single_window_frame(&query.logical_plan)?;
+                let WindowFrameBound::Preceding(value) = &resolved.start_bound else {
+                    return Err(
+                        "DATE interval NULL was retagged as an explicit numeric offset".into(),
+                    );
+                };
+                assert!(value.is_null());
+                assert_eq!(value.data_type(), offset_type);
+                assert!(resolved.start_bound.is_unbounded());
+                assert!(!resolved.has_null_offset());
+
+                let mut state = session.state();
+                let extensions = &mut state.config_mut().options_mut().extensions;
+                extensions.insert(SparkSqlExpressionSemantics::default());
+                extensions.insert(PreserveAggregateStatisticsSchema::default());
+                let analyzed = state.analyzer().execute_and_check(
+                    query.logical_plan.clone(),
+                    state.config_options(),
+                    |_, _| {},
+                )?;
+                let analyzed = find_single_window_frame(&analyzed)?;
+                let WindowFrameBound::Preceding(value) = &analyzed.start_bound else {
+                    return Err("analyzer changed the legacy interval bound kind".into());
+                };
+                assert!(value.is_null());
+                let expected_type = if upper == "CURRENT ROW" {
+                    offset_type.clone()
+                } else {
+                    DataType::Interval(IntervalUnit::MonthDayNano)
+                };
+                assert_eq!(value.data_type(), expected_type);
+                assert!(analyzed.start_bound.is_unbounded());
+                assert!(!analyzed.has_null_offset());
             }
         }
     }

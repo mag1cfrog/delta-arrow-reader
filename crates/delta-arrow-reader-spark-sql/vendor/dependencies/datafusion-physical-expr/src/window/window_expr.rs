@@ -518,6 +518,9 @@ fn is_end_bound_safe_for_range(
     idx: usize,
 ) -> Result<bool> {
     let end_bound = &window_frame.end_bound;
+    if window_frame.checks_date32_offset_negation() {
+        return Ok(false);
+    }
     if window_frame.has_null_offset() {
         let Some(most_recent_ob_col) = most_recent_ob_col.filter(|col| !col.is_empty()) else {
             return Ok(false);

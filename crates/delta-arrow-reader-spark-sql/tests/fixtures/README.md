@@ -4201,9 +4201,10 @@ against `date-range-747-spark.jsonl`. A reference refresh must also update the
 owner controls' reference records, while preserving their native observations
 and the separate native control file.
 
-`date_range_frames.rs` requires 984 primary comparisons at batch sizes 1 and 32
-with two target partitions, including 12 TIMESTAMP control contexts. It also
-replays the exact original query and frame consumers separately in 108 contexts.
+`date_range_frames.rs` requires 1012 primary comparisons at batch sizes 1 and 32
+with two target partitions, including 28 explicit-NULL-offset and 12 TIMESTAMP
+control contexts. It also replays the exact original query and frame consumers
+separately in 108 contexts.
 All five schema stages retain complete names, types, nullability and metadata
 when available. Failures retain the condition, phase and available Fields;
 ordered queries retain raw output order, and unordered comparisons preserve
@@ -4214,10 +4215,51 @@ matching order reuses it, while opposite DATE order requires a sort.
 
 `date-range-747-prior-owner-controls.json` freezes 112 complete earlier DAR
 observations: 28 explicit-NULL-offset contexts under #754 and 84 DATE interval
-contexts under #749/#947. The test requires their prior profiles to remain
-unchanged, including existing Spark differences assigned to those issues. Only
-raw row order for unordered SQL may be canonicalized; Fields, causes, phases and
-row multiplicity stay fixed. `date-range-747-prior-native-controls.json` preserves
-six native SQL control pairs for DATE intervals, TIMESTAMP intervals and INT
-keys at both batch sizes, comparing configured and unconfigured sessions with
-their frozen complete observations.
+contexts under #749/#947. This file and the source manifest's ownership labels
+and `primary_record_count` retain their capture-time meaning. The replay compares
+all 28 NULL-offset contexts strictly with Spark and requires the 84 active interval
+profiles to stay unchanged. The historical NULL native observations remain as
+capture history, rather than current runtime expectations. Only raw row order for
+unordered SQL may be canonicalized; Fields, causes, phases and row multiplicity
+stay fixed.
+`date-range-747-prior-native-controls.json` preserves six native SQL control pairs
+for DATE intervals, TIMESTAMP intervals and INT keys at both batch sizes, comparing
+configured and unconfigured sessions with their frozen complete observations.
+
+### Explicit NULL RANGE bounds
+
+`null-range-754-cases.json` contains the 14 original DATE NULL-offset requests and
+568 supplementary requests. The source inventory has 582 unique corpus/ID/ANSI
+identities and 24 ordered queries. Providers, SQL, ANSI flags and ordering flags
+come from this source-only file. The capture validates the original requests
+against the sibling `date-range-747-cases.json`; historical absolute paths in its
+provenance metadata are not opened.
+
+Use the Python, Java and Spark revision specified above:
+
+```sh
+python3 tests/fixtures/capture_null_range_754_spark.py --self-check
+null_range_capture_dir="$(mktemp -d)"
+TZ=UTC PYTHONDONTWRITEBYTECODE=1 \
+  python3 tests/fixtures/capture_null_range_754_spark.py \
+  "$null_range_capture_dir/null-range-754-spark.jsonl"
+cargo +1.96.0 test --workspace --no-fail-fast --locked \
+  --test null_range_frames -- --nocapture --test-threads=1
+```
+
+The self-check validates the source inventory and exercises the shared capture
+protocol with fake objects, without importing Spark or starting a JVM. A capture
+requires fresh output and lifecycle paths, rejects an existing gateway and records
+registered provider schemas and source rows. It captures each of the five schema
+stages when available, structured error causes and phases, raw ordered rows and
+row multisets. It shuts
+down and reaps its owned JVM; cleanup failure makes the capture fail.
+
+`null_range_frames.rs` replays all 1164 case/batch contexts with batch sizes 1 and
+32, two provider partitions and two target partitions. It prints every native
+observation before asserting differences. Complete public, analyzed, optimized
+and physical Fields are required when available; unavailable error stages remain
+explicit. Ordered queries compare raw sequences, and unordered queries retain
+duplicate rows. Compare a fresh capture with `null-range-754-spark.jsonl` before
+refreshing references, preserving the original source metadata, historical native
+profiles and separate native controls.

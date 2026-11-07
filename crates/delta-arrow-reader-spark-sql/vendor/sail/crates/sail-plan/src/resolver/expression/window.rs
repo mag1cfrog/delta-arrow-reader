@@ -537,6 +537,7 @@ impl PlanResolver<'_> {
         let Some((start, end)) = date_range_displacements(frame, order_by, schema)? else {
             return Ok(());
         };
+        let mut check_date32_offset_negation = false;
         if self.config.ansi_mode {
             let minimum_preceding = [&frame.start_bound, &frame.end_bound].iter().any(|bound| {
                 matches!(
@@ -551,14 +552,20 @@ impl PlanResolver<'_> {
                     datafusion_expr::lit(i32::MIN),
                 ]);
             } else if !order_by[0].asc && [start, end].contains(&Some(i32::MIN)) {
-                // DESC negation belongs to non-NULL key evaluation, including constant DATE keys.
-                order_by[0].expr =
-                    ScalarUDF::from(SparkDateDayArithmetic::new(datafusion_expr::Operator::Plus))
-                        .call(vec![
-                            order_by[0].expr.clone(),
-                            ScalarUDF::from(SparkDateRangeNegation)
-                                .call(vec![datafusion_expr::lit(i32::MIN)]),
-                        ]);
+                if frame.has_null_offset() {
+                    // A NULL upper target can leave no consumed row for a lower comparison.
+                    check_date32_offset_negation = true;
+                } else {
+                    // DESC negation belongs to non-NULL key evaluation, including constant DATE keys.
+                    order_by[0].expr = ScalarUDF::from(SparkDateDayArithmetic::new(
+                        datafusion_expr::Operator::Plus,
+                    ))
+                    .call(vec![
+                        order_by[0].expr.clone(),
+                        ScalarUDF::from(SparkDateRangeNegation)
+                            .call(vec![datafusion_expr::lit(i32::MIN)]),
+                    ]);
+                }
             }
         }
         let start = match start {
@@ -572,7 +579,12 @@ impl PlanResolver<'_> {
             Some(days) => WindowFrameBound::Following(ScalarValue::Int32(Some(days))),
             None => frame.end_bound.clone(),
         };
-        *frame = WindowFrame::new_bounds(frame.units, start, end);
+        let normalized = WindowFrame::new_bounds(frame.units, start, end);
+        *frame = if check_date32_offset_negation {
+            normalized.with_date32_offset_negation_check()
+        } else {
+            normalized
+        };
         Ok(())
     }
 
@@ -766,7 +778,8 @@ impl PlanResolver<'_> {
                     value
                 };
                 let (direction, bound) = if value.is_null()
-                    && (data_type.is_numeric() || data_type == DataType::Date32)
+                    && (data_type.is_numeric()
+                        || (data_type == DataType::Date32 && value.data_type() == DataType::Int32))
                 {
                     if preceding {
                         (

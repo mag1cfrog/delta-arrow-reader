@@ -907,10 +907,15 @@ impl Unparser<'_> {
             }
             datafusion_expr::window_frame::WindowFrameBound::PrecedingNullOffset(data_type)
             | datafusion_expr::window_frame::WindowFrameBound::FollowingNullOffset(data_type) => {
-                let value = self.cast_to_sql(
-                    &Expr::Literal(ScalarValue::Null, None),
-                    &Arc::new(Field::new("", data_type.clone(), true)),
-                )?;
+                let value = ast::Expr::Cast {
+                    kind: ast::CastKind::Cast,
+                    expr: Box::new(ast::Expr::value(ast::Value::Null)),
+                    data_type: self.arrow_dtype_to_ast_dtype(
+                        &Arc::new(Field::new("", data_type.clone(), true)),
+                    )?,
+                    array: false,
+                    format: None,
+                };
                 let expression = Some(Box::new(value));
                 if matches!(bound, datafusion_expr::window_frame::WindowFrameBound::PrecedingNullOffset(_)) {
                     Ok(ast::WindowFrameBound::Preceding(expression))

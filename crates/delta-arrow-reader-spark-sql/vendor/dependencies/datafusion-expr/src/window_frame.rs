@@ -92,6 +92,8 @@ pub struct WindowFrame {
     ///                +--------------+
     /// ```
     causal: bool,
+    /// Check DATE offset negation only when a required comparison evaluates it.
+    date32_offset_negation_check: bool,
 }
 
 impl fmt::Display for WindowFrame {
@@ -109,10 +111,13 @@ impl fmt::Debug for WindowFrame {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "WindowFrame {{ units: {:?}, start_bound: {:?}, end_bound: {:?}, is_causal: {:?} }}",
+            "WindowFrame {{ units: {:?}, start_bound: {:?}, end_bound: {:?}, is_causal: {:?}",
             self.units, self.start_bound, self.end_bound, self.causal
         )?;
-        Ok(())
+        if self.date32_offset_negation_check {
+            f.write_str(", date32_offset_negation_check: true")?;
+        }
+        f.write_str(" }")
     }
 }
 
@@ -163,6 +168,7 @@ impl WindowFrame {
                 start_bound: WindowFrameBound::Preceding(ScalarValue::UInt64(None)),
                 end_bound: WindowFrameBound::CurrentRow,
                 causal: strict,
+                date32_offset_negation_check: false,
             }
         } else {
             // This window frame covers the whole table (or partition if `PARTITION BY`
@@ -173,6 +179,7 @@ impl WindowFrame {
                 start_bound: WindowFrameBound::Preceding(ScalarValue::UInt64(None)),
                 end_bound: WindowFrameBound::Following(ScalarValue::UInt64(None)),
                 causal: false,
+                date32_offset_negation_check: false,
             }
         }
     }
@@ -211,7 +218,9 @@ impl WindowFrame {
                 WindowFrameBound::PrecedingNullOffset(data_type.clone())
             }
         };
-        Self::new_bounds(self.units, start_bound, end_bound)
+        let mut reversed = Self::new_bounds(self.units, start_bound, end_bound);
+        reversed.date32_offset_negation_check = self.date32_offset_negation_check;
+        reversed
     }
 
     /// Get whether window frame is causal
@@ -222,6 +231,17 @@ impl WindowFrame {
     /// Whether either endpoint is an explicit NULL offset rather than unbounded.
     pub fn has_null_offset(&self) -> bool {
         self.start_bound.is_null_offset() || self.end_bound.is_null_offset()
+    }
+
+    /// Enable checked DATE offset negation at comparison time for an admitted frame.
+    pub fn with_date32_offset_negation_check(mut self) -> Self {
+        self.date32_offset_negation_check = true;
+        self
+    }
+
+    /// Whether DATE target subtraction must check offset negation.
+    pub fn checks_date32_offset_negation(&self) -> bool {
+        self.date32_offset_negation_check
     }
 
     /// Initializes window frame from units (type), start bound and end bound.
@@ -261,6 +281,7 @@ impl WindowFrame {
             start_bound,
             end_bound,
             causal,
+            date32_offset_negation_check: false,
         }
     }
 

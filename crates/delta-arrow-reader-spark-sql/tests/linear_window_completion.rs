@@ -1368,3 +1368,282 @@ fn null_lower_numeric_upper_waits_for_later_null_peers() -> TestResult {
     }
     Ok(())
 }
+
+#[test]
+fn date_null_frame_policy_survives_clone_and_reverse_without_changing_sql() -> TestResult {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    let frame = WindowFrame::new_bounds(
+        WindowFrameUnits::Range,
+        WindowFrameBound::Following(ScalarValue::Int32(Some(i32::MIN))),
+        WindowFrameBound::PrecedingNullOffset(DataType::Int32),
+    );
+    assert!(!frame.checks_date32_offset_negation());
+    assert!(!WindowFrame::new(None).checks_date32_offset_negation());
+    assert!(!WindowFrame::new(Some(false)).checks_date32_offset_negation());
+    let checked = frame.clone().with_date32_offset_negation_check();
+    assert!(checked.checks_date32_offset_negation());
+    assert_ne!(checked, frame);
+    assert!(checked.clone().checks_date32_offset_negation());
+    assert!(checked.reverse().checks_date32_offset_negation());
+    assert_eq!(checked.reverse().reverse(), checked);
+    assert_eq!(checked.to_string(), frame.to_string());
+    assert!(!format!("{frame:?}").contains("date32_offset_negation_check"));
+    assert!(format!("{checked:?}").contains("date32_offset_negation_check: true"));
+    let hash = |value: &WindowFrame| {
+        let mut state = DefaultHasher::new();
+        value.hash(&mut state);
+        state.finish()
+    };
+    assert_eq!(hash(&checked), hash(&checked.clone()));
+    assert_eq!(hash(&checked), hash(&checked.reverse().reverse()));
+    Ok(())
+}
+
+#[test]
+fn date_null_frame_checks_negation_only_for_a_required_non_null_comparison() -> TestResult {
+    for (keys, expected) in [
+        (vec![Some(3), Some(2), Some(1)], vec![0..0, 0..0, 0..0]),
+        (vec![None, None], vec![0..2, 0..2]),
+    ] {
+        let column: ArrayRef = Arc::new(Date32Array::from(keys));
+        let frame = Arc::new(
+            WindowFrame::new_bounds(
+                WindowFrameUnits::Range,
+                WindowFrameBound::Following(ScalarValue::Int32(Some(i32::MIN))),
+                WindowFrameBound::PrecedingNullOffset(DataType::Int32),
+            )
+            .with_date32_offset_negation_check(),
+        );
+        let mut context = WindowFrameContext::new(
+            frame,
+            vec![SortOptions {
+                descending: true,
+                nulls_first: true,
+            }],
+        );
+        let mut last = 0..0;
+        for (idx, expected) in expected.into_iter().enumerate() {
+            last =
+                context.calculate_range(std::slice::from_ref(&column), &last, column.len(), idx)?;
+            assert_eq!(last, expected);
+        }
+    }
+    let column: ArrayRef = Arc::new(Date32Array::from(vec![None, Some(3)]));
+    let frame = WindowFrame::new_bounds(
+        WindowFrameUnits::Range,
+        WindowFrameBound::Following(ScalarValue::Int32(Some(i32::MIN))),
+        WindowFrameBound::PrecedingNullOffset(DataType::Int32),
+    )
+    .with_date32_offset_negation_check();
+    let mut context = WindowFrameContext::new(
+        Arc::new(frame.clone()),
+        vec![SortOptions {
+            descending: true,
+            nulls_first: true,
+        }],
+    );
+    let first = context.calculate_range(std::slice::from_ref(&column), &(0..0), 2, 0)?;
+    assert_eq!(first, 0..1);
+    let error = context
+        .calculate_range(std::slice::from_ref(&column), &first, 2, 1)
+        .expect_err("required DATE comparison must check negation");
+    assert!(
+        error
+            .to_string()
+            .contains("[ARITHMETIC_OVERFLOW] DATE RANGE offset negation")
+    );
+    assert!(
+        error
+            .to_string()
+            .contains("Int32 overflow on negative(-2147483648)")
+    );
+    let mut reversed = WindowFrameContext::new(
+        Arc::new(frame.reverse()),
+        vec![SortOptions {
+            descending: false,
+            nulls_first: false,
+        }],
+    );
+    let reversed_column: ArrayRef = Arc::new(Date32Array::from(vec![Some(3), None]));
+    assert!(
+        reversed
+            .calculate_range(&[reversed_column], &(0..0), 2, 0)
+            .is_err()
+    );
+    Ok(())
+}
+
+#[test]
+fn date_null_frame_static_aggregate_and_builtin_preserve_lazy_errors_and_validity() -> TestResult {
+    for (function, ordinal, expected_peer_id) in [
+        (
+            WindowFunctionDefinition::AggregateUDF(count_udaf()),
+            None,
+            None,
+        ),
+        (
+            WindowFunctionDefinition::WindowUDF(first_value_udwf()),
+            None,
+            Some(0),
+        ),
+        (
+            WindowFunctionDefinition::WindowUDF(last_value_udwf()),
+            None,
+            Some(1),
+        ),
+        (
+            WindowFunctionDefinition::WindowUDF(nth_value_udwf()),
+            Some(2),
+            Some(1),
+        ),
+    ] {
+        let batch = date_source_batch(&[(0, 0, Some(1)), (1, 0, Some(2))], true)?;
+        let schema = batch.schema();
+        let frame = WindowFrame::new_bounds(
+            WindowFrameUnits::Range,
+            WindowFrameBound::Following(ScalarValue::Int32(Some(i32::MIN))),
+            WindowFrameBound::PrecedingNullOffset(DataType::Int32),
+        );
+        let make_window = |frame: WindowFrame| -> TestResult<Arc<dyn WindowExpr>> {
+            let mut arguments = vec![col("id", &schema)?];
+            if let Some(ordinal) = ordinal {
+                arguments.push(Arc::new(Literal::new(ScalarValue::Int64(Some(ordinal)))));
+            }
+            Ok(create_window_expr(
+                &function,
+                "value".into(),
+                &arguments,
+                &[col("p", &schema)?],
+                &[PhysicalSortExpr {
+                    expr: col("k", &schema)?,
+                    options: SortOptions {
+                        descending: true,
+                        nulls_first: true,
+                    },
+                }],
+                Arc::new(frame),
+                schema.clone(),
+                false,
+                false,
+                None,
+            )?)
+        };
+        let unchecked = make_window(frame.clone())?;
+        let checked = make_window(frame.with_date32_offset_negation_check())?;
+        assert!(!checked.uses_bounded_memory());
+        assert_eq!(checked.field()?, unchecked.field()?);
+        let values = checked.evaluate(&batch)?;
+        if expected_peer_id.is_some() {
+            assert_eq!(values.null_count(), 2);
+            assert_eq!(
+                values
+                    .as_any()
+                    .downcast_ref::<Int32Array>()
+                    .ok_or("value type")?
+                    .iter()
+                    .collect::<Vec<_>>(),
+                vec![None, None]
+            );
+        } else {
+            assert_eq!(values.null_count(), 0);
+            assert_eq!(
+                values
+                    .as_any()
+                    .downcast_ref::<Int64Array>()
+                    .ok_or("count type")?
+                    .values()
+                    .as_ref(),
+                &[0, 0]
+            );
+        }
+        let all_null = date_source_batch(&[(0, 0, None), (1, 0, None)], true)?;
+        let values = checked.evaluate(&all_null)?;
+        assert_eq!(values.null_count(), 0);
+        if let Some(expected_peer_id) = expected_peer_id {
+            assert_eq!(
+                values
+                    .as_any()
+                    .downcast_ref::<Int32Array>()
+                    .ok_or("value type")?
+                    .values()
+                    .as_ref(),
+                &[expected_peer_id, expected_peer_id]
+            );
+        } else {
+            assert_eq!(
+                values
+                    .as_any()
+                    .downcast_ref::<Int64Array>()
+                    .ok_or("count type")?
+                    .values()
+                    .as_ref(),
+                &[2, 2]
+            );
+        }
+        let mixed = date_source_batch(&[(0, 0, None), (1, 0, Some(1))], true)?;
+        let error = checked
+            .evaluate(&mixed)
+            .expect_err("required DATE comparison must fail");
+        assert!(error.to_string().contains("[ARITHMETIC_OVERFLOW]"));
+        assert!(
+            error
+                .to_string()
+                .contains("Int32 overflow on negative(-2147483648)")
+        );
+        assert!(unchecked.evaluate(&mixed).is_ok());
+    }
+    Ok(())
+}
+
+#[test]
+fn date_null_frame_completion_does_not_speculate_on_checked_targets() -> TestResult {
+    let first = date_source_batch(&[(0, 0, None)], true)?;
+    let schema = first.schema();
+    let window = create_window_expr(
+        &WindowFunctionDefinition::AggregateUDF(count_udaf()),
+        "n".into(),
+        &[col("id", &schema)?],
+        &[col("p", &schema)?],
+        &[PhysicalSortExpr {
+            expr: col("k", &schema)?,
+            options: SortOptions {
+                descending: true,
+                nulls_first: true,
+            },
+        }],
+        Arc::new(
+            WindowFrame::new_bounds(
+                WindowFrameUnits::Range,
+                WindowFrameBound::PrecedingNullOffset(DataType::Int32),
+                WindowFrameBound::Following(ScalarValue::Int32(Some(i32::MIN))),
+            )
+            .with_date32_offset_negation_check(),
+        ),
+        schema,
+        false,
+        false,
+        None,
+    )?;
+    let key = vec![ScalarValue::Int32(Some(0))];
+    let mut buffer = PartitionBatchState::new_with_batch(first);
+    // A finite globally latest row in another partition must not prove a checked target safe.
+    buffer.set_most_recent_row(date_source_batch(&[(1, 1, Some(1))], true)?);
+    let mut buffers = PartitionBatches::default();
+    buffers.insert(key.clone(), buffer);
+    let mut states = PartitionWindowAggStates::default();
+    window.evaluate_stateful(&buffers, &mut states)?;
+    assert!(counts(&states, 0)?.is_empty());
+    assert_eq!(states[&key].state.n_row_result_missing, 1);
+    buffers.get_mut(&key).ok_or("missing buffer")?.is_end = true;
+    window.evaluate_stateful(&buffers, &mut states)?;
+    let values = states[&key]
+        .state
+        .out_col
+        .as_any()
+        .downcast_ref::<Int64Array>()
+        .ok_or("count type")?;
+    assert_eq!(values.iter().collect::<Vec<_>>(), vec![Some(1)]);
+    Ok(())
+}
