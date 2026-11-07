@@ -410,32 +410,44 @@ const LITERAL_CURRENT_CONTROLS: &str =
 fn literal_current_controls_from(fixture: &str) -> TestResult<BTreeMap<String, Value>> {
     let mut records = fixture.lines().map(serde_json::from_str::<Value>);
     let header = records.next().ok_or("missing current native header")??;
-    if header != json!({
-        "kind":"complete-directly-captured-current-native-observations-not-Spark-oracle",
-        "source_product":"f69b1cb1755ea82cef8dbedc3679cc0ce4620f28",
-        "source_execution":"84818105dc4566a8b036aced33c49edd2bf7b54d",
-        "observations":30,"frozen72_unchanged":true,
-        "native_actuals_derived_from_expected_JSON":false
-    }) {
+    if header
+        != json!({
+            "kind":"complete-directly-captured-current-native-observations-not-Spark-oracle",
+            "source_product":"f69b1cb1755ea82cef8dbedc3679cc0ce4620f28",
+            "source_execution":"84818105dc4566a8b036aced33c49edd2bf7b54d",
+            "observations":30,"frozen72_unchanged":true,
+            "native_actuals_derived_from_expected_JSON":false
+        })
+    {
         return Err("invalid current native source attribution".into());
     }
     let (_, cases) = literal_catalog()?;
     let mut expected = literal_controls()?
         .into_iter()
         .filter(|(_, control)| {
-            matches!(control["context"]["id"].as_str(),
-                Some("values_literal_group_error" | "values_literal_group_error_limit_zero"))
-                || (control["context"]["id"] == "values_literal_double_nan"
-                    && control["context"]["ansi"] == false)
+            matches!(
+                control["context"]["id"].as_str(),
+                Some("values_literal_group_error" | "values_literal_group_error_limit_zero")
+            ) || (control["context"]["id"] == "values_literal_double_nan"
+                && control["context"]["ansi"] == false)
         })
         .collect::<BTreeMap<_, _>>();
     if expected.len() != 30 {
         return Err("invalid historical inventory for current controls".into());
     }
     let record_keys = BTreeSet::from([
-        "context", "actual", "false_facets", "strict_Spark_facets", "source_product",
-        "source_execution", "raw_log", "raw_log_sha256", "raw_log_line",
-        "archived_executable_sha256", "classification", "Spark_oracle_credit",
+        "context",
+        "actual",
+        "false_facets",
+        "strict_Spark_facets",
+        "source_product",
+        "source_execution",
+        "raw_log",
+        "raw_log_sha256",
+        "raw_log_line",
+        "archived_executable_sha256",
+        "classification",
+        "Spark_oracle_credit",
         "frozen_historical_actual_modified",
     ]);
     let mut controls = BTreeMap::new();
@@ -443,19 +455,30 @@ fn literal_current_controls_from(fixture: &str) -> TestResult<BTreeMap<String, V
     for record in records {
         let control = record?;
         let key = literal_key(&control["context"])?;
-        let historical = expected.remove(&key).ok_or("unknown or duplicate current control")?;
-        let case = cases.iter().find(|case| {
-            case["sql"] == control["context"]["sql"]
-                && case["ansi"] == control["context"]["ansi"]
-        }).ok_or("unknown current Spark reference")?;
+        let historical = expected
+            .remove(&key)
+            .ok_or("unknown or duplicate current control")?;
+        let case = cases
+            .iter()
+            .find(|case| {
+                case["sql"] == control["context"]["sql"]
+                    && case["ansi"] == control["context"]["ansi"]
+            })
+            .ok_or("unknown current Spark reference")?;
         let strict = control["context"]["id"] != "values_literal_double_nan";
-        let false_facets = if strict { json!([]) } else { json!(["physical_schema"]) };
+        let false_facets = if strict {
+            json!([])
+        } else {
+            json!(["physical_schema"])
+        };
         let classification = if strict {
             "measured required preparation gain with strict Spark facets"
         } else {
             "existing physical nullability difference; exact retained aliased input plan observed"
         };
-        if control.as_object().map(|value| value.keys().map(String::as_str).collect::<BTreeSet<_>>())
+        if control
+            .as_object()
+            .map(|value| value.keys().map(String::as_str).collect::<BTreeSet<_>>())
             != Some(record_keys.clone())
             || control["context"] != historical["context"]
             || control["actual"] == historical["actual"]
@@ -463,15 +486,23 @@ fn literal_current_controls_from(fixture: &str) -> TestResult<BTreeMap<String, V
             || control["strict_Spark_facets"] != strict
             || control["source_product"] != header["source_product"]
             || control["source_execution"] != header["source_execution"]
-            || control["raw_log"] != "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/1049-current-candidate-runtime-r3-final/native/full276/capture.log"
-            || control["raw_log_sha256"] != "0a7f00c9767ec5636654d2c667c19043a48b2d851f15ee23c30faee19ca37266"
-            || control["archived_executable_sha256"] != "26139c50aa41e13aa61d5f11ab55aae415cce3adfe5361d081bdf9f0e5f72965"
-            || !control["raw_log_line"].as_u64().is_some_and(|line| line > 0 && lines.insert(line))
+            || control["raw_log"]
+                != "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/1049-current-candidate-runtime-r3-final/native/full276/capture.log"
+            || control["raw_log_sha256"]
+                != "0a7f00c9767ec5636654d2c667c19043a48b2d851f15ee23c30faee19ca37266"
+            || control["archived_executable_sha256"]
+                != "26139c50aa41e13aa61d5f11ab55aae415cce3adfe5361d081bdf9f0e5f72965"
+            || !control["raw_log_line"]
+                .as_u64()
+                .is_some_and(|line| line > 0 && lines.insert(line))
             || control["classification"] != classification
             || control["Spark_oracle_credit"] != false
             || control["frozen_historical_actual_modified"] != false
-            || !literal_satisfied(&control["actual"],
-                &literal_comparison(&control["actual"], &case["expected"]), Some(&control))
+            || !literal_satisfied(
+                &control["actual"],
+                &literal_comparison(&control["actual"], &case["expected"]),
+                Some(&control),
+            )
         {
             return Err("invalid complete current native control".into());
         }
@@ -938,7 +969,10 @@ async fn literal_preparation_references_keep_fields_stages_and_native_limits() -
                 let historical = controls.remove(&key);
                 let current = current_controls.remove(&key);
                 if current.is_some() {
-                    assert!(historical.is_some(), "current control without historical identity");
+                    assert!(
+                        historical.is_some(),
+                        "current control without historical identity"
+                    );
                 }
                 historical_seen += usize::from(historical.is_some());
                 current_overrides += usize::from(current.is_some());
@@ -991,13 +1025,30 @@ async fn literal_preparation_references_keep_fields_stages_and_native_limits() -
     assert_eq!(providers.len(), 552);
     assert!(controls.is_empty());
     assert!(current_controls.is_empty());
-    assert_eq!((strict, historical_seen, current_overrides, unchanged_historical), (228, 72, 30, 42));
-    assert_eq!(remaining, BTreeMap::from([
-        (BTreeSet::from(["physical_schema".to_owned()]), 36),
-        (BTreeSet::from(["diagnostic_identifier".to_owned(), "phase".to_owned(),
-            "terminal_stage_availability".to_owned()]), 6),
-        (BTreeSet::from(["rows".to_owned(), "status".to_owned()]), 6),
-    ]));
+    assert_eq!(
+        (
+            strict,
+            historical_seen,
+            current_overrides,
+            unchanged_historical
+        ),
+        (228, 72, 30, 42)
+    );
+    assert_eq!(
+        remaining,
+        BTreeMap::from([
+            (BTreeSet::from(["physical_schema".to_owned()]), 36),
+            (
+                BTreeSet::from([
+                    "diagnostic_identifier".to_owned(),
+                    "phase".to_owned(),
+                    "terminal_stage_availability".to_owned()
+                ]),
+                6
+            ),
+            (BTreeSet::from(["rows".to_owned(), "status".to_owned()]), 6),
+        ])
+    );
     assert_eq!(remaining.values().sum::<usize>(), 48);
     assert!(failures.is_empty(), "{}", failures.join("\n"));
     Ok(())
@@ -1104,10 +1155,17 @@ fn literal_current_controls_reject_changed_records_and_actuals() -> TestResult {
     let controls = literal_current_controls()?;
     let historical = literal_controls()?;
     let (_, cases) = literal_catalog()?;
-    let records = LITERAL_CURRENT_CONTROLS.lines()
-        .map(serde_json::from_str::<Value>).collect::<Result<Vec<_>, _>>()?;
-    let encode = |records: &[Value]| records.iter()
-        .map(Value::to_string).collect::<Vec<_>>().join("\n");
+    let records = LITERAL_CURRENT_CONTROLS
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    let encode = |records: &[Value]| {
+        records
+            .iter()
+            .map(Value::to_string)
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
     let mut malformed = Vec::new();
     let mut changed = records.clone();
     changed[0]["source_product"] = json!("unknown");
@@ -1147,14 +1205,19 @@ fn literal_current_controls_reject_changed_records_and_actuals() -> TestResult {
         malformed.push(changed);
     }
     let mut changed = records.clone();
-    changed[1]["actual"] = historical.get(&literal_key(&records[1]["context"])?)
-        .ok_or("missing reverted fixture control")?["actual"].clone();
+    changed[1]["actual"] = historical
+        .get(&literal_key(&records[1]["context"])?)
+        .ok_or("missing reverted fixture control")?["actual"]
+        .clone();
     malformed.push(changed);
     let mut changed = records.clone();
     changed[1]["actual"]["unexpected"] = json!(true);
     malformed.push(changed);
     let mut changed = records.clone();
-    changed[1]["actual"].as_object_mut().unwrap().remove("status");
+    changed[1]["actual"]
+        .as_object_mut()
+        .unwrap()
+        .remove("status");
     malformed.push(changed);
     let mut changed = records.clone();
     changed[2]["raw_log_line"] = changed[1]["raw_log_line"].clone();
@@ -1163,19 +1226,32 @@ fn literal_current_controls_reject_changed_records_and_actuals() -> TestResult {
         assert!(literal_current_controls_from(&encode(&changed)).is_err());
     }
     for (key, control) in controls {
-        let case = cases.iter().find(|case| {
-            case["sql"] == control["context"]["sql"]
-                && case["ansi"] == control["context"]["ansi"]
-        }).ok_or("unknown current mutation reference")?;
+        let case = cases
+            .iter()
+            .find(|case| {
+                case["sql"] == control["context"]["sql"]
+                    && case["ansi"] == control["context"]["ansi"]
+            })
+            .ok_or("unknown current mutation reference")?;
         let actual = &control["actual"];
         let comparison = literal_comparison(actual, &case["expected"]);
         assert!(literal_satisfied(actual, &comparison, Some(&control)));
-        let previous = &historical.get(&key).ok_or("missing historical mutation control")?["actual"];
+        let previous = &historical
+            .get(&key)
+            .ok_or("missing historical mutation control")?["actual"];
         assert_ne!(actual, previous);
-        assert!(!literal_satisfied(previous,
-            &literal_comparison(previous, &case["expected"]), Some(&control)));
+        assert!(!literal_satisfied(
+            previous,
+            &literal_comparison(previous, &case["expected"]),
+            Some(&control)
+        ));
         let mut faults = producer_actual_faults(actual, &case["expected"], Some(&control));
-        for field in ["analyzed_plan", "analyzed_arrow_schema", "physical_plan", "physical_arrow_schema"] {
+        for field in [
+            "analyzed_plan",
+            "analyzed_arrow_schema",
+            "physical_plan",
+            "physical_arrow_schema",
+        ] {
             let mut changed = actual.clone();
             changed[field] = json!(format!("{} changed", actual[field]));
             faults.push(changed);
@@ -1227,9 +1303,15 @@ fn literal_current_controls_reject_changed_records_and_actuals() -> TestResult {
         }
         for changed in faults {
             assert_ne!(changed, *actual, "mutation must change its source object");
-            assert!(!literal_satisfied(&changed,
-                &literal_comparison(&changed, &case["expected"]), Some(&control)),
-                "current control accepted an unrelated difference: {}", control["context"]);
+            assert!(
+                !literal_satisfied(
+                    &changed,
+                    &literal_comparison(&changed, &case["expected"]),
+                    Some(&control)
+                ),
+                "current control accepted an unrelated difference: {}",
+                control["context"]
+            );
         }
     }
     Ok(())
@@ -1533,9 +1615,10 @@ async fn local_regexp_producer_references_keep_all_132_contexts() -> TestResult 
     assert_eq!(receipts.len(), 324);
     assert!(refinements.is_empty());
     assert_eq!(strict, 126);
-    assert_eq!(differences, BTreeMap::from([
-        (BTreeSet::from(["physical_schema".to_owned()]), 6),
-    ]));
+    assert_eq!(
+        differences,
+        BTreeMap::from([(BTreeSet::from(["physical_schema".to_owned()]), 6),])
+    );
     // All observations exist before fault checks or semantic failure assertions.
     let mut faults = 0;
     for (actual, case, control, satisfied) in &captured {
