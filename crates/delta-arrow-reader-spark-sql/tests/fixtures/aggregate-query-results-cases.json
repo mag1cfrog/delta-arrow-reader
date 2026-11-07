@@ -1,0 +1,1160 @@
+{
+  "legacy_source": {
+    "filename": "aggregate-window-spark.jsonl",
+    "sha256": "52402dc9554d41106106fdc1c269ca31632cdec9a4161160dcc58cdf7879ff7d",
+    "observations": 192,
+    "selection": "First 18 query definitions under ANSI=true, retained exactly in both ANSI modes. Original expected contains public schema and rows only."
+  },
+  "capture": {
+    "schema_version": 1,
+    "kind": "independent_aggregate_spark_capture",
+    "spark_version": "4.2.0",
+    "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+    "timezone": "UTC",
+    "requested_spark_sql_settings": {
+      "spark.sql.session.timeZone": "UTC",
+      "spark.sql.shuffle.partitions": "1"
+    },
+    "effective_spark_sql_settings": {
+      "spark.sql.session.timeZone": "UTC",
+      "spark.sql.shuffle.partitions": "1",
+      "spark.sql.adaptive.enabled": "true",
+      "spark.sql.ansi.enabled": "true",
+      "spark.sql.caseSensitive": "false",
+      "spark.sql.parser.escapedStringLiterals": "false",
+      "spark.sql.variable.substitute": "true"
+    }
+  },
+  "inputs": [
+    {
+      "name": "inputs",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "g",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "p",
+            "type": "boolean",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "0",
+          null,
+          null,
+          null
+        ],
+        [
+          "1",
+          "0",
+          "1",
+          "10",
+          "true"
+        ],
+        [
+          "2",
+          "0",
+          "1",
+          "20",
+          "false"
+        ],
+        [
+          "3",
+          "0",
+          "3",
+          null,
+          "true"
+        ],
+        [
+          "4",
+          "0",
+          "5",
+          "10",
+          null
+        ],
+        [
+          "5",
+          "1",
+          null,
+          null,
+          "false"
+        ],
+        [
+          "6",
+          "1",
+          "2",
+          null,
+          null
+        ],
+        [
+          "7",
+          null,
+          "1",
+          "-4",
+          "true"
+        ],
+        [
+          "8",
+          null,
+          "1",
+          "6",
+          "false"
+        ],
+        [
+          "9",
+          null,
+          "4",
+          "6",
+          "true"
+        ],
+        [
+          "10",
+          "0",
+          "1",
+          "20",
+          "false"
+        ]
+      ]
+    },
+    {
+      "name": "empty_inputs",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "g",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "p",
+            "type": "boolean",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": []
+    }
+  ],
+  "cases": [
+    {
+      "id": "aggregate_mixed",
+      "sql": "SELECT COUNT(*) AS n,COUNT(v) AS nonnull,SUM(v) AS total,AVG(v) AS mean,COUNT_IF(p) AS kept FROM inputs",
+      "ordered": false,
+      "expected": {
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "n",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "nonnull",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "total",
+              "type": "long",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "mean",
+              "type": "double",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "kept",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            "11",
+            "7",
+            "68",
+            "40236db6db6db6db",
+            "4"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "grouped_mixed",
+      "sql": "SELECT g,COUNT(*) AS n,COUNT(v) AS nonnull,SUM(v) AS total,AVG(v) AS mean,COUNT_IF(p) AS kept FROM inputs GROUP BY g ORDER BY g NULLS FIRST",
+      "ordered": true,
+      "expected": {
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "g",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "n",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "nonnull",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "total",
+              "type": "long",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "mean",
+              "type": "double",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "kept",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            null,
+            "3",
+            "3",
+            "8",
+            "4005555555555555",
+            "2"
+          ],
+          [
+            "0",
+            "6",
+            "4",
+            "60",
+            "402e000000000000",
+            "2"
+          ],
+          [
+            "1",
+            "2",
+            "0",
+            null,
+            null,
+            "0"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "aggregate_empty",
+      "sql": "SELECT COUNT(*) AS n,COUNT(v) AS nonnull,SUM(v) AS total,AVG(v) AS mean,COUNT_IF(p) AS kept FROM empty_inputs",
+      "ordered": false,
+      "expected": {
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "n",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "nonnull",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "total",
+              "type": "long",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "mean",
+              "type": "double",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "kept",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            "0",
+            "0",
+            null,
+            null,
+            "0"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "grouped_empty",
+      "sql": "SELECT g,COUNT(*) AS n,COUNT(v) AS nonnull,SUM(v) AS total,AVG(v) AS mean,COUNT_IF(p) AS kept FROM empty_inputs GROUP BY g ORDER BY g NULLS FIRST",
+      "ordered": true,
+      "expected": {
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "g",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "n",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "nonnull",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "total",
+              "type": "long",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "mean",
+              "type": "double",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "kept",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": []
+      }
+    },
+    {
+      "id": "aggregate_all_null",
+      "sql": "SELECT COUNT(*) AS n,COUNT(v) AS nonnull,SUM(v) AS total,AVG(v) AS mean,COUNT_IF(p) AS kept FROM inputs WHERE g=1",
+      "ordered": false,
+      "expected": {
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "n",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "nonnull",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "total",
+              "type": "long",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "mean",
+              "type": "double",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "kept",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            "2",
+            "0",
+            null,
+            null,
+            "0"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "grouped_all_null",
+      "sql": "SELECT g,COUNT(*) AS n,COUNT(v) AS nonnull,SUM(v) AS total,AVG(v) AS mean,COUNT_IF(p) AS kept FROM inputs WHERE g=1 GROUP BY g ORDER BY g NULLS FIRST",
+      "ordered": true,
+      "expected": {
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "g",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "n",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "nonnull",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "total",
+              "type": "long",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "mean",
+              "type": "double",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "kept",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            "1",
+            "2",
+            "0",
+            null,
+            null,
+            "0"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "aggregate_labels",
+      "sql": "SELECT COUNT(*),COUNT(v),SUM(v),AVG(v),COUNT_IF(p) FROM inputs",
+      "ordered": false,
+      "expected": {
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "count(1)",
+              "type": "long",
+              "nullable": false,
+              "metadata": {
+                "__autoGeneratedAlias": "true"
+              }
+            },
+            {
+              "name": "count(v)",
+              "type": "long",
+              "nullable": false,
+              "metadata": {
+                "__autoGeneratedAlias": "true"
+              }
+            },
+            {
+              "name": "sum(v)",
+              "type": "long",
+              "nullable": true,
+              "metadata": {
+                "__autoGeneratedAlias": "true"
+              }
+            },
+            {
+              "name": "avg(v)",
+              "type": "double",
+              "nullable": true,
+              "metadata": {
+                "__autoGeneratedAlias": "true"
+              }
+            },
+            {
+              "name": "count_if(p)",
+              "type": "long",
+              "nullable": false,
+              "metadata": {
+                "__autoGeneratedAlias": "true"
+              }
+            }
+          ]
+        },
+        "rows": [
+          [
+            "11",
+            "7",
+            "68",
+            "40236db6db6db6db",
+            "4"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "having_count",
+      "sql": "SELECT g,COUNT(*) AS n,COUNT(v) AS nonnull,SUM(v) AS total,AVG(v) AS mean,COUNT_IF(p) AS kept FROM inputs GROUP BY g HAVING COUNT(*)>2 ORDER BY g NULLS FIRST",
+      "ordered": true,
+      "expected": {
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "g",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "n",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "nonnull",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "total",
+              "type": "long",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "mean",
+              "type": "double",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "kept",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            null,
+            "3",
+            "3",
+            "8",
+            "4005555555555555",
+            "2"
+          ],
+          [
+            "0",
+            "6",
+            "4",
+            "60",
+            "402e000000000000",
+            "2"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "having_null_sum",
+      "sql": "SELECT g,COUNT(*) AS n,COUNT(v) AS nonnull,SUM(v) AS total,AVG(v) AS mean,COUNT_IF(p) AS kept FROM inputs GROUP BY g HAVING SUM(v) IS NULL ORDER BY g NULLS FIRST",
+      "ordered": true,
+      "expected": {
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "g",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "n",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "nonnull",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "total",
+              "type": "long",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "mean",
+              "type": "double",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "kept",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            "1",
+            "2",
+            "0",
+            null,
+            null,
+            "0"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "having_alias",
+      "sql": "SELECT g,COUNT(*) AS n,COUNT(v) AS nonnull,SUM(v) AS total,AVG(v) AS mean,COUNT_IF(p) AS kept FROM inputs GROUP BY g HAVING total>0 ORDER BY g NULLS FIRST",
+      "ordered": true,
+      "expected": {
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "g",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "n",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "nonnull",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "total",
+              "type": "long",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "mean",
+              "type": "double",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "kept",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            null,
+            "3",
+            "3",
+            "8",
+            "4005555555555555",
+            "2"
+          ],
+          [
+            "0",
+            "6",
+            "4",
+            "60",
+            "402e000000000000",
+            "2"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "having_count_if",
+      "sql": "SELECT g,COUNT(*) AS n,COUNT(v) AS nonnull,SUM(v) AS total,AVG(v) AS mean,COUNT_IF(p) AS kept FROM inputs GROUP BY g HAVING COUNT_IF(p)>1 ORDER BY g NULLS FIRST",
+      "ordered": true,
+      "expected": {
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "g",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "n",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "nonnull",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "total",
+              "type": "long",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "mean",
+              "type": "double",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "kept",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            null,
+            "3",
+            "3",
+            "8",
+            "4005555555555555",
+            "2"
+          ],
+          [
+            "0",
+            "6",
+            "4",
+            "60",
+            "402e000000000000",
+            "2"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "distinct_mixed",
+      "sql": "SELECT COUNT(DISTINCT v) AS n,SUM(DISTINCT v) AS total,AVG(DISTINCT v) AS mean,COUNT(DISTINCT g,v) AS pairs FROM inputs",
+      "ordered": false,
+      "expected": {
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "n",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "total",
+              "type": "long",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "mean",
+              "type": "double",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "pairs",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            "4",
+            "32",
+            "4020000000000000",
+            "2"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "distinct_grouped_mixed",
+      "sql": "SELECT g,COUNT(DISTINCT v) AS n,SUM(DISTINCT v) AS total,AVG(DISTINCT v) AS mean,COUNT(DISTINCT g,v) AS pairs FROM inputs GROUP BY g",
+      "ordered": false,
+      "expected": {
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "g",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "n",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "total",
+              "type": "long",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "mean",
+              "type": "double",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "pairs",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            "0",
+            "2",
+            "30",
+            "402e000000000000",
+            "2"
+          ],
+          [
+            "1",
+            "0",
+            null,
+            null,
+            "0"
+          ],
+          [
+            null,
+            "2",
+            "2",
+            "3ff0000000000000",
+            "0"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "distinct_empty",
+      "sql": "SELECT COUNT(DISTINCT v) AS n,SUM(DISTINCT v) AS total,AVG(DISTINCT v) AS mean,COUNT(DISTINCT g,v) AS pairs FROM empty_inputs",
+      "ordered": false,
+      "expected": {
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "n",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "total",
+              "type": "long",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "mean",
+              "type": "double",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "pairs",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            "0",
+            null,
+            null,
+            "0"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "distinct_grouped_empty",
+      "sql": "SELECT g,COUNT(DISTINCT v) AS n,SUM(DISTINCT v) AS total,AVG(DISTINCT v) AS mean,COUNT(DISTINCT g,v) AS pairs FROM empty_inputs GROUP BY g",
+      "ordered": false,
+      "expected": {
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "g",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "n",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "total",
+              "type": "long",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "mean",
+              "type": "double",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "pairs",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": []
+      }
+    },
+    {
+      "id": "distinct_all_null",
+      "sql": "SELECT COUNT(DISTINCT v) AS n,SUM(DISTINCT v) AS total,AVG(DISTINCT v) AS mean,COUNT(DISTINCT g,v) AS pairs FROM inputs WHERE g=1",
+      "ordered": false,
+      "expected": {
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "n",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "total",
+              "type": "long",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "mean",
+              "type": "double",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "pairs",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            "0",
+            null,
+            null,
+            "0"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "distinct_grouped_all_null",
+      "sql": "SELECT g,COUNT(DISTINCT v) AS n,SUM(DISTINCT v) AS total,AVG(DISTINCT v) AS mean,COUNT(DISTINCT g,v) AS pairs FROM inputs WHERE g=1 GROUP BY g",
+      "ordered": false,
+      "expected": {
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "g",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "n",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "total",
+              "type": "long",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "mean",
+              "type": "double",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "pairs",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            "1",
+            "0",
+            null,
+            null,
+            "0"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "distinct_nested_arguments",
+      "sql": "SELECT COUNT(DISTINCT ARRAY(v)) AS arrays,COUNT(DISTINCT NAMED_STRUCT('v',v,'p',p)) AS structs FROM inputs",
+      "ordered": false,
+      "expected": {
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "arrays",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "structs",
+              "type": "long",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            "5",
+            "9"
+          ]
+        ]
+      }
+    }
+  ]
+}

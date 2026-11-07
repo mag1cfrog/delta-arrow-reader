@@ -1,3 +1,4 @@
+// Modified for the DAR Spark SQL runtime. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -32,6 +33,7 @@ use crate::{
 use arrow::datatypes::{Schema, SchemaRef};
 use arrow_schema::{FieldRef, SortOptions};
 use datafusion_common::{Result, exec_err};
+use datafusion_expr::window_state::date32_range_can_wrap;
 use datafusion_expr::{
     LimitEffect, PartitionEvaluator, ReversedUDWF, SetMonotonicity, WindowFrame,
     WindowFunctionDefinition, WindowUDF,
@@ -481,6 +483,14 @@ pub(crate) fn window_equivalence_properties(
                 // If the window frame is ever-receding, and we have set
                 // monotonicity, we can utilize it to introduce new orderings.
                 let frame = sliding_expr.get_window_frame();
+                let date32_wrapping_end = match expr.order_by().first() {
+                    Some(order_by) => date32_range_can_wrap(
+                        &order_by.expr.data_type(input.schema().as_ref())?,
+                        frame.units,
+                        &frame.end_bound,
+                    ),
+                    None => false,
+                };
                 if frame.end_bound.is_unbounded() {
                     let increasing = set_monotonicity.eq(&SetMonotonicity::Increasing);
                     let window_col = Column::new(expr.name(), i + input_schema_len);
@@ -507,7 +517,7 @@ pub(crate) fn window_equivalence_properties(
                 // we also need to check if the frame is causal. If not, we cannot
                 // utilize set-monotonicity since the set shrinks as the frame
                 // boundary starts "touching" the end of the table.
-                else if frame.is_causal() {
+                else if frame.is_causal() && !date32_wrapping_end {
                     // Find one valid ordering for aggregate arguments instead of
                     // checking all combinations
                     let aggregate_exprs = sliding_expr.get_aggregate_expr().expressions();
@@ -615,6 +625,18 @@ pub fn get_best_fitting_window(
     };
 
     let window_expr = if should_reverse {
+        if let Some(order_by) = orderby_keys.first() {
+            let data_type = order_by.expr.data_type(input.schema().as_ref())?;
+            if window_exprs.iter().any(|expr| {
+                let frame = expr.get_window_frame();
+                [&frame.start_bound, &frame.end_bound]
+                    .iter()
+                    .any(|bound| date32_range_can_wrap(&data_type, frame.units, bound))
+            }) {
+                // Wrapped DATE targets use forward cursors that are not reversible.
+                return Ok(None);
+            }
+        }
         if let Some(reversed_window_expr) = window_exprs
             .iter()
             .map(|e| e.get_reverse_expr())

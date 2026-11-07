@@ -237,21 +237,10 @@ fn matched_window_gap_owner(
         && observation["rows_raw"].is_array()
         && observation["ordered_rows_match"] == true;
     let matches = match (control["kind"].as_str()?, owner) {
-        ("parser_error", "#744") => {
-            case["expected"]["rows"].is_array()
-                && phase == "resolve"
-                && error.starts_with("External error: error in SQL parser: ")
-                && matches_unmaterialized_window_error(observation, error, phase)
-        }
         ("boolean_error", "#1045") => {
             case["expected"]["condition"] == "INVALID_PARAMETER_VALUE.BOOLEAN"
                 && phase == "resolve"
                 && matches_unmaterialized_window_error(observation, error, phase)
-        }
-        ("date_rows", "#747") => {
-            success
-                && window_schemas_match_reference(case, observation, None)
-                && observation["rows"] == control["rows"]
         }
         ("lag_nullability", "#1044") => {
             let field = usize::try_from(control["nullable_field"].as_u64()?).ok()?;
@@ -361,7 +350,7 @@ fn window_gap_checks_reject_changes_outside_owned_facets() -> TestResult {
             "native_phase":"encode","error":null,"ordered_rows_match":true,
         });
         match control["kind"].as_str().ok_or("missing retained kind")? {
-            "parser_error" | "boolean_error" | "offset_frame_error" | "offset_cast_phase" => {
+            "boolean_error" | "offset_frame_error" | "offset_cast_phase" => {
                 for key in [
                     "public_schema",
                     "optimized_schema",
@@ -395,7 +384,7 @@ fn window_gap_checks_reject_changes_outside_owned_facets() -> TestResult {
                     observation["public_schema"] = json!({"type":"struct","fields":fields});
                 }
             }
-            "date_rows" | "offset_null_rows" => {
+            "offset_null_rows" => {
                 observation["rows"] = control["rows"].clone();
                 observation["rows_raw"] = control["rows"].clone();
             }
@@ -579,6 +568,7 @@ async fn generated_window_names_check_spark_and_retained_facets() -> TestResult 
     let controls = retained["controls"]
         .as_array()
         .ok_or("missing retained facets")?;
+    assert!(controls.iter().all(|control| control["owner"] != "#747"));
     assert_eq!(records[0]["spark_version"], "4.2.0");
     assert_eq!(records[0]["timezone"], "UTC");
     let mut identities = BTreeSet::new();

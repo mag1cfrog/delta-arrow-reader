@@ -297,7 +297,9 @@ fn substr(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     .call(arguments);
     // Whole constants retain conditional folding; ordinary scalar calls use
     // native NULL selection. Async calls keep their existing extraction path.
-    if !async_arguments && !known_null && crate::expression_errors::row_expression(&logical, false)?
+    if !async_arguments
+        && !known_null
+        && crate::expression_errors::is_locally_evaluable(&logical, false)?
     {
         return substring_lambdas(logical, false).map(|value| value.data);
     }
@@ -784,7 +786,7 @@ impl ScalarUDFImpl for NullPropagatingStringFunction {
                 && nested.args.len() == 1
             {
                 // Child UDF hooks can expose constants after the evaluator's first pass.
-                if crate::expression_errors::row_expression(argument, false)?
+                if crate::expression_errors::is_locally_evaluable(argument, false)?
                     && let Ok(literal @ expr::Expr::Literal(_, _)) =
                         ExprSimplifier::new(info.clone()).simplify(argument.clone())
                 {
@@ -875,7 +877,7 @@ pub(crate) fn simplify_projected_case_conversions(
     for (field, expression) in input.schema.fields().iter().zip(&input.expr) {
         if column_uses.get(field.name()).copied().unwrap_or(0) > 1
             && !expression.placement().should_push_to_leaves()
-            && !crate::expression_errors::row_expression(expression, false)?
+            && !crate::expression_errors::is_locally_evaluable(expression, false)?
         {
             return Ok(Transformed::no(plan));
         }
@@ -1588,7 +1590,9 @@ fn substring_logical_visibility_and_runtime_lowering_do_not_invoke_operands()
     ));
     assert!(!ScalarUDFImpl::short_circuits(&asynchronous));
     assert!(ScalarUDFImpl::conditional_arguments(&asynchronous, &args).is_none());
-    assert!(!crate::expression_errors::row_expression(&logical, false)?);
+    assert!(!crate::expression_errors::is_locally_evaluable(
+        &logical, false
+    )?);
     let info = SimplifyContext::builder()
         .with_schema(Arc::new(DFSchema::try_from(Schema::new(vec![
             Field::new("s", DataType::Utf8, true),
@@ -1619,7 +1623,7 @@ fn substring_logical_visibility_and_runtime_lowering_do_not_invoke_operands()
     assert!(runtime.func.conditional_arguments(&runtime.args).is_some());
     let bodies = SparkSubstring::closed_argument_bodies(&lowered.data)?.unwrap();
     assert_eq!(bodies, [&args[0], &args[1], &args[2]]);
-    assert!(crate::expression_errors::row_expression(
+    assert!(crate::expression_errors::is_locally_evaluable(
         &lowered.data,
         true
     )?);

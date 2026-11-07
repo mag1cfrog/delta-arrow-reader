@@ -28,14 +28,16 @@ use arrow::array::{Array, ArrayRef, make_comparator, new_empty_array};
 use arrow::compute::SortOptions;
 use arrow::compute::filter as arrow_filter;
 use arrow::compute::kernels::sort::SortColumn;
-use arrow::datatypes::FieldRef;
+use arrow::datatypes::{DataType, FieldRef};
 use arrow::record_batch::RecordBatch;
 use datafusion_common::cast::as_boolean_array;
 use datafusion_common::{
     Result, ScalarValue, arrow_datafusion_err, exec_datafusion_err, internal_err,
+    utils::compare_rows,
 };
 use datafusion_expr::window_state::{
     PartitionBatchState, WindowAggState, WindowFrameContext, WindowFrameStateGroups,
+    date32_range_target, date32_range_can_wrap,
 };
 use datafusion_expr::{Accumulator, PartitionEvaluator, WindowFrame, WindowFrameBound};
 use datafusion_physical_expr_common::sort_expr::PhysicalSortExpr;
@@ -334,7 +336,15 @@ pub trait AggregateWindowExpr: WindowExpr {
         // We iterate on each row to perform a running calculation.
         let length = values[0].len();
         let mut row_wise_results: Vec<ScalarValue> = vec![];
-        let is_causal = self.get_window_frame().is_causal();
+        let date32_wrapping_end = order_bys.first().is_some_and(|column| {
+            date32_range_can_wrap(
+                column.data_type(),
+                self.get_window_frame().units,
+                &self.get_window_frame().end_bound,
+            )
+        });
+        // A wrapped DATE offset can reach future rows even for PRECEDING.
+        let is_causal = self.get_window_frame().is_causal() && !date32_wrapping_end;
         let mut end_bound_safe = None;
         while idx < length {
             // Start search from the last_range. This squeezes searched range.
@@ -353,10 +363,12 @@ pub trait AggregateWindowExpr: WindowExpr {
                             idx,
                         )?;
                         // CURRENT ROW and PRECEDING compare the same batch edges for every row.
-                        if !matches!(
-                            self.get_window_frame().end_bound,
-                            WindowFrameBound::Following(_)
-                        ) {
+                        if !date32_wrapping_end
+                            && !matches!(
+                                self.get_window_frame().end_bound,
+                                WindowFrameBound::Following(_)
+                            )
+                        {
                             end_bound_safe = Some(safe);
                         }
                         safe
@@ -478,7 +490,7 @@ fn is_end_bound_safe_for_rows(end_bound: &WindowFrameBound) -> Result<bool> {
     }
 }
 
-/// For row-based window frames, determines whether the end bound calculation
+/// For range-based window frames, determines whether the end bound calculation
 /// is safe by comparing it against specific values (zero, current row). It uses
 /// the `is_row_ahead` helper function to determine if the current row is ahead
 /// of the most recent row based on the ORDER BY column and sorting options.
@@ -501,6 +513,20 @@ fn is_end_bound_safe_for_range(
     sort_options: &SortOptions,
     idx: usize,
 ) -> Result<bool> {
+    if orderby_col.data_type() == &DataType::Date32
+        && let WindowFrameBound::Preceding(delta) | WindowFrameBound::Following(delta) = end_bound
+        && let Some(target) = date32_range_target(
+            &ScalarValue::try_from_array(orderby_col, idx)?,
+            delta,
+            matches!(end_bound, WindowFrameBound::Preceding(_)) == sort_options.descending,
+        )
+    {
+        let Some(most_recent_ob_col) = most_recent_ob_col.filter(|col| !col.is_empty()) else {
+            return Ok(false);
+        };
+        let latest = ScalarValue::try_from_array(most_recent_ob_col, 0)?;
+        return compare_rows(&[latest], &[target], &[*sort_options]).map(|order| order.is_gt());
+    }
     match end_bound {
         WindowFrameBound::Preceding(value) => {
             let zero = ScalarValue::new_zero(&value.data_type())?;

@@ -104,6 +104,121 @@ or rewrite them. The production change is the Spark-marked nullability arm
 from `e8e0d982` / `2337b79d`. This is a partial #721 delivery and a producer
 prerequisite for the discarded-CASE control retained by constant STRUCT #849.
 
+## CASE equal-result tails
+
+[case-result-tails-spark.jsonl](case-result-tails-spark.jsonl) contains 44
+independent observations for equal/distinct results, explicit and typed implicit
+NULL, source metadata, aliases, signed-zero/NaN literals, volatile guards/results,
+and required division or scalar-subquery errors. Its inputs include the original
+id 0/1/2 struct provider, its same-schema empty variant, closed expressions and
+SQL VALUES. [case-result-tails-volatile-subqueries-spark.jsonl](case-result-tails-volatile-subqueries-spark.jsonl)
+adds four observations with UUID inside scalar subquery guards and results.
+[case-result-tails-range-subquery-spark.jsonl](case-result-tails-range-subquery-spark.jsonl)
+adds two deterministic Range subquery guard observations.
+[case-result-tails-volatile-floats-spark.jsonl](case-result-tails-volatile-floats-spark.jsonl)
+adds four signed-zero observations under UUID guards and STRING casts.
+[case-result-tails-raw-floats-spark.jsonl](case-result-tails-raw-floats-spark.jsonl)
+adds four direct DOUBLE observations with exact IEEE bits for both zero signs.
+[case-result-tails-alias-lineage-spark.jsonl](case-result-tails-alias-lineage-spark.jsonl)
+adds six controls for distinct source columns with coincident rows and identical
+fields, separate UUID outputs, and two aliases of one materialized UUID output.
+[case-result-tails-host-contexts-spark.jsonl](case-result-tails-host-contexts-spark.jsonl)
+adds six aggregate, window and filtered-projection controls. SUM retains its
+aliased CASE and required ANSI division error; window SUM and the filtered
+projection prune their aliased CASE results. All seven CASE references contain
+no RAND calls.
+
+Their first-line headers pin Spark 4.2.0 revision
+`32f7299601108917fb01920a54e084595b7b3bf8`, UTC, original input schemas/metadata/rows,
+and capture-script and manifest hashes. Each record preserves its ANSI mode,
+complete available schema stages, plans, and rows or actual error condition and
+phase. These are the authoritative capture inputs and outcomes.
+
+[case_result_tails.rs](../case_result_tails.rs) compares all 70 CASE records at batch
+sizes 1 and 32 through the canonical stage and optimized-field observers.
+The references distinguish removable provider guards from closed/VALUES errors
+that still require optimization-time failure. A deterministic scalar-subquery
+guard can disappear, while a UUID subquery guard retains its CASE prefix.
+Unconditional signed-zero result collapse preserves the ELSE sign. The UUID
+guard controls, both STRING casts and direct DOUBLE outputs, retain the selected
+THEN sign in Spark's recorded rows and optimized plans. UUID result cases observe
+LENGTH 36 rather than requiring random UUID sample equality. The references
+retain their complete field stages unchanged.
+
+Only the test's listed cases and stages allow nullability differences (#711,
+#1072) or exact native causes missing literal condition IDs (#865, #140). All
+other Field attributes, rows and error phases remain exact. The report preserves
+raw comparison results and records each owner; admitted differences keep
+`complete_spark_matches=false`.
+
+Separate algebraic and native SQL controls cover volatility, literal identity,
+metadata and unchanged native CASE behavior, retaining complete raw diagnostics.
+A separate Spark-planner IF control reuses the four unchanged
+[conditional-nested-if-spark.jsonl](conditional-nested-if-spark.jsonl) records for
+eight batch contexts, checking exact nested result fields and rows through the
+reachable `if_expr` path. Its existing header retains the independent provenance.
+These references provide 148 batch contexts in total. CASE result aliases can
+share a representative only when metadata-free column passthroughs reach the
+same stored output and their complete exposed fields agree apart from alias
+names. Filters preserve the stored values of surviving rows; aggregate
+arguments keep their separate pruning boundary. Distinct source columns and separately computed UUIDs stay distinct;
+a shared materialized UUID remains a reference to that stored value. Guards
+remain for the existing CASE pruning rule to handle.
+
+## RAND comparison bounds
+
+Four independent references cover RAND's half-open range [0, 1):
+
+- [rand-comparison-bounds-spark.jsonl](rand-comparison-bounds-spark.jsonl) has 130
+  observations for ordering bounds, operand orders, seed forms, equality and
+  other volatile-function controls, required errors, and output names.
+- [rand-comparison-bounds-operands-spark.jsonl](rand-comparison-bounds-operands-spark.jsonl)
+  adds 70 observations for NULL/NaN operands, throwing seeds and bounds, both
+  original equal-result CASE guard orders, and required error controls.
+- [rand-comparison-bounds-admission-spark.jsonl](rand-comparison-bounds-admission-spark.jsonl)
+  adds 50 observations for infinities, seed type/arity/foldability admission,
+  live throwing seeds, and scalar-subquery errors.
+- [rand-comparison-bounds-subqueries-spark.jsonl](rand-comparison-bounds-subqueries-spark.jsonl)
+  adds four observations for constant bounds after OneRow scalar-subquery
+  inlining, with both operand orders and ANSI modes.
+
+Each file's first-line header is the source for its capture settings and
+provenance: Spark 4.2.0 revision
+`32f7299601108917fb01920a54e084595b7b3bf8`, UTC, original input schemas, metadata
+and rows, and capture-script and manifest hashes. Each record retains its SQL,
+ANSI mode, observed fields, rows or error, and available plans. The real
+`case_parent_mixed` provider includes id 0, which is required by the division
+guards. The references remain unchanged.
+
+[rand_comparison_bounds.rs](../rand_comparison_bounds.rs) compares the recorded
+declarations, rows and required errors at batch sizes 1 and 32. Two ANSI-false
+records require a random-domain contract: `live_seed_error_normal`
+(`rand(1 DIV 0)>0.5D`) and `live_seed_error_swapped`
+(`0.5D<rand(1 DIV 0)`). Their NULL seeds use the existing unseeded path. Across
+the two batch sizes, these four contexts require exact analyzed, optimized,
+before-collect and executed fields, no error, and exactly three single-column,
+nonnull Boolean rows. Their original sampled rowsets remain in the references;
+cross-engine RNG sample equality is not a stream contract.
+
+The regression gate permits only the missing condition IDs tracked by
+[#865](https://github.com/mag1cfrog/delta-arrow-reader/issues/865) and
+[#1067](https://github.com/mag1cfrog/delta-arrow-reader/issues/1067) at the recorded
+fixture positions. It still requires the exact native cause, error phase,
+available fields and no returned rows. Raw comparison flags and
+`contract_matches` remain visible; `regression_matches` can include these
+diagnostic fallbacks and does not imply complete Spark parity. All nullable
+fields remain exact. Both original CASE guard orders and the implicit-NULL case
+still require strict matches in all 12 contexts.
+
+The accepted replay correction for
+`replay/existing-nonansi-zero-cases/112/volatile_divisor_true` requires one
+analyzer context before the original Arrow divide cause after the RAND bound
+folds. It stores `spark_decimal_null_propagation`, the replay's existing canonical
+name for `preserve_spark_expression_errors`. The `execution_error` status and `r`
+output name stay exact. On staging `c7a3545c`, this query fails during collection;
+with #838 it fails during physical preparation. The original Spark record reports
+only `execution_error`; it does not identify a finer Spark phase.
+
 ## Integer-day DATE arithmetic
 
 `date-day-arithmetic-spark.jsonl` contains 296 independent Spark 4.2.0
@@ -1636,6 +1751,51 @@ Regenerate with Python 3.12, PySpark 4.2.0 and Java 21:
 ```sh
 python tests/fixtures/capture_pivot_names_spark.py
 cargo test --locked --workspace --test pivot_names --test pivot_float_keys
+```
+
+## PIVOT source and result aliases
+
+The five PIVOT source-alias captures retain 82 independent
+Spark 4.2.0 observations in UTC and both ANSI modes:
+
+| Fixture | Observations |
+| --- | --- |
+| `pivot-source-aliases-spark.jsonl` | 44 |
+| `pivot-source-aliases-supplement-spark.jsonl` | 22 |
+| `pivot-source-aliases-boundaries-spark.jsonl` | 6 |
+| `pivot-source-aliases-join-spark.jsonl` | 2 |
+| `pivot-source-aliases-relation-order-spark.jsonl` | 8 |
+
+They cover aliases before and after PIVOT, bare `FOR g`, parenthesized and tuple
+keys, qualified grouping columns, malformed inputs, genuine ambiguity, nested
+and dynamic sources, sampling, LATERAL, and modifier/JOIN order. A PIVOT directly
+after a JOIN right operand and before `ON` is a captured parse error. The
+relation-order controls include effective per-query settings and loaded
+Java/Spark runtime identity. Their ordinary UNPIVOT query provides the alias-free
+equivalence control. All raw reference bytes remain unchanged.
+
+`pivot_source_aliases` replays every record at batch sizes 1 and 32, comparing
+complete analyzed, optimized and executed Fields, duplicate-preserving rows and
+specific error causes/phases. `window_names` separately requires the original
+window-generated PIVOT queries and their independent alias-free controls to
+match completely for nonempty, empty and all-NULL inputs.
+
+`pivot-source-aliases-retained-baseline-facets.json` records accepted native
+contracts for 16 contexts under [#786](https://github.com/mag1cfrog/delta-arrow-reader/issues/786)
+(repeated projection identity) and [#1076](https://github.com/mag1cfrog/delta-arrow-reader/issues/1076)
+(UNPIVOT NULL filtering and result nullability). The exact four case IDs, ANSI
+mode, batch, SQL and full reference payload bind each contract. The newly
+admitted alias forms must retain the same complete public behavior as their
+accepted alias-free controls. The other 148 comparisons require exact Spark
+results. The report keeps raw `matches` and `actual` values, then adds separate
+`independent_gap_owner` and `regression_matches` fields. Native private field IDs
+and unordered raw-row order are not frozen by these contracts. New strict
+matches require retiring their obsolete native controls.
+
+```sh
+DAR_PIVOT_SOURCE_ALIASES_REPORT=target/pivot-source-aliases-report.json \
+cargo +1.96.0 test --locked --workspace --no-fail-fast \
+  --test pivot_source_aliases --test window_names --test interval_qualifiers
 ```
 
 ## Nested field expression names
@@ -3433,13 +3593,18 @@ contexts. CSE and local VALUES keep their required errors. Local VALUES reports
 DIVIDE_BY_ZERO at Spark `optimized_schema` and native `physical`; the tests keep
 those stage names separate and compare the exact cause and available fields.
 
-`concat-runtime-native-negative-profiles.jsonl` preserves 17 native R3 receipts
-with their original source hashes, commands, settings and log identities. Nine
-supplementary and eight matched RNG results remain strict Spark differences.
-The seeded value differences are tracked by #901, and direct RAND nullability
-by #875. Three supplementary receipts retain competing errors on different rows
-of an unordered query. Their checks pin complete public fields, exact values,
-row IDs, causes, stages and context without granting compatibility credit.
+`concat-runtime-native-negative-profiles.jsonl` preserves all 17 native R3 receipts
+with their original source hashes, commands, settings and log identities. The
+active expectations cover nine supplementary and six matched RNG negative
+contexts. Both direct RAND contexts at batch size 32 require complete strict
+Spark fields and rows. For the two direct RAND contexts at batch size 1, #838
+updates only the current analyzed and physical `r.nullable` expectations to false.
+Their captured rows, original nullable declarations and Arrow receipts stay
+unchanged. The remaining seeded value differences are tracked by #901.
+These direct RAND contexts cover only part of #875; the issue remains open.
+Three supplementary receipts retain competing errors on different rows of an
+unordered query. Their checks pin complete public fields, exact values, row IDs,
+causes, stages and context without granting compatibility credit.
 Raw Arrow receipts remain available; internal analyzer aliases are not public
 field names. The matched RNG inputs use one real native partition and Spark
 local[1], with batch sizes 1 and 32.
@@ -3515,24 +3680,27 @@ pinned coordinate encoding/error helpers through relative paths.
 original frozen outcomes, stage maps, SQL and provider inputs. The new header
 records its own source and manifest hashes and the original capture lineage.
 
-The case regression gate also retains 126 complete current native negative
-receipts: 96 preexisting TRY_CAST field differences under #802, 24 preexisting
-RAND-range row differences under #838, and six unordered inner LIMIT/OFFSET
-selection contexts. The last six are exactly both ANSI modes, three storage
-representations and batch size 1; batch size 32 remains strict. Outer ORDER BY
-does not constrain the inner unordered selection. This is a retained support
-boundary, with no relational defect asserted.
+The case regression gate retains 102 complete current native negative
+receipts: 96 preexisting TRY_CAST field differences under #802 and six unordered
+inner LIMIT/OFFSET selection contexts. The last six are exactly both ANSI modes,
+three storage representations and batch size 1; batch size 32 remains strict.
+Outer ORDER BY does not constrain the inner unordered selection. This is a
+retained support boundary, with no relational defect asserted.
 
 Every negative requires its complete fixture/SQL/ANSI/storage/batch identity and
 actual analyzed fields, physical fields and rows. It keeps `strict_spark_match`
 and `full_compatibility_pass` false. Changed results, unexpected errors and any
 other case fail. The #802 fields are unchanged from the baseline while some
-case values improved; these profiles retain actual R2 values. All 24 #838 public
-receipts match the baseline exactly. The active #775 numeric profiles remain
-separate and unchanged. Together they retain 150 success differences.
+case values improved; these profiles retain actual R2 values. The active #775
+numeric profiles remain separate and unchanged. Together they retain 126 success
+differences.
+
+The 24 #838 contexts for `producer_single_volatile_lower` and
+`producer_single_volatile_upper` require strict matches in both ANSI modes,
+all three representations and both batch sizes. They have no negative fallback.
 
 A passing regression gate does not complete #792's first acceptance criterion
-or close #802/#838. All original references remain in the output. No new genuine
+or close #802. All original references remain in the output. No new genuine
 or unaliased positive is eligible for a negative fallback.
 
 `case-conversion-producer-genuine-volatile-spark.jsonl` and its `plan-trace`
@@ -3635,6 +3803,39 @@ comparison helpers and have no negative profiles. Together with the original
 660-context gate. The retained preexecution phase mappings keep full family
 compatibility incomplete.
 
+## REGEXP operator names
+
+`regexp-operator-names-spark.jsonl` retains 22 independent Spark 4.2.0
+observations: 11 queries in both ANSI modes. They cover literal and column
+operators, mixed projections, explicit aliases, nested names, outer-query column
+binding, nullable and empty providers, and constant and runtime invalid patterns.
+RLIKE, REGEXP_LIKE, LIKE and ILIKE remain adjacent controls. Source metadata
+detects leaks into generated and explicit aliases.
+
+`regexp_operator_names.rs` replays every reference with Utf8, LargeUtf8 and
+Utf8View inputs at batch sizes 1 and 32. All 132 contexts compare complete
+public, analyzed, optimized and physical Fields at each available Spark stage,
+plus ordered rows or the required malformed-pattern cause. Unavailable Spark
+stages stay unavailable; reached native Fields remain in their own observations.
+The capture header and per-case settings retain runtime and input provenance.
+The existing `like-names-spark.jsonl` reference stays unchanged.
+
+The 12 constant invalid-pattern contexts retain a separate #1079 timing gap:
+Spark fails when obtaining its optimized schema; DAR fails during collection.
+Their raw `strict_spark_matches` grades remain false. The two target controls in
+`regexp-operator-names-inherited-contracts.jsonl` preserve each complete
+inherited observation with only the #1060 names and their schema grades updated
+to Spark requirements. They are expected contracts, not post-change captures.
+Any other field, raw error, phase, reference or grade change fails until the
+controls are deliberately retired. The other 120 contexts require strict
+comparison, including all runtime malformed-pattern contexts. Full regex
+compatibility remains incomplete while #1079 is open.
+
+A separate native SQL test retains all 30 plain and configured DataFusion
+observations across the six layout and batch combinations. It requires complete
+observation equality, successful status for valid queries, and the known native
+malformed-pattern cause and phase for the invalid control.
+
 ## LIKE escapes and pattern evaluation
 
 `like-escapes-spark.jsonl` retains all 196 LIKE/ILIKE observations from the
@@ -3659,9 +3860,8 @@ case sensitivity and escaped string literal settings. SparkContext settings
 separately record the master and default parallelism.
 
 The regexp control preserves the REGEXP operator's explicit `regexp_alias`
-and the other five expressions' unaliased names. The unaliased REGEXP operator's
-default name remains a separate #1060 difference: DAR uses `REGEXP(ab, (a))`,
-while Spark uses `RLIKE(ab, (a))`.
+and the other five expressions' unaliased names. The separate
+[REGEXP operator references](#regexp-operator-names) cover its unaliased names.
 
 `like-evaluation-spark.jsonl` adds 288 independent observations for mixed,
 all-NULL and empty registered inputs. It distinguishes literal from
@@ -3945,3 +4145,98 @@ inserting only `[CAST_OVERFLOW]` and its cause context into the error. All origi
 reference and profile bytes remain unchanged. These checks preserve native
 failure boundaries and available Fields; complete raw Spark diagnostic parity
 remains unverified.
+
+## Aggregate query results
+
+`aggregate-query-results-spark.jsonl` records 18 aggregate statements in both
+ANSI modes, including global and keyed groups, mixed/empty/all-NULL inputs,
+HAVING, generated names and DISTINCT arguments. The cases manifest retains the
+original SQL, ordering flags, queried provider data and public results. The
+fixture header records the Spark build, runtime, settings and capture provenance.
+
+`aggregate_query_results.rs` compares complete public, analyzed, optimized and
+physical Fields before and after collection. It checks all 72 query/mode/batch
+contexts at batch sizes 1 and 32 with two target partitions. Mixed provider
+batches use two round-robin partitions; `empty_inputs` uses one empty partition.
+Ordered queries must retain output order; unordered comparisons preserve row
+multiplicity. This is bounded aggregate coverage within #142.
+
+Run from the standalone crate directory:
+
+```sh
+cargo test --workspace --no-fail-fast --locked --test aggregate_query_results -- --nocapture
+```
+
+To recapture, use Python 3.12, Java 21 and PySpark 4.2.0 at revision
+`32f7299601108917fb01920a54e084595b7b3bf8`. The capture script reuses the existing
+aggregate encoder for IEEE-754 AVG values and recursive array/struct values. It
+translates the observer's physical stage names and preserves actual ordered rows.
+The self-check covers that translation, ordering and duplicate preservation. It
+also checks normal gateway exit and timeout cleanup with mocks.
+
+```sh
+python tests/fixtures/capture_aggregate_query_results_spark.py --self-check
+aggregate_capture_dir="$(mktemp -d)"
+TZ=UTC python tests/fixtures/capture_aggregate_query_results_spark.py \
+  "$aggregate_capture_dir/aggregate-query-results-spark.jsonl"
+```
+
+Recapture creates a new file and compares all 36 public schemas and typed rowsets
+against the original manifest after observation. Review its complete stage Fields,
+settings and runtime provenance against the committed reference before replacing
+fixtures. The manifest pins stable build/settings metadata and original contracts;
+capture/request hashes remain per-run receipts in the fixture header. After
+normal shutdown, the script prints its owned JVM lifecycle receipt to stderr.
+If the gateway exceeds its shutdown timeout, the script kills and reaps that
+owned process and reports the timeout as a failed capture.
+
+## Numeric DATE RANGE bounds
+
+From this standalone crate, use Python 3.12, Java 21 and PySpark 4.2.0 at revision
+`32f7299601108917fb01920a54e084595b7b3bf8`. The capture script verifies the loaded
+revision and records actual runtime artifacts and settings. It reads the sibling
+source-only manifest and writes a fresh JSONL plus an owned-JVM lifecycle receipt.
+
+```sh
+python3 tests/fixtures/capture_date_range_747_spark.py --self-check
+date_range_capture_dir="$(mktemp -d)"
+TZ=UTC PYTHONDONTWRITEBYTECODE=1 \
+  python3 tests/fixtures/capture_date_range_747_spark.py \
+  "$date_range_capture_dir/date-range-747-spark.jsonl"
+cargo +1.96.0 test --workspace --no-fail-fast --locked \
+  --test date_range_frames --test native_window_frame_state \
+  --test linear_window_completion --test window_names \
+  -- --nocapture --test-threads=1
+```
+
+`date-range-747-cases.json` preserves 548 original SQL/ANSI identities and seven
+provider contexts, including the original five-column providers. Its historical
+source paths and hashes identify where those inputs came from; recapture does
+not open or rehash the absent historical corpora. The new capture hashes the
+manifest and helper files it actually uses. Every result comes from Spark.
+A fresh capture is comparison evidence, not a drop-in fixture replacement. Review
+its complete available Fields, error phases, rows, ordering and runtime provenance
+against `date-range-747-spark.jsonl`. A reference refresh must also update the
+owner controls' reference records, while preserving their native observations
+and the separate native control file.
+
+`date_range_frames.rs` requires 984 primary comparisons at batch sizes 1 and 32
+with two target partitions, including 12 TIMESTAMP control contexts. It also
+replays the exact original query and frame consumers separately in 108 contexts.
+All five schema stages retain complete names, types, nullability and metadata
+when available. Failures retain the condition, phase and available Fields;
+ordered queries retain raw output order, and unordered comparisons preserve
+duplicates. The capture self-check exercises partial stages, row ordering and
+owned-process cleanup without importing Spark. A further 32 comparisons use
+preordered providers with one target partition to retain their ordering declaration;
+matching order reuses it, while opposite DATE order requires a sort.
+
+`date-range-747-prior-owner-controls.json` freezes 112 complete earlier DAR
+observations: 28 explicit-NULL-offset contexts under #754 and 84 DATE interval
+contexts under #749/#947. The test requires their prior profiles to remain
+unchanged, including existing Spark differences assigned to those issues. Only
+raw row order for unordered SQL may be canonicalized; Fields, causes, phases and
+row multiplicity stay fixed. `date-range-747-prior-native-controls.json` preserves
+six native SQL control pairs for DATE intervals, TIMESTAMP intervals and INT
+keys at both batch sizes, comparing configured and unconfigured sessions with
+their frozen complete observations.

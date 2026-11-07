@@ -18,6 +18,7 @@ use datafusion_common::config::{ConfigExtension, ConfigOptions};
 use datafusion_common::metadata::FieldMetadata;
 use datafusion_common::tree_node::{Transformed, TreeNode, TreeNodeRecursion};
 use datafusion_common::{DFSchema, DFSchemaRef, Result, ScalarValue};
+use datafusion_expr::expr::ScalarFunction;
 use datafusion_expr::utils::{conjunction, split_conjunction_owned};
 use datafusion_expr::{ColumnarValue, Expr, ExprSchemable, LogicalPlan, Operator, lit};
 
@@ -45,6 +46,7 @@ use datafusion_expr::simplify::SparkArrayIndexError;
 use sail_function::scalar::array::array_contains::ArrayContains;
 use sail_function::scalar::array::spark_array::SparkArray;
 use sail_function::scalar::datetime::timestamp_now::TimestampNow;
+use sail_function::scalar::math::random::Random as SailRandom;
 use sail_function::scalar::math::spark_abs::SparkAbs;
 use sail_function::scalar::math::spark_checked_arithmetic::SparkCheckedArithmetic;
 use sail_function::scalar::math::spark_negative::SparkNegative;
@@ -287,7 +289,7 @@ fn inline_closed_projection_bindings_for_array_check(
                             source.clone(),
                             &project.input,
                         )?
-                    } else if row_expression(source, false)?
+                    } else if is_locally_evaluable(source, false)?
                         && permits_constant_preparation(source)?
                     {
                         source.clone()
@@ -303,7 +305,7 @@ fn inline_closed_projection_bindings_for_array_check(
                 }
                 _ => return Ok(Transformed::no(expr)),
             };
-            if row_expression(&source, false)? && permits_constant_preparation(&source)? {
+            if is_locally_evaluable(&source, false)? && permits_constant_preparation(&source)? {
                 Ok(Transformed::yes(source))
             } else {
                 Ok(Transformed::no(expr))
@@ -381,14 +383,62 @@ impl AnalyzerRule for PrepareSparkExpressions {
     }
 
     fn analyze(&self, plan: LogicalPlan, options: &ConfigOptions) -> Result<LogicalPlan> {
+        let simplifier = ExprSimplifier::new(
+            datafusion_expr::simplify::SimplifyContext::builder()
+                .with_config_options(Arc::new(options.clone()))
+                .build(),
+        );
+        // OptimizeRand discards valid seeds before arithmetic and producer preparation.
+        let plan = plan
+            .transform_up_with_subqueries(|node| {
+                let names = datafusion_expr::expr_rewriter::NamePreserver::new(&node);
+                let mut fold = |expr: Expr| {
+                    let name = names.save(&expr);
+                    expr.transform_up(|expr| fold_rand_comparison(expr, &simplifier))
+                        .map(|expr| expr.update_data(|expr| name.restore(expr)))
+                };
+                node.map_expressions(|expr| {
+                    if matches!(expr, Expr::GroupingSet(_)) {
+                        expr.map_children(&mut fold)
+                    } else {
+                        fold(expr)
+                    }
+                })
+            })?
+            .data;
         let plan = self.prepare(plan, options)?;
+        let spark_query = options
+            .extensions
+            .get::<SparkSqlExpressionSemantics>()
+            .is_some();
         Ok(plan
             .transform_up_with_subqueries(|node| {
+                let input = if spark_query {
+                    match &node {
+                        LogicalPlan::Projection(project) => Some(Arc::clone(&project.input)),
+                        LogicalPlan::Filter(filter) => Some(Arc::clone(&filter.input)),
+                        // Spark projects window arguments; aggregate arguments stay opaque.
+                        LogicalPlan::Window(window) => Some(Arc::clone(&window.input)),
+                        _ => None,
+                    }
+                } else {
+                    None
+                };
                 let names = datafusion_expr::expr_rewriter::NamePreserver::new(&node);
                 let mut materialize = |expr: Expr| {
                     let name = names.save(&expr);
-                    materialize_metadata_literals(expr)
-                        .map(|expr| expr.update_data(|expr| name.restore(expr)))
+                    let folded =
+                        expr.transform_up(|expr| fold_rand_comparison(expr, &simplifier))?;
+                    let canonical = if let Some(input) = &input {
+                        folded
+                            .data
+                            .transform_up(|expr| canonicalize_case_result_columns(expr, input))?
+                    } else {
+                        Transformed::no(folded.data)
+                    };
+                    let mut materialized = materialize_metadata_literals(canonical.data)?;
+                    materialized.transformed |= folded.transformed || canonical.transformed;
+                    Ok(materialized.update_data(|expr| name.restore(expr)))
                 };
                 node.map_expressions(|expr| {
                     if matches!(expr, Expr::GroupingSet(_)) {
@@ -400,6 +450,236 @@ impl AnalyzerRule for PrepareSparkExpressions {
             })?
             .data)
     }
+}
+
+fn spark_rand(expr: &Expr) -> Option<&ScalarFunction> {
+    match without_metadata_annotations(expr) {
+        Expr::ScalarFunction(function) if function.func.inner().is::<SailRandom>() => {
+            Some(function)
+        }
+        Expr::ScalarFunction(function)
+            if function.func.inner().is::<SparkComparisonFloat>()
+                && let [argument] = function.args.as_slice() =>
+        {
+            spark_rand(argument)
+        }
+        Expr::Alias(alias) => spark_rand(&alias.expr),
+        _ => None,
+    }
+}
+
+fn fold_rand_comparison(expr: Expr, simplifier: &ExprSimplifier) -> Result<Transformed<Expr>> {
+    let Expr::BinaryExpr(binary) = &expr else {
+        return Ok(Transformed::no(expr));
+    };
+    if !matches!(
+        binary.op,
+        Operator::Gt | Operator::GtEq | Operator::Lt | Operator::LtEq
+    ) {
+        return Ok(Transformed::no(expr));
+    }
+    let (random, bound, op) = if let Some(random) = spark_rand(&binary.left) {
+        (random, binary.right.as_ref(), binary.op)
+    } else if let Some(random) = spark_rand(&binary.right) {
+        let Some(op) = binary.op.swap() else {
+            return Ok(Transformed::no(expr));
+        };
+        (random, binary.left.as_ref(), op)
+    } else {
+        return Ok(Transformed::no(expr));
+    };
+    match random.args.as_slice() {
+        [] => {}
+        // Admission is structural: a discarded seed need not evaluate successfully.
+        [seed]
+            if is_locally_evaluable(seed, false)?
+                && matches!(
+                    seed.get_type(&DFSchema::empty())?,
+                    DataType::Int64 | DataType::UInt64 | DataType::Null
+                ) => {}
+        _ => return Ok(Transformed::no(expr)),
+    }
+    if !is_locally_evaluable(bound, false)? {
+        return Ok(Transformed::no(expr));
+    }
+    let Ok(Expr::Literal(ScalarValue::Float64(Some(value)), _)) =
+        simplifier.simplify(bound.clone())
+    else {
+        return Ok(Transformed::no(expr));
+    };
+    // Spark RAND is in [0, 1); interior comparisons must remain volatile.
+    let result = match op {
+        Operator::Gt if value < 0.0 => true,
+        Operator::Gt | Operator::GtEq if value >= 1.0 => false,
+        Operator::GtEq if value <= 0.0 => true,
+        Operator::Lt | Operator::LtEq if value >= 1.0 => true,
+        Operator::Lt if value <= 0.0 => false,
+        Operator::LtEq if value < 0.0 => false,
+        _ => return Ok(Transformed::no(expr)),
+    };
+    Ok(Transformed::yes(lit(result)))
+}
+
+fn passthrough_column_origin<'a>(
+    input: &'a LogicalPlan,
+    column: &datafusion_common::Column,
+) -> Result<(&'a LogicalPlan, usize)> {
+    let index = input.schema().index_of_column(column)?;
+    match input {
+        LogicalPlan::SubqueryAlias(alias) => {
+            let column = alias.input.schema().qualified_field(index).into();
+            passthrough_column_origin(&alias.input, &column)
+        }
+        LogicalPlan::Filter(filter) => {
+            // Row selection preserves the existing column values of each surviving row.
+            let column = filter.input.schema().qualified_field(index).into();
+            passthrough_column_origin(&filter.input, &column)
+        }
+        LogicalPlan::Projection(project) => {
+            let mut expression = &project.expr[index];
+            while let Expr::Alias(alias) = expression {
+                if alias
+                    .metadata
+                    .as_ref()
+                    .is_some_and(|metadata| !metadata.is_empty())
+                {
+                    return Ok((input, index));
+                }
+                expression = &alias.expr;
+            }
+            if let Expr::Column(column) = expression {
+                return passthrough_column_origin(&project.input, column);
+            }
+            // A computed output is an existing value, never an expression to inline.
+            Ok((input, index))
+        }
+        _ => Ok((input, index)),
+    }
+}
+
+// Normalize stored result references; the shared CASE rule still owns guard pruning.
+fn canonicalize_case_result_columns(expr: Expr, input: &LogicalPlan) -> Result<Transformed<Expr>> {
+    let Expr::Case(mut case) = expr else {
+        return Ok(Transformed::no(expr));
+    };
+    if !case.is_spark_searched() {
+        return Ok(Transformed::no(Expr::Case(case)));
+    }
+    let Some(Expr::Column(fallback)) = case.else_expr.as_deref() else {
+        return Ok(Transformed::no(Expr::Case(case)));
+    };
+    let fallback = fallback.clone();
+    let fallback_field = input
+        .schema()
+        .field(input.schema().index_of_column(&fallback)?);
+    let (fallback_plan, fallback_index) = passthrough_column_origin(input, &fallback)?;
+    let mut changed = false;
+    for (_, result) in &case.when_then_expr {
+        let Expr::Column(column) = result.as_ref() else {
+            return Ok(Transformed::no(Expr::Case(case)));
+        };
+        let field = input
+            .schema()
+            .field(input.schema().index_of_column(column)?);
+        if field
+            .as_ref()
+            .clone()
+            .with_name(fallback_field.name().as_str())
+            != *fallback_field.as_ref()
+        {
+            return Ok(Transformed::no(Expr::Case(case)));
+        }
+        let (origin_plan, origin_index) = passthrough_column_origin(input, column)?;
+        // Separate outputs can have equal expressions or rows without being the same stored value.
+        if !std::ptr::eq(origin_plan, fallback_plan) || origin_index != fallback_index {
+            return Ok(Transformed::no(Expr::Case(case)));
+        }
+        changed |= column != &fallback;
+    }
+    if changed {
+        for (_, result) in &mut case.when_then_expr {
+            **result = Expr::Column(fallback.clone());
+        }
+    }
+    Ok(Transformed::new_transformed(Expr::Case(case), changed))
+}
+
+#[test]
+fn case_result_columns_require_the_same_existing_value_and_fields() -> Result<()> {
+    use datafusion_expr::{Case, LogicalPlanBuilder, col};
+
+    let values = LogicalPlanBuilder::values(vec![vec![lit(7_i32), lit(7_i32)]])?.build()?;
+    let shared = LogicalPlanBuilder::from(values.clone())
+        .project(vec![col("column1").alias("a"), col("column1").alias("b")])?
+        .alias("q")?
+        .build()?;
+    let filtered = LogicalPlanBuilder::from(shared.clone())
+        .filter(col("q.a").is_not_null())?
+        .build()?;
+    let distinct = LogicalPlanBuilder::from(values.clone())
+        .project(vec![col("column1").alias("a"), col("column2").alias("b")])?
+        .alias("q")?
+        .build()?;
+    let annotated = |name: &str| {
+        col("column1").alias_with_metadata(
+            name,
+            Some(FieldMetadata::from(std::collections::HashMap::from([(
+                "source".to_owned(),
+                name.to_owned(),
+            )]))),
+        )
+    };
+    let metadata = LogicalPlanBuilder::from(values)
+        .project(vec![annotated("a"), annotated("b")])?
+        .alias("q")?
+        .build()?;
+    let volatile = LogicalPlanBuilder::empty(true)
+        .project(vec![expr_fn::uuid().alias("a"), expr_fn::uuid().alias("b")])?
+        .alias("q")?
+        .build()?;
+    let materialized = LogicalPlanBuilder::empty(true)
+        .project(vec![expr_fn::uuid().alias("u")])?
+        .project(vec![col("u").alias("a"), col("u").alias("b")])?
+        .alias("q")?
+        .build()?;
+    let guard = col("q.a").is_not_null();
+    let expression = Expr::Case(Case::new_spark_searched(
+        vec![(Box::new(guard.clone()), Box::new(col("q.a")))],
+        Some(Box::new(col("q.b"))),
+    ));
+    let canonical = Expr::Case(Case::new_spark_searched(
+        vec![(Box::new(guard.clone()), Box::new(col("q.b")))],
+        Some(Box::new(col("q.b"))),
+    ));
+    for (input, changed) in [
+        (shared.clone(), true),
+        (filtered, true),
+        (distinct, false),
+        (metadata, false),
+        (volatile, false),
+        (materialized, true),
+    ] {
+        let actual = canonicalize_case_result_columns(expression.clone(), &input)?;
+        assert_eq!(actual.transformed, changed);
+        assert_eq!(
+            actual.data,
+            if changed {
+                canonical.clone()
+            } else {
+                expression.clone()
+            }
+        );
+    }
+    let native = Expr::Case(Case::new(
+        None,
+        vec![(Box::new(guard), Box::new(col("q.a")))],
+        Some(Box::new(col("q.b"))),
+    ));
+    assert_eq!(
+        canonicalize_case_result_columns(native.clone(), &shared)?.data,
+        native
+    );
+    Ok(())
 }
 
 impl PrepareSparkExpressions {
@@ -433,14 +713,14 @@ impl PrepareSparkExpressions {
             {
                 has_groups |= !aggregate.group_expr.is_empty();
                 for expr in &aggregate.group_expr {
-                    check_groups |= row_expression(expr, false)?;
+                    check_groups |= is_locally_evaluable(expr, false)?;
                 }
             }
             node.apply_expressions(|expr| {
                 found |= expr.exists(|expr| Ok(candidate(expr)))?;
                 has_constant_struct |= is_spark_query && expr.exists(|expr| {
                     Ok(matches!(expr, Expr::ScalarFunction(f) if f.func.inner().is::<StructFunction>())
-                        && row_expression(expr, false)?)
+                        && is_locally_evaluable(expr, false)?)
                 })?;
                 has_coalesce_declaration_casts |= is_spark_query && expr.exists(|expr| {
                     Ok(has_coalesce_declaration_cast(expr))
@@ -644,7 +924,7 @@ impl PrepareSparkExpressions {
                             if check_cast && let Expr::ScalarSubquery(mut subquery) = expr {
                                 if let Some(mut expressions) = one_row_exprs(&subquery.subquery)?
                                     && expressions.len() == 1
-                                    && row_expression(&expressions[0], true)?
+                                    && is_locally_evaluable(&expressions[0], true)?
                                 {
                                     return Ok(Transformed::yes(expressions.remove(0)));
                                 }
@@ -692,7 +972,7 @@ impl PrepareSparkExpressions {
                             })
                             && let Some(mut expressions) = one_row_exprs(&subquery.subquery)?
                             && expressions.len() == 1
-                            && row_expression(&expressions[0], true)?
+                            && is_locally_evaluable(&expressions[0], true)?
                         {
                             return Ok(Transformed::yes(expressions.remove(0)));
                         }
@@ -1018,7 +1298,7 @@ fn prepare_foldable_groups(
     let foldable = aggregate
         .group_expr
         .iter()
-        .map(|expr| row_expression(expr, false))
+        .map(|expr| is_locally_evaluable(expr, false))
         .collect::<Result<Vec<_>>>()?;
     if !foldable.contains(&true) {
         return Ok(Transformed::no(LogicalPlan::Aggregate(aggregate)));
@@ -1086,7 +1366,7 @@ struct Prepare {
 fn preserve_local_string_arguments(plan: LogicalPlan) -> Result<LogicalPlan> {
     fn expressions(exprs: &[Expr], columns: bool) -> Result<bool> {
         exprs.iter().try_fold(true, |local, expr| {
-            Ok(local && row_expression_with_volatile(expr, columns, true)?)
+            Ok(local && is_locally_evaluable_with_volatility(expr, columns, true)?)
         })
     }
     fn local_input(plan: &LogicalPlan) -> Result<bool> {
@@ -1101,7 +1381,7 @@ fn preserve_local_string_arguments(plan: LogicalPlan) -> Result<LogicalPlan> {
             }
             LogicalPlan::SubqueryAlias(alias) => local_input(&alias.input),
             LogicalPlan::Filter(filter) => Ok(local_input(&filter.input)?
-                && row_expression_with_volatile(&filter.predicate, true, true)?),
+                && is_locally_evaluable_with_volatility(&filter.predicate, true, true)?),
             LogicalPlan::Limit(limit) => {
                 let literal_count = |expr: &Expr| match expr {
                     Expr::Literal(ScalarValue::Int32(Some(n)), _) => *n >= 0,
@@ -1399,7 +1679,7 @@ pub(crate) fn try_check_local_row_errors(
     if batch.num_rows() == 0 {
         return Ok(true);
     }
-    if !row_expression(expr, true)? {
+    if !is_locally_evaluable(expr, true)? {
         return Ok(false);
     }
     let expr = prepare_clock(expr.clone())?.data;
@@ -1458,19 +1738,23 @@ fn literal_regexp_input_permitted(input: &LogicalPlan) -> Result<bool> {
     Ok(!asynchronous)
 }
 
-// Physical row expressions only; aggregates, subqueries and outer references
-// require their own planning context. Volatile calls belong to execution, even
-// when their column inputs are already available as a local batch.
-pub(crate) fn row_expression(expr: &Expr, columns: bool) -> Result<bool> {
-    row_expression_with_volatile(expr, columns, false)
+// Structural eligibility for local evaluation, not execution or guaranteed success.
+// Aggregates, subqueries and outer references need their own planning context;
+// volatile calls remain in execution even when local columns are available.
+pub(crate) fn is_locally_evaluable(expr: &Expr, allow_columns: bool) -> Result<bool> {
+    is_locally_evaluable_with_volatility(expr, allow_columns, false)
 }
 
-fn row_expression_with_volatile(expr: &Expr, columns: bool, allow_volatile: bool) -> Result<bool> {
+fn is_locally_evaluable_with_volatility(
+    expr: &Expr,
+    allow_columns: bool,
+    allow_volatile: bool,
+) -> Result<bool> {
     let mut eligible = true;
     expr.apply(|node| {
         if let Some(bodies) = local_string_argument_bodies(node)? {
             for body in bodies {
-                if !row_expression_with_volatile(body, columns, allow_volatile)? {
+                if !is_locally_evaluable_with_volatility(body, allow_columns, allow_volatile)? {
                     eligible = false;
                     return Ok(TreeNodeRecursion::Stop);
                 }
@@ -1478,7 +1762,7 @@ fn row_expression_with_volatile(expr: &Expr, columns: bool, allow_volatile: bool
             return Ok(TreeNodeRecursion::Jump);
         }
         let unsupported = match node {
-            Expr::Column(_) => !columns,
+            Expr::Column(_) => !allow_columns,
             Expr::Literal(_, _)
             | Expr::Alias(_)
             | Expr::BinaryExpr(_)
@@ -1756,14 +2040,14 @@ fn substring_preparation_requires_closed_arguments_and_pure_bodies() -> Result<(
         lambda(lit(2_i64)),
     ]);
     assert!(local_string_argument_bodies(&closed)?.is_some());
-    assert!(row_expression(&closed, false)?);
+    assert!(is_locally_evaluable(&closed, false)?);
     let column = wrapper(vec![
         lambda(col("s")),
         lambda(lit(1_i64)),
         lambda(lit(2_i64)),
     ]);
-    assert!(!row_expression(&column, false)?);
-    assert!(row_expression(&column, true)?);
+    assert!(!is_locally_evaluable(&column, false)?);
+    assert!(is_locally_evaluable(&column, true)?);
     for arguments in [
         vec![lambda(lit("abc")), lambda(lit(1_i64))],
         vec![lit("abc"), lambda(lit(1_i64)), lambda(lit(2_i64))],
@@ -1778,7 +2062,7 @@ fn substring_preparation_requires_closed_arguments_and_pure_bodies() -> Result<(
     ] {
         let malformed = wrapper(arguments);
         assert!(local_string_argument_bodies(&malformed)?.is_none());
-        assert!(!row_expression(&malformed, true)?);
+        assert!(!is_locally_evaluable(&malformed, true)?);
     }
     let volatile = create_udf(
         "volatile_substring_source",
@@ -1793,8 +2077,8 @@ fn substring_preparation_requires_closed_arguments_and_pure_bodies() -> Result<(
         lambda(lit(2_i64)),
     ]);
     assert!(local_string_argument_bodies(&volatile)?.is_some());
-    assert!(!row_expression(&volatile, true)?);
-    assert!(row_expression_with_volatile(&volatile, true, true)?);
+    assert!(!is_locally_evaluable(&volatile, true)?);
+    assert!(is_locally_evaluable_with_volatility(&volatile, true, true)?);
     let other = Expr::HigherOrderFunction(HigherOrderFunction::new(
         Arc::new(HigherOrderUDF::new_from_impl(ConvertTzLazy::new(
             ConvertTz::new(false),
@@ -1802,7 +2086,7 @@ fn substring_preparation_requires_closed_arguments_and_pure_bodies() -> Result<(
         vec![lambda(lit("UTC")), lambda(lit("UTC")), lambda(lit(1_i64))],
     ));
     assert!(local_string_argument_bodies(&other)?.is_none());
-    assert!(!row_expression(&other, true)?);
+    assert!(!is_locally_evaluable(&other, true)?);
     Ok(())
 }
 
@@ -1835,7 +2119,7 @@ fn substring_precheck_keeps_computed_null_source_constants_reachable() -> Result
     ]);
     let prepared = prepare.precheck_expression(marker.clone(), &schema, false)?;
     assert_eq!(prepared, marker);
-    assert!(!row_expression(&prepared, false)?);
+    assert!(!is_locally_evaluable(&prepared, false)?);
     let concat = ScalarUDF::from(SparkConcat::new().with_ordered_evaluation());
     for args in [
         vec![lit(ScalarValue::Utf8(None)), prepared.clone()],
@@ -1911,7 +2195,7 @@ fn case_one_row_foldability(
                 .expr
                 .iter()
                 .map(|expression| {
-                    let mut foldable = row_expression(expression, true)?;
+                    let mut foldable = is_locally_evaluable(expression, true)?;
                     expression.apply(|node| {
                         if let Expr::Column(column) = node {
                             foldable &= input[project.input.schema().index_of_column(column)?];
@@ -1936,7 +2220,7 @@ fn preserve_local_case_conversions(plan: LogicalPlan) -> Result<LogicalPlan> {
         let expressions = |expressions: &[Expr], columns| {
             expressions.iter().try_fold(true, |local, expr| {
                 Ok::<_, datafusion_common::DataFusionError>(
-                    local && row_expression_with_volatile(expr, columns, true)?,
+                    local && is_locally_evaluable_with_volatility(expr, columns, true)?,
                 )
             })
         };
@@ -1950,7 +2234,7 @@ fn preserve_local_case_conversions(plan: LogicalPlan) -> Result<LogicalPlan> {
             }
             LogicalPlan::SubqueryAlias(alias) => local_relation(&alias.input),
             LogicalPlan::Filter(filter) => Ok(local_relation(&filter.input)?
-                && row_expression_with_volatile(&filter.predicate, true, true)?),
+                && is_locally_evaluable_with_volatility(&filter.predicate, true, true)?),
             LogicalPlan::Limit(limit) => {
                 let literal_count = |expr: &Expr| match expr {
                     Expr::Literal(ScalarValue::Int32(Some(n)), _) => *n >= 0,
@@ -2208,12 +2492,12 @@ fn case_foldability_does_not_expand_projection_chains()
 }
 
 // Structural admission for Spark's early local conversion. This does not
-// execute volatile functions; row_expression still excludes them in evaluators.
+// execute volatile functions; is_locally_evaluable still excludes them in evaluators.
 pub(crate) fn early_local_relation(plan: &LogicalPlan) -> Result<bool> {
     let expressions = |expressions: &[Expr], columns| {
         expressions.iter().try_fold(true, |local, expr| {
             Ok::<_, datafusion_common::DataFusionError>(
-                local && row_expression_with_volatile(expr, columns, true)?,
+                local && is_locally_evaluable_with_volatility(expr, columns, true)?,
             )
         })
     };
@@ -2227,7 +2511,7 @@ pub(crate) fn early_local_relation(plan: &LogicalPlan) -> Result<bool> {
         }
         LogicalPlan::SubqueryAlias(alias) => early_local_relation(&alias.input),
         LogicalPlan::Filter(filter) => Ok(early_local_relation(&filter.input)?
-            && row_expression_with_volatile(&filter.predicate, true, true)?),
+            && is_locally_evaluable_with_volatility(&filter.predicate, true, true)?),
         LogicalPlan::Limit(limit) => {
             let literal_count = |expr: &Expr| match expr {
                 Expr::Literal(ScalarValue::Int32(Some(n)), _) => *n >= 0,
@@ -2305,10 +2589,10 @@ fn early_cast(expr: &Expr, schema: &DFSchemaRef, spark_comparison_errors: bool) 
                 && matches!(binary.op, Operator::Eq | Operator::NotEq | Operator::Lt | Operator::LtEq | Operator::Gt | Operator::GtEq)
                 && null_literal(&binary.right) =>
         {
-            row_expression(&binary.left, true)
+            is_locally_evaluable(&binary.left, true)
         }
         Expr::Cast(cast) => {
-            if null_literal(&cast.expr) || !row_expression(&cast.expr, true)? {
+            if null_literal(&cast.expr) || !is_locally_evaluable(&cast.expr, true)? {
                 return Ok(false);
             }
             let source = cast.expr.get_type(schema)?;
@@ -2321,7 +2605,7 @@ fn early_cast(expr: &Expr, schema: &DFSchemaRef, spark_comparison_errors: bool) 
                 .is_some_and(|cast| cast.mode() == DecimalCastMode::Ansi) =>
         {
             Ok(matches!(f.args.as_slice(), [expr]
-                if !null_literal(expr) && row_expression(expr, true)?
+                if !null_literal(expr) && is_locally_evaluable(expr, true)?
                     && matches!(expr.get_type(schema)?, DataType::Decimal128(_, _) | DataType::Decimal256(_, _))))
         }
         Expr::ScalarFunction(f)
@@ -2339,7 +2623,7 @@ fn early_cast(expr: &Expr, schema: &DFSchemaRef, spark_comparison_errors: bool) 
                 || f.func.inner().is::<SparkCastStringToInteger>()
                 || f.func.inner().is::<SparkStringTemporalComparisonCast>() =>
         {
-            Ok(matches!(f.args.as_slice(), [expr] if !null_literal(expr) && row_expression(expr, true)?))
+            Ok(matches!(f.args.as_slice(), [expr] if !null_literal(expr) && is_locally_evaluable(expr, true)?))
         }
         _ => Ok(false),
     })
@@ -2424,7 +2708,7 @@ impl Prepare {
                 )?;
                 changed |= prepared.transformed;
                 *lambda.body = prepared.data;
-                if !row_expression(&lambda.body, false)?
+                if !is_locally_evaluable(&lambda.body, false)?
                     || !permits_constant_preparation(&lambda.body)?
                 {
                     if self.string_result_is_null_on_success(&lambda.body, schema)? {
@@ -2963,7 +3247,7 @@ impl Prepare {
                     }
                     for expr in &project.expr {
                         casts |= early_cast(expr, project.input.schema(), is_spark_query)?;
-                        evaluable &= row_expression(expr, true)?;
+                        evaluable &= is_locally_evaluable(expr, true)?;
                     }
                     retain_input = is_spark_query
                         && self.spark_array_index_errors
@@ -3153,7 +3437,7 @@ impl Prepare {
                         simplifier = simplifier.with_local_input_errors();
                     }
                     for expr in &project.expr {
-                        if forbids_local_planning(expr)? || !row_expression(expr, true)? {
+                        if forbids_local_planning(expr)? || !is_locally_evaluable(expr, true)? {
                             continue;
                         }
                         // Keep local comparisons while lowering other UDFs normally.
@@ -3288,7 +3572,7 @@ impl Prepare {
                     }
                     let expr = prepared.data;
                     if !matches!(&expr, Expr::ScalarFunction(f) if f.func.inner().is::<StructFunction>())
-                        || !row_expression(&expr, false)?
+                        || !is_locally_evaluable(&expr, false)?
                         || expr.exists(|value| Ok(matches!(value, Expr::ScalarFunction(function)
                             if !function.func.inner().supports_constant_folding())))?
                     {
@@ -3367,7 +3651,7 @@ impl Prepare {
         let Some(expr) = expr else {
             return Ok(Some(default));
         };
-        if !row_expression(expr, false)? {
+        if !is_locally_evaluable(expr, false)? {
             return Ok(None);
         }
         // Before simplification, LIMIT/OFFSET can still be casts or arithmetic.
@@ -3528,7 +3812,7 @@ impl Prepare {
                     Some(batch)
                         if check_local_inputs
                             && batch.num_rows() > 0
-                            && row_expression(expr, true)? =>
+                            && is_locally_evaluable(expr, true)? =>
                     {
                         let expr = self.precheck_expression(expr.clone(), &schema, true)?;
                         let error = match create_physical_expr(&expr, &schema, &self.props)?
@@ -3663,7 +3947,7 @@ impl Prepare {
                 })
                 .map(|_| ());
         }
-        if constants && row_expression(expr, false)? {
+        if constants && is_locally_evaluable(expr, false)? {
             self.eval_constant(expr)?;
             return Ok(());
         }
@@ -3712,7 +3996,9 @@ impl Prepare {
         let batch = match plan {
             LogicalPlan::Values(values) if !values.values.is_empty() => {
                 if !values.values.iter().flatten().try_fold(true, |valid, e| {
-                    Ok::<_, datafusion_common::DataFusionError>(valid && row_expression(e, false)?)
+                    Ok::<_, datafusion_common::DataFusionError>(
+                        valid && is_locally_evaluable(e, false)?,
+                    )
                 })? {
                     return Ok(None);
                 }
@@ -3744,7 +4030,9 @@ impl Prepare {
                     ))));
                 }
                 if !project.expr.iter().try_fold(true, |valid, e| {
-                    Ok::<_, datafusion_common::DataFusionError>(valid && row_expression(e, true)?)
+                    Ok::<_, datafusion_common::DataFusionError>(
+                        valid && is_locally_evaluable(e, true)?,
+                    )
                 })? {
                     return Ok(None);
                 }
@@ -3786,7 +4074,7 @@ impl Prepare {
                         .filter(|e| !e.contains_outer()),
                 )
                 .unwrap_or_else(|| lit(true));
-                if !row_expression(&predicate, true)? {
+                if !is_locally_evaluable(&predicate, true)? {
                     return Ok(None);
                 }
                 let predicate = self.precheck_expression(predicate, filter.input.schema(), true)?;
