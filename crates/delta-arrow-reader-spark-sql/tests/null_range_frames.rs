@@ -1167,7 +1167,10 @@ async fn null_range_producer_arithmetic_survives_analyzer_coercion() -> TestResu
             ("CAST(k AS FLOAT)", "FLOAT", false, false),
             ("CAST(k AS DOUBLE)", "DOUBLE", false, false),
             ("CAST(k AS DECIMAL(12,2))", "DECIMAL(12,2)", false, false),
-            ("k", "INT", false, false),
+            ("CAST(k AS TINYINT)", "TINYINT", false, true),
+            ("CAST(k AS SMALLINT)", "SMALLINT", false, true),
+            ("k", "INT", false, true),
+            ("CAST(k AS BIGINT)", "BIGINT", false, true),
             ("DATE_ADD(DATE '2020-01-01',k)", "INT", false, false),
         ] {
             let lower = if null_offset { "NULL" } else { "1" };
@@ -1204,6 +1207,43 @@ async fn null_range_producer_arithmetic_survives_analyzer_coercion() -> TestResu
             assert_eq!(
                 find_single_window_frame(&analyzed)?.range_offset_arithmetic(),
                 expected,
+                "{sql}"
+            );
+        }
+        for frame in [
+            "RANGE BETWEEN CAST(0 AS INT) PRECEDING AND CAST(0 AS INT) FOLLOWING",
+            "RANGE BETWEEN CURRENT ROW AND CURRENT ROW",
+            "RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW",
+        ] {
+            let sql = format!(
+                "SELECT COUNT(*) OVER (ORDER BY k {frame}) AS n FROM null_range_no_null_keys"
+            );
+            let query = plan_query(
+                &session,
+                &sql,
+                &SparkSqlOptions {
+                    ansi_mode,
+                    ..SparkSqlOptions::default()
+                },
+            )
+            .await?;
+            assert_eq!(
+                find_single_window_frame(&query.logical_plan)?.range_offset_arithmetic(),
+                RangeOffsetArithmetic::DataFusion,
+                "{sql}"
+            );
+            let mut state = session.state();
+            let extensions = &mut state.config_mut().options_mut().extensions;
+            extensions.insert(SparkSqlExpressionSemantics::default());
+            extensions.insert(PreserveAggregateStatisticsSchema::default());
+            let analyzed = state.analyzer().execute_and_check(
+                query.logical_plan,
+                state.config_options(),
+                |_, _| {},
+            )?;
+            assert_eq!(
+                find_single_window_frame(&analyzed)?.range_offset_arithmetic(),
+                RangeOffsetArithmetic::DataFusion,
                 "{sql}"
             );
         }
