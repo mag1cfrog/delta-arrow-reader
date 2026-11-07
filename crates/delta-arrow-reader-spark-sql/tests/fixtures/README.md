@@ -4195,8 +4195,11 @@ provider contexts, including the original five-column providers. Its historical
 source paths and hashes identify where those inputs came from; recapture does
 not open or rehash the absent historical corpora. The new capture hashes the
 manifest and helper files it actually uses. Every result comes from Spark.
-Review the new capture's complete available Fields, error phases, rows, ordering
-and runtime provenance against `date-range-747-spark.jsonl` before replacing it.
+A fresh capture is comparison evidence, not a drop-in fixture replacement. Review
+its complete available Fields, error phases, rows, ordering and runtime provenance
+against `date-range-747-spark.jsonl`. A reference refresh must also update the
+owner controls' reference records, while preserving their native observations
+and the separate native control file.
 
 `date_range_frames.rs` requires 984 primary comparisons at batch sizes 1 and 32
 with two target partitions, including 12 TIMESTAMP control contexts. It also
@@ -4205,7 +4208,9 @@ All five schema stages retain complete names, types, nullability and metadata
 when available. Failures retain the condition, phase and available Fields;
 ordered queries retain raw output order, and unordered comparisons preserve
 duplicates. The capture self-check exercises partial stages, row ordering and
-owned-process cleanup without importing Spark.
+owned-process cleanup without importing Spark. A further 32 comparisons use
+preordered providers with one target partition to retain their ordering declaration;
+matching order reuses it, while opposite DATE order requires a sort.
 
 `date-range-747-prior-owner-controls.json` freezes 112 complete earlier DAR
 observations: 28 explicit-NULL-offset contexts under #754 and 84 DATE interval
