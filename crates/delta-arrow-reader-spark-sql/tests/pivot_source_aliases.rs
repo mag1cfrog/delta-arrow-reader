@@ -468,6 +468,38 @@ async fn pivot_source_and_output_aliases_check_spark_and_inherited_facets() -> T
     if let Some(path) = std::env::var_os("DAR_PIVOT_SOURCE_ALIASES_REPORT") {
         std::fs::write(path, serde_json::to_vec_pretty(&observations)?)?;
     }
+    let context_key = |record: &Value| -> TestResult<(String, bool, u64)> {
+        Ok((
+            record["id"].as_str().ok_or("missing ID")?.to_owned(),
+            record["ansi"].as_bool().ok_or("missing ANSI mode")?,
+            record["batch"].as_u64().ok_or("missing batch")?,
+        ))
+    };
+    let expected_contexts = identities
+        .iter()
+        .flat_map(|(id, ansi)| {
+            [1_u64, 32].map(move |batch| ((*id).to_owned(), *ansi, batch))
+        })
+        .collect::<BTreeSet<_>>();
+    let observed_contexts = observations
+        .iter()
+        .map(context_key)
+        .collect::<TestResult<BTreeSet<_>>>()?;
+    assert_eq!(observed_contexts.len(), observations.len(), "duplicate replay context");
+    assert_eq!(observed_contexts, expected_contexts, "replay context coverage changed");
+    let declared_credits = controls
+        .iter()
+        .map(context_key)
+        .collect::<TestResult<BTreeSet<_>>>()?;
+    let observed_credits = observations
+        .iter()
+        .filter(|comparison| comparison["independent_gap_owner"].is_string())
+        .map(context_key)
+        .collect::<TestResult<BTreeSet<_>>>()?;
+    assert_eq!(
+        observed_credits, declared_credits,
+        "retire inherited controls for contexts that now match Spark"
+    );
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }

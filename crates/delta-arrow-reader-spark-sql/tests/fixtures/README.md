@@ -1789,7 +1789,8 @@ admitted alias forms must retain the same complete public behavior as their
 accepted alias-free controls. The other 148 comparisons require exact Spark
 results. The report keeps raw `matches` and `actual` values, then adds separate
 `independent_gap_owner` and `regression_matches` fields. Native private field IDs
-and unordered raw-row order are not frozen by these contracts.
+and unordered raw-row order are not frozen by these contracts. New strict
+matches require retiring their obsolete native controls.
 
 ```sh
 DAR_PIVOT_SOURCE_ALIASES_REPORT=target/pivot-source-aliases-report.json \
