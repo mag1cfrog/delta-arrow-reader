@@ -233,17 +233,21 @@ async fn aggregate_query_results_match_independent_spark() -> TestResult {
             .build(),
         );
         for input in records[0]["inputs"].as_array().ok_or("missing inputs")? {
-            let partition_count = match input["name"].as_str() {
-                Some("inputs") => 2,
-                Some("empty_inputs") => 1,
+            let input_metadata = json!({"inputs": [input]});
+            match input["name"].as_str() {
+                Some("inputs") => {
+                    spark_inputs::register_recorded_inputs(&session, &input_metadata, batch_size)
+                }
+                Some("empty_inputs") => {
+                    spark_inputs::register_recorded_inputs_with_partition_count(
+                        &session,
+                        &input_metadata,
+                        batch_size,
+                        1,
+                    )
+                }
                 other => return Err(format!("unexpected aggregate provider: {other:?}").into()),
-            };
-            spark_inputs::register_recorded_inputs_with_partition_count(
-                &session,
-                &json!({"inputs": [input]}),
-                batch_size,
-                partition_count,
-            )?;
+            }?;
         }
         for case in &records[1..] {
             let id = case["id"].as_str().ok_or("missing ID")?;
