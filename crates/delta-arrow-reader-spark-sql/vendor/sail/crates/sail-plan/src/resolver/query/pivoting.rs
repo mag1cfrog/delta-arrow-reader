@@ -8,7 +8,7 @@ use datafusion_common::tree_node::{Transformed, TreeNode, TreeNodeRecursion};
 use datafusion_common::{Column, DFSchema, DFSchemaRef, ScalarValue};
 use datafusion_expr::expr::{AggregateFunctionParams, NullTreatment};
 use datafusion_expr::{
-    ExprSchemable, LogicalPlan, Operator, Projection, ScalarUDF, col, expr, lit, when,
+    ExprSchemable, Filter, LogicalPlan, Operator, Projection, ScalarUDF, col, expr, lit, when,
 };
 use datafusion_functions_nested::expr_fn as nested_fn;
 use sail_common::spec;
@@ -18,7 +18,8 @@ use sail_function::scalar::explode;
 use sail_function::scalar::struct_function::StructFunction;
 
 use crate::error::{PlanError, PlanResult};
-use crate::function::common::spark_binary_expr;
+use crate::function::common::{drop_inherited_column_metadata, spark_binary_expr};
+use crate::function::scalar::UnpivotFieldDeclaration;
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
 use crate::resolver::state::PlanResolverState;
@@ -286,6 +287,7 @@ impl PlanResolver<'_> {
         unpivot: spec::Unpivot,
         state: &mut PlanResolverState,
     ) -> PlanResult<LogicalPlan> {
+        let include_nulls = unpivot.include_nulls;
         let input = self
             .resolve_query_plan(unpivot.input.as_ref().clone(), state)
             .await?;
@@ -395,6 +397,11 @@ impl PlanResolver<'_> {
 
         let variable_column_name = unpivot.variable_column_name.as_ref();
         let value_column_name = unpivot.value_column_names[0].as_ref();
+        let value_nullable = values.iter().try_fold(false, |nullable, (value, _)| {
+            value
+                .nullable(input.schema())
+                .map(|value| nullable || value)
+        })?;
 
         let structs = values
             .into_iter()
@@ -403,7 +410,14 @@ impl PlanResolver<'_> {
                     variable_column_name.to_string(),
                     value_column_name.to_string(),
                 ]))
-                .call(vec![lit(name), value])
+                .call(vec![
+                    lit(name),
+                    ScalarUDF::from(UnpivotFieldDeclaration {
+                        nullable: value_nullable,
+                        required_at_runtime: false,
+                    })
+                    .call(vec![drop_inherited_column_metadata(value)]),
+                ])
             })
             .collect::<Vec<_>>();
 
@@ -427,9 +441,27 @@ impl PlanResolver<'_> {
             self.rewrite_projection::<MonotonicIdRewriter>(input.clone(), projections, state)?;
         let (input, expr) =
             self.rewrite_projection::<SparkPartitionIdRewriter>(input, expr, state)?;
-        let (input, expr) = self.rewrite_projection::<ExplodeRewriter>(input, expr, state)?;
+        let (mut input, expr) = self.rewrite_projection::<ExplodeRewriter>(input, expr, state)?;
 
-        let expr = self.rewrite_multi_expr(expr)?;
+        let mut expr = self.rewrite_multi_expr(expr)?;
+        let label_index = expr.len() - 2;
+        let value_index = expr.len() - 1;
+        if !include_nulls {
+            input = LogicalPlan::Filter(Filter::try_new(
+                expr[value_index].expr.clone().unalias().is_not_null(),
+                Arc::new(input),
+            )?);
+        }
+        expr[label_index].expr = ScalarUDF::from(UnpivotFieldDeclaration {
+            nullable: false,
+            required_at_runtime: false,
+        })
+        .call(vec![expr[label_index].expr.clone()]);
+        expr[value_index].expr = ScalarUDF::from(UnpivotFieldDeclaration {
+            nullable: value_nullable,
+            required_at_runtime: !include_nulls,
+        })
+        .call(vec![expr[value_index].expr.clone()]);
         let expr = self.rewrite_named_expressions(expr, state)?;
 
         Ok(LogicalPlan::Projection(Projection::try_new(
