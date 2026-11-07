@@ -410,7 +410,7 @@ async fn date_range_original_consumers_match_spark() -> TestResult {
 }
 
 #[tokio::test]
-async fn native_temporal_and_numeric_range_controls_are_unchanged() -> TestResult {
+async fn native_range_controls_match_unconfigured_session() -> TestResult {
     for batch_size in [1, 32] {
         let native = SessionContext::new_with_config(
             SessionConfig::new()
@@ -434,12 +434,27 @@ async fn native_temporal_and_numeric_range_controls_are_unchanged() -> TestResul
             let sql = format!(
                 "SELECT COUNT(*) OVER (ORDER BY k RANGE BETWEEN {offset} PRECEDING AND CURRENT ROW) AS n FROM (VALUES {values}) inputs(k) ORDER BY k"
             );
-            let before = capture_native_query_observation(&native, &sql).await?;
-            let after = capture_native_query_observation(&configured, &sql).await?;
-            assert_eq!(before, after, "{key_type} batch={batch_size}");
-            assert_eq!(after["error"], Value::Null, "{after}");
-            assert_eq!(after["rows"], json!([["1"], ["1"], ["2"]]));
-            assert!(complete_schema(&after["public_schema"]));
+            let native_observation = capture_native_query_observation(&native, &sql).await?;
+            let configured_observation =
+                capture_native_query_observation(&configured, &sql).await?;
+            eprintln!(
+                "NATIVE_DATE_RANGE_CONTROL {}",
+                json!({
+                    "key_type":key_type,"batch":batch_size,"target_partitions":2,"sql":sql,
+                    "native_observation":native_observation,"configured_observation":configured_observation,
+                })
+            );
+            assert_eq!(
+                native_observation, configured_observation,
+                "{key_type} batch={batch_size}"
+            );
+            assert_eq!(
+                configured_observation["error"],
+                Value::Null,
+                "{configured_observation}"
+            );
+            assert_eq!(configured_observation["rows"], json!([["1"], ["1"], ["2"]]));
+            assert!(complete_schema(&configured_observation["public_schema"]));
             for context in [&native, &configured] {
                 let batches = context.sql(&sql).await?.collect().await?;
                 let counts = batches
