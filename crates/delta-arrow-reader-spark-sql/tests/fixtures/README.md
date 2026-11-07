@@ -1782,22 +1782,82 @@ specific error causes/phases. `window_names` separately requires the original
 window-generated PIVOT queries and their independent alias-free controls to
 match completely for nonempty, empty and all-NULL inputs.
 
-`pivot-source-aliases-retained-baseline-facets.json` records accepted native
-contracts for 16 contexts under [#786](https://github.com/mag1cfrog/delta-arrow-reader/issues/786)
+`pivot-source-aliases-retained-baseline-facets.json` preserves 16 historical
+native contexts under [#786](https://github.com/mag1cfrog/delta-arrow-reader/issues/786)
 (repeated projection identity) and [#1076](https://github.com/mag1cfrog/delta-arrow-reader/issues/1076)
-(UNPIVOT NULL filtering and result nullability). The exact four case IDs, ANSI
-mode, batch, SQL and full reference payload bind each contract. The newly
-admitted alias forms must retain the same complete public behavior as their
-accepted alias-free controls. The other 148 comparisons require exact Spark
-results. The report keeps raw `matches` and `actual` values, then adds separate
-`independent_gap_owner` and `regression_matches` fields. Native private field IDs
-and unordered raw-row order are not frozen by these contracts. New strict
-matches require retiring their obsolete native controls.
+(UNPIVOT NULL filtering and result nullability). Only the eight #786 contexts
+remain active regression allowances. The eight original UNPIVOT contexts now
+require complete Spark agreement; their historical entries grant no allowance.
+The unchanged 82-record corpus has 156 Spark comparisons and eight active
+inherited controls at batches 1 and 32.
+
+Each active contract binds the exact case ID, ANSI mode, batch, SQL and full
+reference payload. The report keeps raw `matches` and `actual` values, then
+adds separate `independent_gap_owner` and `regression_matches` fields. Native
+private field IDs and unordered raw-row order are not frozen. The tests retain
+all 16 historical identities, check the active eight against every retained
+facet, and reject #1076 credit even when a historical observation is supplied.
 
 ```sh
 DAR_PIVOT_SOURCE_ALIASES_REPORT=target/pivot-source-aliases-report.json \
 cargo +1.96.0 test --locked --workspace --no-fail-fast \
+  -p delta-arrow-reader-spark-sql \
   --test pivot_source_aliases --test window_names --test interval_qualifiers
+```
+
+
+## Single-value UNPIVOT NULL policy
+
+`unpivot-null-1076-spark.jsonl` contains 30 Spark 4.2.0 observations for default,
+EXCLUDE NULLS and INCLUDE NULLS over mixed, empty and all-NULL providers. It also
+covers accepted source/output aliases, renamed outputs, required inputs with
+field metadata and duplicate rows, and six analysis/parse errors. The original
+four default-mixed records remain in the two source-alias fixture files above.
+
+`unpivot-nullability-1076-spark.jsonl` adds eight observations for default and
+INCLUDE NULLS over mixed and empty providers whose `g` is required and `v` is
+nullable. Their `id`, `g` and `v` Fields have distinct source metadata. The
+source requests and thin capture drivers keep typed provider schemas and rows
+separate from captured outcomes. The mixed provider returns three rows by
+default and four with INCLUDE; both empty cases return no rows. Both drivers use `capture_spark_requests.py`
+and the maintained schema-stage and owned-JVM protocol.
+
+Default and EXCLUDE remove expanded rows whose value is NULL; INCLUDE retains
+them. Labels are nonnullable. Nullable source values stay nullable publicly and
+after logical optimization. Exclusion narrows the value only in the physical
+schema, including empty input. Required value inputs keep required outputs.
+Source id metadata survives; generated label/value metadata is empty. Duplicate
+input rows remain duplicate output rows.
+
+`unpivot_nulls.rs` replays all 42 source records at batch sizes 1 and 32,
+for 84 native contexts across both ANSI modes, two provider partitions and two
+target partitions. It compares complete
+public, analyzed, optimized and before/after-collect Fields, complete row
+multisets and returned-batch validity. The original producer records
+`frame.schema` in `expected.schema`; those bytes supply its public-stage
+comparison without changing the historical fixture format.
+
+All six error records require the captured cause, SQL/resolve phase, identical
+native planning/optimized errors, and no output Fields or rows. The missing
+column and missing-FOR cases use bounded native diagnostic equivalents; their
+raw shared-comparator differences remain visible in `UNPIVOT_OBSERVATION`.
+The incompatible INT/BOOLEAN error also requires the shared strict comparison.
+Negative controls reject unrelated error suffixes, wrong queries, missing or
+unexpected Fields and wrong phases. Native UNNEST padding, nullable filters
+and empty results retain their complete Fields and rows in plain and configured
+sessions before and after Spark UNPIVOT physical planning.
+
+Run these commands from `crates/delta-arrow-reader-spark-sql`. Recapture requires
+Python 3.12, the pinned PySpark 4.2.0 build and Java 21. Supply fresh output paths;
+the scripts refuse to overwrite existing captures.
+
+```sh
+python3.12 tests/fixtures/capture_unpivot_nulls_1076_spark.py --self-check
+python3.12 tests/fixtures/capture_unpivot_nullability_1076_spark.py --self-check
+TZ=UTC python3.12 tests/fixtures/capture_unpivot_nulls_1076_spark.py /tmp/unpivot-null-1076-spark.jsonl
+TZ=UTC python3.12 tests/fixtures/capture_unpivot_nullability_1076_spark.py /tmp/unpivot-nullability-1076-spark.jsonl
+cargo +1.96.0 test --locked --workspace --no-fail-fast \
+  -p delta-arrow-reader-spark-sql --test unpivot_nulls --test pivot_source_aliases
 ```
 
 ## Nested field expression names

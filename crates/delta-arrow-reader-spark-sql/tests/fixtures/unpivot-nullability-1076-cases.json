@@ -1,0 +1,213 @@
+{
+  "version": 1,
+  "issue": 1076,
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "sql_source_count": 4,
+  "expected_record_count": 8,
+  "retained_reference_count": 0,
+  "native_batch_sizes": [
+    1,
+    32
+  ],
+  "native_provider_partitions": 2,
+  "native_target_partitions": 2,
+  "spark_provider_partitions_expected": 1,
+  "corpora": [
+    {
+      "corpus": "unpivot-nullability-1076-supplement",
+      "source": {
+        "kind": "synthetic mixed-nullability fixture"
+      },
+      "metadata": {
+        "spark_version": "4.2.0",
+        "timezone": "UTC",
+        "inputs": [
+          {
+            "name": "unpivot_partial_required",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "id"
+                  }
+                },
+                {
+                  "name": "g",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "g"
+                  }
+                },
+                {
+                  "name": "v",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "v"
+                  }
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "1",
+                null
+              ],
+              [
+                "1",
+                "2",
+                "3"
+              ]
+            ]
+          },
+          {
+            "name": "empty_unpivot_partial_required",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "id"
+                  }
+                },
+                {
+                  "name": "g",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "g"
+                  }
+                },
+                {
+                  "name": "v",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "v"
+                  }
+                }
+              ]
+            },
+            "rows": []
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "unpivot-nullability-1076-supplement",
+          "id": "unpivot_partial_required_default",
+          "ansi": true,
+          "sql": "SELECT o.* FROM (SELECT id,g,v FROM unpivot_partial_required) p UNPIVOT (value FOR label IN (g,v)) o",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "mixed_nullability_boundary",
+            "provider": "unpivot_partial_required",
+            "mode": "default"
+          }
+        },
+        {
+          "corpus": "unpivot-nullability-1076-supplement",
+          "id": "unpivot_partial_required_default",
+          "ansi": false,
+          "sql": "SELECT o.* FROM (SELECT id,g,v FROM unpivot_partial_required) p UNPIVOT (value FOR label IN (g,v)) o",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "mixed_nullability_boundary",
+            "provider": "unpivot_partial_required",
+            "mode": "default"
+          }
+        },
+        {
+          "corpus": "unpivot-nullability-1076-supplement",
+          "id": "unpivot_partial_required_include",
+          "ansi": true,
+          "sql": "SELECT o.* FROM (SELECT id,g,v FROM unpivot_partial_required) p UNPIVOT INCLUDE NULLS (value FOR label IN (g,v)) o",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "mixed_nullability_boundary",
+            "provider": "unpivot_partial_required",
+            "mode": "include"
+          }
+        },
+        {
+          "corpus": "unpivot-nullability-1076-supplement",
+          "id": "unpivot_partial_required_include",
+          "ansi": false,
+          "sql": "SELECT o.* FROM (SELECT id,g,v FROM unpivot_partial_required) p UNPIVOT INCLUDE NULLS (value FOR label IN (g,v)) o",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "mixed_nullability_boundary",
+            "provider": "unpivot_partial_required",
+            "mode": "include"
+          }
+        },
+        {
+          "corpus": "unpivot-nullability-1076-supplement",
+          "id": "empty_unpivot_partial_required_default",
+          "ansi": true,
+          "sql": "SELECT o.* FROM (SELECT id,g,v FROM empty_unpivot_partial_required) p UNPIVOT (value FOR label IN (g,v)) o",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "mixed_nullability_boundary",
+            "provider": "empty_unpivot_partial_required",
+            "mode": "default"
+          }
+        },
+        {
+          "corpus": "unpivot-nullability-1076-supplement",
+          "id": "empty_unpivot_partial_required_default",
+          "ansi": false,
+          "sql": "SELECT o.* FROM (SELECT id,g,v FROM empty_unpivot_partial_required) p UNPIVOT (value FOR label IN (g,v)) o",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "mixed_nullability_boundary",
+            "provider": "empty_unpivot_partial_required",
+            "mode": "default"
+          }
+        },
+        {
+          "corpus": "unpivot-nullability-1076-supplement",
+          "id": "empty_unpivot_partial_required_include",
+          "ansi": true,
+          "sql": "SELECT o.* FROM (SELECT id,g,v FROM empty_unpivot_partial_required) p UNPIVOT INCLUDE NULLS (value FOR label IN (g,v)) o",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "mixed_nullability_boundary",
+            "provider": "empty_unpivot_partial_required",
+            "mode": "include"
+          }
+        },
+        {
+          "corpus": "unpivot-nullability-1076-supplement",
+          "id": "empty_unpivot_partial_required_include",
+          "ansi": false,
+          "sql": "SELECT o.* FROM (SELECT id,g,v FROM empty_unpivot_partial_required) p UNPIVOT INCLUDE NULLS (value FOR label IN (g,v)) o",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "mixed_nullability_boundary",
+            "provider": "empty_unpivot_partial_required",
+            "mode": "include"
+          }
+        }
+      ]
+    }
+  ]
+}

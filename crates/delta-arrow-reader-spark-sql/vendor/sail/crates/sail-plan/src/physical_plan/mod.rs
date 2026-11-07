@@ -24,7 +24,7 @@ use self::signed_range_window::{
 };
 use self::spark_partition_id::SparkPartitionIdExec;
 use crate::expression_errors::SparkSqlExpressionSemantics;
-use crate::function::scalar::lower_runtime_concat;
+use crate::function::scalar::{apply_unpivot_runtime_nullability, lower_runtime_concat};
 use crate::projection_row_errors::{ProjectionRowErrorNode, admit_prefix_producers};
 
 mod input_sort_boundary;
@@ -78,7 +78,10 @@ impl QueryPlanner for SparkQueryPlanner {
                             expression
                                 .transform_up(|expression| {
                                     lower_runtime_concat(expression)
-                                        .map_err(|error| DataFusionError::External(Box::new(error)))
+                                        .map_err(|error| {
+                                            DataFusionError::External(Box::new(error))
+                                        })?
+                                        .transform_data(apply_unpivot_runtime_nullability)
                                 })
                                 .map(|expression| {
                                     expression.update_data(|expression| name.restore(expression))
