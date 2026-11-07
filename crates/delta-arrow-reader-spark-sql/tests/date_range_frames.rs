@@ -728,10 +728,15 @@ async fn preordered_date_providers_preserve_recorded_range_results() -> TestResu
                 // Memory-source repartitioning drops its advertised ordering; keep this source intact.
                 let session = SessionContext::new_with_state(
                     configure_spark_sql(
-                        SessionStateBuilder::new().with_default_features().with_config(
-                            SessionConfig::new().with_batch_size(batch_size).with_target_partitions(1),
-                        ),
-                    ).build(),
+                        SessionStateBuilder::new()
+                            .with_default_features()
+                            .with_config(
+                                SessionConfig::new()
+                                    .with_batch_size(batch_size)
+                                    .with_target_partitions(1),
+                            ),
+                    )
+                    .build(),
                 );
                 let options = SortOptions {
                     descending: descending != opposite,
@@ -758,7 +763,10 @@ async fn preordered_date_providers_preserve_recorded_range_results() -> TestResu
                     .output_ordering()
                     .ok_or("source ordering was not registered")?;
                 assert_eq!(source_order[0].options, options);
-                assert_eq!(source.properties().output_partitioning().partition_count(), 1);
+                assert_eq!(
+                    source.properties().output_partitioning().partition_count(),
+                    1
+                );
                 session.register_table("reversal_inputs", Arc::new(table))?;
                 let query = plan_query(
                     &session,
