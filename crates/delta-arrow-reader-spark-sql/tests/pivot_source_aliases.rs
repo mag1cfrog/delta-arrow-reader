@@ -487,6 +487,7 @@ async fn pivot_source_and_output_aliases_check_spark_and_inherited_facets() -> T
         .collect::<TestResult<BTreeSet<_>>>()?;
     assert_eq!(observed_contexts.len(), observations.len(), "duplicate replay context");
     assert_eq!(observed_contexts, expected_contexts, "replay context coverage changed");
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
     let declared_credits = controls
         .iter()
         .map(context_key)
@@ -500,6 +501,5 @@ async fn pivot_source_and_output_aliases_check_spark_and_inherited_facets() -> T
         observed_credits, declared_credits,
         "retire inherited controls for contexts that now match Spark"
     );
-    assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }
