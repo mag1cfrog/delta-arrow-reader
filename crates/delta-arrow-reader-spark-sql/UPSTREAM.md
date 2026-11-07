@@ -477,6 +477,15 @@ Native DataFusion SQL keeps each column's own annotation. The
 [session-zone column references](tests/fixtures/session-zone-columns/README.md) cover
 these functions in UTC and Los Angeles over UTC, named-zone and fixed-offset annotations.
 
+WEEKDAY numbers Monday 0 through Sunday 6, where it returned -1 for Sunday. WEEKDAY and
+DAYOFWEEK cast a TIMESTAMP_NTZ or NULL argument to DATE like Spark, and convert a STRING with
+Spark's STRING-to-DATE rules. Spaces, short months and days and years outside Arrow's
+nanosecond range now parse. An invalid string fails with `CAST_INVALID_INPUT` under ANSI or
+gives NULL; other temporal functions keep their STRING handling (#942). A NULL literal gives
+NULL, where it failed. Day-of-week fields of EXTRACT and DATE_PART, DAYNAME nullability and
+rejected argument types still differ (#1116). The
+[WEEKDAY references](tests/fixtures/weekday/README.md) record the checks.
+
 TIMESTAMP_SECONDS, TIMESTAMP_MILLIS and TIMESTAMP_MICROS annotate their result with the
 session time zone like any Spark TIMESTAMP, so HOUR, DATE_FORMAT and casts over it read the
 local date-time where they read UTC before; the instants are unchanged. A session zone Arrow

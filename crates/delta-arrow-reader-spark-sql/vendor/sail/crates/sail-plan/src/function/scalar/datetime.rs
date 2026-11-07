@@ -100,6 +100,22 @@ fn integer_part(expr: Expr, part: &str) -> Expr {
     )
 }
 
+/// The argument of WEEKDAY and DAYOFWEEK. Spark casts a STRING, TIMESTAMP_NTZ or NULL argument
+/// to DATE, with its STRING-to-DATE rules for a STRING. DATE passes through, and a TIMESTAMP is
+/// read in its annotated zone, the session zone. Other types pass through unchecked, although
+/// Spark rejects them (#1116).
+fn day_of_week_argument(input: ScalarFunctionInput) -> PlanResult<Expr> {
+    let argument = input.arguments.one()?;
+    Ok(match argument.get_type(input.function_context.schema)? {
+        DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => ScalarUDF::from(
+            SparkDate::new(!input.function_context.plan_config.ansi_mode),
+        )
+        .call(vec![argument]),
+        DataType::Timestamp(_, None) | DataType::Null => cast(argument, DataType::Date32),
+        _ => argument,
+    })
+}
+
 fn years(arg: Expr) -> Expr {
     integer_part(arg, "YEAR")
 }
@@ -1476,7 +1492,7 @@ pub(super) fn list_built_in_datetime_functions() -> Vec<(&'static str, ScalarFun
         ("dayofmonth", F::unary(|arg| integer_part(arg, "DAY"))),
         (
             "dayofweek",
-            F::unary(|arg| integer_part(arg, "DOW") + lit(1)),
+            F::custom(|input| Ok(integer_part(day_of_week_argument(input)?, "DOW") + lit(1))),
         ),
         ("dayofyear", F::unary(|arg| integer_part(arg, "DOY"))),
         ("extract", F::binary(date_part)),
@@ -1623,7 +1639,13 @@ pub(super) fn list_built_in_datetime_functions() -> Vec<(&'static str, ScalarFun
             F::custom(|input| unix_time_unit(input, TimeUnit::Second)),
         ),
         ("unix_timestamp", F::custom(unix_timestamp)),
-        ("weekday", F::unary(|arg| integer_part(arg, "DOW") - lit(1))),
+        // Spark numbers Monday 0 through Sunday 6; DOW numbers Sunday 0 through Saturday 6.
+        (
+            "weekday",
+            F::custom(|input| {
+                Ok((integer_part(day_of_week_argument(input)?, "DOW") + lit(6)) % lit(7))
+            }),
+        ),
         (
             "weekofyear",
             F::unary(|arg| cast(expr_fn::to_char(arg, lit("%V")), DataType::Int32)),
