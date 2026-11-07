@@ -1753,6 +1753,50 @@ python tests/fixtures/capture_pivot_names_spark.py
 cargo test --locked --workspace --test pivot_names --test pivot_float_keys
 ```
 
+## PIVOT source and result aliases
+
+The five PIVOT source-alias captures retain 82 independent
+Spark 4.2.0 observations in UTC and both ANSI modes:
+
+| Fixture | Observations |
+| --- | --- |
+| `pivot-source-aliases-spark.jsonl` | 44 |
+| `pivot-source-aliases-supplement-spark.jsonl` | 22 |
+| `pivot-source-aliases-boundaries-spark.jsonl` | 6 |
+| `pivot-source-aliases-join-spark.jsonl` | 2 |
+| `pivot-source-aliases-relation-order-spark.jsonl` | 8 |
+
+They cover aliases before and after PIVOT, bare `FOR g`, parenthesized and tuple
+keys, qualified grouping columns, malformed inputs, genuine ambiguity, nested
+and dynamic sources, sampling, LATERAL, and modifier/JOIN order. A PIVOT directly
+after a JOIN right operand and before `ON` is a captured parse error. The
+relation-order controls include effective per-query settings and loaded
+Java/Spark runtime identity. Their ordinary UNPIVOT query provides the alias-free
+equivalence control. All raw reference bytes remain unchanged.
+
+`pivot_source_aliases` replays every record at batch sizes 1 and 32, comparing
+complete analyzed, optimized and executed Fields, duplicate-preserving rows and
+specific error causes/phases. `window_names` separately requires the original
+window-generated PIVOT queries and their independent alias-free controls to
+match completely for nonempty, empty and all-NULL inputs.
+
+`pivot-source-aliases-retained-baseline-facets.json` records accepted native
+contracts for 16 contexts under [#786](https://github.com/mag1cfrog/delta-arrow-reader/issues/786)
+(repeated projection identity) and [#1076](https://github.com/mag1cfrog/delta-arrow-reader/issues/1076)
+(UNPIVOT NULL filtering and result nullability). The exact four case IDs, ANSI
+mode, batch, SQL and full reference payload bind each contract. The newly
+admitted alias forms must retain the same complete public behavior as their
+accepted alias-free controls. The other 148 comparisons require exact Spark
+results. The report keeps raw `matches` and `actual` values, then adds separate
+`independent_gap_owner` and `regression_matches` fields. Native private field IDs
+and unordered raw-row order are not frozen by these contracts.
+
+```sh
+DAR_PIVOT_SOURCE_ALIASES_REPORT=target/pivot-source-aliases-report.json \
+cargo +1.96.0 test --locked --workspace --no-fail-fast \
+  --test pivot_source_aliases --test window_names --test interval_qualifiers
+```
+
 ## Nested field expression names
 
 `nested-field-labels-spark.jsonl` retains 172 Spark 4.2.0 observations in UTC

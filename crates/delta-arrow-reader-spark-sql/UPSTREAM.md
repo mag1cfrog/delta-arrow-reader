@@ -1107,6 +1107,26 @@ references require all 148 original comparisons, 28 supplemental input-admission
 comparisons and 44 NULL-inspection boundary comparisons to match strictly, with
 no inherited exceptions.
 
+### PIVOT source and result aliases
+
+The FROM parser represents a source primary followed by ordered JOIN, PIVOT and
+UNPIVOT extensions. A source alias binds before modifier expressions; each
+modifier's output alias binds afterwards. Single-column PIVOT accepts both
+`FOR g` and `FOR (g)`, while tuple keys and malformed-input checks retain their
+identifier-only grammar. A JOIN right operand remains a primary, preserving the
+captured rejection of PIVOT before a following `ON`.
+
+PIVOT retains source qualifiers on grouping columns and leaves generated cells
+unqualified. A result alias replaces those qualifiers through the existing table
+alias resolver. LATERAL subqueries reuse complete source-factor lowering,
+including TABLESAMPLE, while retaining existing join/operator restrictions.
+
+The [source-alias references](tests/fixtures/README.md#pivot-source-and-result-aliases)
+retain the original queries, complete Fields and rows, and exact error phases.
+Repeated projection identity remains under #786; UNPIVOT NULL filtering and
+result nullability remain under #1076. Their exact accepted native contracts
+receive separate regression credit while raw Spark differences stay visible.
+
 ### Projection metadata
 
 SELECT classifies original expressions before lowering: unaliased derived values
