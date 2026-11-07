@@ -453,31 +453,11 @@ pub fn from_ast_expression(expr: Expr) -> SqlResult<spec::Expr> {
                 Ok(expr)
             }
         }
-        Expr::RLike(expr, not, _, pattern) => {
+        Expr::RLike(expr, not, _, pattern) | Expr::RegExp(expr, not, _, pattern) => {
             let expr = from_ast_expression(*expr)?;
             let pattern = from_ast_expression(*pattern)?;
             let expr = spec::Expr::UnresolvedFunction(spec::UnresolvedFunction {
                 function_name: spec::ObjectName::bare("rlike"),
-                arguments: vec![expr, pattern],
-                named_arguments: vec![],
-                is_distinct: false,
-                is_user_defined_function: false,
-                is_internal: None,
-                ignore_nulls: None,
-                filter: None,
-                order_by: None,
-            });
-            if not.is_some() {
-                Ok(negated(expr))
-            } else {
-                Ok(expr)
-            }
-        }
-        Expr::RegExp(expr, not, _, pattern) => {
-            let expr = from_ast_expression(*expr)?;
-            let pattern = from_ast_expression(*pattern)?;
-            let expr = spec::Expr::UnresolvedFunction(spec::UnresolvedFunction {
-                function_name: spec::ObjectName::bare("regexp"),
                 arguments: vec![expr, pattern],
                 named_arguments: vec![],
                 is_distinct: false,
