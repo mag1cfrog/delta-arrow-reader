@@ -14,7 +14,7 @@ use sail_common::spec;
 use sail_common_datafusion::literal::LiteralEvaluator;
 
 use crate::error::{PlanError, PlanResult};
-use crate::expression_errors::{prune_null_divisor, row_expression};
+use crate::expression_errors::{is_locally_evaluable, prune_null_divisor};
 use crate::function::common::without_metadata_annotations;
 use crate::function::numeric_coercion::common_numeric_type;
 use crate::resolver::PlanResolver;
@@ -61,7 +61,7 @@ impl PlanResolver<'_> {
             let mut prepared_constants = Vec::new();
             // Prepare all cells before evaluating any so admission errors keep their precedence.
             for expr in values.values.iter().flatten() {
-                if !row_expression(expr, false)?
+                if !is_locally_evaluable(expr, false)?
                     || expr.exists(|node| {
                         Ok(match node {
                             Expr::ScalarFunction(function) => {

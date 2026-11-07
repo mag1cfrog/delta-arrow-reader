@@ -165,6 +165,38 @@ arguments keep their separate pruning boundary. Distinct source columns and sepa
 a shared materialized UUID remains a reference to that stored value. Guards
 remain for the existing CASE pruning rule to handle.
 
+## RAND comparison bounds
+
+Three independent references cover RAND's half-open range [0, 1):
+
+- [rand-comparison-bounds-spark.jsonl](rand-comparison-bounds-spark.jsonl) has 130
+  observations for ordering bounds, operand orders, seed forms, equality and
+  other volatile-function controls, required errors, and output names.
+- [rand-comparison-bounds-operands-spark.jsonl](rand-comparison-bounds-operands-spark.jsonl)
+  adds 70 observations for NULL/NaN operands, throwing seeds and bounds, both
+  original equal-result CASE guard orders, and required error controls.
+- [rand-comparison-bounds-admission-spark.jsonl](rand-comparison-bounds-admission-spark.jsonl)
+  adds 50 observations for infinities, seed type/arity/foldability admission,
+  live throwing seeds, and scalar-subquery errors.
+
+Each file's first-line header is the source for its capture settings and
+provenance: Spark 4.2.0 revision
+`32f7299601108917fb01920a54e084595b7b3bf8`, UTC, original input schemas, metadata
+and rows, and capture-script and manifest hashes. Each record retains its SQL,
+ANSI mode, observed fields, rows or error, and available plans. The real
+`case_parent_mixed` provider includes id 0, which is required by the division
+guards. The references remain unchanged.
+
+[rand_comparison_bounds.rs](../rand_comparison_bounds.rs) compares the recorded
+declarations, rows and required errors at batch sizes 1 and 32. Two ANSI-false
+records require a random-domain contract: `live_seed_error_normal`
+(`rand(1 DIV 0)>0.5D`) and `live_seed_error_swapped`
+(`0.5D<rand(1 DIV 0)`). Their NULL seeds use the existing unseeded path. Across
+the two batch sizes, these four contexts require exact analyzed, optimized,
+before-collect and executed fields, no error, and exactly three single-column,
+nonnull Boolean rows. Their original sampled rowsets remain in the references;
+cross-engine RNG sample equality is not a stream contract.
+
 ## Integer-day DATE arithmetic
 
 `date-day-arithmetic-spark.jsonl` contains 296 independent Spark 4.2.0
