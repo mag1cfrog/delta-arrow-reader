@@ -297,7 +297,9 @@ fn substr(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     .call(arguments);
     // Whole constants retain conditional folding; ordinary scalar calls use
     // native NULL selection. Async calls keep their existing extraction path.
-    if !async_arguments && !known_null && crate::expression_errors::is_locally_evaluable(&logical, false)?
+    if !async_arguments
+        && !known_null
+        && crate::expression_errors::is_locally_evaluable(&logical, false)?
     {
         return substring_lambdas(logical, false).map(|value| value.data);
     }
@@ -1588,7 +1590,9 @@ fn substring_logical_visibility_and_runtime_lowering_do_not_invoke_operands()
     ));
     assert!(!ScalarUDFImpl::short_circuits(&asynchronous));
     assert!(ScalarUDFImpl::conditional_arguments(&asynchronous, &args).is_none());
-    assert!(!crate::expression_errors::is_locally_evaluable(&logical, false)?);
+    assert!(!crate::expression_errors::is_locally_evaluable(
+        &logical, false
+    )?);
     let info = SimplifyContext::builder()
         .with_schema(Arc::new(DFSchema::try_from(Schema::new(vec![
             Field::new("s", DataType::Utf8, true),

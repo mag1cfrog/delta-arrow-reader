@@ -76,39 +76,56 @@ fn independent_rand_diagnostic_gap(case: &Value, comparison: &Value) -> Option<&
     {
         return None;
     }
-    let (owner, condition, spark_phase, native_phase, cause) =
-        match (fixture, position, case["id"].as_str()?) {
-            ("rand-comparison-bounds-spark.jsonl", 62, "required_prefix_error")
-            | ("rand-comparison-bounds-spark.jsonl", 63, "required_result_error")
-            | ("rand-comparison-bounds-operands-spark.jsonl", 31, "required_prefix_error")
-            | ("rand-comparison-bounds-operands-spark.jsonl", 32, "required_result_error") => (
-                "#865", "DIVIDE_BY_ZERO", "collect", "collect",
-                "Arrow error: Divide by zero error",
-            ),
-            ("rand-comparison-bounds-operands-spark.jsonl", 17, "failing_bound_normal")
-            | ("rand-comparison-bounds-operands-spark.jsonl", 18, "failing_bound_swapped")
-            | ("rand-comparison-bounds-admission-spark.jsonl", 19, "live_seed_error_normal")
-            | ("rand-comparison-bounds-admission-spark.jsonl", 20, "live_seed_error_swapped")
-            | ("rand-comparison-bounds-admission-spark.jsonl", 21, "subquery_bound_error_normal")
-            | ("rand-comparison-bounds-admission-spark.jsonl", 22, "subquery_bound_error_swapped")
-            | ("rand-comparison-bounds-admission-spark.jsonl", 25, "subquery_bound_error_control") => (
-                "#865", "DIVIDE_BY_ZERO", "optimized_schema", "create_physical_plan",
-                "preserve_spark_expression_errors\ncaused by\nArrow error: Divide by zero error",
-            ),
-            ("rand-comparison-bounds-admission-spark.jsonl", 3 | 28, "invalid_arity_control")
-            | ("rand-comparison-bounds-admission-spark.jsonl", 4 | 29, "invalid_arity_normal")
-            | ("rand-comparison-bounds-admission-spark.jsonl", 5 | 30, "invalid_arity_swapped") => (
-                "#1067", "WRONG_NUM_ARGS.WITHOUT_SUGGESTION", "sql", "resolve",
-                "External error: error in DataFusion: Execution error: Spark `random` function requires 0 to 1 arguments, got 2",
-            ),
-            ("rand-comparison-bounds-admission-spark.jsonl", 6 | 31, "invalid_seed_type_control")
-            | ("rand-comparison-bounds-admission-spark.jsonl", 7 | 32, "invalid_seed_type_normal")
-            | ("rand-comparison-bounds-admission-spark.jsonl", 8 | 33, "invalid_seed_type_swapped") => (
-                "#1067", "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE", "sql", "resolve",
+    let (owner, condition, spark_phase, native_phase, cause) = match (
+        fixture,
+        position,
+        case["id"].as_str()?,
+    ) {
+        ("rand-comparison-bounds-spark.jsonl", 62, "required_prefix_error")
+        | ("rand-comparison-bounds-spark.jsonl", 63, "required_result_error")
+        | ("rand-comparison-bounds-operands-spark.jsonl", 31, "required_prefix_error")
+        | ("rand-comparison-bounds-operands-spark.jsonl", 32, "required_result_error") => (
+            "#865",
+            "DIVIDE_BY_ZERO",
+            "collect",
+            "collect",
+            "Arrow error: Divide by zero error",
+        ),
+        ("rand-comparison-bounds-operands-spark.jsonl", 17, "failing_bound_normal")
+        | ("rand-comparison-bounds-operands-spark.jsonl", 18, "failing_bound_swapped")
+        | ("rand-comparison-bounds-admission-spark.jsonl", 19, "live_seed_error_normal")
+        | ("rand-comparison-bounds-admission-spark.jsonl", 20, "live_seed_error_swapped")
+        | ("rand-comparison-bounds-admission-spark.jsonl", 21, "subquery_bound_error_normal")
+        | ("rand-comparison-bounds-admission-spark.jsonl", 22, "subquery_bound_error_swapped")
+        | ("rand-comparison-bounds-admission-spark.jsonl", 25, "subquery_bound_error_control") => (
+            "#865",
+            "DIVIDE_BY_ZERO",
+            "optimized_schema",
+            "create_physical_plan",
+            "preserve_spark_expression_errors\ncaused by\nArrow error: Divide by zero error",
+        ),
+        ("rand-comparison-bounds-admission-spark.jsonl", 3 | 28, "invalid_arity_control")
+        | ("rand-comparison-bounds-admission-spark.jsonl", 4 | 29, "invalid_arity_normal")
+        | ("rand-comparison-bounds-admission-spark.jsonl", 5 | 30, "invalid_arity_swapped") => (
+            "#1067",
+            "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+            "sql",
+            "resolve",
+            "External error: error in DataFusion: Execution error: Spark `random` function requires 0 to 1 arguments, got 2",
+        ),
+        ("rand-comparison-bounds-admission-spark.jsonl", 6 | 31, "invalid_seed_type_control")
+        | ("rand-comparison-bounds-admission-spark.jsonl", 7 | 32, "invalid_seed_type_normal")
+        | ("rand-comparison-bounds-admission-spark.jsonl", 8 | 33, "invalid_seed_type_swapped") => {
+            (
+                "#1067",
+                "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+                "sql",
+                "resolve",
                 "External error: error in DataFusion: Execution error: Unsupported Data Type: Spark `random` function expects Integer Type for seed, got Utf8",
-            ),
-            _ => return None,
-        };
+            )
+        }
+        _ => return None,
+    };
     let fields_match = [
         ("analyzed", "public_schema"),
         ("optimized", "optimized_schema"),
@@ -144,15 +161,22 @@ fn independent_rand_diagnostic_gap(case: &Value, comparison: &Value) -> Option<&
         && comparison.get("rows") == Some(&Value::Null)
         && comparison.get("rows_raw") == Some(&Value::Null)
         && comparison["contract"] == "exact_spark_stages_rows_and_errors"
-        && ["public_matches", "before_matches", "physical_matches", "rows_match", "ordered_rows_match"]
-            .iter().all(|key| comparison[*key] == true)
+        && [
+            "public_matches",
+            "before_matches",
+            "physical_matches",
+            "rows_match",
+            "ordered_rows_match",
+        ]
+        .iter()
+        .all(|key| comparison[*key] == true)
         && comparison["error_matches"] == false
         && comparison["matches"] == false
         && comparison["contract_matches"] == false
         && comparison["optimized_matches"] == (native_phase == "collect")
         && fields_match
         && optimizer_matches)
-    .then_some(owner)
+        .then_some(owner)
 }
 
 async fn compare_references(fixture: &str, source: &str, count: usize) -> TestResult {
@@ -229,12 +253,7 @@ async fn rand_comparison_bounds_match_spark() -> TestResult {
 
 #[tokio::test]
 async fn rand_comparison_operands_and_guard_orders_match_spark() -> TestResult {
-    compare_references(
-        "rand-comparison-bounds-operands-spark.jsonl",
-        OPERANDS,
-        70,
-    )
-    .await
+    compare_references("rand-comparison-bounds-operands-spark.jsonl", OPERANDS, 70).await
 }
 
 #[tokio::test]
@@ -410,7 +429,11 @@ fn rand_diagnostic_gates_reject_changed_owned_facets() -> TestResult {
     for (fixture, source, count) in [
         ("rand-comparison-bounds-spark.jsonl", BOUNDS, 130),
         ("rand-comparison-bounds-operands-spark.jsonl", OPERANDS, 70),
-        ("rand-comparison-bounds-admission-spark.jsonl", ADMISSION, 50),
+        (
+            "rand-comparison-bounds-admission-spark.jsonl",
+            ADMISSION,
+            50,
+        ),
     ] {
         let records = references(source, count)?;
         for (position, case) in records.iter().enumerate().skip(1) {
@@ -422,7 +445,11 @@ fn rand_diagnostic_gates_reject_changed_owned_facets() -> TestResult {
                     } else {
                         "preserve_spark_expression_errors\ncaused by\nArrow error: Divide by zero error"
                     },
-                    if case["spark_error_phase"] == "collect" { "collect" } else { "create_physical_plan" },
+                    if case["spark_error_phase"] == "collect" {
+                        "collect"
+                    } else {
+                        "create_physical_plan"
+                    },
                 ),
                 Some("WRONG_NUM_ARGS.WITHOUT_SUGGESTION") => (
                     "#1067",
@@ -438,7 +465,9 @@ fn rand_diagnostic_gates_reject_changed_owned_facets() -> TestResult {
             };
             for batch in [1, 32] {
                 let stages = &case["schema_stages"];
-                let physical = stages.get("executed").unwrap_or(&stages["executed_before_collect"]);
+                let physical = stages
+                    .get("executed")
+                    .unwrap_or(&stages["executed_before_collect"]);
                 // Synthetic observations exercise the fallback; real observer flags are never rewritten.
                 let observed = json!({
                     "fixture":fixture, "record_position":position,
@@ -460,29 +489,53 @@ fn rand_diagnostic_gates_reject_changed_owned_facets() -> TestResult {
                     assert_eq!(independent_rand_diagnostic_gap(case, &observed), None);
                     continue;
                 }
-                assert_eq!(independent_rand_diagnostic_gap(case, &observed), Some(owner));
+                assert_eq!(
+                    independent_rand_diagnostic_gap(case, &observed),
+                    Some(owner)
+                );
                 for (key, wrong) in [
-                    ("fixture", json!("other.jsonl")), ("record_position", json!(0)),
-                    ("id", json!("unrelated")), ("input", json!("other")),
-                    ("ansi", json!(!case["ansi"].as_bool().ok_or("missing ANSI")?)),
-                    ("batch", json!(2)), ("native_phase", json!("encode")),
-                    ("error", Value::Null), ("error", json!("Arrow error: different failure")),
+                    ("fixture", json!("other.jsonl")),
+                    ("record_position", json!(0)),
+                    ("id", json!("unrelated")),
+                    ("input", json!("other")),
+                    (
+                        "ansi",
+                        json!(!case["ansi"].as_bool().ok_or("missing ANSI")?),
+                    ),
+                    ("batch", json!(2)),
+                    ("native_phase", json!("encode")),
+                    ("error", Value::Null),
+                    ("error", json!("Arrow error: different failure")),
                     ("error", json!(format!("{cause}: unrelated suffix"))),
-                    ("rows", json!([])), ("rows_raw", json!([])),
+                    ("rows", json!([])),
+                    ("rows_raw", json!([])),
                     ("optimized_error", json!("different optimizer failure")),
                     ("optimized_observation", json!({})),
-                    ("public_matches", json!(false)), ("before_matches", json!(false)),
-                    ("physical_matches", json!(false)), ("rows_match", json!(false)),
-                    ("ordered_rows_match", json!(false)), ("error_matches", json!(true)),
-                    ("matches", json!(true)), ("optimized_matches", json!(phase != "collect")),
+                    ("public_matches", json!(false)),
+                    ("before_matches", json!(false)),
+                    ("physical_matches", json!(false)),
+                    ("rows_match", json!(false)),
+                    ("ordered_rows_match", json!(false)),
+                    ("error_matches", json!(true)),
+                    ("matches", json!(true)),
+                    ("optimized_matches", json!(phase != "collect")),
                     ("contract", json!("null_seed_boolean_domain_and_fields")),
                     ("contract_matches", json!(true)),
                 ] {
                     let mut wrong_observation = observed.clone();
                     wrong_observation[key] = wrong;
-                    assert_eq!(independent_rand_diagnostic_gap(case, &wrong_observation), None, "{fixture}:{position}:{key}");
+                    assert_eq!(
+                        independent_rand_diagnostic_gap(case, &wrong_observation),
+                        None,
+                        "{fixture}:{position}:{key}"
+                    );
                 }
-                for key in ["public_schema", "optimized_schema", "before_collect", "physical_schema"] {
+                for key in [
+                    "public_schema",
+                    "optimized_schema",
+                    "before_collect",
+                    "physical_schema",
+                ] {
                     if observed[key].is_null() {
                         let mut unexpected = observed.clone();
                         unexpected[key] = json!({"type":"struct", "fields":[]});
@@ -493,38 +546,70 @@ fn rand_diagnostic_gates_reject_changed_owned_facets() -> TestResult {
                             incomplete[key] = wrong;
                             assert_eq!(independent_rand_diagnostic_gap(case, &incomplete), None);
                         }
-                        if let Some(nullable) = observed[key]["fields"][0]["type"]["fields"][0]["nullable"].as_bool() {
+                        if let Some(nullable) =
+                            observed[key]["fields"][0]["type"]["fields"][0]["nullable"].as_bool()
+                        {
                             let mut nested = observed.clone();
-                            nested[key]["fields"][0]["type"]["fields"][0]["nullable"] = json!(!nullable);
+                            nested[key]["fields"][0]["type"]["fields"][0]["nullable"] =
+                                json!(!nullable);
                             assert_eq!(independent_rand_diagnostic_gap(case, &nested), None);
                             let mut nested = observed.clone();
-                            nested[key]["fields"][0]["type"]["fields"][0]["metadata"] = json!({"source":"wrong child"});
+                            nested[key]["fields"][0]["type"]["fields"][0]["metadata"] =
+                                json!({"source":"wrong child"});
                             assert_eq!(independent_rand_diagnostic_gap(case, &nested), None);
                         }
                         for (attribute, wrong) in [
-                            ("name", json!("wrong")), ("type", json!("wrong")),
-                            ("nullable", json!(!observed[key]["fields"][0]["nullable"].as_bool().ok_or("missing nullable")?)),
+                            ("name", json!("wrong")),
+                            ("type", json!("wrong")),
+                            (
+                                "nullable",
+                                json!(
+                                    !observed[key]["fields"][0]["nullable"]
+                                        .as_bool()
+                                        .ok_or("missing nullable")?
+                                ),
+                            ),
                             ("metadata", json!({"source":"wrong"})),
                         ] {
                             let mut wrong_field = observed.clone();
                             wrong_field[key]["fields"][0][attribute] = wrong;
-                            assert_eq!(independent_rand_diagnostic_gap(case, &wrong_field), None, "{key}:{attribute}");
+                            assert_eq!(
+                                independent_rand_diagnostic_gap(case, &wrong_field),
+                                None,
+                                "{key}:{attribute}"
+                            );
                         }
                     }
                 }
                 for key in observed.as_object().ok_or("missing observation")?.keys() {
                     let mut missing = observed.clone();
                     missing.as_object_mut().ok_or("missing object")?.remove(key);
-                    assert_eq!(independent_rand_diagnostic_gap(case, &missing), None, "missing {key}");
+                    assert_eq!(
+                        independent_rand_diagnostic_gap(case, &missing),
+                        None,
+                        "missing {key}"
+                    );
                 }
                 for pointer in ["/sql", "/expected/condition", "/spark_error_phase"] {
                     let mut wrong_reference = case.clone();
-                    *wrong_reference.pointer_mut(pointer).ok_or("missing reference mutation target")? = json!("changed");
-                    assert_eq!(independent_rand_diagnostic_gap(&wrong_reference, &observed), None);
+                    *wrong_reference
+                        .pointer_mut(pointer)
+                        .ok_or("missing reference mutation target")? = json!("changed");
+                    assert_eq!(
+                        independent_rand_diagnostic_gap(&wrong_reference, &observed),
+                        None
+                    );
                 }
                 let mut corrected = observed.clone();
-                corrected["error"] = json!(format!("[{}] {cause}", case["expected"]["condition"].as_str().ok_or("missing condition")?));
-                if phase != "collect" { corrected["optimized_error"] = corrected["error"].clone(); }
+                corrected["error"] = json!(format!(
+                    "[{}] {cause}",
+                    case["expected"]["condition"]
+                        .as_str()
+                        .ok_or("missing condition")?
+                ));
+                if phase != "collect" {
+                    corrected["optimized_error"] = corrected["error"].clone();
+                }
                 corrected["matches"] = json!(true);
                 corrected["error_matches"] = json!(true);
                 corrected["optimized_matches"] = json!(true);

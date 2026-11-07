@@ -430,7 +430,9 @@ impl AnalyzerRule for PrepareSparkExpressions {
                     let folded =
                         expr.transform_up(|expr| fold_rand_comparison(expr, &simplifier))?;
                     let canonical = if let Some(input) = &input {
-                        folded.data.transform_up(|expr| canonicalize_case_result_columns(expr, input))?
+                        folded
+                            .data
+                            .transform_up(|expr| canonicalize_case_result_columns(expr, input))?
                     } else {
                         Transformed::no(folded.data)
                     };
@@ -1700,7 +1702,11 @@ pub(crate) fn is_locally_evaluable(expr: &Expr, allow_columns: bool) -> Result<b
     is_locally_evaluable_with_volatility(expr, allow_columns, false)
 }
 
-fn is_locally_evaluable_with_volatility(expr: &Expr, allow_columns: bool, allow_volatile: bool) -> Result<bool> {
+fn is_locally_evaluable_with_volatility(
+    expr: &Expr,
+    allow_columns: bool,
+    allow_volatile: bool,
+) -> Result<bool> {
     let mut eligible = true;
     expr.apply(|node| {
         if let Some(bodies) = local_string_argument_bodies(node)? {
@@ -3675,7 +3681,9 @@ impl Prepare {
         let batch = match plan {
             LogicalPlan::Values(values) if !values.values.is_empty() => {
                 if !values.values.iter().flatten().try_fold(true, |valid, e| {
-                    Ok::<_, datafusion_common::DataFusionError>(valid && is_locally_evaluable(e, false)?)
+                    Ok::<_, datafusion_common::DataFusionError>(
+                        valid && is_locally_evaluable(e, false)?,
+                    )
                 })? {
                     return Ok(None);
                 }
@@ -3707,7 +3715,9 @@ impl Prepare {
                     ))));
                 }
                 if !project.expr.iter().try_fold(true, |valid, e| {
-                    Ok::<_, datafusion_common::DataFusionError>(valid && is_locally_evaluable(e, true)?)
+                    Ok::<_, datafusion_common::DataFusionError>(
+                        valid && is_locally_evaluable(e, true)?,
+                    )
                 })? {
                     return Ok(None);
                 }
