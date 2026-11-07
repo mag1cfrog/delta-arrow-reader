@@ -44,6 +44,47 @@ impl PlannedRangeBoundary {
     }
 }
 
+enum ResolvedOffsetBoundary {
+    Native(String, WindowFrameBound),
+    Expression {
+        display: String,
+        converted_bound: Option<WindowFrameBound>,
+        source_type: DataType,
+        is_null: bool,
+    },
+}
+
+impl ResolvedOffsetBoundary {
+    fn validate_rows_type(&self, location: &str) -> PlanResult<()> {
+        if let Self::Expression { source_type, .. } = self
+            && *source_type != DataType::Int32
+        {
+            let data_type = SparkPlanFormatter
+                .data_type_to_simple_string(source_type)?
+                .to_ascii_uppercase();
+            return Err(PlanError::invalid(format!(
+                "[DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE] The data type of the {location} bound \"{data_type}\" does not match the expected data type \"INT\"."
+            )));
+        }
+        Ok(())
+    }
+
+    fn into_native_bound(self) -> PlanResult<(String, WindowFrameBound)> {
+        match self {
+            Self::Native(display, bound) => Ok((display, bound)),
+            Self::Expression {
+                display,
+                converted_bound,
+                ..
+            } => Ok((
+                display,
+                converted_bound
+                    .ok_or_else(|| PlanError::invalid("invalid window boundary offset"))?,
+            )),
+        }
+    }
+}
+
 impl PlanResolver<'_> {
     pub(super) async fn resolve_expression_window(
         &self,
@@ -452,12 +493,54 @@ impl PlanResolver<'_> {
         }
         let mut deferred_checks = [None, None];
         let ((lower_display, start), (upper_display, end)) = match units {
-            WindowFrameUnits::Rows | WindowFrameUnits::Groups => (
-                self.resolve_window_boundary_offset(lower, schema, state)
-                    .await?,
-                self.resolve_window_boundary_offset(upper, schema, state)
-                    .await?,
-            ),
+            WindowFrameUnits::Rows | WindowFrameUnits::Groups => {
+                let retain_null = units == WindowFrameUnits::Rows;
+                let lower = self
+                    .resolve_window_boundary_offset(lower, retain_null, true, schema, state)
+                    .await?;
+                let lower_null = matches!(
+                    &lower,
+                    ResolvedOffsetBoundary::Expression { is_null: true, .. }
+                );
+                if retain_null && lower_null {
+                    lower.validate_rows_type("lower")?;
+                }
+                // A NULL lower bound needs upper type admission, never upper integer conversion.
+                let upper = self
+                    .resolve_window_boundary_offset(upper, retain_null, !lower_null, schema, state)
+                    .await?;
+                if retain_null
+                    && [&lower, &upper].iter().any(|bound| {
+                        matches!(
+                            bound,
+                            ResolvedOffsetBoundary::Expression { is_null: true, .. }
+                        )
+                    })
+                {
+                    // Preserve Spark's lower/upper type admission before rejecting typed NULLs.
+                    lower.validate_rows_type("lower")?;
+                    upper.validate_rows_type("upper")?;
+                    if matches!(&lower, ResolvedOffsetBoundary::Native(_, WindowFrameBound::Following(value)) if value.is_null())
+                        || matches!(&upper, ResolvedOffsetBoundary::Native(_, WindowFrameBound::Preceding(value)) if value.is_null())
+                    {
+                        return Err(PlanError::invalid(
+                            "[DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_INVALID_BOUND] invalid UNBOUNDED frame boundary",
+                        ));
+                    }
+                    let location = if matches!(
+                        &lower,
+                        ResolvedOffsetBoundary::Expression { is_null: true, .. }
+                    ) {
+                        "lower"
+                    } else {
+                        "upper"
+                    };
+                    return Err(PlanError::unsupported(format!(
+                        "NULL ROWS frame {location} bound"
+                    )));
+                }
+                (lower.into_native_bound()?, upper.into_native_bound()?)
+            }
             WindowFrameUnits::Range => {
                 let lower = self
                     .resolve_window_boundary_value(lower, order_by, schema, state)
@@ -668,53 +751,71 @@ impl PlanResolver<'_> {
     async fn resolve_window_boundary_offset(
         &self,
         value: spec::WindowFrameBoundary,
+        retain_null: bool,
+        convert_offset: bool,
         schema: &DFSchemaRef,
         state: &mut PlanResolverState,
-    ) -> PlanResult<(String, WindowFrameBound)> {
+    ) -> PlanResult<ResolvedOffsetBoundary> {
         let preceding = matches!(value, spec::WindowFrameBoundary::Preceding(_));
-        match value {
-            spec::WindowFrameBoundary::CurrentRow => {
-                Ok(("CURRENT ROW".into(), WindowFrameBound::CurrentRow))
+        let bound = match value {
+            spec::WindowFrameBoundary::CurrentRow => WindowFrameBound::CurrentRow,
+            spec::WindowFrameBoundary::UnboundedPreceding => {
+                WindowFrameBound::Preceding(ScalarValue::UInt64(None))
             }
-            spec::WindowFrameBoundary::UnboundedPreceding => Ok((
-                "UNBOUNDED PRECEDING".into(),
-                WindowFrameBound::Preceding(ScalarValue::UInt64(None)),
-            )),
-            spec::WindowFrameBoundary::UnboundedFollowing => Ok((
-                "UNBOUNDED FOLLOWING".into(),
-                WindowFrameBound::Following(ScalarValue::UInt64(None)),
-            )),
+            spec::WindowFrameBoundary::UnboundedFollowing => {
+                WindowFrameBound::Following(ScalarValue::UInt64(None))
+            }
             spec::WindowFrameBoundary::Preceding(expr)
             | spec::WindowFrameBoundary::Following(expr) => {
                 let (display, value) = self.resolve_window_boundary(*expr, schema, state).await?;
-                let ScalarValue::Int64(Some(offset)) = value.cast_to(&DataType::Int64)? else {
-                    return Err(PlanError::invalid("invalid window boundary offset"));
-                };
-                let bound = if offset == 0 {
-                    WindowFrameBound::CurrentRow
-                } else if preceding == (offset > 0) {
-                    WindowFrameBound::Preceding(ScalarValue::UInt64(Some(offset.unsigned_abs())))
+                // Spark gives unary minus on an untyped NULL a DOUBLE operand.
+                let source_type = if preceding && matches!(value, ScalarValue::Null) {
+                    DataType::Float64
                 } else {
-                    WindowFrameBound::Following(ScalarValue::UInt64(Some(offset.unsigned_abs())))
+                    value.data_type()
+                };
+                let is_null = value.is_null();
+                let converted_bound = if !convert_offset || (retain_null && is_null) {
+                    None
+                } else {
+                    let ScalarValue::Int64(Some(offset)) = value.cast_to(&DataType::Int64)? else {
+                        return Err(PlanError::invalid("invalid window boundary offset"));
+                    };
+                    Some(if offset == 0 {
+                        WindowFrameBound::CurrentRow
+                    } else if preceding == (offset > 0) {
+                        WindowFrameBound::Preceding(ScalarValue::UInt64(Some(
+                            offset.unsigned_abs(),
+                        )))
+                    } else {
+                        WindowFrameBound::Following(ScalarValue::UInt64(Some(
+                            offset.unsigned_abs(),
+                        )))
+                    })
                 };
                 let direction = if preceding { "PRECEDING" } else { "FOLLOWING" };
-                Ok((format!("{display} {direction}"), bound))
+                return Ok(ResolvedOffsetBoundary::Expression {
+                    display: format!("{display} {direction}"),
+                    converted_bound,
+                    source_type,
+                    is_null,
+                });
             }
             spec::WindowFrameBoundary::Value(expr) => {
                 let (_, value) = self.resolve_window_boundary(*expr, schema, state).await?;
                 let ScalarValue::Int64(Some(value)) = value.cast_to(&DataType::Int64)? else {
                     return Err(PlanError::invalid("invalid window boundary offset"));
                 };
-                let bound = match value {
+                match value {
                     i64::MIN => WindowFrameBound::Preceding(ScalarValue::UInt64(None)),
                     i64::MAX => WindowFrameBound::Following(ScalarValue::UInt64(None)),
                     0 => WindowFrameBound::CurrentRow,
                     x if x < 0 => WindowFrameBound::Preceding(ScalarValue::UInt64(Some(-x as u64))),
                     x => WindowFrameBound::Following(ScalarValue::UInt64(Some(x as u64))),
-                };
-                Ok((bound.to_string(), bound))
+                }
             }
-        }
+        };
+        Ok(ResolvedOffsetBoundary::Native(bound.to_string(), bound))
     }
 
     async fn resolve_window_boundary_value(
