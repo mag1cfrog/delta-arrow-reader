@@ -1,0 +1,203 @@
+{
+  "purpose": "Permanent focused #1068 regression source; execution and acceptance remain with Root after the #1064 common fix.",
+  "native_test_parent": "97dcdb3ffdbba30ae2b6b4caa4b713e135ffca14",
+  "original_Spark_product": "bb1b0da4a8717ef52e22687c211f55dbbbb69924",
+  "original_Spark_execution": "de823ac0854d7923408f340c22fdbd2abd051a5e",
+  "original_Spark_execution_tree": "3f6098009a8eca711f83927ff8b417f3449797c3",
+  "Spark_version": "4.2.0",
+  "Spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "raw_reference": {
+    "fixture": "regexp-replace-pattern-preparation-spark.jsonl",
+    "source": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/1064-pattern-guards-reference-runtime-r1/spark/observations.jsonl",
+    "sha256": "d27c980c77a006cdce85ffa83eb0ce2114c892b31504ab744dc5aedc24545994",
+    "records": 14,
+    "queries": 12,
+    "provider_receipts": 0,
+    "header_and_summary": 2,
+    "complete_original_bytes": true
+  },
+  "inputs": {
+    "fixture": "regexp-replace-pattern-preparation-inputs.json",
+    "source": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/1064-pattern-guards-reference-preparation-r1/INPUTS.json",
+    "sha256": "5ecad75d31eef03842ca0162d555fd06543ecb827953ba5f4755c610fbbeca62",
+    "complete_original_bytes": true
+  },
+  "admission": {
+    "review": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/1064-spark12-complete-outcomes-independent-review/SEAL.json",
+    "sha256": "dde1da3b17e3ce7ece4f71502d03974b0a68c63f897bc6af6eb8c3a60f090ffa"
+  },
+  "current_baseline_admission": {
+    "review": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/1064-current-complete-baseline-independent-review/SEAL.json",
+    "sha256": "cff6fe37cb53a992472833f9811d378f1b619fc5b37754637647c6d62197cc60",
+    "product_commit": "56de95062a626a4393dea1b9a53d58e8c5ea01d1",
+    "observer_commit": "982ff06bac75dadff4387eadb53a947059d1e8ae",
+    "scope": "Prior admitted baseline only; it does not validate this target or its 97dc parent."
+  },
+  "existing_references": {
+    "regexp-replace-spark.jsonl": {
+      "focus": [
+        "regexp_replace_literal_invalid_pattern"
+      ],
+      "controls": [
+        "regexp_replace_literal_no_match",
+        "regexp_replace_literal_empty_source",
+        "regexp_replace_literal_null_source",
+        "regexp_replace_literal_null_pattern",
+        "regexp_replace_literal_null_replacement",
+        "admission_regexp_replace_position_null"
+      ],
+      "sha256": "b39e252b45ebc295599075f21c0b09866b846306e43c7bff2d44927dbba4552a",
+      "complete_existing_bytes_reused": true,
+      "original_header_source_labels": {
+        "frozen_source_revision": "c426ef86e4da43eb57f270f1a4945c9dcc6559fe"
+      }
+    },
+    "regexp-replace-expanded-spark.jsonl": {
+      "focus": [
+        "position_invalid_past_end"
+      ],
+      "controls": [
+        "rr_nullable",
+        "empty_bad_pattern",
+        "guarded_case",
+        "guarded_filter",
+        "position_bad_replacement_past_end",
+        "position_null_invalid",
+        "null_source_bad_pattern",
+        "null_replacement_bad_pattern"
+      ],
+      "sha256": "d822a8dddd90a2a10a4531d452ece047f9433e1266698bbd82dbc0ce5228379b",
+      "complete_existing_bytes_reused": true,
+      "original_header_source_labels": {
+        "replay_source": {
+          "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/774-expanded-seed.jsonl",
+          "sha256": "2f034920c94e510035c82d6e1bd5758a18597a776f640bb0799ebf20db1300c0",
+          "spark_version": "4.2.0",
+          "spark_build": null,
+          "artifacts": null
+        }
+      }
+    },
+    "regexp-replace-empty-utf16-spark.jsonl": {
+      "focus": [
+        "bad_pattern_beyond"
+      ],
+      "controls": [
+        "empty_at_start",
+        "empty_beyond"
+      ],
+      "sha256": "12e20a2e80abe9536a2a983420907b5581675e88195bd9a37ae8dfdf68a1ffa0",
+      "complete_existing_bytes_reused": true,
+      "original_header_source_labels": {
+        "replay_source": {
+          "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/798-empty-utf16/798-empty-utf16-input-only.jsonl",
+          "sha256": "b0929052e55f79140cbe029c19e99c5d790fd88461006b514ce97b5ad71571b0",
+          "spark_version": "4.2.0",
+          "spark_build": null,
+          "artifacts": null
+        },
+        "seed_source": {
+          "fixture": "regexp-replace-boundary-spark.jsonl",
+          "expected_results_used": false
+        }
+      }
+    },
+    "regex-syntax-missing-spark.jsonl": {
+      "focus": [],
+      "controls": [
+        "regexp_replace_column_malformed"
+      ],
+      "sha256": "2380c9da72773a9caf1b720f57e8fc66631d26c85f314f0d98e9788ae47e2cdf",
+      "complete_existing_bytes_reused": true,
+      "original_header_source_labels": {
+        "replay_source": {
+          "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/regex-support-boundary/inputs/regex-syntax-missing-input.jsonl",
+          "sha256": "ff2f12d63702022fe505fe5dae25d40a82fb022a3b3b2c5bfbf8897da24f38fb",
+          "spark_version": "4.2.0",
+          "spark_build": {
+            "SPARK_VERSION": {
+              "value": "4.2.0",
+              "source": "org.apache.spark.SPARK_VERSION"
+            },
+            "SPARK_REVISION": {
+              "value": "32f7299601108917fb01920a54e084595b7b3bf8",
+              "source": "org.apache.spark.SPARK_REVISION"
+            },
+            "SPARK_BRANCH": {
+              "value": "HEAD",
+              "source": "org.apache.spark.SPARK_BRANCH"
+            },
+            "SPARK_BUILD_USER": {
+              "value": "hgao",
+              "source": "org.apache.spark.SPARK_BUILD_USER"
+            },
+            "SPARK_REPO_URL": {
+              "value": "https://github.com/apache/spark",
+              "source": "org.apache.spark.SPARK_REPO_URL"
+            },
+            "SPARK_BUILD_DATE": {
+              "value": "2026-07-11T15:29:54Z",
+              "source": "org.apache.spark.SPARK_BUILD_DATE"
+            }
+          },
+          "artifacts": {
+            "spark_core": {
+              "loaded_class": "org.apache.spark.SparkContext",
+              "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/spark-venv/lib/python3.12/site-packages/pyspark/jars/spark-core_2.13-4.2.0.jar",
+              "sha256": "8e0a03b66338a4a38c9089d9f798ab6a6c6583aefe93f910311704a5ec90ffc4",
+              "bytes": 15977232
+            },
+            "spark_sql": {
+              "loaded_class": "org.apache.spark.sql.execution.SparkPlan",
+              "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/spark-venv/lib/python3.12/site-packages/pyspark/jars/spark-sql_2.13-4.2.0.jar",
+              "sha256": "ec0a0d699c6c57300ee47ba5d54b4d1f71d3e5401fb90a2bcdcd83b942084dbf",
+              "bytes": 14825720
+            },
+            "spark_catalyst": {
+              "loaded_class": "org.apache.spark.sql.catalyst.plans.logical.LogicalPlan",
+              "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/spark-venv/lib/python3.12/site-packages/pyspark/jars/spark-catalyst_2.13-4.2.0.jar",
+              "sha256": "aef4f68a687de8174d06c5cb451c48019847f90c0b0604ec1928ee313b2a6c40",
+              "bytes": 18637753
+            },
+            "capture_script": {
+              "path": "/Users/hanbowang/Documents/repos/delta-arrow-reader-c06/crates/delta-arrow-reader-spark-sql/tests/fixtures/recapture_string_binary_spark.py",
+              "sha256": "32984b434279a30d196bd5ff94d27b743bdf3d42405758cf6aa7bbaad49f067a",
+              "bytes": 13352
+            }
+          }
+        },
+        "preparation_head": "68a205952f4139ff3c4c8efc3dc31f803e9cad78"
+      }
+    }
+  },
+  "native_layouts": {
+    "representations": [
+      "Utf8",
+      "LargeUtf8",
+      "Utf8View"
+    ],
+    "batch_sizes": [
+      1,
+      32
+    ],
+    "target_partitions": 2,
+    "focus_contexts": 108,
+    "control_contexts": 204,
+    "total_query_contexts": 312,
+    "focus_scalar_provider_receipts": 0,
+    "scalar_representation_effect": "None: all 18 focus references have no providers. The six layout labels repeat scalar queries; controls register actual string carriers."
+  },
+  "comparison": {
+    "public_analyzed_Fields": "Exact full independent analyzed_schema and schema.",
+    "physical_Fields": "Exact full independent physical_schema on success; column failure uses the independently recorded physical_schema_before_collect.",
+    "error_timing": "Spark optimized_schema requires native physical preparation failure with null physical Fields and no rows; Spark collect requires native execute failure with the available physical Fields.",
+    "error_cause": "Required INVALID_PARAMETER_VALUE.PATTERN, regexp_replace, the exact malformed pattern and terminal native parser cause corresponding to the recorded Java cause.",
+    "raw_native_error_and_Arrow_schemas": "Retained in every actual observation; native optimized schema is unexposed.",
+    "raw_cross_engine_diagnostic_equality_claimed": false,
+    "unrelated_native_capability_waivers": false,
+    "expected_Field_or_outcome_overlay": false
+  },
+  "old_fixture_bytes_modified": false,
+  "production_source_or_helper_changes": false,
+  "compatibility_or_issue_closure_claimed": false
+}
