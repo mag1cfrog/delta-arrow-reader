@@ -310,18 +310,7 @@ async fn regexp_replace_matches_spark_and_retains_external_boundaries() -> TestR
                         } else {
                             "required_admission_error"
                         }
-                    } else if limit == Some("utf16_split_region")
-                        || (id == "position_supplementary_3"
-                            && case["sql"] == "SELECT regexp_replace('a😀b','.','X',3) AS r"
-                            && observed["analyzed_schema"] == expected["analyzed_schema"]
-                            && observed["physical_schema"] == expected["physical_schema"]
-                            && expected["rows"] == json!([["a?XX"]])
-                            && observed["error_stage"] == "execute"
-                            && error
-                                == Some(
-                                    "execute: Execution error: regexp_replace cannot start a native regex region inside a UTF-16 surrogate pair",
-                                ))
-                    {
+                    } else if limit == Some("utf16_split_region") {
                         "external_java_utf16_region_798"
                     } else if limit == Some("utf16_optional_advancement") {
                         "external_java_utf16_empty_match_798"
@@ -761,8 +750,8 @@ fn substitution_error_matches(case: &Value, actual: &Value) -> bool {
             else {
                 return false;
             };
-            // #1064 retains literal-error timing; compare the execution cause separately.
-            let has_recorded_execution_phase = expected["phase"] == "collect"
+            let has_required_phase = (expected["phase"] == "collect"
+                && actual["error_stage"] == "execute")
                 || (expected["phase"] == "optimized_schema"
                     && matches!(
                         case["id"].as_str(),
@@ -771,9 +760,11 @@ fn substitution_error_matches(case: &Value, actual: &Value) -> bool {
                                 | "disabled_defined_regexp_replace_literal_bad_named_group"
                                 | "defined_invalid_replacement_group"
                         )
-                    ));
-            has_recorded_execution_phase
-                && actual["error_stage"] == "execute"
+                    )
+                    && actual["error_stage"] == "physical"
+                    && actual.get("physical_schema") == Some(&Value::Null)
+                    && actual.get("physical_arrow_schema") == Some(&Value::Null));
+            has_required_phase
                 && required_error_outcome_matches(error, actual.get("analyzed_schema"), expected)
                 && error.contains(&format!(
                     "[INVALID_REGEXP_REPLACE] source={source:?}, pattern={pattern:?}, replacement={replacement:?}, position={position}:"
@@ -918,9 +909,9 @@ async fn sql_variable_substitution_matches_spark_configuration_references() -> T
     assert_eq!(required_errors, 24 * 6);
     assert_eq!(parse_errors, 4 * 6);
     assert_eq!(cycle_errors, 4 * 6);
-    assert_eq!(phase_differences, 6 * 6);
+    assert_eq!(phase_differences, 0);
     assert_eq!(identifier_differences, 4 * 6);
-    assert_eq!(strict_matches, 110 * 6);
+    assert_eq!(strict_matches, 116 * 6);
     Ok(())
 }
 
