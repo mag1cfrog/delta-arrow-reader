@@ -1,0 +1,693 @@
+{
+  "version": 1,
+  "issue": 1076,
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "sql_source_count": 15,
+  "expected_record_count": 30,
+  "retained_reference_count": 4,
+  "family_record_counts": {
+    "missing_core": 16,
+    "accepted_alias_equivalence": 4,
+    "required_metadata_duplicate_names": 4,
+    "required_error_probe": 6
+  },
+  "native_batch_sizes": [
+    1,
+    32
+  ],
+  "native_provider_partitions": 2,
+  "native_target_partitions": 2,
+  "spark_provider_partitions_expected": 1,
+  "original_provider_source": {
+    "file": "date-range-747-cases.json",
+    "sha256": "850b7d39225c629c01adcf60840014ffa9bba0e86acc090a39d8914923c5c526",
+    "corpus": "original",
+    "provider_names": [
+      "inputs",
+      "empty_inputs",
+      "null_inputs"
+    ]
+  },
+  "corpora": [
+    {
+      "corpus": "unpivot-null-1076-supplement",
+      "source": {
+        "path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/new1076-preflight-v1.json",
+        "sha256": "29cea81c9fcb0937a062db8565d40e2d6f29b2754656dde2cba68c27afa2d8ec"
+      },
+      "metadata": {
+        "spark_version": "4.2.0",
+        "timezone": "UTC",
+        "inputs": [
+          {
+            "name": "inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "g",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "v",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "p",
+                  "type": "boolean",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "0",
+                null,
+                null,
+                null
+              ],
+              [
+                "1",
+                "0",
+                "1",
+                "10",
+                "True"
+              ],
+              [
+                "2",
+                "0",
+                "1",
+                "20",
+                "False"
+              ],
+              [
+                "3",
+                "0",
+                "3",
+                null,
+                "True"
+              ],
+              [
+                "4",
+                "0",
+                "5",
+                "10",
+                null
+              ],
+              [
+                "5",
+                "1",
+                null,
+                null,
+                "False"
+              ],
+              [
+                "6",
+                "1",
+                "2",
+                null,
+                null
+              ],
+              [
+                "7",
+                null,
+                "1",
+                "-4",
+                "True"
+              ],
+              [
+                "8",
+                null,
+                "1",
+                "6",
+                "False"
+              ],
+              [
+                "9",
+                null,
+                "4",
+                "6",
+                "True"
+              ],
+              [
+                "10",
+                "0",
+                "1",
+                "20",
+                "False"
+              ]
+            ]
+          },
+          {
+            "name": "empty_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "g",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "v",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "p",
+                  "type": "boolean",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": []
+          },
+          {
+            "name": "null_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "g",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "v",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "p",
+                  "type": "boolean",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                null,
+                null,
+                null,
+                null
+              ],
+              [
+                "1",
+                null,
+                null,
+                null,
+                null
+              ]
+            ]
+          },
+          {
+            "name": "unpivot_required",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "id"
+                  }
+                },
+                {
+                  "name": "g",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "g"
+                  }
+                },
+                {
+                  "name": "v",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "v"
+                  }
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "1",
+                "2"
+              ],
+              [
+                "0",
+                "1",
+                "2"
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "unpivot-null-1076-supplement",
+          "id": "unpivot_exclude_mixed",
+          "ansi": true,
+          "sql": "SELECT o.* FROM (SELECT id,g,v FROM inputs) UNPIVOT EXCLUDE NULLS (value FOR label IN (g,v)) o",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "missing_core",
+            "provider": "inputs",
+            "mode": "EXCLUDE NULLS"
+          }
+        },
+        {
+          "corpus": "unpivot-null-1076-supplement",
+          "id": "unpivot_exclude_mixed",
+          "ansi": false,
+          "sql": "SELECT o.* FROM (SELECT id,g,v FROM inputs) UNPIVOT EXCLUDE NULLS (value FOR label IN (g,v)) o",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "missing_core",
+            "provider": "inputs",
+            "mode": "EXCLUDE NULLS"
+          }
+        },
+        {
+          "corpus": "unpivot-null-1076-supplement",
+          "id": "unpivot_include_mixed",
+          "ansi": true,
+          "sql": "SELECT o.* FROM (SELECT id,g,v FROM inputs) UNPIVOT INCLUDE NULLS (value FOR label IN (g,v)) o",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "missing_core",
+            "provider": "inputs",
+            "mode": "INCLUDE NULLS"
+          }
+        },
+        {
+          "corpus": "unpivot-null-1076-supplement",
+          "id": "unpivot_include_mixed",
+          "ansi": false,
+          "sql": "SELECT o.* FROM (SELECT id,g,v FROM inputs) UNPIVOT INCLUDE NULLS (value FOR label IN (g,v)) o",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "missing_core",
+            "provider": "inputs",
+            "mode": "INCLUDE NULLS"
+          }
+        },
+        {
+          "corpus": "unpivot-null-1076-supplement",
+          "id": "unpivot_default_empty",
+          "ansi": true,
+          "sql": "SELECT o.* FROM (SELECT id,g,v FROM empty_inputs) UNPIVOT (value FOR label IN (g,v)) o",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "missing_core",
+            "provider": "empty_inputs",
+            "mode": "default"
+          }
+        },
+        {
+          "corpus": "unpivot-null-1076-supplement",
+          "id": "unpivot_default_empty",
+          "ansi": false,
+          "sql": "SELECT o.* FROM (SELECT id,g,v FROM empty_inputs) UNPIVOT (value FOR label IN (g,v)) o",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "missing_core",
+            "provider": "empty_inputs",
+            "mode": "default"
+          }
+        },
+        {
+          "corpus": "unpivot-null-1076-supplement",
+          "id": "unpivot_exclude_empty",
+          "ansi": true,
+          "sql": "SELECT o.* FROM (SELECT id,g,v FROM empty_inputs) UNPIVOT EXCLUDE NULLS (value FOR label IN (g,v)) o",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "missing_core",
+            "provider": "empty_inputs",
+            "mode": "EXCLUDE NULLS"
+          }
+        },
+        {
+          "corpus": "unpivot-null-1076-supplement",
+          "id": "unpivot_exclude_empty",
+          "ansi": false,
+          "sql": "SELECT o.* FROM (SELECT id,g,v FROM empty_inputs) UNPIVOT EXCLUDE NULLS (value FOR label IN (g,v)) o",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "missing_core",
+            "provider": "empty_inputs",
+            "mode": "EXCLUDE NULLS"
+          }
+        },
+        {
+          "corpus": "unpivot-null-1076-supplement",
+          "id": "unpivot_include_empty",
+          "ansi": true,
+          "sql": "SELECT o.* FROM (SELECT id,g,v FROM empty_inputs) UNPIVOT INCLUDE NULLS (value FOR label IN (g,v)) o",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "missing_core",
+            "provider": "empty_inputs",
+            "mode": "INCLUDE NULLS"
+          }
+        },
+        {
+          "corpus": "unpivot-null-1076-supplement",
+          "id": "unpivot_include_empty",
+          "ansi": false,
+          "sql": "SELECT o.* FROM (SELECT id,g,v FROM empty_inputs) UNPIVOT INCLUDE NULLS (value FOR label IN (g,v)) o",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "missing_core",
+            "provider": "empty_inputs",
+            "mode": "INCLUDE NULLS"
+          }
+        },
+        {
+          "corpus": "unpivot-null-1076-supplement",
+          "id": "unpivot_default_all_null",
+          "ansi": true,
+          "sql": "SELECT o.* FROM (SELECT id,g,v FROM null_inputs) UNPIVOT (value FOR label IN (g,v)) o",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "missing_core",
+            "provider": "null_inputs",
+            "mode": "default"
+          }
+        },
+        {
+          "corpus": "unpivot-null-1076-supplement",
+          "id": "unpivot_default_all_null",
+          "ansi": false,
+          "sql": "SELECT o.* FROM (SELECT id,g,v FROM null_inputs) UNPIVOT (value FOR label IN (g,v)) o",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "missing_core",
+            "provider": "null_inputs",
+            "mode": "default"
+          }
+        },
+        {
+          "corpus": "unpivot-null-1076-supplement",
+          "id": "unpivot_exclude_all_null",
+          "ansi": true,
+          "sql": "SELECT o.* FROM (SELECT id,g,v FROM null_inputs) UNPIVOT EXCLUDE NULLS (value FOR label IN (g,v)) o",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "missing_core",
+            "provider": "null_inputs",
+            "mode": "EXCLUDE NULLS"
+          }
+        },
+        {
+          "corpus": "unpivot-null-1076-supplement",
+          "id": "unpivot_exclude_all_null",
+          "ansi": false,
+          "sql": "SELECT o.* FROM (SELECT id,g,v FROM null_inputs) UNPIVOT EXCLUDE NULLS (value FOR label IN (g,v)) o",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "missing_core",
+            "provider": "null_inputs",
+            "mode": "EXCLUDE NULLS"
+          }
+        },
+        {
+          "corpus": "unpivot-null-1076-supplement",
+          "id": "unpivot_include_all_null",
+          "ansi": true,
+          "sql": "SELECT o.* FROM (SELECT id,g,v FROM null_inputs) UNPIVOT INCLUDE NULLS (value FOR label IN (g,v)) o",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "missing_core",
+            "provider": "null_inputs",
+            "mode": "INCLUDE NULLS"
+          }
+        },
+        {
+          "corpus": "unpivot-null-1076-supplement",
+          "id": "unpivot_include_all_null",
+          "ansi": false,
+          "sql": "SELECT o.* FROM (SELECT id,g,v FROM null_inputs) UNPIVOT INCLUDE NULLS (value FOR label IN (g,v)) o",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "missing_core",
+            "provider": "null_inputs",
+            "mode": "INCLUDE NULLS"
+          }
+        },
+        {
+          "corpus": "unpivot-null-1076-supplement",
+          "id": "unpivot_aliased_exclude_mixed",
+          "ansi": true,
+          "sql": "SELECT o.* FROM (SELECT id,g,v FROM inputs) p UNPIVOT EXCLUDE NULLS (value FOR label IN (g,v)) o",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "accepted_alias_equivalence",
+            "provider": "inputs",
+            "mode": "EXCLUDE NULLS"
+          }
+        },
+        {
+          "corpus": "unpivot-null-1076-supplement",
+          "id": "unpivot_aliased_exclude_mixed",
+          "ansi": false,
+          "sql": "SELECT o.* FROM (SELECT id,g,v FROM inputs) p UNPIVOT EXCLUDE NULLS (value FOR label IN (g,v)) o",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "accepted_alias_equivalence",
+            "provider": "inputs",
+            "mode": "EXCLUDE NULLS"
+          }
+        },
+        {
+          "corpus": "unpivot-null-1076-supplement",
+          "id": "unpivot_aliased_include_mixed",
+          "ansi": true,
+          "sql": "SELECT o.* FROM (SELECT id,g,v FROM inputs) p UNPIVOT INCLUDE NULLS (value FOR label IN (g,v)) o",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "accepted_alias_equivalence",
+            "provider": "inputs",
+            "mode": "INCLUDE NULLS"
+          }
+        },
+        {
+          "corpus": "unpivot-null-1076-supplement",
+          "id": "unpivot_aliased_include_mixed",
+          "ansi": false,
+          "sql": "SELECT o.* FROM (SELECT id,g,v FROM inputs) p UNPIVOT INCLUDE NULLS (value FOR label IN (g,v)) o",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "accepted_alias_equivalence",
+            "provider": "inputs",
+            "mode": "INCLUDE NULLS"
+          }
+        },
+        {
+          "corpus": "unpivot-null-1076-supplement",
+          "id": "unpivot_required_default_renamed",
+          "ansi": true,
+          "sql": "SELECT o.* FROM (SELECT id AS RowId,g AS G,v AS V FROM unpivot_required) p UNPIVOT (Val FOR Kind IN (G,V)) o",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "required_metadata_duplicate_names",
+            "provider": "unpivot_required",
+            "mode": "default"
+          }
+        },
+        {
+          "corpus": "unpivot-null-1076-supplement",
+          "id": "unpivot_required_default_renamed",
+          "ansi": false,
+          "sql": "SELECT o.* FROM (SELECT id AS RowId,g AS G,v AS V FROM unpivot_required) p UNPIVOT (Val FOR Kind IN (G,V)) o",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "required_metadata_duplicate_names",
+            "provider": "unpivot_required",
+            "mode": "default"
+          }
+        },
+        {
+          "corpus": "unpivot-null-1076-supplement",
+          "id": "unpivot_required_include_renamed",
+          "ansi": true,
+          "sql": "SELECT o.* FROM (SELECT id AS RowId,g AS G,v AS V FROM unpivot_required) p UNPIVOT INCLUDE NULLS (Val FOR Kind IN (G,V)) o",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "required_metadata_duplicate_names",
+            "provider": "unpivot_required",
+            "mode": "INCLUDE NULLS"
+          }
+        },
+        {
+          "corpus": "unpivot-null-1076-supplement",
+          "id": "unpivot_required_include_renamed",
+          "ansi": false,
+          "sql": "SELECT o.* FROM (SELECT id AS RowId,g AS G,v AS V FROM unpivot_required) p UNPIVOT INCLUDE NULLS (Val FOR Kind IN (G,V)) o",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "required_metadata_duplicate_names",
+            "provider": "unpivot_required",
+            "mode": "INCLUDE NULLS"
+          }
+        },
+        {
+          "corpus": "unpivot-null-1076-supplement",
+          "id": "unpivot_missing_column_empty",
+          "ansi": true,
+          "sql": "SELECT * FROM empty_inputs UNPIVOT (value FOR label IN (missing,v))",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "required_error_probe",
+            "provider": "empty_inputs",
+            "shape": "missing_column_empty"
+          }
+        },
+        {
+          "corpus": "unpivot-null-1076-supplement",
+          "id": "unpivot_missing_column_empty",
+          "ansi": false,
+          "sql": "SELECT * FROM empty_inputs UNPIVOT (value FOR label IN (missing,v))",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "required_error_probe",
+            "provider": "empty_inputs",
+            "shape": "missing_column_empty"
+          }
+        },
+        {
+          "corpus": "unpivot-null-1076-supplement",
+          "id": "unpivot_incompatible_types_empty",
+          "ansi": true,
+          "sql": "SELECT * FROM empty_inputs UNPIVOT INCLUDE NULLS (value FOR label IN (g,p))",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "required_error_probe",
+            "provider": "empty_inputs",
+            "shape": "incompatible_types_empty"
+          }
+        },
+        {
+          "corpus": "unpivot-null-1076-supplement",
+          "id": "unpivot_incompatible_types_empty",
+          "ansi": false,
+          "sql": "SELECT * FROM empty_inputs UNPIVOT INCLUDE NULLS (value FOR label IN (g,p))",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "required_error_probe",
+            "provider": "empty_inputs",
+            "shape": "incompatible_types_empty"
+          }
+        },
+        {
+          "corpus": "unpivot-null-1076-supplement",
+          "id": "unpivot_malformed_clause",
+          "ansi": true,
+          "sql": "SELECT * FROM inputs UNPIVOT (value label IN (g,v))",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "required_error_probe",
+            "provider": "inputs",
+            "shape": "malformed_clause"
+          }
+        },
+        {
+          "corpus": "unpivot-null-1076-supplement",
+          "id": "unpivot_malformed_clause",
+          "ansi": false,
+          "sql": "SELECT * FROM inputs UNPIVOT (value label IN (g,v))",
+          "ordered": false,
+          "ownership": "single_value_unpivot_null_rows",
+          "coverage": {
+            "family": "required_error_probe",
+            "provider": "inputs",
+            "shape": "malformed_clause"
+          }
+        }
+      ]
+    }
+  ]
+}

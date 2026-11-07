@@ -1150,9 +1150,32 @@ including TABLESAMPLE, while retaining existing join/operator restrictions.
 
 The [source-alias references](tests/fixtures/README.md#pivot-source-and-result-aliases)
 retain the original queries, complete Fields and rows, and exact error phases.
-Repeated projection identity remains under #786; UNPIVOT NULL filtering and
-result nullability remain under #1076. Their exact accepted native contracts
-receive separate regression credit while raw Spark differences stay visible.
+Repeated projection identity remains under #786 with eight active native
+regression allowances. All eight original UNPIVOT contexts now require complete
+Spark agreement. The 16 historical native facet records remain unchanged;
+#1076 entries grant no active allowance.
+
+
+### Single-value UNPIVOT NULL policy
+
+Standalone single-value UNPIVOT applies default/EXCLUDE NULLS to the expanded
+value after ordinary column/type validation. INCLUDE NULLS retains the expanded
+NULL-valued rows. Accepted source/output aliases keep their existing name
+resolution, and the expansion preserves duplicate rows.
+
+Local generated-field declarations keep the label required and derive the
+logical value declaration from the resolved inputs. Generated value arguments
+use common nullability and empty metadata before struct-array construction;
+source id Fields keep their metadata. For exclusion, the existing Spark-only
+runtime lowering makes the final physical value required after filtering.
+Public and optimized value Fields retain their recorded logical declaration.
+Native DataFusion UNNEST and Filter declarations stay unchanged.
+
+The [UNPIVOT references](tests/fixtures/README.md#single-value-unpivot-null-policy)
+cover complete stage Fields, names, metadata, NULL rows, empty/all-NULL inputs,
+required and mixed-nullability values, duplicates and exact validation errors.
+The original source-alias UNPIVOT records now require Spark agreement and grant
+no inherited regression allowance.
 
 ### Projection metadata
 

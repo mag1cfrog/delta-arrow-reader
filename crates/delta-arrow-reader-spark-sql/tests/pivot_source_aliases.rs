@@ -146,7 +146,6 @@ fn inherited_relation_gap_owner(
 ) -> Option<&'static str> {
     let owner = match case["id"].as_str()? {
         "duplicate_pivot_input" | "prior_duplicate_alias_free" => "#786",
-        "unpivot_source_and_output_aliases" | "prior_unpivot_without_source_alias" => "#1076",
         _ => return None,
     };
     if comparison["reference"] != *case
@@ -190,7 +189,7 @@ fn inherited_relation_gap_owner(
 }
 
 #[test]
-fn inherited_relation_contracts_reject_changed_context_fields_rows_and_errors() -> TestResult {
+fn inherited_relation_contracts_keep_history_and_reject_changed_active_facets() -> TestResult {
     let retained: Value = serde_json::from_str(include_str!(
         "fixtures/pivot-source-aliases-retained-baseline-facets.json"
     ))?;
@@ -209,6 +208,7 @@ fn inherited_relation_contracts_reject_changed_context_fields_rows_and_errors() 
     })
     .collect::<BTreeSet<_>>();
     let mut contexts = BTreeSet::new();
+    let mut active_contexts = 0;
     for control in controls {
         assert!(contexts.insert((
             control["id"].as_str().ok_or("missing ID")?,
@@ -228,6 +228,15 @@ fn inherited_relation_contracts_reject_changed_context_fields_rows_and_errors() 
             "reference":case, "matches":false, "actual":actual,
         });
         let owner = control["owner"].as_str().ok_or("missing owner")?;
+        if owner == "#1076" {
+            assert_eq!(
+                inherited_relation_gap_owner(case, &observed, controls),
+                None
+            );
+            continue;
+        }
+        assert_eq!(owner, "#786");
+        active_contexts += 1;
         assert_eq!(
             inherited_relation_gap_owner(case, &observed, controls),
             Some(owner)
@@ -368,6 +377,7 @@ fn inherited_relation_contracts_reject_changed_context_fields_rows_and_errors() 
         }
     }
     assert_eq!(contexts, expected_contexts);
+    assert_eq!(active_contexts, 8);
     let owned: Value = serde_json::from_str(
         include_str!("fixtures/pivot-source-aliases-spark.jsonl")
             .lines()
@@ -495,6 +505,7 @@ async fn pivot_source_and_output_aliases_check_spark_and_inherited_facets() -> T
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     let declared_credits = controls
         .iter()
+        .filter(|control| control["owner"] == "#786")
         .map(context_key)
         .collect::<TestResult<BTreeSet<_>>>()?;
     let observed_credits = observations
