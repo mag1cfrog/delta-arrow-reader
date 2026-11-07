@@ -255,7 +255,9 @@ fn substr(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         _ => cast_to_logical_string_or_try(value, function_context.schema, false)?,
     };
     let length = length_opt.unwrap_or_else(|| lit(i32::MAX));
-    let arguments = [value, position, length]
+    let known_null_string_length = literal_value_without_evaluation(&length)
+        .is_some_and(|value| value.is_null() && value.data_type().is_string());
+    let mut arguments = [value, position, length]
         .into_iter()
         .enumerate()
         .map(|(index, argument)| {
@@ -288,6 +290,11 @@ fn substr(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
                 })?,
         )
     })?;
+    // Keep an admitted STRING NULL visible before unused operands can fold.
+    // Async arguments retain their existing extraction and evaluation path.
+    if known_null_string_length && !async_arguments {
+        arguments[2] = lit(ScalarValue::Int64(None));
+    }
     let logical = ScalarUDF::from(
         SparkSubstring::new()
             .with_logical_arguments()
@@ -1550,6 +1557,70 @@ fn regexp_extract_known_null_pruning_keeps_local_order_and_type_validation() -> 
                 )
                 .is_err()
         );
+    }
+    Ok(())
+}
+
+#[test]
+fn substring_preserves_coerced_null_length_without_invoking_operands() -> PlanResult<()> {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use datafusion::arrow::datatypes::{Field, Schema};
+    use datafusion::prelude::SessionContext;
+    use datafusion_expr::{Volatility, col, create_udf};
+
+    use crate::config::PlanConfig;
+    use crate::function::common::FunctionContextInput;
+
+    let session = SessionContext::new();
+    let schema = Arc::new(DFSchema::try_from(Schema::new(vec![
+        Field::new("s", DataType::Utf8, true),
+        Field::new("n", DataType::Utf8, true),
+    ]))?);
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&calls);
+    let position = create_udf(
+        "substring_unused_position",
+        vec![DataType::Int64],
+        DataType::Int64,
+        Volatility::Immutable,
+        Arc::new(move |args| {
+            observed.fetch_add(1, Ordering::SeqCst);
+            Ok(args[0].clone())
+        }),
+    )
+    .call(vec![lit(2_i64)]);
+    let info = SimplifyContext::builder()
+        .with_schema(Arc::clone(&schema))
+        .build();
+    for ansi_mode in [true, false] {
+        let config = Arc::new(PlanConfig {
+            ansi_mode,
+            ..Default::default()
+        });
+        let resolve = |length| {
+            substr(ScalarFunctionInput {
+                arguments: vec![col("s"), position.clone(), length],
+                function_context: FunctionContextInput {
+                    argument_display_names: &[],
+                    plan_config: &config,
+                    session_context: &session,
+                    schema: &schema,
+                },
+            })
+        };
+        let expression = resolve(cast(lit(ScalarValue::Null), DataType::Utf8))?;
+        let expr::Expr::ScalarFunction(function) = &expression else {
+            return Err(PlanError::internal("expected logical substring"));
+        };
+        assert_eq!(function.args[2], lit(ScalarValue::Int64(None)));
+        let lowered = substring_lambdas(expression.clone(), false)?;
+        assert!(!lowered.transformed);
+        assert_eq!(lowered.data, expression);
+        let simplified = ExprSimplifier::new(info.clone()).simplify(expression)?;
+        assert!(matches!(simplified, expr::Expr::Literal(value, _) if value.is_null()));
+        assert!(substring_lambdas(resolve(col("n"))?, false)?.transformed);
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
     }
     Ok(())
 }

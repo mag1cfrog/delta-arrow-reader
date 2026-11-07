@@ -162,6 +162,20 @@ async fn substring_evaluates_each_needed_operand_once() -> TestResult {
                         )
                         .await?;
                     }
+                    for length_type in ["INT", "STRING"] {
+                        let sql = format!(
+                            "SELECT substring({source_function}(id,{source}),count_substring_position(id,p),CAST(NULL AS {length_type})) AS r FROM substring_text"
+                        );
+                        check_counted(
+                            &session,
+                            &sql,
+                            ansi_mode,
+                            &observed,
+                            [vec![], vec![], vec![]],
+                            12,
+                        )
+                        .await?;
+                    }
                 }
                 for (sql, expected, row_count) in [
                     (
