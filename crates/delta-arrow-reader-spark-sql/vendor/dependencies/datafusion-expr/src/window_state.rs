@@ -18,7 +18,7 @@
 
 //! Structures used to hold window function state (for implementing WindowUDFs)
 
-use std::{collections::VecDeque, fmt, ops::Range, sync::Arc};
+use std::{cmp::Ordering, collections::VecDeque, fmt, ops::Range, sync::Arc};
 
 use crate::window_frame::RangeOffsetArithmetic;
 use crate::{WindowFrame, WindowFrameBound, WindowFrameUnits};
@@ -27,7 +27,7 @@ use arrow::compute::kernels::sort::{LexicographicalComparator, SortColumn};
 use arrow::{
     array::ArrayRef,
     compute::{SortOptions, concat, concat_batches},
-    datatypes::{DataType, SchemaRef},
+    datatypes::{DataType, SchemaRef, i256},
     error::ArrowError,
     record_batch::RecordBatch,
 };
@@ -359,9 +359,10 @@ pub fn date32_range_target(
     }
 }
 
-/// Computes a RANGE comparison target using the current ORDER BY key type.
-/// `None` denotes a native unbounded bound or a DataFusion checked-arithmetic
-/// edge. Spark checked overflow is an error; non-ANSI signed targets wrap.
+/// Computes a RANGE comparison target, widening Spark Decimal128 to Decimal256.
+/// Other targets retain the ORDER BY key type. `None` denotes a native unbounded
+/// bound or a DataFusion checked-arithmetic edge. Spark checked integer overflow
+/// is an error; non-ANSI signed targets wrap.
 pub fn range_bound_target(
     current_key: &ScalarValue,
     bound: &WindowFrameBound,
@@ -387,20 +388,42 @@ pub fn range_bound_target(
     }
     if let RangeOffsetArithmetic::Spark { ansi_mode } = arithmetic {
         let is_date = matches!(current_key, ScalarValue::Date32(_));
-        let admitted_pair = matches!(
-            (current_key, delta),
+        let (key, mut offset) = match (current_key, delta) {
+            (
+                ScalarValue::Decimal128(Some(value), _, scale),
+                ScalarValue::Decimal128(Some(delta), _, delta_scale),
+            ) if scale == delta_scale => {
+                // Two admitted 38-digit operands need at most 39 digits at the same scale.
+                (
+                    ScalarValue::Decimal256(Some(i256::from_i128(*value)), 76, *scale),
+                    ScalarValue::Decimal256(Some(i256::from_i128(*delta)), 76, *scale),
+                )
+            }
             (ScalarValue::Int8(_), ScalarValue::Int8(_))
-                | (ScalarValue::Int16(_), ScalarValue::Int16(_))
-                | (ScalarValue::Int32(_), ScalarValue::Int32(_))
-                | (ScalarValue::Int64(_), ScalarValue::Int64(_))
-                | (ScalarValue::Date32(_), ScalarValue::Int32(_))
+            | (ScalarValue::Int16(_), ScalarValue::Int16(_))
+            | (ScalarValue::Int32(_), ScalarValue::Int32(_))
+            | (ScalarValue::Int64(_), ScalarValue::Int64(_))
+            | (ScalarValue::Date32(_), ScalarValue::Int32(_))
+            | (ScalarValue::Float32(_), ScalarValue::Float32(_))
+            | (ScalarValue::Float64(_), ScalarValue::Float64(_)) => {
+                (current_key.clone(), delta.clone())
+            }
+            _ => {
+                return internal_err!(
+                    "Spark RANGE offset arithmetic requires admitted signed-integer, floating, same-scale Decimal128, or Date32/INT values"
+                );
+            }
+        };
+        let is_float_or_decimal = matches!(
+            key,
+            ScalarValue::Float32(_)
+                | ScalarValue::Float64(_)
+                | ScalarValue::Decimal256(_, _, _)
         );
-        if !admitted_pair {
-            return internal_err!(
-                "Spark RANGE offset arithmetic requires admitted signed-integer or Date32/INT values"
-            );
-        }
         let negate = |offset: &ScalarValue| -> Result<ScalarValue> {
+            if is_float_or_decimal {
+                return offset.arithmetic_negate();
+            }
             if !ansi_mode {
                 return ScalarValue::new_zero(&offset.data_type())?.sub(offset);
             }
@@ -422,16 +445,17 @@ pub fn range_bound_target(
                 }
             })
         };
-        let mut offset = if preceding {
-            negate(delta)?
-        } else {
-            delta.clone()
-        };
+        if preceding {
+            offset = negate(&offset)?;
+        }
         if descending {
             offset = negate(&offset)?;
         }
         if is_date {
             return Ok(date32_range_target(current_key, &offset, true));
+        }
+        if is_float_or_decimal {
+            return key.add_checked(&offset).map(Some);
         }
         return if ansi_mode {
             current_key.add_checked(&offset).map(Some).map_err(|error| {
@@ -457,6 +481,53 @@ pub fn range_bound_target(
     } else {
         Ok(current_key.sub_checked(delta).ok())
     }
+}
+
+/// Compare a Spark target without narrowing decimal values or ordering NaN payload bits.
+fn compare_spark_range_target(
+    candidate_key: &ScalarValue,
+    target: &ScalarValue,
+    sort_options: &SortOptions,
+) -> Result<Ordering> {
+    if candidate_key.is_null() || target.is_null() {
+        return compare_rows(
+            std::slice::from_ref(candidate_key),
+            std::slice::from_ref(target),
+            std::slice::from_ref(sort_options),
+        );
+    }
+    let order = match (candidate_key, target) {
+        (
+            ScalarValue::Decimal128(Some(value), _, scale),
+            ScalarValue::Decimal256(_, _, target_scale),
+        ) if scale == target_scale => {
+            let widened_key =
+                ScalarValue::Decimal256(Some(i256::from_i128(*value)), 76, *scale);
+            return compare_rows(
+                std::slice::from_ref(&widened_key),
+                std::slice::from_ref(target),
+                std::slice::from_ref(sort_options),
+            );
+        }
+        (ScalarValue::Float32(Some(left)), ScalarValue::Float32(Some(right))) => left
+            .partial_cmp(right)
+            .unwrap_or_else(|| left.is_nan().cmp(&right.is_nan())),
+        (ScalarValue::Float64(Some(left)), ScalarValue::Float64(Some(right))) => left
+            .partial_cmp(right)
+            .unwrap_or_else(|| left.is_nan().cmp(&right.is_nan())),
+        _ => {
+            return compare_rows(
+                std::slice::from_ref(candidate_key),
+                std::slice::from_ref(target),
+                std::slice::from_ref(sort_options),
+            );
+        }
+    };
+    Ok(if sort_options.descending {
+        order.reverse()
+    } else {
+        order
+    })
 }
 
 impl WindowFrameStateRange {
@@ -635,7 +706,7 @@ impl WindowFrameStateRange {
                 })?
                 .descending;
 
-            // On overflow the boundary exceeds the type's range and is
+            // On DataFusion overflow the boundary exceeds the type's range and is
             // effectively unbounded within the partition. Collapse to the
             // partition edge rather than feeding `search_in_slice` a
             // wrapped-around target: PRECEDING searches reach `search_start`,
@@ -657,7 +728,21 @@ impl WindowFrameStateRange {
             targets
         };
         let compare_fn = |current: &[ScalarValue], target: &[ScalarValue]| {
-            let cmp = compare_rows(current, target, &self.sort_options)?;
+            let cmp = if matches!(
+                window_frame.range_offset_arithmetic(),
+                RangeOffsetArithmetic::Spark { .. }
+            ) {
+                let ([key], [target], [options]) =
+                    (current, target, self.sort_options.as_slice())
+                else {
+                    return internal_err!(
+                        "Spark RANGE comparison requires one ORDER BY key"
+                    );
+                };
+                compare_spark_range_target(key, target, options)?
+            } else {
+                compare_rows(current, target, &self.sort_options)?
+            };
             Ok(if SIDE { cmp.is_lt() } else { cmp.is_le() })
         };
         search_in_slice(range_columns, &end_range, compare_fn, search_start, length)

@@ -4,10 +4,11 @@ use std::error::Error;
 use std::sync::Arc;
 
 use arrow::array::{
-    Array, ArrayRef, Date32Array, Int32Array, Int64Array, ListArray, StructArray, UInt32Array,
+    Array, ArrayRef, Date32Array, Decimal128Array, Float32Array, Float64Array, Int32Array,
+    Int64Array, ListArray, StructArray, UInt32Array,
 };
 use arrow::compute::{SortOptions, take_record_batch};
-use arrow::datatypes::{DataType, Field, Int32Type, Schema, SchemaRef};
+use arrow::datatypes::{DataType, Field, Int32Type, Schema, SchemaRef, i256};
 use arrow::record_batch::RecordBatch;
 use datafusion::common::ScalarValue;
 use datafusion::functions_aggregate::count::count_udaf;
@@ -1915,6 +1916,355 @@ fn spark_date_range_key_addition_wraps_in_both_ansi_modes() -> TestResult {
             )?,
             Some(ScalarValue::Date32(Some(i32::MIN)))
         );
+    }
+    Ok(())
+}
+
+#[test]
+fn spark_decimal_range_targets_widen_before_sign_arithmetic() -> TestResult {
+    let maximum = 99_999_999_999_999_999_999_999_999_999_999_999_999_i128;
+    let positive_sum = i256::from_string("199999999999999999999999999999999999998")
+        .ok_or("positive 39-digit target")?;
+    let negative_sum = i256::from_string("-199999999999999999999999999999999999998")
+        .ok_or("negative 39-digit target")?;
+    for scale in [0, 2] {
+        let positive = ScalarValue::Decimal128(Some(maximum), 38, scale);
+        let negative = ScalarValue::Decimal128(Some(-maximum), 38, scale);
+        for ansi_mode in [false, true] {
+            for (key, bound, descending, expected) in [
+                (
+                    positive.clone(),
+                    WindowFrameBound::Following(positive.clone()),
+                    false,
+                    positive_sum,
+                ),
+                (
+                    negative.clone(),
+                    WindowFrameBound::Following(negative.clone()),
+                    false,
+                    negative_sum,
+                ),
+                (
+                    negative.clone(),
+                    WindowFrameBound::Following(positive.clone()),
+                    true,
+                    negative_sum,
+                ),
+                (
+                    positive.clone(),
+                    WindowFrameBound::Preceding(positive.clone()),
+                    true,
+                    positive_sum,
+                ),
+            ] {
+                assert_eq!(
+                    range_bound_target(
+                        &key,
+                        &bound,
+                        descending,
+                        RangeOffsetArithmetic::Spark { ansi_mode },
+                    )?,
+                    Some(ScalarValue::Decimal256(Some(expected), 76, scale))
+                );
+            }
+            let null = ScalarValue::Decimal128(None, 38, scale);
+            assert_eq!(
+                range_bound_target(
+                    &null,
+                    &WindowFrameBound::Following(positive.clone()),
+                    true,
+                    RangeOffsetArithmetic::Spark { ansi_mode },
+                )?,
+                Some(null.clone())
+            );
+            assert_eq!(
+                range_bound_target(
+                    &positive,
+                    &WindowFrameBound::FollowingNullOffset(positive.data_type()),
+                    false,
+                    RangeOffsetArithmetic::Spark { ansi_mode },
+                )?,
+                Some(null)
+            );
+        }
+        assert_eq!(
+            range_bound_target(
+                &positive,
+                &WindowFrameBound::Following(positive.clone()),
+                false,
+                RangeOffsetArithmetic::DataFusion,
+            )?,
+            None
+        );
+    }
+    for offset in [
+        ScalarValue::Decimal128(Some(1), 38, 1),
+        ScalarValue::Float64(Some(1.0)),
+        ScalarValue::Decimal256(Some(i256::ONE), 76, 0),
+    ] {
+        let error = range_bound_target(
+            &ScalarValue::Decimal128(Some(1), 38, 0),
+            &WindowFrameBound::Following(offset),
+            false,
+            RangeOffsetArithmetic::Spark { ansi_mode: true },
+        )
+        .expect_err("unadmitted pairs must not acquire arithmetic overflow labels");
+        assert!(!error.to_string().contains("[ARITHMETIC_OVERFLOW]"));
+    }
+    Ok(())
+}
+
+#[test]
+fn spark_decimal_range_membership_keeps_finite_targets_separate_from_nulls() -> TestResult {
+    let maximum = 99_999_999_999_999_999_999_999_999_999_999_999_999_i128;
+    // ASC cases are the four captured decimal38_max boundary queries. DESC reflects
+    // both the key sign and ordering, preserving the same finite-versus-NULL relation.
+    for descending in [false, true] {
+        let key = if descending { -maximum } else { maximum };
+        for (nulls_first, lower_finite, expected) in [
+            (false, false, vec![1..1, 1..2]),
+            (true, false, vec![0..1, 0..2]),
+            (false, true, vec![1..2, 1..2]),
+            (true, true, vec![0..1, 1..1]),
+        ] {
+            let values = if nulls_first {
+                vec![None, Some(key)]
+            } else {
+                vec![Some(key), None]
+            };
+            let column: ArrayRef =
+                Arc::new(Decimal128Array::from(values).with_precision_and_scale(38, 0)?);
+            for ansi_mode in [false, true] {
+                let null = WindowFrameBound::PrecedingNullOffset(DataType::Decimal128(38, 0));
+                let finite =
+                    WindowFrameBound::Following(ScalarValue::Decimal128(Some(maximum), 38, 0));
+                let (start, end) = if lower_finite {
+                    (finite, null)
+                } else {
+                    (null, finite)
+                };
+                let frame = Arc::new(
+                    WindowFrame::new_bounds(WindowFrameUnits::Range, start, end)
+                        .with_range_offset_arithmetic(RangeOffsetArithmetic::Spark { ansi_mode }),
+                );
+                let mut context = WindowFrameContext::new(
+                    frame,
+                    vec![SortOptions {
+                        descending,
+                        nulls_first,
+                    }],
+                );
+                let mut last = 0..0;
+                for (idx, expected) in expected.iter().enumerate() {
+                    last = context.calculate_range(
+                        std::slice::from_ref(&column),
+                        &last,
+                        column.len(),
+                        idx,
+                    )?;
+                    assert_eq!(&last, expected);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn spark_float_range_matches_infinity_and_negated_nan_spark_rows() -> TestResult {
+    // Exact lengths from float/double_infinity_following and negated_nan_following.
+    for wide in [false, true] {
+        for (infinity, expected) in [(true, vec![1, 5, 5, 5, 5]), (false, vec![1, 3, 3])] {
+            let (column, offset): (ArrayRef, ScalarValue) = if wide {
+                let values = if infinity {
+                    vec![
+                        None,
+                        Some(f64::NEG_INFINITY),
+                        Some(0.0),
+                        Some(f64::INFINITY),
+                        Some(f64::NAN),
+                    ]
+                } else {
+                    vec![None, Some(0.0), Some(f64::from_bits(0xfff8_0000_0000_0123))]
+                };
+                (
+                    Arc::new(Float64Array::from(values)),
+                    ScalarValue::Float64(Some(if infinity {
+                        f64::INFINITY
+                    } else {
+                        f64::from_bits(0xfff8_0000_0000_4567)
+                    })),
+                )
+            } else {
+                let values = if infinity {
+                    vec![
+                        None,
+                        Some(f32::NEG_INFINITY),
+                        Some(0.0),
+                        Some(f32::INFINITY),
+                        Some(f32::NAN),
+                    ]
+                } else {
+                    vec![None, Some(0.0), Some(f32::from_bits(0xffc0_0123))]
+                };
+                (
+                    Arc::new(Float32Array::from(values)),
+                    ScalarValue::Float32(Some(if infinity {
+                        f32::INFINITY
+                    } else {
+                        f32::from_bits(0xffc0_4567)
+                    })),
+                )
+            };
+            for ansi_mode in [false, true] {
+                let frame = Arc::new(
+                    WindowFrame::new_bounds(
+                        WindowFrameUnits::Range,
+                        WindowFrameBound::PrecedingNullOffset(column.data_type().clone()),
+                        WindowFrameBound::Following(offset.clone()),
+                    )
+                    .with_range_offset_arithmetic(RangeOffsetArithmetic::Spark { ansi_mode }),
+                );
+                let mut context = WindowFrameContext::new(
+                    frame,
+                    vec![SortOptions {
+                        descending: false,
+                        nulls_first: true,
+                    }],
+                );
+                let mut last = 0..0;
+                for (idx, expected) in expected.iter().enumerate() {
+                    last = context.calculate_range(
+                        std::slice::from_ref(&column),
+                        &last,
+                        column.len(),
+                        idx,
+                    )?;
+                    assert_eq!(last, 0..*expected);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn spark_float_range_peers_collapse_nan_payloads_and_signed_zeros() -> TestResult {
+    for wide in [false, true] {
+        for descending in [false, true] {
+            for nulls_first in [false, true] {
+                let (column, zero): (ArrayRef, ScalarValue) = if wide {
+                    let mut values = vec![
+                        Some(-0.0),
+                        Some(0.0),
+                        Some(f64::from_bits(0xfff8_0000_0000_0123)),
+                        Some(f64::from_bits(0x7ff8_0000_0000_4567)),
+                    ];
+                    if descending {
+                        values.rotate_left(2);
+                    }
+                    if nulls_first {
+                        values.insert(0, None);
+                    } else {
+                        values.push(None);
+                    }
+                    (
+                        Arc::new(Float64Array::from(values)),
+                        ScalarValue::Float64(Some(0.0)),
+                    )
+                } else {
+                    let mut values = vec![
+                        Some(-0.0),
+                        Some(0.0),
+                        Some(f32::from_bits(0xffc0_0123)),
+                        Some(f32::from_bits(0x7fc0_4567)),
+                    ];
+                    if descending {
+                        values.rotate_left(2);
+                    }
+                    if nulls_first {
+                        values.insert(0, None);
+                    } else {
+                        values.push(None);
+                    }
+                    (
+                        Arc::new(Float32Array::from(values)),
+                        ScalarValue::Float32(Some(0.0)),
+                    )
+                };
+                let expected = if nulls_first {
+                    vec![0..1, 0..3, 0..3, 0..5, 0..5]
+                } else {
+                    vec![2..2, 2..2, 4..4, 4..4, 4..5]
+                };
+                for ansi_mode in [false, true] {
+                    let frame = Arc::new(
+                        WindowFrame::new_bounds(
+                            WindowFrameUnits::Range,
+                            WindowFrameBound::PrecedingNullOffset(column.data_type().clone()),
+                            WindowFrameBound::Following(zero.clone()),
+                        )
+                        .with_range_offset_arithmetic(RangeOffsetArithmetic::Spark { ansi_mode }),
+                    );
+                    let mut context = WindowFrameContext::new(
+                        frame,
+                        vec![SortOptions {
+                            descending,
+                            nulls_first,
+                        }],
+                    );
+                    let mut last = 0..0;
+                    for (idx, expected) in expected.iter().enumerate() {
+                        last = context.calculate_range(
+                            std::slice::from_ref(&column),
+                            &last,
+                            column.len(),
+                            idx,
+                        )?;
+                        assert_eq!(&last, expected);
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn spark_float_range_negation_preserves_signed_zero_before_addition() -> TestResult {
+    for ansi_mode in [false, true] {
+        for descending in [false, true] {
+            let bound32 = if descending {
+                WindowFrameBound::Following(ScalarValue::Float32(Some(0.0)))
+            } else {
+                WindowFrameBound::Preceding(ScalarValue::Float32(Some(0.0)))
+            };
+            let bound64 = if descending {
+                WindowFrameBound::Following(ScalarValue::Float64(Some(0.0)))
+            } else {
+                WindowFrameBound::Preceding(ScalarValue::Float64(Some(0.0)))
+            };
+            let target32 = range_bound_target(
+                &ScalarValue::Float32(Some(-0.0)),
+                &bound32,
+                descending,
+                RangeOffsetArithmetic::Spark { ansi_mode },
+            )?;
+            let target64 = range_bound_target(
+                &ScalarValue::Float64(Some(-0.0)),
+                &bound64,
+                descending,
+                RangeOffsetArithmetic::Spark { ansi_mode },
+            )?;
+            let Some(ScalarValue::Float32(Some(target32))) = target32 else {
+                return Err("FLOAT comparison target type".into());
+            };
+            let Some(ScalarValue::Float64(Some(target64))) = target64 else {
+                return Err("DOUBLE comparison target type".into());
+            };
+            assert_eq!(target32.to_bits(), (-0.0_f32).to_bits());
+            assert_eq!(target64.to_bits(), (-0.0_f64).to_bits());
+        }
     }
     Ok(())
 }

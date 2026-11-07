@@ -853,7 +853,14 @@ fn null_range_arithmetic_key_type(
     let key_type = order.expr.get_type(schema)?;
     Ok(matches!(
         key_type,
-        DataType::Int8 | DataType::Int16 | DataType::Int32 | DataType::Int64 | DataType::Date32
+        DataType::Int8
+            | DataType::Int16
+            | DataType::Int32
+            | DataType::Int64
+            | DataType::Date32
+            | DataType::Float32
+            | DataType::Float64
+            | DataType::Decimal128(_, _)
     )
     .then_some(key_type))
 }

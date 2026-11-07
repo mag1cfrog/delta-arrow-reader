@@ -100,7 +100,8 @@ pub struct WindowFrame {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Hash)]
 pub enum RangeOffsetArithmetic {
     DataFusion,
-    /// Spark signed-integer targets honor ANSI; Date32 key addition always wraps.
+    /// Spark integers honor ANSI, Date32 adds wrap, and decimal targets widen.
+    /// Floating targets use Spark NaN and signed-zero comparison semantics.
     Spark {
         ansi_mode: bool,
     },
