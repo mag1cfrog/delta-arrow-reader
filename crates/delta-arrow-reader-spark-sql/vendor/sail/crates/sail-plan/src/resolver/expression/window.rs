@@ -558,13 +558,27 @@ impl PlanResolver<'_> {
         schema: &DFSchemaRef,
     ) -> PlanResult<()> {
         let spark_key_type = spark_range_arithmetic_key_type(frame, order_by, schema)?;
-        let date_displacements = if frame.units == WindowFrameUnits::Range
-            && order_by
+        let key_type = if frame.units == WindowFrameUnits::Range {
+            order_by
                 .first()
                 .map(|order| order.expr.get_type(schema))
                 .transpose()?
-                == Some(DataType::Date32)
+        } else {
+            None
+        };
+        if let Some(key_type) = &key_type
+            && range_order_key_type(key_type).is_signed_integer()
         {
+            // Expression zero must stay distinct from CURRENT ROW until SQL admission.
+            let zero = ScalarValue::new_zero(range_order_key_type(key_type))?;
+            for bound in [&mut frame.start_bound, &mut frame.end_bound] {
+                if matches!(bound, WindowFrameBound::Preceding(value) | WindowFrameBound::Following(value) if *value == zero)
+                {
+                    *bound = WindowFrameBound::CurrentRow;
+                }
+            }
+        }
+        let date_displacements = if key_type == Some(DataType::Date32) {
             range_frame_displacements(frame, order_by, schema)?
         } else {
             None

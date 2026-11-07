@@ -1441,10 +1441,12 @@ record their membership, consumer Fields, failure phases and ordered outer queri
 
 For TINYINT, SMALLINT, INT and BIGINT keys, the resolver compares signed expression
 endpoints after key-type conversion. CURRENT ROW and true UNBOUNDED boundaries
-skip that expression comparison; an expression zero remains distinct. Invalid
-UNBOUNDED directions, nonfoldable bounds and finite frames with multiple ORDER
-keys retain their admission errors. The resolver builds public names before
-normalization, and deferred checks preserve the original ORDER key Field.
+skip that expression comparison; an expression zero remains distinct during
+admission. After validation, signed zero displacements become CURRENT ROW for
+native planning. Their original display names and deferred negation or cast checks
+remain intact. Invalid UNBOUNDED directions, nonfoldable bounds and finite frames
+with multiple ORDER keys retain their admission errors. Deferred checks preserve
+the original ORDER key Field.
 
 Ordinary nonzero signed frames compute the upper cursor first and cap the lower search at
 input already consumed by the upper cursor. Forward cursors and pruning retain

@@ -10,7 +10,7 @@ use datafusion::physical_expr::{
 use datafusion::physical_plan::windows::{self, BoundedWindowAggExec, WindowAggExec};
 use datafusion::physical_plan::{ExecutionPlan, InputOrderMode, WindowExpr};
 use datafusion::physical_planner::create_window_expr;
-use datafusion_common::tree_node::{Transformed, TreeNode};
+use datafusion_common::tree_node::Transformed;
 use datafusion_common::{DFSchema, DFSchemaRef, Result, internal_err};
 use datafusion_expr::expr::{NullTreatment, WindowFunction};
 use datafusion_expr::logical_plan::{Extension, Window};

@@ -1144,6 +1144,7 @@ fn find_single_window_frame(
 
 #[tokio::test]
 async fn null_range_producer_arithmetic_survives_analyzer_coercion() -> TestResult {
+    use datafusion::logical_expr::WindowFrameBound;
     use datafusion::logical_expr::window_frame::RangeOffsetArithmetic;
     use datafusion::physical_optimizer::aggregate_statistics::PreserveAggregateStatisticsSchema;
     use delta_arrow_reader_spark_sql::{SparkSqlOptions, plan_query};
@@ -1212,6 +1213,9 @@ async fn null_range_producer_arithmetic_survives_analyzer_coercion() -> TestResu
         }
         for frame in [
             "RANGE BETWEEN CAST(0 AS INT) PRECEDING AND CAST(0 AS INT) FOLLOWING",
+            "RANGE BETWEEN 0 PRECEDING AND CURRENT ROW",
+            "RANGE 0 PRECEDING",
+            "RANGE BETWEEN 0 FOLLOWING AND CURRENT ROW",
             "RANGE BETWEEN CURRENT ROW AND CURRENT ROW",
             "RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW",
         ] {
@@ -1227,11 +1231,16 @@ async fn null_range_producer_arithmetic_survives_analyzer_coercion() -> TestResu
                 },
             )
             .await?;
+            let resolved = find_single_window_frame(&query.logical_plan)?;
             assert_eq!(
-                find_single_window_frame(&query.logical_plan)?.range_offset_arithmetic(),
+                resolved.range_offset_arithmetic(),
                 RangeOffsetArithmetic::DataFusion,
                 "{sql}"
             );
+            if !frame.contains("UNBOUNDED") {
+                assert_eq!(resolved.start_bound, WindowFrameBound::CurrentRow, "{sql}");
+                assert_eq!(resolved.end_bound, WindowFrameBound::CurrentRow, "{sql}");
+            }
             let mut state = session.state();
             let extensions = &mut state.config_mut().options_mut().extensions;
             extensions.insert(SparkSqlExpressionSemantics::default());
@@ -1241,11 +1250,16 @@ async fn null_range_producer_arithmetic_survives_analyzer_coercion() -> TestResu
                 state.config_options(),
                 |_, _| {},
             )?;
+            let analyzed = find_single_window_frame(&analyzed)?;
             assert_eq!(
-                find_single_window_frame(&analyzed)?.range_offset_arithmetic(),
+                analyzed.range_offset_arithmetic(),
                 RangeOffsetArithmetic::DataFusion,
                 "{sql}"
             );
+            if !frame.contains("UNBOUNDED") {
+                assert_eq!(analyzed.start_bound, WindowFrameBound::CurrentRow, "{sql}");
+                assert_eq!(analyzed.end_bound, WindowFrameBound::CurrentRow, "{sql}");
+            }
         }
     }
     Ok(())

@@ -24,6 +24,10 @@ const LIMITED_REFERENCE: &str = include_str!("fixtures/finite-range-1086-limited
 const LIMITED_CORPUS: &str = "finite-range-1086-limited-output-diagnostics";
 const NARROWING_REQUEST: &str = include_str!("fixtures/finite-range-1086-narrowing-cases.json");
 const NARROWING_REFERENCE: &str = include_str!("fixtures/finite-range-1086-narrowing-spark.jsonl");
+const ZERO_CURRENT_REQUEST: &str =
+    include_str!("fixtures/finite-range-1086-zero-current-cases.json");
+const ZERO_CURRENT_REFERENCE: &str =
+    include_str!("fixtures/finite-range-1086-zero-current-spark.jsonl");
 
 fn validate_finite_range_references(request: &Value, records: &[Value]) -> TestResult {
     if request["issue"] != 1086
@@ -389,6 +393,117 @@ fn parse_limited_range_fixture() -> TestResult<(Value, Vec<Value>)> {
     Ok((request, records))
 }
 
+fn parse_zero_current_range_fixture() -> TestResult<(Value, Vec<Value>)> {
+    let request = serde_json::from_str(ZERO_CURRENT_REQUEST)?;
+    let records = ZERO_CURRENT_REFERENCE
+        .lines()
+        .map(serde_json::from_str)
+        .collect::<Result<Vec<_>, _>>()?;
+    validate_zero_current_range_references(&request, &records)?;
+    Ok((request, records))
+}
+
+fn validate_zero_current_range_references(request: &Value, records: &[Value]) -> TestResult {
+    let corpora = request["corpora"]
+        .as_array()
+        .ok_or("missing zero/current corpora")?;
+    let key_types = ["TINYINT", "SMALLINT", "INT", "BIGINT"];
+    let wrapped = BTreeMap::from([
+        (("TINYINT", "INT"), "256"),
+        (("SMALLINT", "INT"), "65536"),
+        (("INT", "BIGINT"), "4294967296"),
+    ]);
+    if request["version"] != 1
+        || request["issue"] != 1086
+        || request["expected_record_count"] != 30
+        || request["sql_source_count"] != 15
+        || request["spark_version"] != "4.2.0"
+        || request["spark_revision"] != "32f7299601108917fb01920a54e084595b7b3bf8"
+        || request["signed_key_types"] != json!(key_types)
+        || corpora.len() != 1
+        || records.len() != 31
+        || corpora[0]["corpus"] != "finite-range-1086-zero-current-controls"
+        || corpora[0]["metadata"] != json!({"spark_version":"4.2.0","timezone":"UTC","inputs":[]})
+    {
+        return Err("zero/current finite RANGE inventory differs".into());
+    }
+    let mut contexts = BTreeSet::new();
+    let mut definitions = BTreeMap::new();
+    for case in corpora[0]["cases"]
+        .as_array()
+        .ok_or("missing zero/current cases")?
+    {
+        let identity = case_identity(case)?;
+        let coverage = &case["coverage"];
+        let key = coverage["key_type"]
+            .as_str()
+            .ok_or("missing zero/current key")?;
+        let source = coverage["source_offset_type"]
+            .as_str()
+            .ok_or("missing zero/current source")?;
+        let offset = coverage["positive_offset"]
+            .as_str()
+            .ok_or("missing zero/current offset")?;
+        let shape = coverage["shape"]
+            .as_str()
+            .ok_or("missing zero/current shape")?;
+        let (family, frame) = if shape == "wrapped_preceding_current" {
+            if wrapped.get(&(key, source)) != Some(&offset) {
+                return Err("unexpected wrapped-zero coercion pair".into());
+            }
+            (
+                "wrapped_zero_current",
+                format!("RANGE BETWEEN CAST({offset} AS {source}) PRECEDING AND CURRENT ROW"),
+            )
+        } else {
+            if !key_types.contains(&key) || source != "INT" || offset != "0" {
+                return Err("unexpected zero/current operand type".into());
+            }
+            let frame = match shape {
+                "zero_preceding_current" => "RANGE BETWEEN 0 PRECEDING AND CURRENT ROW",
+                "zero_preceding_shorthand" => "RANGE 0 PRECEDING",
+                "zero_following_current" => "RANGE BETWEEN 0 FOLLOWING AND CURRENT ROW",
+                _ => return Err("unexpected zero/current frame shape".into()),
+            };
+            ("zero_current", frame.into())
+        };
+        let values = ["NULL", "NULL", "0", "0", "1"]
+            .iter()
+            .enumerate()
+            .map(|(id, value)| (id, format!("CAST({value} AS {key})")))
+            .collect::<Vec<_>>();
+        let sql_values = values
+            .iter()
+            .map(|(id, value)| format!("({id},{value})"))
+            .collect::<Vec<_>>()
+            .join(",");
+        let sql = format!(
+            "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST {frame}) AS n FROM VALUES {sql_values} AS t(id,k) ORDER BY id"
+        );
+        if case["corpus"] != corpora[0]["corpus"]
+            || case["ordered"] != true
+            || case["ownership"] != "finite_signed_integer_zero_current_control"
+            || coverage["family"] != family
+            || coverage["frame"] != frame
+            || coverage["inline_values"] != json!(values)
+            || coverage["order"] != "ASC NULLS FIRST"
+            || coverage["outer_order"] != "id"
+            || case["sql"] != sql
+            || ["expected", "status", "rows_raw", "spark_error_details"]
+                .iter()
+                .any(|field| case.get(*field).is_some())
+            || !contexts.insert((key, source, offset, shape, identity.2))
+            || definitions.insert(identity, case).is_some()
+        {
+            return Err("zero/current finite RANGE source clauses differ".into());
+        }
+    }
+    if contexts.len() != 30 || definitions.len() != 30 {
+        return Err("zero/current finite RANGE source context inventory differs".into());
+    }
+    validate_range_capture(request, records, &definitions)
+}
+
 fn matches_numeric_error_cause(reference: &Value, observation: &Value) -> bool {
     let condition = reference["expected"]["condition"].as_str();
     if !matches!(
@@ -465,6 +580,7 @@ async fn finite_signed_integer_range_frames_match_spark() -> TestResult {
         parse_finite_range_fixture()?,
         parse_limited_range_fixture()?,
         parse_narrowing_range_fixture()?,
+        parse_zero_current_range_fixture()?,
     ];
     let mut completed = BTreeSet::new();
     let mut differences = Vec::new();
@@ -544,10 +660,10 @@ async fn finite_signed_integer_range_frames_match_spark() -> TestResult {
     }
     eprintln!(
         "FINITE_RANGE_SUMMARY {}",
-        json!({"observations":completed.len(),"expected_observations":440,
+        json!({"observations":completed.len(),"expected_observations":500,
         "differences":differences.len()}),
     );
-    assert_eq!(completed.len(), 440);
+    assert_eq!(completed.len(), 500);
     assert!(
         differences.is_empty(),
         "finite RANGE differences:\n{}",
@@ -878,6 +994,81 @@ fn finite_range_matcher_requires_every_available_and_unavailable_stage() -> Test
             let mut changed = observation.clone();
             changed[field] = json!(false);
             assert!(!native_result_matches_spark_reference(&changed, reference));
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn zero_current_range_references_reject_lost_source_and_capture_contracts() -> TestResult {
+    let (request, records) = parse_zero_current_range_fixture()?;
+    let mut missing = records.clone();
+    missing.pop();
+    assert!(validate_zero_current_range_references(&request, &missing).is_err());
+    let mut changed = request.clone();
+    changed["corpora"][0]["cases"][0]["coverage"]["frame"] =
+        json!("RANGE BETWEEN CURRENT ROW AND CURRENT ROW");
+    assert!(validate_zero_current_range_references(&changed, &records).is_err());
+    let mut changed = records.clone();
+    changed[1]["schema_stages"]["public"]["fields"][0]["metadata"] = Value::Null;
+    assert!(validate_zero_current_range_references(&request, &changed).is_err());
+    Ok(())
+}
+
+#[tokio::test]
+async fn nonzero_and_zero_range_windows_share_a_query() -> TestResult {
+    use datafusion::physical_plan::collect;
+    use delta_arrow_reader_spark_sql::{SparkSqlOptions, plan_query};
+
+    let sql = "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND CURRENT ROW) AS bounded,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN 0 FOLLOWING AND CURRENT ROW) AS peers FROM VALUES (0,CAST(NULL AS INT)),(1,CAST(NULL AS INT)),(2,CAST(0 AS INT)),(3,CAST(0 AS INT)),(4,CAST(1 AS INT)) AS t(id,k) ORDER BY id";
+    for ansi_mode in [true, false] {
+        for batch in [1, 32] {
+            let session = SessionContext::new_with_state(
+                configure_spark_sql(
+                    SessionStateBuilder::new()
+                        .with_default_features()
+                        .with_config(
+                            SessionConfig::new()
+                                .with_batch_size(batch)
+                                .with_target_partitions(2),
+                        ),
+                )
+                .build(),
+            );
+            let query = plan_query(
+                &session,
+                sql,
+                &SparkSqlOptions {
+                    ansi_mode,
+                    ..SparkSqlOptions::default()
+                },
+            )
+            .await?;
+            let plan = query.create_physical_plan(&session).await?;
+            let batches = collect(plan, session.task_ctx()).await?;
+            let mut rows = Vec::new();
+            for batch in &batches {
+                for row in 0..batch.num_rows() {
+                    rows.push(
+                        batch
+                            .columns()
+                            .iter()
+                            .map(|column| spark_results::encode_value(column.as_ref(), row))
+                            .collect::<TestResult<Vec<_>>>()?,
+                    );
+                }
+            }
+            assert_eq!(
+                json!(rows),
+                json!([
+                    ["0", "2", "2"],
+                    ["1", "2", "2"],
+                    ["2", "2", "2"],
+                    ["3", "2", "2"],
+                    ["4", "3", "1"]
+                ]),
+                "ANSI={ansi_mode} batch={batch}"
+            );
         }
     }
     Ok(())
