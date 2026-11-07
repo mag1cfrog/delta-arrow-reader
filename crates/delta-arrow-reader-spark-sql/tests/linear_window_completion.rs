@@ -2,6 +2,7 @@
 
 use std::error::Error;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 
 use arrow::array::{
     Array, ArrayRef, Date32Array, Decimal128Array, Float32Array, Float64Array, Int32Array,
@@ -3276,5 +3277,169 @@ fn native_window_without_fetch_preserves_known_statistics_with_unknown_row_count
         before.column_statistics.as_slice()
     );
     assert_eq!(after.total_byte_size, Precision::Absent);
+    Ok(())
+}
+
+#[derive(Debug)]
+struct DropTrackedIntegerRangeInput {
+    batch: RecordBatch,
+    polls: Arc<AtomicUsize>,
+    drops: Arc<AtomicUsize>,
+}
+
+#[derive(Debug)]
+struct RangeInputStreamDropCounter(Arc<AtomicUsize>);
+
+impl Drop for RangeInputStreamDropCounter {
+    fn drop(&mut self) {
+        self.0.fetch_add(1, AtomicOrdering::SeqCst);
+    }
+}
+
+impl PartitionStream for DropTrackedIntegerRangeInput {
+    fn schema(&self) -> &SchemaRef {
+        self.batch.schema_ref()
+    }
+
+    fn execute(&self, _: Arc<TaskContext>) -> SendableRecordBatchStream {
+        let mut batch = Some(self.batch.clone());
+        let polls = Arc::clone(&self.polls);
+        let drop_counter = RangeInputStreamDropCounter(Arc::clone(&self.drops));
+        let batches = stream::poll_fn(move |_| {
+            let _stream_lifetime = &drop_counter;
+            polls.fetch_add(1, AtomicOrdering::SeqCst);
+            match batch.take() {
+                Some(batch) => std::task::Poll::Ready(Some(Ok(batch))),
+                None => std::task::Poll::Pending,
+            }
+        });
+        Box::pin(RecordBatchStreamAdapter::new(self.batch.schema(), batches))
+    }
+}
+
+#[tokio::test]
+async fn spark_finite_integer_fetch_releases_input_when_output_limit_is_reached() -> TestResult {
+    for fetch in [Some(0), Some(1), None] {
+        let batch = source_batch(&[(0, 0, 0), (1, 0, 1), (2, 0, 2)], false, false)?;
+        let schema = batch.schema();
+        let upstream_polls = Arc::new(AtomicUsize::new(0));
+        let upstream_drops = Arc::new(AtomicUsize::new(0));
+        let key_order = PhysicalSortExpr {
+            expr: col("k", &schema)?,
+            options: SortOptions::default(),
+        };
+        let ordering = LexOrdering::new(vec![
+            PhysicalSortExpr {
+                expr: col("p", &schema)?,
+                options: SortOptions::default(),
+            },
+            key_order.clone(),
+        ])
+        .ok_or("empty source ordering")?;
+        let input: Arc<dyn ExecutionPlan> = Arc::new(StreamingTableExec::try_new(
+            Arc::clone(&schema),
+            vec![Arc::new(DropTrackedIntegerRangeInput {
+                batch,
+                polls: Arc::clone(&upstream_polls),
+                drops: Arc::clone(&upstream_drops),
+            })],
+            None,
+            Some(ordering),
+            true,
+            None,
+        )?);
+        let frame = WindowFrame::new_bounds(
+            WindowFrameUnits::Range,
+            WindowFrameBound::CurrentRow,
+            WindowFrameBound::Following(ScalarValue::Int32(Some(1))),
+        );
+        // The unlimited case retains native arithmetic and its live pending input.
+        let frame = if fetch.is_some() {
+            frame.with_range_offset_arithmetic(RangeOffsetArithmetic::Spark { ansi_mode: true })
+        } else {
+            frame
+        };
+        let window = create_window_expr(
+            &WindowFunctionDefinition::AggregateUDF(count_udaf()),
+            "n".into(),
+            &[col("id", &schema)?],
+            &[col("p", &schema)?],
+            &[key_order],
+            Arc::new(frame),
+            schema,
+            false,
+            false,
+            None,
+        )?;
+        let plan =
+            get_best_fitting_window(&[window], &input, &[])?.ok_or("bounded window missing")?;
+        let plan = if let Some(fetch) = fetch {
+            plan.with_fetch(Some(fetch)).ok_or("fetch unsupported")?
+        } else {
+            plan
+        };
+        assert_eq!(plan.fetch(), fetch);
+        let expected_schema = plan.schema();
+        let mut output = plan.execute(0, Arc::new(TaskContext::default()))?;
+        assert_eq!(upstream_polls.load(AtomicOrdering::SeqCst), 0);
+        assert_eq!(upstream_drops.load(AtomicOrdering::SeqCst), 0);
+
+        let first = output
+            .next()
+            .now_or_never()
+            .ok_or("output waited for pending input")?;
+        let expected_polls = usize::from(fetch != Some(0));
+        assert_eq!(upstream_polls.load(AtomicOrdering::SeqCst), expected_polls);
+        assert_eq!(
+            upstream_drops.load(AtomicOrdering::SeqCst),
+            usize::from(fetch.is_some())
+        );
+        let emitted = if fetch == Some(0) {
+            assert!(first.is_none());
+            None
+        } else {
+            Some(first.ok_or("stream ended before its first output")??)
+        };
+        if let Some(batch) = &emitted {
+            assert_eq!(batch.num_rows(), 1);
+            assert_eq!(batch.schema(), expected_schema);
+            assert_eq!(
+                ScalarValue::try_from_array(batch.column(0), 0)?,
+                ScalarValue::Int32(Some(0))
+            );
+            assert_eq!(
+                ScalarValue::try_from_array(batch.column(3), 0)?,
+                ScalarValue::Int64(Some(2))
+            );
+        }
+
+        if fetch.is_some() {
+            for _ in 0..2 {
+                assert!(
+                    output
+                        .next()
+                        .now_or_never()
+                        .ok_or("completed output became pending")?
+                        .is_none()
+                );
+                assert_eq!(upstream_polls.load(AtomicOrdering::SeqCst), expected_polls);
+                assert_eq!(upstream_drops.load(AtomicOrdering::SeqCst), 1);
+            }
+        } else {
+            assert!(output.next().now_or_never().is_none());
+            assert_eq!(upstream_polls.load(AtomicOrdering::SeqCst), 2);
+            assert_eq!(upstream_drops.load(AtomicOrdering::SeqCst), 0);
+        }
+        assert_eq!(output.schema(), expected_schema);
+        drop(output);
+        assert_eq!(upstream_drops.load(AtomicOrdering::SeqCst), 1);
+        if let Some(batch) = emitted {
+            assert_eq!(batch.schema(), expected_schema);
+            assert_eq!(
+                ScalarValue::try_from_array(batch.column(3), 0)?,
+                ScalarValue::Int64(Some(2))
+            );
+        }
+    }
     Ok(())
 }

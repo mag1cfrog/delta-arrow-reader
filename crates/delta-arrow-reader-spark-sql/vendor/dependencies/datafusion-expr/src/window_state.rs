@@ -127,9 +127,8 @@ impl WindowAggState {
 pub enum WindowFrameContext {
     /// ROWS frames are inherently stateless.
     Rows(Arc<WindowFrame>),
-    /// RANGE frames are stateful, they store indices specifying where the
-    /// previous search left off. This amortizes the overall cost to O(n)
-    /// where n denotes the row count.
+    /// RANGE frames retain committed search indices. Their forward movement
+    /// totals O(n) for n rows; pending rows may rescan buffered input.
     Range {
         window_frame: Arc<WindowFrame>,
         state: WindowFrameStateRange,
@@ -544,10 +543,9 @@ impl WindowFrameStateRange {
     }
 
     /// This function calculates beginning/ending indices for the frame of the current row.
-    // Argument `last_range` stores the resulting indices from the previous search. Since the indices only
-    // advance forward, we start from `last_range` subsequently. Thus, the overall
-    // time complexity of linear search amortizes to O(n) where n denotes the total
-    // row count.
+    // `last_range` stores the previous committed indices. They only advance,
+    // so committed cursor movement totals O(n) for n rows. Pending rows may
+    // rescan buffered rows as more input arrives.
     fn calculate_range(
         &mut self,
         window_frame: &Arc<WindowFrame>,

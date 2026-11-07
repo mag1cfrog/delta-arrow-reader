@@ -1086,9 +1086,24 @@ impl BoundedWindowAggStream {
                 *remaining -= n_generated;
             }
             self.prune_state(n_generated)?;
-            Ok(Some(RecordBatch::try_new(schema, columns_to_show)?))
+            let batch = RecordBatch::try_new(schema, columns_to_show)?;
+            if self.remaining_fetch == Some(0) {
+                self.finish_after_fetch();
+            }
+            Ok(Some(batch))
         } else {
             Ok(None)
+        }
+    }
+
+    fn finish_after_fetch(&mut self) {
+        self.finished = true;
+        let input_schema = self.input.schema();
+        self.input = Box::pin(EmptyRecordBatchStream::new(Arc::clone(&input_schema)));
+        self.input_buffer = RecordBatch::new_empty(input_schema);
+        self.partition_buffers.clear();
+        for state in &mut self.window_agg_states {
+            state.clear();
         }
     }
 
@@ -1098,7 +1113,7 @@ impl BoundedWindowAggStream {
             return Poll::Ready(None);
         }
         if self.remaining_fetch == Some(0) {
-            self.finished = true;
+            self.finish_after_fetch();
             return Poll::Ready(None);
         }
 
