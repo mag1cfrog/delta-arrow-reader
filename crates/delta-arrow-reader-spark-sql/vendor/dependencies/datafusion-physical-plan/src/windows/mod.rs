@@ -43,9 +43,7 @@ use datafusion_functions_window_common::field::WindowUDFFieldArgs;
 use datafusion_functions_window_common::partition::PartitionEvaluatorArgs;
 use datafusion_physical_expr::aggregate::{AggregateExprBuilder, AggregateFunctionExpr};
 use datafusion_physical_expr::expressions::Column;
-use datafusion_physical_expr::window::{
-    SlidingAggregateWindowExpr, StandardWindowFunctionExpr,
-};
+use datafusion_physical_expr::window::{SlidingAggregateWindowExpr, StandardWindowFunctionExpr};
 use datafusion_physical_expr::{ConstExpr, EquivalenceProperties};
 use datafusion_physical_expr_common::sort_expr::{
     LexOrdering, LexRequirement, OrderingRequirements, PhysicalSortRequirement,
@@ -135,13 +133,7 @@ pub fn create_window_expr(
                     .build()
                     .map(Arc::new)?
             };
-            window_expr_from_aggregate_expr(
-                partition_by,
-                order_by,
-                window_frame,
-                aggregate,
-                filter,
-            )
+            window_expr_from_aggregate_expr(partition_by, order_by, window_frame, aggregate, filter)
         }
         WindowFunctionDefinition::WindowUDF(fun) => Arc::new(StandardWindowExpr::new(
             create_udwf_window_expr(fun, args, &input_schema, name, ignore_nulls)?,
@@ -315,18 +307,13 @@ impl StandardWindowFunctionExpr for WindowUDFExpr {
     }
 }
 
-pub(crate) fn calc_requirements<
-    T: Borrow<Arc<dyn PhysicalExpr>>,
-    S: Borrow<PhysicalSortExpr>,
->(
+pub(crate) fn calc_requirements<T: Borrow<Arc<dyn PhysicalExpr>>, S: Borrow<PhysicalSortExpr>>(
     partition_by_exprs: impl IntoIterator<Item = T>,
     orderby_sort_exprs: impl IntoIterator<Item = S>,
 ) -> Option<OrderingRequirements> {
     let mut sort_reqs_with_partition = partition_by_exprs
         .into_iter()
-        .map(|partition_by| {
-            PhysicalSortRequirement::new(Arc::clone(partition_by.borrow()), None)
-        })
+        .map(|partition_by| PhysicalSortRequirement::new(Arc::clone(partition_by.borrow()), None))
         .collect::<Vec<_>>();
     let mut sort_reqs = vec![];
     for element in orderby_sort_exprs.into_iter() {
@@ -401,7 +388,11 @@ pub(crate) fn window_equivalence_properties(
     let window_expr_indices = (input_schema_len..window_schema_len).collect::<Vec<_>>();
 
     for (i, expr) in window_exprs.iter().enumerate() {
-        if expr.get_window_frame().has_null_offset() {
+        if expr.get_window_frame().has_null_offset()
+            || expr
+                .get_window_frame()
+                .has_nonzero_spark_integer_range_offset()
+        {
             continue;
         }
         let partitioning_exprs = expr.partition_by();
@@ -468,10 +459,8 @@ pub(crate) fn window_equivalence_properties(
                     // Window function results in a partial constant value in
                     // some ordering. Adjust the ordering equivalences accordingly:
                     let new_lexs = all_satisfied_lexs.into_iter().flat_map(|lex| {
-                        let new_partial_consts = sort_options_resolving_constant(
-                            Arc::clone(&window_col),
-                            false,
-                        );
+                        let new_partial_consts =
+                            sort_options_resolving_constant(Arc::clone(&window_col), false);
 
                         new_partial_consts.into_iter().map(move |partial| {
                             let mut existing = lex.clone();
@@ -484,10 +473,8 @@ pub(crate) fn window_equivalence_properties(
             } else {
                 // The window frame is ever expanding, so set monotonicity comes
                 // into play.
-                plain_expr.add_equal_orderings(
-                    &mut window_eq_properties,
-                    window_expr_indices[i],
-                )?;
+                plain_expr
+                    .add_equal_orderings(&mut window_eq_properties, window_expr_indices[i])?;
             }
         } else if let Some(sliding_expr) =
             expr.as_any().downcast_ref::<SlidingAggregateWindowExpr>()
@@ -642,7 +629,12 @@ pub fn get_best_fitting_window(
     };
 
     let window_expr = if should_reverse {
-        if window_exprs.iter().any(|expr| expr.get_window_frame().has_null_offset()) {
+        if window_exprs.iter().any(|expr| {
+            expr.get_window_frame().has_null_offset()
+                || expr
+                    .get_window_frame()
+                    .has_nonzero_spark_integer_range_offset()
+        }) {
             return Ok(None);
         }
         if let Some(order_by) = orderby_keys.first() {
@@ -925,9 +917,8 @@ mod tests {
             for expected_param in expected_params.clone() {
                 let mut requirements = vec![];
                 for (col_name, reqs) in expected_param {
-                    let options = reqs.map(|(descending, nulls_first)| {
-                        SortOptions::new(descending, nulls_first)
-                    });
+                    let options = reqs
+                        .map(|(descending, nulls_first)| SortOptions::new(descending, nulls_first));
                     let expr = col(col_name, &schema)?;
                     requirements.push(PhysicalSortRequirement::new(expr, options));
                 }
@@ -991,11 +982,7 @@ mod tests {
             ((true, false), (true, true), false),
             ((true, false), (true, false), true),
         ];
-        for (
-            (physical_desc, physical_nulls_first),
-            (req_desc, req_nulls_first),
-            expected,
-        ) in params
+        for ((physical_desc, physical_nulls_first), (req_desc, req_nulls_first), expected) in params
         {
             let physical_ordering = PhysicalSortExpr {
                 expr: col("nullable_col", &schema)?,
@@ -1031,11 +1018,7 @@ mod tests {
             ((true, false), (true, true), true),
             ((true, false), (true, false), true),
         ];
-        for (
-            (physical_desc, physical_nulls_first),
-            (req_desc, req_nulls_first),
-            expected,
-        ) in params
+        for ((physical_desc, physical_nulls_first), (req_desc, req_nulls_first), expected) in params
         {
             let physical_ordering = PhysicalSortExpr {
                 expr: col("non_nullable_col", &schema)?,

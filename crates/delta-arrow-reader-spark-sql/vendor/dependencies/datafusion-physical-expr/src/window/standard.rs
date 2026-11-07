@@ -33,9 +33,7 @@ use arrow::record_batch::RecordBatch;
 use datafusion_common::utils::evaluate_partition_ranges;
 use datafusion_common::{Result, ScalarValue};
 use datafusion_expr::WindowFrame;
-use datafusion_expr::window_state::{
-    WindowAggState, WindowFrameContext, date32_range_can_wrap,
-};
+use datafusion_expr::window_state::{WindowAggState, WindowFrameContext, date32_range_can_wrap};
 use datafusion_physical_expr_common::sort_expr::PhysicalSortExpr;
 
 /// A window expr that takes the form of a [`StandardWindowFunctionExpr`].
@@ -73,10 +71,7 @@ impl StandardWindowExpr {
     /// If `self.expr` doesn't have an ordering, ordering equivalence properties
     /// are not updated. Otherwise, ordering equivalence properties are updated
     /// by the ordering of `self.expr`.
-    pub fn add_equal_orderings(
-        &self,
-        eq_properties: &mut EquivalenceProperties,
-    ) -> Result<()> {
+    pub fn add_equal_orderings(&self, eq_properties: &mut EquivalenceProperties) -> Result<()> {
         let schema = eq_properties.schema();
         if let Some(fn_res_ordering) = self.expr.get_result_ordering(schema) {
             add_new_ordering_expr_with_partition_by(
@@ -133,12 +128,8 @@ impl WindowExpr for StandardWindowExpr {
             let mut last_range = Range { start: 0, end: 0 };
             // We iterate on each row to calculate window frame range and and window function result
             for idx in 0..num_rows {
-                let range = window_frame_ctx.calculate_range(
-                    order_bys_ref,
-                    &last_range,
-                    num_rows,
-                    idx,
-                )?;
+                let range =
+                    window_frame_ctx.calculate_range(order_bys_ref, &last_range, num_rows, idx)?;
                 let value = evaluator.evaluate(&values, &range)?;
                 row_wise_results.push(value);
                 last_range = range;
@@ -185,6 +176,13 @@ impl WindowExpr for StandardWindowExpr {
                 _ => unreachable!(),
             };
             let state = &mut window_state.state;
+            if partition_batch_state
+                .output_end_index
+                .is_some_and(|end| state.last_calculated_index >= end)
+            {
+                state.update(&new_empty_array(out_type), partition_batch_state)?;
+                continue;
+            }
 
             let batch_ref = &partition_batch_state.record_batch;
             let mut values = self.evaluate_args(batch_ref)?;
@@ -198,7 +196,8 @@ impl WindowExpr for StandardWindowExpr {
             let order_bys_ref = &values[n_args..];
 
             let most_recent_order_bys = if evaluator.uses_window_frame()
-                && self.window_frame.has_null_offset()
+                && (self.window_frame.has_null_offset()
+                    || self.window_frame.has_nonzero_spark_integer_range_offset())
             {
                 partition_batch_state
                     .most_recent_row
@@ -226,7 +225,11 @@ impl WindowExpr for StandardWindowExpr {
             } else {
                 evaluator.is_causal()
             };
-            for idx in state.last_calculated_index..num_rows {
+            let output_end_index = partition_batch_state
+                .output_end_index
+                .unwrap_or(num_rows)
+                .min(num_rows);
+            for idx in state.last_calculated_index..output_end_index {
                 let frame_range = if evaluator.uses_window_frame() {
                     state
                         .window_frame_ctx
@@ -248,11 +251,10 @@ impl WindowExpr for StandardWindowExpr {
                 }?;
 
                 // Exit if the range is non-causal and extends all the way:
-                if frame_range.end == num_rows
-                    && !is_causal
-                    && !partition_batch_state.is_end
-                {
-                    let safe = if self.window_frame.has_null_offset() {
+                if frame_range.end == num_rows && !is_causal && !partition_batch_state.is_end {
+                    let safe = if self.window_frame.has_null_offset()
+                        || self.window_frame.has_nonzero_spark_integer_range_offset()
+                    {
                         match state.window_frame_ctx.as_ref() {
                             Some(context) => is_end_bound_safe(
                                 context,

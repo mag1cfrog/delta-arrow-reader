@@ -127,9 +127,8 @@ impl WindowAggState {
 pub enum WindowFrameContext {
     /// ROWS frames are inherently stateless.
     Rows(Arc<WindowFrame>),
-    /// RANGE frames are stateful, they store indices specifying where the
-    /// previous search left off. This amortizes the overall cost to O(n)
-    /// where n denotes the row count.
+    /// RANGE frames retain committed search indices. Their forward movement
+    /// totals O(n) for n rows; pending rows may rescan buffered input.
     Range {
         window_frame: Arc<WindowFrame>,
         state: WindowFrameStateRange,
@@ -177,13 +176,7 @@ impl WindowFrameContext {
             WindowFrameContext::Range {
                 window_frame,
                 state,
-            } => state.calculate_range(
-                window_frame,
-                last_range,
-                range_columns,
-                length,
-                idx,
-            ),
+            } => state.calculate_range(window_frame, last_range, range_columns, length, idx),
             // Sort options is not used in GROUPS mode calculations as the
             // inequality of two rows indicates a group change, and ordering
             // or position of NULLs do not impact inequality.
@@ -270,6 +263,8 @@ pub struct PartitionBatchState {
     pub is_end: bool,
     /// Number of rows emitted for each partition
     pub n_out_row: usize,
+    /// Exclusive current-row output index in the retained batch; membership uses the full batch.
+    pub output_end_index: Option<usize>,
 }
 
 impl PartitionBatchState {
@@ -279,6 +274,7 @@ impl PartitionBatchState {
             most_recent_row: None,
             is_end: false,
             n_out_row: 0,
+            output_end_index: None,
         }
     }
 
@@ -288,6 +284,7 @@ impl PartitionBatchState {
             most_recent_row: None,
             is_end: false,
             n_out_row: 0,
+            output_end_index: None,
         }
     }
 
@@ -462,7 +459,13 @@ pub fn range_bound_target(
                 if matches!(&error, DataFusionError::ArrowError(cause, _)
                     if matches!(cause.as_ref(), ArrowError::ArithmeticOverflow(_)))
                 {
-                    error.context("[ARITHMETIC_OVERFLOW] RANGE comparison target")
+                    error.context(
+                        if matches!(current_key, ScalarValue::Int8(_) | ScalarValue::Int16(_)) {
+                            "[BINARY_ARITHMETIC_OVERFLOW] RANGE comparison target"
+                        } else {
+                            "[ARITHMETIC_OVERFLOW] RANGE comparison target"
+                        },
+                    )
                 } else {
                     error
                 }
@@ -540,10 +543,9 @@ impl WindowFrameStateRange {
     }
 
     /// This function calculates beginning/ending indices for the frame of the current row.
-    // Argument `last_range` stores the resulting indices from the previous search. Since the indices only
-    // advance forward, we start from `last_range` subsequently. Thus, the overall
-    // time complexity of linear search amortizes to O(n) where n denotes the total
-    // row count.
+    // `last_range` stores the previous committed indices. They only advance,
+    // so committed cursor movement totals O(n) for n rows. Pending rows may
+    // rescan buffered rows as more input arrives.
     fn calculate_range(
         &mut self,
         window_frame: &Arc<WindowFrame>,
@@ -555,11 +557,12 @@ impl WindowFrameStateRange {
         let date32_wrapping_bound = range_columns.first().is_some_and(|column| {
             [&window_frame.start_bound, &window_frame.end_bound]
                 .iter()
-                .any(|bound| {
-                    date32_range_can_wrap(column.data_type(), window_frame.units, bound)
-                })
+                .any(|bound| date32_range_can_wrap(column.data_type(), window_frame.units, bound))
         });
-        if date32_wrapping_bound || window_frame.has_null_offset() {
+        if date32_wrapping_bound
+            || window_frame.has_null_offset()
+            || window_frame.has_nonzero_spark_integer_range_offset()
+        {
             let end = self.calculate_index_of_bound::<false>(
                 window_frame,
                 &window_frame.end_bound,
@@ -610,26 +613,24 @@ impl WindowFrameStateRange {
         match bound {
             WindowFrameBound::Preceding(n) if SIDE && n.is_null() => Ok(0),
             WindowFrameBound::Following(n) if !SIDE && n.is_null() => Ok(length),
-            WindowFrameBound::Preceding(_) | WindowFrameBound::PrecedingNullOffset(_) => {
-                self.calculate_index_of_row::<SIDE, true>(
+            WindowFrameBound::Preceding(_) | WindowFrameBound::PrecedingNullOffset(_) => self
+                .calculate_index_of_row::<SIDE, true>(
                     window_frame,
                     range_columns,
                     last_range,
                     idx,
                     bound,
                     length,
-                )
-            }
-            WindowFrameBound::Following(_) | WindowFrameBound::FollowingNullOffset(_) => {
-                self.calculate_index_of_row::<SIDE, false>(
+                ),
+            WindowFrameBound::Following(_) | WindowFrameBound::FollowingNullOffset(_) => self
+                .calculate_index_of_row::<SIDE, false>(
                     window_frame,
                     range_columns,
                     last_range,
                     idx,
                     bound,
                     length,
-                )
-            }
+                ),
             WindowFrameBound::CurrentRow => self.calculate_index_of_row::<SIDE, false>(
                 window_frame,
                 range_columns,
@@ -658,7 +659,9 @@ impl WindowFrameStateRange {
         } else {
             last_range.end
         };
-        if window_frame.has_null_offset() && search_start == length {
+        if (window_frame.has_null_offset() || window_frame.has_nonzero_spark_integer_range_offset())
+            && search_start == length
+        {
             return Ok(length);
         }
         if matches!(bound, WindowFrameBound::CurrentRow) {
@@ -797,46 +800,26 @@ impl WindowFrameStateGroups {
                     // UNBOUNDED PRECEDING
                     0
                 } else {
-                    self.calculate_index_of_row::<true, true>(
-                        range_columns,
-                        idx,
-                        Some(n),
-                        length,
-                    )?
+                    self.calculate_index_of_row::<true, true>(range_columns, idx, Some(n), length)?
                 }
             }
-            WindowFrameBound::CurrentRow => self.calculate_index_of_row::<true, true>(
-                range_columns,
-                idx,
-                None,
-                length,
-            )?,
-            WindowFrameBound::Following(ref n) => self
-                .calculate_index_of_row::<true, false>(
-                    range_columns,
-                    idx,
-                    Some(n),
-                    length,
-                )?,
-            WindowFrameBound::PrecedingNullOffset(_)
-            | WindowFrameBound::FollowingNullOffset(_) => {
+            WindowFrameBound::CurrentRow => {
+                self.calculate_index_of_row::<true, true>(range_columns, idx, None, length)?
+            }
+            WindowFrameBound::Following(ref n) => {
+                self.calculate_index_of_row::<true, false>(range_columns, idx, Some(n), length)?
+            }
+            WindowFrameBound::PrecedingNullOffset(_) | WindowFrameBound::FollowingNullOffset(_) => {
                 return internal_err!("NULL offsets require a RANGE window frame");
             }
         };
         let end = match window_frame.end_bound {
-            WindowFrameBound::Preceding(ref n) => self
-                .calculate_index_of_row::<false, true>(
-                    range_columns,
-                    idx,
-                    Some(n),
-                    length,
-                )?,
-            WindowFrameBound::CurrentRow => self.calculate_index_of_row::<false, false>(
-                range_columns,
-                idx,
-                None,
-                length,
-            )?,
+            WindowFrameBound::Preceding(ref n) => {
+                self.calculate_index_of_row::<false, true>(range_columns, idx, Some(n), length)?
+            }
+            WindowFrameBound::CurrentRow => {
+                self.calculate_index_of_row::<false, false>(range_columns, idx, None, length)?
+            }
             WindowFrameBound::Following(ref n) => {
                 if n.is_null() {
                     // UNBOUNDED FOLLOWING
@@ -1170,12 +1153,8 @@ mod tests {
         for (idx, (expected_range, expected_group_idx)) in
             expected_results.into_iter().enumerate()
         {
-            let range = window_frame_groups.calculate_range(
-                window_frame,
-                &range_columns,
-                n_row,
-                idx,
-            )?;
+            let range =
+                window_frame_groups.calculate_range(window_frame, &range_columns, n_row, idx)?;
             assert_eq!(range, expected_range);
             assert_eq!(window_frame_groups.current_group_idx, expected_group_idx);
         }
@@ -1192,12 +1171,8 @@ mod tests {
         let n_row = range_columns[0].len();
         let mut last_range = Range { start: 0, end: 0 };
         for (idx, expected_range) in expected_results.into_iter().enumerate() {
-            let range = window_frame_context.calculate_range(
-                &range_columns,
-                &last_range,
-                n_row,
-                idx,
-            )?;
+            let range =
+                window_frame_context.calculate_range(&range_columns, &last_range, n_row, idx)?;
             assert_eq!(range, expected_range);
             last_range = range;
         }
