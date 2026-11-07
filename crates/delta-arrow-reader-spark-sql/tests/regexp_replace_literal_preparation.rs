@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use arrow::datatypes::DataType;
 use datafusion::execution::SessionStateBuilder;
+use datafusion::physical_plan::collect;
 use datafusion::prelude::{SessionConfig, SessionContext};
 use delta_arrow_reader_spark_sql::configure_spark_sql;
 use sail_plan::expression_errors::SparkSqlExpressionSemantics;
@@ -229,6 +230,65 @@ async fn native_controls(session: &SessionContext) -> TestResult<Value> {
     Ok(json!(results))
 }
 
+// Provider readback uses native DataFusion and retains each actual string carrier.
+async fn provider_observation(
+    session: &SessionContext,
+    name: &str,
+    representation: usize,
+) -> Value {
+    let mut stage = "registered_schema";
+    let mut actual = json!({
+        "provider_schema":null,"provider_raw_schema":null,"storage_matches":false,
+        "public_schema":null,"public_raw_schema":null,"before_collect":null,
+        "before_collect_raw_schema":null,"physical_schema":null,"physical_raw_schema":null
+    });
+    let result: TestResult = async {
+        let schema = session.table_provider(name).await?.schema();
+        actual["provider_schema"] = string_binary::capture_schema(schema.fields(), None)?;
+        actual["provider_raw_schema"] = json!(format!("{schema:?}"));
+        let string_type = [DataType::Utf8, DataType::LargeUtf8, DataType::Utf8View][representation].clone();
+        actual["storage_matches"] = json!(schema.fields().iter().all(|field| {
+            field.data_type() == if field.name() == "k" { &DataType::Int32 } else { &string_type }
+        }));
+        stage = "resolve";
+        let sql = format!("SELECT * FROM {name} ORDER BY {}", schema.field(0).name());
+        let frame = session.sql(&sql).await?;
+        actual["public_schema"] = string_binary::capture_schema(frame.schema().fields(), None)?;
+        actual["public_raw_schema"] = json!(format!("{:?}", frame.schema()));
+        stage = "physical";
+        let physical = frame.create_physical_plan().await?;
+        actual["before_collect"] = string_binary::capture_schema(physical.schema().fields(), None)?;
+        actual["before_collect_raw_schema"] = json!(format!("{:?}", physical.schema()));
+        stage = "collect";
+        let batches = collect(physical.clone(), session.task_ctx()).await;
+        actual["physical_schema"] = string_binary::capture_schema(physical.schema().fields(), None)?;
+        actual["physical_raw_schema"] = json!(format!("{:?}", physical.schema()));
+        let batches = batches?;
+        stage = "encode";
+        let mut rows = Vec::new();
+        let mut receipts = Vec::new();
+        for batch in batches {
+            spark_results::validate_batch(physical.schema().as_ref(), &batch)?;
+            receipts.push(json!({
+                "rows":batch.num_rows(),
+                "schema":string_binary::capture_schema(batch.schema().fields(), None)?,
+                "raw_schema":format!("{:?}", batch.schema())
+            }));
+            for row in 0..batch.num_rows() {
+                rows.push(batch.columns().iter().map(|column| {
+                    spark_results::encode_value(column.as_ref(), row)
+                }).collect::<TestResult<Vec<_>>>()?);
+            }
+        }
+        actual["rows"] = json!(rows);
+        actual["batches"] = json!(receipts);
+        Ok(())
+    }.await;
+    actual["phase"] = json!(stage);
+    actual["error"] = json!(result.err().map(|error| format!("{stage}: {error}")));
+    actual
+}
+
 #[tokio::test]
 async fn replacement_preparation_matches_all_34_independent_references() -> TestResult {
     let references = references()?;
@@ -253,16 +313,9 @@ async fn replacement_preparation_matches_all_34_independent_references() -> Test
                     let name = declaration["name"].as_str().ok_or("missing provider name")?;
                     let expected = &references.providers
                         .get(&(case_key.clone(), name.to_owned())).ok_or("missing provider receipt")?["actual"];
-                    let provider = session.table_provider(name).await?;
-                    let schema = provider.schema();
-                    let fields = spark_results::capture_schema(schema.fields(), None)?;
-                    let sql = format!("SELECT * FROM {name} ORDER BY {}", schema.field(0).name());
-                    let actual = spark_results::capture_native_query_observation(&session, &sql).await?;
-                    let string_type = [DataType::Utf8, DataType::LargeUtf8, DataType::Utf8View][representation].clone();
-                    let storage_matches = schema.fields().iter().all(|field| {
-                        field.data_type() == if field.name() == "k" { &DataType::Int32 } else { &string_type }
-                    });
-                    let matches = storage_matches && fields == expected["schema"]
+                    let actual = provider_observation(&session, name, representation).await;
+                    let fields = &actual["provider_schema"];
+                    let matches = actual["storage_matches"] == true && *fields == expected["schema"]
                         && actual["public_schema"] == expected["analyzed_schema"]
                         && actual["before_collect"] == expected["physical_schema"]
                         && actual["physical_schema"] == expected["physical_schema"]
@@ -271,7 +324,7 @@ async fn replacement_preparation_matches_all_34_independent_references() -> Test
                     eprintln!("c06 replacement provider regression: {}", json!({
                         "id":case["id"],"ansi":case["ansi"],"name":name,"representation":representation,
                         "batch_size":batch_size,"actual":actual,"provider_schema":fields,
-                        "provider_raw_schema":format!("{schema:?}"),"matches_reference":matches
+                        "provider_raw_schema":actual["provider_raw_schema"],"matches_reference":matches
                     }));
                     if !matches { differences.push(format!("provider {name}: {case_key:?}/{representation}/{batch_size}")); }
                 }
