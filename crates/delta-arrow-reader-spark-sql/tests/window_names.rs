@@ -299,6 +299,32 @@ fn matched_window_gap_owner(
     matches.then(|| owner.to_string())
 }
 
+fn uses_unsupported_lead_null_rows_policy(case: &Value) -> bool {
+    case["corpus"] == "additional_boundary"
+        && case["id"] == "explicit_lead_invalid_cast"
+        && case["ansi"] == false
+}
+
+fn matches_unsupported_lead_null_rows_bound(case: &Value, observation: &Value) -> bool {
+    uses_unsupported_lead_null_rows_policy(case)
+        && case["sql"]
+            == "SELECT LEAD(v,CAST('bad' AS INT)) OVER (ORDER BY id ROWS BETWEEN CAST('bad' AS INT) FOLLOWING AND CAST('bad' AS INT) FOLLOWING) FROM inputs"
+        && case["expected"]["condition"] == "INTERNAL_ERROR"
+        && case["spark_error_phase"] == "collect"
+        && case["spark_error_details"]["sql_state"] == "XX000"
+        && case["spark_error_details"]["message_parameters"]
+            == json!({
+                "message":"Unsupported factory: (FRAME_LESS_OFFSET,RowFrame,null,null,List())"
+            })
+        && observation.get("observer_error").is_none()
+        && observation.get("native_panic").is_none()
+        && matches_unmaterialized_window_error(
+            observation,
+            "External error: not supported: NULL ROWS frame lower bound",
+            "resolve",
+        )
+}
+
 fn matches_window_int32_negation_overflow(case: &Value, observation: &Value) -> bool {
     let error = "External error: error in DataFusion: Execution error: Int32 overflow on negative(-2147483648)";
     case["ansi"] == true
@@ -534,6 +560,93 @@ fn window_negation_overflow_requires_exact_input_operation_type_and_phase() -> T
         let mut changed = case.clone();
         changed["spark_error_phase"] = json!("collect");
         assert!(!matches_window_int32_negation_overflow(
+            &changed,
+            &observation
+        ));
+    }
+    Ok(())
+}
+
+#[test]
+fn explicit_lead_null_rows_requires_the_intentional_error_and_exact_observations() -> TestResult {
+    let cases = include_str!("fixtures/window-name-boundaries-spark.jsonl")
+        .lines()
+        .skip(1)
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    let selected = cases
+        .iter()
+        .filter(|case| uses_unsupported_lead_null_rows_policy(case))
+        .collect::<Vec<_>>();
+    assert_eq!(selected.len(), 1);
+    let case = selected[0];
+    let error = "External error: not supported: NULL ROWS frame lower bound";
+    let observation = json!({"native_phase":"resolve","error":error,"optimized_error":error,
+        "public_schema":null,"optimized_schema":null,"before_collect":null,"physical_schema":null,
+        "rows":null,"rows_raw":null,"optimized_observation":null});
+    assert!(matches_unsupported_lead_null_rows_bound(case, &observation));
+    for wrong_error in [
+        "External error: invalid argument: invalid window boundary offset".to_owned(),
+        "External error: invalid argument: [INTERNAL_ERROR] another cause".to_owned(),
+        error.replace("lower", "upper"),
+        error.replace("ROWS", "RANGE"),
+        format!("{error} unrelated cause"),
+    ] {
+        let mut changed = observation.clone();
+        changed["error"] = json!(wrong_error);
+        changed["optimized_error"] = changed["error"].clone();
+        assert!(!matches_unsupported_lead_null_rows_bound(case, &changed));
+    }
+    for (field, value) in [
+        ("native_phase", json!("collect")),
+        ("optimized_error", json!("another cause")),
+        ("rows", json!([])),
+        ("rows_raw", json!([])),
+        ("observer_error", json!("capture failed")),
+        ("native_panic", json!("capture failed")),
+    ] {
+        let mut changed = observation.clone();
+        changed[field] = value;
+        assert!(!matches_unsupported_lead_null_rows_bound(case, &changed));
+    }
+    for field in [
+        "public_schema",
+        "optimized_schema",
+        "before_collect",
+        "physical_schema",
+        "rows",
+        "rows_raw",
+        "optimized_observation",
+    ] {
+        let mut changed = observation.clone();
+        changed
+            .as_object_mut()
+            .ok_or("missing observation")?
+            .remove(field);
+        assert!(!matches_unsupported_lead_null_rows_bound(case, &changed));
+        let mut changed = observation.clone();
+        changed[field] = json!({"type":"struct","fields":[]});
+        assert!(!matches_unsupported_lead_null_rows_bound(case, &changed));
+    }
+    for (field, value) in [
+        ("ansi", json!(true)),
+        ("id", json!("another_case")),
+        ("corpus", json!("another_corpus")),
+        (
+            "sql",
+            json!(
+                case["sql"]
+                    .as_str()
+                    .ok_or("missing SQL")?
+                    .replace(" AS INT", " AS BIGINT")
+            ),
+        ),
+        ("expected", json!({"condition":"CAST_INVALID_INPUT"})),
+        ("spark_error_phase", json!("sql")),
+    ] {
+        let mut changed = case.clone();
+        changed[field] = value;
+        assert!(!matches_unsupported_lead_null_rows_bound(
             &changed,
             &observation
         ));
@@ -810,7 +923,11 @@ async fn generated_window_names_cover_source_boundaries() -> TestResult {
             let negation_overflow_matches = actual
                 .as_ref()
                 .is_ok_and(|result| matches_window_int32_negation_overflow(case, result));
-            let gap_owner = if matches || negation_overflow_matches {
+            let unsupported_null_rows = uses_unsupported_lead_null_rows_policy(case);
+            let unsupported_null_rows_matches = actual
+                .as_ref()
+                .is_ok_and(|result| matches_unsupported_lead_null_rows_bound(case, result));
+            let gap_owner = if matches || negation_overflow_matches || unsupported_null_rows {
                 None
             } else {
                 actual
@@ -818,8 +935,16 @@ async fn generated_window_names_cover_source_boundaries() -> TestResult {
                     .ok()
                     .and_then(|result| matched_window_gap_owner(case, result, controls))
             };
-            let accepted = matches || negation_overflow_matches || gap_owner.is_some();
-            let disposition = if matches {
+            let accepted = if unsupported_null_rows {
+                unsupported_null_rows_matches
+            } else {
+                matches || negation_overflow_matches || gap_owner.is_some()
+            };
+            let disposition = if unsupported_null_rows_matches {
+                "intentional_unsupported_null_rows_bound"
+            } else if unsupported_null_rows {
+                "unexpected_difference"
+            } else if matches {
                 "spark_match"
             } else if negation_overflow_matches {
                 "equivalent_int32_negation_overflow"
@@ -834,6 +959,7 @@ async fn generated_window_names_cover_source_boundaries() -> TestResult {
                 "actual":actual.unwrap_or_else(|error| json!({"error":error.to_string()})),
                 "accepted":accepted,"disposition":disposition,"owned_gap":gap_owner,
                 "negation_overflow_matches":negation_overflow_matches,
+                "intentional_unsupported_null_rows_matches":unsupported_null_rows_matches,
             }));
         }
     }

@@ -477,6 +477,35 @@ Native DataFusion SQL keeps each column's own annotation. The
 [session-zone column references](tests/fixtures/session-zone-columns/README.md) cover
 these functions in UTC and Los Angeles over UTC, named-zone and fixed-offset annotations.
 
+CAST and TRY_CAST from TIMESTAMP to TIMESTAMP_NTZ, one-argument TO_TIMESTAMP_NTZ and the
+TIMESTAMP argument of CONVERT_TIMEZONE take each instant's local date-time in the session
+time zone, whatever zone its type names. Arrow's cast kept the UTC date-time. The offsets
+come from `local_time.rs`, which TIMESTAMPDIFF also reads. Beyond Chrono's range it takes
+the offset from a nearer 400-year cycle, so every BIGINT instant converts. Summer instants
+after 2099 still get standard time (#1052). A local date-time beyond BIGINT fails with
+Java's `long overflow`. A constant fails during optimization through
+[constant folding errors](#constant-folding-errors), except inside CONVERT_TIMEZONE, whose
+lazy arguments defer it (#1106). Under TRY_CAST it is NULL. Spark declares the result
+nullable only for a nullable input, so a NOT NULL input fails the query instead, where
+Spark returns -1 (#1106). TO_TIMESTAMP, TRY_TO_TIMESTAMP and TO_TIMESTAMP_LTZ of a
+TIMESTAMP now keep the instant. They used to convert it to local time and back, which
+failed on the reference instants. A session zone Arrow cannot parse keeps the previous
+conversion, and `EST`, `MST` and `HST` parse as regions where Spark uses fixed offsets
+(#1029).
+
+Related cases are still open:
+- casts of arrays, structs and maps convert their TIMESTAMP values with Arrow's cast
+  (#1103);
+- TIMESTAMP_NTZ values beyond Chrono's years are read wrongly (#1104);
+- Spark's optimizer compares a converted value with a TIMESTAMP_NTZ literal by the
+  literal's instant, which DAR does not yet do (#1105);
+- formatted TO_TIMESTAMP and TO_TIMESTAMP_NTZ fail on a TIMESTAMP, and TIMESTAMP() returns
+  TIMESTAMP_NTZ (#1107).
+
+Native DataFusion SQL keeps Arrow's cast. The
+[TIMESTAMP_NTZ conversion references](tests/fixtures/timestamp-ntz-conversion/README.md)
+record the checks.
+
 TO_UTC_TIMESTAMP and FROM_UTC_TIMESTAMP convert TIMESTAMP_NTZ and DATE arguments to
 the session zone with that same builder, so a local time or midnight skipped by a DST
 change moves forward and a repeated one takes its earlier instant, where Arrow's cast
@@ -1096,7 +1125,17 @@ folding, during optimization. A scalar UDF can return `true` from
 `propagates_constant_folding_errors` (default `false`) to fail during optimization, as
 literal CASTs already do. A call inside a short-circuiting expression other than AND and
 OR, such as CASE or COALESCE, still defers its error. `AliasedScalarUDFImpl` forwards the
-choice. Only TIMESTAMPDIFF opts in.
+choice. TIMESTAMPDIFF and the TIMESTAMP to TIMESTAMP_NTZ conversion opt in.
+
+Spark REGEXP_REPLACE checks admitted literal arguments in its own simplify callback,
+after native operand simplification, and reports only its own kernel errors. The
+existing conditional simplifier defers these errors in guarded branches. Async operands
+retain native planning and its swallowed synchronous wrapper rejections. Closed,
+permitted replacement calls over local VALUES fold before an outer LIMIT 0 can discard
+them; an already-limited empty input is pruned first. Local folds use the existing query
+start time and retain successful folds in the plan, preserving once-only producer
+evaluation. Kernel NULL/no-match handling, position admission and native regex/UTF16
+capability boundaries retain their existing rules.
 
 ### ARRAY_COMPACT result fields
 
@@ -1334,7 +1373,11 @@ numeric INT cast builders in the query's ANSI mode. Conversion and positive-rang
 validation precede replacement evaluation. The logical cast remains visible for
 analyzed nullability; ordinary optimization can later refine its field.
 New coercion paths reject custom operands that disable constant folding before
-literal evaluation. The existing INT position path is unchanged.
+literal evaluation. Already-INT synchronous operands keep their existing folding
+behavior. Positions with a native async function in the expression tree fail
+with `NON_FOLDABLE_INPUT` before literal evaluation, including through expression
+aliases and casts. Async source, pattern and replacement arguments keep their
+execution path.
 
 The focused position fixture retains 110 independent Spark references and all
 660 native configurations. BIGINT narrowing and FLOAT/DOUBLE positions use the
@@ -1452,6 +1495,28 @@ disable aggregate-result ordering inference and prevent plan reversal to reuse
 opposite input ordering. The
 [NULL RANGE references](tests/fixtures/README.md#explicit-null-range-bounds)
 record their membership, consumer Fields, failure phases and ordered outer queries.
+
+### NULL ROWS bounds
+
+Sail retains each evaluated ROWS expression's source type until both bounds have
+passed NULL admission. Bare PRECEDING NULL has Spark's unary-minus type DOUBLE;
+bare FOLLOWING NULL has type VOID. The type error identifies the actual lower or
+upper bound. For a frame containing a NULL expression, lower type admission,
+upper type admission and invalid UNBOUNDED sides precede the typed-INT-NULL
+rejection. A non-NULL lower offset still converts before upper resolution, using
+the existing signed and zero normalization. A NULL lower checks its type first;
+an admitted INT NULL lower resolves the upper expression without converting it to
+an integer, so invalid upper STRING bounds report a type error before conversion.
+Value/API sentinels and GROUPS keep their existing behavior.
+
+Typed INT NULL is intentionally rejected during resolution with
+`External error: not supported: NULL ROWS frame lower bound` or the corresponding
+`upper bound` message. Neither native Fields nor rows are available at that
+phase. The pinned Spark capture instead reports an internal collection error on
+nonempty input, and successful empty rows on empty input, with all five Fields
+available in both cases. The [NULL ROWS references](tests/fixtures/README.md#null-rows-bound-admission)
+retain those outcomes and label the earlier native rejection as an intentional
+difference. RANGE planning, native DataFusion frames and execution are unchanged.
 
 ### Signed-integer RANGE bounds
 
