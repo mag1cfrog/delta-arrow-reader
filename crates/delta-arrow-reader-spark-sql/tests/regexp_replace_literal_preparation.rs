@@ -389,3 +389,67 @@ async fn replacement_null_no_match_and_pattern_priority_keep_their_boundaries() 
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }
+
+#[tokio::test]
+async fn replacement_preparation_evaluates_foldable_immutable_arguments_once() -> TestResult {
+    use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+    use datafusion::logical_expr::{Volatility, create_udf};
+    use delta_arrow_reader_spark_sql::{SparkSqlOptions, plan_query};
+
+    for ansi_mode in [true, false] {
+        for slot in 0..3 {
+            for (local_values_limit, invalid_group) in [(false, false), (false, true), (true, false), (true, true)] {
+                let session = session(32);
+                let calls = Arc::new(AtomicUsize::new(0));
+                let observed = Arc::clone(&calls);
+                session.register_udf(create_udf(
+                    "replacement_immutable_argument",
+                    vec![DataType::Utf8],
+                    DataType::Utf8,
+                    Volatility::Immutable,
+                    Arc::new(move |arguments| {
+                        observed.fetch_add(1, Ordering::SeqCst);
+                        Ok(arguments[0].clone())
+                    }),
+                ));
+                let mut arguments = ["'a'".to_owned(), "'(a)'".to_owned(),
+                    if invalid_group { "'$9'" } else { "'$1'" }.to_owned()];
+                arguments[slot] = format!("replacement_immutable_argument({})", arguments[slot]);
+                let input = if local_values_limit { " FROM VALUES(1) AS t(k) LIMIT 0" } else { "" };
+                let sql = format!("SELECT regexp_replace({}) AS r{input}", arguments.join(","));
+                let query = plan_query(&session, &sql, &SparkSqlOptions {
+                    ansi_mode, ..Default::default()
+                }).await?;
+                let resolved = query.logical_plan.schema().clone();
+                assert_eq!(calls.load(Ordering::SeqCst), 0);
+                let physical = query.create_physical_plan(&session).await;
+                assert_eq!(calls.load(Ordering::SeqCst), 1, "{sql}");
+                assert_eq!(query.logical_plan.schema(), &resolved);
+                let physical_schema = physical.as_ref().ok().map(|p| format!("{:?}", p.schema()));
+                let error = physical.as_ref().err().map(ToString::to_string);
+                if invalid_group {
+                    let error = error.as_deref().ok_or("missing preparation error")?;
+                    assert!(error.contains("[INVALID_REGEXP_REPLACE]"));
+                    assert!(error.ends_with("java.lang.IndexOutOfBoundsException: No group 9"));
+                } else {
+                    let batches = collect(physical?, session.task_ctx()).await?;
+                    assert_eq!(batches.iter().map(|b| b.num_rows()).sum::<usize>(), usize::from(!local_values_limit));
+                    for batch in batches {
+                        for row in 0..batch.num_rows() {
+                            assert_eq!(spark_results::encode_value(batch.column(0).as_ref(), row)?, "a");
+                        }
+                    }
+                    assert_eq!(calls.load(Ordering::SeqCst), 1);
+                }
+                eprintln!("c06 replacement immutable argument: {}", json!({
+                    "sql":sql,"ansi":ansi_mode,"slot":slot,"invalid_group":invalid_group,
+                    "local_values_limit":local_values_limit,
+                    "analyzed_schema":string_binary::capture_schema(resolved.fields(), Some(&query.column_names))?,
+                    "analyzed_raw_schema":format!("{resolved:?}"),"physical_raw_schema":physical_schema,
+                    "preparation_error":error,"calls":calls.load(Ordering::SeqCst),"Spark_custom_UDF_oracle":false
+                }));
+            }
+        }
+    }
+    Ok(())
+}

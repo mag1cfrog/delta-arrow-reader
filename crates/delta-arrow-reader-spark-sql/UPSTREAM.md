@@ -1096,7 +1096,13 @@ folding, during optimization. A scalar UDF can return `true` from
 `propagates_constant_folding_errors` (default `false`) to fail during optimization, as
 literal CASTs already do. A call inside a short-circuiting expression other than AND and
 OR, such as CASE or COALESCE, still defers its error. `AliasedScalarUDFImpl` forwards the
-choice. Only TIMESTAMPDIFF opts in.
+choice. TIMESTAMPDIFF opts in. The Spark REGEXP_REPLACE resolver also opts in when
+its arguments have no native async descendant. Async operands retain native planning
+and its swallowed synchronous wrapper rejections. Closed, permitted replacement calls
+over local VALUES fold before an outer LIMIT 0 can discard them; an already-limited
+empty input is pruned first. Successful folds stay in the plan, preserving once-only
+producer evaluation. Kernel NULL/no-match handling, position admission and native
+regex/UTF16 capability boundaries retain their existing rules.
 
 ### ARRAY_COMPACT result fields
 

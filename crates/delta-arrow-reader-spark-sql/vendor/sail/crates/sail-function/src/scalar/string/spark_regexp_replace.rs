@@ -17,6 +17,7 @@ use crate::functions_utils::{StrMemo, make_scalar_function};
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkRegexpReplace {
     signature: Signature,
+    preparation_errors: bool,
 }
 
 impl Default for SparkRegexpReplace {
@@ -29,7 +30,13 @@ impl SparkRegexpReplace {
     pub fn new() -> Self {
         Self {
             signature: Signature::user_defined(Volatility::Immutable),
+            preparation_errors: false,
         }
+    }
+
+    pub fn with_preparation_errors(mut self) -> Self {
+        self.preparation_errors = true;
+        self
     }
 }
 
@@ -40,6 +47,10 @@ impl ScalarUDFImpl for SparkRegexpReplace {
 
     fn signature(&self) -> &Signature {
         &self.signature
+    }
+
+    fn propagates_constant_folding_errors(&self) -> bool {
+        self.preparation_errors
     }
 
     fn return_type(&self, arg_types: &[DataType]) -> Result<DataType> {
@@ -351,6 +362,24 @@ fn append_replacement(
 mod tests {
     use super::*;
     use datafusion::arrow::array::{Int32Array, StringArray};
+
+    #[test]
+    fn preparation_policy_has_distinct_native_udf_identity() {
+        use std::hash::{DefaultHasher, Hash, Hasher};
+        use datafusion_expr::ScalarUDF;
+
+        let native = ScalarUDF::from(SparkRegexpReplace::new());
+        let spark = ScalarUDF::from(SparkRegexpReplace::new().with_preparation_errors());
+        let fingerprint = |function: &ScalarUDF| {
+            let mut hasher = DefaultHasher::new();
+            function.hash(&mut hasher);
+            hasher.finish()
+        };
+        assert_ne!(native, spark);
+        assert_ne!(fingerprint(&native), fingerprint(&spark));
+        assert!(!native.inner().propagates_constant_folding_errors());
+        assert!(spark.with_aliases(["replacement_alias"]).inner().propagates_constant_folding_errors());
+    }
 
     #[test]
     fn sliced_replacements_skip_null_rows_and_keep_string_storage() -> Result<()> {

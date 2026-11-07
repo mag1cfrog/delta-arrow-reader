@@ -66,6 +66,7 @@ use sail_function::scalar::spark_decimal_cast::{DecimalCastMode, SparkDecimalCas
 use sail_function::scalar::spark_evaluation::SparkInterpretedEvaluation;
 use sail_function::scalar::spark_to_string::{SparkToLargeUtf8, SparkToUtf8, SparkToUtf8View};
 use sail_function::scalar::string::spark_regexp_extract_all::SparkRegexpExtract;
+use sail_function::scalar::string::spark_regexp_replace::SparkRegexpReplace;
 use sail_function::scalar::string::spark_substring::SparkSubstring;
 use sail_function::scalar::struct_function::StructFunction;
 
@@ -2647,6 +2648,72 @@ fn known_empty(plan: &LogicalPlan) -> bool {
 }
 
 impl Prepare {
+    // Fold closed replacement calls before an outer LIMIT can discard local VALUES rows.
+    fn prepare_local_regexp_replacements(
+        &self,
+        mut node: LogicalPlan,
+        options: &ConfigOptions,
+    ) -> Result<Transformed<LogicalPlan>> {
+        let names = datafusion_expr::expr_rewriter::NamePreserver::new(&node);
+        let LogicalPlan::Projection(project) = &mut node else {
+            return Ok(Transformed::no(node));
+        };
+        let eligible = |expr: &Expr| -> Result<bool> {
+            Ok(is_locally_evaluable(expr, false)?
+                && permits_constant_preparation(expr)?
+                && !expr.exists(|expr| {
+                    Ok(matches!(expr, Expr::ScalarFunction(function)
+                        if function.func.as_async().is_some()))
+                })?
+                && expr.exists(|expr| {
+                    Ok(matches!(expr, Expr::ScalarFunction(function)
+                        if function.func.inner().is::<SparkRegexpReplace>()
+                            && function.func.inner().propagates_constant_folding_errors()))
+                })?)
+        };
+        if !project.input.exists(|plan| Ok(matches!(plan, LogicalPlan::Values(_))))?
+            || !literal_regexp_input_permitted(&project.input)?
+            || !project.expr.iter().try_fold(false, |found, expr| {
+                Ok::<_, datafusion_common::DataFusionError>(found || eligible(expr)?)
+            })?
+        {
+            return Ok(Transformed::no(node));
+        }
+        // Native type admission precedes NULL folding or empty-input pruning.
+        for expr in &project.expr {
+            if eligible(expr)? {
+                let _ = create_physical_expr(expr, project.input.schema(), &self.props)?;
+            }
+        }
+        let input = self.simplify_local_input_expressions(
+            Arc::unwrap_or_clone(Arc::clone(&project.input)),
+        )?;
+        project.input = Arc::new(input.data);
+        if known_empty(&project.input) {
+            return Ok(Transformed::yes(LogicalPlan::EmptyRelation(
+                datafusion_expr::logical_plan::EmptyRelation {
+                    produce_one_row: false,
+                    schema: Arc::clone(&project.schema),
+                },
+            )));
+        }
+        let info = datafusion_expr::simplify::SimplifyContext::builder()
+            .with_schema(Arc::clone(project.input.schema()))
+            .with_config_options(Arc::new(options.clone()))
+            .build();
+        let simplifier = ExprSimplifier::new(info).with_local_input_errors();
+        let mut changed = input.transformed;
+        for expr in &mut project.expr {
+            if eligible(expr)? {
+                let name = names.save(expr);
+                let (prepared, _) = simplifier.simplify_with_cycle_count_transformed(expr.clone())?;
+                changed |= prepared.transformed;
+                *expr = name.restore(prepared.data);
+            }
+        }
+        Ok(Transformed::new_transformed(node.recompute_schema()?, changed))
+    }
+
     // Cache arguments after input checks, before current-expression previews can replay producers.
     fn prepare_array_errors_in_string_calls(
         &self,
@@ -3231,6 +3298,12 @@ impl Prepare {
         // evaluate their projection; nonempty ones preserve live CAST failures.
         let plan = plan
             .transform_up(|mut node| {
+                let replacement = if is_spark_query {
+                    self.prepare_local_regexp_replacements(node, options)?
+                } else {
+                    Transformed::no(node)
+                };
+                node = replacement.data;
                 let mut input_batch = None;
                 let mut casts = false;
                 let mut evaluable = true;
@@ -3464,7 +3537,7 @@ impl Prepare {
                 }
                 Ok(Transformed::new_transformed(
                     node,
-                    prepared.transformed || retained || simplified_input,
+                    replacement.transformed || prepared.transformed || retained || simplified_input,
                 ))
             })?
             .data;
