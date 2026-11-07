@@ -16,6 +16,8 @@ use spark_results::TestResult;
 const BOUNDS: &str = include_str!("fixtures/rand-comparison-bounds-spark.jsonl");
 const OPERANDS: &str = include_str!("fixtures/rand-comparison-bounds-operands-spark.jsonl");
 const ADMISSION: &str = include_str!("fixtures/rand-comparison-bounds-admission-spark.jsonl");
+const SUBQUERY_BOUNDS: &str =
+    include_str!("fixtures/rand-comparison-bounds-subqueries-spark.jsonl");
 
 fn references(source: &str, count: usize) -> TestResult<Vec<Value>> {
     let records = source
@@ -262,6 +264,16 @@ async fn rand_comparison_admission_and_errors_match_spark() -> TestResult {
         "rand-comparison-bounds-admission-spark.jsonl",
         ADMISSION,
         50,
+    )
+    .await
+}
+
+#[tokio::test]
+async fn rand_comparison_subquery_bounds_match_spark() -> TestResult {
+    compare_references(
+        "rand-comparison-bounds-subqueries-spark.jsonl",
+        SUBQUERY_BOUNDS,
+        4,
     )
     .await
 }

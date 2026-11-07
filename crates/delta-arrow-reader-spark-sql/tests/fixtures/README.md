@@ -167,7 +167,7 @@ remain for the existing CASE pruning rule to handle.
 
 ## RAND comparison bounds
 
-Three independent references cover RAND's half-open range [0, 1):
+Four independent references cover RAND's half-open range [0, 1):
 
 - [rand-comparison-bounds-spark.jsonl](rand-comparison-bounds-spark.jsonl) has 130
   observations for ordering bounds, operand orders, seed forms, equality and
@@ -178,6 +178,9 @@ Three independent references cover RAND's half-open range [0, 1):
 - [rand-comparison-bounds-admission-spark.jsonl](rand-comparison-bounds-admission-spark.jsonl)
   adds 50 observations for infinities, seed type/arity/foldability admission,
   live throwing seeds, and scalar-subquery errors.
+- [rand-comparison-bounds-subqueries-spark.jsonl](rand-comparison-bounds-subqueries-spark.jsonl)
+  adds four observations for constant bounds after OneRow scalar-subquery
+  inlining, with both operand orders and ANSI modes.
 
 Each file's first-line header is the source for its capture settings and
 provenance: Spark 4.2.0 revision
