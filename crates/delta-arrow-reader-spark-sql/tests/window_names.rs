@@ -237,12 +237,6 @@ fn matched_window_gap_owner(
         && observation["rows_raw"].is_array()
         && observation["ordered_rows_match"] == true;
     let matches = match (control["kind"].as_str()?, owner) {
-        ("parser_error", "#744") => {
-            case["expected"]["rows"].is_array()
-                && phase == "resolve"
-                && error.starts_with("External error: error in SQL parser: ")
-                && matches_unmaterialized_window_error(observation, error, phase)
-        }
         ("boolean_error", "#1045") => {
             case["expected"]["condition"] == "INVALID_PARAMETER_VALUE.BOOLEAN"
                 && phase == "resolve"
@@ -361,7 +355,7 @@ fn window_gap_checks_reject_changes_outside_owned_facets() -> TestResult {
             "native_phase":"encode","error":null,"ordered_rows_match":true,
         });
         match control["kind"].as_str().ok_or("missing retained kind")? {
-            "parser_error" | "boolean_error" | "offset_frame_error" | "offset_cast_phase" => {
+            "boolean_error" | "offset_frame_error" | "offset_cast_phase" => {
                 for key in [
                     "public_schema",
                     "optimized_schema",
