@@ -4126,3 +4126,47 @@ inserting only `[CAST_OVERFLOW]` and its cause context into the error. All origi
 reference and profile bytes remain unchanged. These checks preserve native
 failure boundaries and available Fields; complete raw Spark diagnostic parity
 remains unverified.
+
+## Aggregate query results
+
+`aggregate-query-results-spark.jsonl` records 18 aggregate statements in both
+ANSI modes, including global and keyed groups, mixed/empty/all-NULL inputs,
+HAVING, generated names and DISTINCT arguments. The cases manifest retains the
+original SQL, ordering flags, queried provider data and public results. The
+fixture header records the Spark build, runtime, settings and capture provenance.
+
+`aggregate_query_results.rs` compares complete public, analyzed, optimized and
+physical Fields before and after collection. It checks all 72 query/mode/batch
+contexts at batch sizes 1 and 32 with two target partitions. Mixed provider
+batches use two round-robin partitions; `empty_inputs` uses one empty partition.
+Ordered queries must retain output order; unordered comparisons preserve row
+multiplicity. This is bounded aggregate coverage within #142.
+
+Run from the standalone crate directory:
+
+```sh
+cargo test --workspace --no-fail-fast --locked --test aggregate_query_results -- --nocapture
+```
+
+To recapture, use Python 3.12, Java 21 and PySpark 4.2.0 at revision
+`32f7299601108917fb01920a54e084595b7b3bf8`. The capture script reuses the existing
+aggregate encoder for IEEE-754 AVG values and recursive array/struct values. It
+translates the observer's physical stage names and preserves actual ordered rows.
+The self-check covers that translation, ordering and duplicate preservation. It
+also checks normal gateway exit and timeout cleanup with mocks.
+
+```sh
+python tests/fixtures/capture_aggregate_query_results_spark.py --self-check
+aggregate_capture_dir="$(mktemp -d)"
+TZ=UTC python tests/fixtures/capture_aggregate_query_results_spark.py \
+  "$aggregate_capture_dir/aggregate-query-results-spark.jsonl"
+```
+
+Recapture creates a new file and compares all 36 public schemas and typed rowsets
+against the original manifest after observation. Review its complete stage Fields,
+settings and runtime provenance against the committed reference before replacing
+fixtures. The manifest pins stable build/settings metadata and original contracts;
+capture/request hashes remain per-run receipts in the fixture header. After
+normal shutdown, the script prints its owned JVM lifecycle receipt to stderr.
+If the gateway exceeds its shutdown timeout, the script kills and reaps that
+owned process and reports the timeout as a failed capture.
