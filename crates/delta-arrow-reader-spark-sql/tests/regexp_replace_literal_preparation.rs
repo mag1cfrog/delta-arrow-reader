@@ -243,7 +243,7 @@ async fn replacement_preparation_matches_all_34_independent_references() -> Test
     for representation in 0..3 {
         for batch_size in [1, 32] {
             let session = session(batch_size);
-            spark_inputs::register_inputs(&session, &registration, representation, batch_size)?;
+            string_binary::register_inputs(&session, &registration, representation, batch_size)?;
             assert!(marker_absent(&session));
             assert_eq!(native_controls(&session).await?, native);
             for case in references.inputs["cases"].as_array().ok_or("missing cases")? {
@@ -318,7 +318,7 @@ async fn replacement_null_no_match_and_pattern_priority_keep_their_boundaries() 
         for representation in 0..3 {
             for batch_size in [1, 32] {
                 let session = session(batch_size);
-                spark_inputs::register_inputs(&session, &records[0], representation, batch_size)?;
+                string_binary::register_inputs(&session, &records[0], representation, batch_size)?;
                 for case in &cases {
                     let actual = capture_observation(&session, case).await?;
                     let matches = matches_reference(&actual, &case["expected"]);
