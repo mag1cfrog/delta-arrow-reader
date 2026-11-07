@@ -60,7 +60,10 @@ fn required_pattern_error_matches(expected: &Value, actual: &Value) -> bool {
         })
 }
 
-fn inherited_folded_error_contract_matches(observation: &Value, controls: &[Value]) -> Option<bool> {
+fn inherited_folded_error_contract_matches(
+    observation: &Value,
+    controls: &[Value],
+) -> Option<bool> {
     let control = controls.iter().find(|control| {
         control["id"] == observation["id"] && control["ansi"] == observation["ansi"]
     })?;
@@ -141,8 +144,14 @@ async fn regexp_operator_names_match_spark_and_preserve_tracked_error_contract()
         .collect::<Result<Vec<_>, _>>()?;
     assert_eq!(inherited.len(), 3);
     assert_eq!(inherited[0]["issue"], 1079);
-    assert_eq!(inherited[0]["kind"], "expected_target_contracts_not_captured_observations");
-    assert_eq!(inherited[0]["context_fields_removed"], json!(["representation", "batch_size"]));
+    assert_eq!(
+        inherited[0]["kind"],
+        "expected_target_contracts_not_captured_observations"
+    );
+    assert_eq!(
+        inherited[0]["context_fields_removed"],
+        json!(["representation", "batch_size"])
+    );
     assert_eq!(inherited[0]["contexts_per_control"], 6);
     let controls = &inherited[1..];
     let control_identities = controls
@@ -154,11 +163,18 @@ async fn regexp_operator_names_match_spark_and_preserve_tracked_error_contract()
             ))
         })
         .collect::<TestResult<BTreeSet<_>>>()?;
-    assert_eq!(control_identities.len(), controls.len(), "duplicate inherited phase control");
-    assert_eq!(control_identities, BTreeSet::from([
-        ("regexp_operator_invalid_folded", false),
-        ("regexp_operator_invalid_folded", true),
-    ]));
+    assert_eq!(
+        control_identities.len(),
+        controls.len(),
+        "duplicate inherited phase control"
+    );
+    assert_eq!(
+        control_identities,
+        BTreeSet::from([
+            ("regexp_operator_invalid_folded", false),
+            ("regexp_operator_invalid_folded", true),
+        ])
+    );
     let mut observations = Vec::new();
     let mut differences = Vec::new();
     let mut successes = 0;
@@ -286,12 +302,18 @@ async fn regexp_operator_names_match_spark_and_preserve_tracked_error_contract()
     assert_eq!(errors, 24);
     assert_eq!(original_mixed, 12);
     assert_eq!(
-        observations.iter().filter(|observed| observed["strict_spark_matches"] == true).count(),
+        observations
+            .iter()
+            .filter(|observed| observed["strict_spark_matches"] == true)
+            .count(),
         120,
         "#1079: retire repaired controls and update the strict inventory"
     );
     assert_eq!(
-        observations.iter().filter(|observed| observed["inherited_phase_preserved"] == true).count(),
+        observations
+            .iter()
+            .filter(|observed| observed["inherited_phase_preserved"] == true)
+            .count(),
         12,
         "#1079: retire repaired controls and update the tracked phase inventory"
     );
@@ -419,13 +441,22 @@ fn inherited_folded_error_contract_requires_complete_observation_and_spark_names
         let mut observed = control.clone();
         observed["representation"] = json!(2);
         observed["batch_size"] = json!(32);
-        assert_eq!(inherited_folded_error_contract_matches(&observed, controls), Some(true));
+        assert_eq!(
+            inherited_folded_error_contract_matches(&observed, controls),
+            Some(true)
+        );
         assert_eq!(observed["strict_spark_matches"], false);
         assert_eq!(observed["comparison"]["public_schema"], true);
         assert_eq!(observed["comparison"]["analyzed_schema"], true);
-        assert_eq!(observed["comparison"]["required_error_cause_and_stage"], false);
+        assert_eq!(
+            observed["comparison"]["required_error_cause_and_stage"],
+            false
+        );
         let expected = &observed["reference"]["expected"];
-        assert_eq!(observed["actual"]["analyzed_schema"], expected["analyzed_schema"]);
+        assert_eq!(
+            observed["actual"]["analyzed_schema"],
+            expected["analyzed_schema"]
+        );
         assert_eq!(expected["phase"], "optimized_schema");
         assert_eq!(observed["actual"]["error_stage"], "execute");
         assert!(expected["optimized_schema"].is_null());
@@ -453,8 +484,14 @@ fn inherited_folded_error_contract_requires_complete_observation_and_spark_names
             "/available_reference_stages/physical",
         ] {
             let mut changed = observed.clone();
-            *changed.pointer_mut(pointer).ok_or("missing mutation target")? = json!("changed");
-            assert_eq!(inherited_folded_error_contract_matches(&changed, controls), Some(false), "{pointer}");
+            *changed
+                .pointer_mut(pointer)
+                .ok_or("missing mutation target")? = json!("changed");
+            assert_eq!(
+                inherited_folded_error_contract_matches(&changed, controls),
+                Some(false),
+                "{pointer}"
+            );
         }
         // A real phase fix must require retiring this inherited contract.
         let mut improved = observed.clone();
@@ -469,22 +506,39 @@ fn inherited_folded_error_contract_requires_complete_observation_and_spark_names
         improved["actual"]["error"] = json!(format!("physical: {error}"));
         improved["actual"]["physical_schema"] = Value::Null;
         improved["actual"]["physical_arrow_schema"] = Value::Null;
-        assert!(required_pattern_error_matches(expected, &improved["actual"]));
-        assert!(improved["comparison"]
-            .as_object()
-            .ok_or("missing improved comparison")?
-            .values()
-            .all(|facet| facet == true));
-        assert_eq!(inherited_folded_error_contract_matches(&improved, controls), Some(false));
+        assert!(required_pattern_error_matches(
+            expected,
+            &improved["actual"]
+        ));
+        assert!(
+            improved["comparison"]
+                .as_object()
+                .ok_or("missing improved comparison")?
+                .values()
+                .all(|facet| facet == true)
+        );
+        assert_eq!(
+            inherited_folded_error_contract_matches(&improved, controls),
+            Some(false)
+        );
         let mut with_rows = observed.clone();
         with_rows["actual"]["rows"] = json!([]);
-        assert_eq!(inherited_folded_error_contract_matches(&with_rows, controls), Some(false));
+        assert_eq!(
+            inherited_folded_error_contract_matches(&with_rows, controls),
+            Some(false)
+        );
         let mut old_name = observed.clone();
         old_name["actual"]["analyzed_schema"]["fields"][0]["name"] = json!("REGEXP(ab, [)");
-        assert_eq!(inherited_folded_error_contract_matches(&old_name, controls), Some(false));
+        assert_eq!(
+            inherited_folded_error_contract_matches(&old_name, controls),
+            Some(false)
+        );
         let mut other = observed.clone();
         other["id"] = json!("regexp_operator_invalid_runtime");
-        assert_eq!(inherited_folded_error_contract_matches(&other, controls), None);
+        assert_eq!(
+            inherited_folded_error_contract_matches(&other, controls),
+            None
+        );
     }
     Ok(())
 }
