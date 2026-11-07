@@ -2,6 +2,7 @@
 
 use std::error::Error;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 
 use arrow::array::{
     Array, ArrayRef, Date32Array, Decimal128Array, Float32Array, Float64Array, Int32Array,
@@ -11,6 +12,11 @@ use arrow::compute::{SortOptions, take_record_batch};
 use arrow::datatypes::{DataType, Field, Int32Type, Schema, SchemaRef, i256};
 use arrow::record_batch::RecordBatch;
 use datafusion::common::ScalarValue;
+use datafusion::common::config::ConfigOptions;
+use datafusion::common::stats::Precision;
+use datafusion::datasource::memory::MemorySourceConfig;
+use datafusion::datasource::source::DataSourceExec;
+use datafusion::execution::TaskContext;
 use datafusion::functions_aggregate::count::count_udaf;
 use datafusion::functions_aggregate::min_max::max_udaf;
 use datafusion::functions_window::nth_value::{first_value_udwf, last_value_udwf, nth_value_udwf};
@@ -22,14 +28,26 @@ use datafusion::logical_expr::window_state::{
 use datafusion::logical_expr::{
     WindowFrame, WindowFrameBound, WindowFrameUnits, WindowFunctionDefinition,
 };
-use datafusion::physical_expr::expressions::{Literal, col};
+use datafusion::physical_expr::expressions::{Literal, col, lit};
 use datafusion::physical_expr::window::{PartitionBatches, PartitionWindowAggStates, WindowExpr};
 use datafusion::physical_expr::{LexOrdering, PhysicalSortExpr};
-use datafusion::physical_plan::ExecutionPlan;
-use datafusion::physical_plan::streaming::StreamingTableExec;
+use datafusion::physical_optimizer::PhysicalOptimizerRule;
+use datafusion::physical_optimizer::limit_pushdown::LimitPushdown;
+use datafusion::physical_plan::coalesce_partitions::CoalescePartitionsExec;
+use datafusion::physical_plan::execution_plan::{Boundedness, CardinalityEffect};
+use datafusion::physical_plan::limit::GlobalLimitExec;
+use datafusion::physical_plan::projection::ProjectionExec;
+use datafusion::physical_plan::sorts::sort::SortExec;
+use datafusion::physical_plan::stream::RecordBatchStreamAdapter;
+use datafusion::physical_plan::streaming::{PartitionStream, StreamingTableExec};
+use datafusion::physical_plan::test::TestMemoryExec;
 use datafusion::physical_plan::windows::{
-    WindowAggExec, create_window_expr, get_best_fitting_window,
+    BoundedWindowAggExec, WindowAggExec, create_window_expr, get_best_fitting_window,
 };
+use datafusion::physical_plan::{
+    ExecutionPlan, ExecutionPlanProperties, InputOrderMode, SendableRecordBatchStream,
+};
+use futures_util::{FutureExt, StreamExt, stream};
 
 type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
 
@@ -1750,7 +1768,12 @@ fn spark_integer_range_arithmetic_wraps_or_checks_each_signed_width() -> TestRes
             RangeOffsetArithmetic::Spark { ansi_mode: true },
         )
         .expect_err("checked addition must overflow");
-        assert!(error.to_string().contains("[ARITHMETIC_OVERFLOW]"));
+        let condition = if matches!(maximum, ScalarValue::Int8(_) | ScalarValue::Int16(_)) {
+            "[BINARY_ARITHMETIC_OVERFLOW]"
+        } else {
+            "[ARITHMETIC_OVERFLOW]"
+        };
+        assert!(error.to_string().contains(condition));
         let following_minimum = WindowFrameBound::Following(minimum.clone());
         // Direct checked subtraction would accept MIN-MIN; Spark first negates the offset.
         assert_eq!(
@@ -2264,6 +2287,1158 @@ fn spark_float_range_negation_preserves_signed_zero_before_addition() -> TestRes
             };
             assert_eq!(target32.to_bits(), (-0.0_f32).to_bits());
             assert_eq!(target64.to_bits(), (-0.0_f64).to_bits());
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn spark_integer_range_guards_are_derived_from_nonzero_offsets() -> TestResult {
+    for one in [
+        ScalarValue::Int8(Some(1)),
+        ScalarValue::Int16(Some(1)),
+        ScalarValue::Int32(Some(1)),
+        ScalarValue::Int64(Some(1)),
+    ] {
+        let native = WindowFrame::new_bounds(
+            WindowFrameUnits::Range,
+            WindowFrameBound::Preceding(ScalarValue::Null),
+            WindowFrameBound::Preceding(one.clone()),
+        );
+        assert!(native.is_causal());
+        assert!(!native.has_nonzero_spark_integer_range_offset());
+        for ansi_mode in [false, true] {
+            let spark = native
+                .clone()
+                .with_range_offset_arithmetic(RangeOffsetArithmetic::Spark { ansi_mode });
+            assert!(spark.has_nonzero_spark_integer_range_offset());
+            assert!(!spark.is_causal());
+            assert!(format!("{spark:?}").contains("is_causal: false"));
+            assert_eq!(spark.to_string(), native.to_string());
+            assert_eq!(spark.clone(), spark.reverse().reverse());
+            assert_eq!(
+                spark.with_range_offset_arithmetic(RangeOffsetArithmetic::DataFusion),
+                native
+            );
+            for end in [
+                WindowFrameBound::CurrentRow,
+                WindowFrameBound::Following(ScalarValue::new_zero(&one.data_type())?),
+                WindowFrameBound::Following(ScalarValue::Null),
+            ] {
+                let frame = WindowFrame::new_bounds(
+                    WindowFrameUnits::Range,
+                    WindowFrameBound::CurrentRow,
+                    end,
+                );
+                let causal = frame.is_causal();
+                let spark =
+                    frame.with_range_offset_arithmetic(RangeOffsetArithmetic::Spark { ansi_mode });
+                assert!(!spark.has_nonzero_spark_integer_range_offset());
+                assert_eq!(spark.is_causal(), causal);
+            }
+        }
+    }
+    let unsigned = WindowFrame::new_bounds(
+        WindowFrameUnits::Range,
+        WindowFrameBound::CurrentRow,
+        WindowFrameBound::Following(ScalarValue::UInt32(Some(1))),
+    )
+    .with_range_offset_arithmetic(RangeOffsetArithmetic::Spark { ansi_mode: false });
+    assert!(!unsigned.has_nonzero_spark_integer_range_offset());
+    Ok(())
+}
+
+#[test]
+fn spark_finite_integer_cursors_never_retract_unconsumed_rows() -> TestResult {
+    for minimum in [
+        ScalarValue::Int8(Some(i8::MIN)),
+        ScalarValue::Int16(Some(i16::MIN)),
+        ScalarValue::Int32(Some(i32::MIN)),
+        ScalarValue::Int64(Some(i64::MIN)),
+    ] {
+        let key_type = minimum.data_type();
+        let keys = ScalarValue::iter_to_array(
+            [-4, 0, 1, 1, 3, 7]
+                .into_iter()
+                .map(|key| ScalarValue::Int32(Some(key)).cast_to(&key_type))
+                .collect::<datafusion::common::Result<Vec<_>>>()?,
+        )?;
+        let batch = RecordBatch::try_new(
+            Arc::new(Schema::new(vec![
+                Field::new("id", DataType::Int32, false),
+                Field::new("k", key_type.clone(), false),
+            ])),
+            vec![
+                Arc::new(Int32Array::from(vec![0, 1, 2, 3, 4, 5])),
+                keys.clone(),
+            ],
+        )?;
+        let frame = Arc::new(
+            WindowFrame::new_bounds(
+                WindowFrameUnits::Range,
+                WindowFrameBound::Preceding(minimum),
+                WindowFrameBound::Following(ScalarValue::new_one(&key_type)?),
+            )
+            .with_range_offset_arithmetic(RangeOffsetArithmetic::Spark { ansi_mode: false }),
+        );
+        let mut context = WindowFrameContext::new(frame.clone(), vec![SortOptions::default()]);
+        let mut last = 0..0;
+        for (idx, expected) in [1..1, 1..4, 1..4, 1..4, 1..5, 1..6].into_iter().enumerate() {
+            let next = context.calculate_range(std::slice::from_ref(&keys), &last, 6, idx)?;
+            assert_eq!(next, expected, "{key_type:?} row{idx}");
+            assert!(last.start <= next.start && last.end <= next.end && next.start <= next.end);
+            last = next;
+        }
+        let window = create_window_expr(
+            &WindowFunctionDefinition::AggregateUDF(count_udaf()),
+            "n".into(),
+            &[col("id", &batch.schema())?],
+            &[],
+            &[PhysicalSortExpr {
+                expr: col("k", &batch.schema())?,
+                options: SortOptions::default(),
+            }],
+            frame,
+            batch.schema(),
+            false,
+            false,
+            None,
+        )?;
+        assert!(window.uses_bounded_memory());
+        let values = window.evaluate(&batch)?;
+        assert_eq!(values.null_count(), 0);
+        assert_eq!(
+            values
+                .as_any()
+                .downcast_ref::<Int64Array>()
+                .ok_or("count type")?
+                .values()
+                .as_ref(),
+            &[0, 3, 3, 3, 4, 5]
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn spark_finite_integer_sparse_completion_prunes_consumed_rows() -> TestResult {
+    for ansi_mode in [false, true] {
+        for descending in [false, true] {
+            for (function, ordinal, is_count) in [
+                (
+                    WindowFunctionDefinition::AggregateUDF(count_udaf()),
+                    None,
+                    true,
+                ),
+                (
+                    WindowFunctionDefinition::WindowUDF(first_value_udwf()),
+                    None,
+                    false,
+                ),
+                (
+                    WindowFunctionDefinition::WindowUDF(last_value_udwf()),
+                    None,
+                    false,
+                ),
+                (
+                    WindowFunctionDefinition::WindowUDF(nth_value_udwf()),
+                    Some(2),
+                    false,
+                ),
+            ] {
+                let first = source_batch(&[(0, 0, 0), (1, 1, 100)], false, descending)?;
+                let schema = first.schema();
+                let mut args = vec![col("id", &schema)?];
+                if let Some(ordinal) = ordinal {
+                    args.push(Arc::new(Literal::new(ScalarValue::Int64(Some(ordinal)))));
+                }
+                let window = create_window_expr(
+                    &function,
+                    "v".into(),
+                    &args,
+                    &[col("p", &schema)?],
+                    &[PhysicalSortExpr {
+                        expr: col("k", &schema)?,
+                        options: SortOptions {
+                            descending,
+                            nulls_first: true,
+                        },
+                    }],
+                    Arc::new(
+                        WindowFrame::new_bounds(
+                            WindowFrameUnits::Range,
+                            WindowFrameBound::CurrentRow,
+                            WindowFrameBound::Following(ScalarValue::Int32(Some(1))),
+                        )
+                        .with_range_offset_arithmetic(RangeOffsetArithmetic::Spark { ansi_mode }),
+                    ),
+                    schema,
+                    false,
+                    false,
+                    None,
+                )?;
+                assert!(window.uses_bounded_memory());
+                let mut buffers = PartitionBatches::default();
+                let mut states = PartitionWindowAggStates::default();
+                append_linear_batch(window.as_ref(), &mut buffers, &mut states, first)?;
+                let key = vec![ScalarValue::Int32(Some(0))];
+                assert_eq!(states[&key].state.out_col.len(), 1);
+                for (id, a_key, b_key) in [(2, 101, 103), (4, 104, 106)] {
+                    append_linear_batch(
+                        window.as_ref(),
+                        &mut buffers,
+                        &mut states,
+                        source_batch(&[(id, 0, a_key), (id + 1, 1, b_key)], false, descending)?,
+                    )?;
+                    prune_partition(&mut buffers, &mut states, 0, 1)?;
+                    assert_eq!(buffers[&key].record_batch.num_rows(), 1);
+                }
+                let state = &states[&key].state;
+                assert_eq!(state.offset_pruned_rows, 2);
+                assert_eq!(state.out_col.len(), 3);
+                assert!(!state.is_end);
+                for (index, id) in [0, 2, 4].into_iter().enumerate() {
+                    let expected = if is_count {
+                        ScalarValue::Int64(Some(1))
+                    } else if ordinal.is_some() {
+                        ScalarValue::Int32(None)
+                    } else {
+                        ScalarValue::Int32(Some(id))
+                    };
+                    assert_eq!(
+                        ScalarValue::try_from_array(&state.out_col, index)?,
+                        expected
+                    );
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn nullable_integer_range_batch(rows: &[(i32, i32, Option<i32>)]) -> TestResult<RecordBatch> {
+    Ok(RecordBatch::try_new(
+        Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Int32, false),
+            Field::new("p", DataType::Int32, false),
+            Field::new("k", DataType::Int32, true),
+        ])),
+        vec![
+            Arc::new(Int32Array::from_iter_values(rows.iter().map(|row| row.0))),
+            Arc::new(Int32Array::from_iter_values(rows.iter().map(|row| row.1))),
+            Arc::new(Int32Array::from(
+                rows.iter().map(|row| row.2).collect::<Vec<_>>(),
+            )),
+        ],
+    )?)
+}
+
+#[test]
+fn spark_finite_integer_completion_keeps_exhausted_upper_errors_lazy() -> TestResult {
+    for append_candidate in [false, true] {
+        let first = nullable_integer_range_batch(&[
+            (0, 0, Some(i32::MAX - 2)),
+            (1, 0, Some(i32::MAX - 1)),
+            (2, 0, Some(i32::MAX)),
+            (3, 1, None),
+        ])?;
+        let schema = first.schema();
+        let window = create_window_expr(
+            &WindowFunctionDefinition::AggregateUDF(count_udaf()),
+            "n".into(),
+            &[col("id", &schema)?],
+            &[col("p", &schema)?],
+            &[PhysicalSortExpr {
+                expr: col("k", &schema)?,
+                options: SortOptions {
+                    descending: false,
+                    nulls_first: false,
+                },
+            }],
+            Arc::new(
+                WindowFrame::new_bounds(
+                    WindowFrameUnits::Range,
+                    WindowFrameBound::Preceding(ScalarValue::Null),
+                    WindowFrameBound::Following(ScalarValue::Int32(Some(1))),
+                )
+                .with_range_offset_arithmetic(RangeOffsetArithmetic::Spark { ansi_mode: true }),
+            ),
+            schema,
+            false,
+            false,
+            None,
+        )?;
+        let mut buffers = PartitionBatches::default();
+        let mut states = PartitionWindowAggStates::default();
+        append_linear_batch(window.as_ref(), &mut buffers, &mut states, first)?;
+        assert_eq!(counts(&states, 0)?, [2, 3]);
+        let key = vec![ScalarValue::Int32(Some(0))];
+        assert_eq!(states[&key].state.window_frame_range.end, 3);
+        assert_eq!(states[&key].state.last_calculated_index, 2);
+        prune_partition(&mut buffers, &mut states, 0, 2)?;
+        assert_eq!(buffers[&key].record_batch.num_rows(), 1);
+        if append_candidate {
+            let error = append_linear_batch(
+                window.as_ref(),
+                &mut buffers,
+                &mut states,
+                nullable_integer_range_batch(&[(4, 0, None)])?,
+            )
+            .expect_err("a new candidate requires the checked MAX+1 comparison");
+            assert!(
+                error
+                    .to_string()
+                    .contains("[ARITHMETIC_OVERFLOW] RANGE comparison target")
+            );
+        } else {
+            for buffer in buffers.values_mut() {
+                buffer.is_end = true;
+            }
+            window.evaluate_stateful(&buffers, &mut states)?;
+            let values = &states[&key].state.out_col;
+            assert_eq!(values.null_count(), 0);
+            assert_eq!(
+                values
+                    .as_any()
+                    .downcast_ref::<Int64Array>()
+                    .ok_or("count type")?
+                    .values()
+                    .as_ref(),
+                &[2, 3, 3]
+            );
+        }
+    }
+    Ok(())
+}
+
+#[derive(Debug)]
+struct PendingIntegerRangeInput(RecordBatch);
+
+impl PartitionStream for PendingIntegerRangeInput {
+    fn schema(&self) -> &SchemaRef {
+        self.0.schema_ref()
+    }
+
+    fn execute(&self, _: Arc<TaskContext>) -> SendableRecordBatchStream {
+        let batches = stream::iter([Ok(self.0.clone())]).chain(stream::pending());
+        Box::pin(RecordBatchStreamAdapter::new(self.0.schema(), batches))
+    }
+}
+
+#[tokio::test]
+async fn spark_finite_integer_bounded_executor_emits_before_input_eof() -> TestResult {
+    for linear in [false, true] {
+        let batch = if linear {
+            source_batch(&[(0, 0, 0), (1, 1, 100)], false, false)?
+        } else {
+            source_batch(&[(0, 0, 0), (1, 0, 1), (2, 1, 0)], false, false)?
+        };
+        let schema = batch.schema();
+        let key_order = PhysicalSortExpr {
+            expr: col("k", &schema)?,
+            options: SortOptions::default(),
+        };
+        let mut ordering = if linear {
+            vec![]
+        } else {
+            vec![PhysicalSortExpr {
+                expr: col("p", &schema)?,
+                options: SortOptions::default(),
+            }]
+        };
+        ordering.push(key_order.clone());
+        let input: Arc<dyn ExecutionPlan> = Arc::new(StreamingTableExec::try_new(
+            schema.clone(),
+            vec![Arc::new(PendingIntegerRangeInput(batch))],
+            None,
+            Some(LexOrdering::new(ordering).ok_or("empty source order")?),
+            true,
+            None,
+        )?);
+        let window = create_window_expr(
+            &WindowFunctionDefinition::AggregateUDF(count_udaf()),
+            "n".into(),
+            &[col("id", &schema)?],
+            &[col("p", &schema)?],
+            &[key_order],
+            Arc::new(
+                WindowFrame::new_bounds(
+                    WindowFrameUnits::Range,
+                    WindowFrameBound::CurrentRow,
+                    WindowFrameBound::Following(ScalarValue::Int32(Some(1))),
+                )
+                .with_range_offset_arithmetic(RangeOffsetArithmetic::Spark { ansi_mode: true }),
+            ),
+            schema,
+            false,
+            false,
+            None,
+        )?;
+        let plan =
+            get_best_fitting_window(&[window], &input, &[])?.ok_or("fitting window missing")?;
+        assert!(plan.downcast_ref::<BoundedWindowAggExec>().is_some());
+        let mut output = plan.execute(0, Arc::new(TaskContext::default()))?;
+        let ready = output
+            .next()
+            .now_or_never()
+            .ok_or("finite frame waited for physical EOF")?
+            .ok_or("stream ended before its pending source")??;
+        let values = ready
+            .column(3)
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .ok_or("count type")?;
+        assert_eq!(
+            values.values().as_ref(),
+            if linear { &[1][..] } else { &[2, 1][..] }
+        );
+        assert!(output.next().now_or_never().is_none());
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn spark_finite_integer_output_fetch_preserves_following_lookahead_and_groups() -> TestResult
+{
+    for batch_size in [1, 32] {
+        let batch = source_batch(
+            &[(0, 0, 0), (1, 0, 1), (2, 1, 0), (3, 1, 1), (4, 1, i32::MAX)],
+            false,
+            false,
+        )?;
+        let schema = batch.schema();
+        let key_order = PhysicalSortExpr {
+            expr: col("k", &schema)?,
+            options: SortOptions::default(),
+        };
+        let ordering = LexOrdering::new(vec![
+            PhysicalSortExpr {
+                expr: col("p", &schema)?,
+                options: SortOptions::default(),
+            },
+            key_order.clone(),
+        ])
+        .ok_or("empty order")?;
+        let batches = (0..batch.num_rows())
+            .step_by(batch_size)
+            .map(|offset| batch.slice(offset, batch_size.min(batch.num_rows() - offset)))
+            .collect::<Vec<_>>();
+        let source = Arc::new(
+            TestMemoryExec::try_new(&[batches], schema.clone(), None)?
+                .try_with_sort_information(vec![ordering])?,
+        );
+        let input: Arc<dyn ExecutionPlan> = Arc::new(TestMemoryExec::update_cache(&source));
+        let mut windows = Vec::new();
+        for (function, name) in [
+            (WindowFunctionDefinition::AggregateUDF(count_udaf()), "n"),
+            (
+                WindowFunctionDefinition::WindowUDF(last_value_udwf()),
+                "last_id",
+            ),
+        ] {
+            windows.push(create_window_expr(
+                &function,
+                name.into(),
+                &[col("id", &schema)?],
+                &[col("p", &schema)?],
+                std::slice::from_ref(&key_order),
+                Arc::new(
+                    WindowFrame::new_bounds(
+                        WindowFrameUnits::Range,
+                        WindowFrameBound::CurrentRow,
+                        WindowFrameBound::Following(ScalarValue::Int32(Some(1))),
+                    )
+                    .with_range_offset_arithmetic(RangeOffsetArithmetic::Spark { ansi_mode: true }),
+                ),
+                schema.clone(),
+                false,
+                false,
+                None,
+            )?);
+        }
+        let plan =
+            get_best_fitting_window(&windows, &input, &[])?.ok_or("fitting window missing")?;
+        assert_eq!(plan.fetch(), None);
+        let native = count_window(
+            schema.clone(),
+            WindowFrameUnits::Range,
+            WindowFrameBound::Following(ScalarValue::Int32(Some(1))),
+            SortOptions::default(),
+        )?;
+        let native_plan = get_best_fitting_window(&[native], &input, &[])?
+            .ok_or("native fitting window missing")?;
+        assert!(native_plan.with_fetch(Some(3)).is_none());
+        let limited = plan.with_fetch(Some(3)).ok_or("output fetch unsupported")?;
+        assert_eq!(limited.fetch(), Some(3));
+        assert!(!limited.supports_limit_pushdown());
+        let rebuilt = limited.clone().with_new_children(vec![input.clone()])?;
+        assert_eq!(rebuilt.fetch(), Some(3));
+        assert_eq!(
+            rebuilt
+                .with_fetch(None)
+                .ok_or("fetch removal unsupported")?
+                .fetch(),
+            None
+        );
+        let requested: Arc<dyn ExecutionPlan> =
+            Arc::new(GlobalLimitExec::new(plan.clone(), 1, Some(2)));
+        let limited = LimitPushdown::new().optimize(requested, &ConfigOptions::default())?;
+        assert_eq!(limited.children()[0].fetch(), Some(3));
+        let batches =
+            datafusion::physical_plan::collect(limited, Arc::new(TaskContext::default())).await?;
+        let mut rows = Vec::new();
+        for batch in batches {
+            for row in 0..batch.num_rows() {
+                rows.push((
+                    ScalarValue::try_from_array(batch.column(0), row)?,
+                    ScalarValue::try_from_array(batch.column(3), row)?,
+                    ScalarValue::try_from_array(batch.column(4), row)?,
+                ));
+            }
+        }
+        assert_eq!(
+            rows,
+            vec![
+                (
+                    ScalarValue::Int32(Some(1)),
+                    ScalarValue::Int64(Some(1)),
+                    ScalarValue::Int32(Some(1))
+                ),
+                (
+                    ScalarValue::Int32(Some(2)),
+                    ScalarValue::Int64(Some(2)),
+                    ScalarValue::Int32(Some(3))
+                ),
+            ]
+        );
+        let sorted: Arc<dyn ExecutionPlan> = Arc::new(
+            SortExec::new(
+                LexOrdering::new(vec![PhysicalSortExpr {
+                    expr: col("n", &plan.schema())?,
+                    options: SortOptions {
+                        descending: true,
+                        nulls_first: false,
+                    },
+                }])
+                .ok_or("empty result order")?,
+                plan.clone(),
+            )
+            .with_fetch(Some(1)),
+        );
+        let sorted = LimitPushdown::new().optimize(sorted, &ConfigOptions::default())?;
+        assert_eq!(sorted.children()[0].fetch(), None);
+        let error = datafusion::physical_plan::collect(sorted, Arc::new(TaskContext::default()))
+            .await
+            .expect_err("sorting by the window result requires the later MAX+1 output");
+        assert!(
+            error
+                .to_string()
+                .contains("[ARITHMETIC_OVERFLOW] RANGE comparison target")
+        );
+        let error = datafusion::physical_plan::collect(plan, Arc::new(TaskContext::default()))
+            .await
+            .expect_err("the unlimited last output row requires MAX+1");
+        assert!(
+            error
+                .to_string()
+                .contains("[ARITHMETIC_OVERFLOW] RANGE comparison target")
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn spark_finite_integer_bounded_batches_preserve_empty_frames_and_retraction() -> TestResult {
+    for batch_size in [1, 32] {
+        let batch = source_batch(
+            &[
+                (0, 0, -4),
+                (1, 0, 0),
+                (2, 0, 1),
+                (3, 0, 1),
+                (4, 0, 3),
+                (5, 0, 7),
+            ],
+            false,
+            false,
+        )?;
+        let schema = batch.schema();
+        let key_order = PhysicalSortExpr {
+            expr: col("k", &schema)?,
+            options: SortOptions::default(),
+        };
+        let ordering = LexOrdering::new(vec![key_order.clone()]).ok_or("empty order")?;
+        let batches = (0..batch.num_rows())
+            .step_by(batch_size)
+            .map(|offset| batch.slice(offset, batch_size.min(batch.num_rows() - offset)))
+            .collect::<Vec<_>>();
+        let source = Arc::new(
+            TestMemoryExec::try_new(&[batches], schema.clone(), None)?
+                .try_with_sort_information(vec![ordering])?,
+        );
+        let input: Arc<dyn ExecutionPlan> = Arc::new(TestMemoryExec::update_cache(&source));
+        let mut windows = Vec::new();
+        for (function, name) in [
+            (WindowFunctionDefinition::AggregateUDF(count_udaf()), "n"),
+            (
+                WindowFunctionDefinition::WindowUDF(first_value_udwf()),
+                "first_id",
+            ),
+            (
+                WindowFunctionDefinition::WindowUDF(last_value_udwf()),
+                "last_id",
+            ),
+        ] {
+            windows.push(create_window_expr(
+                &function,
+                name.into(),
+                &[col("id", &schema)?],
+                &[],
+                std::slice::from_ref(&key_order),
+                Arc::new(
+                    WindowFrame::new_bounds(
+                        WindowFrameUnits::Range,
+                        WindowFrameBound::Preceding(ScalarValue::Int32(Some(i32::MIN))),
+                        WindowFrameBound::Following(ScalarValue::Int32(Some(1))),
+                    )
+                    .with_range_offset_arithmetic(
+                        RangeOffsetArithmetic::Spark { ansi_mode: false },
+                    ),
+                ),
+                schema.clone(),
+                false,
+                false,
+                None,
+            )?);
+        }
+        let plan =
+            get_best_fitting_window(&windows, &input, &[])?.ok_or("fitting window missing")?;
+        assert!(plan.downcast_ref::<BoundedWindowAggExec>().is_some());
+        let batches =
+            datafusion::physical_plan::collect(plan, Arc::new(TaskContext::default())).await?;
+        let mut rows = Vec::new();
+        for batch in batches {
+            for row in 0..batch.num_rows() {
+                rows.push((
+                    ScalarValue::try_from_array(batch.column(3), row)?,
+                    ScalarValue::try_from_array(batch.column(4), row)?,
+                    ScalarValue::try_from_array(batch.column(5), row)?,
+                ));
+            }
+        }
+        assert_eq!(
+            rows,
+            [
+                (0, None, None),
+                (3, Some(1), Some(3)),
+                (3, Some(1), Some(3)),
+                (3, Some(1), Some(3)),
+                (4, Some(1), Some(4)),
+                (5, Some(1), Some(5)),
+            ]
+            .into_iter()
+            .map(|(count, first, last)| (
+                ScalarValue::Int64(Some(count)),
+                ScalarValue::Int32(first),
+                ScalarValue::Int32(last),
+            ))
+            .collect::<Vec<_>>()
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn spark_finite_integer_planning_declines_reversal_and_result_ordering() -> TestResult {
+    let schema = Arc::new(Schema::new(vec![Field::new("k", DataType::Int32, false)]));
+    let key_order = PhysicalSortExpr {
+        expr: col("k", &schema)?,
+        options: SortOptions::default(),
+    };
+    for arithmetic in [
+        RangeOffsetArithmetic::DataFusion,
+        RangeOffsetArithmetic::Spark { ansi_mode: false },
+        RangeOffsetArithmetic::Spark { ansi_mode: true },
+    ] {
+        let window = create_window_expr(
+            &WindowFunctionDefinition::AggregateUDF(max_udaf()),
+            "mx".into(),
+            &[col("k", &schema)?],
+            &[],
+            std::slice::from_ref(&key_order),
+            Arc::new(
+                WindowFrame::new_bounds(
+                    WindowFrameUnits::Range,
+                    WindowFrameBound::Preceding(ScalarValue::Int32(Some(i32::MAX))),
+                    WindowFrameBound::Preceding(ScalarValue::Int32(Some(i32::MAX - 1))),
+                )
+                .with_range_offset_arithmetic(arithmetic),
+            ),
+            schema.clone(),
+            false,
+            false,
+            None,
+        )?;
+        for reverse in [false, true] {
+            let source_order = if reverse {
+                key_order.reverse()
+            } else {
+                key_order.clone()
+            };
+            let input: Arc<dyn ExecutionPlan> = Arc::new(StreamingTableExec::try_new(
+                schema.clone(),
+                vec![],
+                None,
+                Some(LexOrdering::new(vec![source_order]).ok_or("empty order")?),
+                false,
+                None,
+            )?);
+            let fitting = get_best_fitting_window(std::slice::from_ref(&window), &input, &[])?;
+            assert_eq!(
+                fitting.is_some(),
+                !reverse || arithmetic == RangeOffsetArithmetic::DataFusion
+            );
+            if !reverse {
+                assert!(
+                    fitting
+                        .ok_or("matching order rejected")?
+                        .downcast_ref::<BoundedWindowAggExec>()
+                        .is_some()
+                );
+                let plan = WindowAggExec::try_new(vec![window.clone()], input, false)?;
+                let inferred = plan
+                    .properties()
+                    .equivalence_properties()
+                    .ordering_satisfy([PhysicalSortExpr {
+                        expr: col("mx", &plan.schema())?,
+                        options: SortOptions {
+                            descending: false,
+                            nulls_first: false,
+                        },
+                    }])?;
+                assert_eq!(inferred, arithmetic == RangeOffsetArithmetic::DataFusion);
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn spark_finite_integer_fetch_properties_follow_the_limit_and_current_input() -> TestResult {
+    let batch = source_batch(&[(0, 0, 0), (1, 0, 1), (2, 1, 0)], false, false)?;
+    let schema = batch.schema();
+    let key_order = PhysicalSortExpr {
+        expr: col("k", &schema)?,
+        options: SortOptions::default(),
+    };
+    let ordering = LexOrdering::new(vec![
+        PhysicalSortExpr {
+            expr: col("p", &schema)?,
+            options: SortOptions::default(),
+        },
+        key_order.clone(),
+    ])
+    .ok_or("empty input ordering")?;
+    let unbounded: Arc<dyn ExecutionPlan> = Arc::new(StreamingTableExec::try_new(
+        schema.clone(),
+        vec![Arc::new(PendingIntegerRangeInput(batch.clone()))],
+        None,
+        Some(ordering.clone()),
+        true,
+        None,
+    )?);
+    let source = Arc::new(
+        TestMemoryExec::try_new(&[vec![batch]], schema.clone(), None)?
+            .try_with_sort_information(vec![ordering])?,
+    );
+    let bounded: Arc<dyn ExecutionPlan> = Arc::new(TestMemoryExec::update_cache(&source));
+    let window = create_window_expr(
+        &WindowFunctionDefinition::AggregateUDF(count_udaf()),
+        "n".into(),
+        &[col("id", &schema)?],
+        &[col("p", &schema)?],
+        &[key_order],
+        Arc::new(
+            WindowFrame::new_bounds(
+                WindowFrameUnits::Range,
+                WindowFrameBound::CurrentRow,
+                WindowFrameBound::Following(ScalarValue::Int32(Some(1))),
+            )
+            .with_range_offset_arithmetic(RangeOffsetArithmetic::Spark { ansi_mode: true }),
+        ),
+        schema,
+        false,
+        false,
+        None,
+    )?;
+    let plan =
+        get_best_fitting_window(&[window], &unbounded, &[])?.ok_or("fitting window missing")?;
+    assert_eq!(plan.fetch(), None);
+    assert_eq!(plan.boundedness(), unbounded.boundedness());
+    assert!(plan.boundedness().is_unbounded());
+    assert!(matches!(
+        plan.cardinality_effect(),
+        CardinalityEffect::Equal
+    ));
+
+    let fetched = plan.with_fetch(Some(1)).ok_or("fetch unsupported")?;
+    assert_eq!(fetched.boundedness(), Boundedness::Bounded);
+    assert!(matches!(
+        fetched.cardinality_effect(),
+        CardinalityEffect::LowerEqual
+    ));
+    assert_eq!(fetched.output_ordering(), plan.output_ordering());
+    assert_eq!(fetched.pipeline_behavior(), plan.pipeline_behavior());
+    assert_eq!(fetched.clone().boundedness(), Boundedness::Bounded);
+    let cleared = fetched.with_fetch(None).ok_or("clear fetch unsupported")?;
+    assert_eq!(cleared.boundedness(), unbounded.boundedness());
+    assert!(matches!(
+        cleared.cardinality_effect(),
+        CardinalityEffect::Equal
+    ));
+
+    let same = fetched.clone().with_new_children(vec![unbounded.clone()])?;
+    assert_eq!(same.fetch(), Some(1));
+    assert_eq!(same.boundedness(), Boundedness::Bounded);
+    assert_eq!(
+        same.with_fetch(None)
+            .ok_or("clear same-child fetch")?
+            .boundedness(),
+        unbounded.boundedness()
+    );
+
+    let changed = fetched.with_new_children(vec![bounded.clone()])?;
+    assert_eq!(changed.fetch(), Some(1));
+    assert_eq!(changed.boundedness(), Boundedness::Bounded);
+    assert_eq!(
+        changed
+            .with_fetch(None)
+            .ok_or("clear changed-child fetch")?
+            .boundedness(),
+        bounded.boundedness()
+    );
+    let restored = changed.with_new_children(vec![unbounded.clone()])?;
+    assert_eq!(restored.fetch(), Some(1));
+    assert_eq!(restored.boundedness(), Boundedness::Bounded);
+    assert_eq!(
+        restored
+            .with_fetch(None)
+            .ok_or("clear restored-child fetch")?
+            .boundedness(),
+        unbounded.boundedness()
+    );
+
+    let default_rebuilt = plan.with_new_children(vec![bounded.clone()])?;
+    assert_eq!(default_rebuilt.fetch(), None);
+    assert_eq!(default_rebuilt.boundedness(), bounded.boundedness());
+    assert!(matches!(
+        default_rebuilt.cardinality_effect(),
+        CardinalityEffect::Equal
+    ));
+    Ok(())
+}
+
+#[tokio::test]
+async fn spark_finite_integer_fetch_statistics_sum_physical_partition_outputs() -> TestResult {
+    for (lengths, fetch) in [([3, 3], 1), ([1, 5], 2), ([0, 6], 2), ([0, 0], 2)] {
+        let partitions = lengths
+            .into_iter()
+            .enumerate()
+            .map(|(partition, length)| {
+                let rows = (0..length)
+                    .map(|key| (partition as i32 * 10 + key, partition as i32, key))
+                    .collect::<Vec<_>>();
+                source_batch(&rows, false, false).map(|batch| vec![batch])
+            })
+            .collect::<TestResult<Vec<_>>>()?;
+        let schema = partitions[0][0].schema();
+        let key_order = PhysicalSortExpr {
+            expr: col("k", &schema)?,
+            options: SortOptions::default(),
+        };
+        let ordering = LexOrdering::new(vec![
+            PhysicalSortExpr {
+                expr: col("p", &schema)?,
+                options: SortOptions::default(),
+            },
+            key_order.clone(),
+        ])
+        .ok_or("empty input order")?;
+        let source = MemorySourceConfig::try_new(&partitions, schema.clone(), None)?
+            .try_with_sort_information(vec![ordering])?;
+        let input: Arc<dyn ExecutionPlan> = DataSourceExec::from_data_source(source);
+        let window = create_window_expr(
+            &WindowFunctionDefinition::AggregateUDF(count_udaf()),
+            "n".into(),
+            &[col("id", &schema)?],
+            &[col("p", &schema)?],
+            &[key_order],
+            Arc::new(
+                WindowFrame::new_bounds(
+                    WindowFrameUnits::Range,
+                    WindowFrameBound::CurrentRow,
+                    WindowFrameBound::Following(ScalarValue::Int32(Some(1))),
+                )
+                .with_range_offset_arithmetic(RangeOffsetArithmetic::Spark { ansi_mode: true }),
+            ),
+            schema,
+            false,
+            false,
+            None,
+        )?;
+        // Each physical input contains a different complete logical p group.
+        let plan: Arc<dyn ExecutionPlan> = Arc::new(BoundedWindowAggExec::try_new(
+            vec![window],
+            input,
+            InputOrderMode::Sorted,
+            true,
+        )?);
+        assert_eq!(
+            plan.partition_statistics(None)?.num_rows,
+            Precision::Exact(lengths.into_iter().sum::<i32>() as usize)
+        );
+        let fetched = plan.with_fetch(Some(fetch)).ok_or("fetch unsupported")?;
+        let expected = lengths.map(|length| (length as usize).min(fetch));
+        for (partition, expected) in expected.into_iter().enumerate() {
+            assert_eq!(
+                fetched.partition_statistics(Some(partition))?.num_rows,
+                Precision::Exact(expected)
+            );
+        }
+        let expected_total = expected.into_iter().sum::<usize>();
+        assert_eq!(fetched.output_partitioning().partition_count(), 2);
+        assert_eq!(
+            fetched.partition_statistics(None)?.num_rows,
+            Precision::Exact(expected_total)
+        );
+        let batches =
+            datafusion::physical_plan::collect(fetched.clone(), Arc::new(TaskContext::default()))
+                .await?;
+        assert_eq!(
+            batches.iter().map(RecordBatch::num_rows).sum::<usize>(),
+            expected_total
+        );
+
+        let combined: Arc<dyn ExecutionPlan> = Arc::new(CoalescePartitionsExec::new(fetched));
+        let requested: Arc<dyn ExecutionPlan> =
+            Arc::new(GlobalLimitExec::new(combined, 0, Some(1)));
+        let limited = LimitPushdown::new().optimize(requested, &ConfigOptions::default())?;
+        let batches =
+            datafusion::physical_plan::collect(limited, Arc::new(TaskContext::default())).await?;
+        assert_eq!(
+            batches.iter().map(RecordBatch::num_rows).sum::<usize>(),
+            expected_total.min(1)
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn native_window_without_fetch_preserves_known_statistics_with_unknown_row_count() -> TestResult {
+    let batch = source_batch(&[(0, 0, 0)], false, false)?;
+    let source_schema = batch.schema();
+    let source: Arc<dyn ExecutionPlan> = Arc::new(StreamingTableExec::try_new(
+        source_schema.clone(),
+        vec![Arc::new(PendingIntegerRangeInput(batch))],
+        None,
+        [],
+        true,
+        None,
+    )?);
+    let input: Arc<dyn ExecutionPlan> = Arc::new(ProjectionExec::try_new(
+        vec![
+            (col("id", &source_schema)?, "id".to_owned()),
+            (col("p", &source_schema)?, "p".to_owned()),
+            (col("k", &source_schema)?, "k".to_owned()),
+            (lit(7i32), "constant".to_owned()),
+            (lit(ScalarValue::Int32(None)), "null_constant".to_owned()),
+        ],
+        source,
+    )?);
+    let before = input.partition_statistics(None)?;
+    assert_eq!(before.num_rows, Precision::Absent);
+    assert_eq!(
+        before.column_statistics[3].min_value,
+        Precision::Exact(ScalarValue::Int32(Some(7)))
+    );
+    assert_eq!(before.column_statistics[4].byte_size, Precision::Exact(0));
+    let window = count_window(
+        input.schema(),
+        WindowFrameUnits::Range,
+        WindowFrameBound::Following(ScalarValue::Int32(Some(1))),
+        SortOptions::default(),
+    )?;
+    let plan = BoundedWindowAggExec::try_new(vec![window], input, InputOrderMode::Sorted, false)?;
+    assert_eq!(plan.fetch(), None);
+    let after = plan.partition_statistics(None)?;
+    assert_eq!(after.num_rows, Precision::Absent);
+    assert_eq!(
+        &after.column_statistics[..before.column_statistics.len()],
+        before.column_statistics.as_slice()
+    );
+    assert_eq!(after.total_byte_size, Precision::Absent);
+    Ok(())
+}
+
+#[derive(Debug)]
+struct DropTrackedIntegerRangeInput {
+    batch: RecordBatch,
+    polls: Arc<AtomicUsize>,
+    drops: Arc<AtomicUsize>,
+}
+
+#[derive(Debug)]
+struct RangeInputStreamDropCounter(Arc<AtomicUsize>);
+
+impl Drop for RangeInputStreamDropCounter {
+    fn drop(&mut self) {
+        self.0.fetch_add(1, AtomicOrdering::SeqCst);
+    }
+}
+
+impl PartitionStream for DropTrackedIntegerRangeInput {
+    fn schema(&self) -> &SchemaRef {
+        self.batch.schema_ref()
+    }
+
+    fn execute(&self, _: Arc<TaskContext>) -> SendableRecordBatchStream {
+        let mut batch = Some(self.batch.clone());
+        let polls = Arc::clone(&self.polls);
+        let drop_counter = RangeInputStreamDropCounter(Arc::clone(&self.drops));
+        let batches = stream::poll_fn(move |_| {
+            let _stream_lifetime = &drop_counter;
+            polls.fetch_add(1, AtomicOrdering::SeqCst);
+            match batch.take() {
+                Some(batch) => std::task::Poll::Ready(Some(Ok(batch))),
+                None => std::task::Poll::Pending,
+            }
+        });
+        Box::pin(RecordBatchStreamAdapter::new(self.batch.schema(), batches))
+    }
+}
+
+#[tokio::test]
+async fn spark_finite_integer_fetch_releases_input_when_output_limit_is_reached() -> TestResult {
+    for fetch in [Some(0), Some(1), None] {
+        let batch = source_batch(&[(0, 0, 0), (1, 0, 1), (2, 0, 2)], false, false)?;
+        let schema = batch.schema();
+        let upstream_polls = Arc::new(AtomicUsize::new(0));
+        let upstream_drops = Arc::new(AtomicUsize::new(0));
+        let key_order = PhysicalSortExpr {
+            expr: col("k", &schema)?,
+            options: SortOptions::default(),
+        };
+        let ordering = LexOrdering::new(vec![
+            PhysicalSortExpr {
+                expr: col("p", &schema)?,
+                options: SortOptions::default(),
+            },
+            key_order.clone(),
+        ])
+        .ok_or("empty source ordering")?;
+        let input: Arc<dyn ExecutionPlan> = Arc::new(StreamingTableExec::try_new(
+            Arc::clone(&schema),
+            vec![Arc::new(DropTrackedIntegerRangeInput {
+                batch,
+                polls: Arc::clone(&upstream_polls),
+                drops: Arc::clone(&upstream_drops),
+            })],
+            None,
+            Some(ordering),
+            true,
+            None,
+        )?);
+        let frame = WindowFrame::new_bounds(
+            WindowFrameUnits::Range,
+            WindowFrameBound::CurrentRow,
+            WindowFrameBound::Following(ScalarValue::Int32(Some(1))),
+        );
+        // The unlimited case retains native arithmetic and its live pending input.
+        let frame = if fetch.is_some() {
+            frame.with_range_offset_arithmetic(RangeOffsetArithmetic::Spark { ansi_mode: true })
+        } else {
+            frame
+        };
+        let window = create_window_expr(
+            &WindowFunctionDefinition::AggregateUDF(count_udaf()),
+            "n".into(),
+            &[col("id", &schema)?],
+            &[col("p", &schema)?],
+            &[key_order],
+            Arc::new(frame),
+            schema,
+            false,
+            false,
+            None,
+        )?;
+        let plan =
+            get_best_fitting_window(&[window], &input, &[])?.ok_or("bounded window missing")?;
+        let plan = if let Some(fetch) = fetch {
+            plan.with_fetch(Some(fetch)).ok_or("fetch unsupported")?
+        } else {
+            plan
+        };
+        assert_eq!(plan.fetch(), fetch);
+        let expected_schema = plan.schema();
+        let mut output = plan.execute(0, Arc::new(TaskContext::default()))?;
+        assert_eq!(upstream_polls.load(AtomicOrdering::SeqCst), 0);
+        assert_eq!(upstream_drops.load(AtomicOrdering::SeqCst), 0);
+
+        let first = output
+            .next()
+            .now_or_never()
+            .ok_or("output waited for pending input")?;
+        let expected_polls = usize::from(fetch != Some(0));
+        assert_eq!(upstream_polls.load(AtomicOrdering::SeqCst), expected_polls);
+        assert_eq!(
+            upstream_drops.load(AtomicOrdering::SeqCst),
+            usize::from(fetch.is_some())
+        );
+        let emitted = if fetch == Some(0) {
+            assert!(first.is_none());
+            None
+        } else {
+            Some(first.ok_or("stream ended before its first output")??)
+        };
+        if let Some(batch) = &emitted {
+            assert_eq!(batch.num_rows(), 1);
+            assert_eq!(batch.schema(), expected_schema);
+            assert_eq!(
+                ScalarValue::try_from_array(batch.column(0), 0)?,
+                ScalarValue::Int32(Some(0))
+            );
+            assert_eq!(
+                ScalarValue::try_from_array(batch.column(3), 0)?,
+                ScalarValue::Int64(Some(2))
+            );
+        }
+
+        if fetch.is_some() {
+            for _ in 0..2 {
+                assert!(
+                    output
+                        .next()
+                        .now_or_never()
+                        .ok_or("completed output became pending")?
+                        .is_none()
+                );
+                assert_eq!(upstream_polls.load(AtomicOrdering::SeqCst), expected_polls);
+                assert_eq!(upstream_drops.load(AtomicOrdering::SeqCst), 1);
+            }
+        } else {
+            assert!(output.next().now_or_never().is_none());
+            assert_eq!(upstream_polls.load(AtomicOrdering::SeqCst), 2);
+            assert_eq!(upstream_drops.load(AtomicOrdering::SeqCst), 0);
+        }
+        assert_eq!(output.schema(), expected_schema);
+        drop(output);
+        assert_eq!(upstream_drops.load(AtomicOrdering::SeqCst), 1);
+        if let Some(batch) = emitted {
+            assert_eq!(batch.schema(), expected_schema);
+            assert_eq!(
+                ScalarValue::try_from_array(batch.column(3), 0)?,
+                ScalarValue::Int64(Some(2))
+            );
         }
     }
     Ok(())

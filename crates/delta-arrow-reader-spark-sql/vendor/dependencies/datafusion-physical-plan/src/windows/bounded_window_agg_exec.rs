@@ -1,3 +1,4 @@
+// Modified for the DAR Spark SQL runtime. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -27,6 +28,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use super::utils::create_schema;
+use crate::execution_plan::Boundedness;
 use crate::metrics::{BaselineMetrics, ExecutionPlanMetricsSet, MetricsSet};
 use crate::stream::EmptyRecordBatchStream;
 use crate::windows::{
@@ -48,12 +50,8 @@ use arrow::{
 };
 use datafusion_common::hash_utils::create_hashes;
 use datafusion_common::stats::Precision;
-use datafusion_common::utils::{
-    evaluate_partition_ranges, get_at_indices, get_row_at_idx,
-};
-use datafusion_common::{
-    HashMap, Result, arrow_datafusion_err, exec_datafusion_err, exec_err,
-};
+use datafusion_common::utils::{evaluate_partition_ranges, get_at_indices, get_row_at_idx};
+use datafusion_common::{HashMap, Result, arrow_datafusion_err, exec_datafusion_err, exec_err};
 use datafusion_execution::TaskContext;
 use datafusion_expr::ColumnarValue;
 use datafusion_expr::window_state::{PartitionBatchState, WindowAggState};
@@ -61,9 +59,7 @@ use datafusion_physical_expr::window::{
     PartitionBatches, PartitionKey, PartitionWindowAggStates, WindowState,
 };
 use datafusion_physical_expr_common::physical_expr::PhysicalExpr;
-use datafusion_physical_expr_common::sort_expr::{
-    OrderingRequirements, PhysicalSortExpr,
-};
+use datafusion_physical_expr_common::sort_expr::{OrderingRequirements, PhysicalSortExpr};
 
 use crate::execution_plan::CardinalityEffect;
 use datafusion_common::hash_utils::RandomState;
@@ -97,6 +93,8 @@ pub struct BoundedWindowAggExec {
     cache: Arc<PlanProperties>,
     /// If `can_rerepartition` is false, partition_keys is always empty.
     can_repartition: bool,
+    /// Maximum output rows per execution partition; input lookahead is not limited.
+    fetch: Option<usize>,
 }
 
 impl BoundedWindowAggExec {
@@ -112,10 +110,8 @@ impl BoundedWindowAggExec {
         let partition_by_exprs = window_expr[0].partition_by();
         let ordered_partition_by_indices = match &input_order_mode {
             InputOrderMode::Sorted => {
-                let indices = get_ordered_partition_by_indices(
-                    window_expr[0].partition_by(),
-                    &input,
-                )?;
+                let indices =
+                    get_ordered_partition_by_indices(window_expr[0].partition_by(), &input)?;
                 if indices.len() == partition_by_exprs.len() {
                     indices
                 } else {
@@ -137,6 +133,7 @@ impl BoundedWindowAggExec {
             ordered_partition_by_indices,
             cache: Arc::new(cache),
             can_repartition,
+            fetch: None,
         })
     }
 
@@ -243,11 +240,15 @@ impl BoundedWindowAggExec {
         for _ in 0..win_cols {
             column_statistics.push(ColumnStatistics::new_unknown())
         }
-        Ok(Statistics {
+        let statistics = Statistics {
             num_rows: statistics.num_rows,
             column_statistics,
             total_byte_size: Precision::Absent,
-        })
+        };
+        match self.fetch {
+            Some(fetch) => statistics.with_fetch(Some(fetch), 0, 1),
+            None => Ok(statistics),
+        }
     }
 
     fn with_new_children_and_same_properties(
@@ -263,11 +264,7 @@ impl BoundedWindowAggExec {
 }
 
 impl DisplayAs for BoundedWindowAggExec {
-    fn fmt_as(
-        &self,
-        t: DisplayFormatType,
-        f: &mut std::fmt::Formatter,
-    ) -> std::fmt::Result {
+    fn fmt_as(&self, t: DisplayFormatType, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match t {
             DisplayFormatType::Default | DisplayFormatType::Verbose => {
                 write!(f, "BoundedWindowAggExec: ")?;
@@ -289,6 +286,9 @@ impl DisplayAs for BoundedWindowAggExec {
                     .collect();
                 let mode = &self.input_order_mode;
                 write!(f, "wdw=[{}], mode=[{:?}]", g.join(", "), mode)?;
+                if let Some(fetch) = self.fetch {
+                    write!(f, ", fetch={fetch}")?;
+                }
             }
             DisplayFormatType::TreeRender => {
                 let g: Vec<String> = self
@@ -300,6 +300,9 @@ impl DisplayAs for BoundedWindowAggExec {
 
                 let mode = &self.input_order_mode;
                 writeln!(f, "mode={mode:?}")?;
+                if let Some(fetch) = self.fetch {
+                    writeln!(f, "fetch={fetch}")?;
+                }
             }
         }
         Ok(())
@@ -348,12 +351,15 @@ impl ExecutionPlan for BoundedWindowAggExec {
         children: Vec<Arc<dyn ExecutionPlan>>,
     ) -> Result<Arc<dyn ExecutionPlan>> {
         check_if_same_properties!(self, children);
-        Ok(Arc::new(BoundedWindowAggExec::try_new(
+        let rebuilt = BoundedWindowAggExec::try_new(
             self.window_expr.clone(),
             Arc::clone(&children[0]),
             self.input_order_mode.clone(),
             self.can_repartition,
-        )?))
+        )?;
+        Ok(rebuilt
+            .with_fetch(self.fetch)
+            .unwrap_or_else(|| Arc::new(rebuilt)))
     }
 
     fn execute(
@@ -369,6 +375,7 @@ impl ExecutionPlan for BoundedWindowAggExec {
             input,
             BaselineMetrics::new(&self.metrics, partition),
             search_mode,
+            self.fetch,
         )?);
         Ok(stream)
     }
@@ -378,13 +385,52 @@ impl ExecutionPlan for BoundedWindowAggExec {
     }
 
     fn partition_statistics(&self, partition: Option<usize>) -> Result<Arc<Statistics>> {
-        let input_stat =
-            Arc::unwrap_or_clone(self.input.partition_statistics(partition)?);
+        if partition.is_none() && self.fetch.is_some() {
+            let statistics = (0..self.cache.output_partitioning().partition_count())
+                .map(|partition| self.partition_statistics(Some(partition)))
+                .collect::<Result<Vec<_>>>()?;
+            return Statistics::try_merge_iter(
+                statistics.iter().map(|statistics| statistics.as_ref()),
+                self.schema.as_ref(),
+            )
+            .map(Arc::new);
+        }
+        let input_stat = Arc::unwrap_or_clone(self.input.partition_statistics(partition)?);
         Ok(Arc::new(self.statistics_helper(input_stat)?))
     }
 
     fn cardinality_effect(&self) -> CardinalityEffect {
-        CardinalityEffect::Equal
+        if self.fetch.is_some() {
+            CardinalityEffect::LowerEqual
+        } else {
+            CardinalityEffect::Equal
+        }
+    }
+
+    fn with_fetch(&self, fetch: Option<usize>) -> Option<Arc<dyn ExecutionPlan>> {
+        if self.input_order_mode != InputOrderMode::Sorted
+            || !self.window_expr.iter().any(|expr| {
+                expr.get_window_frame()
+                    .has_nonzero_spark_integer_range_offset()
+            })
+        {
+            return None;
+        }
+        let boundedness = if fetch.is_some() {
+            Boundedness::Bounded
+        } else {
+            self.input.boundedness()
+        };
+        let cache = Arc::new(PlanProperties::clone(&self.cache).with_boundedness(boundedness));
+        Some(Arc::new(Self {
+            fetch,
+            cache,
+            ..Self::clone(self)
+        }))
+    }
+
+    fn fetch(&self) -> Option<usize> {
+        self.fetch
     }
 }
 
@@ -563,11 +609,8 @@ impl PartitionSearcher for LinearSearch {
         partition_buffers: &mut PartitionBatches,
         window_expr: &[Arc<dyn WindowExpr>],
     ) -> Result<Option<Vec<ArrayRef>>> {
-        let partition_output_indices = self.calc_partition_output_indices(
-            input_buffer,
-            window_agg_states,
-            window_expr,
-        )?;
+        let partition_output_indices =
+            self.calc_partition_output_indices(input_buffer, window_agg_states, window_expr)?;
 
         let n_window_col = window_agg_states.len();
         let mut new_columns = vec![vec![]; n_window_col];
@@ -707,11 +750,8 @@ impl LinearSearch {
             if let Some((_, group_idx)) = entry {
                 result[*group_idx].1.push(row_idx)
             } else {
-                self.row_map_batch.insert_unique(
-                    hash,
-                    (hash, result.len()),
-                    |(hash, _)| *hash,
-                );
+                self.row_map_batch
+                    .insert_unique(hash, (hash, result.len()), |(hash, _)| *hash);
                 let row = get_row_at_idx(columns, row_idx as usize)?;
                 // This is a new partition its only index is row_idx for now.
                 result.push((row, vec![row_idx]));
@@ -913,9 +953,7 @@ fn evaluate_partition_by_column_values(
         .iter()
         .map(|item| match item.evaluate(record_batch)? {
             ColumnarValue::Array(array) => Ok(array),
-            ColumnarValue::Scalar(scalar) => {
-                scalar.to_array_of_size(record_batch.num_rows())
-            }
+            ColumnarValue::Scalar(scalar) => scalar.to_array_of_size(record_batch.num_rows()),
         })
         .collect()
 }
@@ -946,6 +984,8 @@ pub struct BoundedWindowAggStream {
     /// Search mode for partition columns. This determines the algorithm with
     /// which we group each partition.
     search_mode: Box<dyn PartitionSearcher>,
+    /// Output rows still requested by the absorbed fetch, independent of lookahead input.
+    remaining_fetch: Option<usize>,
 }
 
 impl BoundedWindowAggStream {
@@ -972,10 +1012,7 @@ impl BoundedWindowAggStream {
 impl Stream for BoundedWindowAggStream {
     type Item = Result<RecordBatch>;
 
-    fn poll_next(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<Self::Item>> {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let poll = self.poll_next_inner(cx);
         self.baseline_metrics.record_poll(poll)
     }
@@ -989,6 +1026,7 @@ impl BoundedWindowAggStream {
         input: SendableRecordBatchStream,
         baseline_metrics: BaselineMetrics,
         search_mode: Box<dyn PartitionSearcher>,
+        fetch: Option<usize>,
     ) -> Result<Self> {
         let state = window_expr.iter().map(|_| IndexMap::new()).collect();
         let empty_batch = RecordBatch::new_empty(Arc::clone(&schema));
@@ -1002,10 +1040,23 @@ impl BoundedWindowAggStream {
             window_expr,
             baseline_metrics,
             search_mode,
+            remaining_fetch: fetch,
         })
     }
 
     fn compute_aggregates(&mut self) -> Result<Option<RecordBatch>> {
+        if let Some(mut remaining) = self.remaining_fetch {
+            for (partition_key, batch) in self.partition_buffers.iter_mut() {
+                let next_output = self.window_agg_states[0]
+                    .get(partition_key)
+                    .map_or(0, |state| {
+                        state.state.last_calculated_index - state.state.out_col.len()
+                    });
+                let count = remaining.min(batch.record_batch.num_rows() - next_output);
+                batch.output_end_index = Some(next_output + count);
+                remaining -= count;
+            }
+        }
         // calculate window cols
         for (cur_window_expr, state) in
             self.window_expr.iter().zip(&mut self.window_agg_states)
@@ -1031,19 +1082,38 @@ impl BoundedWindowAggStream {
                 .chain(window_expr_out)
                 .collect::<Vec<_>>();
             let n_generated = columns_to_show[0].len();
+            if let Some(remaining) = &mut self.remaining_fetch {
+                *remaining -= n_generated;
+            }
             self.prune_state(n_generated)?;
-            Ok(Some(RecordBatch::try_new(schema, columns_to_show)?))
+            let batch = RecordBatch::try_new(schema, columns_to_show)?;
+            if self.remaining_fetch == Some(0) {
+                self.finish_after_fetch();
+            }
+            Ok(Some(batch))
         } else {
             Ok(None)
         }
     }
 
+    fn finish_after_fetch(&mut self) {
+        self.finished = true;
+        let input_schema = self.input.schema();
+        self.input = Box::pin(EmptyRecordBatchStream::new(Arc::clone(&input_schema)));
+        self.input_buffer = RecordBatch::new_empty(input_schema);
+        self.partition_buffers.clear();
+        for state in &mut self.window_agg_states {
+            state.clear();
+        }
+    }
+
     #[inline]
-    fn poll_next_inner(
-        &mut self,
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<Result<RecordBatch>>> {
+    fn poll_next_inner(&mut self, cx: &mut Context<'_>) -> Poll<Option<Result<RecordBatch>>> {
         if self.finished {
+            return Poll::Ready(None);
+        }
+        if self.remaining_fetch == Some(0) {
+            self.finish_after_fetch();
             return Poll::Ready(None);
         }
 
@@ -1127,6 +1197,9 @@ impl BoundedWindowAggStream {
 
             let batch = &pb_state.record_batch;
             pb_state.record_batch = batch.slice(*n_prune, batch.num_rows() - n_prune);
+            if let Some(end) = &mut pb_state.output_end_index {
+                *end -= n_prune;
+            }
             pb_state.n_out_row = 0;
 
             // Update state indices since we have pruned some rows from the beginning:
@@ -1277,9 +1350,7 @@ mod tests {
     use datafusion_common::test_util::batches_to_string;
     use datafusion_common::{Result, ScalarValue, exec_datafusion_err};
     use datafusion_execution::config::SessionConfig;
-    use datafusion_execution::{
-        RecordBatchStream, SendableRecordBatchStream, TaskContext,
-    };
+    use datafusion_execution::{RecordBatchStream, SendableRecordBatchStream, TaskContext};
     use datafusion_expr::{
         WindowFrame, WindowFrameBound, WindowFrameUnits, WindowFunctionDefinition,
     };
@@ -1321,10 +1392,7 @@ mod tests {
     impl Stream for TestStreamPartition {
         type Item = Result<RecordBatch>;
 
-        fn poll_next(
-            mut self: Pin<&mut Self>,
-            cx: &mut Context<'_>,
-        ) -> Poll<Option<Self::Item>> {
+        fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
             self.poll_next_inner(cx)
         }
     }
@@ -1689,13 +1757,9 @@ mod tests {
                 )),
             )) as _,
         ];
-        let physical_plan = BoundedWindowAggExec::try_new(
-            window_exprs,
-            memory_exec,
-            InputOrderMode::Sorted,
-            true,
-        )
-        .map(|e| Arc::new(e) as Arc<dyn ExecutionPlan>)?;
+        let physical_plan =
+            BoundedWindowAggExec::try_new(window_exprs, memory_exec, InputOrderMode::Sorted, true)
+                .map(|e| Arc::new(e) as Arc<dyn ExecutionPlan>)?;
 
         let batches = collect(physical_plan.execute(0, task_ctx)?).await?;
 

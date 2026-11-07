@@ -18,6 +18,287 @@ use serde_json::{Value, json};
 
 pub(crate) type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
 
+#[allow(
+    dead_code,
+    reason = "Integration tests select individual shared reference checks."
+)]
+pub(crate) const STAGES: [(&str, &str); 5] = [
+    ("public", "public_schema"),
+    ("analyzed", "public_schema"),
+    ("optimized", "optimized_schema"),
+    ("executed_before_collect", "before_collect"),
+    ("executed", "physical_schema"),
+];
+
+#[allow(
+    dead_code,
+    reason = "Integration tests select individual shared reference checks."
+)]
+pub(crate) fn case_identity(case: &Value) -> TestResult<(String, String, bool)> {
+    Ok((
+        case["corpus"].as_str().ok_or("missing corpus")?.into(),
+        case["id"].as_str().ok_or("missing ID")?.into(),
+        case["ansi"].as_bool().ok_or("missing ANSI")?,
+    ))
+}
+
+fn multiset(rows: &Value) -> TestResult<Value> {
+    let mut rows = rows.as_array().ok_or("missing rows")?.clone();
+    rows.sort_by_key(Value::to_string);
+    Ok(json!(rows))
+}
+
+fn complete_schema(schema: &Value) -> bool {
+    schema["type"] == "struct"
+        && schema["fields"]
+            .as_array()
+            .is_some_and(|fields| !fields.is_empty())
+        && complete_data_type(schema)
+}
+
+fn complete_data_type(data_type: &Value) -> bool {
+    if data_type.is_string() {
+        return true;
+    }
+    match data_type["type"].as_str() {
+        Some("array") => {
+            complete_data_type(&data_type["elementType"]) && data_type["containsNull"].is_boolean()
+        }
+        Some("map") => {
+            complete_data_type(&data_type["keyType"])
+                && complete_data_type(&data_type["valueType"])
+                && data_type["valueContainsNull"].is_boolean()
+        }
+        Some("struct") => data_type["fields"].as_array().is_some_and(|fields| {
+            fields.iter().all(|field| {
+                field["name"].is_string()
+                    && complete_data_type(&field["type"])
+                    && field["nullable"].is_boolean()
+                    && field["metadata"].is_object()
+            })
+        }),
+        _ => false,
+    }
+}
+
+fn complete_recorded_value(value: &Value, data_type: &Value, nullable: bool) -> bool {
+    if value.is_null() {
+        return nullable;
+    }
+    if data_type.is_string() {
+        return value.is_string();
+    }
+    let Some(values) = value.as_array() else {
+        return false;
+    };
+    match data_type["type"].as_str() {
+        Some("array") => data_type["containsNull"].as_bool().is_some_and(|nullable| {
+            values
+                .iter()
+                .all(|value| complete_recorded_value(value, &data_type["elementType"], nullable))
+        }),
+        Some("struct") => data_type["fields"].as_array().is_some_and(|fields| {
+            values.len() == fields.len()
+                && values.iter().zip(fields).all(|(value, field)| {
+                    field["nullable"].as_bool().is_some_and(|nullable| {
+                        complete_recorded_value(value, &field["type"], nullable)
+                    })
+                })
+        }),
+        Some("map") => data_type["valueContainsNull"]
+            .as_bool()
+            .is_some_and(|nullable| {
+                values.iter().all(|entry| {
+                    entry.as_array().is_some_and(|entry| {
+                        entry.len() == 2
+                            && complete_recorded_value(&entry[0], &data_type["keyType"], false)
+                            && complete_recorded_value(&entry[1], &data_type["valueType"], nullable)
+                    })
+                })
+            }),
+        _ => false,
+    }
+}
+
+#[test]
+fn complete_spark_schema_requires_nested_type_and_field_declarations() -> TestResult {
+    let schema = json!({"type":"struct","fields":[{"name":"nested","nullable":true,"metadata":{},
+        "type":{"type":"array","containsNull":false,"elementType":{"type":"map","keyType":"integer",
+        "valueContainsNull":true,"valueType":{"type":"struct","fields":[{"name":"value","type":"integer","nullable":true,"metadata":{}}]}}}}]});
+    assert!(complete_schema(&schema));
+    for pointer in [
+        "/fields/0/type/containsNull",
+        "/fields/0/type/elementType/valueContainsNull",
+        "/fields/0/type/elementType/keyType",
+        "/fields/0/type/elementType/valueType/fields/0/metadata",
+    ] {
+        let mut changed = schema.clone();
+        *changed
+            .pointer_mut(pointer)
+            .ok_or("nested schema fault target")? = Value::Null;
+        assert!(!complete_schema(&changed), "accepted lost {pointer}");
+    }
+    let mut changed = schema;
+    changed["fields"][0]["type"] = json!({"type":"unknown"});
+    assert!(!complete_schema(&changed));
+    Ok(())
+}
+
+#[test]
+fn recorded_nested_values_keep_shape_and_nullability() {
+    let data_type = json!({"type":"array","containsNull":false,"elementType":{"type":"map",
+        "keyType":"integer","valueContainsNull":false,"valueType":{"type":"struct","fields":[
+        {"name":"value","type":"integer","nullable":false,"metadata":{}}]}}});
+    assert!(complete_recorded_value(
+        &json!([[["0", ["70"]]]]),
+        &data_type,
+        false
+    ));
+    for value in [
+        json!([null]),
+        json!([{"0":["70"]}]),
+        json!([[["0", []]]]),
+        json!([[[null, ["70"]]]]),
+        json!([[["0", null]]]),
+        json!([[["0", [null]]]]),
+        json!([[["0", [70]]]]),
+        json!([[["0", ["70"], "extra"]]]),
+    ] {
+        assert!(
+            !complete_recorded_value(&value, &data_type, false),
+            "accepted malformed nested value {value}"
+        );
+    }
+    let mut nullable = data_type.clone();
+    nullable["containsNull"] = json!(true);
+    assert!(complete_recorded_value(&json!([null]), &nullable, false));
+    let mut nullable = data_type.clone();
+    nullable["elementType"]["valueContainsNull"] = json!(true);
+    assert!(complete_recorded_value(
+        &json!([[["0", null]]]),
+        &nullable,
+        false
+    ));
+    let mut nullable = data_type;
+    nullable["elementType"]["valueType"]["fields"][0]["nullable"] = json!(true);
+    assert!(complete_recorded_value(
+        &json!([[["0", [null]]]]),
+        &nullable,
+        false
+    ));
+}
+
+#[allow(
+    dead_code,
+    reason = "Integration tests select individual shared reference checks."
+)]
+pub(crate) fn validate_spark_reference_result(spark_reference: &Value) -> TestResult {
+    let case = spark_reference;
+    let key = case_identity(case)?;
+    let schemas = case["schema_stages"]
+        .as_object()
+        .ok_or("missing schema stages")?;
+    let availability = case["schema_stage_availability"]
+        .as_object()
+        .ok_or("missing schema availability")?;
+    if availability.len() != STAGES.len()
+        || schemas
+            .keys()
+            .any(|stage| !STAGES.iter().any(|(name, _)| *name == stage.as_str()))
+    {
+        return Err("Spark reference schema stage inventory differs".into());
+    }
+    for (stage, _) in STAGES {
+        let state = &case["schema_stage_availability"][stage];
+        match state["available"].as_bool() {
+            Some(true) if complete_schema(&case["schema_stages"][stage]) => {}
+            Some(false)
+                if case["status"] == "error"
+                    && !schemas.contains_key(stage)
+                    && state["reason"]
+                        .as_str()
+                        .is_some_and(|reason| !reason.is_empty()) => {}
+            _ => return Err(format!("incomplete Spark reference stage {stage}: {key:?}").into()),
+        }
+    }
+    if case["status"] == "ok" {
+        let fields = case["schema_stages"]["public"]["fields"]
+            .as_array()
+            .ok_or("missing public Fields")?;
+        if schemas.len() != STAGES.len()
+            || case["expected"]["schema"] != case["schema_stages"]["public"]
+            || case["expected"].get("condition").is_some()
+            || ["rows_raw", "rows_multiset"].iter().any(|field| {
+                !case[*field].as_array().is_some_and(|rows| {
+                    rows.iter().all(|row| {
+                        row.as_array().is_some_and(|row| {
+                            row.len() == fields.len()
+                                && row.iter().zip(fields).all(|(value, field)| {
+                                    field["nullable"].as_bool().is_some_and(|nullable| {
+                                        complete_recorded_value(value, &field["type"], nullable)
+                                    })
+                                })
+                        })
+                    })
+                })
+            })
+            || multiset(&case["rows_raw"])? != case["rows_multiset"]
+            || case["expected"].get("rows")
+                != Some(if case["ordered"] == true {
+                    &case["rows_raw"]
+                } else {
+                    &case["rows_multiset"]
+                })
+        {
+            return Err(format!("incomplete Spark reference success or rows: {key:?}").into());
+        }
+    } else {
+        let details = &case["spark_error_details"];
+        if !case["expected"]["condition"].is_string()
+            || case["expected"].get("rows").is_some()
+            || !case["spark_error_phase"].is_string()
+            || details["condition"] != case["expected"]["condition"]
+            || details["phase"] != case["spark_error_phase"]
+            || !details["message"].is_string()
+            || !details["java_causes"].as_array().is_some_and(|causes| {
+                !causes.is_empty()
+                    && causes.iter().all(|cause| {
+                        cause["class"].is_string()
+                            && cause["message"].is_string()
+                            && cause["parameters"].is_object()
+                            && cause.get("condition").is_some()
+                            && cause.get("sql_state").is_some()
+                    })
+            })
+            || details["cause_chain_complete"] != true
+            || ["parameters", "sql_state", "python_class"]
+                .iter()
+                .any(|field| details.get(*field).is_none())
+        {
+            return Err(format!("incomplete Spark reference failure: {key:?}").into());
+        }
+    }
+    Ok(())
+}
+
+#[allow(
+    dead_code,
+    reason = "Integration tests select individual shared reference checks."
+)]
+pub(crate) fn native_result_matches_spark_reference(
+    native_result: &Value,
+    spark_reference: &Value,
+) -> bool {
+    native_result["matches"] == true
+        && native_result["optimized_matches"] == true
+        && STAGES.iter().all(|(stage, observed)| {
+            match spark_reference["schema_stages"].get(*stage) {
+                Some(expected) => native_result.get(*observed) == Some(expected),
+                None => native_result.get(*observed).is_some_and(Value::is_null),
+            }
+        })
+}
+
 /// Compare the observed Int32 cast cause with Spark's recorded failing input.
 /// Only CAST_INVALID_INPUT records require this additional input check.
 #[allow(

@@ -19,6 +19,9 @@ use sail_logical_plan::spark_partition_id::SparkPartitionIdNode;
 
 use self::input_sort_boundary::InputSortBoundaryExec;
 use self::monotonic_id::MonotonicIdExec;
+use self::signed_range_window::{
+    SparkSignedRangeWindowNode, lower_signed_range_windows, plan_signed_range_window,
+};
 use self::spark_partition_id::SparkPartitionIdExec;
 use crate::expression_errors::SparkSqlExpressionSemantics;
 use crate::function::scalar::lower_runtime_concat;
@@ -26,6 +29,7 @@ use crate::projection_row_errors::{ProjectionRowErrorNode, admit_prefix_producer
 
 mod input_sort_boundary;
 mod monotonic_id;
+mod signed_range_window;
 mod spark_partition_id;
 
 /// Plan native DataFusion queries and the supported Spark execution extensions.
@@ -64,7 +68,7 @@ impl QueryPlanner for SparkQueryPlanner {
             .get::<SparkSqlExpressionSemantics>()
             .is_some()
         {
-            Cow::Owned(admit_prefix_producers(
+            Cow::Owned(lower_signed_range_windows(admit_prefix_producers(
                 logical_plan
                     .clone()
                     .transform_up_with_subqueries(|node| {
@@ -82,7 +86,7 @@ impl QueryPlanner for SparkQueryPlanner {
                         })
                     })?
                     .data,
-            )?)
+            )?)?)
         } else {
             Cow::Borrowed(logical_plan)
         };
@@ -105,9 +109,14 @@ impl ExtensionPlanner for SparkExtensionPlanner {
         physical_inputs: &[Arc<dyn ExecutionPlan>],
         session_state: &SessionState,
     ) -> Result<Option<Arc<dyn ExecutionPlan>>> {
-        let plan: Arc<dyn ExecutionPlan> = if let Some(provenance) =
-            node.as_any().downcast_ref::<ProjectionRowErrorNode>()
+        let plan: Arc<dyn ExecutionPlan> = if let Some(window) =
+            node.as_any().downcast_ref::<SparkSignedRangeWindowNode>()
         {
+            let [input] = physical_inputs else {
+                return internal_err!("SparkSignedRangeWindow requires exactly one physical input");
+            };
+            plan_signed_range_window(window, Arc::clone(input), session_state)?
+        } else if let Some(provenance) = node.as_any().downcast_ref::<ProjectionRowErrorNode>() {
             let [input] = physical_inputs else {
                 return internal_err!(
                     "Projection row-error provenance requires exactly one physical input"

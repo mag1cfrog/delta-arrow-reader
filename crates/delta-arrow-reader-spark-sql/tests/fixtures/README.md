@@ -4297,3 +4297,42 @@ The capture script records both source files in one run, for 598 observations.
 Compare each corpus with its corresponding checked-in reference before
 refreshing it. Preserve the original source metadata, historical native profiles
 and separate native controls.
+
+### Signed-integer RANGE bounds
+
+`finite-range-1086-cases.json` and `finite-range-1086-spark.jsonl` contain 188
+SQL/ANSI contexts, including the original 16 finite numeric controls. The separate
+`finite-range-1086-limited-*` pair contains eight contexts for matching-order
+LIMIT 1 and LIMIT 0 behavior. The `finite-range-1086-narrowing-*` pair adds 24
+contexts for the six signed narrowing pairs with special and expression endpoints.
+The `finite-range-1086-zero-current-*` pair adds 30 contexts for zero expressions
+with CURRENT ROW, shorthand frames and narrowing that wraps an offset to zero.
+Source files supply SQL and providers; every outcome comes from the pinned Spark
+runtime specified above.
+
+```sh
+python3 tests/fixtures/capture_finite_range_1086_spark.py --self-check
+python3 tests/fixtures/capture_finite_range_1086_limited_spark.py --self-check
+python3 tests/fixtures/capture_finite_range_1086_narrowing_spark.py --self-check
+python3 tests/fixtures/capture_finite_range_1086_zero_current_spark.py --self-check
+finite_range_capture_dir="$(mktemp -d)"
+TZ=UTC PYTHONDONTWRITEBYTECODE=1 \
+  python3 tests/fixtures/capture_finite_range_1086_spark.py \
+  "$finite_range_capture_dir/finite-range-1086-spark.jsonl"
+cargo +1.96.0 test --workspace --no-fail-fast --locked \
+  --test finite_range_frames --test native_window_frame_state \
+  --test linear_window_completion -- --nocapture --test-threads=1
+```
+
+Use the limited, narrowing and zero/current capture scripts with fresh output
+paths to refresh their corresponding JSONL files. All four wrappers reuse the existing capture
+protocol, including five schema stages, actual settings, complete error causes,
+ordered raw rows, duplicate-preserving multisets and owned-JVM cleanup.
+
+`finite_range_frames.rs` observes all 500 case/batch contexts at batch sizes 1 and
+32 with two target partitions before asserting differences. Registered providers
+use two partitions. It checks
+every available Field, unavailable stage and recorded result, including nested
+member-ID arrays. A native panic remains a failed observation and does not stop
+the remaining captures. Keep the original 188/8/24 references and historical
+native observations unchanged when extending the separate zero/current inventory.
