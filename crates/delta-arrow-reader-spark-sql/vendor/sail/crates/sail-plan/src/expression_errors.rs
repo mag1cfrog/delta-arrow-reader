@@ -2667,8 +2667,8 @@ impl Prepare {
                 })?
                 && expr.exists(|expr| {
                     Ok(matches!(expr, Expr::ScalarFunction(function)
-                        if function.func.inner().is::<SparkRegexpReplace>()
-                            && function.func.inner().propagates_constant_folding_errors()))
+                        if function.func.inner().downcast_ref::<SparkRegexpReplace>()
+                            .is_some_and(SparkRegexpReplace::prepares_literal_errors)))
                 })?)
         };
         if !project.input.exists(|plan| Ok(matches!(plan, LogicalPlan::Values(_))))?
@@ -2699,6 +2699,7 @@ impl Prepare {
         }
         let info = datafusion_expr::simplify::SimplifyContext::builder()
             .with_schema(Arc::clone(project.input.schema()))
+            .with_query_execution_start_time(self.props.query_execution_start_time)
             .with_config_options(Arc::new(options.clone()))
             .build();
         let simplifier = ExprSimplifier::new(info).with_local_input_errors();
