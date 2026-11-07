@@ -2671,7 +2671,9 @@ impl Prepare {
                             .is_some_and(SparkRegexpReplace::prepares_literal_errors)))
                 })?)
         };
-        if !project.input.exists(|plan| Ok(matches!(plan, LogicalPlan::Values(_))))?
+        if !project
+            .input
+            .exists(|plan| Ok(matches!(plan, LogicalPlan::Values(_))))?
             || !literal_regexp_input_permitted(&project.input)?
             || !project.expr.iter().try_fold(false, |found, expr| {
                 Ok::<_, datafusion_common::DataFusionError>(found || eligible(expr)?)
@@ -2685,9 +2687,8 @@ impl Prepare {
                 let _ = create_physical_expr(expr, project.input.schema(), &self.props)?;
             }
         }
-        let input = self.simplify_local_input_expressions(
-            Arc::unwrap_or_clone(Arc::clone(&project.input)),
-        )?;
+        let input = self
+            .simplify_local_input_expressions(Arc::unwrap_or_clone(Arc::clone(&project.input)))?;
         project.input = Arc::new(input.data);
         if known_empty(&project.input) {
             return Ok(Transformed::yes(LogicalPlan::EmptyRelation(
@@ -2707,12 +2708,16 @@ impl Prepare {
         for expr in &mut project.expr {
             if eligible(expr)? {
                 let name = names.save(expr);
-                let (prepared, _) = simplifier.simplify_with_cycle_count_transformed(expr.clone())?;
+                let (prepared, _) =
+                    simplifier.simplify_with_cycle_count_transformed(expr.clone())?;
                 changed |= prepared.transformed;
                 *expr = name.restore(prepared.data);
             }
         }
-        Ok(Transformed::new_transformed(node.recompute_schema()?, changed))
+        Ok(Transformed::new_transformed(
+            node.recompute_schema()?,
+            changed,
+        ))
     }
 
     // Cache arguments after input checks, before current-expression previews can replay producers.

@@ -59,15 +59,28 @@ impl ScalarUDFImpl for SparkRegexpReplace {
             return Ok(ExprSimplifyResult::Original(args));
         }
         // Native passes simplify and retain operands first. Never invoke an operand here.
-        let Some(values) = args.iter().map(|arg| match arg {
-            Expr::Literal(value, _) => Some(value.clone()),
-            _ => None,
-        }).collect::<Option<Vec<_>>>() else {
+        let Some(values) = args
+            .iter()
+            .map(|arg| match arg {
+                Expr::Literal(value, _) => Some(value.clone()),
+                _ => None,
+            })
+            .collect::<Option<Vec<_>>>()
+        else {
             return Ok(ExprSimplifyResult::Original(args));
         };
-        let types = values.iter().map(|value| value.data_type()).collect::<Vec<_>>();
-        if self.coerce_types(&types).is_ok_and(|coerced| coerced == types) {
-            let values = values.into_iter().map(ColumnarValue::Scalar).collect::<Vec<_>>();
+        let types = values
+            .iter()
+            .map(|value| value.data_type())
+            .collect::<Vec<_>>();
+        if self
+            .coerce_types(&types)
+            .is_ok_and(|coerced| coerced == types)
+        {
+            let values = values
+                .into_iter()
+                .map(ColumnarValue::Scalar)
+                .collect::<Vec<_>>();
             let _ = regexp_replace_values(&values)?;
         }
         Ok(ExprSimplifyResult::Original(args))
@@ -389,8 +402,8 @@ mod tests {
 
     #[test]
     fn preparation_policy_has_distinct_native_udf_identity() -> Result<()> {
-        use std::hash::{DefaultHasher, Hash, Hasher};
         use datafusion_expr::ScalarUDF;
+        use std::hash::{DefaultHasher, Hash, Hasher};
 
         let native = ScalarUDF::from(SparkRegexpReplace::new());
         let spark = ScalarUDF::from(SparkRegexpReplace::new().with_preparation_errors());
@@ -407,9 +420,16 @@ mod tests {
         let info = SimplifyContext::builder()
             .with_schema(Arc::new(datafusion_common::DFSchema::empty()))
             .build();
-        let args = vec![datafusion_expr::lit("a"), datafusion_expr::lit("(a)"),
-            datafusion_expr::lit("$9"), datafusion_expr::lit(1_i32)];
-        assert!(matches!(native.simplify(args.clone(), &info)?, ExprSimplifyResult::Original(_)));
+        let args = vec![
+            datafusion_expr::lit("a"),
+            datafusion_expr::lit("(a)"),
+            datafusion_expr::lit("$9"),
+            datafusion_expr::lit(1_i32),
+        ];
+        assert!(matches!(
+            native.simplify(args.clone(), &info)?,
+            ExprSimplifyResult::Original(_)
+        ));
         let error = match alias.simplify(args, &info) {
             Err(error) => error.to_string(),
             Ok(_) => return exec_err!("prepared alias did not check its own literal kernel"),
