@@ -1,0 +1,644 @@
+{
+  "issue": 1044,
+  "source_request_sha256": "763eb1f77a35b9701d1f4ba947d62dabd974e21fe0786c424c7708f7899bb8f4",
+  "reference_fixture_sha256": "e469295534e917e216beb5849c4cb9efa10c973d1a6257ce8dc34f4b67945de5",
+  "reference_fixture_version": "canonical Timestamp and Boolean source v3",
+  "expected_source_records": 92,
+  "expected_native_contexts": 184,
+  "expected_raw_strict_contexts": 164,
+  "expected_retained_native_contexts": 20,
+  "classification": "Exact inherited native gaps. These observations do not count as Spark matches.",
+  "profiles": {
+    "decimal_invalid_string": {
+      "public_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "id",
+              "role": "total-order"
+            }
+          },
+          {
+            "name": "shifted",
+            "type": "decimal(12,2)",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "before_collect": null,
+      "physical_schema": null,
+      "rows": null,
+      "rows_raw": null,
+      "native_phase": "create_physical_plan",
+      "error": "preserve_spark_expression_errors\ncaused by\nExecution error: Cannot cast Some(\"bad\") to DECIMAL(12,2)",
+      "public_matches": true,
+      "before_matches": true,
+      "physical_matches": true,
+      "rows_match": true,
+      "ordered_rows_match": true,
+      "error_matches": false,
+      "matches": false,
+      "optimized_matches": false,
+      "optimized_schema": null,
+      "optimized_observation": null,
+      "optimized_error": "preserve_spark_expression_errors\ncaused by\nExecution error: Cannot cast Some(\"bad\") to DECIMAL(12,2)"
+    },
+    "decimal_numeric_overflow": {
+      "public_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "id",
+              "role": "total-order"
+            }
+          },
+          {
+            "name": "shifted",
+            "type": "decimal(12,2)",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "before_collect": null,
+      "physical_schema": null,
+      "rows": null,
+      "rows_raw": null,
+      "native_phase": "create_physical_plan",
+      "error": "preserve_spark_expression_errors\ncaused by\nArrow error: Invalid argument error: 10000000000.00 is too large to store in a Decimal128 of precision 12. Max is 9999999999.99",
+      "public_matches": true,
+      "before_matches": true,
+      "physical_matches": true,
+      "rows_match": true,
+      "ordered_rows_match": true,
+      "error_matches": false,
+      "matches": false,
+      "optimized_matches": false,
+      "optimized_schema": null,
+      "optimized_observation": null,
+      "optimized_error": "preserve_spark_expression_errors\ncaused by\nArrow error: Invalid argument error: 10000000000.00 is too large to store in a Decimal128 of precision 12. Max is 9999999999.99"
+    },
+    "timestamp_invalid_string": {
+      "public_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "id",
+              "role": "total-order"
+            }
+          },
+          {
+            "name": "shifted",
+            "type": "timestamp",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "before_collect": null,
+      "physical_schema": null,
+      "rows": null,
+      "rows_raw": null,
+      "native_phase": "create_physical_plan",
+      "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nExecution error: invalid argument: DateValue { year: 2021, month: 2, day: 29 }",
+      "public_matches": true,
+      "before_matches": true,
+      "physical_matches": true,
+      "rows_match": true,
+      "ordered_rows_match": true,
+      "error_matches": false,
+      "matches": false,
+      "optimized_matches": false,
+      "optimized_schema": null,
+      "optimized_observation": null,
+      "optimized_error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nExecution error: invalid argument: DateValue { year: 2021, month: 2, day: 29 }"
+    },
+    "lag_untyped_null": {
+      "public_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "total-order",
+              "source": "id"
+            }
+          },
+          {
+            "name": "shifted",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "before_collect": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "total-order",
+              "source": "id"
+            }
+          },
+          {
+            "name": "shifted",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "physical_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "total-order",
+              "source": "id"
+            }
+          },
+          {
+            "name": "shifted",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "99.5"
+        ],
+        [
+          "1",
+          null
+        ],
+        [
+          "2",
+          null
+        ],
+        [
+          "3",
+          null
+        ],
+        [
+          "4",
+          null
+        ],
+        [
+          "5",
+          null
+        ],
+        [
+          "6",
+          null
+        ],
+        [
+          "7",
+          null
+        ]
+      ],
+      "rows_raw": [
+        [
+          "0",
+          "99.5"
+        ],
+        [
+          "1",
+          null
+        ],
+        [
+          "2",
+          null
+        ],
+        [
+          "3",
+          null
+        ],
+        [
+          "4",
+          null
+        ],
+        [
+          "5",
+          null
+        ],
+        [
+          "6",
+          null
+        ],
+        [
+          "7",
+          null
+        ]
+      ],
+      "native_phase": "encode",
+      "error": null,
+      "public_matches": true,
+      "before_matches": true,
+      "physical_matches": true,
+      "rows_match": true,
+      "ordered_rows_match": true,
+      "error_matches": false,
+      "matches": false,
+      "optimized_matches": false,
+      "optimized_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "total-order",
+              "source": "id"
+            }
+          },
+          {
+            "name": "shifted",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "optimized_observation": {
+        "raw_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "#6",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {
+                "role": "total-order",
+                "source": "id"
+              }
+            },
+            {
+              "name": "#7",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "id",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {
+                "role": "total-order",
+                "source": "id"
+              }
+            },
+            {
+              "name": "shifted",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "names_match": true
+      },
+      "optimized_error": null
+    },
+    "lead_untyped_null": {
+      "public_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "id",
+              "role": "total-order"
+            }
+          },
+          {
+            "name": "shifted",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "before_collect": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "total-order",
+              "source": "id"
+            }
+          },
+          {
+            "name": "shifted",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "physical_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "total-order",
+              "source": "id"
+            }
+          },
+          {
+            "name": "shifted",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          null
+        ],
+        [
+          "1",
+          null
+        ],
+        [
+          "2",
+          null
+        ],
+        [
+          "3",
+          null
+        ],
+        [
+          "4",
+          null
+        ],
+        [
+          "5",
+          null
+        ],
+        [
+          "6",
+          null
+        ],
+        [
+          "7",
+          "99.5"
+        ]
+      ],
+      "rows_raw": [
+        [
+          "0",
+          null
+        ],
+        [
+          "1",
+          null
+        ],
+        [
+          "2",
+          null
+        ],
+        [
+          "3",
+          null
+        ],
+        [
+          "4",
+          null
+        ],
+        [
+          "5",
+          null
+        ],
+        [
+          "6",
+          null
+        ],
+        [
+          "7",
+          "99.5"
+        ]
+      ],
+      "native_phase": "encode",
+      "error": null,
+      "public_matches": true,
+      "before_matches": true,
+      "physical_matches": true,
+      "rows_match": true,
+      "ordered_rows_match": true,
+      "error_matches": false,
+      "matches": false,
+      "optimized_matches": false,
+      "optimized_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "id",
+              "role": "total-order"
+            }
+          },
+          {
+            "name": "shifted",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "optimized_observation": {
+        "raw_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "#6",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {
+                "source": "id",
+                "role": "total-order"
+              }
+            },
+            {
+              "name": "#7",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "id",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {
+                "source": "id",
+                "role": "total-order"
+              }
+            },
+            {
+              "name": "shifted",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "names_match": true
+      },
+      "optimized_error": null
+    }
+  },
+  "controls": [
+    {
+      "corpus": "offset-window-default-coercion-1044",
+      "id": "lag_decimal_offset_scalar_invalid_string_default",
+      "ansi": true,
+      "sql": "SELECT id,LAG(CAST(r AS DECIMAL(12,2)),1,'bad') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+      "kind": "diagnostic",
+      "owner_issue": 1124,
+      "profile": "decimal_invalid_string"
+    },
+    {
+      "corpus": "offset-window-default-coercion-1044",
+      "id": "lead_decimal_offset_scalar_invalid_string_default",
+      "ansi": true,
+      "sql": "SELECT id,LEAD(CAST(r AS DECIMAL(12,2)),1,'bad') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+      "kind": "diagnostic",
+      "owner_issue": 1124,
+      "profile": "decimal_invalid_string"
+    },
+    {
+      "corpus": "offset-window-default-coercion-1044",
+      "id": "lag_decimal_offset_scalar_overflow_numeric_default",
+      "ansi": true,
+      "sql": "SELECT id,LAG(CAST(r AS DECIMAL(12,2)),1,CAST(10000000000 AS BIGINT)) OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+      "kind": "diagnostic",
+      "owner_issue": 1124,
+      "profile": "decimal_numeric_overflow"
+    },
+    {
+      "corpus": "offset-window-default-coercion-1044",
+      "id": "lead_decimal_offset_scalar_overflow_numeric_default",
+      "ansi": true,
+      "sql": "SELECT id,LEAD(CAST(r AS DECIMAL(12,2)),1,CAST(10000000000 AS BIGINT)) OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+      "kind": "diagnostic",
+      "owner_issue": 1124,
+      "profile": "decimal_numeric_overflow"
+    },
+    {
+      "corpus": "offset-window-default-coercion-1044",
+      "id": "lag_timestamp_utc_offset_scalar_invalid_string_default",
+      "ansi": true,
+      "sql": "SELECT id,LAG(TIMESTAMP '2020-01-02 03:04:05.123456',1,'2021-02-29 12:34:56') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+      "kind": "diagnostic",
+      "owner_issue": 1057,
+      "profile": "timestamp_invalid_string"
+    },
+    {
+      "corpus": "offset-window-default-coercion-1044",
+      "id": "lead_timestamp_utc_offset_scalar_invalid_string_default",
+      "ansi": true,
+      "sql": "SELECT id,LEAD(TIMESTAMP '2020-01-02 03:04:05.123456',1,'2021-02-29 12:34:56') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+      "kind": "diagnostic",
+      "owner_issue": 1057,
+      "profile": "timestamp_invalid_string"
+    },
+    {
+      "corpus": "offset-window-default-coercion-1044",
+      "id": "lag_offset_scalar_untyped_null_valid_string_default",
+      "ansi": true,
+      "sql": "SELECT id,LAG(NULL,1,'99.5') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+      "kind": "untyped_null",
+      "owner_issue": 1119,
+      "profile": "lag_untyped_null"
+    },
+    {
+      "corpus": "offset-window-default-coercion-1044",
+      "id": "lag_offset_scalar_untyped_null_valid_string_default",
+      "ansi": false,
+      "sql": "SELECT id,LAG(NULL,1,'99.5') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+      "kind": "untyped_null",
+      "owner_issue": 1119,
+      "profile": "lag_untyped_null"
+    },
+    {
+      "corpus": "offset-window-default-coercion-1044",
+      "id": "lead_offset_scalar_untyped_null_valid_string_default",
+      "ansi": true,
+      "sql": "SELECT id,LEAD(NULL,1,'99.5') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+      "kind": "untyped_null",
+      "owner_issue": 1119,
+      "profile": "lead_untyped_null"
+    },
+    {
+      "corpus": "offset-window-default-coercion-1044",
+      "id": "lead_offset_scalar_untyped_null_valid_string_default",
+      "ansi": false,
+      "sql": "SELECT id,LEAD(NULL,1,'99.5') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+      "kind": "untyped_null",
+      "owner_issue": 1119,
+      "profile": "lead_untyped_null"
+    }
+  ],
+  "profile_provenance": {
+    "native_observations_file": "new1044-combined1123-canonical-observation-raw-v1.json",
+    "native_observations_sha256": "801b3eb711985c2b787ea0b7d8064f302bbd0a8cb9dfd9e8909eb880feb61f5d",
+    "candidate_head": "d22203e1204d46f94379346f4757d9e9a691e46e",
+    "before_observations_file": "new1044-default-coercion-before-observation-raw-v2.json",
+    "before_observations_sha256": "9d1abb579f5914cec763b13b441abd24dc15f7d32cf0306601c041d9d688951d",
+    "explicit_cast_conservation_file": "new1044-explicit-cast-complete-conservation-root-v1.json",
+    "explicit_cast_conservation_sha256": "7c15b370a3db50e0471737e015b5ad0a981fdfd546eb3abfb8b972910752ca9d",
+    "independent_fields_authority": "Every available corresponding complete Spark Field must match before exact native profile equality. The untyped-NULL source fails admission and supplies no Fields or rows.",
+    "untyped_null_1119": "All eight complete native observations equal before-v2, including both ANSI modes and batches. No typed-NULL or conversion case uses this control.",
+    "decimal_1124": "The shared explicit-CAST baseline and candidate have identical complete observations. Only the missing malformed-input or overflow condition is inherited; the offset profile requires repaired Spark Fields and optimization failure, with the exact observed kernel cause.",
+    "timestamp_1057": "The explicit-CAST baseline retains the same DateValue kernel cause. Issue1123 restores that cause during optimization; OnlyLiteral or nonliteral-default masking is never accepted.",
+    "owner_receipt": "new1044-cast-dependency-issues-created-v1.json"
+  }
+}

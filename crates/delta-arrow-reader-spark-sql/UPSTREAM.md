@@ -816,6 +816,22 @@ generated labels; their executable expressions retain declared parameter names.
 The [field-name references](tests/fixtures/README.md#nested-field-expression-names)
 record remaining STRUCT schema, alias display and metadata differences separately.
 
+### Offset-window result Fields
+
+Spark LAG/LEAD results are required only when the payload and explicit default
+are both required. A nullable payload, nullable default or omitted default keeps
+the result nullable. A Spark field adapter reads the current argument Fields
+at each planning stage, so folding can tighten the optimized declaration. It
+retains the native result type, nested Fields and their metadata; the existing
+window metadata rule still applies. Evaluation, reversal and limits delegate to
+the native function. Scalar defaults of a different type first use the same
+Spark conversion rules as explicit CAST, including ANSI failures and legacy
+NULL results. Uncoerced scalar defaults retain their native field declaration.
+Native DataFusion SQL keeps its existing path.
+
+The [window-name references](tests/fixtures/README.md#offset-window-result-fields)
+compare the original required LAG declarations at every recorded stage.
+
 ### Derived window metadata
 
 Spark value-returning windows remove inherited top-level user metadata from

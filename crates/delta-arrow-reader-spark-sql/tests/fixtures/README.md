@@ -2195,6 +2195,48 @@ python tests/fixtures/capture_nested_window_frames_spark.py
 cargo test --locked --workspace --test nested_ordering --test nested_float_ordering --test nested_window_frames
 ```
 
+## Offset-window result Fields
+
+`offset-window-fields-1044-spark.jsonl` records 94 independent Spark cases.
+`offset_window_fields.rs` checks both ANSI modes and batches 1/32, with 120
+strictly matching contexts and 68 separately owned native gaps retained as exact
+profiles. Complete available Fields are checked against Spark before those
+profiles are considered. The source request and capture script live beside the
+fixture; the Boolean codec check preserves literal strings and provider inputs.
+
+`offset-window-default-coercion-1044-spark.jsonl` adds 92 independent records
+using the same six providers. The test requires 184 contexts: 164 strict matches
+and 20 exact native profiles. The retained controls belong to
+[#1119](https://github.com/mag1cfrog/delta-arrow-reader/issues/1119) for untyped-NULL
+admission, [#1124](https://github.com/mag1cfrog/delta-arrow-reader/issues/1124) for
+Decimal error conditions, and
+[#1057](https://github.com/mag1cfrog/delta-arrow-reader/issues/1057) for Timestamp
+error conditions. Diagnostic profiles still require every available Spark Field
+and the exact native error, phase and optimizer cause. They cannot accept a
+nonliteral-default error that hides a temporal conversion failure.
+
+`capture_offset_default_coercion_1044_spark.py` validates the source request
+before capturing it. The shared codec distinguishes Boolean and Timestamp
+outputs from literal strings and provider inputs. Raw capture headers retain
+the paths and hashes used for that capture. When changing a producer or codec,
+keep historical captures unchanged and record any fresh capture with its own
+source and runtime provenance.
+
+`window_names.rs` compares the six original `literal_arguments` records in
+`window-name-stages-spark.jsonl` with Spark 4.2.0 revision
+`32f7299601108917fb01920a54e084595b7b3bf8`. Both ANSI modes and batch sizes 1/32
+check analyzed, optimized, before collection and executed schemas. The raw
+references stay unchanged, and their required LAG Fields have no nullability
+allowance.
+
+LAG/LEAD result Fields are required only when the payload and explicit default
+are both required. A nullable payload, nullable default or omitted default keeps
+the result nullable. The Spark field adapter reads current argument Fields, so
+folding can tighten the optimized declaration while retaining the native result
+type and nested Fields. The existing metadata rule still applies. Evaluation
+and native DataFusion SQL keep their existing path; offset/frame admission and
+default error policies retain their separate controls.
+
 ## Derived window metadata
 
 `window-metadata-spark.jsonl` contains 102 Spark 4.2.0 observations in UTC and

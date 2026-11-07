@@ -43,9 +43,9 @@ def main():
         types.StructField("flags", types.ArrayType(types.BooleanType())),
     ])
     row = (value, original, [True, None])
-    assert encode(row, schema) == ["2020-01-02T03:04:05.123456Z", original, ["True", None]]
+    assert encode(row, schema) == ["2020-01-02T03:04:05.123456Z", original, ["true", None]]
     assert encode(row, schema, input_value=True) == [original, original, ["True", None]]
-    assert encode(False, types.BooleanType()) == "False"
+    assert encode(False, types.BooleanType()) == "false"
     assert encode(False, types.BooleanType(), input_value=True) == "False"
     assert encode(-0.0, types.FloatType()) == "80000000"
     assert SparkContext._gateway is None and SparkContext._active_spark_context is None

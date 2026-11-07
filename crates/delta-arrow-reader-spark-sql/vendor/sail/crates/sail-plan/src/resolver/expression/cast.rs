@@ -135,7 +135,6 @@ impl PlanResolver<'_> {
         let named = self.resolve_named_expression(expr, schema, state).await?;
         let expr_field = named.expr.to_field(schema)?.1;
         let expr_type = expr_field.data_type().clone();
-        let expr_is_variant = is_variant_storage_field(expr_field.as_ref());
         let named_input = named_source
             && matches!(
                 &named.expr,
@@ -168,6 +167,36 @@ impl PlanResolver<'_> {
                 named_input,
             ));
         }
+        if expr_type.is_numeric()
+            && matches!(cast_to_type, DataType::Duration(_))
+            && let Some(field) = day_time_interval_field
+        {
+            let expr = cast(
+                expr.mul(lit(day_time_field_to_microseconds(field))),
+                cast_to_type,
+            );
+            return Ok((
+                NamedExpr::new(name, drop_inherited_column_metadata(expr)),
+                named_input,
+            ));
+        }
+        let expr = self.cast_resolved_expression(expr, cast_to_type, is_try, schema)?;
+        Ok((
+            NamedExpr::new(name, drop_inherited_column_metadata(expr)),
+            named_input,
+        ))
+    }
+
+    pub(super) fn cast_resolved_expression(
+        &self,
+        expr: expr::Expr,
+        cast_to_type: DataType,
+        is_try: bool,
+        schema: &DFSchemaRef,
+    ) -> PlanResult<expr::Expr> {
+        let expr_field = expr.to_field(schema)?.1;
+        let expr_type = expr_field.data_type().clone();
+        let expr_is_variant = is_variant_storage_field(expr_field.as_ref());
         // Spark reads each instant's local date-time in the session time zone; Arrow's cast
         // keeps its UTC date-time.
         if cast_to_type == DataType::Timestamp(TimeUnit::Microsecond, None)
@@ -180,10 +209,7 @@ impl PlanResolver<'_> {
                 is_try,
             )
         {
-            return Ok((
-                NamedExpr::new(name, drop_inherited_column_metadata(local)),
-                named_input,
-            ));
+            return Ok(local);
         }
         let override_string_cast = matches!(
             expr_type,
@@ -302,10 +328,7 @@ impl PlanResolver<'_> {
             (from, DataType::Timestamp(time_unit, _) | DataType::Duration(time_unit), _)
                 if from.is_numeric() =>
             {
-                let multiplier = match (day_time_interval_field, &cast_to_type) {
-                    (Some(field), DataType::Duration(_)) => day_time_field_to_microseconds(field),
-                    _ => time_unit_to_multiplier(&time_unit),
-                };
+                let multiplier = time_unit_to_multiplier(&time_unit);
                 cast(expr.mul(lit(multiplier)), cast_to_type)
             }
             (DataType::Timestamp(time_unit, _) | DataType::Duration(time_unit), to, _)
@@ -419,10 +442,7 @@ impl PlanResolver<'_> {
             (_, to, true) => try_cast(expr, to),
             (_, to, _) => cast(expr, to),
         };
-        Ok((
-            NamedExpr::new(name, drop_inherited_column_metadata(expr)),
-            named_input,
-        ))
+        Ok(expr)
     }
 }
 

@@ -19,7 +19,7 @@ rows, and source hashes. Each observation retains public, analyzed, optimized,
 plans, exact rows or the original error condition, cause chain and failing
 phase.
 
-| Source | SHA256 |
+| Source at capture | SHA256 |
 | --- | --- |
 | Spark reference | `5aef5b40dc2ad055c77b2f05bf643a959b075eacb217e19933aa2b7be7ecd3fe` |
 | [Producer](../capture_temporal_fold_1123_spark.py) | `d0c78647c61f9313761f5451ab5e3d8f9bc4261ff70c3ab6e4186f86570eaa67` |
@@ -29,8 +29,11 @@ phase.
 The producer reads SQL and typed provider inputs from the adjacent request.
 It uses `capture_spark_requests.py` for the five schema stages, errors and owned
 JVM shutdown. The shared encoder writes typed TIMESTAMP output as UTC RFC3339
-text; TIMESTAMP_NTZ keeps its wall-clock datetime text. Provider input encoding
-and other output types retain their existing formats.
+text; TIMESTAMP_NTZ keeps its wall-clock datetime text. Provider inputs retain
+their recorded formats. The current encoder also writes Boolean output as
+lowercase text. The request and table above retain their original capture
+hashes; the producer pins current helper code separately. Fresh capture headers
+record the producer and helper hashes actually used for that run.
 
 Recapture from the crate root with the pinned Python/PySpark build and Java 21.
 Run the codec check and source/protocol check in separate fresh Python

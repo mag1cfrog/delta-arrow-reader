@@ -162,12 +162,8 @@ fn matches_window_boolean_parameter_error(observation: &Value) -> bool {
         })
 }
 
-/// Compare all schema stages, allowing only (field index, prior native nullable flag).
-fn window_schemas_match_reference(
-    case: &Value,
-    observation: &Value,
-    retained_nullability: Option<(usize, bool)>,
-) -> bool {
+/// Compare complete schema stages and require preserved optimized output names.
+fn window_schemas_match_reference(case: &Value, observation: &Value) -> bool {
     observation["optimized_observation"]["names_match"] == true
         && [
             ("analyzed", "public_schema"),
@@ -180,18 +176,10 @@ fn window_schemas_match_reference(
             let Some(expected) = case["schema_stages"].get(stage) else {
                 return false;
             };
-            let Some(mut actual) = observation.get(key).cloned() else {
+            let Some(actual) = observation.get(key) else {
                 return false;
             };
-            if let Some((field, nullable)) = retained_nullability {
-                if actual["fields"][field]["nullable"] != nullable
-                    || expected["fields"][field]["nullable"] != false
-                {
-                    return false;
-                }
-                actual["fields"][field]["nullable"] = expected["fields"][field]["nullable"].clone();
-            }
-            actual == *expected
+            actual == expected
         })
 }
 
@@ -242,18 +230,11 @@ fn matched_window_gap_owner(
                 && phase == "resolve"
                 && matches_unmaterialized_window_error(observation, error, phase)
         }
-        ("lag_nullability", "#1044") => {
-            let field = usize::try_from(control["nullable_field"].as_u64()?).ok()?;
-            let nullable = control["nullable"].as_bool()?;
-            success
-                && window_schemas_match_reference(case, observation, Some((field, nullable)))
-                && observation["rows"] == case["expected"]["rows"]
-        }
         ("offset_null_rows", "#1048") => {
             case["expected"]["condition"] == "INTERNAL_ERROR"
                 && case["spark_error_phase"] == "collect"
                 && success
-                && window_schemas_match_reference(case, observation, None)
+                && window_schemas_match_reference(case, observation)
                 && observation["rows"] == control["rows"]
         }
         ("offset_frame_error", "#1048") => {
@@ -413,21 +394,6 @@ fn window_gap_checks_reject_changes_outside_owned_facets() -> TestResult {
             "offset_null_rows" => {
                 observation["rows"] = control["rows"].clone();
                 observation["rows_raw"] = control["rows"].clone();
-            }
-            "lag_nullability" => {
-                let field = usize::try_from(
-                    control["nullable_field"]
-                        .as_u64()
-                        .ok_or("missing nullable field")?,
-                )?;
-                for key in [
-                    "public_schema",
-                    "optimized_schema",
-                    "before_collect",
-                    "physical_schema",
-                ] {
-                    observation[key]["fields"][field]["nullable"] = control["nullable"].clone();
-                }
             }
             _ => return Err("unexpected retained kind".into()),
         }

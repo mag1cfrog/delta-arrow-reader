@@ -34,7 +34,7 @@ FAMILY_COUNTS = {
 HELPERS = {
     "capture_spark_requests.py": "1a813099731f8dc6bba26bb71bcc2fd56cd0b4e9c7b430f27a0a86950d35ef17",
     "capture_date_range_747_spark.py": "b8ec7266c62a60a60262d8b0a988f712d8995c58c6a8410e105c13ac0afa3922",
-    "capture_floating_group_keys_spark.py": "e8755f789b2ef55e25817bb864a05b99194d513bd49db11e418a80b371100943",
+    "capture_floating_group_keys_spark.py": "9db227451bea43d54e8dcd30d24501e78b18e752f22d971d285f863f058fd934",
     "capture_window_name_stages_spark.py": "52a3efa953716f7c1770952990beb655de1414561f278ef65c25599d29739633",
     "recapture_string_binary_spark.py": "3fa0da4a0a44fb7560097285442819f0e722af2c3791ce2622e02e64712d03b8",
 }
@@ -103,9 +103,10 @@ def load_capture_requests():
     assert request["native_batch_sizes"] == [1, 32]
     assert request["native_provider_partitions"] == request["native_target_partitions"] == 2
     assert request["spark_master"] == "local[1]" and request["spark_provider_partitions_expected"] == 1
+    # The request records its original codec; HELPERS pins this capture run.
     assert request["codec"] == {
         "base_encoder_sha256": "273495f1945d74dd8a36719ebc40fc01b35cc93cac85d8993cfdeff865261911",
-        "capture_encoder_sha256": HELPERS["capture_floating_group_keys_spark.py"],
+        "capture_encoder_sha256": "e8755f789b2ef55e25817bb864a05b99194d513bd49db11e418a80b371100943",
         "change": "TimestampType output branch only; base Boolean output/input spelling retained",
         "unmerged_1044_Boolean_fix_included": False,
     }
