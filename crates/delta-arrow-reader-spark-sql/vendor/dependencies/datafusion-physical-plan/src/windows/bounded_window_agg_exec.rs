@@ -386,7 +386,7 @@ impl ExecutionPlan for BoundedWindowAggExec {
 
     fn partition_statistics(&self, partition: Option<usize>) -> Result<Arc<Statistics>> {
         if partition.is_none() && self.fetch.is_some() {
-            let statistics = (0..self.output_partitioning().partition_count())
+            let statistics = (0..self.cache.output_partitioning().partition_count())
                 .map(|partition| self.partition_statistics(Some(partition)))
                 .collect::<Result<Vec<_>>>()?;
             return Statistics::try_merge_iter(
