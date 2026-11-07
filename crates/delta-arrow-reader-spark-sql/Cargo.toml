@@ -123,6 +123,7 @@ sail-plan = { path = "vendor/sail/crates/sail-plan" }
 sail-sql-analyzer = { path = "vendor/sail/crates/sail-sql-analyzer" }
 
 [dev-dependencies]
+async-trait = { workspace = true }
 arrow = "=58.4.0"
 datasketches = { workspace = true }
 delta-arrow-reader = { path = "../delta-arrow-reader-core", features = ["datafusion"] }
