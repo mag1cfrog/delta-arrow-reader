@@ -35,9 +35,10 @@ use datafusion_common::{
     Result, ScalarValue, arrow_datafusion_err, exec_datafusion_err, internal_err,
     utils::compare_rows,
 };
+use datafusion_expr::window_frame::RangeOffsetArithmetic;
 use datafusion_expr::window_state::{
     PartitionBatchState, WindowAggState, WindowFrameContext, WindowFrameStateGroups,
-    date32_range_target, date32_range_can_wrap,
+    date32_range_can_wrap, date32_range_target, range_bound_target,
 };
 use datafusion_expr::{Accumulator, PartitionEvaluator, WindowFrame, WindowFrameBound};
 use datafusion_physical_expr_common::sort_expr::PhysicalSortExpr;
@@ -363,7 +364,8 @@ pub trait AggregateWindowExpr: WindowExpr {
                             idx,
                         )?;
                         // CURRENT ROW and PRECEDING compare the same batch edges for every row.
-                        if !date32_wrapping_end
+                        if !self.get_window_frame().has_null_offset()
+                            && !date32_wrapping_end
                             && !matches!(
                                 self.get_window_frame().end_bound,
                                 WindowFrameBound::Following(_)
@@ -450,7 +452,7 @@ pub(crate) fn is_end_bound_safe(
             is_end_bound_safe_for_rows(&window_frame.end_bound)
         }
         WindowFrameContext::Range { window_frame, .. } => is_end_bound_safe_for_range(
-            &window_frame.end_bound,
+            window_frame,
             &order_bys[0],
             most_recent_order_bys.map(|items| &items[0]),
             &sort_exprs[0].options,
@@ -482,6 +484,9 @@ pub(crate) fn is_end_bound_safe(
 ///
 /// A `Result` indicating whether the end bound is safe for row-based window frames.
 fn is_end_bound_safe_for_rows(end_bound: &WindowFrameBound) -> Result<bool> {
+    if end_bound.is_null_offset() {
+        return internal_err!("NULL offsets require a RANGE window frame");
+    }
     if let WindowFrameBound::Following(value) = end_bound {
         let zero = ScalarValue::new_zero(&value.data_type());
         Ok(zero.map(|zero| value.eq(&zero)).unwrap_or(false))
@@ -497,7 +502,7 @@ fn is_end_bound_safe_for_rows(end_bound: &WindowFrameBound) -> Result<bool> {
 ///
 /// # Parameters
 ///
-/// * `end_bound`: Reference to the window frame bound in question.
+/// * `window_frame`: The frame whose current upper target must be complete.
 /// * `orderby_col`: Reference to the column used for ordering.
 /// * `most_recent_ob_col`: Optional reference to the most recent order-by column.
 /// * `sort_options`: The sorting options used in the window frame.
@@ -507,25 +512,52 @@ fn is_end_bound_safe_for_rows(end_bound: &WindowFrameBound) -> Result<bool> {
 ///
 /// A `Result` indicating whether the end bound is safe for range-based window frames.
 fn is_end_bound_safe_for_range(
-    end_bound: &WindowFrameBound,
+    window_frame: &WindowFrame,
     orderby_col: &ArrayRef,
     most_recent_ob_col: Option<&ArrayRef>,
     sort_options: &SortOptions,
     idx: usize,
 ) -> Result<bool> {
-    if orderby_col.data_type() == &DataType::Date32
-        && let WindowFrameBound::Preceding(delta) | WindowFrameBound::Following(delta) = end_bound
-        && let Some(target) = date32_range_target(
-            &ScalarValue::try_from_array(orderby_col, idx)?,
-            delta,
-            matches!(end_bound, WindowFrameBound::Preceding(_)) == sort_options.descending,
-        )
-    {
-        let Some(most_recent_ob_col) = most_recent_ob_col.filter(|col| !col.is_empty()) else {
+    let end_bound = &window_frame.end_bound;
+    if window_frame.range_offset_arithmetic() != RangeOffsetArithmetic::DataFusion {
+        return Ok(false);
+    }
+    if window_frame.has_null_offset() {
+        let Some(most_recent_ob_col) = most_recent_ob_col.filter(|col| !col.is_empty())
+        else {
+            return Ok(false);
+        };
+        let current_key = ScalarValue::try_from_array(orderby_col, idx)?;
+        let Some(target) = range_bound_target(
+            &current_key,
+            end_bound,
+            sort_options.descending,
+            window_frame.range_offset_arithmetic(),
+        )?
+        else {
             return Ok(false);
         };
         let latest = ScalarValue::try_from_array(most_recent_ob_col, 0)?;
-        return compare_rows(&[latest], &[target], &[*sort_options]).map(|order| order.is_gt());
+        return compare_rows(&[latest], &[target], &[*sort_options])
+            .map(|order| order.is_gt());
+    }
+    if orderby_col.data_type() == &DataType::Date32
+        && let WindowFrameBound::Preceding(delta) | WindowFrameBound::Following(delta) =
+            end_bound
+        && let Some(target) = date32_range_target(
+            &ScalarValue::try_from_array(orderby_col, idx)?,
+            delta,
+            matches!(end_bound, WindowFrameBound::Preceding(_))
+                == sort_options.descending,
+        )
+    {
+        let Some(most_recent_ob_col) = most_recent_ob_col.filter(|col| !col.is_empty())
+        else {
+            return Ok(false);
+        };
+        let latest = ScalarValue::try_from_array(most_recent_ob_col, 0)?;
+        return compare_rows(&[latest], &[target], &[*sort_options])
+            .map(|order| order.is_gt());
     }
     match end_bound {
         WindowFrameBound::Preceding(value) => {
@@ -557,6 +589,8 @@ fn is_end_bound_safe_for_range(
                     .map(|value| most_recent_row_value > value)
             }
         }
+        WindowFrameBound::PrecedingNullOffset(_)
+        | WindowFrameBound::FollowingNullOffset(_) => Ok(false),
     }
 }
 

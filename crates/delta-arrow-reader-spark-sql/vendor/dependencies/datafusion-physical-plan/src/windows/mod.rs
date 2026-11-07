@@ -32,11 +32,11 @@ use crate::{
 
 use arrow::datatypes::{Schema, SchemaRef};
 use arrow_schema::{FieldRef, SortOptions};
-use datafusion_common::{Result, exec_err};
+use datafusion_common::{Result, exec_err, plan_err};
 use datafusion_expr::window_state::date32_range_can_wrap;
 use datafusion_expr::{
     LimitEffect, PartitionEvaluator, ReversedUDWF, SetMonotonicity, WindowFrame,
-    WindowFunctionDefinition, WindowUDF,
+    WindowFrameBound, WindowFrameUnits, WindowFunctionDefinition, WindowUDF,
 };
 use datafusion_functions_window_common::expr::ExpressionArgs;
 use datafusion_functions_window_common::field::WindowUDFFieldArgs;
@@ -103,6 +103,20 @@ pub fn create_window_expr(
     distinct: bool,
     filter: Option<Arc<dyn PhysicalExpr>>,
 ) -> Result<Arc<dyn WindowExpr>> {
+    if window_frame.has_null_offset() {
+        if window_frame.units != WindowFrameUnits::Range {
+            return plan_err!("NULL offsets require a RANGE window frame");
+        }
+        if order_by.len() != 1 {
+            return plan_err!("RANGE requires exactly one ORDER BY column");
+        }
+        if matches!(&window_frame.start_bound, WindowFrameBound::Following(value) if value.is_null()) {
+            return plan_err!("Invalid window frame: start bound cannot be UNBOUNDED FOLLOWING");
+        }
+        if matches!(&window_frame.end_bound, WindowFrameBound::Preceding(value) if value.is_null()) {
+            return plan_err!("Invalid window frame: end bound cannot be UNBOUNDED PRECEDING");
+        }
+    }
     Ok(match fun {
         WindowFunctionDefinition::AggregateUDF(fun) => {
             let aggregate = if distinct {
@@ -387,6 +401,9 @@ pub(crate) fn window_equivalence_properties(
     let window_expr_indices = (input_schema_len..window_schema_len).collect::<Vec<_>>();
 
     for (i, expr) in window_exprs.iter().enumerate() {
+        if expr.get_window_frame().has_null_offset() {
+            continue;
+        }
         let partitioning_exprs = expr.partition_by();
         let no_partitioning = partitioning_exprs.is_empty();
 
@@ -625,6 +642,9 @@ pub fn get_best_fitting_window(
     };
 
     let window_expr = if should_reverse {
+        if window_exprs.iter().any(|expr| expr.get_window_frame().has_null_offset()) {
+            return Ok(None);
+        }
         if let Some(order_by) = orderby_keys.first() {
             let data_type = order_by.expr.data_type(input.schema().as_ref())?;
             if window_exprs.iter().any(|expr| {

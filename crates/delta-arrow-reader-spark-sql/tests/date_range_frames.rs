@@ -70,7 +70,15 @@ fn validate_prior_owner_controls(records: &[Value], controls: &[Value]) -> TestR
             return Err("prior owner reference or observation profile differs".into());
         }
     }
-    if controls.len() != 112 || expected.len() != 112 || seen != expected {
+    if controls.len() != 112
+        || expected.len() != 112
+        || seen != expected
+        || controls
+            .iter()
+            .filter(|control| control["ownership"] == "date_interval_owner")
+            .count()
+            != 84
+    {
         return Err("prior owner corpus/ANSI/batch inventory differs".into());
     }
     Ok(())
@@ -432,7 +440,7 @@ async fn replay_date_range_cases(original_consumers_only: bool) -> TestResult {
     ))?;
     validate_prior_owner_controls(&records, &owner_controls)?;
     let mut owner_differences = Vec::new();
-    let mut owner_contexts = 0;
+    let mut remaining_owner_contexts = 0;
     let mut primary_contexts = 0;
     let mut completed = BTreeSet::new();
     let mut primary_differences = Vec::new();
@@ -466,20 +474,21 @@ async fn replay_date_range_cases(original_consumers_only: bool) -> TestResult {
                 });
                 let actual =
                     result.unwrap_or_else(|error| json!({"observer_error":error.to_string()}));
-                let independent_owner = matches!(
-                    case["ownership"].as_str(),
-                    Some("null_offset_owner" | "date_interval_owner")
-                );
+                // Source tags describe the original capture; only interval owners remain pending.
+                let source_ownership_tag = case["ownership"]
+                    .as_str()
+                    .ok_or("missing source ownership tag")?;
+                let remaining_owner = source_ownership_tag == "date_interval_owner";
                 let observation = json!({
                     "corpus":source,"id":id,"ansi":ansi,"batch":batch_size,
                     "target_partitions":2,"provider_partitions":2,
                     "replay_scope":if original_consumers_only { "original_consumers" } else { "all" },
                     "ownership":case["ownership"],"reference":case,"observation":actual,
-                    "spark_matches":matches,"primary":!independent_owner,
+                    "spark_matches":matches,"primary":!remaining_owner,
                 });
                 eprintln!("DATE_RANGE_OBSERVATION {observation}");
-                if independent_owner {
-                    owner_contexts += 1;
+                if remaining_owner {
+                    remaining_owner_contexts += 1;
                     let control = owner_controls
                         .iter()
                         .find(|control| {
@@ -494,11 +503,11 @@ async fn replay_date_range_cases(original_consumers_only: bool) -> TestResult {
                             .push(format!("{source}:{id} ANSI={ansi} batch={batch_size}"));
                     }
                 }
-                if !independent_owner && !matches {
+                if !remaining_owner && !matches {
                     primary_differences
                         .push(format!("{source}:{id} ANSI={ansi} batch={batch_size}"));
                 }
-                primary_contexts += usize::from(!independent_owner);
+                primary_contexts += usize::from(!remaining_owner);
             }
         }
     }
@@ -506,11 +515,11 @@ async fn replay_date_range_cases(original_consumers_only: bool) -> TestResult {
     assert_eq!(completed.len(), expected_contexts);
     assert_eq!(
         primary_contexts,
-        if original_consumers_only { 108 } else { 984 }
+        if original_consumers_only { 108 } else { 1012 }
     );
     assert_eq!(
-        owner_contexts,
-        if original_consumers_only { 0 } else { 112 }
+        remaining_owner_contexts,
+        if original_consumers_only { 0 } else { 84 }
     );
     assert!(
         primary_differences.is_empty() && owner_differences.is_empty(),
