@@ -598,8 +598,8 @@ fn null_offset_unparser_rejects_unsupported_payload_types() -> TestResult {
 async fn date_null_interval_bounds_keep_legacy_representation_and_coercion() -> TestResult {
     use arrow::datatypes::{DataType, IntervalUnit, TimeUnit};
     use datafusion::logical_expr::WindowFrameBound;
+    use datafusion::logical_expr::window_frame::RangeOffsetArithmetic;
     use datafusion::physical_optimizer::aggregate_statistics::PreserveAggregateStatisticsSchema;
-    use datafusion_expr::window_frame::RangeOffsetArithmetic;
     use delta_arrow_reader_spark_sql::{SparkSqlOptions, plan_query};
     use sail_plan::expression_errors::SparkSqlExpressionSemantics;
 
@@ -701,8 +701,8 @@ fn find_single_window_frame(
 
 #[tokio::test]
 async fn null_range_producer_arithmetic_survives_analyzer_coercion() -> TestResult {
+    use datafusion::logical_expr::window_frame::RangeOffsetArithmetic;
     use datafusion::physical_optimizer::aggregate_statistics::PreserveAggregateStatisticsSchema;
-    use datafusion_expr::window_frame::RangeOffsetArithmetic;
     use delta_arrow_reader_spark_sql::{SparkSqlOptions, plan_query};
     use sail_plan::expression_errors::SparkSqlExpressionSemantics;
 
