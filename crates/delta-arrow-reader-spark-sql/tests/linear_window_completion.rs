@@ -3,20 +3,28 @@
 use std::error::Error;
 use std::sync::Arc;
 
-use arrow::array::{Array, ArrayRef, Int32Array, Int64Array, ListArray, StructArray, UInt32Array};
+use arrow::array::{
+    Array, ArrayRef, Date32Array, Int32Array, Int64Array, ListArray, StructArray, UInt32Array,
+};
 use arrow::compute::{SortOptions, take_record_batch};
-use arrow::datatypes::{Field, Int32Type, Schema, SchemaRef};
+use arrow::datatypes::{DataType, Field, Int32Type, Schema, SchemaRef};
 use arrow::record_batch::RecordBatch;
 use datafusion::common::ScalarValue;
 use datafusion::functions_aggregate::count::count_udaf;
+use datafusion::functions_aggregate::min_max::max_udaf;
+use datafusion::functions_window::nth_value::{first_value_udwf, nth_value_udwf};
 use datafusion::logical_expr::window_state::PartitionBatchState;
 use datafusion::logical_expr::{
     WindowFrame, WindowFrameBound, WindowFrameUnits, WindowFunctionDefinition,
 };
-use datafusion::physical_expr::PhysicalSortExpr;
-use datafusion::physical_expr::expressions::col;
+use datafusion::physical_expr::expressions::{Literal, col};
 use datafusion::physical_expr::window::{PartitionBatches, PartitionWindowAggStates, WindowExpr};
-use datafusion::physical_plan::windows::create_window_expr;
+use datafusion::physical_expr::{LexOrdering, PhysicalSortExpr};
+use datafusion::physical_plan::ExecutionPlan;
+use datafusion::physical_plan::streaming::StreamingTableExec;
+use datafusion::physical_plan::windows::{
+    WindowAggExec, create_window_expr, get_best_fitting_window,
+};
 
 type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
 
@@ -81,6 +89,29 @@ fn count_window(
         false,
         None,
     )?)
+}
+
+fn date_source_batch(
+    rows: &[(i32, i32, Option<i32>)],
+    descending: bool,
+) -> TestResult<RecordBatch> {
+    let columns: Vec<ArrayRef> = vec![
+        Arc::new(Int32Array::from_iter_values(rows.iter().map(|row| row.0))),
+        Arc::new(Int32Array::from_iter_values(rows.iter().map(|row| row.1))),
+        Arc::new(Date32Array::from(
+            rows.iter()
+                .map(|row| row.2.map(|key| if descending { -key } else { key }))
+                .collect::<Vec<_>>(),
+        )),
+    ];
+    let schema = Arc::new(Schema::new(
+        ["id", "p", "k"]
+            .into_iter()
+            .zip(&columns)
+            .map(|(name, column)| Field::new(name, column.data_type().clone(), name == "k"))
+            .collect::<Vec<_>>(),
+    ));
+    Ok(RecordBatch::try_new(schema, columns)?)
 }
 
 fn append_linear_batch(
@@ -149,6 +180,276 @@ fn prune_partition(
         .record_batch
         .slice(n_prune, buffer.record_batch.num_rows() - n_prune);
     state.prune_state(n_prune);
+    Ok(())
+}
+
+#[test]
+fn date_range_offsets_decline_reversal_of_either_bound() -> TestResult {
+    for data_type in [DataType::Date32, DataType::Int32] {
+        let schema = Arc::new(Schema::new(vec![Field::new("k", data_type.clone(), false)]));
+        let ordering = LexOrdering::new(vec![PhysicalSortExpr {
+            expr: col("k", &schema)?,
+            options: SortOptions {
+                descending: true,
+                nulls_first: false,
+            },
+        }])
+        .ok_or("empty ordering")?;
+        let input: Arc<dyn ExecutionPlan> = Arc::new(StreamingTableExec::try_new(
+            schema.clone(),
+            vec![],
+            None,
+            Some(ordering),
+            false,
+            None,
+        )?);
+        for offset in [0, 1] {
+            for (start, end) in [
+                (
+                    WindowFrameBound::Preceding(ScalarValue::Int32(Some(offset))),
+                    WindowFrameBound::CurrentRow,
+                ),
+                (
+                    WindowFrameBound::CurrentRow,
+                    WindowFrameBound::Following(ScalarValue::Int32(Some(offset))),
+                ),
+            ] {
+                let window = create_window_expr(
+                    &WindowFunctionDefinition::AggregateUDF(count_udaf()),
+                    "n".into(),
+                    &[col("k", &schema)?],
+                    &[],
+                    &[PhysicalSortExpr {
+                        expr: col("k", &schema)?,
+                        options: SortOptions::default(),
+                    }],
+                    Arc::new(WindowFrame::new_bounds(WindowFrameUnits::Range, start, end)),
+                    schema.clone(),
+                    false,
+                    false,
+                    None,
+                )?;
+                let optimized = get_best_fitting_window(&[window], &input, &[])?;
+                assert_eq!(
+                    optimized.is_some(),
+                    data_type == DataType::Int32 || offset == 0
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn date_range_wrap_does_not_infer_aggregate_output_ordering() -> TestResult {
+    for data_type in [DataType::Date32, DataType::Int32] {
+        let schema = Arc::new(Schema::new(vec![Field::new("k", data_type.clone(), false)]));
+        let options = SortOptions {
+            descending: false,
+            nulls_first: false,
+        };
+        let ordering = LexOrdering::new(vec![PhysicalSortExpr {
+            expr: col("k", &schema)?,
+            options,
+        }])
+        .ok_or("empty ordering")?;
+        let input: Arc<dyn ExecutionPlan> = Arc::new(StreamingTableExec::try_new(
+            schema.clone(),
+            vec![],
+            None,
+            Some(ordering),
+            false,
+            None,
+        )?);
+        let window = create_window_expr(
+            &WindowFunctionDefinition::AggregateUDF(max_udaf()),
+            "mx".into(),
+            &[col("k", &schema)?],
+            &[],
+            &[PhysicalSortExpr {
+                expr: col("k", &schema)?,
+                options,
+            }],
+            Arc::new(WindowFrame::new_bounds(
+                WindowFrameUnits::Range,
+                WindowFrameBound::Preceding(ScalarValue::Int32(Some(i32::MAX))),
+                WindowFrameBound::Preceding(ScalarValue::Int32(Some(i32::MAX - 1))),
+            )),
+            schema,
+            false,
+            false,
+            None,
+        )?;
+        let plan = WindowAggExec::try_new(vec![window], input, false)?;
+        let inferred = plan
+            .properties()
+            .equivalence_properties()
+            .ordering_satisfy([PhysicalSortExpr {
+                expr: col("mx", &plan.schema())?,
+                options,
+            }])?;
+        assert_eq!(inferred, data_type == DataType::Int32);
+    }
+    Ok(())
+}
+
+#[test]
+fn date_preceding_wrap_waits_for_builtin_window_values() -> TestResult {
+    for (function, nth) in [(first_value_udwf(), false), (nth_value_udwf(), true)] {
+        for descending in [false, true] {
+            for nulls_first in [false, true] {
+                let first = date_source_batch(&[(0, 0, Some(-3)), (1, 1, Some(-2))], descending)?;
+                let schema = first.schema();
+                let mut arguments = vec![col("id", &schema)?];
+                if nth {
+                    arguments.push(Arc::new(Literal::new(ScalarValue::Int64(Some(2)))));
+                }
+                let window = create_window_expr(
+                    &WindowFunctionDefinition::WindowUDF(function.clone()),
+                    "value".into(),
+                    &arguments,
+                    &[col("p", &schema)?],
+                    &[PhysicalSortExpr {
+                        expr: col("k", &schema)?,
+                        options: SortOptions {
+                            descending,
+                            nulls_first,
+                        },
+                    }],
+                    Arc::new(WindowFrame::new_bounds(
+                        WindowFrameUnits::Range,
+                        WindowFrameBound::Preceding(ScalarValue::UInt64(None)),
+                        WindowFrameBound::Preceding(ScalarValue::Int32(Some(i32::MAX))),
+                    )),
+                    schema,
+                    false,
+                    false,
+                    None,
+                )?;
+                let mut buffers = PartitionBatches::default();
+                let mut states = PartitionWindowAggStates::default();
+                append_linear_batch(window.as_ref(), &mut buffers, &mut states, first)?;
+                for state in states.values() {
+                    assert!(state.state.out_col.is_empty());
+                }
+                append_linear_batch(
+                    window.as_ref(),
+                    &mut buffers,
+                    &mut states,
+                    date_source_batch(
+                        &[(2, 0, Some(i32::MAX - 1)), (3, 1, Some(i32::MAX))],
+                        descending,
+                    )?,
+                )?;
+                for buffer in buffers.values_mut() {
+                    buffer.is_end = true;
+                }
+                window.evaluate_stateful(&buffers, &mut states)?;
+                for partition in [0, 1] {
+                    let state = &states[&vec![ScalarValue::Int32(Some(partition))]].state;
+                    let values = state
+                        .out_col
+                        .as_any()
+                        .downcast_ref::<Int32Array>()
+                        .ok_or("value type")?;
+                    let expected = if nth { partition + 2 } else { partition };
+                    assert_eq!(values.null_count(), 0);
+                    assert_eq!(values.values().as_ref(), &[expected, expected]);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn date_range_day_bounds_complete_and_prune_sparse_partitions() -> TestResult {
+    for end in [
+        WindowFrameBound::Following(ScalarValue::Int32(Some(1))),
+        WindowFrameBound::Preceding(ScalarValue::Int32(Some(-1))),
+    ] {
+        for descending in [false, true] {
+            for nulls_first in [false, true] {
+                let first = date_source_batch(
+                    &[
+                        (0, 0, Some(1)),
+                        (1, 1, Some(1)),
+                        (2, 0, Some(2)),
+                        (3, 1, Some(3)),
+                    ],
+                    descending,
+                )?;
+                let window = count_window(
+                    first.schema(),
+                    WindowFrameUnits::Range,
+                    end.clone(),
+                    SortOptions {
+                        descending,
+                        nulls_first,
+                    },
+                )?;
+                let mut buffers = PartitionBatches::default();
+                let mut states = PartitionWindowAggStates::default();
+                append_linear_batch(window.as_ref(), &mut buffers, &mut states, first)?;
+                assert_eq!(counts(&states, 0)?, [2]);
+                assert_eq!(counts(&states, 1)?, [1]);
+                append_linear_batch(
+                    window.as_ref(),
+                    &mut buffers,
+                    &mut states,
+                    date_source_batch(&[(4, 0, Some(3)), (5, 1, Some(4))], descending)?,
+                )?;
+                assert_eq!(counts(&states, 0)?, [2, 2]);
+                assert_eq!(counts(&states, 1)?, [1]);
+                prune_partition(&mut buffers, &mut states, 0, 1)?;
+                append_linear_batch(
+                    window.as_ref(),
+                    &mut buffers,
+                    &mut states,
+                    date_source_batch(&[(6, 0, Some(4)), (7, 1, Some(5))], descending)?,
+                )?;
+                assert_eq!(counts(&states, 0)?, [2, 2, 2]);
+                assert_eq!(counts(&states, 1)?, [1, 2]);
+                assert_eq!(
+                    states[&vec![ScalarValue::Int32(Some(0))]]
+                        .state
+                        .offset_pruned_rows,
+                    1
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn date_range_completion_uses_the_latest_rows_null_order() -> TestResult {
+    for offset in [0, 1] {
+        for descending in [false, true] {
+            for nulls_first in [false, true] {
+                let keys = if nulls_first {
+                    [None, Some(1)]
+                } else {
+                    [Some(1), None]
+                };
+                let first = date_source_batch(&[(0, 0, keys[0]), (1, 1, keys[1])], descending)?;
+                let window = count_window(
+                    first.schema(),
+                    WindowFrameUnits::Range,
+                    WindowFrameBound::Following(ScalarValue::Int32(Some(offset))),
+                    SortOptions {
+                        descending,
+                        nulls_first,
+                    },
+                )?;
+                let mut buffers = PartitionBatches::default();
+                let mut states = PartitionWindowAggStates::default();
+                append_linear_batch(window.as_ref(), &mut buffers, &mut states, first)?;
+                assert_eq!(counts(&states, 0)?, [1]);
+                assert!(counts(&states, 1)?.is_empty());
+            }
+        }
+    }
     Ok(())
 }
 
