@@ -35,8 +35,8 @@ use arrow_schema::{FieldRef, SortOptions};
 use datafusion_common::{Result, exec_err, plan_err};
 use datafusion_expr::window_state::date32_range_can_wrap;
 use datafusion_expr::{
-    LimitEffect, PartitionEvaluator, ReversedUDWF, SetMonotonicity, WindowFrame, WindowFrameBound,
-    WindowFrameUnits, WindowFunctionDefinition, WindowUDF,
+    LimitEffect, PartitionEvaluator, ReversedUDWF, SetMonotonicity, WindowFrame,
+    WindowFrameBound, WindowFrameUnits, WindowFunctionDefinition, WindowUDF,
 };
 use datafusion_functions_window_common::expr::ExpressionArgs;
 use datafusion_functions_window_common::field::WindowUDFFieldArgs;
@@ -79,8 +79,10 @@ pub fn schema_add_window_field(
     if let WindowFunctionDefinition::AggregateUDF(_) = window_fn {
         Ok(Arc::new(Schema::new(window_fields)))
     } else {
-        window_fields
-            .extend_from_slice(&[window_expr_return_field.as_ref().clone().with_name(fn_name)]);
+        window_fields.extend_from_slice(&[window_expr_return_field
+            .as_ref()
+            .clone()
+            .with_name(fn_name)]);
         Ok(Arc::new(Schema::new(window_fields)))
     }
 }
@@ -106,12 +108,10 @@ pub fn create_window_expr(
         if order_by.len() != 1 {
             return plan_err!("RANGE requires exactly one ORDER BY column");
         }
-        if matches!(&window_frame.start_bound, WindowFrameBound::Following(value) if value.is_null())
-        {
+        if matches!(&window_frame.start_bound, WindowFrameBound::Following(value) if value.is_null()) {
             return plan_err!("Invalid window frame: start bound cannot be UNBOUNDED FOLLOWING");
         }
-        if matches!(&window_frame.end_bound, WindowFrameBound::Preceding(value) if value.is_null())
-        {
+        if matches!(&window_frame.end_bound, WindowFrameBound::Preceding(value) if value.is_null()) {
             return plan_err!("Invalid window frame: end bound cannot be UNBOUNDED PRECEDING");
         }
     }
@@ -404,7 +404,8 @@ pub(crate) fn window_equivalence_properties(
         let mut candidate_ordering = vec![];
 
         for partition_expr in partitioning_exprs.iter() {
-            let sort_options = sort_options_resolving_constant(Arc::clone(partition_expr), true);
+            let sort_options =
+                sort_options_resolving_constant(Arc::clone(partition_expr), true);
 
             // Try each sort option and pick the first one that works
             let mut found = false;
@@ -438,14 +439,18 @@ pub(crate) fn window_equivalence_properties(
         // new orderings for the window plan.
         if !no_partitioning && all_satisfied_lexs.is_empty() {
             return Ok(window_eq_properties);
-        } else if let Some(std_expr) = expr.as_any().downcast_ref::<StandardWindowExpr>() {
+        } else if let Some(std_expr) = expr.as_any().downcast_ref::<StandardWindowExpr>()
+        {
             std_expr.add_equal_orderings(&mut window_eq_properties)?;
-        } else if let Some(plain_expr) = expr.as_any().downcast_ref::<PlainAggregateWindowExpr>() {
+        } else if let Some(plain_expr) =
+            expr.as_any().downcast_ref::<PlainAggregateWindowExpr>()
+        {
             // We are dealing with plain window frames; i.e. frames having an
             // unbounded starting point.
             // First, check if the frame covers the whole table:
             if plain_expr.get_window_frame().end_bound.is_unbounded() {
-                let window_col = Arc::new(Column::new(expr.name(), i + input_schema_len)) as _;
+                let window_col =
+                    Arc::new(Column::new(expr.name(), i + input_schema_len)) as _;
                 if no_partitioning {
                     // Window function has a constant result across the table:
                     window_eq_properties
@@ -525,7 +530,8 @@ pub(crate) fn window_equivalence_properties(
 
                     for (idx, expr) in aggregate_exprs.iter().enumerate() {
                         let mut found = false;
-                        let sort_options = sort_options_resolving_constant(Arc::clone(expr), false);
+                        let sort_options =
+                            sort_options_resolving_constant(Arc::clone(expr), false);
 
                         // Try each option and pick the first that works
                         for sort_expr in sort_options.into_iter() {
@@ -563,7 +569,8 @@ pub(crate) fn window_equivalence_properties(
                         && !aggregate_exprs.is_empty();
 
                     if satisfied {
-                        let increasing = set_monotonicity.eq(&SetMonotonicity::Increasing);
+                        let increasing =
+                            set_monotonicity.eq(&SetMonotonicity::Increasing);
                         let window_col = Column::new(expr.name(), i + input_schema_len);
                         if increasing && (asc || no_partitioning) {
                             window_eq_properties.add_ordering([PhysicalSortExpr::new(
@@ -606,13 +613,14 @@ pub fn get_best_fitting_window(
     // of the window_exprs are same.
     let partitionby_exprs = window_exprs[0].partition_by();
     let orderby_keys = window_exprs[0].order_by();
-    let (should_reverse, input_order_mode) = if let Some((should_reverse, input_order_mode)) =
-        get_window_mode(partitionby_exprs, orderby_keys, input)?
-    {
-        (should_reverse, input_order_mode)
-    } else {
-        return Ok(None);
-    };
+    let (should_reverse, input_order_mode) =
+        if let Some((should_reverse, input_order_mode)) =
+            get_window_mode(partitionby_exprs, orderby_keys, input)?
+        {
+            (should_reverse, input_order_mode)
+        } else {
+            return Ok(None);
+        };
     let is_unbounded = input.boundedness().is_unbounded();
     if !is_unbounded && input_order_mode != InputOrderMode::Sorted {
         // Executor has bounded input and `input_order_mode` is not `InputOrderMode::Sorted`
@@ -708,8 +716,11 @@ pub fn get_window_mode(
     // Treat partition by exprs as constant. During analysis of requirements are satisfied.
     let const_exprs = partitionby_exprs.iter().cloned().map(ConstExpr::from);
     input_eqs.add_constants(const_exprs)?;
-    let reverse_orderby_keys = orderby_keys.iter().map(|e| e.reverse()).collect::<Vec<_>>();
-    for (should_swap, orderbys) in [(false, orderby_keys), (true, reverse_orderby_keys.as_ref())] {
+    let reverse_orderby_keys =
+        orderby_keys.iter().map(|e| e.reverse()).collect::<Vec<_>>();
+    for (should_swap, orderbys) in
+        [(false, orderby_keys), (true, reverse_orderby_keys.as_ref())]
+    {
         let mut req = partition_by_reqs.clone();
         req.extend(orderbys.iter().cloned().map(Into::into));
         if req.is_empty() || input_eqs.ordering_satisfy_requirement(req)? {
@@ -927,7 +938,8 @@ mod tests {
     #[tokio::test]
     async fn test_drop_cancel() -> Result<()> {
         let task_ctx = Arc::new(TaskContext::default());
-        let schema = Arc::new(Schema::new(vec![Field::new("a", DataType::Float32, true)]));
+        let schema =
+            Arc::new(Schema::new(vec![Field::new("a", DataType::Float32, true)]));
 
         let blocking_exec = Arc::new(BlockingExec::new(Arc::clone(&schema), 1));
         let refs = blocking_exec.refs();
@@ -1137,7 +1149,8 @@ mod tests {
                 let options = SortOptions::default();
                 order_by_exprs.push(PhysicalSortExpr { expr, options });
             }
-            let res = get_window_mode(&partition_by_exprs, &order_by_exprs, &exec_unbounded)?;
+            let res =
+                get_window_mode(&partition_by_exprs, &order_by_exprs, &exec_unbounded)?;
             // Since reversibility is not important in this test. Convert Option<(bool, InputOrderMode)> to Option<InputOrderMode>
             let res = res.map(|(_, mode)| mode);
             assert_eq!(

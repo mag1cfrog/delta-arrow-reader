@@ -558,7 +558,8 @@ fn is_end_bound_safe_for_range(
         return compare_rows(&[latest], &[target], &[*sort_options]).map(|order| order.is_gt());
     }
     if window_frame.has_null_offset() {
-        let Some(most_recent_ob_col) = most_recent_ob_col.filter(|col| !col.is_empty()) else {
+        let Some(most_recent_ob_col) = most_recent_ob_col.filter(|col| !col.is_empty())
+        else {
             return Ok(false);
         };
         let current_key = ScalarValue::try_from_array(orderby_col, idx)?;
@@ -572,21 +573,26 @@ fn is_end_bound_safe_for_range(
             return Ok(false);
         };
         let latest = ScalarValue::try_from_array(most_recent_ob_col, 0)?;
-        return compare_rows(&[latest], &[target], &[*sort_options]).map(|order| order.is_gt());
+        return compare_rows(&[latest], &[target], &[*sort_options])
+            .map(|order| order.is_gt());
     }
     if orderby_col.data_type() == &DataType::Date32
-        && let WindowFrameBound::Preceding(delta) | WindowFrameBound::Following(delta) = end_bound
+        && let WindowFrameBound::Preceding(delta) | WindowFrameBound::Following(delta) =
+            end_bound
         && let Some(target) = date32_range_target(
             &ScalarValue::try_from_array(orderby_col, idx)?,
             delta,
-            matches!(end_bound, WindowFrameBound::Preceding(_)) == sort_options.descending,
+            matches!(end_bound, WindowFrameBound::Preceding(_))
+                == sort_options.descending,
         )
     {
-        let Some(most_recent_ob_col) = most_recent_ob_col.filter(|col| !col.is_empty()) else {
+        let Some(most_recent_ob_col) = most_recent_ob_col.filter(|col| !col.is_empty())
+        else {
             return Ok(false);
         };
         let latest = ScalarValue::try_from_array(most_recent_ob_col, 0)?;
-        return compare_rows(&[latest], &[target], &[*sort_options]).map(|order| order.is_gt());
+        return compare_rows(&[latest], &[target], &[*sort_options])
+            .map(|order| order.is_gt());
     }
     match end_bound {
         WindowFrameBound::Preceding(value) => {
@@ -602,7 +608,8 @@ fn is_end_bound_safe_for_range(
             let Some(most_recent_ob_col) = most_recent_ob_col else {
                 return Ok(false);
             };
-            let most_recent_row_value = ScalarValue::try_from_array(most_recent_ob_col, 0)?;
+            let most_recent_row_value =
+                ScalarValue::try_from_array(most_recent_ob_col, 0)?;
             let current_row_value = ScalarValue::try_from_array(orderby_col, idx)?;
 
             if sort_options.descending {
@@ -722,7 +729,8 @@ mod tests {
 
     #[test]
     fn test_is_row_ahead() -> Result<()> {
-        let old_values: ArrayRef = Arc::new(Float64Array::from(vec![5.0, 7.0, 8.0, 9., 10.]));
+        let old_values: ArrayRef =
+            Arc::new(Float64Array::from(vec![5.0, 7.0, 8.0, 9., 10.]));
 
         let new_values1: ArrayRef = Arc::new(Float64Array::from(vec![11.0]));
         let new_values2: ArrayRef = Arc::new(Float64Array::from(vec![10.0]));

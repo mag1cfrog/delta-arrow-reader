@@ -152,7 +152,9 @@ impl TryFrom<ast::WindowFrame> for WindowFrame {
 
         if let WindowFrameBound::Following(val) = &start_bound {
             if val.is_null() {
-                plan_err!("Invalid window frame: start bound cannot be UNBOUNDED FOLLOWING")?
+                plan_err!(
+                    "Invalid window frame: start bound cannot be UNBOUNDED FOLLOWING"
+                )?
             }
         } else if let WindowFrameBound::Preceding(val) = &end_bound
             && val.is_null()
@@ -361,8 +363,10 @@ impl WindowFrame {
     /// Returns whether the window frame is "free range"; i.e. its start/end
     /// bounds are UNBOUNDED or CURRENT ROW.
     fn free_range(&self) -> bool {
-        (self.start_bound.is_unbounded() || self.start_bound == WindowFrameBound::CurrentRow)
-            && (self.end_bound.is_unbounded() || self.end_bound == WindowFrameBound::CurrentRow)
+        (self.start_bound.is_unbounded()
+            || self.start_bound == WindowFrameBound::CurrentRow)
+            && (self.end_bound.is_unbounded()
+                || self.end_bound == WindowFrameBound::CurrentRow)
     }
 
     /// Is the window frame ever-expanding (it always grows in the superset sense).
@@ -606,8 +610,7 @@ mod tests {
         let err = WindowFrame::try_from(window_frame).unwrap_err();
         assert_eq!(
             err.strip_backtrace(),
-            "Error during planning: Invalid window frame: end bound cannot be UNBOUNDED PRECEDING"
-                .to_owned()
+            "Error during planning: Invalid window frame: end bound cannot be UNBOUNDED PRECEDING".to_owned()
         );
 
         let window_frame = ast::WindowFrame {

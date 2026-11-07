@@ -221,7 +221,9 @@ impl WindowFrameContext {
         let end = match window_frame.end_bound {
             // UNBOUNDED PRECEDING
             WindowFrameBound::Preceding(ScalarValue::UInt64(None)) => {
-                return internal_err!("Frame end cannot be UNBOUNDED PRECEDING '{window_frame:?}'");
+                return internal_err!(
+                    "Frame end cannot be UNBOUNDED PRECEDING '{window_frame:?}'"
+                );
             }
             WindowFrameBound::Preceding(ScalarValue::UInt64(Some(n))) => {
                 if idx >= n as usize {
@@ -371,7 +373,8 @@ pub fn range_bound_target(
         {
             return Ok(None);
         }
-        WindowFrameBound::PrecedingNullOffset(_) | WindowFrameBound::FollowingNullOffset(_) => {
+        WindowFrameBound::PrecedingNullOffset(_)
+        | WindowFrameBound::FollowingNullOffset(_) => {
             return ScalarValue::try_from(&current_key.data_type()).map(Some);
         }
         WindowFrameBound::CurrentRow => return Ok(Some(current_key.clone())),
@@ -411,7 +414,9 @@ pub fn range_bound_target(
         };
         let is_float_or_decimal = matches!(
             key,
-            ScalarValue::Float32(_) | ScalarValue::Float64(_) | ScalarValue::Decimal256(_, _, _)
+            ScalarValue::Float32(_)
+                | ScalarValue::Float64(_)
+                | ScalarValue::Decimal256(_, _, _)
         );
         let negate = |offset: &ScalarValue| -> Result<ScalarValue> {
             if is_float_or_decimal {
@@ -424,12 +429,15 @@ pub fn range_bound_target(
                 if matches!(&error, DataFusionError::ArrowError(cause, _)
                     if matches!(cause.as_ref(), ArrowError::ArithmeticOverflow(_)))
                 {
-                    exec_datafusion_err!("{} overflow on negative({offset})", offset.data_type())
-                        .context(if is_date {
-                            "[ARITHMETIC_OVERFLOW] DATE RANGE offset negation"
-                        } else {
-                            "[ARITHMETIC_OVERFLOW] RANGE offset negation"
-                        })
+                    exec_datafusion_err!(
+                        "{} overflow on negative({offset})",
+                        offset.data_type()
+                    )
+                    .context(if is_date {
+                        "[ARITHMETIC_OVERFLOW] DATE RANGE offset negation"
+                    } else {
+                        "[ARITHMETIC_OVERFLOW] RANGE offset negation"
+                    })
                 } else {
                     error
                 }
@@ -497,7 +505,8 @@ fn compare_spark_range_target(
             ScalarValue::Decimal128(Some(value), _, scale),
             ScalarValue::Decimal256(_, _, target_scale),
         ) if scale == target_scale => {
-            let widened_key = ScalarValue::Decimal256(Some(i256::from_i128(*value)), 76, *scale);
+            let widened_key =
+                ScalarValue::Decimal256(Some(i256::from_i128(*value)), 76, *scale);
             return compare_rows(
                 std::slice::from_ref(&widened_key),
                 std::slice::from_ref(target),
@@ -675,10 +684,13 @@ impl WindowFrameStateRange {
                     })
                     .collect::<Vec<_>>();
                 let comparator = LexicographicalComparator::try_new(&columns)?;
-                self.peer_comparator = Some((range_columns.to_vec(), Arc::new(comparator)));
+                self.peer_comparator =
+                    Some((range_columns.to_vec(), Arc::new(comparator)));
             }
             let (_, comparator) = self.peer_comparator.as_ref().ok_or_else(|| {
-                internal_datafusion_err!("Peer comparator unexpectedly absent in a window frame")
+                internal_datafusion_err!(
+                    "Peer comparator unexpectedly absent in a window frame"
+                )
             })?;
             return Ok((search_start..length)
                 .find(|&row| {
@@ -693,7 +705,9 @@ impl WindowFrameStateRange {
                 .sort_options
                 .first()
                 .ok_or_else(|| {
-                    internal_datafusion_err!("Sort options unexpectedly absent in a window frame")
+                    internal_datafusion_err!(
+                        "Sort options unexpectedly absent in a window frame"
+                    )
                 })?
                 .descending;
 
@@ -723,9 +737,12 @@ impl WindowFrameStateRange {
                 window_frame.range_offset_arithmetic(),
                 RangeOffsetArithmetic::Spark { .. }
             ) {
-                let ([key], [target], [options]) = (current, target, self.sort_options.as_slice())
+                let ([key], [target], [options]) =
+                    (current, target, self.sort_options.as_slice())
                 else {
-                    return internal_err!("Spark RANGE comparison requires one ORDER BY key");
+                    return internal_err!(
+                        "Spark RANGE comparison requires one ORDER BY key"
+                    );
                 };
                 compare_spark_range_target(key, target, options)?
             } else {
@@ -818,7 +835,8 @@ impl WindowFrameStateGroups {
                     )?
                 }
             }
-            WindowFrameBound::PrecedingNullOffset(_) | WindowFrameBound::FollowingNullOffset(_) => {
+            WindowFrameBound::PrecedingNullOffset(_)
+            | WindowFrameBound::FollowingNullOffset(_) => {
                 return internal_err!("NULL offsets require a RANGE window frame");
             }
         };
@@ -995,7 +1013,8 @@ mod tests {
             ),
         ] {
             let column: ArrayRef = Arc::new(Date32Array::from(days));
-            let frame = Arc::new(WindowFrame::new_bounds(WindowFrameUnits::Range, start, end));
+            let frame =
+                Arc::new(WindowFrame::new_bounds(WindowFrameUnits::Range, start, end));
             let mut state = WindowFrameContext::new(
                 frame,
                 vec![SortOptions {
@@ -1091,8 +1110,8 @@ mod tests {
                 cached = Some(current);
                 last_range = range;
             }
-            let previous =
-                cached.ok_or_else(|| internal_datafusion_err!("missing test comparator"))?;
+            let previous = cached
+                .ok_or_else(|| internal_datafusion_err!("missing test comparator"))?;
             let replacement = column.slice(0, column.len());
             state.calculate_range(&frame, &(0..0), &[replacement], column.len(), 0)?;
             assert!(previous.upgrade().is_none());
@@ -1133,7 +1152,8 @@ mod tests {
         let mut window_frame_groups = WindowFrameStateGroups::default();
         let (range_columns, _) = get_test_data();
         let n_row = range_columns[0].len();
-        for (idx, (expected_range, expected_group_idx)) in expected_results.into_iter().enumerate()
+        for (idx, (expected_range, expected_group_idx)) in
+            expected_results.into_iter().enumerate()
         {
             let range =
                 window_frame_groups.calculate_range(window_frame, &range_columns, n_row, idx)?;
@@ -1147,7 +1167,8 @@ mod tests {
         window_frame: &Arc<WindowFrame>,
         expected_results: Vec<Range<usize>>,
     ) -> Result<()> {
-        let mut window_frame_context = WindowFrameContext::new(Arc::clone(window_frame), vec![]);
+        let mut window_frame_context =
+            WindowFrameContext::new(Arc::clone(window_frame), vec![]);
         let (range_columns, _) = get_test_data();
         let n_row = range_columns[0].len();
         let mut last_range = Range { start: 0, end: 0 };

@@ -159,17 +159,18 @@ impl WindowExpr for StandardWindowExpr {
         // group, which is faster than potentially creating a new one at every iteration
         let new_state = WindowAggState::new(out_type)?;
         for (partition_row, partition_batch_state) in partition_batches.iter() {
-            let window_state = if let Some(window_state) = window_agg_state.get_mut(partition_row) {
-                window_state
-            } else {
-                let evaluator = self.expr.create_evaluator()?;
-                window_agg_state
-                    .entry(partition_row.clone())
-                    .or_insert(WindowState {
-                        state: new_state.clone(),
-                        window_fn: WindowFn::Builtin(evaluator),
-                    })
-            };
+            let window_state =
+                if let Some(window_state) = window_agg_state.get_mut(partition_row) {
+                    window_state
+                } else {
+                    let evaluator = self.expr.create_evaluator()?;
+                    window_agg_state
+                        .entry(partition_row.clone())
+                        .or_insert(WindowState {
+                            state: new_state.clone(),
+                            window_fn: WindowFn::Builtin(evaluator),
+                        })
+                };
             let evaluator = match &mut window_state.window_fn {
                 WindowFn::Builtin(evaluator) => evaluator,
                 _ => unreachable!(),
@@ -273,7 +274,8 @@ impl WindowExpr for StandardWindowExpr {
                 }
                 // Update last range
                 state.window_frame_range = frame_range;
-                row_wise_results.push(evaluator.evaluate(&values, &state.window_frame_range)?);
+                row_wise_results
+                    .push(evaluator.evaluate(&values, &state.window_frame_range)?);
             }
             let out_col = if row_wise_results.is_empty() {
                 new_empty_array(out_type)

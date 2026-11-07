@@ -170,7 +170,8 @@ impl BoundedWindowAggExec {
         Ok(match &self.input_order_mode {
             InputOrderMode::Sorted => {
                 // In Sorted mode, all partition by columns should be ordered.
-                if self.window_expr()[0].partition_by().len() != ordered_partition_by_indices.len()
+                if self.window_expr()[0].partition_by().len()
+                    != ordered_partition_by_indices.len()
                 {
                     return exec_err!(
                         "All partition by columns should have an ordering in Sorted mode."
@@ -483,13 +484,15 @@ trait PartitionSearcher: Send {
         if record_batch.num_rows() == 0 {
             return Ok(());
         }
-        let partition_batches = self.evaluate_partition_batches(&record_batch, window_expr)?;
+        let partition_batches =
+            self.evaluate_partition_batches(&record_batch, window_expr)?;
         for (partition_row, partition_batch) in partition_batches {
-            if let Some(partition_batch_state) = partition_buffers.get_mut(&partition_row) {
+            if let Some(partition_batch_state) = partition_buffers.get_mut(&partition_row)
+            {
                 partition_batch_state.extend(&partition_batch)?
             } else {
-                let options =
-                    RecordBatchOptions::new().with_row_count(Some(partition_batch.num_rows()));
+                let options = RecordBatchOptions::new()
+                    .with_row_count(Some(partition_batch.num_rows()));
                 // Use input_schema for the buffer schema, not `record_batch.schema()`
                 // as it may not have the "correct" schema in terms of output
                 // nullability constraints. For details, see the following issue:
@@ -499,7 +502,8 @@ trait PartitionSearcher: Send {
                     partition_batch.columns().to_vec(),
                     &options,
                 )?;
-                let partition_batch_state = PartitionBatchState::new_with_batch(partition_batch);
+                let partition_batch_state =
+                    PartitionBatchState::new_with_batch(partition_batch);
                 partition_buffers.insert(partition_row, partition_batch_state);
             }
         }
@@ -653,7 +657,8 @@ impl PartitionSearcher for LinearSearch {
         record_batch: &RecordBatch,
         window_expr: &[Arc<dyn WindowExpr>],
     ) -> Result<Vec<(PartitionKey, RecordBatch)>> {
-        let partition_bys = evaluate_partition_by_column_values(record_batch, window_expr)?;
+        let partition_bys =
+            evaluate_partition_by_column_values(record_batch, window_expr)?;
         // NOTE: In Linear or PartiallySorted modes, we are sure that
         //       `partition_bys` are not empty.
         // Calculate indices for each partition and construct a new record
@@ -765,13 +770,15 @@ impl LinearSearch {
         window_agg_states: &[PartitionWindowAggStates],
         window_expr: &[Arc<dyn WindowExpr>],
     ) -> Result<Vec<(PartitionKey, Vec<u32>)>> {
-        let partition_by_columns = evaluate_partition_by_column_values(input_buffer, window_expr)?;
+        let partition_by_columns =
+            evaluate_partition_by_column_values(input_buffer, window_expr)?;
         // Reset the row_map state:
         self.row_map_out.clear();
         let mut partition_indices: Vec<(PartitionKey, Vec<u32>)> = vec![];
         for (hash, row_idx) in self.input_buffer_hashes.iter().zip(0u32..) {
             let entry = self.row_map_out.find_mut(*hash, |(_, group_idx, _)| {
-                let row = get_row_at_idx(&partition_by_columns, row_idx as usize).unwrap();
+                let row =
+                    get_row_at_idx(&partition_by_columns, row_idx as usize).unwrap();
                 row == partition_indices[*group_idx].0
             });
             if let Some((_, group_idx, n_out)) = entry {
@@ -855,7 +862,8 @@ impl PartitionSearcher for SortedSearch {
         // Reorder `partition_columns` such that its ordering matches input ordering.
         let partition_columns_ordered =
             get_at_indices(&partition_columns, &self.ordered_partition_by_indices)?;
-        let partition_points = evaluate_partition_ranges(num_rows, &partition_columns_ordered)?;
+        let partition_points =
+            evaluate_partition_ranges(num_rows, &partition_columns_ordered)?;
         let partition_bys = partition_columns
             .into_iter()
             .map(|arr| arr.values)
@@ -877,7 +885,8 @@ impl PartitionSearcher for SortedSearch {
         // We are sure that those partitions will never receive any values.
         // (Otherwise ordering invariant is violated.)
         let n_partitions = partition_buffers.len();
-        for (idx, (_, partition_batch_state)) in partition_buffers.iter_mut().enumerate() {
+        for (idx, (_, partition_batch_state)) in partition_buffers.iter_mut().enumerate()
+        {
             partition_batch_state.is_end |= idx < n_partitions - 1;
         }
     }
@@ -1049,7 +1058,9 @@ impl BoundedWindowAggStream {
             }
         }
         // calculate window cols
-        for (cur_window_expr, state) in self.window_expr.iter().zip(&mut self.window_agg_states) {
+        for (cur_window_expr, state) in
+            self.window_expr.iter().zip(&mut self.window_agg_states)
+        {
             cur_window_expr.evaluate_stateful(&self.partition_buffers, state)?;
         }
 
@@ -1153,7 +1164,8 @@ impl BoundedWindowAggStream {
         for window_agg_state in self.window_agg_states.iter_mut() {
             window_agg_state.retain(|_, WindowState { state, .. }| !state.is_end);
             for (partition_row, WindowState { state: value, .. }) in window_agg_state {
-                let n_prune = min(value.window_frame_range.start, value.last_calculated_index);
+                let n_prune =
+                    min(value.window_frame_range.start, value.last_calculated_index);
                 if let Some(current) = n_prune_each_partition.get_mut(partition_row) {
                     if n_prune < *current {
                         *current = n_prune;
@@ -1275,12 +1287,15 @@ fn get_aggregate_result_out_column(
     }
 
     if !batches_to_concat.is_empty() {
-        let array_refs: Vec<&dyn Array> = batches_to_concat.iter().map(|a| a.as_ref()).collect();
+        let array_refs: Vec<&dyn Array> =
+            batches_to_concat.iter().map(|a| a.as_ref()).collect();
         result = Some(concat(&array_refs)?);
     }
 
     if running_length != len_to_show {
-        return exec_err!("Generated row number should be {len_to_show}, it is {running_length}");
+        return exec_err!(
+            "Generated row number should be {len_to_show}, it is {running_length}"
+        );
     }
     result.ok_or_else(|| exec_datafusion_err!("Should contain something"))
 }
@@ -1384,14 +1399,17 @@ mod tests {
                         // Wait for self.sleep_duration before sending any new data
                         let f = tokio::time::sleep(self.sleep_duration).boxed().shared();
                         self.state = PolingState::Sleep(f);
-                        let input_batch = if let Some(batch) = self.batches.clone().get(self.idx) {
+                        let input_batch = if let Some(batch) =
+                            self.batches.clone().get(self.idx)
+                        {
                             batch.clone()
                         } else if self.send_exit {
                             // Send None to signal end of data
                             return Poll::Ready(None);
                         } else {
                             // Go to sleep mode
-                            let f = tokio::time::sleep(self.sleep_duration).boxed().shared();
+                            let f =
+                                tokio::time::sleep(self.sleep_duration).boxed().shared();
                             self.state = PolingState::Sleep(f);
                             continue;
                         };
@@ -1422,7 +1440,8 @@ mod tests {
     ) -> Result<Arc<dyn ExecutionPlan>> {
         let schema = input.schema();
         let window_fn = WindowFunctionDefinition::AggregateUDF(count_udaf());
-        let col_expr = Arc::new(Column::new(schema.fields[0].name(), 0)) as Arc<dyn PhysicalExpr>;
+        let col_expr =
+            Arc::new(Column::new(schema.fields[0].name(), 0)) as Arc<dyn PhysicalExpr>;
         let args = vec![col_expr];
         let partitionby_exprs = vec![col(hash, &schema)?];
         let orderby_exprs = vec![PhysicalSortExpr {
@@ -1604,7 +1623,8 @@ mod tests {
         let orderings = schema_orders(&schema)?;
 
         // Source waits per_batch_wait_duration_in_millis ms before sending other batch
-        let per_batch_wait_duration = Duration::from_millis(per_batch_wait_duration_in_millis);
+        let per_batch_wait_duration =
+            Duration::from_millis(per_batch_wait_duration_in_millis);
 
         let batches = generate_batches(&schema, n_rows, chunk_length)?;
 
@@ -1837,9 +1857,11 @@ mod tests {
 
         let timeout_duration = Duration::from_millis(2000);
 
-        let source = generate_never_ending_source(n_rows, chunk_length, 1, true, false, 5)?;
+        let source =
+            generate_never_ending_source(n_rows, chunk_length, 1, true, false, 5)?;
 
-        let window = bounded_window_exec_pb_latent_range(source, n_future_range, "hash", "sn")?;
+        let window =
+            bounded_window_exec_pb_latent_range(source, n_future_range, "hash", "sn")?;
 
         let plan = projection_exec(window)?;
 

@@ -460,7 +460,7 @@ async fn finite_signed_integer_range_frames_match_spark() -> TestResult {
                     eprintln!(
                         "FINITE_RANGE_OBSERVATION {}",
                         json!({"issue":1086,"corpus":case["corpus"],"id":case["id"],
-                    "ansi":case["ansi"],"batch":batch,"target_partitions":2,"provider_partitions":2,
+                    "ansi":case["ansi"],"batch":batch,"target_partitions":2,"provider_partitions":(!corpus["metadata"]["inputs"].as_array().ok_or("missing provider inputs")?.is_empty()).then_some(2),
                     "source_ownership_tag":case["ownership"],"reference":case,
                     "observation":observation,"spark_matches":matches}),
                     );
