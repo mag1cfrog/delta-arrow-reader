@@ -282,7 +282,16 @@ fn validate_null_range_references(request: &Value, records: &[Value]) -> TestRes
                 || details["condition"] != case["expected"]["condition"]
                 || details["phase"] != case["spark_error_phase"]
                 || !details["message"].is_string()
-                || !details["java_causes"].is_array()
+                || !details["java_causes"].as_array().is_some_and(|causes| {
+                    !causes.is_empty()
+                        && causes.iter().all(|cause| {
+                            cause["class"].is_string()
+                                && cause["message"].is_string()
+                                && cause["parameters"].is_object()
+                                && cause.get("condition").is_some()
+                                && cause.get("sql_state").is_some()
+                        })
+                })
                 || details["cause_chain_complete"] != true
                 || ["parameters", "sql_state", "python_class"]
                     .iter()
@@ -450,5 +459,110 @@ fn null_range_references_reject_contract_loss() -> TestResult {
     let mut changed = records.clone();
     changed[0]["corpora"][0]["registered_inputs"][0]["schema_observed"] = Value::Null;
     assert!(validate_null_range_references(&request, &changed).is_err());
+    Ok(())
+}
+
+#[test]
+fn null_range_collect_errors_keep_partial_fields_and_causes() -> TestResult {
+    let (request, records) = parse_null_range_fixture()?;
+    let collect_error = records
+        .iter()
+        .position(|case| case["status"] == "error" && case["spark_error_phase"] == "collect")
+        .ok_or("missing collect error")?;
+    for pointer in [
+        "/schema_stages/public/fields/0/metadata",
+        "/schema_stages/analyzed/fields/0/metadata",
+        "/schema_stages/optimized/fields/0/metadata",
+        "/schema_stages/executed_before_collect/fields/0/metadata",
+        "/schema_stages/executed/fields/0/metadata",
+        "/expected/condition",
+        "/spark_error_phase",
+        "/spark_error_details/cause_chain_complete",
+    ] {
+        let mut changed = records.clone();
+        *changed[collect_error]
+            .pointer_mut(pointer)
+            .ok_or("missing collect fault target")? = Value::Null;
+        assert!(
+            validate_null_range_references(&request, &changed).is_err(),
+            "accepted lost {pointer}"
+        );
+    }
+    let mut changed = records.clone();
+    changed[collect_error]["spark_error_details"]["java_causes"] = json!([]);
+    assert!(validate_null_range_references(&request, &changed).is_err());
+    Ok(())
+}
+
+#[test]
+fn null_offset_unparser_keeps_typed_expressions_and_native_unbounded_bounds() -> TestResult {
+    use arrow::datatypes::DataType;
+    use datafusion::common::ScalarValue;
+    use datafusion::functions_aggregate::count::count_udaf;
+    use datafusion::logical_expr::expr::WindowFunction;
+    use datafusion::logical_expr::{Expr, WindowFrame, WindowFrameBound, WindowFrameUnits, col};
+    use datafusion::sql::{sqlparser::ast, unparser::expr_to_sql};
+
+    for (data_type, sql_type) in [
+        (DataType::Int32, ast::DataType::Integer(None)),
+        (
+            DataType::Float64,
+            ast::DataType::Double(ast::ExactNumberInfo::None),
+        ),
+        (
+            DataType::Decimal128(9, 2),
+            ast::DataType::Decimal(ast::ExactNumberInfo::PrecisionAndScale(9, 2)),
+        ),
+    ] {
+        for explicit in [false, true] {
+            let (start, end) = if explicit {
+                (
+                    WindowFrameBound::PrecedingNullOffset(data_type.clone()),
+                    WindowFrameBound::FollowingNullOffset(data_type.clone()),
+                )
+            } else {
+                let value = ScalarValue::try_from(&data_type)?;
+                (
+                    WindowFrameBound::Preceding(value.clone()),
+                    WindowFrameBound::Following(value),
+                )
+            };
+            let mut call = WindowFunction::new(count_udaf(), vec![col("v")]);
+            call.params.order_by = vec![col("k").sort(true, true)];
+            call.params.window_frame = WindowFrame::new_bounds(WindowFrameUnits::Range, start, end);
+            let ast::Expr::Function(function) = expr_to_sql(&Expr::from(call))? else {
+                return Err("missing unparsed window function".into());
+            };
+            let Some(ast::WindowType::WindowSpec(window)) = function.over else {
+                return Err("missing unparsed window specification".into());
+            };
+            let frame = window.window_frame.ok_or("missing unparsed frame")?;
+            for (bound, preceding) in [
+                (frame.start_bound, true),
+                (frame.end_bound.ok_or("missing end bound")?, false),
+            ] {
+                let expression = match bound {
+                    ast::WindowFrameBound::Preceding(expression) if preceding => expression,
+                    ast::WindowFrameBound::Following(expression) if !preceding => expression,
+                    _ => return Err("unparser changed frame direction".into()),
+                };
+                if explicit {
+                    let Some(ast::Expr::Cast {
+                        expr, data_type, ..
+                    }) = expression.as_deref()
+                    else {
+                        return Err("explicit NULL offset lost its typed expression".into());
+                    };
+                    assert_eq!(expr.to_string(), "NULL");
+                    assert_eq!(*data_type, sql_type);
+                } else {
+                    assert!(
+                        expression.is_none(),
+                        "native unbounded sentinel became an expression"
+                    );
+                }
+            }
+        }
+    }
     Ok(())
 }

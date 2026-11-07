@@ -1,6 +1,7 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::cmp::Ordering;
 
+use arrow::compute::can_cast_types;
 use arrow::datatypes::{DataType, FieldRef};
 use datafusion::optimizer::simplify_expressions::ExprSimplifier;
 use datafusion_common::tree_node::TreeNode;
@@ -446,8 +447,50 @@ impl PlanResolver<'_> {
             ),
         };
         let frame = WindowFrame::new_bounds(units, start, end);
+        if frame.has_null_offset() {
+            if matches!(&frame.start_bound, WindowFrameBound::Following(value) if value.is_null())
+                || matches!(&frame.end_bound, WindowFrameBound::Preceding(value) if value.is_null())
+            {
+                return Err(PlanError::invalid(
+                    "[DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_INVALID_BOUND] invalid UNBOUNDED frame boundary",
+                ));
+            }
+            let expression_type = |bound: &WindowFrameBound| match bound {
+                WindowFrameBound::PrecedingNullOffset(data_type)
+                | WindowFrameBound::FollowingNullOffset(data_type) => Some(data_type.clone()),
+                WindowFrameBound::Preceding(value) | WindowFrameBound::Following(value)
+                    if !value.is_null() =>
+                {
+                    Some(value.data_type())
+                }
+                _ => None,
+            };
+            if let (Some(start), Some(end)) = (
+                expression_type(&frame.start_bound),
+                expression_type(&frame.end_bound),
+            ) {
+                if start != end {
+                    return Err(PlanError::invalid(
+                        "[DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_DIFF_TYPES] expression frame bounds require the same type",
+                    ));
+                }
+            }
+        }
         let valid = if let Some((start, end)) = date_range_displacements(&frame, order_by, schema)?
         {
+            // The left expression is evaluated before a NULL right endpoint short-circuits comparison.
+            if frame.has_null_offset()
+                && self.config.ansi_mode
+                && matches!(
+                    &frame.start_bound,
+                    WindowFrameBound::Preceding(ScalarValue::Int32(Some(i32::MIN)))
+                )
+            {
+                LiteralEvaluator::new().evaluate(
+                    &ScalarUDF::from(SparkDateRangeNegation)
+                        .call(vec![datafusion_expr::lit(i32::MIN)]),
+                )?;
+            }
             // Spark compares expression endpoints; CURRENT ROW and UNBOUNDED skip this fold.
             if let (Some(start), Some(end)) = (start, end) {
                 if self.config.ansi_mode {
@@ -468,6 +511,8 @@ impl PlanResolver<'_> {
                 !matches!(&frame.start_bound, WindowFrameBound::Following(value) if value.is_null())
                     && !matches!(&frame.end_bound, WindowFrameBound::Preceding(value) if value.is_null())
             }
+        } else if frame.has_null_offset() {
+            true
         } else {
             datafusion::physical_planner::is_window_frame_bound_valid(&frame)
         };
@@ -664,10 +709,43 @@ impl PlanResolver<'_> {
             spec::WindowFrameBoundary::Preceding(expr)
             | spec::WindowFrameBoundary::Following(expr) => {
                 let (display, value) = self.resolve_window_boundary(*expr, schema, state).await?;
-                // Cast numeric boundaries to match the ORDER BY type.
-                // Non-numeric boundaries (e.g. INTERVAL for TIMESTAMP ORDER BY) are left as-is
-                // since DataFusion handles interval arithmetic directly.
+                // Spark gives unary minus on an untyped NULL a DOUBLE operand.
+                let value = if preceding && matches!(value, ScalarValue::Null) {
+                    ScalarValue::Float64(None)
+                } else {
+                    value
+                };
+                if value.is_null() && order_by.len() > 1 {
+                    return Err(PlanError::invalid(
+                        "[DATATYPE_MISMATCH.RANGE_FRAME_MULTI_ORDER] range window frame requires exactly one order by expression",
+                    ));
+                }
                 let data_type = get_order_by_type()?;
+                if value.is_null() {
+                    let source_type = value.data_type();
+                    let coerced_type =
+                        if !matches!(data_type, DataType::Date32 | DataType::Timestamp(_, _))
+                            && can_cast_types(&source_type, &data_type)
+                        {
+                            &data_type
+                        } else {
+                            &source_type
+                        };
+                    if !coerced_type.is_numeric()
+                        && !matches!(coerced_type, DataType::Interval(_) | DataType::Duration(_))
+                    {
+                        return Err(PlanError::invalid(
+                            "[DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE] RANGE expression bounds require a numeric or interval type",
+                        ));
+                    }
+                    if !data_type.is_numeric()
+                        && !matches!(data_type, DataType::Date32 | DataType::Timestamp(_, _))
+                    {
+                        return Err(PlanError::invalid(
+                            "[DATATYPE_MISMATCH.RANGE_FRAME_INVALID_TYPE] unsupported RANGE order key and offset type",
+                        ));
+                    }
+                }
                 if data_type == DataType::Date32
                     && !matches!(
                         value.data_type(),
@@ -681,12 +759,27 @@ impl PlanResolver<'_> {
                         "[DATATYPE_MISMATCH.RANGE_FRAME_INVALID_TYPE] numeric DATE RANGE bounds require INT days",
                     ));
                 }
+                // Temporal offsets retain their admitted Interval/Duration representation.
                 let value = if data_type.is_numeric() {
                     value.cast_to(&data_type)?
                 } else {
                     value
                 };
-                let (direction, bound) = if preceding {
+                let (direction, bound) = if value.is_null()
+                    && (data_type.is_numeric() || data_type == DataType::Date32)
+                {
+                    if preceding {
+                        (
+                            "PRECEDING",
+                            WindowFrameBound::PrecedingNullOffset(value.data_type()),
+                        )
+                    } else {
+                        (
+                            "FOLLOWING",
+                            WindowFrameBound::FollowingNullOffset(value.data_type()),
+                        )
+                    }
+                } else if preceding {
                     ("PRECEDING", WindowFrameBound::Preceding(value))
                 } else {
                     ("FOLLOWING", WindowFrameBound::Following(value))
@@ -743,6 +836,8 @@ fn date_range_displacements(
         }
         WindowFrameBound::Following(ScalarValue::Int32(Some(days))) => Some(Some(*days)),
         WindowFrameBound::CurrentRow => Some(None),
+        WindowFrameBound::PrecedingNullOffset(DataType::Int32)
+        | WindowFrameBound::FollowingNullOffset(DataType::Int32) => Some(None),
         WindowFrameBound::Preceding(value) | WindowFrameBound::Following(value)
             if value.is_null() =>
         {

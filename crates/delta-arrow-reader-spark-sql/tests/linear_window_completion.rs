@@ -12,8 +12,11 @@ use arrow::record_batch::RecordBatch;
 use datafusion::common::ScalarValue;
 use datafusion::functions_aggregate::count::count_udaf;
 use datafusion::functions_aggregate::min_max::max_udaf;
-use datafusion::functions_window::nth_value::{first_value_udwf, nth_value_udwf};
-use datafusion::logical_expr::window_state::PartitionBatchState;
+use datafusion::functions_window::nth_value::{first_value_udwf, last_value_udwf, nth_value_udwf};
+use datafusion::functions_window::row_number::row_number_udwf;
+use datafusion::logical_expr::window_state::{
+    PartitionBatchState, WindowFrameContext, range_bound_target,
+};
 use datafusion::logical_expr::{
     WindowFrame, WindowFrameBound, WindowFrameUnits, WindowFunctionDefinition,
 };
@@ -560,6 +563,807 @@ fn following_completion_changes_with_row_and_group_position() -> TestResult {
                 assert_eq!(states[&key].state.last_calculated_index, 1);
                 assert_eq!(buffers[&key].record_batch.num_rows(), 2);
             }
+        }
+    }
+    Ok(())
+}
+
+fn range_count_window(
+    schema: SchemaRef,
+    start: WindowFrameBound,
+    end: WindowFrameBound,
+    options: SortOptions,
+) -> TestResult<Arc<dyn WindowExpr>> {
+    Ok(create_window_expr(
+        &WindowFunctionDefinition::AggregateUDF(count_udaf()),
+        "n".into(),
+        &[col("id", &schema)?],
+        &[col("p", &schema)?],
+        &[PhysicalSortExpr {
+            expr: col("k", &schema)?,
+            options,
+        }],
+        Arc::new(WindowFrame::new_bounds(WindowFrameUnits::Range, start, end)),
+        schema,
+        false,
+        false,
+        None,
+    )?)
+}
+
+#[test]
+fn null_range_targets_preserve_native_unbounded_and_arithmetic_edges() -> TestResult {
+    for data_type in [
+        DataType::UInt64,
+        DataType::Int32,
+        DataType::Float64,
+        DataType::Date32,
+    ] {
+        let null = ScalarValue::try_from(&data_type)?;
+        for bound in [
+            WindowFrameBound::Preceding(null.clone()),
+            WindowFrameBound::Following(null.clone()),
+        ] {
+            assert!(bound.is_unbounded());
+            assert!(!bound.is_null_offset());
+            assert_eq!(range_bound_target(&null, &bound, false)?, None);
+            assert!(bound.to_string().starts_with("UNBOUNDED "));
+        }
+    }
+    for bound in [
+        WindowFrameBound::PrecedingNullOffset(DataType::Float64),
+        WindowFrameBound::FollowingNullOffset(DataType::Float64),
+    ] {
+        assert!(!bound.is_unbounded());
+        assert!(bound.is_null_offset());
+        assert!(bound.to_string().starts_with("NULL "));
+        assert_eq!(
+            range_bound_target(&ScalarValue::Date32(Some(1)), &bound, false)?,
+            Some(ScalarValue::Date32(None))
+        );
+        let frame = WindowFrame::new_bounds(
+            WindowFrameUnits::Range,
+            bound,
+            WindowFrameBound::Preceding(ScalarValue::Int32(Some(1))),
+        );
+        assert!(frame.has_null_offset());
+        assert!(!frame.is_causal());
+        assert!(!frame.is_ever_expanding());
+        assert!(!frame.can_accept_multi_orderby());
+        assert_eq!(frame.reverse().reverse(), frame);
+        assert!(frame.regularize_order_bys(&mut vec![]).is_err());
+    }
+    for bound in [
+        WindowFrameBound::CurrentRow,
+        WindowFrameBound::Following(ScalarValue::Int32(Some(1))),
+    ] {
+        assert_eq!(
+            range_bound_target(&ScalarValue::Int32(None), &bound, false)?,
+            Some(ScalarValue::Int32(None))
+        );
+    }
+    assert_eq!(
+        range_bound_target(
+            &ScalarValue::UInt32(Some(1)),
+            &WindowFrameBound::Preceding(ScalarValue::UInt32(Some(2))),
+            false,
+        )?,
+        Some(ScalarValue::UInt32(Some(0)))
+    );
+    let following_one = WindowFrameBound::Following(ScalarValue::Int32(Some(1)));
+    assert_eq!(
+        range_bound_target(&ScalarValue::Int32(Some(i32::MAX)), &following_one, false)?,
+        None
+    );
+    assert_eq!(
+        range_bound_target(&ScalarValue::Date32(Some(i32::MAX)), &following_one, false)?,
+        Some(ScalarValue::Date32(Some(i32::MIN)))
+    );
+    let native = WindowFrame::new_bounds(
+        WindowFrameUnits::Range,
+        WindowFrameBound::Preceding(ScalarValue::UInt64(None)),
+        WindowFrameBound::CurrentRow,
+    );
+    assert_eq!(native, WindowFrame::new(Some(false)));
+    assert!(!native.has_null_offset());
+    assert!(native.is_ever_expanding());
+    assert!(native.can_accept_multi_orderby());
+    Ok(())
+}
+
+#[test]
+fn null_range_cursors_stop_at_consumed_upper_rows() -> TestResult {
+    for date in [false, true] {
+        for descending in [false, true] {
+            for nulls_first in [false, true] {
+                let keys = if nulls_first {
+                    vec![None, Some(1), Some(1), Some(2), Some(3)]
+                } else {
+                    vec![Some(1), Some(1), Some(2), Some(3), None]
+                };
+                let keys = keys
+                    .into_iter()
+                    .map(|key| key.map(|key| if descending { -key } else { key }))
+                    .collect::<Vec<_>>();
+                let column: ArrayRef = if date {
+                    Arc::new(Date32Array::from(keys))
+                } else {
+                    Arc::new(Int32Array::from(keys))
+                };
+                for null_bound in [
+                    WindowFrameBound::PrecedingNullOffset(DataType::Int32),
+                    WindowFrameBound::FollowingNullOffset(DataType::Int32),
+                ] {
+                    let cases = if nulls_first {
+                        vec![
+                            (
+                                WindowFrameBound::CurrentRow,
+                                null_bound.clone(),
+                                vec![0..1, 1..1, 1..1, 1..1, 1..1],
+                            ),
+                            (
+                                null_bound.clone(),
+                                WindowFrameBound::CurrentRow,
+                                vec![0..1, 0..3, 0..3, 0..4, 0..5],
+                            ),
+                            (null_bound.clone(), null_bound.clone(), vec![0..1; 5]),
+                        ]
+                    } else {
+                        vec![
+                            (
+                                WindowFrameBound::CurrentRow,
+                                null_bound.clone(),
+                                vec![0..5, 0..5, 2..5, 3..5, 4..5],
+                            ),
+                            (
+                                null_bound.clone(),
+                                WindowFrameBound::CurrentRow,
+                                vec![2..2, 2..2, 3..3, 4..4, 4..5],
+                            ),
+                            (null_bound.clone(), null_bound.clone(), vec![4..5; 5]),
+                        ]
+                    };
+                    for (start, end, expected) in cases {
+                        let frame =
+                            Arc::new(WindowFrame::new_bounds(WindowFrameUnits::Range, start, end));
+                        let mut context = WindowFrameContext::new(
+                            frame,
+                            vec![SortOptions {
+                                descending,
+                                nulls_first,
+                            }],
+                        );
+                        let mut last = 0..0;
+                        for (idx, expected) in expected.into_iter().enumerate() {
+                            let range = context.calculate_range(
+                                std::slice::from_ref(&column),
+                                &last,
+                                column.len(),
+                                idx,
+                            )?;
+                            assert_eq!(range, expected);
+                            assert!(last.start <= range.start && last.end <= range.end);
+                            assert!(range.start <= range.end && range.end <= column.len());
+                            last = range;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn null_range_native_constructor_rejects_invalid_units_sides_and_keys() -> TestResult {
+    let schema = date_source_batch(&[(0, 0, None)], false)?.schema();
+    let order_by = PhysicalSortExpr {
+        expr: col("k", &schema)?,
+        options: SortOptions::default(),
+    };
+    let null = WindowFrameBound::FollowingNullOffset(DataType::Int32);
+    let frames = [
+        (
+            WindowFrameUnits::Rows,
+            WindowFrameBound::CurrentRow,
+            null.clone(),
+        ),
+        (
+            WindowFrameUnits::Groups,
+            null.clone(),
+            WindowFrameBound::CurrentRow,
+        ),
+        (
+            WindowFrameUnits::Range,
+            WindowFrameBound::Following(ScalarValue::Int32(None)),
+            null.clone(),
+        ),
+        (
+            WindowFrameUnits::Range,
+            null.clone(),
+            WindowFrameBound::Preceding(ScalarValue::Date32(None)),
+        ),
+    ];
+    for (function, takes_argument) in [
+        (WindowFunctionDefinition::AggregateUDF(count_udaf()), true),
+        (
+            WindowFunctionDefinition::WindowUDF(first_value_udwf()),
+            true,
+        ),
+        (
+            WindowFunctionDefinition::WindowUDF(row_number_udwf()),
+            false,
+        ),
+    ] {
+        let args = if takes_argument {
+            vec![col("id", &schema)?]
+        } else {
+            vec![]
+        };
+        for (units, start, end) in &frames {
+            let frame = Arc::new(WindowFrame::new_bounds(*units, start.clone(), end.clone()));
+            assert!(
+                create_window_expr(
+                    &function,
+                    "value".into(),
+                    &args,
+                    &[],
+                    std::slice::from_ref(&order_by),
+                    frame.clone(),
+                    schema.clone(),
+                    false,
+                    false,
+                    None
+                )
+                .is_err()
+            );
+            if *units != WindowFrameUnits::Range {
+                let mut context = WindowFrameContext::new(frame, vec![SortOptions::default()]);
+                let column: ArrayRef = Arc::new(Date32Array::from(vec![None]));
+                assert!(context.calculate_range(&[column], &(0..0), 1, 0).is_err());
+            }
+        }
+        for keys in [vec![], vec![order_by.clone(), order_by.clone()]] {
+            let frame = Arc::new(WindowFrame::new_bounds(
+                WindowFrameUnits::Range,
+                WindowFrameBound::CurrentRow,
+                null.clone(),
+            ));
+            assert!(
+                create_window_expr(
+                    &function,
+                    "value".into(),
+                    &args,
+                    &[],
+                    &keys,
+                    frame,
+                    schema.clone(),
+                    false,
+                    false,
+                    None
+                )
+                .is_err()
+            );
+        }
+        let frame = Arc::new(WindowFrame::new_bounds(
+            WindowFrameUnits::Range,
+            WindowFrameBound::Preceding(ScalarValue::UInt64(None)),
+            null.clone(),
+        ));
+        let window = create_window_expr(
+            &function,
+            "value".into(),
+            &args,
+            &[],
+            std::slice::from_ref(&order_by),
+            frame,
+            schema.clone(),
+            false,
+            false,
+            None,
+        )?;
+        assert_eq!(window.uses_bounded_memory(), !takes_argument);
+    }
+    Ok(())
+}
+
+#[test]
+fn null_upper_completes_sparse_partitions_without_claiming_bounded_retention() -> TestResult {
+    for descending in [false, true] {
+        for end in [
+            WindowFrameBound::PrecedingNullOffset(DataType::Int32),
+            WindowFrameBound::FollowingNullOffset(DataType::Int32),
+        ] {
+            let first = date_source_batch(&[(0, 0, None), (1, 1, None)], descending)?;
+            let window = range_count_window(
+                first.schema(),
+                WindowFrameBound::CurrentRow,
+                end,
+                SortOptions {
+                    descending,
+                    nulls_first: true,
+                },
+            )?;
+            assert!(!window.uses_bounded_memory());
+            let mut buffers = PartitionBatches::default();
+            let mut states = PartitionWindowAggStates::default();
+            append_linear_batch(window.as_ref(), &mut buffers, &mut states, first)?;
+            assert!(counts(&states, 0)?.is_empty());
+            assert!(counts(&states, 1)?.is_empty());
+            append_linear_batch(
+                window.as_ref(),
+                &mut buffers,
+                &mut states,
+                date_source_batch(&[(2, 1, Some(1))], descending)?,
+            )?;
+            assert_eq!(counts(&states, 0)?, [1]);
+            assert_eq!(counts(&states, 1)?, [1, 0]);
+            append_linear_batch(
+                window.as_ref(),
+                &mut buffers,
+                &mut states,
+                date_source_batch(&[(3, 0, Some(2)), (4, 1, Some(3))], descending)?,
+            )?;
+            assert_eq!(counts(&states, 0)?, [1, 0]);
+            prune_partition(&mut buffers, &mut states, 0, 1)?;
+            let key = vec![ScalarValue::Int32(Some(0))];
+            assert_eq!(states[&key].state.window_frame_range, 0..0);
+            assert_eq!(buffers[&key].record_batch.num_rows(), 1);
+            append_linear_batch(
+                window.as_ref(),
+                &mut buffers,
+                &mut states,
+                date_source_batch(&[(5, 0, Some(4)), (6, 1, Some(5))], descending)?,
+            )?;
+            assert_eq!(counts(&states, 0)?, [1, 0, 0]);
+            assert_eq!(counts(&states, 1)?, [1, 0, 0, 0]);
+            assert_eq!(states[&key].state.window_frame_range, 0..0);
+            assert_eq!(states[&key].state.offset_pruned_rows, 1);
+            assert_eq!(states[&key].state.last_calculated_index, 2);
+            assert_eq!(buffers[&key].record_batch.num_rows(), 2);
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn null_upper_last_and_true_unbounded_upper_wait_for_future_rows() -> TestResult {
+    for (nulls_first, end) in [
+        (
+            false,
+            WindowFrameBound::FollowingNullOffset(DataType::Int32),
+        ),
+        (true, WindowFrameBound::Following(ScalarValue::Int32(None))),
+    ] {
+        let first = date_source_batch(&[(0, 0, None), (1, 1, None)], false)?;
+        let start = if nulls_first {
+            WindowFrameBound::PrecedingNullOffset(DataType::Int32)
+        } else {
+            WindowFrameBound::CurrentRow
+        };
+        let window = range_count_window(
+            first.schema(),
+            start,
+            end,
+            SortOptions {
+                descending: false,
+                nulls_first,
+            },
+        )?;
+        let mut buffers = PartitionBatches::default();
+        let mut states = PartitionWindowAggStates::default();
+        append_linear_batch(window.as_ref(), &mut buffers, &mut states, first)?;
+        let later = if nulls_first { Some(1) } else { None };
+        append_linear_batch(
+            window.as_ref(),
+            &mut buffers,
+            &mut states,
+            date_source_batch(&[(2, 0, later), (3, 1, later)], false)?,
+        )?;
+        assert!(counts(&states, 0)?.is_empty());
+        assert!(counts(&states, 1)?.is_empty());
+        for buffer in buffers.values_mut() {
+            buffer.is_end = true;
+        }
+        window.evaluate_stateful(&buffers, &mut states)?;
+        for state in states.values() {
+            let values = state
+                .state
+                .out_col
+                .as_any()
+                .downcast_ref::<Int64Array>()
+                .ok_or("count type")?;
+            assert_eq!(values.iter().collect::<Vec<_>>(), vec![Some(2), Some(2)]);
+            assert_eq!(state.state.n_row_result_missing, 0);
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn null_lower_with_finite_upper_waits_for_null_peers() -> TestResult {
+    for end in [
+        WindowFrameBound::Preceding(ScalarValue::Int32(Some(1))),
+        WindowFrameBound::Following(ScalarValue::Int32(Some(1))),
+    ] {
+        let first = date_source_batch(&[(0, 0, None), (1, 1, None)], false)?;
+        let window = range_count_window(
+            first.schema(),
+            WindowFrameBound::PrecedingNullOffset(DataType::Int32),
+            end,
+            SortOptions {
+                descending: false,
+                nulls_first: true,
+            },
+        )?;
+        let mut buffers = PartitionBatches::default();
+        let mut states = PartitionWindowAggStates::default();
+        append_linear_batch(window.as_ref(), &mut buffers, &mut states, first)?;
+        assert!(counts(&states, 0)?.is_empty());
+        assert!(counts(&states, 1)?.is_empty());
+        append_linear_batch(
+            window.as_ref(),
+            &mut buffers,
+            &mut states,
+            date_source_batch(&[(2, 1, Some(1))], false)?,
+        )?;
+        assert_eq!(counts(&states, 0)?, [1]);
+    }
+    Ok(())
+}
+
+#[test]
+fn null_range_builtins_preserve_values_validity_and_sparse_completion() -> TestResult {
+    let source = |rows: &[(i32, i32, Option<i32>)]| -> TestResult<RecordBatch> {
+        let batch = date_source_batch(rows, false)?;
+        let mut fields = batch.schema().fields().iter().cloned().collect::<Vec<_>>();
+        fields.push(Arc::new(Field::new("v", DataType::Int32, true)));
+        let mut columns = batch.columns().to_vec();
+        columns.push(Arc::new(Int32Array::from(
+            rows.iter()
+                .map(|row| if row.0 == 1 { Some(11) } else { None })
+                .collect::<Vec<_>>(),
+        )));
+        Ok(RecordBatch::try_new(
+            Arc::new(Schema::new(fields)),
+            columns,
+        )?)
+    };
+    for (function, nth, expected_respect, expected_ignore) in [
+        (first_value_udwf(), false, None, Some(11)),
+        (last_value_udwf(), false, Some(11), Some(11)),
+        (nth_value_udwf(), true, Some(11), None),
+    ] {
+        for ignore_nulls in [false, true] {
+            let first = source(&[(0, 0, None), (1, 0, None), (2, 1, None)])?;
+            let schema = first.schema();
+            let mut arguments = vec![col("v", &schema)?];
+            if nth {
+                arguments.push(Arc::new(Literal::new(ScalarValue::Int64(Some(2)))));
+            }
+            let window = create_window_expr(
+                &WindowFunctionDefinition::WindowUDF(function.clone()),
+                "value".into(),
+                &arguments,
+                &[col("p", &schema)?],
+                &[PhysicalSortExpr {
+                    expr: col("k", &schema)?,
+                    options: SortOptions {
+                        descending: false,
+                        nulls_first: true,
+                    },
+                }],
+                Arc::new(WindowFrame::new_bounds(
+                    WindowFrameUnits::Range,
+                    WindowFrameBound::CurrentRow,
+                    WindowFrameBound::FollowingNullOffset(DataType::Int32),
+                )),
+                schema,
+                ignore_nulls,
+                false,
+                None,
+            )?;
+            assert_eq!(
+                window.field()?.as_ref(),
+                &Field::new("value", DataType::Int32, true)
+            );
+            assert!(!window.uses_bounded_memory());
+            let mut buffers = PartitionBatches::default();
+            let mut states = PartitionWindowAggStates::default();
+            append_linear_batch(window.as_ref(), &mut buffers, &mut states, first)?;
+            assert!(states.values().all(|state| state.state.out_col.is_empty()));
+            append_linear_batch(
+                window.as_ref(),
+                &mut buffers,
+                &mut states,
+                source(&[(3, 1, Some(1))])?,
+            )?;
+            for partition in [0, 1] {
+                let state = &states[&vec![ScalarValue::Int32(Some(partition))]].state;
+                let values = state
+                    .out_col
+                    .as_any()
+                    .downcast_ref::<Int32Array>()
+                    .ok_or("value type")?;
+                let value = if ignore_nulls {
+                    expected_ignore
+                } else {
+                    expected_respect
+                };
+                let expected = if partition == 0 {
+                    vec![value, value]
+                } else {
+                    vec![None, None]
+                };
+                assert_eq!(values.iter().collect::<Vec<_>>(), expected);
+                assert_eq!(
+                    values.null_count(),
+                    expected.iter().filter(|value| value.is_none()).count()
+                );
+                assert_eq!(state.n_row_result_missing, 0);
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn null_range_planning_selects_final_operator_and_declines_reversal() -> TestResult {
+    let schema = date_source_batch(&[(0, 0, None)], false)?.schema();
+    let options = SortOptions {
+        descending: false,
+        nulls_first: true,
+    };
+    let order_by = PhysicalSortExpr {
+        expr: col("k", &schema)?,
+        options,
+    };
+    for (start, end) in [
+        (
+            WindowFrameBound::CurrentRow,
+            WindowFrameBound::FollowingNullOffset(DataType::Int32),
+        ),
+        (
+            WindowFrameBound::PrecedingNullOffset(DataType::Int32),
+            WindowFrameBound::CurrentRow,
+        ),
+        (
+            WindowFrameBound::Preceding(ScalarValue::UInt64(None)),
+            WindowFrameBound::FollowingNullOffset(DataType::Int32),
+        ),
+    ] {
+        let window = create_window_expr(
+            &WindowFunctionDefinition::AggregateUDF(count_udaf()),
+            "n".into(),
+            &[col("id", &schema)?],
+            &[],
+            std::slice::from_ref(&order_by),
+            Arc::new(WindowFrame::new_bounds(WindowFrameUnits::Range, start, end)),
+            schema.clone(),
+            false,
+            false,
+            None,
+        )?;
+        for reverse in [false, true] {
+            let source_order = if reverse {
+                order_by.reverse()
+            } else {
+                order_by.clone()
+            };
+            let ordering = LexOrdering::new(vec![source_order]).ok_or("empty ordering")?;
+            let input: Arc<dyn ExecutionPlan> = Arc::new(StreamingTableExec::try_new(
+                schema.clone(),
+                vec![],
+                None,
+                Some(ordering),
+                false,
+                None,
+            )?);
+            let plan = get_best_fitting_window(std::slice::from_ref(&window), &input, &[])?;
+            if reverse {
+                assert!(plan.is_none());
+            } else {
+                assert!(
+                    plan.ok_or("matching ordering rejected")?
+                        .downcast_ref::<WindowAggExec>()
+                        .is_some()
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn null_lower_builtin_true_unbounded_upper_does_not_complete_at_null_target() -> TestResult {
+    let first = date_source_batch(&[(0, 0, None), (1, 1, Some(1))], false)?;
+    let schema = first.schema();
+    let window = create_window_expr(
+        &WindowFunctionDefinition::WindowUDF(last_value_udwf()),
+        "value".into(),
+        &[col("id", &schema)?],
+        &[col("p", &schema)?],
+        &[PhysicalSortExpr {
+            expr: col("k", &schema)?,
+            options: SortOptions {
+                descending: false,
+                nulls_first: true,
+            },
+        }],
+        Arc::new(WindowFrame::new_bounds(
+            WindowFrameUnits::Range,
+            WindowFrameBound::PrecedingNullOffset(DataType::Int32),
+            WindowFrameBound::Following(ScalarValue::Int32(None)),
+        )),
+        schema,
+        false,
+        false,
+        None,
+    )?;
+    let mut buffers = PartitionBatches::default();
+    let mut states = PartitionWindowAggStates::default();
+    append_linear_batch(window.as_ref(), &mut buffers, &mut states, first)?;
+    assert!(states.values().all(|state| state.state.out_col.is_empty()));
+    append_linear_batch(
+        window.as_ref(),
+        &mut buffers,
+        &mut states,
+        date_source_batch(&[(2, 0, Some(2)), (3, 1, Some(3))], false)?,
+    )?;
+    assert!(states.values().all(|state| state.state.out_col.is_empty()));
+    for buffer in buffers.values_mut() {
+        buffer.is_end = true;
+    }
+    window.evaluate_stateful(&buffers, &mut states)?;
+    for partition in [0, 1] {
+        let state = &states[&vec![ScalarValue::Int32(Some(partition))]].state;
+        let values = state
+            .out_col
+            .as_any()
+            .downcast_ref::<Int32Array>()
+            .ok_or("value type")?;
+        assert_eq!(
+            values.iter().collect::<Vec<_>>(),
+            vec![Some(partition + 2); 2]
+        );
+        assert_eq!(values.null_count(), 0);
+        assert_eq!(state.n_row_result_missing, 0);
+    }
+    Ok(())
+}
+
+#[test]
+fn null_lower_numeric_upper_does_not_cache_row_dependent_completion() -> TestResult {
+    let first = source_batch(&[(0, 0, 0), (1, 0, 5), (2, 1, 11)], false, false)?;
+    let window = range_count_window(
+        first.schema(),
+        WindowFrameBound::PrecedingNullOffset(DataType::Int32),
+        WindowFrameBound::Preceding(ScalarValue::Int32(Some(-10))),
+        SortOptions {
+            descending: false,
+            nulls_first: true,
+        },
+    )?;
+    let mut buffers = PartitionBatches::default();
+    let mut states = PartitionWindowAggStates::default();
+    append_linear_batch(window.as_ref(), &mut buffers, &mut states, first)?;
+    let key = vec![ScalarValue::Int32(Some(0))];
+    // Latest key 11 passes row 0's target 10, but not row 1's target 15.
+    assert_eq!(counts(&states, 0)?, [2]);
+    assert_eq!(states[&key].state.last_calculated_index, 1);
+    assert_eq!(states[&key].state.n_row_result_missing, 1);
+    assert_eq!(states[&key].state.window_frame_range, 0..2);
+    append_linear_batch(
+        window.as_ref(),
+        &mut buffers,
+        &mut states,
+        source_batch(&[(3, 0, 12), (4, 1, 16)], false, false)?,
+    )?;
+    assert_eq!(counts(&states, 0)?, [2, 3]);
+    assert_eq!(states[&key].state.last_calculated_index, 2);
+    assert_eq!(states[&key].state.n_row_result_missing, 1);
+    assert_eq!(states[&key].state.window_frame_range, 0..3);
+    for buffer in buffers.values_mut() {
+        buffer.is_end = true;
+    }
+    window.evaluate_stateful(&buffers, &mut states)?;
+    for (partition, expected) in [(0, vec![2, 3, 3]), (1, vec![2, 2])] {
+        let state = &states[&vec![ScalarValue::Int32(Some(partition))]].state;
+        let values = state
+            .out_col
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .ok_or("count type")?;
+        assert_eq!(values.values().as_ref(), expected.as_slice());
+        assert_eq!(values.null_count(), 0);
+        assert_eq!(state.n_row_result_missing, 0);
+        assert!(state.is_end);
+    }
+    Ok(())
+}
+
+#[test]
+fn null_lower_numeric_upper_waits_for_later_null_peers() -> TestResult {
+    let source = |rows: &[(i32, i32, Option<i32>)]| -> TestResult<RecordBatch> {
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Int32, false),
+            Field::new("p", DataType::Int32, false),
+            Field::new("k", DataType::Int32, true),
+        ]));
+        let columns: Vec<ArrayRef> = vec![
+            Arc::new(Int32Array::from_iter_values(rows.iter().map(|row| row.0))),
+            Arc::new(Int32Array::from_iter_values(rows.iter().map(|row| row.1))),
+            Arc::new(Int32Array::from(
+                rows.iter().map(|row| row.2).collect::<Vec<_>>(),
+            )),
+        ];
+        Ok(RecordBatch::try_new(schema, columns)?)
+    };
+    for (end, expected_partition_one) in [
+        (
+            WindowFrameBound::Preceding(ScalarValue::Int32(Some(1))),
+            vec![2, 2, 2],
+        ),
+        (
+            WindowFrameBound::Following(ScalarValue::Int32(Some(1))),
+            vec![2, 2, 3],
+        ),
+    ] {
+        let first = source(&[(0, 0, None), (1, 1, None)])?;
+        let window = range_count_window(
+            first.schema(),
+            WindowFrameBound::PrecedingNullOffset(DataType::Int32),
+            end,
+            SortOptions {
+                descending: false,
+                nulls_first: true,
+            },
+        )?;
+        let mut buffers = PartitionBatches::default();
+        let mut states = PartitionWindowAggStates::default();
+        append_linear_batch(window.as_ref(), &mut buffers, &mut states, first)?;
+        assert!(counts(&states, 0)?.is_empty());
+        assert!(counts(&states, 1)?.is_empty());
+        append_linear_batch(
+            window.as_ref(),
+            &mut buffers,
+            &mut states,
+            source(&[(2, 0, None), (3, 1, None)])?,
+        )?;
+        for partition in [0, 1] {
+            assert!(counts(&states, partition)?.is_empty());
+            let state = &states[&vec![ScalarValue::Int32(Some(partition))]].state;
+            assert_eq!(state.last_calculated_index, 0);
+            assert_eq!(state.n_row_result_missing, 2);
+        }
+        append_linear_batch(
+            window.as_ref(),
+            &mut buffers,
+            &mut states,
+            source(&[(4, 1, Some(1))])?,
+        )?;
+        assert_eq!(counts(&states, 0)?, [2, 2]);
+        assert_eq!(
+            states[&vec![ScalarValue::Int32(Some(0))]]
+                .state
+                .n_row_result_missing,
+            0
+        );
+        for buffer in buffers.values_mut() {
+            buffer.is_end = true;
+        }
+        window.evaluate_stateful(&buffers, &mut states)?;
+        for (partition, expected) in [(0, vec![2, 2]), (1, expected_partition_one)] {
+            let state = &states[&vec![ScalarValue::Int32(Some(partition))]].state;
+            let values = state
+                .out_col
+                .as_any()
+                .downcast_ref::<Int64Array>()
+                .ok_or("count type")?;
+            assert_eq!(values.values().as_ref(), expected.as_slice());
+            assert_eq!(values.null_count(), 0);
+            assert_eq!(state.n_row_result_missing, 0);
+            assert!(state.is_end);
         }
     }
     Ok(())

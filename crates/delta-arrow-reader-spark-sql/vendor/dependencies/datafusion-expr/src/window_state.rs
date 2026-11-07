@@ -214,7 +214,10 @@ impl WindowFrameContext {
                 std::cmp::min(idx + n as usize, length)
             }
             // ERRONEOUS FRAMES
-            WindowFrameBound::Preceding(_) | WindowFrameBound::Following(_) => {
+            WindowFrameBound::Preceding(_)
+            | WindowFrameBound::Following(_)
+            | WindowFrameBound::PrecedingNullOffset(_)
+            | WindowFrameBound::FollowingNullOffset(_) => {
                 return internal_err!("Rows should be UInt64");
             }
         };
@@ -239,7 +242,10 @@ impl WindowFrameContext {
                 std::cmp::min(idx + n as usize + 1, length)
             }
             // ERRONEOUS FRAMES
-            WindowFrameBound::Preceding(_) | WindowFrameBound::Following(_) => {
+            WindowFrameBound::Preceding(_)
+            | WindowFrameBound::Following(_)
+            | WindowFrameBound::PrecedingNullOffset(_)
+            | WindowFrameBound::FollowingNullOffset(_) => {
                 return internal_err!("Rows should be UInt64");
             }
         };
@@ -350,6 +356,43 @@ pub fn date32_range_target(
     }
 }
 
+/// Computes a RANGE comparison target using the current ORDER BY key type.
+/// `None` denotes a native unbounded bound or the existing checked-arithmetic
+/// overflow edge. Membership retains its directional edge; completion must wait.
+pub fn range_bound_target(
+    current_key: &ScalarValue,
+    bound: &WindowFrameBound,
+    descending: bool,
+) -> Result<Option<ScalarValue>> {
+    let (delta, preceding) = match bound {
+        WindowFrameBound::Preceding(delta) | WindowFrameBound::Following(delta)
+            if delta.is_null() =>
+        {
+            return Ok(None);
+        }
+        WindowFrameBound::PrecedingNullOffset(_)
+        | WindowFrameBound::FollowingNullOffset(_) => {
+            return ScalarValue::try_from(&current_key.data_type()).map(Some);
+        }
+        WindowFrameBound::CurrentRow => return Ok(Some(current_key.clone())),
+        WindowFrameBound::Preceding(delta) => (delta, true),
+        WindowFrameBound::Following(delta) => (delta, false),
+    };
+    if current_key.is_null() {
+        return Ok(Some(current_key.clone()));
+    }
+    let add_offset = preceding == descending;
+    if let Some(target) = date32_range_target(current_key, delta, add_offset) {
+        Ok(Some(target))
+    } else if add_offset {
+        Ok(current_key.add_checked(delta).ok())
+    } else if current_key.is_unsigned() && current_key < delta {
+        current_key.sub(current_key).map(Some)
+    } else {
+        Ok(current_key.sub_checked(delta).ok())
+    }
+}
+
 impl WindowFrameStateRange {
     /// Create a new object to store the search state.
     fn new(sort_options: Vec<SortOptions>) -> Self {
@@ -379,7 +422,7 @@ impl WindowFrameStateRange {
                     date32_range_can_wrap(column.data_type(), window_frame.units, bound)
                 })
         });
-        if date32_wrapping_bound {
+        if date32_wrapping_bound || window_frame.has_null_offset() {
             let end = self.calculate_index_of_bound::<false>(
                 &window_frame.end_bound, range_columns, last_range, idx, length,
             )?;
@@ -409,25 +452,27 @@ impl WindowFrameStateRange {
         match bound {
             WindowFrameBound::Preceding(n) if SIDE && n.is_null() => Ok(0),
             WindowFrameBound::Following(n) if !SIDE && n.is_null() => Ok(length),
-            WindowFrameBound::Preceding(n) => self.calculate_index_of_row::<SIDE, true>(
+            WindowFrameBound::Preceding(_)
+            | WindowFrameBound::PrecedingNullOffset(_) => self.calculate_index_of_row::<SIDE, true>(
                 range_columns,
                 last_range,
                 idx,
-                Some(n),
+                bound,
                 length,
             ),
-            WindowFrameBound::Following(n) => self.calculate_index_of_row::<SIDE, false>(
+            WindowFrameBound::Following(_)
+            | WindowFrameBound::FollowingNullOffset(_) => self.calculate_index_of_row::<SIDE, false>(
                 range_columns,
                 last_range,
                 idx,
-                Some(n),
+                bound,
                 length,
             ),
             WindowFrameBound::CurrentRow => self.calculate_index_of_row::<SIDE, false>(
                 range_columns,
                 last_range,
                 idx,
-                None,
+                bound,
                 length,
             ),
         }
@@ -441,7 +486,7 @@ impl WindowFrameStateRange {
         range_columns: &[ArrayRef],
         last_range: &Range<usize>,
         idx: usize,
-        delta: Option<&ScalarValue>,
+        bound: &WindowFrameBound,
         length: usize,
     ) -> Result<usize> {
         let search_start = if SIDE {
@@ -449,7 +494,7 @@ impl WindowFrameStateRange {
         } else {
             last_range.end
         };
-        let Some(delta) = delta else {
+        if matches!(bound, WindowFrameBound::CurrentRow) {
             // Peer boundaries must use the same nested ordering as the sort.
             if !self.peer_comparator.as_ref().is_some_and(|(columns, _)| {
                 columns.len() == range_columns.len()
@@ -481,7 +526,7 @@ impl WindowFrameStateRange {
                     if SIDE { !order.is_lt() } else { !order.is_le() }
                 })
                 .unwrap_or(length));
-        };
+        }
         let current_row_values = get_row_at_idx(range_columns, idx)?;
         let end_range = {
             let is_descending: bool = self
@@ -502,29 +547,8 @@ impl WindowFrameStateRange {
             let unbounded_edge = if SEARCH_SIDE { search_start } else { length };
             let mut targets = Vec::with_capacity(current_row_values.len());
             for value in &current_row_values {
-                if value.is_null() {
-                    targets.push(value.clone());
-                    continue;
-                }
-                let target = if let Some(target) =
-                    date32_range_target(value, delta, SEARCH_SIDE == is_descending)
-                {
-                    target
-                } else if SEARCH_SIDE == is_descending {
-                    match value.add_checked(delta) {
-                        Ok(v) => v,
-                        Err(_) => return Ok(unbounded_edge),
-                    }
-                } else if value.is_unsigned() && value < delta {
-                    // NOTE: This gets a polymorphic zero without having long coercion code for ScalarValue.
-                    //       If we decide to implement a "default" construction mechanism for ScalarValue,
-                    //       change the following statement to use that.
-                    value.sub(value)?
-                } else {
-                    match value.sub_checked(delta) {
-                        Ok(v) => v,
-                        Err(_) => return Ok(unbounded_edge),
-                    }
+                let Some(target) = range_bound_target(value, bound, is_descending)? else {
+                    return Ok(unbounded_edge);
                 };
                 targets.push(target);
             }
@@ -607,6 +631,10 @@ impl WindowFrameStateGroups {
                     Some(n),
                     length,
                 )?,
+            WindowFrameBound::PrecedingNullOffset(_)
+            | WindowFrameBound::FollowingNullOffset(_) => {
+                return internal_err!("NULL offsets require a RANGE window frame");
+            }
         };
         let end = match window_frame.end_bound {
             WindowFrameBound::Preceding(ref n) => self
@@ -634,6 +662,10 @@ impl WindowFrameStateGroups {
                         length,
                     )?
                 }
+            }
+            WindowFrameBound::PrecedingNullOffset(_)
+            | WindowFrameBound::FollowingNullOffset(_) => {
+                return internal_err!("NULL offsets require a RANGE window frame");
             }
         };
         Ok(Range { start, end })
