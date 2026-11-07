@@ -141,8 +141,16 @@ that still require optimization-time failure. A deterministic scalar-subquery
 guard can disappear, while a UUID subquery guard retains its CASE prefix.
 Unconditional signed-zero result collapse preserves the ELSE sign. The UUID
 guard controls, both STRING casts and direct DOUBLE outputs, retain the selected
-THEN sign in Spark's recorded rows and optimized plans. UUID result cases observe LENGTH 36 rather than
-requiring random UUID sample equality; their field stages remain exact.
+THEN sign in Spark's recorded rows and optimized plans. UUID result cases observe
+LENGTH 36 rather than requiring random UUID sample equality. The references
+retain their complete field stages unchanged.
+
+Only the test's listed cases and stages allow nullability differences (#711,
+#1072) or exact native causes missing literal condition IDs (#865, #140). All
+other Field attributes, rows and error phases remain exact. The report preserves
+raw comparison results and records each owner; admitted differences keep
+`complete_spark_matches=false`.
+
 Separate algebraic and native SQL controls cover volatility, literal identity,
 metadata and unchanged native CASE behavior, retaining complete raw diagnostics.
 A separate Spark-planner IF control reuses the four unchanged
