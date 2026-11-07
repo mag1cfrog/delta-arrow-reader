@@ -1,4 +1,4 @@
-//! Compare explicit NULL RANGE rows, complete Fields and failures with independent Spark records.
+//! Compare NULL RANGE results with Spark and retain unsupported NULL ROWS rejections.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -17,6 +17,14 @@ const REQUEST: &str = include_str!("fixtures/null-range-754-cases.json");
 const REFERENCE: &str = include_str!("fixtures/null-range-754-spark.jsonl");
 const ORIGINAL_REQUEST: &str = include_str!("fixtures/date-range-747-cases.json");
 const ORIGINAL_REFERENCE: &str = include_str!("fixtures/date-range-747-spark.jsonl");
+const PRIOR_ROWS_REJECTIONS: &str =
+    include_str!("fixtures/null-range-754-prior-rows-rejections.json");
+const ROWS_REJECTION_IDS: [&str; 4] = [
+    "admission_rows_lower_typed_null",
+    "admission_rows_upper_typed_null",
+    "admission_rows_lower_bare_null",
+    "admission_rows_upper_bare_null",
+];
 const STAGES: [(&str, &str); 5] = [
     ("public", "public_schema"),
     ("analyzed", "public_schema"),
@@ -317,10 +325,83 @@ fn parse_null_range_fixture() -> TestResult<(Value, Vec<Value>)> {
     Ok((request, records))
 }
 
+fn is_unsupported_rows_case(case: &Value) -> bool {
+    case["corpus"] == "null-range-754-supplement"
+        && case["id"]
+            .as_str()
+            .is_some_and(|id| ROWS_REJECTION_IDS.contains(&id))
+}
+
+fn validate_prior_rows_rejections(records: &[Value], controls: &[Value]) -> TestResult {
+    let mut expected = BTreeSet::new();
+    for case in records[1..]
+        .iter()
+        .filter(|case| is_unsupported_rows_case(case))
+    {
+        for batch in [1_u64, 32] {
+            expected.insert((case_identity(case)?, batch));
+        }
+    }
+    let mut seen = BTreeSet::new();
+    for control in controls {
+        let batch = control["batch"]
+            .as_u64()
+            .ok_or("missing prior ROWS batch")?;
+        if !seen.insert((case_identity(control)?, batch)) {
+            return Err("duplicate prior ROWS rejection identity/batch".into());
+        }
+        let observation = &control["observation"];
+        let error = "External error: invalid argument: invalid window boundary offset";
+        if observation["native_phase"] != "resolve"
+            || observation["error"] != error
+            || observation["optimized_error"] != error
+            || observation["matches"] != false
+            || observation["optimized_matches"] != false
+            || observation.get("observer_error").is_some()
+            || [
+                "public_schema",
+                "optimized_schema",
+                "before_collect",
+                "physical_schema",
+                "optimized_observation",
+                "rows",
+                "rows_raw",
+            ]
+            .iter()
+            .any(|field| !observation.get(*field).is_some_and(Value::is_null))
+        {
+            return Err("prior ROWS profile is not the required resolution rejection".into());
+        }
+    }
+    if controls.len() != 16 || expected.len() != 16 || seen != expected {
+        return Err("prior ROWS rejection inventory differs".into());
+    }
+    Ok(())
+}
+
+fn prior_rows_rejection_matches(
+    case: &Value,
+    batch: usize,
+    observation: &Value,
+    controls: &[Value],
+) -> bool {
+    controls.iter().any(|control| {
+        control["corpus"] == case["corpus"]
+            && control["id"] == case["id"]
+            && control["ansi"] == case["ansi"]
+            && control["batch"] == batch
+            && control["observation"] == *observation
+    })
+}
+
 #[tokio::test]
-async fn explicit_null_range_frames_match_spark() -> TestResult {
+async fn null_range_frames_match_spark_and_rows_bounds_reject() -> TestResult {
     let (request, records) = parse_null_range_fixture()?;
+    let rows_controls: Vec<Value> = serde_json::from_str(PRIOR_ROWS_REJECTIONS)?;
+    validate_prior_rows_rejections(&records, &rows_controls)?;
     let mut completed = BTreeSet::new();
+    let mut strict_contexts = 0;
+    let mut unsupported_rows_contexts = 0;
     let mut differences = Vec::new();
     for corpus in request["corpora"].as_array().ok_or("missing corpora")? {
         for batch in [1, 32] {
@@ -363,7 +444,17 @@ async fn explicit_null_range_frames_match_spark() -> TestResult {
                     });
                 // Validated source identities cannot abort observation collection on a query difference.
                 let unique = completed.insert(identity);
-                if !matches || !unique {
+                let unsupported_rows = is_unsupported_rows_case(case);
+                let matches_prior_rejection = unsupported_rows
+                    && prior_rows_rejection_matches(case, batch, &observation, &rows_controls);
+                let contract_matches = if unsupported_rows {
+                    unsupported_rows_contexts += 1;
+                    !matches && matches_prior_rejection
+                } else {
+                    strict_contexts += 1;
+                    matches
+                };
+                if !contract_matches || !unique {
                     differences.push(format!(
                         "{}:{} ANSI={} batch={batch}",
                         case["corpus"], case["id"], case["ansi"]
@@ -371,7 +462,9 @@ async fn explicit_null_range_frames_match_spark() -> TestResult {
                 }
                 let record = json!({"issue":754,"corpus":case["corpus"],"id":case["id"],
                     "ansi":case["ansi"],"batch":batch,"target_partitions":2,"provider_partitions":2,
-                    "source_ownership_tag":case["ownership"],"primary":true,
+                    "source_ownership_tag":case["ownership"],"primary":!unsupported_rows,
+                    "remaining_owner":if unsupported_rows { Some(1085) } else { None },
+                    "prior_rejection_matches":if unsupported_rows { Some(matches_prior_rejection) } else { None },
                     "reference":case,"observation":observation,"spark_matches":matches});
                 eprintln!("NULL_RANGE_OBSERVATION {record}");
             }
@@ -380,15 +473,85 @@ async fn explicit_null_range_frames_match_spark() -> TestResult {
     eprintln!(
         "NULL_RANGE_SUMMARY {}",
         json!({"observations":completed.len(),
+        "strict_spark_contexts":strict_contexts,"unsupported_rows_rejections":unsupported_rows_contexts,
         "differences":differences.len(),"expected_observations":1164})
     );
     assert_eq!(completed.len(), 1164);
+    assert_eq!(strict_contexts, 1148);
+    assert_eq!(unsupported_rows_contexts, 16);
     assert!(
         differences.is_empty(),
-        "{} NULL RANGE differences:\n{}",
+        "{} NULL RANGE or required ROWS-rejection differences:\n{}",
         differences.len(),
         differences.join("\n")
     );
+    Ok(())
+}
+
+#[test]
+fn prior_rows_controls_reject_inventory_and_observation_changes() -> TestResult {
+    let (_, records) = parse_null_range_fixture()?;
+    let controls: Vec<Value> = serde_json::from_str(PRIOR_ROWS_REJECTIONS)?;
+    validate_prior_rows_rejections(&records, &controls)?;
+    let mut missing = controls.clone();
+    missing.pop();
+    assert!(validate_prior_rows_rejections(&records, &missing).is_err());
+    let mut duplicate = controls.clone();
+    duplicate[1] = duplicate[0].clone();
+    assert!(validate_prior_rows_rejections(&records, &duplicate).is_err());
+
+    let control = &controls[0];
+    let batch: usize = control["batch"]
+        .as_u64()
+        .ok_or("missing control batch")?
+        .try_into()?;
+    let observation = &control["observation"];
+    assert!(prior_rows_rejection_matches(
+        control,
+        batch,
+        observation,
+        &controls
+    ));
+    for (field, value) in [
+        ("native_phase", json!("collect")),
+        ("error", json!("another rejection cause")),
+        ("optimized_error", json!("another optimizer cause")),
+        ("public_schema", json!({"type":"struct","fields":[]})),
+        ("rows", json!([])),
+        ("rows_raw", json!([])),
+    ] {
+        let mut changed = observation.clone();
+        changed[field] = value;
+        assert!(
+            !prior_rows_rejection_matches(control, batch, &changed, &controls),
+            "accepted changed {field}"
+        );
+        let mut changed_controls = controls.clone();
+        changed_controls[0]["observation"] = changed;
+        assert!(validate_prior_rows_rejections(&records, &changed_controls).is_err());
+    }
+    let mut missing_field = observation.clone();
+    missing_field
+        .as_object_mut()
+        .ok_or("missing control observation")?
+        .remove("physical_schema");
+    assert!(!prior_rows_rejection_matches(
+        control,
+        batch,
+        &missing_field,
+        &controls
+    ));
+    let mut changed_controls = controls.clone();
+    changed_controls[0]["observation"] = missing_field;
+    assert!(validate_prior_rows_rejections(&records, &changed_controls).is_err());
+    let mut success = observation.clone();
+    success["error"] = Value::Null;
+    success["optimized_error"] = Value::Null;
+    success["native_phase"] = json!("encode");
+    success["rows"] = json!([]);
+    assert!(!prior_rows_rejection_matches(
+        control, batch, &success, &controls
+    ));
     Ok(())
 }
 

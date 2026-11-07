@@ -4260,6 +4260,10 @@ down and reaps its owned JVM; cleanup failure makes the capture fail.
 observation before asserting differences. Complete public, analyzed, optimized
 and physical Fields are required when available; unavailable error stages remain
 explicit. Ordered queries compare raw sequences, and unordered queries retain
-duplicate rows. Compare a fresh capture with `null-range-754-spark.jsonl` before
-refreshing references, preserving the original source metadata, historical native
-profiles and separate native controls.
+duplicate rows. It requires 1148 strict Spark comparisons and 16 unchanged native
+NULL ROWS rejections from `null-range-754-prior-rows-rejections.json`.
+[The ROWS admission issue](https://github.com/mag1cfrog/delta-arrow-reader/issues/1085)
+owns those unsupported bounds; their original Spark records remain visible and
+are not reported as parity. Compare a fresh capture with
+`null-range-754-spark.jsonl` before refreshing references, preserving the original
+source metadata, historical native profiles and separate native controls.
