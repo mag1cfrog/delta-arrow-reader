@@ -512,25 +512,40 @@ fn finite_range_references_reject_lost_captured_contracts() -> TestResult {
 #[test]
 fn finite_range_member_ids_keep_the_recorded_array_codec() -> TestResult {
     let (_, records) = parse_finite_range_fixture()?;
-    let reference = records.iter().find(|case| {
-        case["id"] == "consumers_tinyint_sliding" && case["status"] == "ok"
-    }).ok_or("missing captured member_ids consumer")?;
-    let field = reference["schema_stages"]["public"]["fields"].as_array().ok_or("missing consumer Fields")?
-        .iter().position(|field| field["name"] == "member_ids").ok_or("missing member_ids Field")?;
+    let reference = records
+        .iter()
+        .find(|case| case["id"] == "consumers_tinyint_sliding" && case["status"] == "ok")
+        .ok_or("missing captured member_ids consumer")?;
+    let field = reference["schema_stages"]["public"]["fields"]
+        .as_array()
+        .ok_or("missing consumer Fields")?
+        .iter()
+        .position(|field| field["name"] == "member_ids")
+        .ok_or("missing member_ids Field")?;
     assert_eq!(reference["rows_raw"][0][field], json!(["0", "70"]));
     assert_eq!(reference["ordered"], true);
     validate_spark_reference_result(reference)?;
     for value in [
-        Value::Null, json!("scalar"), json!([0, "70"]), json!([null, "70"]),
-        json!([["0"], "70"]), json!({"unexpected":["0", "70"]}),
+        Value::Null,
+        json!("scalar"),
+        json!([0, "70"]),
+        json!([null, "70"]),
+        json!([["0"], "70"]),
+        json!({"unexpected":["0", "70"]}),
     ] {
         let mut changed = reference.clone();
         changed["rows_raw"][0][field] = value;
-        let mut rows = changed["rows_raw"].as_array().ok_or("missing recorded rows")?.clone();
+        let mut rows = changed["rows_raw"]
+            .as_array()
+            .ok_or("missing recorded rows")?
+            .clone();
         rows.sort_by_key(Value::to_string);
         changed["rows_multiset"] = json!(rows);
         changed["expected"]["rows"] = changed["rows_raw"].clone();
-        assert!(validate_spark_reference_result(&changed).is_err(), "accepted malformed member_ids codec");
+        assert!(
+            validate_spark_reference_result(&changed).is_err(),
+            "accepted malformed member_ids codec"
+        );
     }
     Ok(())
 }

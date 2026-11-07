@@ -29,6 +29,7 @@ use datafusion::physical_expr::window::{PartitionBatches, PartitionWindowAggStat
 use datafusion::physical_expr::{LexOrdering, PhysicalSortExpr};
 use datafusion::physical_optimizer::PhysicalOptimizerRule;
 use datafusion::physical_optimizer::limit_pushdown::LimitPushdown;
+use datafusion::physical_plan::execution_plan::{Boundedness, CardinalityEffect};
 use datafusion::physical_plan::limit::GlobalLimitExec;
 use datafusion::physical_plan::sorts::sort::SortExec;
 use datafusion::physical_plan::stream::RecordBatchStreamAdapter;
@@ -37,7 +38,9 @@ use datafusion::physical_plan::test::TestMemoryExec;
 use datafusion::physical_plan::windows::{
     BoundedWindowAggExec, WindowAggExec, create_window_expr, get_best_fitting_window,
 };
-use datafusion::physical_plan::{ExecutionPlan, SendableRecordBatchStream};
+use datafusion::physical_plan::{
+    ExecutionPlan, ExecutionPlanProperties, SendableRecordBatchStream,
+};
 use futures_util::{FutureExt, StreamExt, stream};
 
 type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
@@ -3002,11 +3005,129 @@ fn spark_finite_integer_planning_declines_reversal_and_result_ordering() -> Test
                     .equivalence_properties()
                     .ordering_satisfy([PhysicalSortExpr {
                         expr: col("mx", &plan.schema())?,
-                        options: SortOptions::default(),
+                        options: SortOptions {
+                            descending: false,
+                            nulls_first: false,
+                        },
                     }])?;
                 assert_eq!(inferred, arithmetic == RangeOffsetArithmetic::DataFusion);
             }
         }
     }
+    Ok(())
+}
+
+#[test]
+fn spark_finite_integer_fetch_properties_follow_the_limit_and_current_input() -> TestResult {
+    let batch = source_batch(&[(0, 0, 0), (1, 0, 1), (2, 1, 0)], false, false)?;
+    let schema = batch.schema();
+    let key_order = PhysicalSortExpr {
+        expr: col("k", &schema)?,
+        options: SortOptions::default(),
+    };
+    let ordering = LexOrdering::new(vec![
+        PhysicalSortExpr {
+            expr: col("p", &schema)?,
+            options: SortOptions::default(),
+        },
+        key_order.clone(),
+    ])
+    .ok_or("empty input ordering")?;
+    let unbounded: Arc<dyn ExecutionPlan> = Arc::new(StreamingTableExec::try_new(
+        schema.clone(),
+        vec![Arc::new(PendingIntegerRangeInput(batch.clone()))],
+        None,
+        Some(ordering.clone()),
+        true,
+        None,
+    )?);
+    let source = Arc::new(
+        TestMemoryExec::try_new(&[vec![batch]], schema.clone(), None)?
+            .try_with_sort_information(vec![ordering])?,
+    );
+    let bounded: Arc<dyn ExecutionPlan> = Arc::new(TestMemoryExec::update_cache(&source));
+    let window = create_window_expr(
+        &WindowFunctionDefinition::AggregateUDF(count_udaf()),
+        "n".into(),
+        &[col("id", &schema)?],
+        &[col("p", &schema)?],
+        &[key_order],
+        Arc::new(
+            WindowFrame::new_bounds(
+                WindowFrameUnits::Range,
+                WindowFrameBound::CurrentRow,
+                WindowFrameBound::Following(ScalarValue::Int32(Some(1))),
+            )
+            .with_range_offset_arithmetic(RangeOffsetArithmetic::Spark { ansi_mode: true }),
+        ),
+        schema,
+        false,
+        false,
+        None,
+    )?;
+    let plan =
+        get_best_fitting_window(&[window], &unbounded, &[])?.ok_or("fitting window missing")?;
+    assert_eq!(plan.fetch(), None);
+    assert_eq!(plan.boundedness(), unbounded.boundedness());
+    assert!(plan.boundedness().is_unbounded());
+    assert!(matches!(
+        plan.cardinality_effect(),
+        CardinalityEffect::Equal
+    ));
+
+    let fetched = plan.with_fetch(Some(1)).ok_or("fetch unsupported")?;
+    assert_eq!(fetched.boundedness(), Boundedness::Bounded);
+    assert!(matches!(
+        fetched.cardinality_effect(),
+        CardinalityEffect::LowerEqual
+    ));
+    assert_eq!(fetched.output_ordering(), plan.output_ordering());
+    assert_eq!(fetched.pipeline_behavior(), plan.pipeline_behavior());
+    assert_eq!(fetched.clone().boundedness(), Boundedness::Bounded);
+    let cleared = fetched.with_fetch(None).ok_or("clear fetch unsupported")?;
+    assert_eq!(cleared.boundedness(), unbounded.boundedness());
+    assert!(matches!(
+        cleared.cardinality_effect(),
+        CardinalityEffect::Equal
+    ));
+
+    let same = fetched.clone().with_new_children(vec![unbounded.clone()])?;
+    assert_eq!(same.fetch(), Some(1));
+    assert_eq!(same.boundedness(), Boundedness::Bounded);
+    assert_eq!(
+        same.with_fetch(None)
+            .ok_or("clear same-child fetch")?
+            .boundedness(),
+        unbounded.boundedness()
+    );
+
+    let changed = fetched.with_new_children(vec![bounded.clone()])?;
+    assert_eq!(changed.fetch(), Some(1));
+    assert_eq!(changed.boundedness(), Boundedness::Bounded);
+    assert_eq!(
+        changed
+            .with_fetch(None)
+            .ok_or("clear changed-child fetch")?
+            .boundedness(),
+        bounded.boundedness()
+    );
+    let restored = changed.with_new_children(vec![unbounded.clone()])?;
+    assert_eq!(restored.fetch(), Some(1));
+    assert_eq!(restored.boundedness(), Boundedness::Bounded);
+    assert_eq!(
+        restored
+            .with_fetch(None)
+            .ok_or("clear restored-child fetch")?
+            .boundedness(),
+        unbounded.boundedness()
+    );
+
+    let default_rebuilt = plan.with_new_children(vec![bounded.clone()])?;
+    assert_eq!(default_rebuilt.fetch(), None);
+    assert_eq!(default_rebuilt.boundedness(), bounded.boundedness());
+    assert!(matches!(
+        default_rebuilt.cardinality_effect(),
+        CardinalityEffect::Equal
+    ));
     Ok(())
 }

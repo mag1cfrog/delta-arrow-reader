@@ -93,22 +93,29 @@ fn complete_recorded_value(value: &Value, data_type: &Value, nullable: bool) -> 
     };
     match data_type["type"].as_str() {
         Some("array") => data_type["containsNull"].as_bool().is_some_and(|nullable| {
-            values.iter().all(|value| complete_recorded_value(value, &data_type["elementType"], nullable))
+            values
+                .iter()
+                .all(|value| complete_recorded_value(value, &data_type["elementType"], nullable))
         }),
         Some("struct") => data_type["fields"].as_array().is_some_and(|fields| {
-            values.len() == fields.len() && values.iter().zip(fields).all(|(value, field)| {
-                field["nullable"].as_bool().is_some_and(|nullable| {
-                    complete_recorded_value(value, &field["type"], nullable)
+            values.len() == fields.len()
+                && values.iter().zip(fields).all(|(value, field)| {
+                    field["nullable"].as_bool().is_some_and(|nullable| {
+                        complete_recorded_value(value, &field["type"], nullable)
+                    })
                 })
-            })
         }),
-        Some("map") => data_type["valueContainsNull"].as_bool().is_some_and(|nullable| {
-            values.iter().all(|entry| entry.as_array().is_some_and(|entry| {
-                entry.len() == 2
-                    && complete_recorded_value(&entry[0], &data_type["keyType"], false)
-                    && complete_recorded_value(&entry[1], &data_type["valueType"], nullable)
-            }))
-        }),
+        Some("map") => data_type["valueContainsNull"]
+            .as_bool()
+            .is_some_and(|nullable| {
+                values.iter().all(|entry| {
+                    entry.as_array().is_some_and(|entry| {
+                        entry.len() == 2
+                            && complete_recorded_value(&entry[0], &data_type["keyType"], false)
+                            && complete_recorded_value(&entry[1], &data_type["valueType"], nullable)
+                    })
+                })
+            }),
         _ => false,
     }
 }
@@ -142,23 +149,43 @@ fn recorded_nested_values_keep_shape_and_nullability() {
     let data_type = json!({"type":"array","containsNull":false,"elementType":{"type":"map",
         "keyType":"integer","valueContainsNull":false,"valueType":{"type":"struct","fields":[
         {"name":"value","type":"integer","nullable":false,"metadata":{}}]}}});
-    assert!(complete_recorded_value(&json!([[["0", ["70"]]]]), &data_type, false));
+    assert!(complete_recorded_value(
+        &json!([[["0", ["70"]]]]),
+        &data_type,
+        false
+    ));
     for value in [
-        json!([null]), json!([{"0":["70"]}]), json!([[["0", []]]]),
-        json!([[[null, ["70"]]]]), json!([[["0", null]]]), json!([[["0", [null]]]]),
-        json!([[["0", [70]]]]), json!([[["0", ["70"], "extra"]]]),
+        json!([null]),
+        json!([{"0":["70"]}]),
+        json!([[["0", []]]]),
+        json!([[[null, ["70"]]]]),
+        json!([[["0", null]]]),
+        json!([[["0", [null]]]]),
+        json!([[["0", [70]]]]),
+        json!([[["0", ["70"], "extra"]]]),
     ] {
-        assert!(!complete_recorded_value(&value, &data_type, false), "accepted malformed nested value {value}");
+        assert!(
+            !complete_recorded_value(&value, &data_type, false),
+            "accepted malformed nested value {value}"
+        );
     }
     let mut nullable = data_type.clone();
     nullable["containsNull"] = json!(true);
     assert!(complete_recorded_value(&json!([null]), &nullable, false));
     let mut nullable = data_type.clone();
     nullable["elementType"]["valueContainsNull"] = json!(true);
-    assert!(complete_recorded_value(&json!([[["0", null]]]), &nullable, false));
+    assert!(complete_recorded_value(
+        &json!([[["0", null]]]),
+        &nullable,
+        false
+    ));
     let mut nullable = data_type;
     nullable["elementType"]["valueType"]["fields"][0]["nullable"] = json!(true);
-    assert!(complete_recorded_value(&json!([[["0", [null]]]]), &nullable, false));
+    assert!(complete_recorded_value(
+        &json!([[["0", [null]]]]),
+        &nullable,
+        false
+    ));
 }
 
 #[allow(

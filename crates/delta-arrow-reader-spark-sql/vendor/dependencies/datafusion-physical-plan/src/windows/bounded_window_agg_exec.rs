@@ -28,6 +28,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use super::utils::create_schema;
+use crate::execution_plan::Boundedness;
 use crate::metrics::{BaselineMetrics, ExecutionPlanMetricsSet, MetricsSet};
 use crate::stream::EmptyRecordBatchStream;
 use crate::windows::{
@@ -346,14 +347,15 @@ impl ExecutionPlan for BoundedWindowAggExec {
         children: Vec<Arc<dyn ExecutionPlan>>,
     ) -> Result<Arc<dyn ExecutionPlan>> {
         check_if_same_properties!(self, children);
-        let mut rebuilt = BoundedWindowAggExec::try_new(
+        let rebuilt = BoundedWindowAggExec::try_new(
             self.window_expr.clone(),
             Arc::clone(&children[0]),
             self.input_order_mode.clone(),
             self.can_repartition,
         )?;
-        rebuilt.fetch = self.fetch;
-        Ok(Arc::new(rebuilt))
+        Ok(rebuilt
+            .with_fetch(self.fetch)
+            .unwrap_or_else(|| Arc::new(rebuilt)))
     }
 
     fn execute(
@@ -400,8 +402,15 @@ impl ExecutionPlan for BoundedWindowAggExec {
         {
             return None;
         }
+        let boundedness = if fetch.is_some() {
+            Boundedness::Bounded
+        } else {
+            self.input.boundedness()
+        };
+        let cache = Arc::new(PlanProperties::clone(&self.cache).with_boundedness(boundedness));
         Some(Arc::new(Self {
             fetch,
+            cache,
             ..Self::clone(self)
         }))
     }
