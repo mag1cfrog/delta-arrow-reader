@@ -104,6 +104,67 @@ or rewrite them. The production change is the Spark-marked nullability arm
 from `e8e0d982` / `2337b79d`. This is a partial #721 delivery and a producer
 prerequisite for the discarded-CASE control retained by constant STRUCT #849.
 
+## CASE equal-result tails
+
+[case-result-tails-spark.jsonl](case-result-tails-spark.jsonl) contains 44
+independent observations for equal/distinct results, explicit and typed implicit
+NULL, source metadata, aliases, signed-zero/NaN literals, volatile guards/results,
+and required division or scalar-subquery errors. Its inputs include the original
+id 0/1/2 struct provider, its same-schema empty variant, closed expressions and
+SQL VALUES. [case-result-tails-volatile-subqueries-spark.jsonl](case-result-tails-volatile-subqueries-spark.jsonl)
+adds four observations with UUID inside scalar subquery guards and results.
+[case-result-tails-range-subquery-spark.jsonl](case-result-tails-range-subquery-spark.jsonl)
+adds two deterministic Range subquery guard observations.
+[case-result-tails-volatile-floats-spark.jsonl](case-result-tails-volatile-floats-spark.jsonl)
+adds four signed-zero observations under UUID guards and STRING casts.
+[case-result-tails-raw-floats-spark.jsonl](case-result-tails-raw-floats-spark.jsonl)
+adds four direct DOUBLE observations with exact IEEE bits for both zero signs.
+[case-result-tails-alias-lineage-spark.jsonl](case-result-tails-alias-lineage-spark.jsonl)
+adds six controls for distinct source columns with coincident rows and identical
+fields, separate UUID outputs, and two aliases of one materialized UUID output.
+[case-result-tails-host-contexts-spark.jsonl](case-result-tails-host-contexts-spark.jsonl)
+adds six aggregate, window and filtered-projection controls. SUM retains its
+aliased CASE and required ANSI division error; window SUM and the filtered
+projection prune their aliased CASE results. All seven CASE references contain
+no RAND calls.
+
+Their first-line headers pin Spark 4.2.0 revision
+`32f7299601108917fb01920a54e084595b7b3bf8`, UTC, original input schemas/metadata/rows,
+and capture-script and manifest hashes. Each record preserves its ANSI mode,
+complete available schema stages, plans, and rows or actual error condition and
+phase. These are the authoritative capture inputs and outcomes.
+
+[case_result_tails.rs](../case_result_tails.rs) compares all 70 CASE records at batch
+sizes 1 and 32 through the canonical stage and optimized-field observers.
+The references distinguish removable provider guards from closed/VALUES errors
+that still require optimization-time failure. A deterministic scalar-subquery
+guard can disappear, while a UUID subquery guard retains its CASE prefix.
+Unconditional signed-zero result collapse preserves the ELSE sign. The UUID
+guard controls, both STRING casts and direct DOUBLE outputs, retain the selected
+THEN sign in Spark's recorded rows and optimized plans. UUID result cases observe
+LENGTH 36 rather than requiring random UUID sample equality. The references
+retain their complete field stages unchanged.
+
+Only the test's listed cases and stages allow nullability differences (#711,
+#1072) or exact native causes missing literal condition IDs (#865, #140). All
+other Field attributes, rows and error phases remain exact. The report preserves
+raw comparison results and records each owner; admitted differences keep
+`complete_spark_matches=false`.
+
+Separate algebraic and native SQL controls cover volatility, literal identity,
+metadata and unchanged native CASE behavior, retaining complete raw diagnostics.
+A separate Spark-planner IF control reuses the four unchanged
+[conditional-nested-if-spark.jsonl](conditional-nested-if-spark.jsonl) records for
+eight batch contexts, checking exact nested result fields and rows through the
+reachable `if_expr` path. Its existing header retains the independent provenance.
+These references provide 148 batch contexts in total. CASE result aliases can
+share a representative only when metadata-free column passthroughs reach the
+same stored output and their complete exposed fields agree apart from alias
+names. Filters preserve the stored values of surviving rows; aggregate
+arguments keep their separate pruning boundary. Distinct source columns and separately computed UUIDs stay distinct;
+a shared materialized UUID remains a reference to that stored value. Guards
+remain for the existing CASE pruning rule to handle.
+
 ## Integer-day DATE arithmetic
 
 `date-day-arithmetic-spark.jsonl` contains 296 independent Spark 4.2.0
