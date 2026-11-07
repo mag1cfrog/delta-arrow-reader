@@ -10,7 +10,10 @@ use serde_json::{Value, json};
 #[allow(dead_code, reason = "This suite selects the shared stage observers.")]
 #[path = "support/spark_results.rs"]
 mod spark_results;
-#[allow(dead_code, reason = "This suite uses complete observations, including errors.")]
+#[allow(
+    dead_code,
+    reason = "This suite uses complete observations, including errors."
+)]
 #[path = "support/string_binary.rs"]
 mod string_binary;
 use spark_results::{capture_native_query_observation, capture_spark_optimized_observation};
@@ -68,9 +71,8 @@ fn required_pattern_errors_reject_wrong_phase_pattern_and_cause() -> TestResult 
             "execute"
         };
         // Synthetic diagnostics test the matcher; integration logs retain actual errors.
-        let error = format!(
-            "{phase}: regex parse error:\n    [\n    ^\nerror: unclosed character class"
-        );
+        let error =
+            format!("{phase}: regex parse error:\n    [\n    ^\nerror: unclosed character class");
         let actual = json!({"error_stage":phase, "error":error});
         assert!(required_pattern_error_matches(&case["expected"], &actual));
         for wrong in [
@@ -104,10 +106,19 @@ async fn regexp_operator_names_match_independent_spark_stages() -> TestResult {
             case["ansi"].as_bool().ok_or("missing ANSI")?,
         )));
         assert_eq!(case["timezone"], "UTC");
-        assert_eq!(case["effective_spark_sql_settings"]["spark.sql.parser.escapedStringLiterals"], "false");
-        assert_eq!(case["effective_spark_sql_settings"]["spark.sql.variable.substitute"], "true");
+        assert_eq!(
+            case["effective_spark_sql_settings"]["spark.sql.parser.escapedStringLiterals"],
+            "false"
+        );
+        assert_eq!(
+            case["effective_spark_sql_settings"]["spark.sql.variable.substitute"],
+            "true"
+        );
         if case["id"] == "regexp_operator_original_mixed" {
-            assert_eq!(case["sql"], "SELECT 'ab' RLIKE '(a)', 'ab' REGEXP '(a)', rlike('ab','(a)'), regexp_like('ab','(a)'), regexp_extract('ab','(a)',1), regexp_replace('ab','a','x')");
+            assert_eq!(
+                case["sql"],
+                "SELECT 'ab' RLIKE '(a)', 'ab' REGEXP '(a)', rlike('ab','(a)'), regexp_like('ab','(a)'), regexp_extract('ab','(a)',1), regexp_replace('ab','a','x')"
+            );
         }
     }
     let mut observations = Vec::new();
@@ -140,11 +151,13 @@ async fn regexp_operator_names_match_independent_spark_stages() -> TestResult {
                 });
                 if expected["optimized_schema"].is_object() {
                     comparison["optimized_names"] = json!(optimized["names_match"] == true);
-                    comparison["optimized_schema"] = json!(optimized["schema"] == expected["optimized_schema"]);
+                    comparison["optimized_schema"] =
+                        json!(optimized["schema"] == expected["optimized_schema"]);
                     comparison["optimized_raw"] = json!(optimized["raw_schema"].is_object());
                 }
                 if expected["physical_schema"].is_object() {
-                    comparison["physical_schema"] = json!(actual["physical_schema"] == expected["physical_schema"]);
+                    comparison["physical_schema"] =
+                        json!(actual["physical_schema"] == expected["physical_schema"]);
                 }
                 if expected["status"] == "ok" {
                     successes += 1;
@@ -155,15 +168,22 @@ async fn regexp_operator_names_match_independent_spark_stages() -> TestResult {
                     assert_eq!(expected["status"], "error");
                     assert_eq!(case["require_error"], true);
                     errors += 1;
-                    comparison["required_error_cause_and_stage"] = json!(required_pattern_error_matches(expected, &actual));
-                    comparison["completed_physical_fields"] = json!(if actual["error_stage"] == "execute" {
-                        actual["physical_schema"].is_object() && actual["physical_arrow_schema"].is_string()
-                    } else {
-                        actual["physical_schema"].is_null() && actual["physical_arrow_schema"].is_null()
-                    });
+                    comparison["required_error_cause_and_stage"] =
+                        json!(required_pattern_error_matches(expected, &actual));
+                    comparison["completed_physical_fields"] =
+                        json!(if actual["error_stage"] == "execute" {
+                            actual["physical_schema"].is_object()
+                                && actual["physical_arrow_schema"].is_string()
+                        } else {
+                            actual["physical_schema"].is_null()
+                                && actual["physical_arrow_schema"].is_null()
+                        });
                 }
-                let matches = comparison.as_object().ok_or("missing comparison")?
-                    .values().all(|facet| facet == true);
+                let matches = comparison
+                    .as_object()
+                    .ok_or("missing comparison")?
+                    .values()
+                    .all(|facet| facet == true);
                 let observation = json!({
                     "id":id, "ansi":ansi, "representation":representation, "batch_size":batch_size,
                     "reference":case, "actual":actual, "optimized":optimized,
@@ -177,7 +197,9 @@ async fn regexp_operator_names_match_independent_spark_stages() -> TestResult {
                 eprintln!("regexp operator observation: {observation}");
                 observations.push(observation);
                 if !matches {
-                    differences.push(format!("{id} ANSI={ansi} representation={representation} batch={batch_size}"));
+                    differences.push(format!(
+                        "{id} ANSI={ansi} representation={representation} batch={batch_size}"
+                    ));
                 }
             }
         }
@@ -185,20 +207,37 @@ async fn regexp_operator_names_match_independent_spark_stages() -> TestResult {
     if let Some(path) = std::env::var_os("DAR_REGEXP_OPERATOR_NAMES_REPORT") {
         serde_json::to_writer_pretty(std::fs::File::create_new(path)?, &observations)?;
     }
-    let expected_contexts = identities.iter().flat_map(|(id, ansi)| {
-        (0_u64..3).flat_map(move |representation| {
-            [1_u64, 32].map(move |batch_size| (id.clone(), *ansi, representation, batch_size))
+    let expected_contexts = identities
+        .iter()
+        .flat_map(|(id, ansi)| {
+            (0_u64..3).flat_map(move |representation| {
+                [1_u64, 32].map(move |batch_size| (id.clone(), *ansi, representation, batch_size))
+            })
         })
-    }).collect::<BTreeSet<_>>();
-    let observed_contexts = observations.iter().map(|observed| {
-        Ok((
-            observed["id"].as_str().ok_or("missing observed ID")?.to_owned(),
-            observed["ansi"].as_bool().ok_or("missing observed ANSI")?,
-            observed["representation"].as_u64().ok_or("missing observed representation")?,
-            observed["batch_size"].as_u64().ok_or("missing observed batch size")?,
-        ))
-    }).collect::<TestResult<BTreeSet<_>>>()?;
-    assert_eq!(observed_contexts.len(), observations.len(), "duplicate observation context");
+        .collect::<BTreeSet<_>>();
+    let observed_contexts = observations
+        .iter()
+        .map(|observed| {
+            Ok((
+                observed["id"]
+                    .as_str()
+                    .ok_or("missing observed ID")?
+                    .to_owned(),
+                observed["ansi"].as_bool().ok_or("missing observed ANSI")?,
+                observed["representation"]
+                    .as_u64()
+                    .ok_or("missing observed representation")?,
+                observed["batch_size"]
+                    .as_u64()
+                    .ok_or("missing observed batch size")?,
+            ))
+        })
+        .collect::<TestResult<BTreeSet<_>>>()?;
+    assert_eq!(
+        observed_contexts.len(),
+        observations.len(),
+        "duplicate observation context"
+    );
     assert_eq!(observed_contexts, expected_contexts);
     assert_eq!(observations.len(), 132);
     assert_eq!(successes, 108);
@@ -210,12 +249,25 @@ async fn regexp_operator_names_match_independent_spark_stages() -> TestResult {
 
 #[tokio::test]
 async fn regexp_operator_repair_preserves_native_sql() -> TestResult {
-    let metadata: Value = serde_json::from_str(REFERENCE.lines().next().ok_or("missing metadata")?)?;
+    let metadata: Value =
+        serde_json::from_str(REFERENCE.lines().next().ok_or("missing metadata")?)?;
     let sql_controls = [
-        ("SELECT regexp_like('ab','(a)') AS matched, 'ab' LIKE 'a%' AS like_match, 'Ab' ILIKE 'a%' AS ilike_match", false),
-        ("SELECT k, regexp_like(s,re) AS matched, s LIKE pattern AS like_match, s ILIKE pattern AS ilike_match FROM regexp_required ORDER BY k", false),
-        ("SELECT k, regexp_like(s,re) AS matched FROM regexp_nullable ORDER BY k", false),
-        ("SELECT k, regexp_like(s,re) AS matched FROM regexp_empty ORDER BY k", false),
+        (
+            "SELECT regexp_like('ab','(a)') AS matched, 'ab' LIKE 'a%' AS like_match, 'Ab' ILIKE 'a%' AS ilike_match",
+            false,
+        ),
+        (
+            "SELECT k, regexp_like(s,re) AS matched, s LIKE pattern AS like_match, s ILIKE pattern AS ilike_match FROM regexp_required ORDER BY k",
+            false,
+        ),
+        (
+            "SELECT k, regexp_like(s,re) AS matched FROM regexp_nullable ORDER BY k",
+            false,
+        ),
+        (
+            "SELECT k, regexp_like(s,re) AS matched FROM regexp_empty ORDER BY k",
+            false,
+        ),
         ("SELECT regexp_like('ab','[') AS matched", true),
     ];
     let mut observations = Vec::new();
@@ -223,7 +275,9 @@ async fn regexp_operator_repair_preserves_native_sql() -> TestResult {
     for representation in 0..3 {
         for batch_size in [1, 32] {
             let plain = SessionContext::new_with_config(
-                SessionConfig::new().with_batch_size(batch_size).with_target_partitions(2),
+                SessionConfig::new()
+                    .with_batch_size(batch_size)
+                    .with_target_partitions(2),
             );
             let configured = session(batch_size);
             for session in [&plain, &configured] {
@@ -256,7 +310,9 @@ async fn regexp_operator_repair_preserves_native_sql() -> TestResult {
                 eprintln!("regexp operator native observation: {observation}");
                 observations.push(observation);
                 if !matches {
-                    differences.push(format!("native representation={representation} batch={batch_size}: {sql}"));
+                    differences.push(format!(
+                        "native representation={representation} batch={batch_size}: {sql}"
+                    ));
                 }
             }
         }
@@ -264,19 +320,36 @@ async fn regexp_operator_repair_preserves_native_sql() -> TestResult {
     if let Some(path) = std::env::var_os("DAR_REGEXP_OPERATOR_NAMES_NATIVE_REPORT") {
         serde_json::to_writer_pretty(std::fs::File::create_new(path)?, &observations)?;
     }
-    let expected_contexts = sql_controls.into_iter().flat_map(|(sql, _)| {
-        (0_u64..3).flat_map(move |representation| {
-            [1_u64, 32].map(move |batch_size| (sql.to_owned(), representation, batch_size))
+    let expected_contexts = sql_controls
+        .into_iter()
+        .flat_map(|(sql, _)| {
+            (0_u64..3).flat_map(move |representation| {
+                [1_u64, 32].map(move |batch_size| (sql.to_owned(), representation, batch_size))
+            })
         })
-    }).collect::<BTreeSet<_>>();
-    let observed_contexts = observations.iter().map(|observed| {
-        Ok((
-            observed["sql"].as_str().ok_or("missing observed SQL")?.to_owned(),
-            observed["representation"].as_u64().ok_or("missing observed representation")?,
-            observed["batch_size"].as_u64().ok_or("missing observed batch size")?,
-        ))
-    }).collect::<TestResult<BTreeSet<_>>>()?;
-    assert_eq!(observed_contexts.len(), observations.len(), "duplicate native observation context");
+        .collect::<BTreeSet<_>>();
+    let observed_contexts = observations
+        .iter()
+        .map(|observed| {
+            Ok((
+                observed["sql"]
+                    .as_str()
+                    .ok_or("missing observed SQL")?
+                    .to_owned(),
+                observed["representation"]
+                    .as_u64()
+                    .ok_or("missing observed representation")?,
+                observed["batch_size"]
+                    .as_u64()
+                    .ok_or("missing observed batch size")?,
+            ))
+        })
+        .collect::<TestResult<BTreeSet<_>>>()?;
+    assert_eq!(
+        observed_contexts.len(),
+        observations.len(),
+        "duplicate native observation context"
+    );
     assert_eq!(observed_contexts, expected_contexts);
     assert_eq!(observations.len(), 30);
     assert!(differences.is_empty(), "{}", differences.join("\n"));
