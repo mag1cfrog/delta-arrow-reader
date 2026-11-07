@@ -169,7 +169,9 @@ async fn pivot_source_and_output_aliases_match_spark() -> TestResult {
         register_recorded_inputs(&session, &records[0], batch_size)?;
         for case in &records[1..] {
             let comparison_reference = reference_with_arrow_boolean_text(case);
-            let actual = compare_exact_spark_query_stages_with_optimized(&session, &comparison_reference).await;
+            let actual =
+                compare_exact_spark_query_stages_with_optimized(&session, &comparison_reference)
+                    .await;
             let matches = actual.as_ref().is_ok_and(|observation| {
                 if case["expected"].get("condition").is_some() {
                     pivot_error_matches(case, observation)
