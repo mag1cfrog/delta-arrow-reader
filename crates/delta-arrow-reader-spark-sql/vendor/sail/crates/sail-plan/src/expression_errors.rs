@@ -382,7 +382,10 @@ impl AnalyzerRule for PrepareSparkExpressions {
 
     fn analyze(&self, plan: LogicalPlan, options: &ConfigOptions) -> Result<LogicalPlan> {
         let plan = self.prepare(plan, options)?;
-        let spark_query = options.extensions.get::<SparkSqlExpressionSemantics>().is_some();
+        let spark_query = options
+            .extensions
+            .get::<SparkSqlExpressionSemantics>()
+            .is_some();
         Ok(plan
             .transform_up_with_subqueries(|node| {
                 let input = if spark_query {
@@ -438,7 +441,11 @@ fn passthrough_column_origin<'a>(
         LogicalPlan::Projection(project) => {
             let mut expression = &project.expr[index];
             while let Expr::Alias(alias) = expression {
-                if alias.metadata.as_ref().is_some_and(|metadata| !metadata.is_empty()) {
+                if alias
+                    .metadata
+                    .as_ref()
+                    .is_some_and(|metadata| !metadata.is_empty())
+                {
                     return Ok((input, index));
                 }
                 expression = &alias.expr;
@@ -465,15 +472,24 @@ fn canonicalize_case_result_columns(expr: Expr, input: &LogicalPlan) -> Result<T
         return Ok(Transformed::no(Expr::Case(case)));
     };
     let fallback = fallback.clone();
-    let fallback_field = input.schema().field(input.schema().index_of_column(&fallback)?);
+    let fallback_field = input
+        .schema()
+        .field(input.schema().index_of_column(&fallback)?);
     let (fallback_plan, fallback_index) = passthrough_column_origin(input, &fallback)?;
     let mut changed = false;
     for (_, result) in &case.when_then_expr {
         let Expr::Column(column) = result.as_ref() else {
             return Ok(Transformed::no(Expr::Case(case)));
         };
-        let field = input.schema().field(input.schema().index_of_column(column)?);
-        if field.as_ref().clone().with_name(fallback_field.name().as_str()) != *fallback_field.as_ref() {
+        let field = input
+            .schema()
+            .field(input.schema().index_of_column(column)?);
+        if field
+            .as_ref()
+            .clone()
+            .with_name(fallback_field.name().as_str())
+            != *fallback_field.as_ref()
+        {
             return Ok(Transformed::no(Expr::Case(case)));
         }
         let (origin_plan, origin_index) = passthrough_column_origin(input, column)?;
@@ -498,25 +514,37 @@ fn case_result_columns_require_the_same_existing_value_and_fields() -> Result<()
     let values = LogicalPlanBuilder::values(vec![vec![lit(7_i32), lit(7_i32)]])?.build()?;
     let shared = LogicalPlanBuilder::from(values.clone())
         .project(vec![col("column1").alias("a"), col("column1").alias("b")])?
-        .alias("q")?.build()?;
+        .alias("q")?
+        .build()?;
     let filtered = LogicalPlanBuilder::from(shared.clone())
-        .filter(col("q.a").is_not_null())?.build()?;
+        .filter(col("q.a").is_not_null())?
+        .build()?;
     let distinct = LogicalPlanBuilder::from(values.clone())
         .project(vec![col("column1").alias("a"), col("column2").alias("b")])?
-        .alias("q")?.build()?;
-    let annotated = |name: &str| col("column1").alias_with_metadata(name, Some(FieldMetadata::from(
-        std::collections::HashMap::from([("source".to_owned(), name.to_owned())]),
-    )));
+        .alias("q")?
+        .build()?;
+    let annotated = |name: &str| {
+        col("column1").alias_with_metadata(
+            name,
+            Some(FieldMetadata::from(std::collections::HashMap::from([(
+                "source".to_owned(),
+                name.to_owned(),
+            )]))),
+        )
+    };
     let metadata = LogicalPlanBuilder::from(values)
         .project(vec![annotated("a"), annotated("b")])?
-        .alias("q")?.build()?;
+        .alias("q")?
+        .build()?;
     let volatile = LogicalPlanBuilder::empty(true)
         .project(vec![expr_fn::uuid().alias("a"), expr_fn::uuid().alias("b")])?
-        .alias("q")?.build()?;
+        .alias("q")?
+        .build()?;
     let materialized = LogicalPlanBuilder::empty(true)
         .project(vec![expr_fn::uuid().alias("u")])?
         .project(vec![col("u").alias("a"), col("u").alias("b")])?
-        .alias("q")?.build()?;
+        .alias("q")?
+        .build()?;
     let guard = col("q.a").is_not_null();
     let expression = Expr::Case(Case::new_spark_searched(
         vec![(Box::new(guard.clone()), Box::new(col("q.a")))],
@@ -527,18 +555,33 @@ fn case_result_columns_require_the_same_existing_value_and_fields() -> Result<()
         Some(Box::new(col("q.b"))),
     ));
     for (input, changed) in [
-        (shared.clone(), true), (filtered, true), (distinct, false), (metadata, false),
-        (volatile, false), (materialized, true),
+        (shared.clone(), true),
+        (filtered, true),
+        (distinct, false),
+        (metadata, false),
+        (volatile, false),
+        (materialized, true),
     ] {
         let actual = canonicalize_case_result_columns(expression.clone(), &input)?;
         assert_eq!(actual.transformed, changed);
-        assert_eq!(actual.data, if changed { canonical.clone() } else { expression.clone() });
+        assert_eq!(
+            actual.data,
+            if changed {
+                canonical.clone()
+            } else {
+                expression.clone()
+            }
+        );
     }
-    let native = Expr::Case(Case::new(None,
+    let native = Expr::Case(Case::new(
+        None,
         vec![(Box::new(guard), Box::new(col("q.a")))],
         Some(Box::new(col("q.b"))),
     ));
-    assert_eq!(canonicalize_case_result_columns(native.clone(), &shared)?.data, native);
+    assert_eq!(
+        canonicalize_case_result_columns(native.clone(), &shared)?.data,
+        native
+    );
     Ok(())
 }
 
