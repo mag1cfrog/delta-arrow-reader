@@ -26,16 +26,8 @@ use regexp_diagnostics::{availability, error_cause, group_error_suffix_matches};
 
 #[path = "../vendor/sail/crates/sail-plan/src/test_utils/regexp_literal_producer.rs"]
 mod literal_producer;
-#[expect(
-    dead_code,
-    reason = "This target registers only the recorded empty floating input."
-)]
 #[path = "support/spark_inputs.rs"]
 mod spark_inputs;
-#[expect(
-    dead_code,
-    reason = "This target selects the recorded input and Int32 cause helpers."
-)]
 #[path = "support/spark_results.rs"]
 mod spark_results;
 
