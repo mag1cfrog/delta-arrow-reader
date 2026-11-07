@@ -1334,7 +1334,11 @@ numeric INT cast builders in the query's ANSI mode. Conversion and positive-rang
 validation precede replacement evaluation. The logical cast remains visible for
 analyzed nullability; ordinary optimization can later refine its field.
 New coercion paths reject custom operands that disable constant folding before
-literal evaluation. The existing INT position path is unchanged.
+literal evaluation. Already-INT synchronous operands keep their existing folding
+behavior. Positions with a native async function in the expression tree fail
+with `NON_FOLDABLE_INPUT` before literal evaluation, including through expression
+aliases and casts. Async source, pattern and replacement arguments keep their
+execution path.
 
 The focused position fixture retains 110 independent Spark references and all
 660 native configurations. BIGINT narrowing and FLOAT/DOUBLE positions use the
