@@ -76,7 +76,9 @@ fn schema_matches_with_nullable_gap(actual: &Value, expected: &Value, allowed: b
         return true;
     }
     if !allowed
-        || expected["fields"].as_array().is_none_or(|fields| fields.len() != 1)
+        || expected["fields"]
+            .as_array()
+            .is_none_or(|fields| fields.len() != 1)
         || expected["fields"][0]["nullable"] != false
     {
         return false;
@@ -123,11 +125,18 @@ fn independent_case_tail_gap(case: &Value, comparison: &Value) -> Option<&'stati
     {
         return None;
     }
-    let all_stages = ["analyzed", "optimized", "executed_before_collect", "executed"];
+    let all_stages = [
+        "analyzed",
+        "optimized",
+        "executed_before_collect",
+        "executed",
+    ];
     let declaration = match (id, input, ansi) {
-        ("signed_zero_results" | "signed_zero_results_reversed", "case_parent_mixed", true | false) => {
-            Some(("#711", &["analyzed"][..]))
-        }
+        (
+            "signed_zero_results" | "signed_zero_results_reversed",
+            "case_parent_mixed",
+            true | false,
+        ) => Some(("#711", &["analyzed"][..])),
         (
             "volatile_signed_zero_results" | "volatile_signed_zero_results_reversed",
             "case_parent_mixed",
@@ -162,17 +171,21 @@ fn independent_case_tail_gap(case: &Value, comparison: &Value) -> Option<&'stati
     }
     let error_boundary = match (id, input, ansi) {
         (
-            "equal_closed_error_guard" | "all_null_closed_error_guard" | "subquery_guard_closed_equal",
+            "equal_closed_error_guard"
+            | "all_null_closed_error_guard"
+            | "subquery_guard_closed_equal",
             "one_row",
             true,
         )
-        | ("equal_local_error_guard" | "all_null_local_error_guard", "local_values", true) => Some((
-            "#865",
-            "DIVIDE_BY_ZERO",
-            "optimized_schema",
-            "create_physical_plan",
-            "preserve_spark_expression_errors\ncaused by\nArrow error: Divide by zero error",
-        )),
+        | ("equal_local_error_guard" | "all_null_local_error_guard", "local_values", true) => {
+            Some((
+                "#865",
+                "DIVIDE_BY_ZERO",
+                "optimized_schema",
+                "create_physical_plan",
+                "preserve_spark_expression_errors\ncaused by\nArrow error: Divide by zero error",
+            ))
+        }
         (
             "distinct_result_required_guard"
             | "equal_required_result_error"
@@ -500,7 +513,9 @@ async fn spark_case_tail_rules_preserve_native_case() -> TestResult {
 fn reference_observation_for_gap_test(case: &Value) -> Value {
     let stages = &case["schema_stages"];
     let optimized = stages["optimized"].clone();
-    let physical = stages.get("executed").unwrap_or(&stages["executed_before_collect"]);
+    let physical = stages
+        .get("executed")
+        .unwrap_or(&stages["executed_before_collect"]);
     json!({
         "id":case["id"], "input":case["input"], "ansi":case["ansi"], "batch":1,
         "public_schema":stages["analyzed"], "optimized_schema":optimized,
@@ -518,7 +533,10 @@ fn reference_observation_for_gap_test(case: &Value) -> Value {
 fn case_tail_declaration_gates_reject_changed_owned_facets() -> TestResult {
     let records = references(REFERENCE, 44)?;
     for case in records[1..].iter().filter(|case| {
-        matches!(case["id"].as_str(), Some("signed_zero_results" | "signed_zero_results_reversed"))
+        matches!(
+            case["id"].as_str(),
+            Some("signed_zero_results" | "signed_zero_results_reversed")
+        )
     }) {
         let mut observed = reference_observation_for_gap_test(case);
         observed["public_schema"]["fields"][0]["nullable"] = json!(true);
@@ -531,15 +549,24 @@ fn case_tail_declaration_gates_reject_changed_owned_facets() -> TestResult {
             ("/optimized_schema/fields/0/nullable", json!(true)),
             ("/public_schema/fields/0/name", json!("wrong name")),
             ("/public_schema/fields/0/type", json!("integer")),
-            ("/public_schema/fields/0/metadata", json!({"source":"wrong"})),
+            (
+                "/public_schema/fields/0/metadata",
+                json!({"source":"wrong"}),
+            ),
             ("/native_phase", json!("collect")),
             ("/error", json!("Arrow error: Divide by zero error")),
             ("/batch", json!(2)),
             ("/id", json!("unlisted")),
         ] {
             let mut wrong_observation = observed.clone();
-            *wrong_observation.pointer_mut(pointer).ok_or("missing gate mutation target")? = wrong;
-            assert_eq!(independent_case_tail_gap(case, &wrong_observation), None, "{pointer}");
+            *wrong_observation
+                .pointer_mut(pointer)
+                .ok_or("missing gate mutation target")? = wrong;
+            assert_eq!(
+                independent_case_tail_gap(case, &wrong_observation),
+                None,
+                "{pointer}"
+            );
         }
         // A future fully correct declaration passes without requiring the old defect.
         let mut correct = reference_observation_for_gap_test(case);
@@ -548,15 +575,37 @@ fn case_tail_declaration_gates_reject_changed_owned_facets() -> TestResult {
         assert!(complete_spark_matches(case, &correct));
     }
     for (source, count, id, keys, owner) in [
-        (VOLATILE_FLOATS, 4, "volatile_signed_zero_results", &[
-            "public_schema", "optimized_schema", "before_collect", "physical_schema",
-        ][..], "#711"),
-        (REFERENCE, 44, "volatile_results_domain", &[
-            "public_schema", "optimized_schema", "before_collect", "physical_schema",
-        ][..], "#1072"),
-        (VOLATILE_SUBQUERIES, 4, "volatile_subquery_results_domain", &[
-            "optimized_schema", "before_collect", "physical_schema",
-        ][..], "#1072"),
+        (
+            VOLATILE_FLOATS,
+            4,
+            "volatile_signed_zero_results",
+            &[
+                "public_schema",
+                "optimized_schema",
+                "before_collect",
+                "physical_schema",
+            ][..],
+            "#711",
+        ),
+        (
+            REFERENCE,
+            44,
+            "volatile_results_domain",
+            &[
+                "public_schema",
+                "optimized_schema",
+                "before_collect",
+                "physical_schema",
+            ][..],
+            "#1072",
+        ),
+        (
+            VOLATILE_SUBQUERIES,
+            4,
+            "volatile_subquery_results_domain",
+            &["optimized_schema", "before_collect", "physical_schema"][..],
+            "#1072",
+        ),
     ] {
         let records = references(source, count)?;
         for case in records[1..].iter().filter(|case| case["id"] == id) {
@@ -566,7 +615,12 @@ fn case_tail_declaration_gates_reject_changed_owned_facets() -> TestResult {
             }
             observed["optimized_observation"]["schema"] = observed["optimized_schema"].clone();
             assert_eq!(independent_case_tail_gap(case, &observed), Some(owner));
-            for key in ["public_schema", "optimized_schema", "before_collect", "physical_schema"] {
+            for key in [
+                "public_schema",
+                "optimized_schema",
+                "before_collect",
+                "physical_schema",
+            ] {
                 let mut wrong = observed.clone();
                 wrong[key]["fields"][0]["metadata"] = json!({"source":"wrong"});
                 assert_eq!(independent_case_tail_gap(case, &wrong), None, "{id}: {key}");
@@ -582,16 +636,35 @@ fn case_tail_declaration_gates_reject_changed_owned_facets() -> TestResult {
 #[test]
 fn case_tail_error_gates_require_the_original_work_and_identifier_facet() -> TestResult {
     for (source, count, id, owner, cause, phase) in [
-        (HOST_CONTEXTS, 6, "alias_case_sum_argument", "#865",
-         "Arrow error: Divide by zero error", "collect"),
-        (REFERENCE, 44, "equal_closed_error_guard", "#865",
-         "preserve_spark_expression_errors\ncaused by\nArrow error: Divide by zero error",
-         "create_physical_plan"),
-        (REFERENCE, 44, "subquery_results_multirow", "#140",
-         "Execution error: Scalar subquery returned more than one row", "collect"),
+        (
+            HOST_CONTEXTS,
+            6,
+            "alias_case_sum_argument",
+            "#865",
+            "Arrow error: Divide by zero error",
+            "collect",
+        ),
+        (
+            REFERENCE,
+            44,
+            "equal_closed_error_guard",
+            "#865",
+            "preserve_spark_expression_errors\ncaused by\nArrow error: Divide by zero error",
+            "create_physical_plan",
+        ),
+        (
+            REFERENCE,
+            44,
+            "subquery_results_multirow",
+            "#140",
+            "Execution error: Scalar subquery returned more than one row",
+            "collect",
+        ),
     ] {
         let records = references(source, count)?;
-        let case = records[1..].iter().find(|case| case["id"] == id && case["ansi"] == true)
+        let case = records[1..]
+            .iter()
+            .find(|case| case["id"] == id && case["ansi"] == true)
             .ok_or("missing error gate reference")?;
         let mut observed = reference_observation_for_gap_test(case);
         observed["error"] = json!(cause);
@@ -605,22 +678,47 @@ fn case_tail_error_gates_require_the_original_work_and_identifier_facet() -> Tes
         for (pointer, wrong) in [
             ("/error", Value::Null),
             ("/error", json!("Arrow error: different failure")),
-            ("/native_phase", json!(if phase == "collect" { "create_physical_plan" } else { "collect" })),
+            (
+                "/native_phase",
+                json!(if phase == "collect" {
+                    "create_physical_plan"
+                } else {
+                    "collect"
+                }),
+            ),
             ("/rows", json!([])),
             ("/rows_raw", json!([])),
-            ("/public_schema/fields/0/metadata", json!({"source":"wrong"})),
+            (
+                "/public_schema/fields/0/metadata",
+                json!({"source":"wrong"}),
+            ),
         ] {
             let mut wrong_observation = observed.clone();
-            *wrong_observation.pointer_mut(pointer).ok_or("missing error gate mutation target")? = wrong;
-            assert_eq!(independent_case_tail_gap(case, &wrong_observation), None, "{id}: {pointer}");
+            *wrong_observation
+                .pointer_mut(pointer)
+                .ok_or("missing error gate mutation target")? = wrong;
+            assert_eq!(
+                independent_case_tail_gap(case, &wrong_observation),
+                None,
+                "{id}: {pointer}"
+            );
         }
         for key in ["rows", "rows_raw", "public_schema"] {
             let mut missing = observed.clone();
-            missing.as_object_mut().ok_or("expected observation object")?.remove(key);
-            assert_eq!(independent_case_tail_gap(case, &missing), None, "{id}: missing {key}");
+            missing
+                .as_object_mut()
+                .ok_or("expected observation object")?
+                .remove(key);
+            assert_eq!(
+                independent_case_tail_gap(case, &missing),
+                None,
+                "{id}: missing {key}"
+            );
         }
         let mut corrected = observed.clone();
-        let condition = case["expected"]["condition"].as_str().ok_or("missing error condition")?;
+        let condition = case["expected"]["condition"]
+            .as_str()
+            .ok_or("missing error condition")?;
         corrected["error"] = json!(format!("[{condition}] {cause}"));
         corrected["matches"] = json!(true);
         corrected["optimized_matches"] = json!(true);
@@ -633,12 +731,16 @@ fn case_tail_error_gates_require_the_original_work_and_identifier_facet() -> Tes
 #[test]
 fn scalar_cardinality_cause_does_not_receive_strict_condition_id_credit() -> TestResult {
     let records = references(REFERENCE, 44)?;
-    for case in records[1..].iter().filter(|case| case["id"] == "subquery_results_multirow") {
+    for case in records[1..]
+        .iter()
+        .filter(|case| case["id"] == "subquery_results_multirow")
+    {
         for batch in [1, 32] {
             let mut observed = reference_observation_for_gap_test(case);
             observed["batch"] = json!(batch);
             observed["native_phase"] = json!("collect");
-            observed["error"] = json!("Execution error: Scalar subquery returned more than one row");
+            observed["error"] =
+                json!("Execution error: Scalar subquery returned more than one row");
             // The canonical observer matches this cause without a literal condition ID.
             observed["matches"] = json!(true);
             observed["optimized_matches"] = json!(true);
