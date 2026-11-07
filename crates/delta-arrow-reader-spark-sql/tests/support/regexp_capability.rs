@@ -73,7 +73,9 @@ fn profiles() -> Result<&'static [Value], &'static str> {
                 return Err("current regex profile inventory requires 48 context keys".into());
             }
             profiles.retain(|profile: &Value| {
-                !current.iter().any(|current| current["key"] == profile["key"])
+                !current
+                    .iter()
+                    .any(|current| current["key"] == profile["key"])
             });
             profiles.extend(current);
             validate_profiles(profiles)
@@ -169,7 +171,9 @@ fn replacement_preparation_profiles_reject_historical_execution_outcomes()
         let key = &profile["key"];
         let fixture = key["fixture"].as_str().ok_or("missing fixture")?;
         let id = key["id"].as_str().ok_or("missing ID")?;
-        let representation = key["representation"].as_u64().ok_or("missing representation")? as usize;
+        let representation = key["representation"]
+            .as_u64()
+            .ok_or("missing representation")? as usize;
         let batch_size = key["batch_size"].as_u64().ok_or("missing batch size")? as usize;
         *groups.entry((fixture, id)).or_insert(0) += 1;
         let case = json!({"id":id,"ansi":key["ansi"],"sql":profile["sql"],
@@ -178,11 +182,26 @@ fn replacement_preparation_profiles_reject_historical_execution_outcomes()
         assert_eq!(actual["error_stage"], "physical");
         assert_eq!(actual.get("physical_schema"), Some(&Value::Null));
         assert_eq!(actual.get("physical_arrow_schema"), Some(&Value::Null));
-        assert_eq!(actual["analyzed_schema"], case["expected"]["analyzed_schema"]);
-        assert_eq!(recorded_limit(fixture, &case, representation, batch_size, actual)?, profile["category"].as_str());
+        assert_eq!(
+            actual["analyzed_schema"],
+            case["expected"]["analyzed_schema"]
+        );
+        assert_eq!(
+            recorded_limit(fixture, &case, representation, batch_size, actual)?,
+            profile["category"].as_str()
+        );
         if let Some(previous) = historical.iter().find(|previous| previous["key"] == *key) {
             retired += 1;
-            assert!(recorded_limit(fixture, &case, representation, batch_size, &previous["native_actual"])?.is_none());
+            assert!(
+                recorded_limit(
+                    fixture,
+                    &case,
+                    representation,
+                    batch_size,
+                    &previous["native_actual"]
+                )?
+                .is_none()
+            );
         }
         for (field, value) in [
             ("error_stage", json!("execute")),
@@ -192,16 +211,45 @@ fn replacement_preparation_profiles_reject_historical_execution_outcomes()
         ] {
             let mut changed = actual.clone();
             changed[field] = value;
-            assert!(recorded_limit(fixture, &case, representation, batch_size, &changed)?.is_none());
+            assert!(
+                recorded_limit(fixture, &case, representation, batch_size, &changed)?.is_none()
+            );
         }
     }
     assert_eq!(retired, 36);
-    assert_eq!(groups, BTreeMap::from([
-        (("regex-syntax-missing-spark.jsonl", "regexp_replace_literal_lookbehind"), 12),
-        (("regexp-replace-expanded-spark.jsonl", "position_supplementary_3"), 12),
-        (("regexp-replace-empty-utf16-spark.jsonl", "nonempty_split_dot"), 12),
-        (("regexp-replace-nonboundary-spark.jsonl", "nonboundary_probe_retained_nonempty_split_dot"), 12),
-    ]));
+    assert_eq!(
+        groups,
+        BTreeMap::from([
+            (
+                (
+                    "regex-syntax-missing-spark.jsonl",
+                    "regexp_replace_literal_lookbehind"
+                ),
+                12
+            ),
+            (
+                (
+                    "regexp-replace-expanded-spark.jsonl",
+                    "position_supplementary_3"
+                ),
+                12
+            ),
+            (
+                (
+                    "regexp-replace-empty-utf16-spark.jsonl",
+                    "nonempty_split_dot"
+                ),
+                12
+            ),
+            (
+                (
+                    "regexp-replace-nonboundary-spark.jsonl",
+                    "nonboundary_probe_retained_nonempty_split_dot"
+                ),
+                12
+            ),
+        ])
+    );
     Ok(())
 }
 
