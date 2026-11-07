@@ -176,9 +176,9 @@ async fn compare_cases(
                         string_binary::capture_schema(schema.fields(), None)?,
                         input["schema"]
                     );
-                    let string_type =
-                        [DataType::Utf8, DataType::LargeUtf8, DataType::Utf8View][representation]
-                            .clone();
+                    let string_type = [DataType::Utf8, DataType::LargeUtf8, DataType::Utf8View]
+                        [representation]
+                        .clone();
                     for (field, declared) in schema.fields().iter().zip(
                         input["schema"]["fields"]
                             .as_array()
@@ -236,8 +236,10 @@ async fn literal_patterns_match_all_18_independent_preparation_references() -> T
     assert_eq!(references[0]["runtime_identity"]["spark_version"], "4.2.0");
     assert_eq!(
         references.last(),
-        Some(&json!({"kind":"summary","observations":12,"provider_receipts":0,
-            "collection_complete":true,"compatibility_credit":false}))
+        Some(
+            &json!({"kind":"summary","observations":12,"provider_receipts":0,
+            "collection_complete":true,"compatibility_credit":false})
+        )
     );
     let cases = &references[1..references.len() - 1];
     let by_key = cases
