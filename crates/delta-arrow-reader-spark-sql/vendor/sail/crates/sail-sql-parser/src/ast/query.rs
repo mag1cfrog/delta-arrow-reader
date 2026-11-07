@@ -30,7 +30,7 @@ use crate::token::{Token, TokenLabel};
 use crate::tree::TreeParser;
 
 #[derive(Debug, Clone, TreeParser, TreeSyntax)]
-#[parser(dependency = "(Query, Expr, TableWithJoins)", label = TokenLabel::Query)]
+#[parser(dependency = "(Query, Expr, TableRelation)", label = TokenLabel::Query)]
 pub struct Query {
     #[parser(function = |(q, _, _), o| compose(q, o))]
     pub with: Option<WithClause>,
@@ -99,14 +99,14 @@ where
     E::Error: LabelError<'a, I, TokenLabel>,
     P1: Parser<'a, I, Query, E> + Clone + 'a,
     P2: Parser<'a, I, Expr, E> + Clone + 'a,
-    P3: Parser<'a, I, TableWithJoins, E> + Clone + 'a,
+    P3: Parser<'a, I, TableRelation, E> + Clone + 'a,
 {
     fn parser(
-        (query, expr, table_with_joins): (P1, P2, P3),
+        (query, expr, table_relation): (P1, P2, P3),
         options: &'a ParserOptions,
     ) -> impl Parser<'a, I, Self, E> + Clone {
         let quantifier = SetQuantifier::parser((), options).or_not();
-        let term = QueryTerm::parser((query, expr, table_with_joins), options)
+        let term = QueryTerm::parser((query, expr, table_relation), options)
             .map(|t| QueryBody::Term(Box::new(t)));
         term.pratt((
             infix(
@@ -158,7 +158,7 @@ pub enum SetQuantifier {
 }
 
 #[derive(Debug, Clone, TreeParser, TreeSyntax)]
-#[parser(dependency = "(Query, Expr, TableWithJoins)")]
+#[parser(dependency = "(Query, Expr, TableRelation)")]
 pub enum QueryTerm {
     Select(#[parser(function = |(q, e, t), o| boxed(compose((q, e, t), o)))] Box<QuerySelect>),
     Table(Table, ObjectName),
@@ -171,7 +171,7 @@ pub enum QueryTerm {
 }
 
 #[derive(Debug, Clone, TreeParser, TreeSyntax)]
-#[parser(dependency = "(Query, Expr, TableWithJoins)")]
+#[parser(dependency = "(Query, Expr, TableRelation)")]
 pub struct QuerySelect {
     #[parser(function = |(_, e, _), o| compose(e, o))]
     pub select: SelectClause,
@@ -244,25 +244,32 @@ pub struct NamedExprList {
 }
 
 #[derive(Debug, Clone, TreeParser, TreeSyntax)]
-#[parser(dependency = "TableWithJoins")]
+#[parser(dependency = "TableRelation")]
 pub struct FromClause {
     pub from: From,
     #[parser(function = |t, o| sequence(t, unit(o)))]
-    pub tables: Sequence<TableWithJoins, Comma>,
+    pub tables: Sequence<TableRelation, Comma>,
 }
 
 #[derive(Debug, Clone, TreeParser, TreeSyntax)]
-#[parser(dependency = "(Query, Expr, TableWithJoins)")]
-pub struct TableWithJoins {
+#[parser(dependency = "(Query, Expr, TableRelation)")]
+pub struct TableRelation {
     pub lateral: Option<Lateral>,
     #[parser(function = |(q, e, t), o| compose((q, e, t), o))]
-    pub table: TableFactor,
+    pub source: TableFactor,
     #[parser(function = |(q, e, t), o| compose((q, e, t), o))]
-    pub joins: Vec<TableJoin>,
+    pub extensions: Vec<TableExtension>,
 }
 
 #[derive(Debug, Clone, TreeParser, TreeSyntax)]
-#[parser(dependency = "(Query, Expr, TableWithJoins)")]
+#[parser(dependency = "(Query, Expr, TableRelation)")]
+pub enum TableExtension {
+    Join(#[parser(function = |(q, e, t), o| boxed(compose((q, e, t), o)))] Box<TableJoin>),
+    Modifier(#[parser(function = |(_, e, _), o| boxed(compose(e, o)))] Box<TableModifier>),
+}
+
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+#[parser(dependency = "(Query, Expr, TableRelation)")]
 pub enum TableFactor {
     Values {
         #[parser(function = |(_, e, _), o| compose(e, o))]
@@ -276,17 +283,13 @@ pub enum TableFactor {
         right: RightParenthesis,
         #[parser(function = |(_, e, _), o| boxed(compose(e, o)).or_not())]
         sample: Option<Box<TableSampleClause>>,
-        #[parser(function = |(_, e, _), o| compose(e, o))]
-        modifiers: Vec<TableModifier>,
         alias: Option<AliasClause>,
     },
     Nested {
         left: LeftParenthesis,
         #[parser(function = |(_, _, t), _| boxed(t))]
-        table: Box<TableWithJoins>,
+        table: Box<TableRelation>,
         right: RightParenthesis,
-        #[parser(function = |(_, e, _), o| compose(e, o))]
-        modifiers: Vec<TableModifier>,
         alias: Option<AliasClause>,
     },
     Identifier {
@@ -295,8 +298,6 @@ pub enum TableFactor {
         #[parser(function = |(_, e, _), _| e)]
         expr: Expr,
         right: RightParenthesis,
-        #[parser(function = |(_, e, _), o| compose(e, o))]
-        modifiers: Vec<TableModifier>,
         alias: Option<AliasClause>,
     },
     TableFunction {
@@ -310,8 +311,6 @@ pub enum TableFactor {
         temporal: Option<Box<TemporalClause>>,
         #[parser(function = |(_, e, _), o| boxed(compose(e, o)).or_not())]
         sample: Option<Box<TableSampleClause>>,
-        #[parser(function = |(_, e, _), o| compose(e, o))]
-        modifiers: Vec<TableModifier>,
         alias: Option<AliasClause>,
     },
 }
@@ -378,8 +377,17 @@ pub struct TableSampleRepeatable {
 #[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "Expr")]
 pub enum TableModifier {
-    Pivot(#[parser(function = |e, o| compose(e, o))] PivotClause),
-    Unpivot(UnpivotClause),
+    Pivot {
+        #[parser(function = |e, o| compose(e, o))]
+        pivot: PivotClause,
+        #[parser(function = |_, o| unit(o).or_not().then(table_ident(o)).or_not())]
+        output_alias: Option<(Option<As>, Ident)>,
+    },
+    Unpivot {
+        unpivot: UnpivotClause,
+        #[parser(function = |_, o| unit(o).or_not().then(table_ident(o)).or_not())]
+        output_alias: Option<(Option<As>, Ident)>,
+    },
 }
 
 #[derive(Debug, Clone, TreeParser, TreeSyntax)]
@@ -390,7 +398,7 @@ pub struct PivotClause {
     #[parser(function = |e, o| sequence(compose((e, column_ident(o)), o), unit(o)))]
     pub aggregates: Sequence<NamedExpr, Comma>,
     pub r#for: For,
-    pub columns: IdentList,
+    pub columns: Either<Ident, IdentList>,
     pub r#in: In,
     #[parser(function = |e, o| compose(e, o))]
     pub values: NamedExprList,
@@ -447,7 +455,7 @@ pub struct TableFunction {
 }
 
 #[derive(Debug, Clone, TreeParser, TreeSyntax)]
-#[parser(dependency = "(Query, Expr, TableWithJoins)")]
+#[parser(dependency = "(Query, Expr, TableRelation)")]
 pub struct TableJoin {
     // The join criteria must be absent for natural joins.
     // But we defer the enforcement of this to later stages of SQL analysis.

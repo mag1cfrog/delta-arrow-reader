@@ -9,10 +9,10 @@ use sail_sql_parser::ast::query::{
     HavingClause, IdentList, JoinCriteria, JoinOperator, LateralViewClause, LimitClause,
     LimitValue, NamedExpr, NamedExprList, NamedQuery, NamedWindow, OffsetClause, OrderByClause,
     PivotClause, Query, QueryBody, QueryModifier, QuerySelect, QueryTerm, SelectClause,
-    SetOperator, SetQuantifier, SortByClause, TableFactor, TableFunction, TableJoin, TableModifier,
-    TableSampleClause, TableSampleMethod, TableSampleRepeatable, TableWithJoins, TemporalClause,
-    UnpivotClause, UnpivotColumns, UnpivotNulls, ValuesClause, WhereClause, WindowClause,
-    WithClause,
+    SetOperator, SetQuantifier, SortByClause, TableExtension, TableFactor, TableFunction,
+    TableJoin, TableModifier, TableRelation, TableSampleClause, TableSampleMethod,
+    TableSampleRepeatable, TemporalClause, UnpivotClause, UnpivotColumns, UnpivotNulls,
+    ValuesClause, WhereClause, WindowClause, WithClause,
 };
 use sail_sql_parser::common::Sequence;
 
@@ -406,39 +406,47 @@ fn from_ast_values(values: ValuesClause) -> SqlResult<spec::QueryPlan> {
     query_plan_with_table_alias(plan, alias)
 }
 
-fn from_ast_table(
+fn from_ast_table_relation(
     input: Option<spec::QueryPlan>,
-    table: TableWithJoins,
+    relation: TableRelation,
 ) -> SqlResult<spec::QueryPlan> {
-    let TableWithJoins {
+    let TableRelation {
         lateral,
-        table,
-        joins,
-    } = table;
+        source,
+        extensions,
+    } = relation;
     if lateral.is_some() {
-        if !joins.is_empty() {
+        if extensions
+            .iter()
+            .any(|extension| matches!(extension, TableExtension::Join(_)))
+        {
             return Err(SqlError::unsupported("lateral table with join"));
         }
-        match &table {
+        let plan = match &source {
             TableFactor::TableFunction { .. } => {
-                query_plan_with_lateral_table_factor(input, table, true)
+                query_plan_with_lateral_table_factor(input, source, true)
             }
             TableFactor::Query { .. } => {
-                query_plan_with_lateral_subquery(input, table, None, spec::JoinType::Cross)
+                query_plan_with_lateral_subquery(input, source, None, spec::JoinType::Cross)
             }
             _ => Err(SqlError::invalid(
                 "expected function or subquery for lateral table factor",
             )),
-        }
+        }?;
+        extensions
+            .into_iter()
+            .try_fold(plan, query_plan_with_table_extension)
     } else {
-        query_plan_with_table_factor(input, table, joins)
+        query_plan_with_table_relation(input, source, extensions)
     }
 }
 
-pub fn from_ast_tables(tables: Vec<TableWithJoins>) -> SqlResult<spec::QueryPlan> {
+pub fn from_ast_tables(tables: Vec<TableRelation>) -> SqlResult<spec::QueryPlan> {
     let plan = tables
         .into_iter()
-        .try_fold(None, |plan, table| from_ast_table(plan, table).map(Some))?
+        .try_fold(None, |plan, table| {
+            from_ast_table_relation(plan, table).map(Some)
+        })?
         .unwrap_or_else(|| {
             spec::QueryPlan::new(spec::QueryNode::Empty {
                 produce_one_row: true,
@@ -447,12 +455,14 @@ pub fn from_ast_tables(tables: Vec<TableWithJoins>) -> SqlResult<spec::QueryPlan
     Ok(plan)
 }
 
-pub fn from_ast_table_factor_with_joins(
+pub fn from_ast_table_factor_with_extensions(
     table: TableFactor,
-    joins: Vec<TableJoin>,
+    extensions: Vec<TableExtension>,
 ) -> SqlResult<spec::QueryPlan> {
     let plan = from_ast_table_factor(table)?;
-    let plan = joins.into_iter().try_fold(plan, query_plan_with_join)?;
+    let plan = extensions
+        .into_iter()
+        .try_fold(plan, query_plan_with_table_extension)?;
     Ok(plan)
 }
 
@@ -462,7 +472,6 @@ fn from_ast_table_factor(table: TableFactor) -> SqlResult<spec::QueryPlan> {
             name,
             temporal,
             sample,
-            modifiers,
             alias,
         } => {
             let temporal = temporal.map(|t| from_ast_temporal(*t)).transpose()?;
@@ -476,7 +485,6 @@ fn from_ast_table_factor(table: TableFactor) -> SqlResult<spec::QueryPlan> {
                     options: Default::default(),
                 })),
             });
-            let plan = query_plan_with_table_modifiers(plan, modifiers)?;
             query_plan_with_table_alias(plan, alias)
         }
         TableFactor::Query {
@@ -484,7 +492,6 @@ fn from_ast_table_factor(table: TableFactor) -> SqlResult<spec::QueryPlan> {
             query,
             right: _,
             sample,
-            modifiers,
             alias,
         } => {
             let plan = from_ast_query(query)?;
@@ -497,18 +504,15 @@ fn from_ast_table_factor(table: TableFactor) -> SqlResult<spec::QueryPlan> {
             } else {
                 plan
             };
-            let plan = query_plan_with_table_modifiers(plan, modifiers)?;
             query_plan_with_table_alias(plan, alias)
         }
         TableFactor::Nested {
             left: _,
             table,
             right: _,
-            modifiers,
             alias,
         } => {
-            let plan = from_ast_table(None, *table)?;
-            let plan = query_plan_with_table_modifiers(plan, modifiers)?;
+            let plan = from_ast_table_relation(None, *table)?;
             query_plan_with_table_alias(plan, alias)
         }
         TableFactor::TableFunction { function, alias } => {
@@ -542,7 +546,6 @@ fn from_ast_table_factor(table: TableFactor) -> SqlResult<spec::QueryPlan> {
             left: _,
             expr,
             right: _,
-            modifiers,
             alias,
         } => {
             let plan = spec::QueryPlan::new(spec::QueryNode::Read {
@@ -553,7 +556,6 @@ fn from_ast_table_factor(table: TableFactor) -> SqlResult<spec::QueryPlan> {
                     options: Default::default(),
                 })),
             });
-            let plan = query_plan_with_table_modifiers(plan, modifiers)?;
             query_plan_with_table_alias(plan, alias)
         }
     }
@@ -626,21 +628,25 @@ fn from_ast_table_sample(sample: TableSampleClause) -> SqlResult<spec::TableSamp
     Ok(spec::TableSample { method, seed })
 }
 
-fn query_plan_with_table_modifiers(
+fn query_plan_with_table_extension(
     plan: spec::QueryPlan,
-    modifier: Vec<TableModifier>,
+    extension: TableExtension,
 ) -> SqlResult<spec::QueryPlan> {
-    modifier
-        .into_iter()
-        .try_fold(plan, query_plan_with_table_modifier)
+    match extension {
+        TableExtension::Join(join) => query_plan_with_join(plan, *join),
+        TableExtension::Modifier(modifier) => query_plan_with_table_modifier(plan, *modifier),
+    }
 }
 
 fn query_plan_with_table_modifier(
     plan: spec::QueryPlan,
     modifier: TableModifier,
 ) -> SqlResult<spec::QueryPlan> {
-    match modifier {
-        TableModifier::Pivot(pivot) => {
+    let (plan, output_alias) = match modifier {
+        TableModifier::Pivot {
+            pivot,
+            output_alias,
+        } => {
             let PivotClause {
                 pivot: _,
                 left: _,
@@ -655,7 +661,11 @@ fn query_plan_with_table_modifier(
                 .into_items()
                 .map(from_ast_named_expression)
                 .collect::<SqlResult<Vec<_>>>()?;
-            let columns = from_ast_identifier_list(columns)?
+            let columns = match columns {
+                Either::Left(column) => vec![spec::Identifier::from(column.value)],
+                Either::Right(columns) => from_ast_identifier_list(columns)?,
+            };
+            let columns = columns
                 .into_iter()
                 .map(|c| spec::Expr::UnresolvedAttribute {
                     name: spec::ObjectName::bare(c),
@@ -693,15 +703,19 @@ fn query_plan_with_table_modifier(
                     Ok(spec::PivotValue { values, alias })
                 })
                 .collect::<SqlResult<Vec<_>>>()?;
-            Ok(spec::QueryPlan::new(spec::QueryNode::Pivot(spec::Pivot {
+            let plan = spec::QueryPlan::new(spec::QueryNode::Pivot(spec::Pivot {
                 input: Box::new(plan),
                 grouping: None,
                 aggregate,
                 columns,
                 values,
-            })))
+            }));
+            (plan, output_alias)
         }
-        TableModifier::Unpivot(unpivot) => {
+        TableModifier::Unpivot {
+            unpivot,
+            output_alias,
+        } => {
             let UnpivotClause {
                 unpivot: _,
                 nulls,
@@ -775,18 +789,25 @@ fn query_plan_with_table_modifier(
                     spec::UnpivotValue { columns, alias }
                 })
                 .collect::<Vec<_>>();
-            Ok(spec::QueryPlan::new(spec::QueryNode::Unpivot(
-                spec::Unpivot {
-                    input: Box::new(plan),
-                    ids: None,
-                    values: Some(values),
-                    variable_column_name,
-                    value_column_names,
-                    include_nulls,
-                },
-            )))
+            let plan = spec::QueryPlan::new(spec::QueryNode::Unpivot(spec::Unpivot {
+                input: Box::new(plan),
+                ids: None,
+                values: Some(values),
+                variable_column_name,
+                value_column_names,
+                include_nulls,
+            }));
+            (plan, output_alias)
         }
-    }
+    };
+    query_plan_with_table_alias(
+        plan,
+        output_alias.map(|(r#as, table)| AliasClause {
+            r#as,
+            table,
+            columns: None,
+        }),
+    )
 }
 
 pub fn from_ast_with(
@@ -866,12 +887,12 @@ fn query_plan_with_table_alias(
     }
 }
 
-fn query_plan_with_table_factor(
+fn query_plan_with_table_relation(
     left: Option<spec::QueryPlan>,
     table: TableFactor,
-    joins: Vec<TableJoin>,
+    extensions: Vec<TableExtension>,
 ) -> SqlResult<spec::QueryPlan> {
-    let right = from_ast_table_factor_with_joins(table, joins)?;
+    let right = from_ast_table_factor_with_extensions(table, extensions)?;
     match left {
         Some(left) => Ok(spec::QueryPlan::new(spec::QueryNode::Join(spec::Join {
             left: Box::new(left),
@@ -1064,20 +1085,11 @@ fn query_plan_with_lateral_subquery(
     criteria: Option<JoinCriteria>,
     join_type: spec::JoinType,
 ) -> SqlResult<spec::QueryPlan> {
-    let TableFactor::Query {
-        left: _,
-        query,
-        right: _,
-        sample: _sample,
-        modifiers: _modifiers,
-        alias,
-    } = table
-    else {
+    if !matches!(table, TableFactor::Query { .. }) {
         return Err(SqlError::invalid("expected subquery for lateral join"));
-    };
+    }
 
-    let right = from_ast_query(query)?;
-    let right = query_plan_with_table_alias(right, alias)?;
+    let right = from_ast_table_factor(table)?;
     let left = input.unwrap_or_else(|| {
         spec::QueryPlan::new(spec::QueryNode::Empty {
             produce_one_row: true,
