@@ -1,17 +1,19 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::cmp::Ordering;
 
-use arrow::datatypes::DataType;
+use arrow::datatypes::{DataType, FieldRef};
 use datafusion::optimizer::simplify_expressions::ExprSimplifier;
 use datafusion_common::tree_node::TreeNode;
-use datafusion_common::{DFSchemaRef, ScalarValue};
+use datafusion_common::{DFSchemaRef, DataFusionError, ScalarValue};
 use datafusion_expr::simplify::SimplifyContextBuilder;
 use datafusion_expr::{
-    ExprSchemable, ScalarUDF, WindowFrame, WindowFrameBound, WindowFrameUnits, expr,
+    ColumnarValue, ExprSchemable, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl,
+    Signature, Volatility, WindowFrame, WindowFrameBound, WindowFrameUnits, expr,
 };
 use sail_common::spec::{self};
 use sail_common_datafusion::literal::LiteralEvaluator;
 use sail_common_datafusion::utils::items::ItemTaker;
+use sail_function::scalar::datetime::spark_date_day_arithmetic::SparkDateDayArithmetic;
 use sail_function::scalar::math::spark_negative::SparkNegative;
 
 use crate::error::{PlanError, PlanResult};
@@ -147,7 +149,7 @@ impl PlanResolver<'_> {
                         "[WINDOW_FUNCTION_FRAME_NOT_ORDERED] {function_name} requires ORDER BY in the window definition"
                     )));
                 }
-                let (mut frame_display, window_frame) = if let Some(frame) = frame {
+                let (mut frame_display, mut window_frame) = if let Some(frame) = frame {
                     self.resolve_window_frame(frame, &sorts, schema, state)
                         .await?
                 } else if let Some(units) = required_units {
@@ -272,6 +274,7 @@ impl PlanResolver<'_> {
                             &frame_display,
                         )
                     });
+                self.normalize_date_range_frame(&mut window_frame, &mut sorts, schema)?;
                 let input = WinFunctionInput {
                     arguments,
                     partition_by,
@@ -443,7 +446,32 @@ impl PlanResolver<'_> {
             ),
         };
         let frame = WindowFrame::new_bounds(units, start, end);
-        if !datafusion::physical_planner::is_window_frame_bound_valid(&frame) {
+        let valid = if let Some((start, end)) = date_range_displacements(&frame, order_by, schema)?
+        {
+            // Spark compares expression endpoints; CURRENT ROW and UNBOUNDED skip this fold.
+            if let (Some(start), Some(end)) = (start, end) {
+                if self.config.ansi_mode {
+                    for bound in [&frame.start_bound, &frame.end_bound] {
+                        if matches!(
+                            bound,
+                            WindowFrameBound::Preceding(ScalarValue::Int32(Some(i32::MIN)))
+                        ) {
+                            LiteralEvaluator::new().evaluate(
+                                &ScalarUDF::from(SparkDateRangeNegation)
+                                    .call(vec![datafusion_expr::lit(i32::MIN)]),
+                            )?;
+                        }
+                    }
+                }
+                start <= end
+            } else {
+                !matches!(&frame.start_bound, WindowFrameBound::Following(value) if value.is_null())
+                    && !matches!(&frame.end_bound, WindowFrameBound::Preceding(value) if value.is_null())
+            }
+        } else {
+            datafusion::physical_planner::is_window_frame_bound_valid(&frame)
+        };
+        if !valid {
             return Err(PlanError::invalid(format!(
                 "[DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_WRONG_COMPARISON] start bound ({}) cannot be larger than end bound ({})",
                 frame.start_bound, frame.end_bound,
@@ -453,6 +481,54 @@ impl PlanResolver<'_> {
             format!("{units} BETWEEN {lower_display} AND {upper_display}"),
             frame,
         ))
+    }
+
+    fn normalize_date_range_frame(
+        &self,
+        frame: &mut WindowFrame,
+        order_by: &mut [expr::Sort],
+        schema: &DFSchemaRef,
+    ) -> PlanResult<()> {
+        let Some((start, end)) = date_range_displacements(frame, order_by, schema)? else {
+            return Ok(());
+        };
+        if self.config.ansi_mode {
+            let minimum_preceding = [&frame.start_bound, &frame.end_bound].iter().any(|bound| {
+                matches!(
+                    bound,
+                    WindowFrameBound::Preceding(ScalarValue::Int32(Some(i32::MIN)))
+                )
+            });
+            if minimum_preceding {
+                // The scalar-only frame cannot retain Spark's optimizer-time boundary expression.
+                order_by[0].expr = ScalarUDF::from(SparkDateRangeBoundCheck).call(vec![
+                    order_by[0].expr.clone(),
+                    datafusion_expr::lit(i32::MIN),
+                ]);
+            } else if !order_by[0].asc && [start, end].contains(&Some(i32::MIN)) {
+                // DESC negation belongs to non-NULL key evaluation, including constant DATE keys.
+                order_by[0].expr =
+                    ScalarUDF::from(SparkDateDayArithmetic::new(datafusion_expr::Operator::Plus))
+                        .call(vec![
+                            order_by[0].expr.clone(),
+                            ScalarUDF::from(SparkDateRangeNegation)
+                                .call(vec![datafusion_expr::lit(i32::MIN)]),
+                        ]);
+            }
+        }
+        let start = match start {
+            Some(days) if frame.end_bound == WindowFrameBound::CurrentRow => {
+                WindowFrameBound::Preceding(ScalarValue::Int32(Some(days.wrapping_neg())))
+            }
+            Some(days) => WindowFrameBound::Following(ScalarValue::Int32(Some(days))),
+            None => frame.start_bound.clone(),
+        };
+        let end = match end {
+            Some(days) => WindowFrameBound::Following(ScalarValue::Int32(Some(days))),
+            None => frame.end_bound.clone(),
+        };
+        *frame = WindowFrame::new_bounds(frame.units, start, end);
+        Ok(())
     }
 
     async fn resolve_window_boundary(
@@ -466,6 +542,11 @@ impl PlanResolver<'_> {
             .await?;
         let name = names.one()?;
         let resolved = expressions.one()?;
+        if !resolved.column_refs().is_empty() || resolved.contains_outer() {
+            return Err(PlanError::invalid(
+                "[_LEGACY_ERROR_TEMP_0064] Frame bound value must be a literal.",
+            ));
+        }
         if let datafusion_expr::Expr::Literal(scalar, _) = resolved {
             return Ok((name, scalar));
         }
@@ -587,6 +668,19 @@ impl PlanResolver<'_> {
                 // Non-numeric boundaries (e.g. INTERVAL for TIMESTAMP ORDER BY) are left as-is
                 // since DataFusion handles interval arithmetic directly.
                 let data_type = get_order_by_type()?;
+                if data_type == DataType::Date32
+                    && !matches!(
+                        value.data_type(),
+                        DataType::Int32
+                            | DataType::Interval(_)
+                            | DataType::Duration(_)
+                            | DataType::Null
+                    )
+                {
+                    return Err(PlanError::invalid(
+                        "[DATATYPE_MISMATCH.RANGE_FRAME_INVALID_TYPE] numeric DATE RANGE bounds require INT days",
+                    ));
+                }
                 let value = if data_type.is_numeric() {
                     value.cast_to(&data_type)?
                 } else {
@@ -628,5 +722,235 @@ impl PlanResolver<'_> {
                 }
             }
         }
+    }
+}
+
+// Special boundaries remain distinct from an expression whose signed displacement is zero.
+fn date_range_displacements(
+    frame: &WindowFrame,
+    order_by: &[expr::Sort],
+    schema: &DFSchemaRef,
+) -> PlanResult<Option<(Option<i32>, Option<i32>)>> {
+    let [order] = order_by else {
+        return Ok(None);
+    };
+    if frame.units != WindowFrameUnits::Range || order.expr.get_type(schema)? != DataType::Date32 {
+        return Ok(None);
+    }
+    let displacement = |bound: &WindowFrameBound| match bound {
+        WindowFrameBound::Preceding(ScalarValue::Int32(Some(days))) => {
+            Some(Some(days.wrapping_neg()))
+        }
+        WindowFrameBound::Following(ScalarValue::Int32(Some(days))) => Some(Some(*days)),
+        WindowFrameBound::CurrentRow => Some(None),
+        WindowFrameBound::Preceding(value) | WindowFrameBound::Following(value)
+            if value.is_null() =>
+        {
+            Some(None)
+        }
+        _ => None,
+    };
+    Ok(displacement(&frame.start_bound).zip(displacement(&frame.end_bound)))
+}
+
+// Only this exact INT negation cause receives Spark's arithmetic condition.
+#[derive(Debug, PartialEq, Eq, Hash)]
+struct SparkDateRangeNegation;
+
+impl ScalarUDFImpl for SparkDateRangeNegation {
+    fn name(&self) -> &str {
+        "spark_date_range_negation"
+    }
+
+    fn signature(&self) -> &Signature {
+        static SIGNATURE: std::sync::LazyLock<Signature> = std::sync::LazyLock::new(|| {
+            Signature::exact(vec![DataType::Int32], Volatility::Immutable)
+        });
+        &SIGNATURE
+    }
+
+    fn return_type(&self, types: &[DataType]) -> datafusion_common::Result<DataType> {
+        SparkNegative::new(true).return_type(types)
+    }
+
+    fn return_field_from_args(&self, args: ReturnFieldArgs) -> datafusion_common::Result<FieldRef> {
+        SparkNegative::new(true).return_field_from_args(args)
+    }
+
+    fn invoke_with_args(
+        &self,
+        args: ScalarFunctionArgs,
+    ) -> datafusion_common::Result<ColumnarValue> {
+        SparkNegative::new(true)
+            .invoke_with_args(args)
+            .map_err(|error| {
+                if matches!(&error, DataFusionError::Execution(message)
+                if message == "Int32 overflow on negative(-2147483648)")
+                {
+                    error.context("[ARITHMETIC_OVERFLOW] DATE RANGE offset negation")
+                } else {
+                    error
+                }
+            })
+    }
+}
+
+// Retain the original key declaration while a PRECEDING expression awaits constant folding.
+#[derive(Debug, PartialEq, Eq, Hash)]
+struct SparkDateRangeBoundCheck;
+
+impl ScalarUDFImpl for SparkDateRangeBoundCheck {
+    fn name(&self) -> &str {
+        "spark_date_range_bound_check"
+    }
+
+    fn signature(&self) -> &Signature {
+        static SIGNATURE: std::sync::LazyLock<Signature> = std::sync::LazyLock::new(|| {
+            Signature::exact(
+                vec![DataType::Date32, DataType::Int32],
+                Volatility::Immutable,
+            )
+        });
+        &SIGNATURE
+    }
+
+    fn return_type(&self, _: &[DataType]) -> datafusion_common::Result<DataType> {
+        Ok(DataType::Date32)
+    }
+
+    fn return_field_from_args(&self, args: ReturnFieldArgs) -> datafusion_common::Result<FieldRef> {
+        Ok(args.arg_fields[0].clone())
+    }
+
+    fn simplify(
+        &self,
+        args: Vec<expr::Expr>,
+        _: &datafusion_expr::simplify::SimplifyContext,
+    ) -> datafusion_common::Result<datafusion_expr::simplify::ExprSimplifyResult> {
+        let [key, bound] = datafusion_common::utils::take_function_args(self.name(), args)?;
+        LiteralEvaluator::new()
+            .evaluate(&ScalarUDF::from(SparkDateRangeNegation).call(vec![bound]))?;
+        Ok(datafusion_expr::simplify::ExprSimplifyResult::Simplified(
+            key,
+        ))
+    }
+
+    fn invoke_with_args(
+        &self,
+        args: ScalarFunctionArgs,
+    ) -> datafusion_common::Result<ColumnarValue> {
+        let [key, bound] =
+            datafusion_common::utils::take_function_args(self.name(), args.args.clone())?;
+        SparkDateRangeNegation.invoke_with_args(ScalarFunctionArgs {
+            args: vec![bound],
+            arg_fields: vec![args.arg_fields[1].clone()],
+            return_field: args.arg_fields[1].clone(),
+            ..args
+        })?;
+        Ok(key)
+    }
+}
+
+#[cfg(test)]
+mod date_range_tests {
+    use std::collections::HashMap;
+    use std::sync::Arc;
+
+    use arrow::datatypes::{Field, Schema};
+    use arrow::record_batch::RecordBatch;
+    use datafusion::physical_expr::create_physical_expr;
+    use datafusion_common::DFSchema;
+    use datafusion_expr::execution_props::ExecutionProps;
+    use datafusion_expr::{Operator, col, lit};
+
+    use super::*;
+
+    #[test]
+    fn date_range_negation_keeps_declarations_and_spark_failure_phases()
+    -> datafusion_common::Result<()> {
+        fn error_message<T>(
+            result: datafusion_common::Result<T>,
+        ) -> datafusion_common::Result<String> {
+            result
+                .err()
+                .map(|error| error.to_string())
+                .ok_or_else(|| DataFusionError::Internal("expected DATE RANGE failure".into()))
+        }
+        let key_field = Arc::new(
+            Field::new("day", DataType::Date32, true)
+                .with_metadata(HashMap::from([("source".into(), "kept".into())])),
+        );
+        let offset_field = Arc::new(Field::new("days", DataType::Int32, false));
+        let schema = Arc::new(DFSchema::try_from(Schema::new(vec![key_field.clone()]))?);
+        let fields = [key_field.clone(), offset_field];
+        let minimum = ScalarValue::Int32(Some(i32::MIN));
+        let actual = SparkDateRangeBoundCheck.return_field_from_args(ReturnFieldArgs {
+            arg_fields: &fields,
+            scalar_arguments: &[None, Some(&minimum)],
+        })?;
+        assert_eq!(actual, key_field);
+        let simplifier = ExprSimplifier::new(
+            SimplifyContextBuilder::default()
+                .with_schema(schema.clone())
+                .build(),
+        );
+        for key in [
+            col("day"),
+            lit(ScalarValue::Date32(None)),
+            lit(ScalarValue::Date32(Some(0))),
+        ] {
+            let checked = ScalarUDF::from(SparkDateRangeBoundCheck).call(vec![key, lit(i32::MIN)]);
+            let error = error_message(simplifier.simplify(checked))?;
+            assert!(error.contains("[ARITHMETIC_OVERFLOW]"), "{error}");
+            assert!(
+                error.contains("Int32 overflow on negative(-2147483648)"),
+                "{error}"
+            );
+        }
+        let arguments = |value: ScalarValue| {
+            let field = Arc::new(Field::new("operand", value.data_type(), value.is_null()));
+            ScalarFunctionArgs {
+                args: vec![ColumnarValue::Scalar(value)],
+                arg_fields: vec![field.clone()],
+                number_rows: 1,
+                return_field: field,
+                config_options: Arc::default(),
+            }
+        };
+        let error = error_message(
+            SparkDateRangeNegation.invoke_with_args(arguments(ScalarValue::Int64(Some(i64::MIN)))),
+        )?;
+        assert!(!error.contains("[ARITHMETIC_OVERFLOW]"), "{error}");
+        let mut args = arguments(minimum);
+        args.args
+            .insert(0, ColumnarValue::Scalar(ScalarValue::Date32(Some(0))));
+        args.arg_fields.insert(0, key_field.clone());
+        args.return_field = key_field;
+        assert!(
+            error_message(SparkDateRangeBoundCheck.invoke_with_args(args))?
+                .contains("[ARITHMETIC_OVERFLOW]")
+        );
+
+        let desc_key = |key| {
+            ScalarUDF::from(SparkDateDayArithmetic::new(Operator::Plus)).call(vec![
+                key,
+                ScalarUDF::from(SparkDateRangeNegation).call(vec![lit(i32::MIN)]),
+            ])
+        };
+        let null_key = simplifier.simplify(desc_key(lit(ScalarValue::Date32(None))))?;
+        assert_eq!(
+            LiteralEvaluator::new().evaluate(&null_key)?,
+            ScalarValue::Date32(None)
+        );
+        let non_null_key = simplifier.simplify(desc_key(lit(ScalarValue::Date32(Some(0)))))?;
+        assert!(
+            error_message(LiteralEvaluator::new().evaluate(&non_null_key))?
+                .contains("[ARITHMETIC_OVERFLOW]")
+        );
+        let physical =
+            create_physical_expr(&desc_key(col("day")), &schema, &ExecutionProps::new())?;
+        let empty = RecordBatch::new_empty(schema.inner().clone());
+        assert_eq!(physical.evaluate(&empty)?.into_array(0)?.len(), 0);
+        Ok(())
     }
 }

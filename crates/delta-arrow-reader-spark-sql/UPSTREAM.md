@@ -42,6 +42,14 @@ Unmodified files came from those archives, rather than mutable Cargo source cach
 Modified dependency files carry a DAR notice. The source is checked in directly;
 the historical patch files are evidence, not build-time dependencies.
 
+The DataFusion optimizer backports [upstream PR #23704](https://github.com/apache/datafusion/pull/23704)
+from commit `c111f0a9ff9e56da416c162257a31d3355461f56`. It applies the existing
+regex coercion to `SimilarTo`, which Sail uses for REGEXP/RLIKE operators and
+`regexp`, `regexp_like` and `rlike` function aliases. Physical regex dispatch
+returns a checked error for mismatched arrays constructed without the analyzer.
+The [operand tests](tests/regex_operand_coercion.rs) cover string representations,
+NULLs, dictionary behavior, flags, required errors and native SQL admission.
+
 Typed List and LargeList literals retain their complete element fields when
 converted from Arrow rows or cast to a declared list type. For example, an
 element named `kept_element` with `source=constant-coordinate-test` keeps that
@@ -637,7 +645,8 @@ cover results, errors, incremental work bounds and repeatable timing cases.
 
 Spark window resolution validates required ordering, function-specific frames
 and DISTINCT before planning can prune empty input. Native DataFusion supplies
-the bound-order validator and execution kernels. A whole-partition RANGE frame
+the general bound-order validator and execution kernels; numeric DATE bounds use
+the [Spark-specific rules below](#numeric-date-range-bounds). A whole-partition RANGE frame
 without ordering lowers to its equivalent ROWS frame. The
 [window admission references](tests/fixtures/README.md#window-admission)
 preserve Spark's expression-sensitive offset-frame rules and valid controls.
@@ -647,9 +656,10 @@ lexicographical comparator, matching the arrays and sort options used by the
 physical sort. One comparator is reused while those arrays are unchanged and
 released when window state is pruned. The shared analyzer admits RANGE frames
 whose bounds are only CURRENT ROW or unbounded without coercing an arithmetic
-offset. Actual offsets retain native type validation and checked arithmetic.
+offset. Offsets other than numeric DATE bounds retain native type validation and checked arithmetic.
 Incremental RANGE and GROUPS completion also compares batch edges through Arrow;
-CURRENT ROW and PRECEDING completion checks are reused within each evaluation.
+CURRENT ROW and PRECEDING completion checks are reused within each evaluation,
+except for potentially wrapping DATE offsets.
 The [nested frame references](tests/fixtures/README.md#nested-range-frames)
 cover this shared native repair.
 
@@ -1110,6 +1120,26 @@ references require all 148 original comparisons, 28 supplemental input-admission
 comparisons and 44 NULL-inspection boundary comparisons to match strictly, with
 no inherited exceptions.
 
+### PIVOT source and result aliases
+
+The FROM parser represents a source primary followed by ordered JOIN, PIVOT and
+UNPIVOT extensions. A source alias binds before modifier expressions; each
+modifier's output alias binds afterwards. Single-column PIVOT accepts both
+`FOR g` and `FOR (g)`, while tuple keys and malformed-input checks retain their
+identifier-only grammar. A JOIN right operand remains a primary, preserving the
+captured rejection of PIVOT before a following `ON`.
+
+PIVOT retains source qualifiers on grouping columns and leaves generated cells
+unqualified. A result alias replaces those qualifiers through the existing table
+alias resolver. LATERAL subqueries reuse complete source-factor lowering,
+including TABLESAMPLE, while retaining existing join/operator restrictions.
+
+The [source-alias references](tests/fixtures/README.md#pivot-source-and-result-aliases)
+retain the original queries, complete Fields and rows, and exact error phases.
+Repeated projection identity remains under #786; UNPIVOT NULL filtering and
+result nullability remain under #1076. Their exact accepted native contracts
+receive separate regression credit while raw Spark differences stay visible.
+
 ### Projection metadata
 
 SELECT classifies original expressions before lowering: unaliased derived values
@@ -1273,6 +1303,16 @@ incompatible observations remain frozen as history. Shared RAND/STRING-cast
 declarations remain current differences.
 
 
+### REGEXP operator names
+
+REGEXP and RLIKE operators share the analyzer's existing `rlike` lowering.
+Canonicalizing the operator here gives projections, nested expressions and
+outer-query binding the same RLIKE name. The predicate registry already maps
+both spellings to one implementation, and the formatter uses the canonical
+function name. Explicit aliases and function calls keep their existing paths.
+The [operator references](tests/fixtures/README.md#regexp-operator-names) cover
+these consumers and retain the separate #1079 constant-pattern timing gap.
+
 ### REGEXP_REPLACE position INT coercion
 
 Foldable positions reuse the substring adapter's native STRING, Decimal and
@@ -1338,3 +1378,29 @@ scalar NULL masks and once-only evaluation paths retain their existing code.
 Internal CONCAT lambdas keep their dummy parameter and selected-row cardinality
 API. The [nested lambda references](tests/fixtures/README.md#nested-lambda-capture-positions)
 cover all original and supplemental cases plus CASE and connected consumers.
+
+### Numeric DATE RANGE bounds
+
+Spark numeric DATE RANGE bounds require INT day offsets. The resolver compares
+signed expression endpoints before DESC execution negation, while CURRENT ROW
+remains a special boundary distinct from numeric zero. It builds the complete
+Spark output name before normalizing the physical frame. Existing interval
+bounds keep their Interval or Duration representation and arithmetic.
+
+ANSI minimum-INT PRECEDING negation fails during resolution when admission
+compares two expression endpoints. With a special endpoint, the bound check
+retains the original key Field and fails during optimization, after public and
+analyzed Fields are available. DESC minimum-INT FOLLOWING negation fails only
+when execution evaluates a non-NULL DATE key, including a constant key; empty
+and all-NULL keys succeed. These checks use the query's Spark ANSI setting.
+
+Shared frame state adds signed INT days with i32 wrapping in both ANSI modes.
+For a nonzero DATE offset, it computes the upper cursor first and limits the
+lower cursor to input already consumed by the upper cursor. Completion checks
+use the same target arithmetic. Finite wrapping ends require per-row completion
+proofs. Frame-aware builtins defer a row when its unfinished frame reaches the
+end of buffered input. Such ends also invalidate causal output-order inference,
+and either wrapping bound prevents
+plan reversal. Integer keys and interval bounds keep their existing decisions.
+The [DATE RANGE references](tests/fixtures/README.md#numeric-date-range-bounds)
+cover these consumers, error stages and separate-owner controls.

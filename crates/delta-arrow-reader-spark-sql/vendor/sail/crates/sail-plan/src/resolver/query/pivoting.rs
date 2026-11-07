@@ -193,7 +193,25 @@ impl PlanResolver<'_> {
             }
         }
 
-        self.rewrite_aggregate(input, projections, grouping, None, false, state)
+        let grouping_qualifiers = grouping
+            .iter()
+            .map(|group| group.expr.qualified_name().0)
+            .collect::<Vec<_>>();
+        let LogicalPlan::Projection(mut projection) =
+            self.rewrite_aggregate(input, projections, grouping, None, false, state)?
+        else {
+            return Err(PlanError::internal("expected pivot output projection"));
+        };
+        // Spark retains source qualifiers on grouping columns, while pivot cells are unqualified.
+        for (expression, qualifier) in projection.expr.iter_mut().zip(grouping_qualifiers) {
+            if let expr::Expr::Alias(alias) = expression {
+                alias.relation = qualifier;
+            }
+        }
+        Ok(LogicalPlan::Projection(Projection::try_new(
+            projection.expr,
+            projection.input,
+        )?))
     }
 
     fn pivot_value_matches(

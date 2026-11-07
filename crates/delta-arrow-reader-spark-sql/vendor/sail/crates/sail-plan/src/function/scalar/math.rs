@@ -55,6 +55,7 @@ use sail_function::scalar::spark_to_string::{SparkToLargeUtf8, SparkToUtf8, Spar
 pub(crate) use super::conditional::SparkNullIfZero;
 pub(crate) use super::integer_divide::SparkIntegerDivide;
 use crate::error::{PlanError, PlanResult};
+use crate::expression_errors::is_locally_evaluable;
 use crate::function::common::{
     FunctionContextInput, ScalarFunction, ScalarFunctionInput, without_metadata_annotations,
 };
@@ -2450,6 +2451,28 @@ fn spark_decimal_round(input: ScalarFunctionInput) -> PlanResult<Expr> {
     Ok(call)
 }
 
+fn spark_rand_with_validated_seed(input: ScalarFunctionInput) -> PlanResult<Expr> {
+    let ScalarFunctionInput {
+        arguments,
+        function_context,
+    } = input;
+    let random = Random::new();
+    let argument_types = arguments
+        .iter()
+        .map(|argument| argument.get_type(function_context.schema))
+        .collect::<datafusion_common::Result<Vec<_>>>()?;
+    random.coerce_types(&argument_types)?;
+    // Check admission before pruning without evaluating a seed that may be discarded.
+    if let [seed] = arguments.as_slice()
+        && !is_locally_evaluable(seed, false)?
+    {
+        return Err(PlanError::invalid(
+            "[SEED_EXPRESSION_IS_UNFOLDABLE] RAND seed must be a foldable expression",
+        ));
+    }
+    Ok(ScalarUDF::from(random).call(arguments))
+}
+
 pub(super) fn list_built_in_math_functions() -> Vec<(&'static str, ScalarFunction)> {
     use crate::function::common::ScalarFunctionBuilder as F;
 
@@ -2504,10 +2527,10 @@ pub(super) fn list_built_in_math_functions() -> Vec<(&'static str, ScalarFunctio
         ("pow", F::binary(power)),
         ("power", F::binary(power)),
         ("radians", F::unary(double(expr_fn::radians))),
-        ("rand", F::udf(Random::new())),
+        ("rand", F::custom(spark_rand_with_validated_seed)),
         ("random_poisson", F::udf(RandPoisson::new())),
         ("randn", F::udf(Randn::new())),
-        ("random", F::udf(Random::new())),
+        ("random", F::custom(spark_rand_with_validated_seed)),
         ("rint", F::unary(rint)),
         ("round", F::custom(spark_decimal_round)),
         ("sec", F::unary(double(|arg| lit(1.0) / expr_fn::cos(arg)))),

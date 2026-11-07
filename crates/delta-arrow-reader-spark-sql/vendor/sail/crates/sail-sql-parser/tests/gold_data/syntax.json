@@ -1240,15 +1240,27 @@
               }
             },
             {
-              "name": "Box(TableSampleClause)",
+              "name": "Box(TableJoin)",
               "node": {
-                "nonTerminal": "TableSampleClause"
+                "nonTerminal": "TableJoin"
               }
             },
             {
-              "name": "Box(TableWithJoins)",
+              "name": "Box(TableModifier)",
               "node": {
-                "nonTerminal": "TableWithJoins"
+                "nonTerminal": "TableModifier"
+              }
+            },
+            {
+              "name": "Box(TableRelation)",
+              "node": {
+                "nonTerminal": "TableRelation"
+              }
+            },
+            {
+              "name": "Box(TableSampleClause)",
+              "node": {
+                "nonTerminal": "TableSampleClause"
               }
             },
             {
@@ -3457,7 +3469,7 @@
                     "nonTerminal": "Keyword(From)"
                   },
                   {
-                    "nonTerminal": "Sequence(TableWithJoins, Operator(Comma))"
+                    "nonTerminal": "Sequence(TableRelation, Operator(Comma))"
                   }
                 ]
               }
@@ -8372,7 +8384,7 @@
                     "nonTerminal": "Keyword(For)"
                   },
                   {
-                    "nonTerminal": "IdentList"
+                    "nonTerminal": "Either(Identifier, IdentList)"
                   },
                   {
                     "nonTerminal": "Keyword(In)"
@@ -9237,11 +9249,11 @@
               }
             },
             {
-              "name": "Sequence(TableWithJoins, Operator(Comma))",
+              "name": "Sequence(TableRelation, Operator(Comma))",
               "node": {
                 "sequence": [
                   {
-                    "nonTerminal": "TableWithJoins"
+                    "nonTerminal": "TableRelation"
                   },
                   {
                     "zeroOrMore": {
@@ -9250,7 +9262,7 @@
                           "nonTerminal": "Operator(Comma)"
                         },
                         {
-                          "nonTerminal": "TableWithJoins"
+                          "nonTerminal": "TableRelation"
                         }
                       ]
                     }
@@ -10490,6 +10502,27 @@
               }
             },
             {
+              "name": "TableExtension",
+              "node": {
+                "choice": [
+                  {
+                    "sequence": [
+                      {
+                        "nonTerminal": "Box(TableJoin)"
+                      }
+                    ]
+                  },
+                  {
+                    "sequence": [
+                      {
+                        "nonTerminal": "Box(TableModifier)"
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
               "name": "TableFactor",
               "node": {
                 "choice": [
@@ -10518,9 +10551,6 @@
                         "nonTerminal": "Option(Box(TableSampleClause))"
                       },
                       {
-                        "nonTerminal": "Vector(TableModifier)"
-                      },
-                      {
                         "nonTerminal": "Option(AliasClause)"
                       }
                     ]
@@ -10531,13 +10561,10 @@
                         "nonTerminal": "Operator(LeftParenthesis)"
                       },
                       {
-                        "nonTerminal": "Box(TableWithJoins)"
+                        "nonTerminal": "Box(TableRelation)"
                       },
                       {
                         "nonTerminal": "Operator(RightParenthesis)"
-                      },
-                      {
-                        "nonTerminal": "Vector(TableModifier)"
                       },
                       {
                         "nonTerminal": "Option(AliasClause)"
@@ -10557,9 +10584,6 @@
                       },
                       {
                         "nonTerminal": "Operator(RightParenthesis)"
-                      },
-                      {
-                        "nonTerminal": "Vector(TableModifier)"
                       },
                       {
                         "nonTerminal": "Option(AliasClause)"
@@ -10586,9 +10610,6 @@
                       },
                       {
                         "nonTerminal": "Option(Box(TableSampleClause))"
-                      },
-                      {
-                        "nonTerminal": "Vector(TableModifier)"
                       },
                       {
                         "nonTerminal": "Option(AliasClause)"
@@ -10650,6 +10671,9 @@
                     "sequence": [
                       {
                         "nonTerminal": "PivotClause"
+                      },
+                      {
+                        "nonTerminal": "Option(Tuple(Option(Keyword(As)), Identifier))"
                       }
                     ]
                   },
@@ -10657,8 +10681,27 @@
                     "sequence": [
                       {
                         "nonTerminal": "UnpivotClause"
+                      },
+                      {
+                        "nonTerminal": "Option(Tuple(Option(Keyword(As)), Identifier))"
                       }
                     ]
+                  }
+                ]
+              }
+            },
+            {
+              "name": "TableRelation",
+              "node": {
+                "sequence": [
+                  {
+                    "nonTerminal": "Option(Keyword(Lateral))"
+                  },
+                  {
+                    "nonTerminal": "TableFactor"
+                  },
+                  {
+                    "nonTerminal": "Vector(TableExtension)"
                   }
                 ]
               }
@@ -10743,22 +10786,6 @@
                   },
                   {
                     "nonTerminal": "Operator(RightParenthesis)"
-                  }
-                ]
-              }
-            },
-            {
-              "name": "TableWithJoins",
-              "node": {
-                "sequence": [
-                  {
-                    "nonTerminal": "Option(Keyword(Lateral))"
-                  },
-                  {
-                    "nonTerminal": "TableFactor"
-                  },
-                  {
-                    "nonTerminal": "Vector(TableJoin)"
                   }
                 ]
               }
@@ -12079,18 +12106,10 @@
               }
             },
             {
-              "name": "Vector(TableJoin)",
+              "name": "Vector(TableExtension)",
               "node": {
                 "zeroOrMore": {
-                  "nonTerminal": "TableJoin"
-                }
-              }
-            },
-            {
-              "name": "Vector(TableModifier)",
-              "node": {
-                "zeroOrMore": {
-                  "nonTerminal": "TableModifier"
+                  "nonTerminal": "TableExtension"
                 }
               }
             },
