@@ -148,6 +148,10 @@ fn regexp_replace(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     )?;
     if position.is_volatile()
         || !position.column_refs().is_empty()
+        || position.exists(|expression| {
+            Ok(matches!(expression, expr::Expr::ScalarFunction(function)
+                if function.func.as_async().is_some()))
+        })?
         || (coerced_position
             && position.exists(|expression| {
                 Ok(matches!(expression, expr::Expr::ScalarFunction(function)
