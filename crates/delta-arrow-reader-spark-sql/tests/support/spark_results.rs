@@ -50,15 +50,59 @@ fn multiset(rows: &Value) -> TestResult<Value> {
 
 fn complete_schema(schema: &Value) -> bool {
     schema["type"] == "struct"
-        && schema["fields"].as_array().is_some_and(|fields| {
-            !fields.is_empty()
-                && fields.iter().all(|field| {
-                    field["name"].is_string()
-                        && field["type"].is_string()
-                        && field["nullable"].is_boolean()
-                        && field["metadata"].is_object()
-                })
-        })
+        && schema["fields"]
+            .as_array()
+            .is_some_and(|fields| !fields.is_empty())
+        && complete_data_type(schema)
+}
+
+fn complete_data_type(data_type: &Value) -> bool {
+    if data_type.is_string() {
+        return true;
+    }
+    match data_type["type"].as_str() {
+        Some("array") => {
+            complete_data_type(&data_type["elementType"]) && data_type["containsNull"].is_boolean()
+        }
+        Some("map") => {
+            complete_data_type(&data_type["keyType"])
+                && complete_data_type(&data_type["valueType"])
+                && data_type["valueContainsNull"].is_boolean()
+        }
+        Some("struct") => data_type["fields"].as_array().is_some_and(|fields| {
+            fields.iter().all(|field| {
+                field["name"].is_string()
+                    && complete_data_type(&field["type"])
+                    && field["nullable"].is_boolean()
+                    && field["metadata"].is_object()
+            })
+        }),
+        _ => false,
+    }
+}
+
+#[test]
+fn complete_spark_schema_requires_nested_type_and_field_declarations() -> TestResult {
+    let schema = json!({"type":"struct","fields":[{"name":"nested","nullable":true,"metadata":{},
+        "type":{"type":"array","containsNull":false,"elementType":{"type":"map","keyType":"integer",
+        "valueContainsNull":true,"valueType":{"type":"struct","fields":[{"name":"value","type":"integer","nullable":true,"metadata":{}}]}}}}]});
+    assert!(complete_schema(&schema));
+    for pointer in [
+        "/fields/0/type/containsNull",
+        "/fields/0/type/elementType/valueContainsNull",
+        "/fields/0/type/elementType/keyType",
+        "/fields/0/type/elementType/valueType/fields/0/metadata",
+    ] {
+        let mut changed = schema.clone();
+        *changed
+            .pointer_mut(pointer)
+            .ok_or("nested schema fault target")? = Value::Null;
+        assert!(!complete_schema(&changed), "accepted lost {pointer}");
+    }
+    let mut changed = schema;
+    changed["fields"][0]["type"] = json!({"type":"unknown"});
+    assert!(!complete_schema(&changed));
+    Ok(())
 }
 
 #[allow(

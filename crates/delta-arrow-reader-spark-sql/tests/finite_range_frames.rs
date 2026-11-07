@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use datafusion::execution::SessionStateBuilder;
 use datafusion::prelude::{SessionConfig, SessionContext};
 use delta_arrow_reader_spark_sql::configure_spark_sql;
+use futures_util::FutureExt;
 use serde_json::{Value, json};
 
 #[path = "support/spark_inputs.rs"]
@@ -18,6 +19,9 @@ use spark_results::{
 
 const REQUEST: &str = include_str!("fixtures/finite-range-1086-cases.json");
 const REFERENCE: &str = include_str!("fixtures/finite-range-1086-spark.jsonl");
+const LIMITED_REQUEST: &str = include_str!("fixtures/finite-range-1086-limited-cases.json");
+const LIMITED_REFERENCE: &str = include_str!("fixtures/finite-range-1086-limited-spark.jsonl");
+const LIMITED_CORPUS: &str = "finite-range-1086-limited-output-diagnostics";
 
 fn validate_finite_range_references(request: &Value, records: &[Value]) -> TestResult {
     if request["issue"] != 1086
@@ -96,16 +100,22 @@ fn validate_finite_range_references(request: &Value, records: &[Value]) -> TestR
     {
         return Err("finite RANGE source family or ANSI inventory differs".into());
     }
-    for (corpus, id) in modes.keys() {
-        let left = definitions
-            .get(&(corpus.clone(), id.clone(), true))
-            .ok_or("missing ANSI source")?;
-        let right = definitions
-            .get(&(corpus.clone(), id.clone(), false))
-            .ok_or("missing non-ANSI source")?;
+    validate_range_capture(request, records, &definitions)
+}
+
+fn validate_range_capture(
+    request: &Value,
+    records: &[Value],
+    definitions: &BTreeMap<(String, String, bool), &Value>,
+) -> TestResult {
+    let corpora = request["corpora"].as_array().ok_or("missing corpora")?;
+    for ((corpus, id, ansi), source) in definitions {
+        let partner = definitions
+            .get(&(corpus.clone(), id.clone(), !*ansi))
+            .ok_or("missing ANSI source partner")?;
         if ["sql", "ordered", "ownership", "coverage"]
             .iter()
-            .any(|field| left.get(*field) != right.get(*field))
+            .any(|field| source.get(*field) != partner.get(*field))
         {
             return Err("finite RANGE ANSI source partners differ".into());
         }
@@ -114,7 +124,7 @@ fn validate_finite_range_references(request: &Value, records: &[Value]) -> TestR
     if header["issue"] != 1086
         || header["spark_version"] != request["spark_version"]
         || header["spark_build"]["SPARK_REVISION"]["value"] != request["spark_revision"]
-        || header["expected_record_count"] != 188
+        || header["expected_record_count"] != request["expected_record_count"]
         || header["spark_only"] != true
         || header["reads_expected_outputs"] != false
         || header["schema_stage_protocol"] != json!(STAGES.map(|(stage, _)| stage))
@@ -200,6 +210,73 @@ fn validate_finite_range_references(request: &Value, records: &[Value]) -> TestR
     Ok(())
 }
 
+fn validate_limited_range_references(request: &Value, records: &[Value]) -> TestResult {
+    let corpora = request["corpora"]
+        .as_array()
+        .ok_or("missing limited corpora")?;
+    if request["issue"] != 1086
+        || request["expected_record_count"] != 8
+        || request["sql_source_count"] != 4
+        || corpora.len() != 1
+        || records.len() != 9
+        || request["spark_version"] != "4.2.0"
+        || request["spark_revision"] != "32f7299601108917fb01920a54e084595b7b3bf8"
+        || request["frozen_primary_request"]["sha256"]
+            != "e4d0fc47801a667224180372684a1f6c0533b80d0a9ac054b20f8f1e230480ec"
+        || corpora[0]["corpus"] != LIMITED_CORPUS
+        || corpora[0]["metadata"] != json!({"spark_version":"4.2.0","timezone":"UTC","inputs":[]})
+    {
+        return Err("limited finite RANGE inventory differs".into());
+    }
+    let limits = BTreeMap::from([
+        ("limited_a_null_intmax", 1),
+        ("limited_b_zero_intmax", 1),
+        ("limited_c_null_intmin_desc", 1),
+        ("limited_d_upper_min_preceding_limit_zero", 0),
+    ]);
+    let mut definitions = BTreeMap::new();
+    for case in corpora[0]["cases"]
+        .as_array()
+        .ok_or("missing limited cases")?
+    {
+        let key = case_identity(case)?;
+        let limit = limits.get(key.1.as_str()).ok_or("unexpected limited ID")?;
+        let coverage = &case["coverage"];
+        let order = coverage["window_order"]
+            .as_str()
+            .ok_or("missing window order")?;
+        let frame = coverage["frame"].as_str().ok_or("missing limited frame")?;
+        let sql = case["sql"].as_str().ok_or("missing limited SQL")?;
+        if case["corpus"] != corpora[0]["corpus"]
+            || case["ordered"] != true
+            || case["ownership"] != "finite_signed_integer_diagnostic"
+            || coverage["family"] != "limited_output"
+            || coverage["global_window"] != true
+            || coverage["key_type"] != "INT"
+            || coverage["outer_order"] != coverage["window_order"]
+            || coverage["limit"] != *limit
+            || !sql.contains(&format!("OVER (ORDER BY {order} {frame})"))
+            || !sql.ends_with(&format!("ORDER BY {order} LIMIT {limit}"))
+            || ["expected", "status", "rows_raw", "spark_error_details"]
+                .iter()
+                .any(|field| case.get(*field).is_some())
+            || definitions.insert(key, case).is_some()
+        {
+            return Err("limited finite RANGE source clauses differ".into());
+        }
+    }
+    if definitions.len() != 8
+        || limits.keys().any(|id| {
+            [true, false].iter().any(|ansi| {
+                !definitions.contains_key(&(LIMITED_CORPUS.into(), (*id).into(), *ansi))
+            })
+        })
+    {
+        return Err("limited finite RANGE ANSI inventory differs".into());
+    }
+    validate_range_capture(request, records, &definitions)
+}
+
 fn parse_finite_range_fixture() -> TestResult<(Value, Vec<Value>)> {
     let request = serde_json::from_str(REQUEST)?;
     let records = REFERENCE
@@ -210,66 +287,100 @@ fn parse_finite_range_fixture() -> TestResult<(Value, Vec<Value>)> {
     Ok((request, records))
 }
 
+fn parse_limited_range_fixture() -> TestResult<(Value, Vec<Value>)> {
+    let request = serde_json::from_str(LIMITED_REQUEST)?;
+    let records = LIMITED_REFERENCE
+        .lines()
+        .map(serde_json::from_str)
+        .collect::<Result<Vec<_>, _>>()?;
+    validate_limited_range_references(&request, &records)?;
+    Ok((request, records))
+}
+
 #[tokio::test]
 async fn finite_signed_integer_range_frames_match_spark() -> TestResult {
-    let (request, records) = parse_finite_range_fixture()?;
+    let fixtures = [
+        parse_finite_range_fixture()?,
+        parse_limited_range_fixture()?,
+    ];
     let mut completed = BTreeSet::new();
     let mut differences = Vec::new();
-    for corpus in request["corpora"].as_array().ok_or("missing corpora")? {
-        for batch in [1, 32] {
-            let session = SessionContext::new_with_state(
-                configure_spark_sql(
-                    SessionStateBuilder::new()
-                        .with_default_features()
-                        .with_config(
-                            SessionConfig::new()
-                                .with_batch_size(batch)
-                                .with_target_partitions(2),
-                        ),
-                )
-                .build(),
-            );
-            let provider_error =
-                spark_inputs::register_recorded_inputs(&session, &corpus["metadata"], batch)
-                    .err()
-                    .map(|error| error.to_string());
-            for case in records[1..]
-                .iter()
-                .filter(|case| case["corpus"] == corpus["corpus"])
-            {
-                let identity = (case_identity(case)?, batch);
-                let observation = match &provider_error {
-                    Some(error) => {
-                        json!({"observer_error":error,"observer_phase":"register_inputs"})
-                    }
-                    None => compare_exact_spark_query_stages_with_optimized(&session, case)
+    for (request, records) in fixtures {
+        for corpus in request["corpora"].as_array().ok_or("missing corpora")? {
+            for batch in [1, 32] {
+                let session = SessionContext::new_with_state(
+                    configure_spark_sql(
+                        SessionStateBuilder::new()
+                            .with_default_features()
+                            .with_config(
+                                SessionConfig::new()
+                                    .with_batch_size(batch)
+                                    .with_target_partitions(2),
+                            ),
+                    )
+                    .build(),
+                );
+                let provider_error =
+                    spark_inputs::register_recorded_inputs(&session, &corpus["metadata"], batch)
+                        .err()
+                        .map(|error| error.to_string());
+                for case in records[1..]
+                    .iter()
+                    .filter(|case| case["corpus"] == corpus["corpus"])
+                {
+                    let identity = (case_identity(case)?, batch);
+                    let observation = match &provider_error {
+                        Some(error) => {
+                            json!({"observer_error":error,"observer_phase":"register_inputs"})
+                        }
+                        None => match std::panic::AssertUnwindSafe(
+                            compare_exact_spark_query_stages_with_optimized(&session, case),
+                        )
+                        .catch_unwind()
                         .await
-                        .unwrap_or_else(|error| json!({"observer_error":error.to_string()})),
-                };
-                let matches = native_result_matches_spark_reference(&observation, case);
-                let unique = completed.insert(identity);
-                if !matches || !unique {
-                    differences.push(format!(
-                        "{}:{} ANSI={} batch={batch}",
-                        case["corpus"], case["id"], case["ansi"],
-                    ));
-                }
-                eprintln!(
-                    "FINITE_RANGE_OBSERVATION {}",
-                    json!({"issue":1086,"corpus":case["corpus"],"id":case["id"],
+                        {
+                            Ok(result) => result.unwrap_or_else(
+                                |error| json!({"observer_error":error.to_string()}),
+                            ),
+                            Err(payload) => {
+                                let panic = payload
+                                    .downcast_ref::<String>()
+                                    .cloned()
+                                    .or_else(|| {
+                                        payload
+                                            .downcast_ref::<&str>()
+                                            .map(|message| (*message).to_owned())
+                                    })
+                                    .unwrap_or_else(|| "non-string panic payload".into());
+                                json!({"native_panic":panic,"matches":false,"optimized_matches":false})
+                            }
+                        },
+                    };
+                    let matches = native_result_matches_spark_reference(&observation, case);
+                    let unique = completed.insert(identity);
+                    if !matches || !unique {
+                        differences.push(format!(
+                            "{}:{} ANSI={} batch={batch}",
+                            case["corpus"], case["id"], case["ansi"],
+                        ));
+                    }
+                    eprintln!(
+                        "FINITE_RANGE_OBSERVATION {}",
+                        json!({"issue":1086,"corpus":case["corpus"],"id":case["id"],
                     "ansi":case["ansi"],"batch":batch,"target_partitions":2,"provider_partitions":2,
                     "source_ownership_tag":case["ownership"],"reference":case,
                     "observation":observation,"spark_matches":matches}),
-                );
+                    );
+                }
             }
         }
     }
     eprintln!(
         "FINITE_RANGE_SUMMARY {}",
-        json!({"observations":completed.len(),"expected_observations":376,
+        json!({"observations":completed.len(),"expected_observations":392,
         "differences":differences.len()}),
     );
-    assert_eq!(completed.len(), 376);
+    assert_eq!(completed.len(), 392);
     assert!(
         differences.is_empty(),
         "finite RANGE differences:\n{}",
@@ -335,6 +446,32 @@ fn finite_range_references_reject_lost_captured_contracts() -> TestResult {
     let mut changed_request = request.clone();
     changed_request["corpora"][1]["cases"][0]["sql"] = json!("changed source SQL");
     assert!(validate_finite_range_references(&changed_request, &records).is_err());
+    let consumer = records
+        .iter()
+        .position(|case| {
+            case["status"] == "ok"
+                && case["schema_stages"]["public"]["fields"]
+                    .as_array()
+                    .is_some_and(|fields| fields.iter().any(|field| field["name"] == "member_ids"))
+        })
+        .ok_or("missing nested finite RANGE consumer reference")?;
+    for (stage, _) in STAGES {
+        let field = records[consumer]["schema_stages"][stage]["fields"]
+            .as_array()
+            .ok_or("missing consumer Fields")?
+            .iter()
+            .position(|field| field["name"] == "member_ids")
+            .ok_or("missing member_ids Field")?;
+        for property in ["elementType", "containsNull"] {
+            let mut changed = records.clone();
+            changed[consumer]["schema_stages"][stage]["fields"][field]["type"][property] =
+                Value::Null;
+            assert!(
+                validate_finite_range_references(&request, &changed).is_err(),
+                "accepted lost {stage} array {property}"
+            );
+        }
+    }
 
     for phase in ["sql", "optimized_schema", "collect"] {
         let error = records
@@ -369,6 +506,21 @@ fn finite_range_references_reject_lost_captured_contracts() -> TestResult {
             }
         }
     }
+    Ok(())
+}
+
+#[test]
+fn limited_range_references_reject_lost_source_and_capture_contracts() -> TestResult {
+    let (request, records) = parse_limited_range_fixture()?;
+    let mut missing = records.clone();
+    missing.pop();
+    assert!(validate_limited_range_references(&request, &missing).is_err());
+    let mut changed = request.clone();
+    changed["corpora"][0]["cases"][0]["coverage"]["limit"] = json!(0);
+    assert!(validate_limited_range_references(&changed, &records).is_err());
+    let mut changed = records.clone();
+    changed[1]["schema_stages"]["optimized"] = Value::Null;
+    assert!(validate_limited_range_references(&request, &changed).is_err());
     Ok(())
 }
 
