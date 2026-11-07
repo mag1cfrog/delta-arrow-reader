@@ -1,4 +1,4 @@
-//! Compare NULL RANGE results with Spark and retain unsupported NULL ROWS rejections.
+//! Compare NULL RANGE and NULL ROWS admission with Spark, with explicit typed-NULL ROWS rejection.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -7,6 +7,8 @@ use datafusion::prelude::{SessionConfig, SessionContext};
 use delta_arrow_reader_spark_sql::configure_spark_sql;
 use serde_json::{Value, json};
 
+#[path = "support/null_rows.rs"]
+mod null_rows;
 #[path = "support/spark_inputs.rs"]
 mod spark_inputs;
 #[path = "support/spark_results.rs"]
@@ -24,7 +26,7 @@ const BOUNDARY_REQUEST: &str = include_str!("fixtures/null-range-754-boundary-ca
 const BOUNDARY_REFERENCE: &str = include_str!("fixtures/null-range-754-boundary-spark.jsonl");
 const PRIOR_ROWS_REJECTIONS: &str =
     include_str!("fixtures/null-range-754-prior-rows-rejections.json");
-const ROWS_REJECTION_IDS: [&str; 4] = [
+const ORIGINAL_NULL_ROWS_IDS: [&str; 4] = [
     "admission_rows_lower_typed_null",
     "admission_rows_upper_typed_null",
     "admission_rows_lower_bare_null",
@@ -216,18 +218,18 @@ fn parse_null_range_fixture() -> TestResult<(Value, Vec<Value>)> {
     Ok((request, records))
 }
 
-fn is_unsupported_rows_case(case: &Value) -> bool {
+fn is_original_null_rows_case(case: &Value) -> bool {
     case["corpus"] == "null-range-754-supplement"
         && case["id"]
             .as_str()
-            .is_some_and(|id| ROWS_REJECTION_IDS.contains(&id))
+            .is_some_and(|id| ORIGINAL_NULL_ROWS_IDS.contains(&id))
 }
 
 fn validate_prior_rows_rejections(records: &[Value], controls: &[Value]) -> TestResult {
     let mut expected = BTreeSet::new();
     for case in records[1..]
         .iter()
-        .filter(|case| is_unsupported_rows_case(case))
+        .filter(|case| is_original_null_rows_case(case))
     {
         for batch in [1_u64, 32] {
             expected.insert((case_identity(case)?, batch));
@@ -682,13 +684,13 @@ async fn dictionary_float_null_ranges_match_the_recorded_logical_values() -> Tes
 }
 
 #[tokio::test]
-async fn null_range_frames_match_spark_and_rows_bounds_reject() -> TestResult {
+async fn null_range_frames_match_spark_with_explicit_typed_rows_difference() -> TestResult {
     let (request, records) = parse_null_range_fixture()?;
     let rows_controls: Vec<Value> = serde_json::from_str(PRIOR_ROWS_REJECTIONS)?;
     validate_prior_rows_rejections(&records, &rows_controls)?;
     let mut completed = BTreeSet::new();
     let mut strict_contexts = 0;
-    let mut unsupported_rows_contexts = 0;
+    let mut typed_rows_contexts = 0;
     let mut differences = Vec::new();
     for corpus in request["corpora"].as_array().ok_or("missing corpora")? {
         for batch in [1, 32] {
@@ -724,15 +726,19 @@ async fn null_range_frames_match_spark_and_rows_bounds_reject() -> TestResult {
                 let matches = native_result_matches_spark_reference(&observation, case);
                 // Validated source identities cannot abort observation collection on a query difference.
                 let unique = completed.insert(identity);
-                let unsupported_rows = is_unsupported_rows_case(case);
-                let matches_prior_rejection = unsupported_rows
+                let rows_case = is_original_null_rows_case(case);
+                let typed_rows =
+                    rows_case && null_rows::unsupported_null_bound_location(case).is_some();
+                let matches_prior_rejection = rows_case
                     && prior_rows_rejection_matches(case, batch, &observation, &rows_controls);
-                let contract_matches = if unsupported_rows {
-                    unsupported_rows_contexts += 1;
-                    !matches && matches_prior_rejection
+                let exact_rows_rejection =
+                    !rows_case || null_rows::matches_contract(case, &observation)?;
+                let contract_matches = if typed_rows {
+                    typed_rows_contexts += 1;
+                    !matches && exact_rows_rejection
                 } else {
                     strict_contexts += 1;
-                    matches
+                    matches && exact_rows_rejection
                 };
                 if !contract_matches || !unique {
                     differences.push(format!(
@@ -742,9 +748,9 @@ async fn null_range_frames_match_spark_and_rows_bounds_reject() -> TestResult {
                 }
                 let record = json!({"issue":754,"corpus":case["corpus"],"id":case["id"],
                     "ansi":case["ansi"],"batch":batch,"target_partitions":2,"provider_partitions":2,
-                    "source_ownership_tag":case["ownership"],"primary":!unsupported_rows,
-                    "remaining_owner":if unsupported_rows { Some(1085) } else { None },
-                    "prior_rejection_matches":if unsupported_rows { Some(matches_prior_rejection) } else { None },
+                    "source_ownership_tag":case["ownership"],"primary":!typed_rows,
+                    "intentional_typed_null_difference":typed_rows,
+                    "prior_rejection_matches":if rows_case { Some(matches_prior_rejection) } else { None },
                     "reference":case,"observation":observation,"spark_matches":matches});
                 eprintln!("NULL_RANGE_OBSERVATION {record}");
             }
@@ -753,15 +759,15 @@ async fn null_range_frames_match_spark_and_rows_bounds_reject() -> TestResult {
     eprintln!(
         "NULL_RANGE_SUMMARY {}",
         json!({"observations":completed.len(),
-        "strict_spark_contexts":strict_contexts,"unsupported_rows_rejections":unsupported_rows_contexts,
+        "strict_spark_contexts":strict_contexts,"intentional_typed_rows_contexts":typed_rows_contexts,
         "differences":differences.len(),"expected_observations":1164})
     );
     assert_eq!(completed.len(), 1164);
-    assert_eq!(strict_contexts, 1148);
-    assert_eq!(unsupported_rows_contexts, 16);
+    assert_eq!(strict_contexts, 1156);
+    assert_eq!(typed_rows_contexts, 8);
     assert!(
         differences.is_empty(),
-        "{} NULL RANGE or required ROWS-rejection differences:\n{}",
+        "{} NULL RANGE or NULL ROWS admission differences:\n{}",
         differences.len(),
         differences.join("\n")
     );
