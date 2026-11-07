@@ -139,10 +139,8 @@ async fn substring_literal_null_length_discards_unused_errors_and_keeps_parent_p
                 ),
             ] {
                 for length_type in ["INT", "STRING"] {
-                    let sql = sql.replace(
-                        "CAST(NULL AS INT)",
-                        &format!("CAST(NULL AS {length_type})"),
-                    );
+                    let sql =
+                        sql.replace("CAST(NULL AS INT)", &format!("CAST(NULL AS {length_type})"));
                     null_result(&session, &sql, ansi_mode, &expected_type, 1).await?;
                 }
             }
