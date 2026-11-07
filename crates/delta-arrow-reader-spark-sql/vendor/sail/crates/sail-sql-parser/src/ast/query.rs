@@ -264,8 +264,8 @@ pub struct TableRelation {
 #[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "(Query, Expr, TableRelation)")]
 pub enum TableExtension {
-    Join(#[parser(function = |(q, e, t), o| compose((q, e, t), o))] TableJoin),
-    Modifier(#[parser(function = |(_, e, _), o| compose(e, o))] TableModifier),
+    Join(#[parser(function = |(q, e, t), o| boxed(compose((q, e, t), o)))] Box<TableJoin>),
+    Modifier(#[parser(function = |(_, e, _), o| boxed(compose(e, o)))] Box<TableModifier>),
 }
 
 #[derive(Debug, Clone, TreeParser, TreeSyntax)]

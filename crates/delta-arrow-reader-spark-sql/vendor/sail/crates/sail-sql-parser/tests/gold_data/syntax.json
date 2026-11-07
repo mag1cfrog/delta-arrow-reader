@@ -1240,6 +1240,18 @@
               }
             },
             {
+              "name": "Box(TableJoin)",
+              "node": {
+                "nonTerminal": "TableJoin"
+              }
+            },
+            {
+              "name": "Box(TableModifier)",
+              "node": {
+                "nonTerminal": "TableModifier"
+              }
+            },
+            {
               "name": "Box(TableRelation)",
               "node": {
                 "nonTerminal": "TableRelation"
@@ -10496,14 +10508,14 @@
                   {
                     "sequence": [
                       {
-                        "nonTerminal": "TableJoin"
+                        "nonTerminal": "Box(TableJoin)"
                       }
                     ]
                   },
                   {
                     "sequence": [
                       {
-                        "nonTerminal": "TableModifier"
+                        "nonTerminal": "Box(TableModifier)"
                       }
                     ]
                   }

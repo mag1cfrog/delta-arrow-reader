@@ -633,8 +633,8 @@ fn query_plan_with_table_extension(
     extension: TableExtension,
 ) -> SqlResult<spec::QueryPlan> {
     match extension {
-        TableExtension::Join(join) => query_plan_with_join(plan, join),
-        TableExtension::Modifier(modifier) => query_plan_with_table_modifier(plan, modifier),
+        TableExtension::Join(join) => query_plan_with_join(plan, *join),
+        TableExtension::Modifier(modifier) => query_plan_with_table_modifier(plan, *modifier),
     }
 }
 
