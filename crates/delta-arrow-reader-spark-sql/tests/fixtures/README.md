@@ -197,6 +197,16 @@ before-collect and executed fields, no error, and exactly three single-column,
 nonnull Boolean rows. Their original sampled rowsets remain in the references;
 cross-engine RNG sample equality is not a stream contract.
 
+The regression gate permits only the missing condition IDs tracked by
+[#865](https://github.com/mag1cfrog/delta-arrow-reader/issues/865) and
+[#1067](https://github.com/mag1cfrog/delta-arrow-reader/issues/1067) at the recorded
+fixture positions. It still requires the exact native cause, error phase,
+available fields and no returned rows. Raw comparison flags and
+`contract_matches` remain visible; `regression_matches` can include these
+diagnostic fallbacks and does not imply complete Spark parity. All nullable
+fields remain exact. Both original CASE guard orders and the implicit-NULL case
+still require strict matches in all 12 contexts.
+
 ## Integer-day DATE arithmetic
 
 `date-day-arithmetic-spark.jsonl` contains 296 independent Spark 4.2.0
