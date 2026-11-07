@@ -293,31 +293,49 @@ async fn substring_keeps_native_async_descendant_values_fields_and_invocations()
                     let control_schema = control_plan.schema();
                     let control_batches = collect(control_plan, session.task_ctx()).await?;
                     let expected = concat_batches(&control_schema, &control_batches)?;
-                    let sql = control_sql.replace("substring(s,", "substring(literal_async_fold(s),");
-                    let query = plan_query(&session, &sql, &options).await.map_err(|error| {
-                        format!("async substring resolve: {sql}, ANSI={ansi_mode}: {error:?}")
-                    })?;
+                    let sql =
+                        control_sql.replace("substring(s,", "substring(literal_async_fold(s),");
+                    let query = plan_query(&session, &sql, &options)
+                        .await
+                        .map_err(|error| {
+                            format!("async substring resolve: {sql}, ANSI={ansi_mode}: {error:?}")
+                        })?;
                     assert_eq!(query.column_names, control.column_names, "{sql}");
-                    assert_eq!(query.column_names, vec!["id".to_owned(), "r".to_owned()], "{sql}");
+                    assert_eq!(
+                        query.column_names,
+                        vec!["id".to_owned(), "r".to_owned()],
+                        "{sql}"
+                    );
                     assert_eq!(
                         string_binary::capture_schema(
-                            query.logical_plan.schema().fields(), Some(&query.column_names)
+                            query.logical_plan.schema().fields(),
+                            Some(&query.column_names)
                         )?,
                         string_binary::capture_schema(
-                            control.logical_plan.schema().fields(), Some(&control.column_names)
+                            control.logical_plan.schema().fields(),
+                            Some(&control.column_names)
                         )?,
                         "{sql}"
                     );
                     let result = query.logical_plan.schema().field(1);
                     assert_eq!(result.data_type(), source_field.data_type(), "{sql}");
-                    assert!(result.is_nullable() && result.metadata().is_empty(), "{sql}");
+                    assert!(
+                        result.is_nullable() && result.metadata().is_empty(),
+                        "{sql}"
+                    );
                     // These receipts count inner producer calls. The native wrapper's
                     // rejected sync entries are not exposed by this product helper.
                     assert_eq!(counts.calls.load(Ordering::SeqCst), 0, "{sql}");
                     counts.phase.store(1, Ordering::SeqCst);
-                    let physical = query.create_physical_plan(&session).await.map_err(|error| {
-                        format!("async substring physical: {sql}, analyzed={:?}: {error:?}", query.logical_plan.schema())
-                    })?;
+                    let physical = query
+                        .create_physical_plan(&session)
+                        .await
+                        .map_err(|error| {
+                            format!(
+                                "async substring physical: {sql}, analyzed={:?}: {error:?}",
+                                query.logical_plan.schema()
+                            )
+                        })?;
                     let actual_schema = physical.schema();
                     assert_eq!(actual_schema.field(1).name(), "r", "{sql}");
                     assert_eq!(actual_schema, control_schema, "{sql}");
@@ -333,25 +351,52 @@ async fn substring_keeps_native_async_descendant_values_fields_and_invocations()
                     assert_eq!(actual, expected, "{sql}");
                     assert_eq!(actual.num_rows(), 12, "{sql}");
                     let snapshot = counts.snapshot();
-                    let events = snapshot["events"].as_array().ok_or("missing async events")?;
+                    let events = snapshot["events"]
+                        .as_array()
+                        .ok_or("missing async events")?;
                     assert_eq!(counts.calls.load(Ordering::SeqCst), events.len(), "{sql}");
-                    assert_eq!(events.len(), if reached_async { 12_usize.div_ceil(batch_size) } else { 0 }, "{sql}");
+                    assert_eq!(
+                        events.len(),
+                        if reached_async {
+                            12_usize.div_ceil(batch_size)
+                        } else {
+                            0
+                        },
+                        "{sql}"
+                    );
                     let mut rows = 0;
                     for event in events {
                         assert_eq!(event["phase"], 2, "{sql}: {event}");
-                        let row_count = event["number_rows"].as_u64().ok_or("missing async row count")?;
-                        assert!(row_count > 0 && row_count <= batch_size as u64, "{sql}: {event}");
+                        let row_count = event["number_rows"]
+                            .as_u64()
+                            .ok_or("missing async row count")?;
+                        assert!(
+                            row_count > 0 && row_count <= batch_size as u64,
+                            "{sql}: {event}"
+                        );
                         rows += row_count;
-                        assert_eq!(event["arg_fields"], format!("{:?}", [Arc::clone(&source_field)]), "{sql}");
+                        assert_eq!(
+                            event["arg_fields"],
+                            format!("{:?}", [Arc::clone(&source_field)]),
+                            "{sql}"
+                        );
                         assert_eq!(event["return_field"], format!("{source_field:?}"), "{sql}");
-                        assert!(event["arguments"].as_str().is_some_and(|value| !value.is_empty()), "{sql}");
+                        assert!(
+                            event["arguments"]
+                                .as_str()
+                                .is_some_and(|value| !value.is_empty()),
+                            "{sql}"
+                        );
                     }
                     // Existing native simplification removes known-NULL calls before
                     // async extraction. Non-NULL calls execute the source once per row.
                     assert_eq!(rows, if reached_async { 12 } else { 0 }, "{sql}");
                     if reached_async {
                         assert_eq!(
-                            arrow::util::display::array_value_to_string(actual.column(1).as_ref(), 0)?,
+                            arrow::util::display::array_value_to_string(
+                                actual.column(1).as_ref(),
+                                0
+                            )?,
                             "bc",
                             "{sql}"
                         );

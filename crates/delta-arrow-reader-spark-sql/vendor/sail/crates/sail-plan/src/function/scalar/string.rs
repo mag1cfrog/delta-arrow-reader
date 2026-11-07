@@ -1634,13 +1634,15 @@ fn substring_preserves_coerced_null_length_without_invoking_operands() -> PlanRe
             lit(ScalarValue::Utf8View(None)),
             cast(lit(ScalarValue::Null), DataType::Utf8),
         ] {
-            for (source, is_async) in [
-                (col("s"), false),
-                (asynchronous.call(vec![col("s")]), true),
-            ] {
+            for (source, is_async) in [(col("s"), false), (asynchronous.call(vec![col("s")]), true)]
+            {
                 let expression = resolve(
                     source,
-                    if is_async { lit(2_i64) } else { position.clone() },
+                    if is_async {
+                        lit(2_i64)
+                    } else {
+                        position.clone()
+                    },
                     length.clone(),
                 )?;
                 let expr::Expr::ScalarFunction(function) = &expression else {
@@ -1674,7 +1676,9 @@ fn substring_preserves_coerced_null_length_without_invoking_operands() -> PlanRe
                 assert_eq!(async_counts.calls.load(Ordering::SeqCst), 0);
             }
         }
-        assert!(substring_lambdas(resolve(col("s"), position.clone(), col("n"))?, false)?.transformed);
+        assert!(
+            substring_lambdas(resolve(col("s"), position.clone(), col("n"))?, false)?.transformed
+        );
         assert_eq!(calls.load(Ordering::SeqCst), 0);
     }
     Ok(())
