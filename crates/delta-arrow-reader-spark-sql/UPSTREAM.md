@@ -490,8 +490,40 @@ Two-argument DATEDIFF/DATE_DIFF return Spark's INT day count, subtracting the
 DATE days as a native INT subtraction that wraps at the DATE limits like Spark's
 `int` arithmetic; TIMESTAMP arguments are cast to DATE in their TIMESTAMP type's
 zone, which is the session time zone for Spark-typed values. The three-argument
-`datediff(unit, start, end)` form keeps its BIGINT TIMESTAMPDIFF path. The
-[DATEDIFF references](tests/fixtures/date-diff/README.md) record the checks.
+form is TIMESTAMPDIFF. The [DATEDIFF references](tests/fixtures/date-diff/README.md)
+record the checks.
+
+TIMESTAMPDIFF, and its three-argument DATEDIFF, DATE_DIFF and TIMEDIFF spellings, first
+convert both arguments to TIMESTAMP in the session time zone:
+- DATE and TIMESTAMP_NTZ with Spark's gap and overlap rules;
+- STRING with Spark's parser, including dictionary-encoded STRING such as a Delta
+  partition column.
+
+It then counts whole units between the two local date-times, as Java's
+`LocalDateTime.until` does. For instants beyond Chrono's range, the offset comes from the
+same position in a nearer 400-year calendar cycle.
+
+Only Spark's unit keywords become a unit. Any other first argument behaves as in Spark:
+- a string unit fails as Spark's parser does;
+- under TIMESTAMPDIFF and TIMEDIFF it names no routine;
+- under DATEDIFF and DATE_DIFF it stays an ordinary argument.
+
+DAYOFYEAR fails for each evaluated row.
+
+TIMESTAMPDIFF opts in to [constant folding errors](#constant-folding-errors), so its unit,
+overflow and STRING conversion errors keep Spark's optimization stage.
+
+The harness pins two remaining differences, each with an owner:
+- `timestamp_diff` still resolves as an alias (#1051);
+- the zone table applies no DST after 2099 (#1052).
+
+Two more have owners but no pinned records:
+- backquoted, parenthesized and two-argument unit spellings fail differently or not at
+  all (#1056);
+- a malformed STRING argument reports DAR's parser message instead of
+  `CAST_INVALID_INPUT` (#1057).
+
+The [TIMESTAMPDIFF references](tests/fixtures/timestamp-diff/README.md) record the checks.
 
 Searched CASE conditions must have BOOLEAN type before branch simplification.
 The [condition references](tests/fixtures/README.md#case-condition-types) retain
@@ -1028,6 +1060,16 @@ Spark plans it as a lambda over a default comparator (#1038). A LIMIT over an
 unfolded lambda now fails during physical planning, where Spark rejects it during
 analysis (#1039). The [closed-lambda references](tests/fixtures/README.md#date-arithmetic-with-closed-lambda-day-operands)
 cover DATE arithmetic, plain higher-order results and both retained differences.
+
+### Constant folding errors
+
+DataFusion's constant evaluator defers an error from a constant scalar call to
+execution, so a branch that never runs cannot fail the query. Spark instead fails while
+folding, during optimization. A scalar UDF can return `true` from
+`propagates_constant_folding_errors` (default `false`) to fail during optimization, as
+literal CASTs already do. A call inside a short-circuiting expression other than AND and
+OR, such as CASE or COALESCE, still defers its error. `AliasedScalarUDFImpl` forwards the
+choice. Only TIMESTAMPDIFF opts in.
 
 ### ARRAY_COMPACT result fields
 

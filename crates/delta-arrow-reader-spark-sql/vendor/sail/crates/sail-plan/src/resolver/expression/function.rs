@@ -7,12 +7,14 @@ use datafusion_expr::{EmptyRelation, Expr, ExprSchemable, LogicalPlan, expr};
 use datafusion_functions_nested::concat::ArrayConcat;
 use sail_common::spec;
 use sail_common_datafusion::utils::items::ItemTaker;
+use sail_function::scalar::datetime::spark_timestamp_diff::TIMESTAMP_DIFF_PARSER_UNITS;
 use sail_function::scalar::multi_expr::MultiExpr;
 
 use crate::error::{PlanError, PlanResult};
 use crate::formatter::SparkPlanFormatter;
 use crate::function::common::{AggFunctionInput, FunctionContextInput, ScalarFunctionInput};
 use crate::function::float_keys::normalize_spark_float_key;
+use crate::function::scalar::datetime::unresolved_timestamp_diff_routine;
 use crate::function::{
     get_built_in_aggregate_function, get_built_in_function, is_higher_order_function,
 };
@@ -72,7 +74,7 @@ impl PlanResolver<'_> {
         // For functions that accept a date-part keyword as the first argument
         // (e.g., DATEDIFF(DAY, start, end)), convert the unresolved attribute
         // to a string literal before resolution.
-        let arguments = Self::convert_date_part_argument(&canonical_function_name, arguments);
+        let arguments = self.convert_date_part_argument(&canonical_function_name, arguments)?;
 
         // For `mode() WITHIN GROUP (ORDER BY col)`, move the sort expression and a
         // tie-break sentinel into the argument list before resolution, so that the
@@ -439,20 +441,23 @@ impl PlanResolver<'_> {
     /// (e.g., `DATEDIFF(DAY, start, end)`, `TIMESTAMPDIFF(HOUR, start, end)`),
     /// convert the first argument from an unresolved attribute to a string literal.
     fn convert_date_part_argument(
+        &self,
         function_name: &str,
         mut arguments: Vec<spec::Expr>,
-    ) -> Vec<spec::Expr> {
-        const DATE_PART_FUNCTIONS: &[&str] = &[
-            "date_add",
-            "dateadd",
+    ) -> PlanResult<Vec<spec::Expr>> {
+        const DATE_PART_FUNCTIONS: &[&str] =
+            &["date_add", "dateadd", "timestampadd", "timestamp_add"];
+        const DIFF_FUNCTIONS: &[&str] = &[
             "datediff",
             "date_diff",
-            "timestampadd",
-            "timestamp_add",
             "timestampdiff",
             "timestamp_diff",
+            "timediff",
         ];
         let function_name = function_name.trim().to_lowercase();
+        if DIFF_FUNCTIONS.contains(&function_name.as_str()) && arguments.len() == 3 {
+            return self.resolve_timestamp_diff_unit(&function_name, arguments);
+        }
         let accepts_date_part = match function_name.as_str() {
             "date_add" | "dateadd" => arguments.len() == 3,
             _ => arguments.len() >= 3 && DATE_PART_FUNCTIONS.contains(&function_name.as_str()),
@@ -466,7 +471,44 @@ impl PlanResolver<'_> {
                 });
             }
         }
-        arguments
+        Ok(arguments)
+    }
+
+    /// Spark's three-argument difference grammar accepts only its datetime unit keywords: a
+    /// string unit fails to parse, other TIMESTAMPDIFF and TIMEDIFF calls name no routine, and
+    /// other DATEDIFF and DATE_DIFF calls keep an ordinary first argument.
+    fn resolve_timestamp_diff_unit(
+        &self,
+        function_name: &str,
+        mut arguments: Vec<spec::Expr>,
+    ) -> PlanResult<Vec<spec::Expr>> {
+        match arguments.first() {
+            Some(spec::Expr::Literal(spec::Literal::Utf8 { value: Some(unit) })) => {
+                return Err(PlanError::invalid(format!(
+                    "[INVALID_PARAMETER_VALUE.DATETIME_UNIT] The value of parameter(s) \
+                     `unit` in `{function_name}` is invalid: expects one of the units \
+                     without quotes {}, but got the string literal '{unit}'.",
+                    TIMESTAMP_DIFF_PARSER_UNITS.join(", ")
+                )));
+            }
+            Some(spec::Expr::UnresolvedAttribute { name, .. }) => {
+                let parts: Vec<String> = name.clone().into();
+                if let [unit] = parts.as_slice()
+                    && TIMESTAMP_DIFF_PARSER_UNITS.contains(&unit.to_ascii_uppercase().as_str())
+                {
+                    arguments[0] = spec::Expr::Literal(spec::Literal::Utf8 {
+                        value: Some(unit.clone()),
+                    });
+                    return Ok(arguments);
+                }
+            }
+            _ => {}
+        }
+        if matches!(function_name, "datediff" | "date_diff") {
+            Ok(arguments)
+        } else {
+            Err(unresolved_timestamp_diff_routine(function_name, self.ctx))
+        }
     }
 }
 

@@ -7,6 +7,7 @@ use datafusion::arrow::datatypes::{
 };
 use datafusion::functions::expr_fn;
 use datafusion::optimizer::simplify_expressions::ExprSimplifier;
+use datafusion::prelude::SessionContext;
 use datafusion_common::tree_node::TreeNode;
 use datafusion_common::{DFSchemaRef, ScalarValue};
 use datafusion_expr::expr::{self, Expr};
@@ -36,6 +37,7 @@ use sail_function::scalar::datetime::spark_time::SparkTime;
 use sail_function::scalar::datetime::spark_time_diff::SparkTimeDiff;
 use sail_function::scalar::datetime::spark_time_trunc::SparkTimeTrunc;
 use sail_function::scalar::datetime::spark_timestamp::SparkTimestamp;
+use sail_function::scalar::datetime::spark_timestamp_diff::SparkTimestampDiff;
 use sail_function::scalar::datetime::spark_unix_timestamp::SparkUnixTimestamp;
 use sail_function::scalar::datetime::spark_window_buckets::SparkWindowBuckets;
 use sail_function::scalar::datetime::spark_year::SparkYear;
@@ -49,7 +51,7 @@ use super::lambda::lambda_with_fresh_parameter;
 use crate::config::DefaultTimestampType;
 use crate::error::{PlanError, PlanResult};
 use crate::function::common::{
-    ScalarFunction, ScalarFunctionInput, expr_contains_spark_cast_to_variant,
+    FunctionContextInput, ScalarFunction, ScalarFunctionInput, expr_contains_spark_cast_to_variant,
 };
 use crate::function::common::{literal_value_without_evaluation, without_metadata_annotations};
 use crate::function::temporal_coercion::cast_local_timestamp_expr_to_ltz;
@@ -394,25 +396,9 @@ fn make_date(year: Expr, month: Expr, day: Expr) -> Expr {
     }
 }
 
-fn date_days_arithmetic(dt1: Expr, dt2: Expr, op: Operator) -> Expr {
-    let (dt1, dt2) = match (&dt1, &dt2) {
-        (Expr::Literal(ScalarValue::Date32(_), _), Expr::Literal(ScalarValue::Date32(_), _)) => {
-            (dt1, dt2)
-        }
-        _ => (cast(dt1, DataType::Date32), cast(dt2, DataType::Date32)),
-    };
-    let dt1 = cast(dt1, DataType::Int64);
-    let dt2 = cast(dt2, DataType::Int64);
-    Expr::BinaryExpr(BinaryExpr {
-        left: Box::new(dt1),
-        op,
-        right: Box::new(dt2),
-    })
-}
-
 /// Spark's `DateDiff`: the INT number of days from `start` to `end`, computed as a Java `int`
 /// subtraction, which wraps at the DATE limits. TIMESTAMP arguments are cast to DATE. The
-/// three-argument DAY form instead uses `date_days_arithmetic`, which returns a BIGINT.
+/// three-argument form is TIMESTAMPDIFF instead.
 fn date_diff_days(end: Expr, start: Expr) -> Expr {
     let days = |date: Expr| cast(cast(date, DataType::Date32), DataType::Int32);
     // A native integer subtraction wraps rather than failing on overflow.
@@ -423,117 +409,119 @@ fn date_diff_days(end: Expr, start: Expr) -> Expr {
     })
 }
 
-fn timestamp_micros(expr: Expr) -> Expr {
-    cast(
-        cast(expr, DataType::Timestamp(TimeUnit::Microsecond, None)),
-        DataType::Int64,
-    )
+/// Spark resolves TIMESTAMPDIFF and TIMEDIFF only in their keyword-unit grammar; any other
+/// call names a routine that does not exist on the active search path.
+pub(crate) fn unresolved_timestamp_diff_routine(
+    function_name: &str,
+    session: &SessionContext,
+) -> PlanError {
+    let state = session.state();
+    let catalog = &state.config().options().catalog;
+    let catalog_name = catalog.default_catalog.replace('`', "``");
+    let schema_name = catalog.default_schema.replace('`', "``");
+    PlanError::analysis(format!(
+        "[UNRESOLVED_ROUTINE] Cannot resolve routine `{function_name}` on search path \
+         [`system`.`builtin`, `system`.`session`, `{catalog_name}`.`{schema_name}`]. \
+         SQLSTATE: 42883"
+    ))
 }
 
-fn timestamp_time_micros(expr: Expr) -> Expr {
-    timestamp_micros(expr.clone()) - timestamp_micros(expr_fn::date_trunc(lit("DAY"), expr))
-}
-
-fn timestamp_months(expr: Expr) -> Expr {
-    integer_part(expr.clone(), "YEAR") * lit(12) + integer_part(expr, "MONTH")
-}
-
-fn timestamp_day_time_is_before(left: Expr, right: Expr) -> Expr {
-    let left_day = integer_part(left.clone(), "DAY");
-    let right_day = integer_part(right.clone(), "DAY");
-    left_day.clone().lt(right_day.clone()).or(left_day
-        .eq(right_day)
-        .and(timestamp_time_micros(left).lt(timestamp_time_micros(right))))
-}
-
-fn timestamp_month_diff(start: Expr, end: Expr) -> PlanResult<Expr> {
-    let start = cast(start, DataType::Timestamp(TimeUnit::Microsecond, None));
-    let end = cast(end, DataType::Timestamp(TimeUnit::Microsecond, None));
-    let months = cast(
-        timestamp_months(end.clone()) - timestamp_months(start.clone()),
-        DataType::Int64,
-    );
-    let incomplete_positive_month = months
-        .clone()
-        .gt(lit(0_i64))
-        .and(timestamp_day_time_is_before(end.clone(), start.clone()));
-    let incomplete_negative_month = months
-        .clone()
-        .lt(lit(0_i64))
-        .and(timestamp_day_time_is_before(start, end));
-    Ok(when(incomplete_positive_month, months.clone() - lit(1_i64))
-        .when(incomplete_negative_month, months.clone() + lit(1_i64))
-        .when(lit(true), months)
-        .end()?)
-}
-
-fn timestampdiff_calendar_unit(unit: &str, start: Expr, end: Expr) -> PlanResult<Expr> {
-    let months = timestamp_month_diff(start, end)?;
-    match unit {
-        "MONTH" => Ok(months),
-        "QUARTER" => Ok(months / lit(3_i64)),
-        "YEAR" => Ok(months / lit(12_i64)),
-        _ => Err(PlanError::internal(format!(
-            "invalid timestampdiff calendar unit: {unit}"
+/// Casts a TIMESTAMPDIFF argument to the TIMESTAMP instant Spark's implicit cast gives it in
+/// the session time zone.
+fn cast_timestamp_diff_argument(
+    function_name: &str,
+    ordinal: &str,
+    expr: Expr,
+    context: &FunctionContextInput,
+) -> PlanResult<Expr> {
+    let timezone = &context.plan_config.session_timezone;
+    let timestamp = DataType::Timestamp(TimeUnit::Microsecond, Some(Arc::clone(timezone)));
+    match expr.get_type(context.schema)? {
+        DataType::Timestamp(TimeUnit::Microsecond, Some(_)) => Ok(expr),
+        // Spark has no dictionary encoding; Delta uses one for STRING partition columns.
+        DataType::Dictionary(_, value_type) => {
+            cast_timestamp_diff_argument(function_name, ordinal, cast(expr, *value_type), context)
+        }
+        DataType::Timestamp(_, Some(_)) | DataType::Null => Ok(cast(expr, timestamp)),
+        DataType::Timestamp(_, None) | DataType::Date32 | DataType::Date64 => {
+            Ok(cast_local_timestamp_expr_to_ltz(expr, timezone))
+        }
+        DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => {
+            Ok(ScalarUDF::from(SparkTimestamp::try_new(
+                Some(Arc::clone(timezone)),
+                context.plan_config.ansi_mode,
+                false,
+            )?)
+            .call(vec![expr]))
+        }
+        data_type @ (DataType::Time32(_) | DataType::Time64(_)) => {
+            Err(PlanError::invalid(format!(
+                "[DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION] {function_name} cannot cast the \
+                 {ordinal} argument from {data_type} to TIMESTAMP"
+            )))
+        }
+        other => Err(PlanError::invalid(format!(
+            "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] {function_name} requires a TIMESTAMP \
+             {ordinal} argument, got {other}"
         ))),
     }
 }
 
-fn timestampdiff_fixed_unit(unit: &str, start: Expr, end: Expr) -> Expr {
-    let start_ts = timestamp_micros(start);
-    let end_ts = timestamp_micros(end);
-    let diff_micros = cast(
-        Expr::BinaryExpr(BinaryExpr {
-            left: Box::new(end_ts),
-            op: Operator::Minus,
-            right: Box::new(start_ts),
-        }),
-        DataType::Int64,
-    );
-    let divisor = match unit {
-        "SECOND" => 1_000_000i64,
-        "MINUTE" => 60_000_000i64,
-        "HOUR" => 3_600_000_000i64,
-        "WEEK" => 7 * 24 * 3_600_000_000i64,
-        _ => 1i64,
+/// Spark's TIMESTAMPDIFF, also spelled as three-argument DATEDIFF, DATE_DIFF and TIMEDIFF. The
+/// resolver passes a datetime unit keyword as a string literal; any other first argument is an
+/// ordinary argument, which leaves too many for two-argument DATEDIFF.
+fn timestamp_diff_with_name(input: ScalarFunctionInput, function_name: &str) -> PlanResult<Expr> {
+    let ScalarFunctionInput {
+        arguments,
+        function_context,
+    } = input;
+    let Ok([unit, start, end]) = <[Expr; 3]>::try_from(arguments) else {
+        return Err(unresolved_timestamp_diff_routine(
+            function_name,
+            function_context.session_context,
+        ));
     };
-    diff_micros / lit(divisor)
+    let Expr::Literal(ScalarValue::Utf8(Some(unit)), _) = unit else {
+        return Err(PlanError::invalid(format!(
+            "[WRONG_NUM_ARGS.WITHOUT_SUGGESTION] The `{function_name}` requires 2 parameters \
+             but the actual number is 3."
+        )));
+    };
+    let start = cast_timestamp_diff_argument(function_name, "first", start, &function_context)?;
+    let end = cast_timestamp_diff_argument(function_name, "second", end, &function_context)?;
+    let timezone = Arc::clone(&function_context.plan_config.session_timezone);
+    Ok(ScalarUDF::from(SparkTimestampDiff::new(&unit, timezone)).call(vec![start, end]))
+}
+
+fn datediff_with_name(input: ScalarFunctionInput, function_name: &str) -> PlanResult<Expr> {
+    match input.arguments.len() {
+        2 => {
+            let [end, start] = <[Expr; 2]>::try_from(input.arguments).map_err(|_| {
+                PlanError::invalid(format!("{function_name} requires 2 or 3 arguments"))
+            })?;
+            Ok(date_diff_days(end, start))
+        }
+        3 => timestamp_diff_with_name(input, function_name),
+        n => Err(PlanError::invalid(format!(
+            "{function_name} requires 2 or 3 arguments, got {n}"
+        ))),
+    }
 }
 
 fn datediff(input: ScalarFunctionInput) -> PlanResult<Expr> {
-    let args = input.arguments;
-    match args.len() {
-        2 => {
-            let [end, start] = <[Expr; 2]>::try_from(args)
-                .map_err(|_| PlanError::invalid("datediff requires 2 or 3 arguments"))?;
-            Ok(date_diff_days(end, start))
-        }
-        3 => {
-            let [unit, start, end] = <[Expr; 3]>::try_from(args)
-                .map_err(|_| PlanError::invalid("datediff requires 2 or 3 arguments"))?;
-            let unit_str = match &unit {
-                Expr::Literal(ScalarValue::Utf8(Some(s)), _)
-                | Expr::Literal(ScalarValue::LargeUtf8(Some(s)), _) => s.to_uppercase(),
-                Expr::Column(col) => col.name().to_uppercase(),
-                _ => {
-                    return Err(PlanError::invalid(
-                        "datediff unit must be a string literal or keyword",
-                    ));
-                }
-            };
-            match unit_str.as_str() {
-                "DAY" => Ok(date_days_arithmetic(end, start, Operator::Minus)),
-                "HOUR" | "MINUTE" | "SECOND" | "WEEK" => {
-                    Ok(timestampdiff_fixed_unit(&unit_str, start, end))
-                }
-                "MONTH" | "YEAR" | "QUARTER" => timestampdiff_calendar_unit(&unit_str, start, end),
-                other => Err(PlanError::unsupported(format!("datediff unit: {other}"))),
-            }
-        }
-        n => Err(PlanError::invalid(format!(
-            "datediff requires 2 or 3 arguments, got {n}"
-        ))),
-    }
+    datediff_with_name(input, "datediff")
+}
+
+fn date_diff(input: ScalarFunctionInput) -> PlanResult<Expr> {
+    datediff_with_name(input, "date_diff")
+}
+
+fn timestampdiff(input: ScalarFunctionInput) -> PlanResult<Expr> {
+    timestamp_diff_with_name(input, "timestampdiff")
+}
+
+fn timediff(input: ScalarFunctionInput) -> PlanResult<Expr> {
+    timestamp_diff_with_name(input, "timediff")
 }
 
 fn session_timezone(input: &ScalarFunctionInput) -> Expr {
@@ -1399,7 +1387,7 @@ pub(super) fn list_built_in_datetime_functions() -> Vec<(&'static str, ScalarFun
         ),
         ("current_timezone", F::custom(current_timezone)),
         ("date_add", F::custom(|input| dateadd(input, "date_add"))),
-        ("date_diff", F::custom(datediff)),
+        ("date_diff", F::custom(date_diff)),
         (
             "date_format",
             F::custom(|input| match input.arguments.len() {
@@ -1506,8 +1494,9 @@ pub(super) fn list_built_in_datetime_functions() -> Vec<(&'static str, ScalarFun
         ),
         ("timestampadd", F::custom(timestampadd)),
         ("timestamp_add", F::custom(timestampadd)),
-        ("timestampdiff", F::custom(datediff)),
-        ("timestamp_diff", F::custom(datediff)),
+        ("timestampdiff", F::custom(timestampdiff)),
+        ("timestamp_diff", F::custom(timestampdiff)),
+        ("timediff", F::custom(timediff)),
         ("to_date", F::custom(to_date)),
         ("to_time", F::custom(to_time)),
         ("try_to_time", F::custom(try_to_time)),
