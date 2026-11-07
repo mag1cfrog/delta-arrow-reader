@@ -22,6 +22,8 @@ const REFERENCE: &str = include_str!("fixtures/finite-range-1086-spark.jsonl");
 const LIMITED_REQUEST: &str = include_str!("fixtures/finite-range-1086-limited-cases.json");
 const LIMITED_REFERENCE: &str = include_str!("fixtures/finite-range-1086-limited-spark.jsonl");
 const LIMITED_CORPUS: &str = "finite-range-1086-limited-output-diagnostics";
+const NARROWING_REQUEST: &str = include_str!("fixtures/finite-range-1086-narrowing-cases.json");
+const NARROWING_REFERENCE: &str = include_str!("fixtures/finite-range-1086-narrowing-spark.jsonl");
 
 fn validate_finite_range_references(request: &Value, records: &[Value]) -> TestResult {
     if request["issue"] != 1086
@@ -287,6 +289,96 @@ fn parse_finite_range_fixture() -> TestResult<(Value, Vec<Value>)> {
     Ok((request, records))
 }
 
+fn parse_narrowing_range_fixture() -> TestResult<(Value, Vec<Value>)> {
+    let request: Value = serde_json::from_str(NARROWING_REQUEST)?;
+    let records = NARROWING_REFERENCE
+        .lines()
+        .map(serde_json::from_str)
+        .collect::<Result<Vec<_>, _>>()?;
+    validate_narrowing_range_references(&request, &records)?;
+    Ok((request, records))
+}
+
+fn validate_narrowing_range_references(request: &Value, records: &[Value]) -> TestResult {
+    let corpora = request["corpora"]
+        .as_array()
+        .ok_or("missing narrowing corpora")?;
+    if request["issue"] != 1086
+        || request["expected_record_count"] != 24
+        || request["sql_source_count"] != 12
+        || corpora.len() != 1
+        || records.len() != 25
+        || request["spark_version"] != "4.2.0"
+        || request["spark_revision"] != "32f7299601108917fb01920a54e084595b7b3bf8"
+        || corpora[0]["corpus"] != "finite-range-1086-narrowing-controls"
+        || corpora[0]["metadata"] != json!({"spark_version":"4.2.0","timezone":"UTC","inputs":[]})
+    {
+        return Err("narrowing finite RANGE inventory differs".into());
+    }
+    let pairs = BTreeMap::from([
+        (("TINYINT", "SMALLINT"), "128"),
+        (("TINYINT", "INT"), "128"),
+        (("TINYINT", "BIGINT"), "128"),
+        (("SMALLINT", "INT"), "32768"),
+        (("SMALLINT", "BIGINT"), "32768"),
+        (("INT", "BIGINT"), "2147483648"),
+    ]);
+    let mut contexts = BTreeSet::new();
+    let mut definitions = BTreeMap::new();
+    for case in corpora[0]["cases"]
+        .as_array()
+        .ok_or("missing narrowing cases")?
+    {
+        let identity = case_identity(case)?;
+        let coverage = &case["coverage"];
+        let key_type = coverage["key_type"]
+            .as_str()
+            .ok_or("missing narrowing key type")?;
+        let source_type = coverage["source_offset_type"]
+            .as_str()
+            .ok_or("missing narrowing source type")?;
+        let offset = pairs
+            .get(&(key_type, source_type))
+            .ok_or("unexpected narrowing pair")?;
+        let shape = coverage["shape"]
+            .as_str()
+            .ok_or("missing narrowing shape")?;
+        let lower = match shape {
+            "unbounded" => "UNBOUNDED PRECEDING".into(),
+            "zero_following" => format!("CAST(0 AS {source_type}) FOLLOWING"),
+            _ => return Err("unexpected narrowing shape".into()),
+        };
+        let frame = format!("RANGE BETWEEN {lower} AND CAST({offset} AS {source_type}) FOLLOWING");
+        let values = format!(
+            "(0,CAST(-1 AS {key_type})),(1,CAST(0 AS {key_type})),(2,CAST(1 AS {key_type}))"
+        );
+        let sql = format!(
+            "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST {frame}) AS n FROM VALUES {values} AS t(id,k) ORDER BY id"
+        );
+        if case["corpus"] != corpora[0]["corpus"]
+            || case["ordered"] != true
+            || case["ownership"] != "finite_signed_integer_narrowing_control"
+            || coverage["family"] != "narrowing_coercion"
+            || coverage["positive_offset"] != *offset
+            || coverage["order"] != "ASC NULLS FIRST"
+            || coverage["outer_order"] != "id"
+            || coverage["frame"] != frame
+            || case["sql"] != sql
+            || ["expected", "status", "rows_raw", "spark_error_details"]
+                .iter()
+                .any(|field| case.get(*field).is_some())
+            || !contexts.insert((key_type, source_type, shape, identity.2))
+            || definitions.insert(identity, case).is_some()
+        {
+            return Err("narrowing finite RANGE source clauses differ".into());
+        }
+    }
+    if contexts.len() != 24 || definitions.len() != 24 {
+        return Err("narrowing finite RANGE source context inventory differs".into());
+    }
+    validate_range_capture(request, records, &definitions)
+}
+
 fn parse_limited_range_fixture() -> TestResult<(Value, Vec<Value>)> {
     let request = serde_json::from_str(LIMITED_REQUEST)?;
     let records = LIMITED_REFERENCE
@@ -302,6 +394,7 @@ async fn finite_signed_integer_range_frames_match_spark() -> TestResult {
     let fixtures = [
         parse_finite_range_fixture()?,
         parse_limited_range_fixture()?,
+        parse_narrowing_range_fixture()?,
     ];
     let mut completed = BTreeSet::new();
     let mut differences = Vec::new();
@@ -377,10 +470,10 @@ async fn finite_signed_integer_range_frames_match_spark() -> TestResult {
     }
     eprintln!(
         "FINITE_RANGE_SUMMARY {}",
-        json!({"observations":completed.len(),"expected_observations":392,
+        json!({"observations":completed.len(),"expected_observations":440,
         "differences":differences.len()}),
     );
-    assert_eq!(completed.len(), 392);
+    assert_eq!(completed.len(), 440);
     assert!(
         differences.is_empty(),
         "finite RANGE differences:\n{}",
@@ -547,6 +640,21 @@ fn finite_range_member_ids_keep_the_recorded_array_codec() -> TestResult {
             "accepted malformed member_ids codec"
         );
     }
+    Ok(())
+}
+
+#[test]
+fn narrowing_range_references_reject_lost_source_and_capture_contracts() -> TestResult {
+    let (request, records) = parse_narrowing_range_fixture()?;
+    let mut missing = records.clone();
+    missing.pop();
+    assert!(validate_narrowing_range_references(&request, &missing).is_err());
+    let mut changed = request.clone();
+    changed["corpora"][0]["cases"][0]["coverage"]["positive_offset"] = json!("0");
+    assert!(validate_narrowing_range_references(&changed, &records).is_err());
+    let mut changed = records.clone();
+    changed[1]["spark_error_details"]["cause_chain_complete"] = Value::Null;
+    assert!(validate_narrowing_range_references(&request, &changed).is_err());
     Ok(())
 }
 
