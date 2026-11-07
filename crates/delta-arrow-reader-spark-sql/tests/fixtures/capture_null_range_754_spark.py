@@ -25,7 +25,7 @@ REQUEST = HERE / "null-range-754-cases.json"
 ORIGINAL_MANIFEST = HERE / "date-range-747-cases.json"
 
 
-def inventory():
+def load_capture_requests():
     request = json.loads(REQUEST.read_text())
     assert request["issue"] == 754 and request["spark_version"] == VERSION
     assert request["spark_revision"] == REVISION
@@ -88,7 +88,7 @@ def main():
     parser.add_argument("--self-check", action="store_true")
     args = parser.parse_args()
     assert sys.version_info[:2] == (3, 12), "use Python 3.12"
-    request = inventory()
+    request = load_capture_requests()
     if args.self_check:
         assert args.output is None and "pyspark" not in sys.modules
         check_capture_protocol(request)

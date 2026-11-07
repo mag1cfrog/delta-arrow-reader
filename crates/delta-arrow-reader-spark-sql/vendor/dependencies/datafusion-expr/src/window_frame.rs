@@ -92,8 +92,18 @@ pub struct WindowFrame {
     ///                +--------------+
     /// ```
     causal: bool,
-    /// Check DATE offset negation only when a required comparison evaluates it.
-    date32_offset_negation_check: bool,
+    /// Arithmetic selected by the admitted frame's producer.
+    range_offset_arithmetic: RangeOffsetArithmetic,
+}
+
+/// Arithmetic for finite RANGE offsets; native construction retains DataFusion semantics.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Hash)]
+pub enum RangeOffsetArithmetic {
+    DataFusion,
+    /// Spark signed-integer targets honor ANSI; Date32 key addition always wraps.
+    Spark {
+        ansi_mode: bool,
+    },
 }
 
 impl fmt::Display for WindowFrame {
@@ -114,8 +124,12 @@ impl fmt::Debug for WindowFrame {
             "WindowFrame {{ units: {:?}, start_bound: {:?}, end_bound: {:?}, is_causal: {:?}",
             self.units, self.start_bound, self.end_bound, self.causal
         )?;
-        if self.date32_offset_negation_check {
-            f.write_str(", date32_offset_negation_check: true")?;
+        if self.range_offset_arithmetic != RangeOffsetArithmetic::DataFusion {
+            write!(
+                f,
+                ", range_offset_arithmetic: {:?}",
+                self.range_offset_arithmetic
+            )?;
         }
         f.write_str(" }")
     }
@@ -168,7 +182,7 @@ impl WindowFrame {
                 start_bound: WindowFrameBound::Preceding(ScalarValue::UInt64(None)),
                 end_bound: WindowFrameBound::CurrentRow,
                 causal: strict,
-                date32_offset_negation_check: false,
+                range_offset_arithmetic: RangeOffsetArithmetic::DataFusion,
             }
         } else {
             // This window frame covers the whole table (or partition if `PARTITION BY`
@@ -179,7 +193,7 @@ impl WindowFrame {
                 start_bound: WindowFrameBound::Preceding(ScalarValue::UInt64(None)),
                 end_bound: WindowFrameBound::Following(ScalarValue::UInt64(None)),
                 causal: false,
-                date32_offset_negation_check: false,
+                range_offset_arithmetic: RangeOffsetArithmetic::DataFusion,
             }
         }
     }
@@ -219,7 +233,7 @@ impl WindowFrame {
             }
         };
         let mut reversed = Self::new_bounds(self.units, start_bound, end_bound);
-        reversed.date32_offset_negation_check = self.date32_offset_negation_check;
+        reversed.range_offset_arithmetic = self.range_offset_arithmetic;
         reversed
     }
 
@@ -233,15 +247,18 @@ impl WindowFrame {
         self.start_bound.is_null_offset() || self.end_bound.is_null_offset()
     }
 
-    /// Enable checked DATE offset negation at comparison time for an admitted frame.
-    pub fn with_date32_offset_negation_check(mut self) -> Self {
-        self.date32_offset_negation_check = true;
+    /// Select finite RANGE arithmetic after the producer has admitted the frame.
+    pub fn with_range_offset_arithmetic(
+        mut self,
+        arithmetic: RangeOffsetArithmetic,
+    ) -> Self {
+        self.range_offset_arithmetic = arithmetic;
         self
     }
 
-    /// Whether DATE target subtraction must check offset negation.
-    pub fn checks_date32_offset_negation(&self) -> bool {
-        self.date32_offset_negation_check
+    /// Arithmetic selected by the producer for finite RANGE offsets.
+    pub fn range_offset_arithmetic(&self) -> RangeOffsetArithmetic {
+        self.range_offset_arithmetic
     }
 
     /// Initializes window frame from units (type), start bound and end bound.
@@ -250,38 +267,40 @@ impl WindowFrame {
         start_bound: WindowFrameBound,
         end_bound: WindowFrameBound,
     ) -> Self {
-        let causal = !start_bound.is_null_offset() && !end_bound.is_null_offset() && match units {
-            WindowFrameUnits::Rows => match &end_bound {
-                WindowFrameBound::Following(value) => {
-                    if value.is_null() {
-                        // Unbounded following
-                        false
-                    } else {
-                        let zero = ScalarValue::new_zero(&value.data_type());
-                        zero.map(|zero| value.eq(&zero)).unwrap_or(false)
+        let causal = !start_bound.is_null_offset()
+            && !end_bound.is_null_offset()
+            && match units {
+                WindowFrameUnits::Rows => match &end_bound {
+                    WindowFrameBound::Following(value) => {
+                        if value.is_null() {
+                            // Unbounded following
+                            false
+                        } else {
+                            let zero = ScalarValue::new_zero(&value.data_type());
+                            zero.map(|zero| value.eq(&zero)).unwrap_or(false)
+                        }
                     }
-                }
-                _ => true,
-            },
-            WindowFrameUnits::Range | WindowFrameUnits::Groups => match &end_bound {
-                WindowFrameBound::Preceding(value) => {
-                    if value.is_null() {
-                        // Unbounded preceding
-                        true
-                    } else {
-                        let zero = ScalarValue::new_zero(&value.data_type());
-                        zero.map(|zero| value.gt(&zero)).unwrap_or(false)
+                    _ => true,
+                },
+                WindowFrameUnits::Range | WindowFrameUnits::Groups => match &end_bound {
+                    WindowFrameBound::Preceding(value) => {
+                        if value.is_null() {
+                            // Unbounded preceding
+                            true
+                        } else {
+                            let zero = ScalarValue::new_zero(&value.data_type());
+                            zero.map(|zero| value.gt(&zero)).unwrap_or(false)
+                        }
                     }
-                }
-                _ => false,
-            },
-        };
+                    _ => false,
+                },
+            };
         Self {
             units,
             start_bound,
             end_bound,
             causal,
-            date32_offset_negation_check: false,
+            range_offset_arithmetic: RangeOffsetArithmetic::DataFusion,
         }
     }
 
@@ -377,7 +396,10 @@ pub enum WindowFrameBound {
 impl WindowFrameBound {
     /// Whether this is an explicit NULL RANGE offset, not a native unbounded sentinel.
     pub fn is_null_offset(&self) -> bool {
-        matches!(self, Self::PrecedingNullOffset(_) | Self::FollowingNullOffset(_))
+        matches!(
+            self,
+            Self::PrecedingNullOffset(_) | Self::FollowingNullOffset(_)
+        )
     }
 
     pub fn is_unbounded(&self) -> bool {

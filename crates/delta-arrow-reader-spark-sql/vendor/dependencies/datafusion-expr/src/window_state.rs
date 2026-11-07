@@ -20,6 +20,7 @@
 
 use std::{collections::VecDeque, fmt, ops::Range, sync::Arc};
 
+use crate::window_frame::RangeOffsetArithmetic;
 use crate::{WindowFrame, WindowFrameBound, WindowFrameUnits};
 
 use arrow::compute::kernels::sort::{LexicographicalComparator, SortColumn};
@@ -27,10 +28,12 @@ use arrow::{
     array::ArrayRef,
     compute::{SortOptions, concat, concat_batches},
     datatypes::{DataType, SchemaRef},
+    error::ArrowError,
     record_batch::RecordBatch,
 };
 use datafusion_common::{
-    Result, ScalarValue, exec_datafusion_err, internal_datafusion_err, internal_err,
+    DataFusionError, Result, ScalarValue, exec_datafusion_err, internal_datafusion_err,
+    internal_err,
     utils::{compare_rows, get_row_at_idx, search_in_slice},
 };
 
@@ -357,12 +360,13 @@ pub fn date32_range_target(
 }
 
 /// Computes a RANGE comparison target using the current ORDER BY key type.
-/// `None` denotes a native unbounded bound or the existing checked-arithmetic
-/// overflow edge. Membership retains its directional edge; completion must wait.
+/// `None` denotes a native unbounded bound or a DataFusion checked-arithmetic
+/// edge. Spark checked overflow is an error; non-ANSI signed targets wrap.
 pub fn range_bound_target(
     current_key: &ScalarValue,
     bound: &WindowFrameBound,
     descending: bool,
+    arithmetic: RangeOffsetArithmetic,
 ) -> Result<Option<ScalarValue>> {
     let (delta, preceding) = match bound {
         WindowFrameBound::Preceding(delta) | WindowFrameBound::Following(delta)
@@ -380,6 +384,68 @@ pub fn range_bound_target(
     };
     if current_key.is_null() {
         return Ok(Some(current_key.clone()));
+    }
+    if let RangeOffsetArithmetic::Spark { ansi_mode } = arithmetic {
+        let is_date = matches!(current_key, ScalarValue::Date32(_));
+        let admitted_pair = matches!(
+            (current_key, delta),
+            (ScalarValue::Int8(_), ScalarValue::Int8(_))
+                | (ScalarValue::Int16(_), ScalarValue::Int16(_))
+                | (ScalarValue::Int32(_), ScalarValue::Int32(_))
+                | (ScalarValue::Int64(_), ScalarValue::Int64(_))
+                | (ScalarValue::Date32(_), ScalarValue::Int32(_))
+        );
+        if !admitted_pair {
+            return internal_err!(
+                "Spark RANGE offset arithmetic requires admitted signed-integer or Date32/INT values"
+            );
+        }
+        let negate = |offset: &ScalarValue| -> Result<ScalarValue> {
+            if !ansi_mode {
+                return ScalarValue::new_zero(&offset.data_type())?.sub(offset);
+            }
+            offset.arithmetic_negate().map_err(|error| {
+                if matches!(&error, DataFusionError::ArrowError(cause, _)
+                    if matches!(cause.as_ref(), ArrowError::ArithmeticOverflow(_)))
+                {
+                    exec_datafusion_err!(
+                        "{} overflow on negative({offset})",
+                        offset.data_type()
+                    )
+                    .context(if is_date {
+                        "[ARITHMETIC_OVERFLOW] DATE RANGE offset negation"
+                    } else {
+                        "[ARITHMETIC_OVERFLOW] RANGE offset negation"
+                    })
+                } else {
+                    error
+                }
+            })
+        };
+        let mut offset = if preceding {
+            negate(delta)?
+        } else {
+            delta.clone()
+        };
+        if descending {
+            offset = negate(&offset)?;
+        }
+        if is_date {
+            return Ok(date32_range_target(current_key, &offset, true));
+        }
+        return if ansi_mode {
+            current_key.add_checked(&offset).map(Some).map_err(|error| {
+                if matches!(&error, DataFusionError::ArrowError(cause, _)
+                    if matches!(cause.as_ref(), ArrowError::ArithmeticOverflow(_)))
+                {
+                    error.context("[ARITHMETIC_OVERFLOW] RANGE comparison target")
+                } else {
+                    error
+                }
+            })
+        } else {
+            current_key.add(&offset).map(Some)
+        };
     }
     let add_offset = preceding == descending;
     if let Some(target) = date32_range_target(current_key, delta, add_offset) {
@@ -425,22 +491,38 @@ impl WindowFrameStateRange {
         if date32_wrapping_bound || window_frame.has_null_offset() {
             let end = self.calculate_index_of_bound::<false>(
                 window_frame,
-                &window_frame.end_bound, range_columns, last_range, idx, length,
+                &window_frame.end_bound,
+                range_columns,
+                last_range,
+                idx,
+                length,
             )?;
             // Spark advances the lower cursor only over input consumed by the upper cursor.
             let start = self.calculate_index_of_bound::<true>(
                 window_frame,
-                &window_frame.start_bound, range_columns, last_range, idx, end,
+                &window_frame.start_bound,
+                range_columns,
+                last_range,
+                idx,
+                end,
             )?;
             return Ok(Range { start, end });
         }
         let start = self.calculate_index_of_bound::<true>(
             window_frame,
-            &window_frame.start_bound, range_columns, last_range, idx, length,
+            &window_frame.start_bound,
+            range_columns,
+            last_range,
+            idx,
+            length,
         )?;
         let end = self.calculate_index_of_bound::<false>(
             window_frame,
-            &window_frame.end_bound, range_columns, last_range, idx, length,
+            &window_frame.end_bound,
+            range_columns,
+            last_range,
+            idx,
+            length,
         )?;
         Ok(Range { start, end })
     }
@@ -457,24 +539,26 @@ impl WindowFrameStateRange {
         match bound {
             WindowFrameBound::Preceding(n) if SIDE && n.is_null() => Ok(0),
             WindowFrameBound::Following(n) if !SIDE && n.is_null() => Ok(length),
-            WindowFrameBound::Preceding(_)
-            | WindowFrameBound::PrecedingNullOffset(_) => self.calculate_index_of_row::<SIDE, true>(
-                window_frame,
-                range_columns,
-                last_range,
-                idx,
-                bound,
-                length,
-            ),
-            WindowFrameBound::Following(_)
-            | WindowFrameBound::FollowingNullOffset(_) => self.calculate_index_of_row::<SIDE, false>(
-                window_frame,
-                range_columns,
-                last_range,
-                idx,
-                bound,
-                length,
-            ),
+            WindowFrameBound::Preceding(_) | WindowFrameBound::PrecedingNullOffset(_) => {
+                self.calculate_index_of_row::<SIDE, true>(
+                    window_frame,
+                    range_columns,
+                    last_range,
+                    idx,
+                    bound,
+                    length,
+                )
+            }
+            WindowFrameBound::Following(_) | WindowFrameBound::FollowingNullOffset(_) => {
+                self.calculate_index_of_row::<SIDE, false>(
+                    window_frame,
+                    range_columns,
+                    last_range,
+                    idx,
+                    bound,
+                    length,
+                )
+            }
             WindowFrameBound::CurrentRow => self.calculate_index_of_row::<SIDE, false>(
                 window_frame,
                 range_columns,
@@ -559,18 +643,13 @@ impl WindowFrameStateRange {
             let unbounded_edge = if SEARCH_SIDE { search_start } else { length };
             let mut targets = Vec::with_capacity(current_row_values.len());
             for value in &current_row_values {
-                if window_frame.checks_date32_offset_negation()
-                    && matches!(value, ScalarValue::Date32(Some(_)))
-                    && SEARCH_SIDE != is_descending
-                    && let WindowFrameBound::Preceding(ScalarValue::Int32(Some(offset)))
-                        | WindowFrameBound::Following(ScalarValue::Int32(Some(offset))) = bound
-                {
-                    offset.checked_neg().ok_or_else(|| {
-                        exec_datafusion_err!("Int32 overflow on negative({offset})")
-                            .context("[ARITHMETIC_OVERFLOW] DATE RANGE offset negation")
-                    })?;
-                }
-                let Some(target) = range_bound_target(value, bound, is_descending)? else {
+                let Some(target) = range_bound_target(
+                    value,
+                    bound,
+                    is_descending,
+                    window_frame.range_offset_arithmetic(),
+                )?
+                else {
                     return Ok(unbounded_edge);
                 };
                 targets.push(target);
@@ -899,10 +978,21 @@ mod tests {
                 WindowFrameBound::Preceding(ScalarValue::Int32(Some(0))),
                 WindowFrameBound::Following(ScalarValue::Int32(Some(0))),
             ));
-            let mut state = WindowFrameContext::new(frame, vec![SortOptions { descending, nulls_first }]);
+            let mut state = WindowFrameContext::new(
+                frame,
+                vec![SortOptions {
+                    descending,
+                    nulls_first,
+                }],
+            );
             let mut last_range = 0..0;
             for (idx, expected) in [0..1, 1..3, 1..3, 3..4].into_iter().enumerate() {
-                last_range = state.calculate_range(std::slice::from_ref(&column), &last_range, column.len(), idx)?;
+                last_range = state.calculate_range(
+                    std::slice::from_ref(&column),
+                    &last_range,
+                    column.len(),
+                    idx,
+                )?;
                 assert_eq!(last_range, expected);
             }
         }

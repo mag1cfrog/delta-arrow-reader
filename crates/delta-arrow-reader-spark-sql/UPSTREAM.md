@@ -1414,6 +1414,13 @@ DATE Interval/Duration NULL bounds keep their existing temporal representation
 and coercion. The SQL unparser retains an explicit typed NULL expression or
 returns the existing checked type-conversion error.
 
+Sail assigns `RangeOffsetArithmetic::Spark` only to admitted explicit NULL frames
+on signed-integer or DATE keys. Integer target addition and sign negation check
+overflow in ANSI mode and wrap otherwise; DATE day addition wraps in both modes.
+Minimum PRECEDING offsets retain their SQL or optimizer failure phase. Remaining
+checked arithmetic runs only for a consumed bound comparison. Plain finite and
+native frames keep the DataFusion policy, including their existing arithmetic.
+
 Aggregate and frame-aware builtin windows with explicit NULL targets buffer the
 whole partition, so memory grows with partition size. These frames are non-causal,
 disable aggregate-result ordering inference and prevent plan reversal to reuse

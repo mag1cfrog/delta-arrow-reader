@@ -14,6 +14,7 @@ use datafusion::functions_aggregate::count::count_udaf;
 use datafusion::functions_aggregate::min_max::max_udaf;
 use datafusion::functions_window::nth_value::{first_value_udwf, last_value_udwf, nth_value_udwf};
 use datafusion::functions_window::row_number::row_number_udwf;
+use datafusion::logical_expr::window_frame::RangeOffsetArithmetic;
 use datafusion::logical_expr::window_state::{
     PartitionBatchState, WindowFrameContext, range_bound_target,
 };
@@ -606,7 +607,10 @@ fn null_range_targets_preserve_native_unbounded_and_arithmetic_edges() -> TestRe
         ] {
             assert!(bound.is_unbounded());
             assert!(!bound.is_null_offset());
-            assert_eq!(range_bound_target(&null, &bound, false)?, None);
+            assert_eq!(
+                range_bound_target(&null, &bound, false, RangeOffsetArithmetic::DataFusion)?,
+                None
+            );
             assert!(bound.to_string().starts_with("UNBOUNDED "));
         }
     }
@@ -618,7 +622,12 @@ fn null_range_targets_preserve_native_unbounded_and_arithmetic_edges() -> TestRe
         assert!(bound.is_null_offset());
         assert!(bound.to_string().starts_with("NULL "));
         assert_eq!(
-            range_bound_target(&ScalarValue::Date32(Some(1)), &bound, false)?,
+            range_bound_target(
+                &ScalarValue::Date32(Some(1)),
+                &bound,
+                false,
+                RangeOffsetArithmetic::DataFusion
+            )?,
             Some(ScalarValue::Date32(None))
         );
         let frame = WindowFrame::new_bounds(
@@ -638,7 +647,12 @@ fn null_range_targets_preserve_native_unbounded_and_arithmetic_edges() -> TestRe
         WindowFrameBound::Following(ScalarValue::Int32(Some(1))),
     ] {
         assert_eq!(
-            range_bound_target(&ScalarValue::Int32(None), &bound, false)?,
+            range_bound_target(
+                &ScalarValue::Int32(None),
+                &bound,
+                false,
+                RangeOffsetArithmetic::DataFusion
+            )?,
             Some(ScalarValue::Int32(None))
         );
     }
@@ -647,16 +661,27 @@ fn null_range_targets_preserve_native_unbounded_and_arithmetic_edges() -> TestRe
             &ScalarValue::UInt32(Some(1)),
             &WindowFrameBound::Preceding(ScalarValue::UInt32(Some(2))),
             false,
+            RangeOffsetArithmetic::DataFusion
         )?,
         Some(ScalarValue::UInt32(Some(0)))
     );
     let following_one = WindowFrameBound::Following(ScalarValue::Int32(Some(1)));
     assert_eq!(
-        range_bound_target(&ScalarValue::Int32(Some(i32::MAX)), &following_one, false)?,
+        range_bound_target(
+            &ScalarValue::Int32(Some(i32::MAX)),
+            &following_one,
+            false,
+            RangeOffsetArithmetic::DataFusion
+        )?,
         None
     );
     assert_eq!(
-        range_bound_target(&ScalarValue::Date32(Some(i32::MAX)), &following_one, false)?,
+        range_bound_target(
+            &ScalarValue::Date32(Some(i32::MAX)),
+            &following_one,
+            false,
+            RangeOffsetArithmetic::DataFusion
+        )?,
         Some(ScalarValue::Date32(Some(i32::MIN)))
     );
     let native = WindowFrame::new_bounds(
@@ -1379,18 +1404,38 @@ fn date_null_frame_policy_survives_clone_and_reverse_without_changing_sql() -> T
         WindowFrameBound::Following(ScalarValue::Int32(Some(i32::MIN))),
         WindowFrameBound::PrecedingNullOffset(DataType::Int32),
     );
-    assert!(!frame.checks_date32_offset_negation());
-    assert!(!WindowFrame::new(None).checks_date32_offset_negation());
-    assert!(!WindowFrame::new(Some(false)).checks_date32_offset_negation());
-    let checked = frame.clone().with_date32_offset_negation_check();
-    assert!(checked.checks_date32_offset_negation());
+    assert_eq!(
+        frame.range_offset_arithmetic(),
+        RangeOffsetArithmetic::DataFusion
+    );
+    assert_eq!(
+        WindowFrame::new(None).range_offset_arithmetic(),
+        RangeOffsetArithmetic::DataFusion
+    );
+    assert_eq!(
+        WindowFrame::new(Some(false)).range_offset_arithmetic(),
+        RangeOffsetArithmetic::DataFusion
+    );
+    let checked = frame
+        .clone()
+        .with_range_offset_arithmetic(RangeOffsetArithmetic::Spark { ansi_mode: true });
+    assert_eq!(
+        checked.range_offset_arithmetic(),
+        RangeOffsetArithmetic::Spark { ansi_mode: true }
+    );
     assert_ne!(checked, frame);
-    assert!(checked.clone().checks_date32_offset_negation());
-    assert!(checked.reverse().checks_date32_offset_negation());
+    assert_eq!(
+        checked.clone().range_offset_arithmetic(),
+        RangeOffsetArithmetic::Spark { ansi_mode: true }
+    );
+    assert_eq!(
+        checked.reverse().range_offset_arithmetic(),
+        RangeOffsetArithmetic::Spark { ansi_mode: true }
+    );
     assert_eq!(checked.reverse().reverse(), checked);
     assert_eq!(checked.to_string(), frame.to_string());
-    assert!(!format!("{frame:?}").contains("date32_offset_negation_check"));
-    assert!(format!("{checked:?}").contains("date32_offset_negation_check: true"));
+    assert!(!format!("{frame:?}").contains("range_offset_arithmetic"));
+    assert!(format!("{checked:?}").contains("range_offset_arithmetic: Spark { ansi_mode: true }"));
     let hash = |value: &WindowFrame| {
         let mut state = DefaultHasher::new();
         value.hash(&mut state);
@@ -1414,7 +1459,7 @@ fn date_null_frame_checks_negation_only_for_a_required_non_null_comparison() -> 
                 WindowFrameBound::Following(ScalarValue::Int32(Some(i32::MIN))),
                 WindowFrameBound::PrecedingNullOffset(DataType::Int32),
             )
-            .with_date32_offset_negation_check(),
+            .with_range_offset_arithmetic(RangeOffsetArithmetic::Spark { ansi_mode: true }),
         );
         let mut context = WindowFrameContext::new(
             frame,
@@ -1436,7 +1481,7 @@ fn date_null_frame_checks_negation_only_for_a_required_non_null_comparison() -> 
         WindowFrameBound::Following(ScalarValue::Int32(Some(i32::MIN))),
         WindowFrameBound::PrecedingNullOffset(DataType::Int32),
     )
-    .with_date32_offset_negation_check();
+    .with_range_offset_arithmetic(RangeOffsetArithmetic::Spark { ansi_mode: true });
     let mut context = WindowFrameContext::new(
         Arc::new(frame.clone()),
         vec![SortOptions {
@@ -1531,7 +1576,9 @@ fn date_null_frame_static_aggregate_and_builtin_preserve_lazy_errors_and_validit
             )?)
         };
         let unchecked = make_window(frame.clone())?;
-        let checked = make_window(frame.with_date32_offset_negation_check())?;
+        let checked = make_window(
+            frame.with_range_offset_arithmetic(RangeOffsetArithmetic::Spark { ansi_mode: true }),
+        )?;
         assert!(!checked.uses_bounded_memory());
         assert_eq!(checked.field()?, unchecked.field()?);
         let values = checked.evaluate(&batch)?;
@@ -1619,7 +1666,7 @@ fn date_null_frame_completion_does_not_speculate_on_checked_targets() -> TestRes
                 WindowFrameBound::PrecedingNullOffset(DataType::Int32),
                 WindowFrameBound::Following(ScalarValue::Int32(Some(i32::MIN))),
             )
-            .with_date32_offset_negation_check(),
+            .with_range_offset_arithmetic(RangeOffsetArithmetic::Spark { ansi_mode: true }),
         ),
         schema,
         false,
@@ -1645,5 +1692,229 @@ fn date_null_frame_completion_does_not_speculate_on_checked_targets() -> TestRes
         .downcast_ref::<Int64Array>()
         .ok_or("count type")?;
     assert_eq!(values.iter().collect::<Vec<_>>(), vec![Some(1)]);
+    Ok(())
+}
+
+#[test]
+fn spark_integer_range_arithmetic_wraps_or_checks_each_signed_width() -> TestResult {
+    for (maximum, minimum, one, zero) in [
+        (
+            ScalarValue::Int8(Some(i8::MAX)),
+            ScalarValue::Int8(Some(i8::MIN)),
+            ScalarValue::Int8(Some(1)),
+            ScalarValue::Int8(Some(0)),
+        ),
+        (
+            ScalarValue::Int16(Some(i16::MAX)),
+            ScalarValue::Int16(Some(i16::MIN)),
+            ScalarValue::Int16(Some(1)),
+            ScalarValue::Int16(Some(0)),
+        ),
+        (
+            ScalarValue::Int32(Some(i32::MAX)),
+            ScalarValue::Int32(Some(i32::MIN)),
+            ScalarValue::Int32(Some(1)),
+            ScalarValue::Int32(Some(0)),
+        ),
+        (
+            ScalarValue::Int64(Some(i64::MAX)),
+            ScalarValue::Int64(Some(i64::MIN)),
+            ScalarValue::Int64(Some(1)),
+            ScalarValue::Int64(Some(0)),
+        ),
+    ] {
+        let following_one = WindowFrameBound::Following(one.clone());
+        assert_eq!(
+            range_bound_target(
+                &maximum,
+                &following_one,
+                false,
+                RangeOffsetArithmetic::DataFusion
+            )?,
+            None
+        );
+        assert_eq!(
+            range_bound_target(
+                &maximum,
+                &following_one,
+                false,
+                RangeOffsetArithmetic::Spark { ansi_mode: false }
+            )?,
+            Some(minimum.clone())
+        );
+        let error = range_bound_target(
+            &maximum,
+            &following_one,
+            false,
+            RangeOffsetArithmetic::Spark { ansi_mode: true },
+        )
+        .expect_err("checked addition must overflow");
+        assert!(error.to_string().contains("[ARITHMETIC_OVERFLOW]"));
+        let following_minimum = WindowFrameBound::Following(minimum.clone());
+        // Direct checked subtraction would accept MIN-MIN; Spark first negates the offset.
+        assert_eq!(
+            range_bound_target(
+                &minimum,
+                &following_minimum,
+                true,
+                RangeOffsetArithmetic::DataFusion
+            )?,
+            Some(zero.clone())
+        );
+        assert_eq!(
+            range_bound_target(
+                &minimum,
+                &following_minimum,
+                true,
+                RangeOffsetArithmetic::Spark { ansi_mode: false }
+            )?,
+            Some(zero.clone())
+        );
+        let error = range_bound_target(
+            &minimum,
+            &following_minimum,
+            true,
+            RangeOffsetArithmetic::Spark { ansi_mode: true },
+        )
+        .expect_err("DESC must check MIN negation before addition");
+        assert!(
+            error
+                .to_string()
+                .contains("[ARITHMETIC_OVERFLOW] RANGE offset negation")
+        );
+        assert!(error.to_string().contains("overflow on negative("));
+        let preceding_minimum = WindowFrameBound::Preceding(minimum.clone());
+        assert_eq!(
+            range_bound_target(
+                &minimum,
+                &preceding_minimum,
+                false,
+                RangeOffsetArithmetic::Spark { ansi_mode: false }
+            )?,
+            Some(zero)
+        );
+        assert!(
+            range_bound_target(
+                &minimum,
+                &preceding_minimum,
+                false,
+                RangeOffsetArithmetic::Spark { ansi_mode: true }
+            )
+            .is_err()
+        );
+        let null = ScalarValue::try_from(&maximum.data_type())?;
+        assert_eq!(
+            range_bound_target(
+                &null,
+                &following_minimum,
+                true,
+                RangeOffsetArithmetic::Spark { ansi_mode: true }
+            )?,
+            Some(null.clone())
+        );
+        assert_eq!(
+            range_bound_target(
+                &null,
+                &WindowFrameBound::Following(null.clone()),
+                true,
+                RangeOffsetArithmetic::Spark { ansi_mode: true }
+            )?,
+            None
+        );
+        assert_eq!(
+            range_bound_target(
+                &maximum,
+                &WindowFrameBound::Preceding(one),
+                true,
+                RangeOffsetArithmetic::Spark { ansi_mode: false }
+            )?,
+            Some(minimum)
+        );
+    }
+    let type_error = range_bound_target(
+        &ScalarValue::Int32(Some(1)),
+        &WindowFrameBound::Following(ScalarValue::Float64(Some(1.0))),
+        false,
+        RangeOffsetArithmetic::Spark { ansi_mode: true },
+    )
+    .expect_err("unsupported offset types must fail without overflow relabeling");
+    assert!(!type_error.to_string().contains("[ARITHMETIC_OVERFLOW]"));
+    Ok(())
+}
+
+#[test]
+fn spark_integer_range_targets_preserve_consumed_upper_and_empty_comparisons() -> TestResult {
+    // Spark's independent minimum_int_no_null_nullp_minp_asc_nf case has count6 for this partition.
+    let column: ArrayRef = Arc::new(Int32Array::from(vec![-4, 0, 1, 1, 3, 7]));
+    let frame = Arc::new(
+        WindowFrame::new_bounds(
+            WindowFrameUnits::Range,
+            WindowFrameBound::PrecedingNullOffset(DataType::Int32),
+            WindowFrameBound::Preceding(ScalarValue::Int32(Some(i32::MIN))),
+        )
+        .with_range_offset_arithmetic(RangeOffsetArithmetic::Spark { ansi_mode: false }),
+    );
+    let mut context = WindowFrameContext::new(
+        frame,
+        vec![SortOptions {
+            descending: false,
+            nulls_first: true,
+        }],
+    );
+    let mut last = 0..0;
+    for idx in 0..column.len() {
+        last = context.calculate_range(std::slice::from_ref(&column), &last, column.len(), idx)?;
+        assert_eq!(last, 0..6);
+    }
+    for (nulls_first, expect_error) in [(true, false), (false, true)] {
+        let frame = Arc::new(
+            WindowFrame::new_bounds(
+                WindowFrameUnits::Range,
+                WindowFrameBound::Following(ScalarValue::Int32(Some(i32::MIN))),
+                WindowFrameBound::PrecedingNullOffset(DataType::Int32),
+            )
+            .with_range_offset_arithmetic(RangeOffsetArithmetic::Spark { ansi_mode: true }),
+        );
+        let mut context = WindowFrameContext::new(
+            frame,
+            vec![SortOptions {
+                descending: false,
+                nulls_first,
+            }],
+        );
+        let mut last = 0..0;
+        for idx in 0..column.len() {
+            let result =
+                context.calculate_range(std::slice::from_ref(&column), &last, column.len(), idx);
+            if expect_error {
+                assert!(
+                    result
+                        .expect_err("required addition comparison must overflow")
+                        .to_string()
+                        .contains("[ARITHMETIC_OVERFLOW]")
+                );
+                break;
+            }
+            last = result?;
+            assert_eq!(last, 0..0);
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn spark_date_range_key_addition_wraps_in_both_ansi_modes() -> TestResult {
+    let bound = WindowFrameBound::Following(ScalarValue::Int32(Some(1)));
+    for ansi_mode in [false, true] {
+        assert_eq!(
+            range_bound_target(
+                &ScalarValue::Date32(Some(i32::MAX)),
+                &bound,
+                false,
+                RangeOffsetArithmetic::Spark { ansi_mode }
+            )?,
+            Some(ScalarValue::Date32(Some(i32::MIN)))
+        );
+    }
     Ok(())
 }

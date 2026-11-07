@@ -35,9 +35,10 @@ use datafusion_common::{
     Result, ScalarValue, arrow_datafusion_err, exec_datafusion_err, internal_err,
     utils::compare_rows,
 };
+use datafusion_expr::window_frame::RangeOffsetArithmetic;
 use datafusion_expr::window_state::{
     PartitionBatchState, WindowAggState, WindowFrameContext, WindowFrameStateGroups,
-    date32_range_target, date32_range_can_wrap, range_bound_target,
+    date32_range_can_wrap, date32_range_target, range_bound_target,
 };
 use datafusion_expr::{Accumulator, PartitionEvaluator, WindowFrame, WindowFrameBound};
 use datafusion_physical_expr_common::sort_expr::PhysicalSortExpr;
@@ -518,33 +519,45 @@ fn is_end_bound_safe_for_range(
     idx: usize,
 ) -> Result<bool> {
     let end_bound = &window_frame.end_bound;
-    if window_frame.checks_date32_offset_negation() {
+    if window_frame.range_offset_arithmetic() != RangeOffsetArithmetic::DataFusion {
         return Ok(false);
     }
     if window_frame.has_null_offset() {
-        let Some(most_recent_ob_col) = most_recent_ob_col.filter(|col| !col.is_empty()) else {
+        let Some(most_recent_ob_col) = most_recent_ob_col.filter(|col| !col.is_empty())
+        else {
             return Ok(false);
         };
         let current_key = ScalarValue::try_from_array(orderby_col, idx)?;
-        let Some(target) = range_bound_target(&current_key, end_bound, sort_options.descending)? else {
+        let Some(target) = range_bound_target(
+            &current_key,
+            end_bound,
+            sort_options.descending,
+            window_frame.range_offset_arithmetic(),
+        )?
+        else {
             return Ok(false);
         };
         let latest = ScalarValue::try_from_array(most_recent_ob_col, 0)?;
-        return compare_rows(&[latest], &[target], &[*sort_options]).map(|order| order.is_gt());
+        return compare_rows(&[latest], &[target], &[*sort_options])
+            .map(|order| order.is_gt());
     }
     if orderby_col.data_type() == &DataType::Date32
-        && let WindowFrameBound::Preceding(delta) | WindowFrameBound::Following(delta) = end_bound
+        && let WindowFrameBound::Preceding(delta) | WindowFrameBound::Following(delta) =
+            end_bound
         && let Some(target) = date32_range_target(
             &ScalarValue::try_from_array(orderby_col, idx)?,
             delta,
-            matches!(end_bound, WindowFrameBound::Preceding(_)) == sort_options.descending,
+            matches!(end_bound, WindowFrameBound::Preceding(_))
+                == sort_options.descending,
         )
     {
-        let Some(most_recent_ob_col) = most_recent_ob_col.filter(|col| !col.is_empty()) else {
+        let Some(most_recent_ob_col) = most_recent_ob_col.filter(|col| !col.is_empty())
+        else {
             return Ok(false);
         };
         let latest = ScalarValue::try_from_array(most_recent_ob_col, 0)?;
-        return compare_rows(&[latest], &[target], &[*sort_options]).map(|order| order.is_gt());
+        return compare_rows(&[latest], &[target], &[*sort_options])
+            .map(|order| order.is_gt());
     }
     match end_bound {
         WindowFrameBound::Preceding(value) => {

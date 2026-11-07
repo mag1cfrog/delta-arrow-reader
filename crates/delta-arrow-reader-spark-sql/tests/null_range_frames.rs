@@ -597,32 +597,11 @@ fn null_offset_unparser_rejects_unsupported_payload_types() -> TestResult {
 #[tokio::test]
 async fn date_null_interval_bounds_keep_legacy_representation_and_coercion() -> TestResult {
     use arrow::datatypes::{DataType, IntervalUnit, TimeUnit};
-    use datafusion::common::tree_node::{TreeNode, TreeNodeRecursion};
-    use datafusion::logical_expr::{Expr, LogicalPlan, WindowFrame, WindowFrameBound};
+    use datafusion::logical_expr::WindowFrameBound;
     use datafusion::physical_optimizer::aggregate_statistics::PreserveAggregateStatisticsSchema;
+    use datafusion_expr::window_frame::RangeOffsetArithmetic;
     use delta_arrow_reader_spark_sql::{SparkSqlOptions, plan_query};
     use sail_plan::expression_errors::SparkSqlExpressionSemantics;
-
-    fn find_single_window_frame(plan: &LogicalPlan) -> TestResult<WindowFrame> {
-        let mut frames = Vec::new();
-        plan.apply(|node| {
-            node.apply_expressions(|expression| {
-                expression.apply(|expression| {
-                    if let Expr::WindowFunction(function) = expression {
-                        frames.push(function.params.window_frame.clone());
-                    }
-                    Ok(TreeNodeRecursion::Continue)
-                })
-            })?;
-            Ok(TreeNodeRecursion::Continue)
-        })?;
-        if frames.len() != 1 {
-            return Err("expected one interval control frame".into());
-        }
-        frames
-            .pop()
-            .ok_or_else(|| "missing interval control frame".into())
-    }
 
     let (request, _) = parse_null_range_fixture()?;
     let session = SessionContext::new_with_state(
@@ -659,6 +638,10 @@ async fn date_null_interval_bounds_keep_legacy_representation_and_coercion() -> 
                 assert_eq!(value.data_type(), offset_type);
                 assert!(resolved.start_bound.is_unbounded());
                 assert!(!resolved.has_null_offset());
+                assert_eq!(
+                    resolved.range_offset_arithmetic(),
+                    RangeOffsetArithmetic::DataFusion
+                );
 
                 let mut state = session.state();
                 let extensions = &mut state.config_mut().options_mut().extensions;
@@ -682,7 +665,100 @@ async fn date_null_interval_bounds_keep_legacy_representation_and_coercion() -> 
                 assert_eq!(value.data_type(), expected_type);
                 assert!(analyzed.start_bound.is_unbounded());
                 assert!(!analyzed.has_null_offset());
+                assert_eq!(
+                    analyzed.range_offset_arithmetic(),
+                    RangeOffsetArithmetic::DataFusion
+                );
             }
+        }
+    }
+    Ok(())
+}
+
+fn find_single_window_frame(
+    plan: &datafusion::logical_expr::LogicalPlan,
+) -> TestResult<datafusion::logical_expr::WindowFrame> {
+    use datafusion::common::tree_node::{TreeNode, TreeNodeRecursion};
+    use datafusion::logical_expr::Expr;
+
+    let mut frames = Vec::new();
+    plan.apply(|node| {
+        node.apply_expressions(|expression| {
+            expression.apply(|expression| {
+                if let Expr::WindowFunction(function) = expression {
+                    frames.push(function.params.window_frame.clone());
+                }
+                Ok(TreeNodeRecursion::Continue)
+            })
+        })?;
+        Ok(TreeNodeRecursion::Continue)
+    })?;
+    if frames.len() != 1 {
+        return Err("expected one window frame".into());
+    }
+    frames.pop().ok_or_else(|| "missing window frame".into())
+}
+
+#[tokio::test]
+async fn null_range_producer_arithmetic_survives_analyzer_coercion() -> TestResult {
+    use datafusion::physical_optimizer::aggregate_statistics::PreserveAggregateStatisticsSchema;
+    use datafusion_expr::window_frame::RangeOffsetArithmetic;
+    use delta_arrow_reader_spark_sql::{SparkSqlOptions, plan_query};
+    use sail_plan::expression_errors::SparkSqlExpressionSemantics;
+
+    let (request, _) = parse_null_range_fixture()?;
+    let session = SessionContext::new_with_state(
+        configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
+    );
+    spark_inputs::register_recorded_inputs(&session, &request["corpora"][2]["metadata"], 1)?;
+    for ansi_mode in [true, false] {
+        for (key, offset_type, null_offset, uses_spark) in [
+            ("CAST(k AS TINYINT)", "TINYINT", true, true),
+            ("CAST(k AS SMALLINT)", "SMALLINT", true, true),
+            ("k", "INT", true, true),
+            ("CAST(k AS BIGINT)", "BIGINT", true, true),
+            ("DATE_ADD(DATE '2020-01-01',k)", "INT", true, true),
+            ("CAST(k AS DOUBLE)", "DOUBLE", true, false),
+            ("CAST(k AS DECIMAL(12,2))", "DECIMAL(12,2)", true, false),
+            ("k", "INT", false, false),
+            ("DATE_ADD(DATE '2020-01-01',k)", "INT", false, false),
+        ] {
+            let lower = if null_offset { "NULL" } else { "1" };
+            let sql = format!(
+                "SELECT COUNT(*) OVER (ORDER BY {key} \
+                RANGE BETWEEN CAST({lower} AS {offset_type}) PRECEDING \
+                AND CAST(2 AS {offset_type}) FOLLOWING) AS n FROM null_range_no_null_keys"
+            );
+            let query = plan_query(
+                &session,
+                &sql,
+                &SparkSqlOptions {
+                    ansi_mode,
+                    ..SparkSqlOptions::default()
+                },
+            )
+            .await?;
+            let resolved = find_single_window_frame(&query.logical_plan)?;
+            let expected = if uses_spark {
+                RangeOffsetArithmetic::Spark { ansi_mode }
+            } else {
+                RangeOffsetArithmetic::DataFusion
+            };
+            assert_eq!(resolved.range_offset_arithmetic(), expected, "{sql}");
+            let mut state = session.state();
+            let extensions = &mut state.config_mut().options_mut().extensions;
+            extensions.insert(SparkSqlExpressionSemantics::default());
+            extensions.insert(PreserveAggregateStatisticsSchema::default());
+            let analyzed = state.analyzer().execute_and_check(
+                query.logical_plan,
+                state.config_options(),
+                |_, _| {},
+            )?;
+            assert_eq!(
+                find_single_window_frame(&analyzed)?.range_offset_arithmetic(),
+                expected,
+                "{sql}"
+            );
         }
     }
     Ok(())
