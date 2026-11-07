@@ -199,6 +199,12 @@ each of 20 exact observation IDs. The original captures remain unchanged.
   two complete errors, retaining the exact operand, scale, stage and output name.
   It does not permit success or an arbitrary overflow message.
 
+The INT alternatives `1449/only_int_union_exists_true` and
+`1450/only_int_union_count_true` require exactly one `[CAST_INVALID_INPUT]`
+context before the original Arrow cast cause, as introduced by #811. Their
+original captures succeeded, so they are outside the 817 primary-error
+corrections. The cause, execution stage and output name still compare exactly.
+
 These alternatives were checked against the frozen plans and by executing each
 ROUND partition and each failing UNION branch separately. Some repeated complete
 queries also reproduced both outcomes. The matcher tests reject wrong values,
