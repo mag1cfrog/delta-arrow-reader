@@ -1454,6 +1454,10 @@ proofs let sparse partitions advance.
 A failed speculative target proof defers completion without creating a comparison
 error. These frames disable causal output-order inference and plan reversal.
 Retention still depends on peer groups, lookahead and open partitions.
+While a row waits for more input, execution can repeat searches over earlier
+batches. Single-row batches and a large unfinished peer group can require
+quadratic comparison work and retain the whole group. This inherited limit is
+tracked in [#1099](https://github.com/mag1cfrog/delta-arrow-reader/issues/1099).
 
 With matching window and outer ordering, the bounded executor can absorb a LIMIT
 and stop evaluating unrequested output rows while retaining frame lookahead.

@@ -389,6 +389,76 @@ fn parse_limited_range_fixture() -> TestResult<(Value, Vec<Value>)> {
     Ok((request, records))
 }
 
+fn matches_numeric_error_cause(reference: &Value, observation: &Value) -> bool {
+    let condition = reference["expected"]["condition"].as_str();
+    if !matches!(
+        condition,
+        Some("ARITHMETIC_OVERFLOW" | "BINARY_ARITHMETIC_OVERFLOW" | "CAST_OVERFLOW")
+    ) {
+        return true;
+    }
+    let Some(error) = observation["error"].as_str() else {
+        return false;
+    };
+    let parameters = &reference["spark_error_details"]["parameters"];
+    let root_matches = |cause: &str| error.lines().any(|line| line.ends_with(cause));
+    let integer = |name: &str| {
+        parameters[name]
+            .as_str()
+            .map(|value| value.trim_end_matches(['S', 'L']))
+    };
+    match condition {
+        Some("ARITHMETIC_OVERFLOW") if parameters["message"] == "overflow" => {
+            match parameters["alternative"].as_str() {
+                Some(alternative) if alternative.contains("try_add") => {
+                    error.contains("[ARITHMETIC_OVERFLOW] RANGE comparison target")
+                        && error.lines().any(|line| {
+                            line.contains(
+                                "Arrow error: Arithmetic overflow: Overflow happened on: ",
+                            ) && line.contains(" + ")
+                        })
+                }
+                Some("") => {
+                    error.contains("[ARITHMETIC_OVERFLOW] RANGE offset negation")
+                        && error.lines().any(|line| {
+                            line.contains(" overflow on negative(") && line.ends_with(')')
+                        })
+                }
+                _ => false,
+            }
+        }
+        Some("BINARY_ARITHMETIC_OVERFLOW") => {
+            let (Some(left), Some(right)) = (integer("value1"), integer("value2")) else {
+                return false;
+            };
+            parameters["symbol"] == "+"
+                && parameters["functionName"] == "`try_add`"
+                && error.contains("[BINARY_ARITHMETIC_OVERFLOW] RANGE comparison target")
+                && root_matches(&format!(
+                    "Arrow error: Arithmetic overflow: Overflow happened on: {left} + {right}"
+                ))
+        }
+        Some("CAST_OVERFLOW") => {
+            let Some(value) = integer("value") else {
+                return false;
+            };
+            let target = match parameters["targetType"].as_str() {
+                Some("\"TINYINT\"") => "Int8",
+                Some("\"SMALLINT\"") => "Int16",
+                Some("\"INT\"") => "Int32",
+                Some("\"BIGINT\"") => "Int64",
+                _ => return false,
+            };
+            // Native cast roots report the value and target, but do not expose sourceType.
+            error.contains("[CAST_OVERFLOW]")
+                && root_matches(&format!(
+                    "Arrow error: Cast error: Can't cast value {value} to type {target}"
+                ))
+        }
+        _ => false,
+    }
+}
+
 #[tokio::test]
 async fn finite_signed_integer_range_frames_match_spark() -> TestResult {
     let fixtures = [
@@ -449,7 +519,9 @@ async fn finite_signed_integer_range_frames_match_spark() -> TestResult {
                             }
                         },
                     };
-                    let matches = native_result_matches_spark_reference(&observation, case);
+                    let cause_matches = matches_numeric_error_cause(case, &observation);
+                    let matches =
+                        native_result_matches_spark_reference(&observation, case) && cause_matches;
                     let unique = completed.insert(identity);
                     if !matches || !unique {
                         differences.push(format!(
@@ -462,7 +534,9 @@ async fn finite_signed_integer_range_frames_match_spark() -> TestResult {
                         json!({"issue":1086,"corpus":case["corpus"],"id":case["id"],
                     "ansi":case["ansi"],"batch":batch,"target_partitions":2,"provider_partitions":(!corpus["metadata"]["inputs"].as_array().ok_or("missing provider inputs")?.is_empty()).then_some(2),
                     "source_ownership_tag":case["ownership"],"reference":case,
-                    "observation":observation,"spark_matches":matches}),
+                    "observation":observation,"numeric_cause_matches":cause_matches,
+                    "unexposed_cause_parameters":if case["expected"]["condition"] == "CAST_OVERFLOW" { Some(["sourceType"]) } else { None },
+                    "spark_matches":matches}),
                     );
                 }
             }
@@ -479,6 +553,102 @@ async fn finite_signed_integer_range_frames_match_spark() -> TestResult {
         "finite RANGE differences:\n{}",
         differences.join("\n")
     );
+    Ok(())
+}
+
+#[test]
+fn numeric_error_causes_reject_same_condition_phase_and_fields_mutations() -> TestResult {
+    let (_, finite) = parse_finite_range_fixture()?;
+    let (_, narrowing) = parse_narrowing_range_fixture()?;
+    let addition = finite
+        .iter()
+        .find(|case| {
+            case["expected"]["condition"] == "ARITHMETIC_OVERFLOW"
+                && case["spark_error_details"]["parameters"]["alternative"]
+                    .as_str()
+                    .is_some_and(|value| value.contains("try_add"))
+        })
+        .ok_or("missing captured target addition error")?;
+    let negation = finite
+        .iter()
+        .find(|case| {
+            case["expected"]["condition"] == "ARITHMETIC_OVERFLOW"
+                && case["spark_error_details"]["parameters"]["alternative"] == ""
+        })
+        .ok_or("missing captured offset negation error")?;
+    let binary = finite
+        .iter()
+        .find(|case| {
+            case["expected"]["condition"] == "BINARY_ARITHMETIC_OVERFLOW"
+                && case["spark_error_details"]["parameters"]["value1"] == "-4S"
+                && case["spark_error_details"]["parameters"]["value2"] == "-128S"
+        })
+        .ok_or("missing captured binary addition operands")?;
+    let cast = narrowing
+        .iter()
+        .find(|case| {
+            case["expected"]["condition"] == "CAST_OVERFLOW"
+                && case["spark_error_details"]["parameters"]["value"] == "128S"
+                && case["spark_error_details"]["parameters"]["targetType"] == "\"TINYINT\""
+        })
+        .ok_or("missing captured narrowing input and target")?;
+    let add_error = "[ARITHMETIC_OVERFLOW] RANGE comparison target\ncaused by\nArrow error: Arithmetic overflow: Overflow happened on: -4 + -2147483648";
+    let negate_error = "[ARITHMETIC_OVERFLOW] RANGE offset negation\ncaused by\nExecution error: Int32 overflow on negative(-2147483648)";
+    for (reference, error, mutations) in [
+        (
+            addition,
+            add_error,
+            vec![
+                negate_error,
+                "[ARITHMETIC_OVERFLOW] RANGE comparison target\nArrow error: Arithmetic overflow: Overflow happened on: -4 - -2147483648",
+            ],
+        ),
+        (negation, negate_error, vec![add_error]),
+        (
+            binary,
+            "[BINARY_ARITHMETIC_OVERFLOW] RANGE comparison target\nArrow error: Arithmetic overflow: Overflow happened on: -4 + -128",
+            vec![
+                "[BINARY_ARITHMETIC_OVERFLOW] RANGE comparison target\nArrow error: Arithmetic overflow: Overflow happened on: -3 + -128",
+                "[BINARY_ARITHMETIC_OVERFLOW] RANGE comparison target\nArrow error: Arithmetic overflow: Overflow happened on: -128 + -4",
+                "[BINARY_ARITHMETIC_OVERFLOW] RANGE offset negation\nExecution error: Int8 overflow on negative(-128)",
+            ],
+        ),
+        (
+            cast,
+            "[CAST_OVERFLOW]\nArrow error: Cast error: Can't cast value 128 to type Int8",
+            vec![
+                "[CAST_OVERFLOW]\nArrow error: Cast error: Can't cast value 129 to type Int8",
+                "[CAST_OVERFLOW]\nArrow error: Cast error: Can't cast value 128 to type Int16",
+                "[CAST_OVERFLOW] RANGE offset negation\nExecution error: Int8 overflow on negative(-128)",
+            ],
+        ),
+    ] {
+        let phase = match reference["spark_error_phase"].as_str() {
+            Some("sql") => "resolve",
+            Some("optimized_schema") => "create_physical_plan",
+            Some("collect") => "collect",
+            _ => return Err("unexpected arithmetic error phase".into()),
+        };
+        let mut observation =
+            json!({"matches":true,"optimized_matches":true,"native_phase":phase,"error":error});
+        for (stage, observed) in STAGES {
+            observation[observed] = reference["schema_stages"][stage].clone();
+        }
+        assert!(native_result_matches_spark_reference(
+            &observation,
+            reference
+        ));
+        assert!(matches_numeric_error_cause(reference, &observation));
+        for mutation in mutations {
+            let mut changed = observation.clone();
+            changed["error"] = json!(mutation);
+            assert!(native_result_matches_spark_reference(&changed, reference));
+            assert!(
+                !matches_numeric_error_cause(reference, &changed),
+                "accepted wrong numeric cause {mutation}"
+            );
+        }
+    }
     Ok(())
 }
 
