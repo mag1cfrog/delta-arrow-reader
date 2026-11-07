@@ -75,9 +75,9 @@ fn matches_reference(actual: &Value, expected: &Value) -> bool {
         || expected
             .get("schema")
             .is_some_and(|schema| actual.get("analyzed_schema") != Some(schema))
-        || !actual["analyzed_arrow_schema"]
+        || actual["analyzed_arrow_schema"]
             .as_str()
-            .is_some_and(|schema| !schema.is_empty())
+            .is_none_or(|schema| schema.is_empty())
     {
         return false;
     }
