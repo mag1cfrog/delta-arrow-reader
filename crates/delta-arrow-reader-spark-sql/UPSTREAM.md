@@ -1127,6 +1127,16 @@ literal CASTs already do. A call inside a short-circuiting expression other than
 OR, such as CASE or COALESCE, still defers its error. `AliasedScalarUDFImpl` forwards the
 choice. TIMESTAMPDIFF and the TIMESTAMP to TIMESTAMP_NTZ conversion opt in.
 
+Spark REGEXP_REPLACE checks admitted literal arguments in its own simplify callback,
+after native operand simplification, and reports only its own kernel errors. The
+existing conditional simplifier defers these errors in guarded branches. Async operands
+retain native planning and its swallowed synchronous wrapper rejections. Closed,
+permitted replacement calls over local VALUES fold before an outer LIMIT 0 can discard
+them; an already-limited empty input is pruned first. Local folds use the existing query
+start time and retain successful folds in the plan, preserving once-only producer
+evaluation. Kernel NULL/no-match handling, position admission and native regex/UTF16
+capability boundaries retain their existing rules.
+
 ### ARRAY_COMPACT result fields
 
 Spark ARRAY_COMPACT declares its immediate output elements non-null and derives

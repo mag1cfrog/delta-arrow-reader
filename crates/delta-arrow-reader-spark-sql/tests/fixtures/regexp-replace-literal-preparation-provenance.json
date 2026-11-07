@@ -1,0 +1,43 @@
+{
+  "purpose": "Regression-first #1064 source checkpoint; this commit intentionally requires behavior not yet repaired.",
+  "native_source_parent": "56de95062a626a4393dea1b9a53d58e8c5ea01d1",
+  "native_source_tree": "edc51b3ec5d7d6617c455dba83a2306942ffc9a2",
+  "original_Spark_product": "d0e8e2c4790ac854fe81b855662f5564995a3f98",
+  "original_Spark_execution": "ce8ab67eac815a541c74dea92904415a78ea8066",
+  "raw_reference": {
+    "fixture": "regexp-replace-literal-preparation-spark.jsonl",
+    "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/1064-replacement-preparation-runtime-r2/spark/observations.jsonl",
+    "sha256": "7488cf51fbdeec2fb09ec7251ce0bdd47bc681ea67dac06ca1890eaa69931bc6",
+    "records": 138,
+    "queries": 34,
+    "providers": 102,
+    "header_and_summary": 2,
+    "complete_original_bytes": true
+  },
+  "inputs": {
+    "fixture": "regexp-replace-literal-preparation-inputs.json",
+    "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/1064-current-staging-native-preparation-r2-current/INPUTS.json",
+    "sha256": "c3cbb6c2a498a018a1b0ad1102a30ae693061e43097077c7886f19696bc67310",
+    "complete_original_bytes": true
+  },
+  "final_reference_manifest": {
+    "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/1064-replacement-preparation-runtime-r2/spark/spark.manifest.json",
+    "sha256": "2f1ff46bb068b96f5b2eef1e34e37d529cb701d6ff42fbeb165595d97b6ad583"
+  },
+  "native_layouts": {
+    "representations": [
+      "Utf8",
+      "LargeUtf8",
+      "Utf8View"
+    ],
+    "batch_sizes": [
+      1,
+      32
+    ],
+    "target_partitions": 2,
+    "contexts": 204,
+    "provider_readbacks": 612
+  },
+  "compatibility_or_issue_closure_claimed": false,
+  "original_old_fixtures_modified": false
+}

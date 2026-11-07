@@ -184,7 +184,23 @@ fn regexp_replace(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     } else {
         lit(value)
     });
-    Ok(ScalarUDF::from(SparkRegexpReplace::new()).call(arguments))
+    let asynchronous = arguments.iter().try_fold(false, |found, argument| {
+        Ok::<_, datafusion_common::DataFusionError>(
+            found
+                || argument.exists(|expression| {
+                    Ok(matches!(expression, expr::Expr::ScalarFunction(function)
+                    if function.func.as_async().is_some()))
+                })?,
+        )
+    })?;
+    let function = SparkRegexpReplace::new();
+    // Native async planning still swallows its speculative synchronous rejections.
+    let function = if asynchronous {
+        function
+    } else {
+        function.with_preparation_errors()
+    };
+    Ok(ScalarUDF::from(function).call(arguments))
 }
 
 #[cfg(test)]
