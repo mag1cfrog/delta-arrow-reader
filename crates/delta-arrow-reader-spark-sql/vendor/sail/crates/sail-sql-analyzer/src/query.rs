@@ -9,10 +9,10 @@ use sail_sql_parser::ast::query::{
     HavingClause, IdentList, JoinCriteria, JoinOperator, LateralViewClause, LimitClause,
     LimitValue, NamedExpr, NamedExprList, NamedQuery, NamedWindow, OffsetClause, OrderByClause,
     PivotClause, Query, QueryBody, QueryModifier, QuerySelect, QueryTerm, SelectClause,
-    SetOperator, SetQuantifier, SortByClause, TableExtension, TableFactor, TableFunction, TableJoin, TableModifier,
-    TableSampleClause, TableSampleMethod, TableSampleRepeatable, TableRelation, TemporalClause,
-    UnpivotClause, UnpivotColumns, UnpivotNulls, ValuesClause, WhereClause, WindowClause,
-    WithClause,
+    SetOperator, SetQuantifier, SortByClause, TableExtension, TableFactor, TableFunction,
+    TableJoin, TableModifier, TableRelation, TableSampleClause, TableSampleMethod,
+    TableSampleRepeatable, TemporalClause, UnpivotClause, UnpivotColumns, UnpivotNulls,
+    ValuesClause, WhereClause, WindowClause, WithClause,
 };
 use sail_sql_parser::common::Sequence;
 
@@ -416,7 +416,10 @@ fn from_ast_table_relation(
         extensions,
     } = relation;
     if lateral.is_some() {
-        if extensions.iter().any(|extension| matches!(extension, TableExtension::Join(_))) {
+        if extensions
+            .iter()
+            .any(|extension| matches!(extension, TableExtension::Join(_)))
+        {
             return Err(SqlError::unsupported("lateral table with join"));
         }
         let plan = match &source {
@@ -430,7 +433,9 @@ fn from_ast_table_relation(
                 "expected function or subquery for lateral table factor",
             )),
         }?;
-        extensions.into_iter().try_fold(plan, query_plan_with_table_extension)
+        extensions
+            .into_iter()
+            .try_fold(plan, query_plan_with_table_extension)
     } else {
         query_plan_with_table_relation(input, source, extensions)
     }
@@ -439,7 +444,9 @@ fn from_ast_table_relation(
 pub fn from_ast_tables(tables: Vec<TableRelation>) -> SqlResult<spec::QueryPlan> {
     let plan = tables
         .into_iter()
-        .try_fold(None, |plan, table| from_ast_table_relation(plan, table).map(Some))?
+        .try_fold(None, |plan, table| {
+            from_ast_table_relation(plan, table).map(Some)
+        })?
         .unwrap_or_else(|| {
             spec::QueryPlan::new(spec::QueryNode::Empty {
                 produce_one_row: true,
@@ -453,7 +460,9 @@ pub fn from_ast_table_factor_with_extensions(
     extensions: Vec<TableExtension>,
 ) -> SqlResult<spec::QueryPlan> {
     let plan = from_ast_table_factor(table)?;
-    let plan = extensions.into_iter().try_fold(plan, query_plan_with_table_extension)?;
+    let plan = extensions
+        .into_iter()
+        .try_fold(plan, query_plan_with_table_extension)?;
     Ok(plan)
 }
 
