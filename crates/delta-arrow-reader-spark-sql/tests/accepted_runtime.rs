@@ -574,3 +574,66 @@ async fn grouped_integral_cast_keeps_the_parallel_error_envelope() -> TestResult
     assert_eq!(observe(&query).await?, query.expected);
     Ok(())
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn rand_divisor_correction_requires_its_wrapper_and_original_cause() -> TestResult {
+    let corrections: BTreeMap<String, Value> =
+        serde_json::from_str(include_str!("fixtures/reviewed-corrections.json"))?;
+    let parallel_errors: BTreeMap<String, Value> =
+        serde_json::from_str(include_str!("fixtures/parallel-error-outcomes.json"))?;
+    let reader = std::io::BufReader::new(GzDecoder::new(
+        &include_bytes!("fixtures/accepted-runtime.jsonl.gz")[..],
+    ));
+    let mut original = None;
+    for line in reader.lines() {
+        let query: RecordedQuery = serde_json::from_str(&line?)?;
+        if query.id == "replay/existing-nonansi-zero-cases/112/volatile_divisor_true" {
+            original = Some(query);
+            break;
+        }
+    }
+    let original = original.ok_or("missing recorded RAND divisor")?;
+    assert!(original.ansi);
+    assert_eq!(original.batch_size, 3);
+    assert_eq!(
+        original.sql,
+        concat!(
+            "SELECT CAST(2 AS DOUBLE) / CASE WHEN RAND(42) >= 0 ",
+            "THEN CAST('-0.0' AS DOUBLE) ELSE CAST(3 AS DOUBLE) END AS r FROM range(4)"
+        )
+    );
+    assert!(!parallel_errors.contains_key(&original.id));
+    let cause = "Arrow error: Divide by zero error";
+    assert_eq!(original.expected["error"], cause);
+    let mut expected = original.expected.clone();
+    expected["error"] = json!(format!("spark_decimal_null_propagation\ncaused by\n{cause}"));
+    assert_eq!(corrections.get(&original.id), Some(&expected));
+    let mut query = original.clone();
+    query.expected = expected;
+    let raw_error = format!("preserve_spark_expression_errors\ncaused by\n{cause}");
+    let mut raw_expected = query.expected.clone();
+    raw_expected["error"] = json!(raw_error.clone());
+    let actual = observe(&original).await?;
+    assert_eq!(actual, raw_expected);
+    assert!(matches_recorded_outcome(&query, &actual, &parallel_errors));
+    for (field, value) in [
+        ("error", json!(cause)),
+        (
+            "error",
+            json!(format!("preserve_spark_expression_errors\ncaused by\n{raw_error}")),
+        ),
+        ("error", json!(format!("{raw_error} (different cause)"))),
+        ("status", json!("planning_error")),
+        ("status", json!("ok")),
+        ("output_names", json!(["wrong_name"])),
+    ] {
+        let mut wrong = actual.clone();
+        wrong[field] = value;
+        assert!(!matches_recorded_outcome(&query, &wrong, &parallel_errors));
+    }
+    let mut unlisted = original;
+    unlisted.id.push_str("/unlisted");
+    assert!(!corrections.contains_key(&unlisted.id));
+    assert!(!matches_recorded_outcome(&unlisted, &actual, &parallel_errors));
+    Ok(())
+}
