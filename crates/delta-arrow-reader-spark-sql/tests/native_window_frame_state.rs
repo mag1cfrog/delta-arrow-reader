@@ -2,7 +2,7 @@
 
 extern crate self as datafusion_common;
 pub use datafusion::common::*;
-use datafusion::logical_expr::{WindowFrame, WindowFrameBound, WindowFrameUnits};
+use datafusion::logical_expr::{WindowFrame, WindowFrameBound, WindowFrameUnits, window_frame};
 
 #[expect(
     dead_code,
