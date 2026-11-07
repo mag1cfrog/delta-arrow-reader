@@ -453,3 +453,68 @@ async fn replacement_preparation_evaluates_foldable_immutable_arguments_once() -
     }
     Ok(())
 }
+
+#[tokio::test]
+async fn replacement_preparation_preserves_native_simplify_only_operands() -> TestResult {
+    use delta_arrow_reader_spark_sql::{SparkSqlOptions, plan_query};
+
+    let mut compared = 0;
+    let mut differences = Vec::new();
+    for ansi in [true, false] {
+        for local_values_limit in [false, true] {
+            for builtin in ["arrow_cast", "nvl2"] {
+                for slot in 0..3 {
+                    let session = session(32);
+                    let mut arguments = ["'a'".to_owned(), "'(a)'".to_owned(), "'$1'".to_owned()];
+                    let operand = if builtin == "arrow_cast" {
+                        format!("arrow_cast({},'Utf8')", arguments[slot])
+                    } else {
+                        format!("nvl2('x',{},'unused')", arguments[slot])
+                    };
+                    let native_sql = format!("SELECT {operand} AS r");
+                    let native = spark_results::capture_native_query_observation(
+                        &SessionContext::new(), &native_sql,
+                    ).await?;
+                    let before = spark_results::capture_native_query_observation(&session, &native_sql).await?;
+                    arguments[slot] = operand;
+                    let input = if local_values_limit { " FROM VALUES(1) AS t(k) LIMIT 0" } else { "" };
+                    let sql = format!("SELECT regexp_replace({}) AS r{input}", arguments.join(","));
+                    let query = plan_query(&session, &sql, &SparkSqlOptions {
+                        ansi_mode: ansi, ..Default::default()
+                    }).await?;
+                    let resolved = string_binary::capture_schema(
+                        query.logical_plan.schema().fields(), Some(&query.column_names),
+                    )?;
+                    let reference = capture_observation(&session, &json!({
+                        "sql":format!("SELECT regexp_replace('a','(a)','$1') AS r{input}"),"ansi":ansi
+                    })).await?;
+                    let actual = capture_observation(&session, &json!({"sql":sql,"ansi":ansi})).await?;
+                    let after = spark_results::capture_native_query_observation(&session, &native_sql).await?;
+                    let expected_rows = if local_values_limit { json!([]) } else { json!([["a"]]) };
+                    let matches = native["error"].is_null() && before == native && after == native
+                        && marker_absent(&session)
+                        && complete_keys(&reference, false) && reference["rows"] == expected_rows
+                        && complete_keys(&actual, false)
+                        && actual["analyzed_schema"] == resolved
+                        && actual["analyzed_arrow_schema"].as_str().is_some_and(|s| !s.is_empty())
+                        && actual["physical_schema"] == reference["physical_schema"]
+                        && actual["physical_arrow_schema"].as_str().is_some_and(|s| !s.is_empty())
+                        && actual["rows"] == expected_rows;
+                    eprintln!("c06 replacement native simplify-only operand: {}", json!({
+                        "sql":sql,"ansi":ansi,"builtin":builtin,"slot":slot,
+                        "local_values_limit":local_values_limit,"resolved_schema":resolved,
+                        "resolved_raw_schema":format!("{:?}", query.logical_plan.schema()),
+                        "actual":actual,"literal_control":reference,"native_sql":native_sql,
+                        "native_plain":native,"native_before":before,"native_after":after,
+                        "matches_reference":matches,"Spark_custom_UDF_oracle":false
+                    }));
+                    if !matches { differences.push(format!("{sql} ANSI={ansi}: {actual}")); }
+                    compared += 1;
+                }
+            }
+        }
+    }
+    assert_eq!(compared, 24);
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+    Ok(())
+}
