@@ -119,7 +119,14 @@ adds two deterministic Range subquery guard observations.
 adds four signed-zero observations under UUID guards and STRING casts.
 [case-result-tails-raw-floats-spark.jsonl](case-result-tails-raw-floats-spark.jsonl)
 adds four direct DOUBLE observations with exact IEEE bits for both zero signs.
-All five references contain no RAND calls.
+[case-result-tails-alias-lineage-spark.jsonl](case-result-tails-alias-lineage-spark.jsonl)
+adds six controls for distinct source columns with coincident rows and identical
+fields, separate UUID outputs, and two aliases of one materialized UUID output.
+[case-result-tails-host-contexts-spark.jsonl](case-result-tails-host-contexts-spark.jsonl)
+adds six aggregate, window and filtered-projection controls. SUM retains its
+aliased CASE and required ANSI division error; window SUM and the filtered
+projection prune their aliased CASE results. All seven CASE references contain
+no RAND calls.
 
 Their first-line headers pin Spark 4.2.0 revision
 `32f7299601108917fb01920a54e084595b7b3bf8`, UTC, original input schemas/metadata/rows,
@@ -127,7 +134,7 @@ and capture-script and manifest hashes. Each record preserves its ANSI mode,
 complete available schema stages, plans, and rows or actual error condition and
 phase. These are the authoritative capture inputs and outcomes.
 
-[case_result_tails.rs](../case_result_tails.rs) compares all 58 records at batch
+[case_result_tails.rs](../case_result_tails.rs) compares all 70 CASE records at batch
 sizes 1 and 32 through the canonical stage and optimized-field observers.
 The references distinguish removable provider guards from closed/VALUES errors
 that still require optimization-time failure. A deterministic scalar-subquery
@@ -142,6 +149,13 @@ A separate Spark-planner IF control reuses the four unchanged
 [conditional-nested-if-spark.jsonl](conditional-nested-if-spark.jsonl) records for
 eight batch contexts, checking exact nested result fields and rows through the
 reachable `if_expr` path. Its existing header retains the independent provenance.
+These references provide 148 batch contexts in total. CASE result aliases can
+share a representative only when metadata-free column passthroughs reach the
+same stored output and their complete exposed fields agree apart from alias
+names. Filters preserve the stored values of surviving rows; aggregate
+arguments keep their separate pruning boundary. Distinct source columns and separately computed UUIDs stay distinct;
+a shared materialized UUID remains a reference to that stored value. Guards
+remain for the existing CASE pruning rule to handle.
 
 ## Integer-day DATE arithmetic
 

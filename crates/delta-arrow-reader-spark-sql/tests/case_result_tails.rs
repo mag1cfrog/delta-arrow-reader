@@ -29,6 +29,8 @@ const VOLATILE_FLOATS: &str =
     include_str!("fixtures/case-result-tails-volatile-floats-spark.jsonl");
 const RAW_FLOATS: &str = include_str!("fixtures/case-result-tails-raw-floats-spark.jsonl");
 const SPARK_IF: &str = include_str!("fixtures/conditional-nested-if-spark.jsonl");
+const ALIAS_LINEAGE: &str = include_str!("fixtures/case-result-tails-alias-lineage-spark.jsonl");
+const HOST_CONTEXTS: &str = include_str!("fixtures/case-result-tails-host-contexts-spark.jsonl");
 
 fn references(source: &str, count: usize) -> TestResult<Vec<Value>> {
     let records = source
@@ -121,6 +123,16 @@ async fn case_raw_float_tails_match_spark() -> TestResult {
 #[tokio::test]
 async fn spark_case_tail_rules_preserve_spark_if() -> TestResult {
     compare_references(SPARK_IF, 4).await
+}
+
+#[tokio::test]
+async fn case_result_alias_lineage_matches_spark() -> TestResult {
+    compare_references(ALIAS_LINEAGE, 6).await
+}
+
+#[tokio::test]
+async fn case_result_alias_host_contexts_match_spark() -> TestResult {
+    compare_references(HOST_CONTEXTS, 6).await
 }
 
 #[test]
