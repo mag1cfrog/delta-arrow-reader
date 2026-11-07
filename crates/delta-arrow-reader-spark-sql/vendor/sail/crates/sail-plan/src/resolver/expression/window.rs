@@ -671,7 +671,10 @@ impl PlanResolver<'_> {
                 if data_type == DataType::Date32
                     && !matches!(
                         value.data_type(),
-                        DataType::Int32 | DataType::Interval(_) | DataType::Duration(_) | DataType::Null
+                        DataType::Int32
+                            | DataType::Interval(_)
+                            | DataType::Duration(_)
+                            | DataType::Null
                     )
                 {
                     return Err(PlanError::invalid(
