@@ -44,7 +44,7 @@ use datafusion_expr::expr_rewriter::coerce_plan_expr_for_schema;
 use datafusion_expr::expr_schema::cast_subquery;
 use datafusion_expr::logical_plan::Subquery;
 use datafusion_expr::type_coercion::binary::{
-    comparison_coercion, like_coercion, type_union_coercion,
+    comparison_coercion, like_coercion, regex_coercion, type_union_coercion,
 };
 use datafusion_expr::type_coercion::functions::{
     UDFCoercionExt, fields_with_udf, value_fields_with_higher_order_udf_and_lambdas,
@@ -443,6 +443,38 @@ impl<'a> TypeCoercionRewriter<'a> {
 
         Ok(e)
     }
+
+    /// Coerce the value and pattern expressions of a string pattern matching
+    /// expression (`LIKE`, `ILIKE` or `SIMILAR TO`) to a common type using
+    /// the provided coercion rules. `LIKE` can preserve a dictionary-encoded
+    /// value expression, while regex array kernels require both operands to
+    /// have the same physical string type.
+    fn coerce_pattern_operands(
+        &self,
+        expr: Expr,
+        pattern: Expr,
+        coercion: fn(&DataType, &DataType) -> Option<DataType>,
+        op_name: &str,
+        preserve_utf8_dictionary: bool,
+    ) -> Result<(Box<Expr>, Box<Expr>)> {
+        let left_type = expr.get_type(self.schema)?;
+        let right_type = pattern.get_type(self.schema)?;
+        let coerced_type = coercion(&left_type, &right_type).ok_or_else(|| {
+            plan_datafusion_err!(
+                "There isn't a common type to coerce {left_type} and {right_type} in {op_name} expression"
+            )
+        })?;
+        let expr = match left_type {
+            DataType::Dictionary(_, inner)
+                if preserve_utf8_dictionary && *inner == DataType::Utf8 =>
+            {
+                Box::new(expr)
+            }
+            _ => Box::new(expr.cast_to(&coerced_type, self.schema)?),
+        };
+        let pattern = Box::new(pattern.cast_to(&coerced_type, self.schema)?);
+        Ok((expr, pattern))
+    }
 }
 
 impl TreeNodeRewriter for TypeCoercionRewriter<'_> {
@@ -589,24 +621,41 @@ impl TreeNodeRewriter for TypeCoercionRewriter<'_> {
                 escape_char,
                 case_insensitive,
             }) => {
-                let left_type = expr.get_type(self.schema)?;
-                let right_type = pattern.get_type(self.schema)?;
-                let coerced_type = like_coercion(&left_type,  &right_type).ok_or_else(|| {
-                    let op_name = if case_insensitive {
-                        "ILIKE"
-                    } else {
-                        "LIKE"
-                    };
-                    plan_datafusion_err!(
-                        "There isn't a common type to coerce {left_type} and {right_type} in {op_name} expression"
-                    )
-                })?;
-                let expr = match left_type {
-                    DataType::Dictionary(_, inner) if *inner == DataType::Utf8 => expr,
-                    _ => Box::new(expr.cast_to(&coerced_type, self.schema)?),
-                };
-                let pattern = Box::new(pattern.cast_to(&coerced_type, self.schema)?);
+                let op_name = if case_insensitive { "ILIKE" } else { "LIKE" };
+                let (expr, pattern) = self.coerce_pattern_operands(
+                    *expr,
+                    *pattern,
+                    like_coercion,
+                    op_name,
+                    true,
+                )?;
                 Ok(Transformed::yes(Expr::Like(Like::new(
+                    negated,
+                    expr,
+                    pattern,
+                    escape_char,
+                    case_insensitive,
+                ))))
+            }
+            Expr::SimilarTo(Like {
+                negated,
+                expr,
+                pattern,
+                escape_char,
+                case_insensitive,
+            }) => {
+                // `SIMILAR TO` is planned as a regex operator, so its operands
+                // must be coerced to a common string type using the same
+                // coercion rules as the physical regex operators. Otherwise
+                // mismatched operand types panic during execution.
+                let (expr, pattern) = self.coerce_pattern_operands(
+                    *expr,
+                    *pattern,
+                    regex_coercion,
+                    "SIMILAR TO",
+                    false,
+                )?;
+                Ok(Transformed::yes(Expr::SimilarTo(Like::new(
                     negated,
                     expr,
                     pattern,
@@ -802,7 +851,6 @@ impl TreeNodeRewriter for TypeCoercionRewriter<'_> {
             | Expr::Column(_)
             | Expr::ScalarVariable(_, _)
             | Expr::Literal(_, _)
-            | Expr::SimilarTo(_)
             | Expr::IsNotNull(_)
             | Expr::IsNull(_)
             | Expr::Cast(_)
