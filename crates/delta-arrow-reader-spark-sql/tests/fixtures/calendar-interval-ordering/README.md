@@ -1,13 +1,13 @@
 # Ordering and comparing calendar intervals
 
-`calendar-interval-ordering-spark.jsonl` records 684 observations from Spark 4.2.0, revision
+`calendar-interval-ordering-spark.jsonl` records 740 observations from Spark 4.2.0, revision
 `32f7299601108917fb01920a54e084595b7b3bf8`, Java 17.0.20.1 and Python 3.12.14 (#1149, #1163).
 The header stores the build properties, capture script hash, settings and the registered
 `required` table of NOT NULL INT keys `k` and day counts `d`. Each failure keeps Spark's error
 condition and the class and message of its innermost Java exception. Two captures were
 byte-identical.
 
-171 queries run in both ANSI modes in UTC and America/Los_Angeles over calendar intervals built
+185 queries run in both ANSI modes in UTC and America/Los_Angeles over calendar intervals built
 by `make_interval(0, 0, 0, d)`:
 - ORDER BY an expression, DESC NULLS LAST, an alias, an ordinal, a constant, a second key, an
   ARRAY and a STRUCT holding an interval, with LIMIT, SORT BY, window ORDER BY with and without
@@ -33,8 +33,10 @@ by `make_interval(0, 0, 0, d)`:
   holding a calendar interval beside a field pair, and the STRUCT comparison without the
   interval as a control, for 14 pairs: INT beside BIGINT, DOUBLE, DECIMAL, STRING, BOOLEAN,
   ARRAY and DATE, STRING beside DATE, DATE beside TIMESTAMP, ARRAY<INT> beside ARRAY<BIGINT>
-  and ARRAY<STRING>, STRUCTs whose field widens or is renamed, and NULL beside INT; and STRUCTs
-  with renamed interval fields or another field count.
+  and ARRAY<STRING>, STRUCTs whose field widens or is renamed, and NULL beside INT; STRUCTs
+  with renamed interval fields or another field count; STRUCTs with duplicate field names or
+  reordered field names; and NULLIF, GREATEST, a simple CASE, JOIN ON, a single-column IN
+  subquery and an ARRAY of STRUCTs, each beside INT and BIGINT and beside INT and ARRAY.
 
 Spark rejects every ordering and comparison of a calendar interval during analysis with
 `DATATYPE_MISMATCH.INVALID_ORDERING_TYPE`, in both ANSI modes. Beside a value of another shape,
@@ -61,11 +63,10 @@ must have Spark's condition. Five differences are retained, each at DAR's exact 
   (4 records);
 - #1176: DataFusion's comparison coercion, which decides whether a field beside a calendar
   interval is compatible, accepts INT beside DECIMAL, STRING or DATE and STRING beside DATE in a
-  comparison, ARRAY<INT> beside ARRAY<STRING>, and INT beside DATE in an IN list or subquery and
-  beside STRING in an IN subquery. Those records get the ordering error, and their controls
-  give DAR's rows or errors, where Spark reports a type mismatch. The INT beside BOOLEAN and
-  ARRAY controls fail without Spark's condition, and the renamed STRUCT control fails while
-  optimizing (64 records);
+  comparison, ARRAY<INT> beside ARRAY<STRING>, and INT beside DATE in an IN list or subquery.
+  Those records get the ordering error, and their controls give DAR's rows or errors, where
+  Spark reports a type mismatch. The INT beside BOOLEAN and ARRAY controls fail without Spark's
+  condition, and the renamed STRUCT control fails while optimizing (60 records);
 - #1122: the DATE beside TIMESTAMP control in America/Los_Angeles starts the DATE at UTC
   midnight and gives false where Spark gives true (2 records).
 

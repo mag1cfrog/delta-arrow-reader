@@ -43,7 +43,7 @@ fn calendar_interval_ordering_references() -> TestResult<Vec<Value>> {
             |build| build.contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
         )
     );
-    assert_eq!(records.len() - 1, 684);
+    assert_eq!(records.len() - 1, 740);
     Ok(records)
 }
 
@@ -76,12 +76,16 @@ enum NestedCoercionResult {
     OrderingError,
     /// Rows of `k` and a NOT NULL BOOLEAN `r`, as JSON.
     Rows(&'static str),
-    /// A failure at the stage, with DAR's message, after the listed recorded stages.
-    Failure(&'static str, &'static str, &'static [&'static str]),
+    /// A failure at `phase` with DAR's `message`, after the recorded `stages`.
+    Failure {
+        phase: &'static str,
+        message: &'static str,
+        stages: &'static [&'static str],
+    },
 }
 
 /// Records of the #1176 class and DAR's result for each.
-const NESTED_COERCION_RECORDS: [(&str, NestedCoercionResult); 16] = [
+const NESTED_COERCION_RECORDS: [(&str, NestedCoercionResult); 15] = [
     (
         "field_int_decimal_struct_equal",
         NestedCoercionResult::OrderingError,
@@ -107,10 +111,6 @@ const NESTED_COERCION_RECORDS: [(&str, NestedCoercionResult); 16] = [
         NestedCoercionResult::OrderingError,
     ),
     (
-        "field_int_string_in_subquery",
-        NestedCoercionResult::OrderingError,
-    ),
-    (
         "field_int_date_in_subquery",
         NestedCoercionResult::OrderingError,
     ),
@@ -132,42 +132,42 @@ const NESTED_COERCION_RECORDS: [(&str, NestedCoercionResult); 16] = [
     ),
     (
         "field_array_int_string_control",
-        NestedCoercionResult::Failure(
-            "collect",
-            "While casting struct field 'a'\ncaused by\nArrow error: Cast error: Cannot cast \
+        NestedCoercionResult::Failure {
+            phase: "collect",
+            message: "While casting struct field 'a'\ncaused by\nArrow error: Cast error: Cannot cast \
              string 'a' to value of Int32 type",
-            &["analyzed", "optimized"],
-        ),
+            stages: &["analyzed", "optimized"],
+        },
     ),
     (
         "field_struct_names_control",
-        NestedCoercionResult::Failure(
-            "optimized",
-            "This feature is not implemented: Unsupported CAST from Struct(\"a\": non-null \
+        NestedCoercionResult::Failure {
+            phase: "optimized",
+            message: "This feature is not implemented: Unsupported CAST from Struct(\"a\": non-null \
              Struct(\"y\": non-null Int32), \"b\": non-null Int32) to Struct(\"a\": non-null \
              Struct(\"x\": non-null Int32), \"b\": non-null Int32)",
-            &["analyzed"],
-        ),
+            stages: &["analyzed"],
+        },
     ),
     (
         "field_int_boolean_control",
-        NestedCoercionResult::Failure(
-            "sql",
-            "Cannot infer common argument type for comparison operation Struct(\"a\": non-null \
+        NestedCoercionResult::Failure {
+            phase: "sql",
+            message: "Cannot infer common argument type for comparison operation Struct(\"a\": non-null \
              Int32, \"b\": non-null Int32) = Struct(\"a\": non-null Boolean, \"b\": non-null \
              Int32)",
-            &[],
-        ),
+            stages: &[],
+        },
     ),
     (
         "field_int_array_control",
-        NestedCoercionResult::Failure(
-            "sql",
-            "Cannot infer common argument type for comparison operation Struct(\"a\": non-null \
+        NestedCoercionResult::Failure {
+            phase: "sql",
+            message: "Cannot infer common argument type for comparison operation Struct(\"a\": non-null \
              Int32, \"b\": non-null Int32) = Struct(\"a\": non-null List(non-null Int32), \
              \"b\": non-null Int32)",
-            &[],
-        ),
+            stages: &[],
+        },
     ),
 ];
 
@@ -283,7 +283,6 @@ fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResu
                         "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES"
                             | "DATATYPE_MISMATCH.DATA_DIFF_TYPES"
                             | "DATATYPE_MISMATCH.IN_SUBQUERY_DATA_TYPE_MISMATCH"
-                            | "UNSUPPORTED_TYPED_LITERAL"
                     )
                 );
             if !(spark_ok || spark_mismatch) {
@@ -301,7 +300,11 @@ fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResu
                         json!({"status": "ok", "rows": serde_json::from_str::<Value>(rows)?});
                     current["spark_error_phase"] = Value::Null;
                 }
-                NestedCoercionResult::Failure(phase, message, stages) => {
+                NestedCoercionResult::Failure {
+                    phase,
+                    message,
+                    stages,
+                } => {
                     let all = key_and_boolean_stages();
                     current["schema_stages"] = stages
                         .iter()
@@ -653,7 +656,7 @@ async fn calendar_interval_ordering_matches_spark() -> TestResult {
             (RetainedDifference::OrderingConsumer, 24),
             (RetainedDifference::PivotImplicitGrouping, 6),
             (RetainedDifference::GreatestNullability, 4),
-            (RetainedDifference::NestedComparisonCoercion, 64),
+            (RetainedDifference::NestedComparisonCoercion, 60),
             (RetainedDifference::DateTimestampZone, 2),
         ])
     );
