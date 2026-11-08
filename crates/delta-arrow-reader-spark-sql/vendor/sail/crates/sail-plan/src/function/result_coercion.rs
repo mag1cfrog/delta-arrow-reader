@@ -265,7 +265,7 @@ pub(crate) fn common_result_type_with_strings(
     })
 }
 
-fn coerce_to_temporal(
+pub(crate) fn coerce_to_temporal(
     arg: expr::Expr,
     data_type: &DataType,
     target_type: &DataType,
@@ -290,7 +290,7 @@ fn coerce_to_temporal(
         DataType::Date32 | DataType::Date64 | DataType::Timestamp(_, None)
     ) && let DataType::Timestamp(TimeUnit::Microsecond, Some(timezone)) = target_type
     {
-        Ok(cast_local_timestamp_expr_to_ltz(arg, timezone))
+        Ok(cast_local_timestamp_expr_to_ltz(arg, data_type, timezone))
     } else if is_temporal_type(data_type) {
         Ok(cast(arg, target_type.clone()))
     } else {

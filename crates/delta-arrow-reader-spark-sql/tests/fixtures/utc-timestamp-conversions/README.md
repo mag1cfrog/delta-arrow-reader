@@ -36,8 +36,8 @@ replaces only the owned part with the current DAR result and checks each count:
 - #1025: 24 conversions with an invalid or empty constant zone fail while
   collecting rows instead of during optimization.
 
-An explicit CAST from DATE to TIMESTAMP at a skipped or repeated midnight is owned
-by #1027 and is outside these references.
+An explicit CAST from DATE to TIMESTAMP at a skipped or repeated midnight is recorded
+by the [DATE to TIMESTAMP references](../date-to-timestamp/README.md) (#1027).
 
 Recapture from the crate root:
 

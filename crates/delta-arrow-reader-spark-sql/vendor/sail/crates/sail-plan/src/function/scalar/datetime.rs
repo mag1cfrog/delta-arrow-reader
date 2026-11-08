@@ -462,8 +462,8 @@ fn cast_timestamp_diff_argument(
             cast_timestamp_diff_argument(function_name, ordinal, cast(expr, *value_type), context)
         }
         DataType::Timestamp(_, Some(_)) | DataType::Null => Ok(cast(expr, timestamp)),
-        DataType::Timestamp(_, None) | DataType::Date32 | DataType::Date64 => {
-            Ok(cast_local_timestamp_expr_to_ltz(expr, timezone))
+        source @ (DataType::Timestamp(_, None) | DataType::Date32 | DataType::Date64) => {
+            Ok(cast_local_timestamp_expr_to_ltz(expr, &source, timezone))
         }
         DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => {
             Ok(ScalarUDF::from(SparkTimestamp::try_new(
@@ -1066,11 +1066,15 @@ fn utc_ntz_timestamp_and_unit(
 ) -> PlanResult<(Expr, TimeUnit)> {
     let (ts, unit) = match ts.get_type(schema)? {
         DataType::Timestamp(unit, Some(_)) => (ts, unit),
-        // Spark casts TIMESTAMP_NTZ and DATE to TIMESTAMP in the session zone, moving a local
-        // time skipped by a DST change forward and taking the earlier instant of a repeated one.
-        DataType::Timestamp(unit, None) => (cast_local_timestamp_expr_to_ltz(ts, session_tz), unit),
-        DataType::Date32 | DataType::Date64 => (
-            cast_local_timestamp_expr_to_ltz(ts, session_tz),
+        // Spark casts TIMESTAMP_NTZ and DATE to TIMESTAMP in the session zone. A TIMESTAMP_NTZ
+        // skipped by a DST change moves forward and a repeated one takes its earlier instant; a
+        // DATE starts at the first instant of its day.
+        source @ DataType::Timestamp(unit, None) => (
+            cast_local_timestamp_expr_to_ltz(ts, &source, session_tz),
+            unit,
+        ),
+        source @ (DataType::Date32 | DataType::Date64) => (
+            cast_local_timestamp_expr_to_ltz(ts, &source, session_tz),
             TimeUnit::Microsecond,
         ),
         DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => {

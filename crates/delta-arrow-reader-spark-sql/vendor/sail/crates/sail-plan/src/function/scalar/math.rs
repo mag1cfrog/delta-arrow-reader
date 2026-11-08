@@ -59,6 +59,8 @@ use crate::expression_errors::is_locally_evaluable;
 use crate::function::common::{
     FunctionContextInput, ScalarFunction, ScalarFunctionInput, without_metadata_annotations,
 };
+use crate::function::result_coercion::{coerce_to_temporal, is_temporal_type};
+use crate::function::temporal_coercion::common_temporal_type;
 
 // Byte inputs retain Spark's input nullability while sharing native HEX formatting.
 #[derive(Debug, Default, PartialEq, Eq, Hash)]
@@ -2473,6 +2475,36 @@ fn spark_rand_with_validated_seed(input: ScalarFunctionInput) -> PlanResult<Expr
     Ok(ScalarUDF::from(random).call(arguments))
 }
 
+/// GREATEST and LEAST. Spark widens arguments that mix DATE, TIMESTAMP and TIMESTAMP_NTZ to
+/// their common temporal type, reading DATE and TIMESTAMP_NTZ in the session time zone like
+/// CAST. Other arguments keep DataFusion's coercion.
+fn extremum_with_temporal_widening(
+    input: ScalarFunctionInput,
+    extremum: fn(Vec<Expr>) -> Expr,
+) -> PlanResult<Expr> {
+    let schema = input.function_context.schema;
+    let types = input
+        .arguments
+        .iter()
+        .map(|argument| argument.get_type(schema))
+        .collect::<Result<Vec<_>, _>>()?;
+    let temporal = types
+        .iter()
+        .all(|data_type| is_temporal_type(data_type) || *data_type == DataType::Null);
+    let mixed = types.windows(2).any(|pair| pair[0] != pair[1]);
+    let target = common_temporal_type(&types, &input.function_context.plan_config.session_timezone);
+    let arguments = match target {
+        Some(target) if temporal && mixed => input
+            .arguments
+            .into_iter()
+            .zip(&types)
+            .map(|(argument, data_type)| coerce_to_temporal(argument, data_type, &target))
+            .collect::<PlanResult<Vec<_>>>()?,
+        _ => input.arguments,
+    };
+    Ok(extremum(arguments))
+}
+
 pub(super) fn list_built_in_math_functions() -> Vec<(&'static str, ScalarFunction)> {
     use crate::function::common::ScalarFunctionBuilder as F;
 
@@ -2510,10 +2542,16 @@ pub(super) fn list_built_in_math_functions() -> Vec<(&'static str, ScalarFunctio
         ("expm1", F::unary(math_fn::expm1)),
         ("factorial", F::unary(expr_fn::factorial)),
         ("floor", F::custom(|arg| ceil_floor(arg, "floor"))),
-        ("greatest", F::var_arg(expr_fn::greatest)),
+        (
+            "greatest",
+            F::custom(|input| extremum_with_temporal_widening(input, expr_fn::greatest)),
+        ),
         ("hex", F::custom(hex)),
         ("hypot", F::binary(hypot)),
-        ("least", F::var_arg(expr_fn::least)),
+        (
+            "least",
+            F::custom(|input| extremum_with_temporal_widening(input, expr_fn::least)),
+        ),
         ("ln", F::unary(double(ln))),
         ("log", F::binary(double2(log))),
         ("log10", F::unary(double(log10))),

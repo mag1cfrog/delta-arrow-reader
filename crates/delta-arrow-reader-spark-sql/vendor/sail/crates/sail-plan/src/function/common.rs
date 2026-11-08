@@ -818,7 +818,7 @@ pub(crate) fn spark_binary_expr(
                     DataType::Date32 | DataType::Date64 | DataType::Timestamp(_, None)
                 ) && let DataType::Timestamp(TimeUnit::Microsecond, Some(timezone)) = &target
                 {
-                    cast_local_timestamp_expr_to_ltz(value, timezone)
+                    cast_local_timestamp_expr_to_ltz(value, source, timezone)
                 } else if source != &target {
                     cast(value, target.clone())
                 } else {

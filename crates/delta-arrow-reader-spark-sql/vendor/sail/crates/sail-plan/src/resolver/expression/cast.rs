@@ -35,7 +35,7 @@ use crate::formatter::SparkPlanFormatter;
 use crate::function::common::drop_inherited_column_metadata;
 use crate::function::is_spark_compatible_arrow_fixed_offset;
 use crate::function::temporal_coercion::{
-    cast_local_timestamp_expr_to_ltz, ltz_expr_to_local_timestamp,
+    cast_date_expr_to_ltz, cast_local_timestamp_expr_to_ltz, ltz_expr_to_local_timestamp,
 };
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
@@ -211,6 +211,12 @@ impl PlanResolver<'_> {
                 ))
                 .call(vec![expr])
             }
+            // Spark starts a DATE at the first instant of its day in the session zone.
+            (
+                DataType::Date32 | DataType::Date64,
+                DataType::Timestamp(TimeUnit::Microsecond, Some(timezone)),
+                is_try,
+            ) => cast_date_expr_to_ltz(expr, &timezone, is_try),
             (
                 DataType::Timestamp(_, None),
                 DataType::Timestamp(TimeUnit::Microsecond, Some(timezone)),
@@ -223,7 +229,11 @@ impl PlanResolver<'_> {
                         cast(expr, cast_to_type)
                     }
                 } else {
-                    cast_local_timestamp_expr_to_ltz(expr, &timezone)
+                    cast_local_timestamp_expr_to_ltz(
+                        expr,
+                        &DataType::Timestamp(TimeUnit::Microsecond, None),
+                        &timezone,
+                    )
                 }
             }
             (_, DataType::Utf8, _) if expr_is_variant => cast(
