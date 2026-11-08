@@ -2,7 +2,9 @@
 //! Spark's TIMESTAMPADD, DATEADD and three-argument DATE_ADD, as `DateTimeUtils.timestampAdd`
 //! gives it: a BIGINT quantity of DAY, WEEK, MONTH, QUARTER or YEAR units moves the local
 //! date-time in the TIMESTAMP's time zone, and smaller units move the instant. A
-//! TIMESTAMP_NTZ moves in UTC and stays a TIMESTAMP_NTZ.
+//! TIMESTAMP_NTZ moves in UTC and stays a TIMESTAMP_NTZ. Overflow fails with Spark's
+//! `DATETIME_OVERFLOW`, whose message repeats the unit as written and the timestamp in the
+//! session zone.
 
 use std::sync::Arc;
 
@@ -10,8 +12,10 @@ use datafusion::arrow::array::types::{Int64Type, TimestampMicrosecondType};
 use datafusion::arrow::array::{Array, AsArray, TimestampMicrosecondArray};
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef, TimeUnit};
 use datafusion_common::{Result, ScalarValue, exec_err, internal_err, plan_err};
+use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
 use datafusion_expr::{
-    ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
+    ColumnarValue, Expr, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
+    lit,
 };
 
 use crate::scalar::datetime::local_time::{MICROS_PER_DAY, TimestampZone, add_interval};
@@ -35,21 +39,21 @@ enum Unit {
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkTimestampAdd {
     unit: Unit,
-    /// The unit as written, upper case, for errors.
+    /// The unit as written, which Spark's errors repeat.
     unit_name: String,
     /// Spark's implicit casts of a string or fractional quantity, or of a string TIMESTAMP,
     /// can return NULL, so the result is nullable whatever the arguments declare.
     force_nullable: bool,
-    /// The session time zone in which Spark's DATETIME_OVERFLOW message renders a
-    /// TIMESTAMP_NTZ's microseconds, as if they were an instant.
-    ntz_message_zone: Option<Arc<str>>,
+    /// The session time zone, in which Spark's DATETIME_OVERFLOW message renders a
+    /// TIMESTAMP_NTZ's microseconds as if they were an instant.
+    session_zone: Arc<str>,
     signature: Signature,
 }
 
 impl SparkTimestampAdd {
-    pub fn try_new(unit: &str, force_nullable: bool) -> Result<Self> {
-        let unit_name = unit.trim().to_ascii_uppercase();
-        let unit = match unit_name.as_str() {
+    pub fn try_new(unit: &str, force_nullable: bool, session_zone: Arc<str>) -> Result<Self> {
+        let unit_name = unit.trim().to_owned();
+        let unit = match unit_name.to_ascii_uppercase().as_str() {
             "MICROSECOND" => Unit::Microsecond,
             "MILLISECOND" => Unit::Millisecond,
             "SECOND" => Unit::Second,
@@ -66,15 +70,9 @@ impl SparkTimestampAdd {
             unit,
             unit_name,
             force_nullable,
-            ntz_message_zone: None,
+            session_zone,
             signature: Signature::any(2, Volatility::Immutable),
         })
-    }
-
-    /// Render a TIMESTAMP_NTZ in `zone` in overflow messages, as Spark does in the session zone.
-    pub fn with_ntz_message_zone(mut self, zone: Arc<str>) -> Self {
-        self.ntz_message_zone = Some(zone);
-        self
     }
 
     /// `micros` plus `quantity` units in `zone`, or `None` where Spark overflows an INT unit
@@ -134,6 +132,28 @@ impl ScalarUDFImpl for SparkTimestampAdd {
         true
     }
 
+    // Spark evaluates the quantity first and returns NULL for a NULL quantity without
+    // evaluating the timestamp, whose string cast can fail; constants still fold on their own.
+    fn short_circuits_on_any_null_argument(&self) -> bool {
+        true
+    }
+
+    // Spark propagates a NULL argument before folding constants, so a NULL literal discards a
+    // failing cast in the other argument.
+    fn simplify(&self, args: Vec<Expr>, info: &SimplifyContext) -> Result<ExprSimplifyResult> {
+        if let [_, timestamp] = args.as_slice()
+            && args
+                .iter()
+                .any(|arg| matches!(arg, Expr::Literal(value, _) if value.is_null()))
+        {
+            let timestamp_type = info.get_data_type(timestamp)?;
+            return Ok(ExprSimplifyResult::Simplified(lit(
+                ScalarValue::try_new_null(&timestamp_type)?,
+            )));
+        }
+        Ok(ExprSimplifyResult::Original(args))
+    }
+
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
         let [quantities, timestamps] = args.args.as_slice() else {
             return internal_err!("{} requires two arguments", self.name());
@@ -146,9 +166,9 @@ impl ScalarUDFImpl for SparkTimestampAdd {
         };
         // A TIMESTAMP_NTZ moves in UTC, but Spark's message reads its microseconds as an
         // instant in the session zone.
-        let ntz_message_zone = match (&zone, &self.ntz_message_zone) {
-            (None, Some(session)) => TimestampZone::parse(session),
-            _ => None,
+        let ntz_message_zone = match &zone {
+            None => TimestampZone::parse(&self.session_zone),
+            Some(_) => None,
         };
         let message_zone = ntz_message_zone.as_ref().unwrap_or(&parsed);
         let scalar = matches!(
@@ -241,7 +261,7 @@ mod tests {
 
     fn add(unit: &str, quantity: i64, micros: i64, zone: &str) -> Option<i64> {
         let parsed = TimestampZone::parse(zone)?;
-        SparkTimestampAdd::try_new(unit, false)
+        SparkTimestampAdd::try_new(unit, false, "UTC".into())
             .ok()?
             .add(quantity, micros, &parsed)
     }

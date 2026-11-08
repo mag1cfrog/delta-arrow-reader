@@ -41,7 +41,7 @@ fn timestampadd_quantity_references() -> TestResult<Vec<Value>> {
             |build| build.contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
         )
     );
-    assert_eq!(records.len() - 1, 620);
+    assert_eq!(records.len() - 1, 696);
     Ok(records)
 }
 

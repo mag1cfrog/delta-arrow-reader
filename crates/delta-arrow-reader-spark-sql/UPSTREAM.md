@@ -546,8 +546,11 @@ DataFusion SQL are unchanged. The
 checks.
 
 TIMESTAMPADD's `DATETIME_OVERFLOW` message names the full BIGINT quantity, the unit and the
-timestamp like Spark's. Spark reads a TIMESTAMP_NTZ's microseconds there as an instant in the
-session zone, so the message now does too, where it printed the wall-clock time. The
+timestamp like Spark's. It now keeps the unit as written, where it was upper case, and reads a
+TIMESTAMP_NTZ's microseconds as an instant in the session zone, where it printed the
+wall-clock time. As in Spark, a NULL quantity returns NULL without evaluating the timestamp,
+so a malformed STRING timestamp beside it no longer fails, and a NULL literal argument gives
+NULL before constants fold. The
 [TIMESTAMPADD quantity references](tests/fixtures/timestampadd-quantity/README.md) check
 full-width quantities in every unit, as columns and constants (#981).
 
