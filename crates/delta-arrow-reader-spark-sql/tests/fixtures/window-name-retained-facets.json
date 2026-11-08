@@ -14,17 +14,6 @@
   "controls": [
     {
       "corpus": "supplement",
-      "id": "inputs_literal_arguments",
-      "ansi": true,
-      "sql": "SELECT id,SUM(1) OVER (PARTITION BY g),LAG(1,2,-99) OVER (ORDER BY id),NTH_VALUE(CAST(NULL AS INT),2) IGNORE NULLS OVER (ORDER BY id) FROM inputs",
-      "reference_condition": null,
-      "owner": "#1044",
-      "kind": "lag_nullability",
-      "nullable_field": 2,
-      "nullable": true
-    },
-    {
-      "corpus": "supplement",
       "id": "inputs_folded_ignore_nulls",
       "ansi": true,
       "sql": "SELECT id,NTH_VALUE(v,2,CAST(true AS BOOLEAN)) OVER (ORDER BY id),FIRST_VALUE(v,CAST(true AS BOOLEAN)) OVER (ORDER BY id) FROM inputs",
@@ -36,17 +25,6 @@
     },
     {
       "corpus": "supplement",
-      "id": "empty_inputs_literal_arguments",
-      "ansi": true,
-      "sql": "SELECT id,SUM(1) OVER (PARTITION BY g),LAG(1,2,-99) OVER (ORDER BY id),NTH_VALUE(CAST(NULL AS INT),2) IGNORE NULLS OVER (ORDER BY id) FROM empty_inputs",
-      "reference_condition": null,
-      "owner": "#1044",
-      "kind": "lag_nullability",
-      "nullable_field": 2,
-      "nullable": true
-    },
-    {
-      "corpus": "supplement",
       "id": "empty_inputs_folded_ignore_nulls",
       "ansi": true,
       "sql": "SELECT id,NTH_VALUE(v,2,CAST(true AS BOOLEAN)) OVER (ORDER BY id),FIRST_VALUE(v,CAST(true AS BOOLEAN)) OVER (ORDER BY id) FROM empty_inputs",
@@ -55,17 +33,6 @@
       "kind": "boolean_error",
       "phase": "resolve",
       "error": "External error: invalid argument: nth_value third argument should be boolean scalar"
-    },
-    {
-      "corpus": "supplement",
-      "id": "null_inputs_literal_arguments",
-      "ansi": true,
-      "sql": "SELECT id,SUM(1) OVER (PARTITION BY g),LAG(1,2,-99) OVER (ORDER BY id),NTH_VALUE(CAST(NULL AS INT),2) IGNORE NULLS OVER (ORDER BY id) FROM null_inputs",
-      "reference_condition": null,
-      "owner": "#1044",
-      "kind": "lag_nullability",
-      "nullable_field": 2,
-      "nullable": true
     },
     {
       "corpus": "supplement",
@@ -80,17 +47,6 @@
     },
     {
       "corpus": "supplement",
-      "id": "inputs_literal_arguments",
-      "ansi": false,
-      "sql": "SELECT id,SUM(1) OVER (PARTITION BY g),LAG(1,2,-99) OVER (ORDER BY id),NTH_VALUE(CAST(NULL AS INT),2) IGNORE NULLS OVER (ORDER BY id) FROM inputs",
-      "reference_condition": null,
-      "owner": "#1044",
-      "kind": "lag_nullability",
-      "nullable_field": 2,
-      "nullable": true
-    },
-    {
-      "corpus": "supplement",
       "id": "inputs_folded_ignore_nulls",
       "ansi": false,
       "sql": "SELECT id,NTH_VALUE(v,2,CAST(true AS BOOLEAN)) OVER (ORDER BY id),FIRST_VALUE(v,CAST(true AS BOOLEAN)) OVER (ORDER BY id) FROM inputs",
@@ -102,17 +58,6 @@
     },
     {
       "corpus": "supplement",
-      "id": "empty_inputs_literal_arguments",
-      "ansi": false,
-      "sql": "SELECT id,SUM(1) OVER (PARTITION BY g),LAG(1,2,-99) OVER (ORDER BY id),NTH_VALUE(CAST(NULL AS INT),2) IGNORE NULLS OVER (ORDER BY id) FROM empty_inputs",
-      "reference_condition": null,
-      "owner": "#1044",
-      "kind": "lag_nullability",
-      "nullable_field": 2,
-      "nullable": true
-    },
-    {
-      "corpus": "supplement",
       "id": "empty_inputs_folded_ignore_nulls",
       "ansi": false,
       "sql": "SELECT id,NTH_VALUE(v,2,CAST(true AS BOOLEAN)) OVER (ORDER BY id),FIRST_VALUE(v,CAST(true AS BOOLEAN)) OVER (ORDER BY id) FROM empty_inputs",
@@ -121,17 +66,6 @@
       "kind": "boolean_error",
       "phase": "resolve",
       "error": "External error: invalid argument: nth_value third argument should be boolean scalar"
-    },
-    {
-      "corpus": "supplement",
-      "id": "null_inputs_literal_arguments",
-      "ansi": false,
-      "sql": "SELECT id,SUM(1) OVER (PARTITION BY g),LAG(1,2,-99) OVER (ORDER BY id),NTH_VALUE(CAST(NULL AS INT),2) IGNORE NULLS OVER (ORDER BY id) FROM null_inputs",
-      "reference_condition": null,
-      "owner": "#1044",
-      "kind": "lag_nullability",
-      "nullable_field": 2,
-      "nullable": true
     },
     {
       "corpus": "supplement",

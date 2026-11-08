@@ -21,7 +21,10 @@ use sail_function::scalar::spark_cast_numeric_to_integer::SparkCastNumericToInte
 
 use crate::error::{PlanError, PlanResult};
 use crate::formatter::SparkPlanFormatter;
-use crate::function::common::{FunctionContextInput, WinFunctionInput};
+use crate::function::common::{
+    FunctionContextInput, WinFunctionInput, drop_inherited_column_metadata,
+    without_inherited_column_metadata,
+};
 use crate::function::{get_built_in_window_function, require_deterministic_scalar_expression};
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
@@ -351,6 +354,11 @@ impl PlanResolver<'_> {
                     },
                 };
                 let window = function(input)?;
+                let window = if offset_function {
+                    self.coerce_offset_window_default(window, schema)?
+                } else {
+                    window
+                };
                 (name?, window)
             }
             spec::Expr::CommonInlineUserDefinedFunction { .. } => {
@@ -366,6 +374,33 @@ impl PlanResolver<'_> {
         };
 
         Ok(NamedExpr::new(vec![name], window))
+    }
+
+    fn coerce_offset_window_default(
+        &self,
+        expression: expr::Expr,
+        schema: &DFSchemaRef,
+    ) -> PlanResult<expr::Expr> {
+        let mut window = without_inherited_column_metadata(&expression).clone();
+        let expr::Expr::WindowFunction(function) = &mut window else {
+            return Ok(expression);
+        };
+        let [payload, _, default] = function.params.args.as_mut_slice() else {
+            return Ok(expression);
+        };
+        let payload_type = payload.get_type(schema)?;
+        let default_type = default.get_type(schema)?;
+        if payload_type.is_null()
+            || default_type.is_null()
+            || payload_type.is_nested()
+            || default_type.is_nested()
+            || payload_type.equals_datatype(&default_type)
+            || !can_cast_types(&default_type, &payload_type)
+        {
+            return Ok(expression);
+        }
+        *default = self.cast_resolved_expression(default.clone(), payload_type, false, schema)?;
+        Ok(drop_inherited_column_metadata(window))
     }
 
     fn resolve_offset_window_boundary(

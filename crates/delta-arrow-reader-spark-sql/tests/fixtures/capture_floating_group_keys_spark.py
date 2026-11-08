@@ -18,6 +18,8 @@ from pyspark.sql import SparkSession, types
 def encode(value, data_type, *, input_value=False):
     if value is None:
         return None
+    if isinstance(data_type, types.BooleanType) and not input_value:
+        return str(value).lower()
     if isinstance(data_type, types.TimestampType) and not input_value:
         # PySpark's TimestampType returns local naive datetimes.
         timestamp = value.astimezone(timezone.utc).replace(tzinfo=None)

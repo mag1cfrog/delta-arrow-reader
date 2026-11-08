@@ -10,7 +10,6 @@ use datafusion::functions_aggregate::{
 };
 use datafusion::functions_nested::string::array_to_string;
 use datafusion::functions_window::cume_dist::cume_dist_udwf;
-use datafusion::functions_window::lead_lag::{lag_udwf, lead_udwf};
 use datafusion::functions_window::nth_value::{first_value_udwf, last_value_udwf, nth_value_udwf};
 use datafusion::functions_window::rank::{dense_rank_udwf, percent_rank_udwf, rank_udwf};
 use datafusion::functions_window::row_number::row_number_udwf;
@@ -54,6 +53,10 @@ use crate::function::common::{
 };
 use crate::function::float_keys::normalize_spark_float_key;
 use crate::function::transform_count_star_wildcard_expr;
+
+use self::offset::{spark_lag_udwf, spark_lead_udwf};
+
+mod offset;
 
 lazy_static! {
     static ref BUILT_IN_WINDOW_FUNCTIONS: HashMap<&'static str, WinFunction> =
@@ -663,10 +666,10 @@ fn list_built_in_window_functions() -> Vec<(&'static str, WinFunction)> {
         ("dense_rank", F::window(dense_rank_udwf)),
         ("first", F::window(first_value_udwf)),
         ("first_value", F::window(first_value_udwf)),
-        ("lag", F::window(lag_udwf)),
+        ("lag", F::window(spark_lag_udwf)),
         ("last", F::window(last_value_udwf)),
         ("last_value", F::window(last_value_udwf)),
-        ("lead", F::window(lead_udwf)),
+        ("lead", F::window(spark_lead_udwf)),
         ("nth_value", F::custom(nth_value)),
         ("ntile", F::window(spark_ntile_udwf)),
         ("rank", F::window(rank_udwf)),
@@ -837,11 +840,9 @@ pub(crate) fn get_built_in_window_function(name: &str) -> PlanResult<WinFunction
     Ok(Arc::new(move |input| {
         let schema = input.function_context.schema;
         let result = function(input)?;
-        if !result.to_field(schema)?.1.metadata().is_empty() {
-            Ok(drop_inherited_column_metadata(result))
-        } else {
-            Ok(result)
-        }
+        let _ = result.to_field(schema)?;
+        // Folding can introduce inherited metadata after resolution.
+        Ok(drop_inherited_column_metadata(result))
     }))
 }
 

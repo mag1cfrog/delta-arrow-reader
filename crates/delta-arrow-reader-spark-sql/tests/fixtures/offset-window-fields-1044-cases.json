@@ -1,0 +1,3766 @@
+{
+  "version": 1,
+  "issue": 1044,
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "accepted_base": "5b82dec9131c3fc85b7e57e27429175ffd253a66",
+  "python_version": "3.12",
+  "java_specification_version": "21",
+  "outcome_state": "UNKNOWN: all 94 v2 rows, Fields, plans, statuses and errors await independent root Spark capture.",
+  "sql_source_count": 47,
+  "expected_record_count": 94,
+  "retained_reference_count": 6,
+  "retained_native_context_count": 12,
+  "family_record_counts": {
+    "scalar_defaults": 12,
+    "signed_zero_offsets": 12,
+    "typed_nested_fields": 12,
+    "sql_array_constructors": 8,
+    "outer_consumers": 16,
+    "offset_frame_admission": 12,
+    "optimized_nullability": 4,
+    "column_defaults": 4,
+    "lag_defaults_without_frame": 6,
+    "literal_null_payloads": 8
+  },
+  "native_batch_sizes": [
+    1,
+    32
+  ],
+  "native_provider_partitions": 2,
+  "native_target_partitions": 2,
+  "spark_provider_partitions_expected": 1,
+  "spark_master": "local[1]",
+  "retained_reference_source": {
+    "file": "window-name-stages-spark.jsonl",
+    "sha256": "10cae68fdc747ece067a65164f80f79b9ea83654864e1ce3d0d946534de4b3ea",
+    "corpus": "supplement",
+    "ids": [
+      "inputs_literal_arguments",
+      "empty_inputs_literal_arguments",
+      "null_inputs_literal_arguments"
+    ],
+    "ansi_modes": [
+      true,
+      false
+    ],
+    "recapture_requested": false
+  },
+  "corpora": [
+    {
+      "corpus": "offset-window-fields-1044-supplement",
+      "source": {
+        "kind": "source-only v2 controls with Arrow-compatible string metadata",
+        "base": "5b82dec9131c3fc85b7e57e27429175ffd253a66",
+        "issue": "https://github.com/mag1cfrog/delta-arrow-reader/issues/1044",
+        "reads_expected_outputs": false
+      },
+      "metadata": {
+        "spark_version": "4.2.0",
+        "timezone": "UTC",
+        "inputs": [
+          {
+            "name": "offset_scalar",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "id",
+                    "role": "total-order"
+                  }
+                },
+                {
+                  "name": "g",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "g",
+                    "role": "partition"
+                  }
+                },
+                {
+                  "name": "r",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "r",
+                    "role": "required-payload"
+                  }
+                },
+                {
+                  "name": "v",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "v",
+                    "role": "nullable-payload"
+                  }
+                },
+                {
+                  "name": "d",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "d",
+                    "role": "required-default"
+                  }
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "0",
+                "10",
+                null,
+                "-101"
+              ],
+              [
+                "1",
+                "0",
+                "20",
+                "10",
+                "-102"
+              ],
+              [
+                "2",
+                "0",
+                "30",
+                null,
+                "-103"
+              ],
+              [
+                "3",
+                "0",
+                "40",
+                "20",
+                "-104"
+              ],
+              [
+                "4",
+                "1",
+                "50",
+                null,
+                "-105"
+              ],
+              [
+                "5",
+                "1",
+                "60",
+                "30",
+                "-106"
+              ],
+              [
+                "6",
+                "1",
+                "70",
+                "40",
+                "-107"
+              ],
+              [
+                "7",
+                "1",
+                "80",
+                null,
+                "-108"
+              ]
+            ]
+          },
+          {
+            "name": "empty_offset_scalar",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "id",
+                    "role": "total-order"
+                  }
+                },
+                {
+                  "name": "g",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "g",
+                    "role": "partition"
+                  }
+                },
+                {
+                  "name": "r",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "r",
+                    "role": "required-payload"
+                  }
+                },
+                {
+                  "name": "v",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "v",
+                    "role": "nullable-payload"
+                  }
+                },
+                {
+                  "name": "d",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "d",
+                    "role": "required-default"
+                  }
+                }
+              ]
+            },
+            "rows": []
+          },
+          {
+            "name": "null_offset_scalar",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "id",
+                    "role": "total-order"
+                  }
+                },
+                {
+                  "name": "g",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "g",
+                    "role": "partition"
+                  }
+                },
+                {
+                  "name": "r",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "r",
+                    "role": "required-payload"
+                  }
+                },
+                {
+                  "name": "v",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "v",
+                    "role": "nullable-payload"
+                  }
+                },
+                {
+                  "name": "d",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "d",
+                    "role": "required-default"
+                  }
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "0",
+                "10",
+                null,
+                "-101"
+              ],
+              [
+                "1",
+                "0",
+                "20",
+                null,
+                "-102"
+              ],
+              [
+                "2",
+                "1",
+                "30",
+                null,
+                "-103"
+              ]
+            ]
+          },
+          {
+            "name": "offset_nested",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "id",
+                    "role": "total-order"
+                  }
+                },
+                {
+                  "name": "g",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "g",
+                    "role": "partition"
+                  }
+                },
+                {
+                  "name": "r",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "value",
+                        "type": "integer",
+                        "nullable": false,
+                        "metadata": {
+                          "unit": "count",
+                          "role": "required-child"
+                        }
+                      },
+                      {
+                        "name": "maybe",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {
+                          "unit": "count",
+                          "role": "nullable-child"
+                        }
+                      },
+                      {
+                        "name": "detail",
+                        "type": {
+                          "type": "struct",
+                          "fields": [
+                            {
+                              "name": "token",
+                              "type": "integer",
+                              "nullable": false,
+                              "metadata": {
+                                "source": "detail.token",
+                                "lineage": "{\"origin\":\"1044-fixture\",\"ordinal\":1}"
+                              }
+                            },
+                            {
+                              "name": "flag",
+                              "type": "boolean",
+                              "nullable": true,
+                              "metadata": {
+                                "source": "detail.flag",
+                                "role": "nullable-grandchild"
+                              }
+                            }
+                          ]
+                        },
+                        "nullable": false,
+                        "metadata": {
+                          "source": "detail",
+                          "role": "required-child-struct"
+                        }
+                      }
+                    ]
+                  },
+                  "nullable": false,
+                  "metadata": {
+                    "source": "r",
+                    "purpose": "required-nested-payload",
+                    "version": "1"
+                  }
+                },
+                {
+                  "name": "v",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "value",
+                        "type": "integer",
+                        "nullable": false,
+                        "metadata": {
+                          "unit": "count",
+                          "role": "required-child"
+                        }
+                      },
+                      {
+                        "name": "maybe",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {
+                          "unit": "count",
+                          "role": "nullable-child"
+                        }
+                      },
+                      {
+                        "name": "detail",
+                        "type": {
+                          "type": "struct",
+                          "fields": [
+                            {
+                              "name": "token",
+                              "type": "integer",
+                              "nullable": false,
+                              "metadata": {
+                                "source": "detail.token",
+                                "lineage": "{\"origin\":\"1044-fixture\",\"ordinal\":1}"
+                              }
+                            },
+                            {
+                              "name": "flag",
+                              "type": "boolean",
+                              "nullable": true,
+                              "metadata": {
+                                "source": "detail.flag",
+                                "role": "nullable-grandchild"
+                              }
+                            }
+                          ]
+                        },
+                        "nullable": false,
+                        "metadata": {
+                          "source": "detail",
+                          "role": "required-child-struct"
+                        }
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {
+                    "source": "v",
+                    "purpose": "nullable-nested-payload",
+                    "version": "1"
+                  }
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "0",
+                [
+                  "10",
+                  null,
+                  [
+                    "100",
+                    null
+                  ]
+                ],
+                null
+              ],
+              [
+                "1",
+                "0",
+                [
+                  "20",
+                  "2",
+                  [
+                    "200",
+                    "True"
+                  ]
+                ],
+                [
+                  "21",
+                  null,
+                  [
+                    "210",
+                    "False"
+                  ]
+                ]
+              ],
+              [
+                "2",
+                "1",
+                [
+                  "30",
+                  null,
+                  [
+                    "300",
+                    "False"
+                  ]
+                ],
+                null
+              ],
+              [
+                "3",
+                "1",
+                [
+                  "40",
+                  "4",
+                  [
+                    "400",
+                    null
+                  ]
+                ],
+                [
+                  "41",
+                  "5",
+                  [
+                    "410",
+                    null
+                  ]
+                ]
+              ]
+            ]
+          },
+          {
+            "name": "empty_offset_nested",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "id",
+                    "role": "total-order"
+                  }
+                },
+                {
+                  "name": "g",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "g",
+                    "role": "partition"
+                  }
+                },
+                {
+                  "name": "r",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "value",
+                        "type": "integer",
+                        "nullable": false,
+                        "metadata": {
+                          "unit": "count",
+                          "role": "required-child"
+                        }
+                      },
+                      {
+                        "name": "maybe",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {
+                          "unit": "count",
+                          "role": "nullable-child"
+                        }
+                      },
+                      {
+                        "name": "detail",
+                        "type": {
+                          "type": "struct",
+                          "fields": [
+                            {
+                              "name": "token",
+                              "type": "integer",
+                              "nullable": false,
+                              "metadata": {
+                                "source": "detail.token",
+                                "lineage": "{\"origin\":\"1044-fixture\",\"ordinal\":1}"
+                              }
+                            },
+                            {
+                              "name": "flag",
+                              "type": "boolean",
+                              "nullable": true,
+                              "metadata": {
+                                "source": "detail.flag",
+                                "role": "nullable-grandchild"
+                              }
+                            }
+                          ]
+                        },
+                        "nullable": false,
+                        "metadata": {
+                          "source": "detail",
+                          "role": "required-child-struct"
+                        }
+                      }
+                    ]
+                  },
+                  "nullable": false,
+                  "metadata": {
+                    "source": "r",
+                    "purpose": "required-nested-payload",
+                    "version": "1"
+                  }
+                },
+                {
+                  "name": "v",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "value",
+                        "type": "integer",
+                        "nullable": false,
+                        "metadata": {
+                          "unit": "count",
+                          "role": "required-child"
+                        }
+                      },
+                      {
+                        "name": "maybe",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {
+                          "unit": "count",
+                          "role": "nullable-child"
+                        }
+                      },
+                      {
+                        "name": "detail",
+                        "type": {
+                          "type": "struct",
+                          "fields": [
+                            {
+                              "name": "token",
+                              "type": "integer",
+                              "nullable": false,
+                              "metadata": {
+                                "source": "detail.token",
+                                "lineage": "{\"origin\":\"1044-fixture\",\"ordinal\":1}"
+                              }
+                            },
+                            {
+                              "name": "flag",
+                              "type": "boolean",
+                              "nullable": true,
+                              "metadata": {
+                                "source": "detail.flag",
+                                "role": "nullable-grandchild"
+                              }
+                            }
+                          ]
+                        },
+                        "nullable": false,
+                        "metadata": {
+                          "source": "detail",
+                          "role": "required-child-struct"
+                        }
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {
+                    "source": "v",
+                    "purpose": "nullable-nested-payload",
+                    "version": "1"
+                  }
+                }
+              ]
+            },
+            "rows": []
+          },
+          {
+            "name": "null_offset_nested",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "id",
+                    "role": "total-order"
+                  }
+                },
+                {
+                  "name": "g",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "g",
+                    "role": "partition"
+                  }
+                },
+                {
+                  "name": "r",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "value",
+                        "type": "integer",
+                        "nullable": false,
+                        "metadata": {
+                          "unit": "count",
+                          "role": "required-child"
+                        }
+                      },
+                      {
+                        "name": "maybe",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {
+                          "unit": "count",
+                          "role": "nullable-child"
+                        }
+                      },
+                      {
+                        "name": "detail",
+                        "type": {
+                          "type": "struct",
+                          "fields": [
+                            {
+                              "name": "token",
+                              "type": "integer",
+                              "nullable": false,
+                              "metadata": {
+                                "source": "detail.token",
+                                "lineage": "{\"origin\":\"1044-fixture\",\"ordinal\":1}"
+                              }
+                            },
+                            {
+                              "name": "flag",
+                              "type": "boolean",
+                              "nullable": true,
+                              "metadata": {
+                                "source": "detail.flag",
+                                "role": "nullable-grandchild"
+                              }
+                            }
+                          ]
+                        },
+                        "nullable": false,
+                        "metadata": {
+                          "source": "detail",
+                          "role": "required-child-struct"
+                        }
+                      }
+                    ]
+                  },
+                  "nullable": false,
+                  "metadata": {
+                    "source": "r",
+                    "purpose": "required-nested-payload",
+                    "version": "1"
+                  }
+                },
+                {
+                  "name": "v",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "value",
+                        "type": "integer",
+                        "nullable": false,
+                        "metadata": {
+                          "unit": "count",
+                          "role": "required-child"
+                        }
+                      },
+                      {
+                        "name": "maybe",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {
+                          "unit": "count",
+                          "role": "nullable-child"
+                        }
+                      },
+                      {
+                        "name": "detail",
+                        "type": {
+                          "type": "struct",
+                          "fields": [
+                            {
+                              "name": "token",
+                              "type": "integer",
+                              "nullable": false,
+                              "metadata": {
+                                "source": "detail.token",
+                                "lineage": "{\"origin\":\"1044-fixture\",\"ordinal\":1}"
+                              }
+                            },
+                            {
+                              "name": "flag",
+                              "type": "boolean",
+                              "nullable": true,
+                              "metadata": {
+                                "source": "detail.flag",
+                                "role": "nullable-grandchild"
+                              }
+                            }
+                          ]
+                        },
+                        "nullable": false,
+                        "metadata": {
+                          "source": "detail",
+                          "role": "required-child-struct"
+                        }
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {
+                    "source": "v",
+                    "purpose": "nullable-nested-payload",
+                    "version": "1"
+                  }
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "0",
+                [
+                  "10",
+                  null,
+                  [
+                    "100",
+                    null
+                  ]
+                ],
+                null
+              ],
+              [
+                "1",
+                "0",
+                [
+                  "20",
+                  "2",
+                  [
+                    "200",
+                    "True"
+                  ]
+                ],
+                null
+              ],
+              [
+                "2",
+                "1",
+                [
+                  "30",
+                  null,
+                  [
+                    "300",
+                    "False"
+                  ]
+                ],
+                null
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_offset_scalar_defaults",
+          "ansi": true,
+          "sql": "SELECT id,LAG(r,2,-99) OVER (ORDER BY id) AS required_literal,LAG(r,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS required_null,LAG(r,2) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LAG(v,2,-99) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LAG(v,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS nullable_null,LAG(v,2) RESPECT NULLS OVER (ORDER BY id) AS nullable_omitted,LAG(r,2,-99) IGNORE NULLS OVER (ORDER BY id) AS required_ignore,LAG(v,2,-99) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore,LAG(r,2,-99) OVER (ORDER BY id ROWS BETWEEN 2 PRECEDING AND 2 PRECEDING) AS required_exact_frame FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "scalar_defaults",
+            "provider": "offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "offsets": [
+              2
+            ],
+            "payload_declarations": [
+              "required",
+              "nullable"
+            ],
+            "defaults": [
+              "required-literal",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "implicit-respect",
+              "RESPECT",
+              "IGNORE"
+            ],
+            "frame": [
+              "implicit",
+              "exact-ROWS"
+            ],
+            "state": "mixed-v"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_offset_scalar_defaults",
+          "ansi": false,
+          "sql": "SELECT id,LAG(r,2,-99) OVER (ORDER BY id) AS required_literal,LAG(r,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS required_null,LAG(r,2) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LAG(v,2,-99) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LAG(v,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS nullable_null,LAG(v,2) RESPECT NULLS OVER (ORDER BY id) AS nullable_omitted,LAG(r,2,-99) IGNORE NULLS OVER (ORDER BY id) AS required_ignore,LAG(v,2,-99) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore,LAG(r,2,-99) OVER (ORDER BY id ROWS BETWEEN 2 PRECEDING AND 2 PRECEDING) AS required_exact_frame FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "scalar_defaults",
+            "provider": "offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "offsets": [
+              2
+            ],
+            "payload_declarations": [
+              "required",
+              "nullable"
+            ],
+            "defaults": [
+              "required-literal",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "implicit-respect",
+              "RESPECT",
+              "IGNORE"
+            ],
+            "frame": [
+              "implicit",
+              "exact-ROWS"
+            ],
+            "state": "mixed-v"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_empty_offset_scalar_defaults",
+          "ansi": true,
+          "sql": "SELECT id,LAG(r,2,-99) OVER (ORDER BY id) AS required_literal,LAG(r,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS required_null,LAG(r,2) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LAG(v,2,-99) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LAG(v,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS nullable_null,LAG(v,2) RESPECT NULLS OVER (ORDER BY id) AS nullable_omitted,LAG(r,2,-99) IGNORE NULLS OVER (ORDER BY id) AS required_ignore,LAG(v,2,-99) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore,LAG(r,2,-99) OVER (ORDER BY id ROWS BETWEEN 2 PRECEDING AND 2 PRECEDING) AS required_exact_frame FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "scalar_defaults",
+            "provider": "empty_offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "offsets": [
+              2
+            ],
+            "payload_declarations": [
+              "required",
+              "nullable"
+            ],
+            "defaults": [
+              "required-literal",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "implicit-respect",
+              "RESPECT",
+              "IGNORE"
+            ],
+            "frame": [
+              "implicit",
+              "exact-ROWS"
+            ],
+            "state": "empty"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_empty_offset_scalar_defaults",
+          "ansi": false,
+          "sql": "SELECT id,LAG(r,2,-99) OVER (ORDER BY id) AS required_literal,LAG(r,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS required_null,LAG(r,2) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LAG(v,2,-99) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LAG(v,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS nullable_null,LAG(v,2) RESPECT NULLS OVER (ORDER BY id) AS nullable_omitted,LAG(r,2,-99) IGNORE NULLS OVER (ORDER BY id) AS required_ignore,LAG(v,2,-99) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore,LAG(r,2,-99) OVER (ORDER BY id ROWS BETWEEN 2 PRECEDING AND 2 PRECEDING) AS required_exact_frame FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "scalar_defaults",
+            "provider": "empty_offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "offsets": [
+              2
+            ],
+            "payload_declarations": [
+              "required",
+              "nullable"
+            ],
+            "defaults": [
+              "required-literal",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "implicit-respect",
+              "RESPECT",
+              "IGNORE"
+            ],
+            "frame": [
+              "implicit",
+              "exact-ROWS"
+            ],
+            "state": "empty"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_null_offset_scalar_defaults",
+          "ansi": true,
+          "sql": "SELECT id,LAG(r,2,-99) OVER (ORDER BY id) AS required_literal,LAG(r,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS required_null,LAG(r,2) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LAG(v,2,-99) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LAG(v,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS nullable_null,LAG(v,2) RESPECT NULLS OVER (ORDER BY id) AS nullable_omitted,LAG(r,2,-99) IGNORE NULLS OVER (ORDER BY id) AS required_ignore,LAG(v,2,-99) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore,LAG(r,2,-99) OVER (ORDER BY id ROWS BETWEEN 2 PRECEDING AND 2 PRECEDING) AS required_exact_frame FROM null_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "scalar_defaults",
+            "provider": "null_offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "offsets": [
+              2
+            ],
+            "payload_declarations": [
+              "required",
+              "nullable"
+            ],
+            "defaults": [
+              "required-literal",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "implicit-respect",
+              "RESPECT",
+              "IGNORE"
+            ],
+            "frame": [
+              "implicit",
+              "exact-ROWS"
+            ],
+            "state": "all-NULL-v"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_null_offset_scalar_defaults",
+          "ansi": false,
+          "sql": "SELECT id,LAG(r,2,-99) OVER (ORDER BY id) AS required_literal,LAG(r,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS required_null,LAG(r,2) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LAG(v,2,-99) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LAG(v,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS nullable_null,LAG(v,2) RESPECT NULLS OVER (ORDER BY id) AS nullable_omitted,LAG(r,2,-99) IGNORE NULLS OVER (ORDER BY id) AS required_ignore,LAG(v,2,-99) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore,LAG(r,2,-99) OVER (ORDER BY id ROWS BETWEEN 2 PRECEDING AND 2 PRECEDING) AS required_exact_frame FROM null_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "scalar_defaults",
+            "provider": "null_offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "offsets": [
+              2
+            ],
+            "payload_declarations": [
+              "required",
+              "nullable"
+            ],
+            "defaults": [
+              "required-literal",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "implicit-respect",
+              "RESPECT",
+              "IGNORE"
+            ],
+            "frame": [
+              "implicit",
+              "exact-ROWS"
+            ],
+            "state": "all-NULL-v"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_offset_scalar_signed_respect",
+          "ansi": true,
+          "sql": "SELECT id,LAG(r,0,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS zero_required_null,LAG(r,0) RESPECT NULLS OVER (ORDER BY id) AS zero_required_omitted,LAG(v,0,-99) RESPECT NULLS OVER (ORDER BY id) AS zero_nullable_required,LAG(v,0) RESPECT NULLS OVER (ORDER BY id) AS zero_nullable_omitted,LAG(r,-2,-99) RESPECT NULLS OVER (ORDER BY id) AS negative_required,LAG(v,-2,-99) RESPECT NULLS OVER (ORDER BY id) AS negative_nullable,LAG(r,-2) RESPECT NULLS OVER (ORDER BY id) AS negative_required_omitted,LAG(v,-2) RESPECT NULLS OVER (ORDER BY id) AS negative_nullable_omitted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "signed_zero_offsets",
+            "provider": "offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "offsets": [
+              0,
+              -2
+            ],
+            "payload_declarations": [
+              "required",
+              "nullable"
+            ],
+            "defaults": [
+              "required-literal",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "RESPECT"
+            ],
+            "state": "mixed-v"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_offset_scalar_signed_respect",
+          "ansi": false,
+          "sql": "SELECT id,LAG(r,0,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS zero_required_null,LAG(r,0) RESPECT NULLS OVER (ORDER BY id) AS zero_required_omitted,LAG(v,0,-99) RESPECT NULLS OVER (ORDER BY id) AS zero_nullable_required,LAG(v,0) RESPECT NULLS OVER (ORDER BY id) AS zero_nullable_omitted,LAG(r,-2,-99) RESPECT NULLS OVER (ORDER BY id) AS negative_required,LAG(v,-2,-99) RESPECT NULLS OVER (ORDER BY id) AS negative_nullable,LAG(r,-2) RESPECT NULLS OVER (ORDER BY id) AS negative_required_omitted,LAG(v,-2) RESPECT NULLS OVER (ORDER BY id) AS negative_nullable_omitted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "signed_zero_offsets",
+            "provider": "offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "offsets": [
+              0,
+              -2
+            ],
+            "payload_declarations": [
+              "required",
+              "nullable"
+            ],
+            "defaults": [
+              "required-literal",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "RESPECT"
+            ],
+            "state": "mixed-v"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_offset_scalar_signed_ignore",
+          "ansi": true,
+          "sql": "SELECT id,LAG(r,0,CAST(NULL AS INT)) IGNORE NULLS OVER (ORDER BY id) AS zero_required_null,LAG(r,0) IGNORE NULLS OVER (ORDER BY id) AS zero_required_omitted,LAG(v,0,-99) IGNORE NULLS OVER (ORDER BY id) AS zero_nullable_required,LAG(v,0) IGNORE NULLS OVER (ORDER BY id) AS zero_nullable_omitted,LAG(r,-2,-99) IGNORE NULLS OVER (ORDER BY id) AS negative_required,LAG(v,-2,-99) IGNORE NULLS OVER (ORDER BY id) AS negative_nullable,LAG(r,-2) IGNORE NULLS OVER (ORDER BY id) AS negative_required_omitted,LAG(v,-2) IGNORE NULLS OVER (ORDER BY id) AS negative_nullable_omitted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "signed_zero_offsets",
+            "provider": "offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "offsets": [
+              0,
+              -2
+            ],
+            "payload_declarations": [
+              "required",
+              "nullable"
+            ],
+            "defaults": [
+              "required-literal",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "IGNORE"
+            ],
+            "state": "mixed-v"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_offset_scalar_signed_ignore",
+          "ansi": false,
+          "sql": "SELECT id,LAG(r,0,CAST(NULL AS INT)) IGNORE NULLS OVER (ORDER BY id) AS zero_required_null,LAG(r,0) IGNORE NULLS OVER (ORDER BY id) AS zero_required_omitted,LAG(v,0,-99) IGNORE NULLS OVER (ORDER BY id) AS zero_nullable_required,LAG(v,0) IGNORE NULLS OVER (ORDER BY id) AS zero_nullable_omitted,LAG(r,-2,-99) IGNORE NULLS OVER (ORDER BY id) AS negative_required,LAG(v,-2,-99) IGNORE NULLS OVER (ORDER BY id) AS negative_nullable,LAG(r,-2) IGNORE NULLS OVER (ORDER BY id) AS negative_required_omitted,LAG(v,-2) IGNORE NULLS OVER (ORDER BY id) AS negative_nullable_omitted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "signed_zero_offsets",
+            "provider": "offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "offsets": [
+              0,
+              -2
+            ],
+            "payload_declarations": [
+              "required",
+              "nullable"
+            ],
+            "defaults": [
+              "required-literal",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "IGNORE"
+            ],
+            "state": "mixed-v"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_null_offset_scalar_signed_ignore",
+          "ansi": true,
+          "sql": "SELECT id,LAG(r,0,CAST(NULL AS INT)) IGNORE NULLS OVER (ORDER BY id) AS zero_required_null,LAG(r,0) IGNORE NULLS OVER (ORDER BY id) AS zero_required_omitted,LAG(v,0,-99) IGNORE NULLS OVER (ORDER BY id) AS zero_nullable_required,LAG(v,0) IGNORE NULLS OVER (ORDER BY id) AS zero_nullable_omitted,LAG(r,-2,-99) IGNORE NULLS OVER (ORDER BY id) AS negative_required,LAG(v,-2,-99) IGNORE NULLS OVER (ORDER BY id) AS negative_nullable,LAG(r,-2) IGNORE NULLS OVER (ORDER BY id) AS negative_required_omitted,LAG(v,-2) IGNORE NULLS OVER (ORDER BY id) AS negative_nullable_omitted FROM null_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "signed_zero_offsets",
+            "provider": "null_offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "offsets": [
+              0,
+              -2
+            ],
+            "payload_declarations": [
+              "required",
+              "nullable"
+            ],
+            "defaults": [
+              "required-literal",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "IGNORE"
+            ],
+            "state": "all-NULL-v"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_null_offset_scalar_signed_ignore",
+          "ansi": false,
+          "sql": "SELECT id,LAG(r,0,CAST(NULL AS INT)) IGNORE NULLS OVER (ORDER BY id) AS zero_required_null,LAG(r,0) IGNORE NULLS OVER (ORDER BY id) AS zero_required_omitted,LAG(v,0,-99) IGNORE NULLS OVER (ORDER BY id) AS zero_nullable_required,LAG(v,0) IGNORE NULLS OVER (ORDER BY id) AS zero_nullable_omitted,LAG(r,-2,-99) IGNORE NULLS OVER (ORDER BY id) AS negative_required,LAG(v,-2,-99) IGNORE NULLS OVER (ORDER BY id) AS negative_nullable,LAG(r,-2) IGNORE NULLS OVER (ORDER BY id) AS negative_required_omitted,LAG(v,-2) IGNORE NULLS OVER (ORDER BY id) AS negative_nullable_omitted FROM null_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "signed_zero_offsets",
+            "provider": "null_offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "offsets": [
+              0,
+              -2
+            ],
+            "payload_declarations": [
+              "required",
+              "nullable"
+            ],
+            "defaults": [
+              "required-literal",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "IGNORE"
+            ],
+            "state": "all-NULL-v"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_offset_nested_fields",
+          "ansi": true,
+          "sql": "SELECT id,r AS required_source,v AS nullable_source,LAG(r,1,NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))) RESPECT NULLS OVER (ORDER BY id) AS required_default,LAG(r,1,NULL) RESPECT NULLS OVER (ORDER BY id) AS required_null,LAG(r,1) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LAG(v,1,NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LAG(v,1,NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore,LAG(r,0) RESPECT NULLS OVER (ORDER BY id) AS required_zero FROM offset_nested ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "typed_nested_fields",
+            "provider": "offset_nested",
+            "functions": [
+              "LAG"
+            ],
+            "offsets": [
+              1,
+              0
+            ],
+            "payload_declarations": [
+              "required-struct",
+              "nullable-struct"
+            ],
+            "defaults": [
+              "required-foldable-struct",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "RESPECT",
+              "IGNORE"
+            ],
+            "shape": "struct<required-int,nullable-int,required-struct<required-int,nullable-boolean>>",
+            "metadata": "outer,child,grandchild,nested-metadata-object",
+            "state": "mixed-v"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_offset_nested_fields",
+          "ansi": false,
+          "sql": "SELECT id,r AS required_source,v AS nullable_source,LAG(r,1,NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))) RESPECT NULLS OVER (ORDER BY id) AS required_default,LAG(r,1,NULL) RESPECT NULLS OVER (ORDER BY id) AS required_null,LAG(r,1) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LAG(v,1,NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LAG(v,1,NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore,LAG(r,0) RESPECT NULLS OVER (ORDER BY id) AS required_zero FROM offset_nested ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "typed_nested_fields",
+            "provider": "offset_nested",
+            "functions": [
+              "LAG"
+            ],
+            "offsets": [
+              1,
+              0
+            ],
+            "payload_declarations": [
+              "required-struct",
+              "nullable-struct"
+            ],
+            "defaults": [
+              "required-foldable-struct",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "RESPECT",
+              "IGNORE"
+            ],
+            "shape": "struct<required-int,nullable-int,required-struct<required-int,nullable-boolean>>",
+            "metadata": "outer,child,grandchild,nested-metadata-object",
+            "state": "mixed-v"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_empty_offset_nested_fields",
+          "ansi": true,
+          "sql": "SELECT id,r AS required_source,v AS nullable_source,LAG(r,1,NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))) RESPECT NULLS OVER (ORDER BY id) AS required_default,LAG(r,1,NULL) RESPECT NULLS OVER (ORDER BY id) AS required_null,LAG(r,1) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LAG(v,1,NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LAG(v,1,NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore,LAG(r,0) RESPECT NULLS OVER (ORDER BY id) AS required_zero FROM empty_offset_nested ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "typed_nested_fields",
+            "provider": "empty_offset_nested",
+            "functions": [
+              "LAG"
+            ],
+            "offsets": [
+              1,
+              0
+            ],
+            "payload_declarations": [
+              "required-struct",
+              "nullable-struct"
+            ],
+            "defaults": [
+              "required-foldable-struct",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "RESPECT",
+              "IGNORE"
+            ],
+            "shape": "struct<required-int,nullable-int,required-struct<required-int,nullable-boolean>>",
+            "metadata": "outer,child,grandchild,nested-metadata-object",
+            "state": "empty"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_empty_offset_nested_fields",
+          "ansi": false,
+          "sql": "SELECT id,r AS required_source,v AS nullable_source,LAG(r,1,NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))) RESPECT NULLS OVER (ORDER BY id) AS required_default,LAG(r,1,NULL) RESPECT NULLS OVER (ORDER BY id) AS required_null,LAG(r,1) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LAG(v,1,NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LAG(v,1,NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore,LAG(r,0) RESPECT NULLS OVER (ORDER BY id) AS required_zero FROM empty_offset_nested ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "typed_nested_fields",
+            "provider": "empty_offset_nested",
+            "functions": [
+              "LAG"
+            ],
+            "offsets": [
+              1,
+              0
+            ],
+            "payload_declarations": [
+              "required-struct",
+              "nullable-struct"
+            ],
+            "defaults": [
+              "required-foldable-struct",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "RESPECT",
+              "IGNORE"
+            ],
+            "shape": "struct<required-int,nullable-int,required-struct<required-int,nullable-boolean>>",
+            "metadata": "outer,child,grandchild,nested-metadata-object",
+            "state": "empty"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_null_offset_nested_fields",
+          "ansi": true,
+          "sql": "SELECT id,r AS required_source,v AS nullable_source,LAG(r,1,NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))) RESPECT NULLS OVER (ORDER BY id) AS required_default,LAG(r,1,NULL) RESPECT NULLS OVER (ORDER BY id) AS required_null,LAG(r,1) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LAG(v,1,NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LAG(v,1,NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore,LAG(r,0) RESPECT NULLS OVER (ORDER BY id) AS required_zero FROM null_offset_nested ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "typed_nested_fields",
+            "provider": "null_offset_nested",
+            "functions": [
+              "LAG"
+            ],
+            "offsets": [
+              1,
+              0
+            ],
+            "payload_declarations": [
+              "required-struct",
+              "nullable-struct"
+            ],
+            "defaults": [
+              "required-foldable-struct",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "RESPECT",
+              "IGNORE"
+            ],
+            "shape": "struct<required-int,nullable-int,required-struct<required-int,nullable-boolean>>",
+            "metadata": "outer,child,grandchild,nested-metadata-object",
+            "state": "all-NULL-v"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_null_offset_nested_fields",
+          "ansi": false,
+          "sql": "SELECT id,r AS required_source,v AS nullable_source,LAG(r,1,NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))) RESPECT NULLS OVER (ORDER BY id) AS required_default,LAG(r,1,NULL) RESPECT NULLS OVER (ORDER BY id) AS required_null,LAG(r,1) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LAG(v,1,NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LAG(v,1,NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore,LAG(r,0) RESPECT NULLS OVER (ORDER BY id) AS required_zero FROM null_offset_nested ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "typed_nested_fields",
+            "provider": "null_offset_nested",
+            "functions": [
+              "LAG"
+            ],
+            "offsets": [
+              1,
+              0
+            ],
+            "payload_declarations": [
+              "required-struct",
+              "nullable-struct"
+            ],
+            "defaults": [
+              "required-foldable-struct",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "RESPECT",
+              "IGNORE"
+            ],
+            "shape": "struct<required-int,nullable-int,required-struct<required-int,nullable-boolean>>",
+            "metadata": "outer,child,grandchild,nested-metadata-object",
+            "state": "all-NULL-v"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_offset_nested_array_constructors",
+          "ansi": true,
+          "sql": "SELECT id,a_required AS source_array,a_nullable_element AS source_nullable_elements,a_nested AS source_nested_array,LAG(a_required,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))))) RESPECT NULLS OVER (ORDER BY id) AS required_array,LAG(a_nullable_element,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))),NULL)) RESPECT NULLS OVER (ORDER BY id) AS required_nullable_elements,LAG(a_nested,1,ARRAY(ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))))) RESPECT NULLS OVER (ORDER BY id) AS required_nested_array,LAG(a_nullable_struct,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))))) RESPECT NULLS OVER (ORDER BY id) AS required_nullable_structs,LAG(a_required,1) RESPECT NULLS OVER (ORDER BY id) AS array_omitted,LAG(a_nullable,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))))) RESPECT NULLS OVER (ORDER BY id) AS nullable_array,LAG(a_nullable,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))))) IGNORE NULLS OVER (ORDER BY id) AS nullable_array_ignore FROM (SELECT id,ARRAY(r) AS a_required,ARRAY(r,NULL) AS a_nullable_element,ARRAY(ARRAY(r)) AS a_nested,ARRAY(v) AS a_nullable_struct,IF(id%2=0,NULL,ARRAY(r)) AS a_nullable FROM offset_nested) arrays ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "sql_array_constructors",
+            "provider": "offset_nested",
+            "functions": [
+              "LAG"
+            ],
+            "offsets": [
+              1
+            ],
+            "payload_declarations": [
+              "required-array",
+              "nullable-array"
+            ],
+            "defaults": [
+              "required-foldable-array",
+              "omitted"
+            ],
+            "null_treatment": [
+              "RESPECT",
+              "IGNORE"
+            ],
+            "shape": "SQL arrays of typed structs, nullable elements and nested arrays",
+            "metadata": "typed struct children flow through SQL array constructors",
+            "provider_array_declarations": false,
+            "state": "mixed"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_offset_nested_array_constructors",
+          "ansi": false,
+          "sql": "SELECT id,a_required AS source_array,a_nullable_element AS source_nullable_elements,a_nested AS source_nested_array,LAG(a_required,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))))) RESPECT NULLS OVER (ORDER BY id) AS required_array,LAG(a_nullable_element,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))),NULL)) RESPECT NULLS OVER (ORDER BY id) AS required_nullable_elements,LAG(a_nested,1,ARRAY(ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))))) RESPECT NULLS OVER (ORDER BY id) AS required_nested_array,LAG(a_nullable_struct,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))))) RESPECT NULLS OVER (ORDER BY id) AS required_nullable_structs,LAG(a_required,1) RESPECT NULLS OVER (ORDER BY id) AS array_omitted,LAG(a_nullable,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))))) RESPECT NULLS OVER (ORDER BY id) AS nullable_array,LAG(a_nullable,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))))) IGNORE NULLS OVER (ORDER BY id) AS nullable_array_ignore FROM (SELECT id,ARRAY(r) AS a_required,ARRAY(r,NULL) AS a_nullable_element,ARRAY(ARRAY(r)) AS a_nested,ARRAY(v) AS a_nullable_struct,IF(id%2=0,NULL,ARRAY(r)) AS a_nullable FROM offset_nested) arrays ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "sql_array_constructors",
+            "provider": "offset_nested",
+            "functions": [
+              "LAG"
+            ],
+            "offsets": [
+              1
+            ],
+            "payload_declarations": [
+              "required-array",
+              "nullable-array"
+            ],
+            "defaults": [
+              "required-foldable-array",
+              "omitted"
+            ],
+            "null_treatment": [
+              "RESPECT",
+              "IGNORE"
+            ],
+            "shape": "SQL arrays of typed structs, nullable elements and nested arrays",
+            "metadata": "typed struct children flow through SQL array constructors",
+            "provider_array_declarations": false,
+            "state": "mixed"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_empty_offset_nested_array_constructors",
+          "ansi": true,
+          "sql": "SELECT id,a_required AS source_array,a_nullable_element AS source_nullable_elements,a_nested AS source_nested_array,LAG(a_required,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))))) RESPECT NULLS OVER (ORDER BY id) AS required_array,LAG(a_nullable_element,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))),NULL)) RESPECT NULLS OVER (ORDER BY id) AS required_nullable_elements,LAG(a_nested,1,ARRAY(ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))))) RESPECT NULLS OVER (ORDER BY id) AS required_nested_array,LAG(a_nullable_struct,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))))) RESPECT NULLS OVER (ORDER BY id) AS required_nullable_structs,LAG(a_required,1) RESPECT NULLS OVER (ORDER BY id) AS array_omitted,LAG(a_nullable,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))))) RESPECT NULLS OVER (ORDER BY id) AS nullable_array,LAG(a_nullable,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))))) IGNORE NULLS OVER (ORDER BY id) AS nullable_array_ignore FROM (SELECT id,ARRAY(r) AS a_required,ARRAY(r,NULL) AS a_nullable_element,ARRAY(ARRAY(r)) AS a_nested,ARRAY(v) AS a_nullable_struct,IF(id%2=0,NULL,ARRAY(r)) AS a_nullable FROM empty_offset_nested) arrays ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "sql_array_constructors",
+            "provider": "empty_offset_nested",
+            "functions": [
+              "LAG"
+            ],
+            "offsets": [
+              1
+            ],
+            "payload_declarations": [
+              "required-array",
+              "nullable-array"
+            ],
+            "defaults": [
+              "required-foldable-array",
+              "omitted"
+            ],
+            "null_treatment": [
+              "RESPECT",
+              "IGNORE"
+            ],
+            "shape": "SQL arrays of typed structs, nullable elements and nested arrays",
+            "metadata": "typed struct children flow through SQL array constructors",
+            "provider_array_declarations": false,
+            "state": "empty"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_empty_offset_nested_array_constructors",
+          "ansi": false,
+          "sql": "SELECT id,a_required AS source_array,a_nullable_element AS source_nullable_elements,a_nested AS source_nested_array,LAG(a_required,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))))) RESPECT NULLS OVER (ORDER BY id) AS required_array,LAG(a_nullable_element,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))),NULL)) RESPECT NULLS OVER (ORDER BY id) AS required_nullable_elements,LAG(a_nested,1,ARRAY(ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))))) RESPECT NULLS OVER (ORDER BY id) AS required_nested_array,LAG(a_nullable_struct,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))))) RESPECT NULLS OVER (ORDER BY id) AS required_nullable_structs,LAG(a_required,1) RESPECT NULLS OVER (ORDER BY id) AS array_omitted,LAG(a_nullable,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))))) RESPECT NULLS OVER (ORDER BY id) AS nullable_array,LAG(a_nullable,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))))) IGNORE NULLS OVER (ORDER BY id) AS nullable_array_ignore FROM (SELECT id,ARRAY(r) AS a_required,ARRAY(r,NULL) AS a_nullable_element,ARRAY(ARRAY(r)) AS a_nested,ARRAY(v) AS a_nullable_struct,IF(id%2=0,NULL,ARRAY(r)) AS a_nullable FROM empty_offset_nested) arrays ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "sql_array_constructors",
+            "provider": "empty_offset_nested",
+            "functions": [
+              "LAG"
+            ],
+            "offsets": [
+              1
+            ],
+            "payload_declarations": [
+              "required-array",
+              "nullable-array"
+            ],
+            "defaults": [
+              "required-foldable-array",
+              "omitted"
+            ],
+            "null_treatment": [
+              "RESPECT",
+              "IGNORE"
+            ],
+            "shape": "SQL arrays of typed structs, nullable elements and nested arrays",
+            "metadata": "typed struct children flow through SQL array constructors",
+            "provider_array_declarations": false,
+            "state": "empty"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_alias_null_projection",
+          "ansi": true,
+          "sql": "SELECT id,payload_alias,required_result,nullable_result,omitted_result,zero_result,required_result IS NULL AS required_is_null,required_result IS NOT NULL AS required_is_not_null,nullable_result IS NULL AS nullable_is_null,omitted_result IS NULL AS omitted_is_null,zero_result IS NULL AS zero_is_null,COALESCE(required_result,-999) AS coalesced,CASE WHEN required_result IS NULL THEN -999 ELSE required_result END AS null_branch FROM (SELECT id,r AS payload_alias,LAG(r,2,-99) OVER (ORDER BY id) AS required_result,LAG(v,2,-99) OVER (ORDER BY id) AS nullable_result,LAG(r,2) OVER (ORDER BY id) AS omitted_result,LAG(r,0,CAST(NULL AS INT)) OVER (ORDER BY id) AS zero_result FROM offset_scalar) q ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "outer_consumers",
+            "provider": "offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "consumer": "alias,IS NULL,IS NOT NULL,COALESCE,CASE",
+            "offsets": [
+              2,
+              0
+            ],
+            "optimizer_sensitive": true
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_alias_null_projection",
+          "ansi": false,
+          "sql": "SELECT id,payload_alias,required_result,nullable_result,omitted_result,zero_result,required_result IS NULL AS required_is_null,required_result IS NOT NULL AS required_is_not_null,nullable_result IS NULL AS nullable_is_null,omitted_result IS NULL AS omitted_is_null,zero_result IS NULL AS zero_is_null,COALESCE(required_result,-999) AS coalesced,CASE WHEN required_result IS NULL THEN -999 ELSE required_result END AS null_branch FROM (SELECT id,r AS payload_alias,LAG(r,2,-99) OVER (ORDER BY id) AS required_result,LAG(v,2,-99) OVER (ORDER BY id) AS nullable_result,LAG(r,2) OVER (ORDER BY id) AS omitted_result,LAG(r,0,CAST(NULL AS INT)) OVER (ORDER BY id) AS zero_result FROM offset_scalar) q ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "outer_consumers",
+            "provider": "offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "consumer": "alias,IS NULL,IS NOT NULL,COALESCE,CASE",
+            "offsets": [
+              2,
+              0
+            ],
+            "optimizer_sensitive": true
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_required_null_filter",
+          "ansi": true,
+          "sql": "SELECT id,required_result FROM (SELECT id,r AS payload_alias,LAG(r,2,-99) OVER (ORDER BY id) AS required_result,LAG(v,2,-99) OVER (ORDER BY id) AS nullable_result,LAG(r,2) OVER (ORDER BY id) AS omitted_result,LAG(r,0,CAST(NULL AS INT)) OVER (ORDER BY id) AS zero_result FROM offset_scalar) q WHERE required_result IS NULL ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "outer_consumers",
+            "provider": "offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "consumer": "required-result IS NULL filter",
+            "offsets": [
+              2
+            ],
+            "optimizer_sensitive": true
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_required_null_filter",
+          "ansi": false,
+          "sql": "SELECT id,required_result FROM (SELECT id,r AS payload_alias,LAG(r,2,-99) OVER (ORDER BY id) AS required_result,LAG(v,2,-99) OVER (ORDER BY id) AS nullable_result,LAG(r,2) OVER (ORDER BY id) AS omitted_result,LAG(r,0,CAST(NULL AS INT)) OVER (ORDER BY id) AS zero_result FROM offset_scalar) q WHERE required_result IS NULL ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "outer_consumers",
+            "provider": "offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "consumer": "required-result IS NULL filter",
+            "offsets": [
+              2
+            ],
+            "optimizer_sensitive": true
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_nullable_null_filter",
+          "ansi": true,
+          "sql": "SELECT id,nullable_result,omitted_result FROM (SELECT id,r AS payload_alias,LAG(r,2,-99) OVER (ORDER BY id) AS required_result,LAG(v,2,-99) OVER (ORDER BY id) AS nullable_result,LAG(r,2) OVER (ORDER BY id) AS omitted_result,LAG(r,0,CAST(NULL AS INT)) OVER (ORDER BY id) AS zero_result FROM offset_scalar) q WHERE nullable_result IS NULL OR omitted_result IS NULL ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "outer_consumers",
+            "provider": "offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "consumer": "nullable/omitted-result IS NULL filter",
+            "offsets": [
+              2
+            ],
+            "optimizer_sensitive": true
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_nullable_null_filter",
+          "ansi": false,
+          "sql": "SELECT id,nullable_result,omitted_result FROM (SELECT id,r AS payload_alias,LAG(r,2,-99) OVER (ORDER BY id) AS required_result,LAG(v,2,-99) OVER (ORDER BY id) AS nullable_result,LAG(r,2) OVER (ORDER BY id) AS omitted_result,LAG(r,0,CAST(NULL AS INT)) OVER (ORDER BY id) AS zero_result FROM offset_scalar) q WHERE nullable_result IS NULL OR omitted_result IS NULL ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "outer_consumers",
+            "provider": "offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "consumer": "nullable/omitted-result IS NULL filter",
+            "offsets": [
+              2
+            ],
+            "optimizer_sensitive": true
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_nonfoldable_offset",
+          "ansi": true,
+          "sql": "SELECT id,LAG(r,id,-99) OVER (ORDER BY id) AS result FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "offset_frame_admission",
+            "provider": "offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "boundary": "non-foldable integer offset",
+            "policy": "regression-control-only; no new #1048 admission or diagnostic policy"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_nonfoldable_offset",
+          "ansi": false,
+          "sql": "SELECT id,LAG(r,id,-99) OVER (ORDER BY id) AS result FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "offset_frame_admission",
+            "provider": "offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "boundary": "non-foldable integer offset",
+            "policy": "regression-control-only; no new #1048 admission or diagnostic policy"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_mismatched_rows",
+          "ansi": true,
+          "sql": "SELECT id,LAG(r,2,-99) OVER (ORDER BY id ROWS BETWEEN 1 PRECEDING AND 1 PRECEDING) AS result FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "offset_frame_admission",
+            "provider": "offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "boundary": "offset 2 with single-row frame at offset 1",
+            "policy": "regression-control-only; preserve observed causes/phases"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_mismatched_rows",
+          "ansi": false,
+          "sql": "SELECT id,LAG(r,2,-99) OVER (ORDER BY id ROWS BETWEEN 1 PRECEDING AND 1 PRECEDING) AS result FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "offset_frame_admission",
+            "provider": "offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "boundary": "offset 2 with single-row frame at offset 1",
+            "policy": "regression-control-only; preserve observed causes/phases"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_missing_order",
+          "ansi": true,
+          "sql": "SELECT id,LAG(r,2,-99) OVER () AS result FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "offset_frame_admission",
+            "provider": "offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "boundary": "missing window ORDER BY",
+            "policy": "regression-control-only; preserve observed causes/phases"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_missing_order",
+          "ansi": false,
+          "sql": "SELECT id,LAG(r,2,-99) OVER () AS result FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "offset_frame_admission",
+            "provider": "offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "boundary": "missing window ORDER BY",
+            "policy": "regression-control-only; preserve observed causes/phases"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_offset_scalar_defaults",
+          "ansi": true,
+          "sql": "SELECT id,LEAD(r,2,-99) OVER (ORDER BY id) AS required_literal,LEAD(r,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS required_null,LEAD(r,2) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LEAD(v,2,-99) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LEAD(v,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS nullable_null,LEAD(v,2) RESPECT NULLS OVER (ORDER BY id) AS nullable_omitted,LEAD(r,2,-99) IGNORE NULLS OVER (ORDER BY id) AS required_ignore,LEAD(v,2,-99) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore,LEAD(r,2,-99) OVER (ORDER BY id ROWS BETWEEN 2 FOLLOWING AND 2 FOLLOWING) AS required_exact_frame FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "scalar_defaults",
+            "provider": "offset_scalar",
+            "functions": [
+              "LEAD"
+            ],
+            "offsets": [
+              2
+            ],
+            "payload_declarations": [
+              "required",
+              "nullable"
+            ],
+            "defaults": [
+              "required-literal",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "implicit-respect",
+              "RESPECT",
+              "IGNORE"
+            ],
+            "frame": [
+              "implicit",
+              "exact-ROWS"
+            ],
+            "state": "mixed-v"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_offset_scalar_defaults",
+          "ansi": false,
+          "sql": "SELECT id,LEAD(r,2,-99) OVER (ORDER BY id) AS required_literal,LEAD(r,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS required_null,LEAD(r,2) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LEAD(v,2,-99) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LEAD(v,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS nullable_null,LEAD(v,2) RESPECT NULLS OVER (ORDER BY id) AS nullable_omitted,LEAD(r,2,-99) IGNORE NULLS OVER (ORDER BY id) AS required_ignore,LEAD(v,2,-99) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore,LEAD(r,2,-99) OVER (ORDER BY id ROWS BETWEEN 2 FOLLOWING AND 2 FOLLOWING) AS required_exact_frame FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "scalar_defaults",
+            "provider": "offset_scalar",
+            "functions": [
+              "LEAD"
+            ],
+            "offsets": [
+              2
+            ],
+            "payload_declarations": [
+              "required",
+              "nullable"
+            ],
+            "defaults": [
+              "required-literal",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "implicit-respect",
+              "RESPECT",
+              "IGNORE"
+            ],
+            "frame": [
+              "implicit",
+              "exact-ROWS"
+            ],
+            "state": "mixed-v"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_empty_offset_scalar_defaults",
+          "ansi": true,
+          "sql": "SELECT id,LEAD(r,2,-99) OVER (ORDER BY id) AS required_literal,LEAD(r,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS required_null,LEAD(r,2) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LEAD(v,2,-99) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LEAD(v,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS nullable_null,LEAD(v,2) RESPECT NULLS OVER (ORDER BY id) AS nullable_omitted,LEAD(r,2,-99) IGNORE NULLS OVER (ORDER BY id) AS required_ignore,LEAD(v,2,-99) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore,LEAD(r,2,-99) OVER (ORDER BY id ROWS BETWEEN 2 FOLLOWING AND 2 FOLLOWING) AS required_exact_frame FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "scalar_defaults",
+            "provider": "empty_offset_scalar",
+            "functions": [
+              "LEAD"
+            ],
+            "offsets": [
+              2
+            ],
+            "payload_declarations": [
+              "required",
+              "nullable"
+            ],
+            "defaults": [
+              "required-literal",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "implicit-respect",
+              "RESPECT",
+              "IGNORE"
+            ],
+            "frame": [
+              "implicit",
+              "exact-ROWS"
+            ],
+            "state": "empty"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_empty_offset_scalar_defaults",
+          "ansi": false,
+          "sql": "SELECT id,LEAD(r,2,-99) OVER (ORDER BY id) AS required_literal,LEAD(r,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS required_null,LEAD(r,2) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LEAD(v,2,-99) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LEAD(v,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS nullable_null,LEAD(v,2) RESPECT NULLS OVER (ORDER BY id) AS nullable_omitted,LEAD(r,2,-99) IGNORE NULLS OVER (ORDER BY id) AS required_ignore,LEAD(v,2,-99) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore,LEAD(r,2,-99) OVER (ORDER BY id ROWS BETWEEN 2 FOLLOWING AND 2 FOLLOWING) AS required_exact_frame FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "scalar_defaults",
+            "provider": "empty_offset_scalar",
+            "functions": [
+              "LEAD"
+            ],
+            "offsets": [
+              2
+            ],
+            "payload_declarations": [
+              "required",
+              "nullable"
+            ],
+            "defaults": [
+              "required-literal",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "implicit-respect",
+              "RESPECT",
+              "IGNORE"
+            ],
+            "frame": [
+              "implicit",
+              "exact-ROWS"
+            ],
+            "state": "empty"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_null_offset_scalar_defaults",
+          "ansi": true,
+          "sql": "SELECT id,LEAD(r,2,-99) OVER (ORDER BY id) AS required_literal,LEAD(r,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS required_null,LEAD(r,2) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LEAD(v,2,-99) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LEAD(v,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS nullable_null,LEAD(v,2) RESPECT NULLS OVER (ORDER BY id) AS nullable_omitted,LEAD(r,2,-99) IGNORE NULLS OVER (ORDER BY id) AS required_ignore,LEAD(v,2,-99) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore,LEAD(r,2,-99) OVER (ORDER BY id ROWS BETWEEN 2 FOLLOWING AND 2 FOLLOWING) AS required_exact_frame FROM null_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "scalar_defaults",
+            "provider": "null_offset_scalar",
+            "functions": [
+              "LEAD"
+            ],
+            "offsets": [
+              2
+            ],
+            "payload_declarations": [
+              "required",
+              "nullable"
+            ],
+            "defaults": [
+              "required-literal",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "implicit-respect",
+              "RESPECT",
+              "IGNORE"
+            ],
+            "frame": [
+              "implicit",
+              "exact-ROWS"
+            ],
+            "state": "all-NULL-v"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_null_offset_scalar_defaults",
+          "ansi": false,
+          "sql": "SELECT id,LEAD(r,2,-99) OVER (ORDER BY id) AS required_literal,LEAD(r,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS required_null,LEAD(r,2) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LEAD(v,2,-99) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LEAD(v,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS nullable_null,LEAD(v,2) RESPECT NULLS OVER (ORDER BY id) AS nullable_omitted,LEAD(r,2,-99) IGNORE NULLS OVER (ORDER BY id) AS required_ignore,LEAD(v,2,-99) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore,LEAD(r,2,-99) OVER (ORDER BY id ROWS BETWEEN 2 FOLLOWING AND 2 FOLLOWING) AS required_exact_frame FROM null_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "scalar_defaults",
+            "provider": "null_offset_scalar",
+            "functions": [
+              "LEAD"
+            ],
+            "offsets": [
+              2
+            ],
+            "payload_declarations": [
+              "required",
+              "nullable"
+            ],
+            "defaults": [
+              "required-literal",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "implicit-respect",
+              "RESPECT",
+              "IGNORE"
+            ],
+            "frame": [
+              "implicit",
+              "exact-ROWS"
+            ],
+            "state": "all-NULL-v"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_offset_scalar_signed_respect",
+          "ansi": true,
+          "sql": "SELECT id,LEAD(r,0,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS zero_required_null,LEAD(r,0) RESPECT NULLS OVER (ORDER BY id) AS zero_required_omitted,LEAD(v,0,-99) RESPECT NULLS OVER (ORDER BY id) AS zero_nullable_required,LEAD(v,0) RESPECT NULLS OVER (ORDER BY id) AS zero_nullable_omitted,LEAD(r,-2,-99) RESPECT NULLS OVER (ORDER BY id) AS negative_required,LEAD(v,-2,-99) RESPECT NULLS OVER (ORDER BY id) AS negative_nullable,LEAD(r,-2) RESPECT NULLS OVER (ORDER BY id) AS negative_required_omitted,LEAD(v,-2) RESPECT NULLS OVER (ORDER BY id) AS negative_nullable_omitted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "signed_zero_offsets",
+            "provider": "offset_scalar",
+            "functions": [
+              "LEAD"
+            ],
+            "offsets": [
+              0,
+              -2
+            ],
+            "payload_declarations": [
+              "required",
+              "nullable"
+            ],
+            "defaults": [
+              "required-literal",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "RESPECT"
+            ],
+            "state": "mixed-v"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_offset_scalar_signed_respect",
+          "ansi": false,
+          "sql": "SELECT id,LEAD(r,0,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS zero_required_null,LEAD(r,0) RESPECT NULLS OVER (ORDER BY id) AS zero_required_omitted,LEAD(v,0,-99) RESPECT NULLS OVER (ORDER BY id) AS zero_nullable_required,LEAD(v,0) RESPECT NULLS OVER (ORDER BY id) AS zero_nullable_omitted,LEAD(r,-2,-99) RESPECT NULLS OVER (ORDER BY id) AS negative_required,LEAD(v,-2,-99) RESPECT NULLS OVER (ORDER BY id) AS negative_nullable,LEAD(r,-2) RESPECT NULLS OVER (ORDER BY id) AS negative_required_omitted,LEAD(v,-2) RESPECT NULLS OVER (ORDER BY id) AS negative_nullable_omitted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "signed_zero_offsets",
+            "provider": "offset_scalar",
+            "functions": [
+              "LEAD"
+            ],
+            "offsets": [
+              0,
+              -2
+            ],
+            "payload_declarations": [
+              "required",
+              "nullable"
+            ],
+            "defaults": [
+              "required-literal",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "RESPECT"
+            ],
+            "state": "mixed-v"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_offset_scalar_signed_ignore",
+          "ansi": true,
+          "sql": "SELECT id,LEAD(r,0,CAST(NULL AS INT)) IGNORE NULLS OVER (ORDER BY id) AS zero_required_null,LEAD(r,0) IGNORE NULLS OVER (ORDER BY id) AS zero_required_omitted,LEAD(v,0,-99) IGNORE NULLS OVER (ORDER BY id) AS zero_nullable_required,LEAD(v,0) IGNORE NULLS OVER (ORDER BY id) AS zero_nullable_omitted,LEAD(r,-2,-99) IGNORE NULLS OVER (ORDER BY id) AS negative_required,LEAD(v,-2,-99) IGNORE NULLS OVER (ORDER BY id) AS negative_nullable,LEAD(r,-2) IGNORE NULLS OVER (ORDER BY id) AS negative_required_omitted,LEAD(v,-2) IGNORE NULLS OVER (ORDER BY id) AS negative_nullable_omitted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "signed_zero_offsets",
+            "provider": "offset_scalar",
+            "functions": [
+              "LEAD"
+            ],
+            "offsets": [
+              0,
+              -2
+            ],
+            "payload_declarations": [
+              "required",
+              "nullable"
+            ],
+            "defaults": [
+              "required-literal",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "IGNORE"
+            ],
+            "state": "mixed-v"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_offset_scalar_signed_ignore",
+          "ansi": false,
+          "sql": "SELECT id,LEAD(r,0,CAST(NULL AS INT)) IGNORE NULLS OVER (ORDER BY id) AS zero_required_null,LEAD(r,0) IGNORE NULLS OVER (ORDER BY id) AS zero_required_omitted,LEAD(v,0,-99) IGNORE NULLS OVER (ORDER BY id) AS zero_nullable_required,LEAD(v,0) IGNORE NULLS OVER (ORDER BY id) AS zero_nullable_omitted,LEAD(r,-2,-99) IGNORE NULLS OVER (ORDER BY id) AS negative_required,LEAD(v,-2,-99) IGNORE NULLS OVER (ORDER BY id) AS negative_nullable,LEAD(r,-2) IGNORE NULLS OVER (ORDER BY id) AS negative_required_omitted,LEAD(v,-2) IGNORE NULLS OVER (ORDER BY id) AS negative_nullable_omitted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "signed_zero_offsets",
+            "provider": "offset_scalar",
+            "functions": [
+              "LEAD"
+            ],
+            "offsets": [
+              0,
+              -2
+            ],
+            "payload_declarations": [
+              "required",
+              "nullable"
+            ],
+            "defaults": [
+              "required-literal",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "IGNORE"
+            ],
+            "state": "mixed-v"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_null_offset_scalar_signed_ignore",
+          "ansi": true,
+          "sql": "SELECT id,LEAD(r,0,CAST(NULL AS INT)) IGNORE NULLS OVER (ORDER BY id) AS zero_required_null,LEAD(r,0) IGNORE NULLS OVER (ORDER BY id) AS zero_required_omitted,LEAD(v,0,-99) IGNORE NULLS OVER (ORDER BY id) AS zero_nullable_required,LEAD(v,0) IGNORE NULLS OVER (ORDER BY id) AS zero_nullable_omitted,LEAD(r,-2,-99) IGNORE NULLS OVER (ORDER BY id) AS negative_required,LEAD(v,-2,-99) IGNORE NULLS OVER (ORDER BY id) AS negative_nullable,LEAD(r,-2) IGNORE NULLS OVER (ORDER BY id) AS negative_required_omitted,LEAD(v,-2) IGNORE NULLS OVER (ORDER BY id) AS negative_nullable_omitted FROM null_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "signed_zero_offsets",
+            "provider": "null_offset_scalar",
+            "functions": [
+              "LEAD"
+            ],
+            "offsets": [
+              0,
+              -2
+            ],
+            "payload_declarations": [
+              "required",
+              "nullable"
+            ],
+            "defaults": [
+              "required-literal",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "IGNORE"
+            ],
+            "state": "all-NULL-v"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_null_offset_scalar_signed_ignore",
+          "ansi": false,
+          "sql": "SELECT id,LEAD(r,0,CAST(NULL AS INT)) IGNORE NULLS OVER (ORDER BY id) AS zero_required_null,LEAD(r,0) IGNORE NULLS OVER (ORDER BY id) AS zero_required_omitted,LEAD(v,0,-99) IGNORE NULLS OVER (ORDER BY id) AS zero_nullable_required,LEAD(v,0) IGNORE NULLS OVER (ORDER BY id) AS zero_nullable_omitted,LEAD(r,-2,-99) IGNORE NULLS OVER (ORDER BY id) AS negative_required,LEAD(v,-2,-99) IGNORE NULLS OVER (ORDER BY id) AS negative_nullable,LEAD(r,-2) IGNORE NULLS OVER (ORDER BY id) AS negative_required_omitted,LEAD(v,-2) IGNORE NULLS OVER (ORDER BY id) AS negative_nullable_omitted FROM null_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "signed_zero_offsets",
+            "provider": "null_offset_scalar",
+            "functions": [
+              "LEAD"
+            ],
+            "offsets": [
+              0,
+              -2
+            ],
+            "payload_declarations": [
+              "required",
+              "nullable"
+            ],
+            "defaults": [
+              "required-literal",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "IGNORE"
+            ],
+            "state": "all-NULL-v"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_offset_nested_fields",
+          "ansi": true,
+          "sql": "SELECT id,r AS required_source,v AS nullable_source,LEAD(r,1,NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))) RESPECT NULLS OVER (ORDER BY id) AS required_default,LEAD(r,1,NULL) RESPECT NULLS OVER (ORDER BY id) AS required_null,LEAD(r,1) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LEAD(v,1,NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LEAD(v,1,NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore,LEAD(r,0) RESPECT NULLS OVER (ORDER BY id) AS required_zero FROM offset_nested ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "typed_nested_fields",
+            "provider": "offset_nested",
+            "functions": [
+              "LEAD"
+            ],
+            "offsets": [
+              1,
+              0
+            ],
+            "payload_declarations": [
+              "required-struct",
+              "nullable-struct"
+            ],
+            "defaults": [
+              "required-foldable-struct",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "RESPECT",
+              "IGNORE"
+            ],
+            "shape": "struct<required-int,nullable-int,required-struct<required-int,nullable-boolean>>",
+            "metadata": "outer,child,grandchild,nested-metadata-object",
+            "state": "mixed-v"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_offset_nested_fields",
+          "ansi": false,
+          "sql": "SELECT id,r AS required_source,v AS nullable_source,LEAD(r,1,NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))) RESPECT NULLS OVER (ORDER BY id) AS required_default,LEAD(r,1,NULL) RESPECT NULLS OVER (ORDER BY id) AS required_null,LEAD(r,1) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LEAD(v,1,NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LEAD(v,1,NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore,LEAD(r,0) RESPECT NULLS OVER (ORDER BY id) AS required_zero FROM offset_nested ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "typed_nested_fields",
+            "provider": "offset_nested",
+            "functions": [
+              "LEAD"
+            ],
+            "offsets": [
+              1,
+              0
+            ],
+            "payload_declarations": [
+              "required-struct",
+              "nullable-struct"
+            ],
+            "defaults": [
+              "required-foldable-struct",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "RESPECT",
+              "IGNORE"
+            ],
+            "shape": "struct<required-int,nullable-int,required-struct<required-int,nullable-boolean>>",
+            "metadata": "outer,child,grandchild,nested-metadata-object",
+            "state": "mixed-v"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_empty_offset_nested_fields",
+          "ansi": true,
+          "sql": "SELECT id,r AS required_source,v AS nullable_source,LEAD(r,1,NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))) RESPECT NULLS OVER (ORDER BY id) AS required_default,LEAD(r,1,NULL) RESPECT NULLS OVER (ORDER BY id) AS required_null,LEAD(r,1) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LEAD(v,1,NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LEAD(v,1,NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore,LEAD(r,0) RESPECT NULLS OVER (ORDER BY id) AS required_zero FROM empty_offset_nested ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "typed_nested_fields",
+            "provider": "empty_offset_nested",
+            "functions": [
+              "LEAD"
+            ],
+            "offsets": [
+              1,
+              0
+            ],
+            "payload_declarations": [
+              "required-struct",
+              "nullable-struct"
+            ],
+            "defaults": [
+              "required-foldable-struct",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "RESPECT",
+              "IGNORE"
+            ],
+            "shape": "struct<required-int,nullable-int,required-struct<required-int,nullable-boolean>>",
+            "metadata": "outer,child,grandchild,nested-metadata-object",
+            "state": "empty"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_empty_offset_nested_fields",
+          "ansi": false,
+          "sql": "SELECT id,r AS required_source,v AS nullable_source,LEAD(r,1,NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))) RESPECT NULLS OVER (ORDER BY id) AS required_default,LEAD(r,1,NULL) RESPECT NULLS OVER (ORDER BY id) AS required_null,LEAD(r,1) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LEAD(v,1,NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LEAD(v,1,NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore,LEAD(r,0) RESPECT NULLS OVER (ORDER BY id) AS required_zero FROM empty_offset_nested ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "typed_nested_fields",
+            "provider": "empty_offset_nested",
+            "functions": [
+              "LEAD"
+            ],
+            "offsets": [
+              1,
+              0
+            ],
+            "payload_declarations": [
+              "required-struct",
+              "nullable-struct"
+            ],
+            "defaults": [
+              "required-foldable-struct",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "RESPECT",
+              "IGNORE"
+            ],
+            "shape": "struct<required-int,nullable-int,required-struct<required-int,nullable-boolean>>",
+            "metadata": "outer,child,grandchild,nested-metadata-object",
+            "state": "empty"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_null_offset_nested_fields",
+          "ansi": true,
+          "sql": "SELECT id,r AS required_source,v AS nullable_source,LEAD(r,1,NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))) RESPECT NULLS OVER (ORDER BY id) AS required_default,LEAD(r,1,NULL) RESPECT NULLS OVER (ORDER BY id) AS required_null,LEAD(r,1) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LEAD(v,1,NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LEAD(v,1,NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore,LEAD(r,0) RESPECT NULLS OVER (ORDER BY id) AS required_zero FROM null_offset_nested ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "typed_nested_fields",
+            "provider": "null_offset_nested",
+            "functions": [
+              "LEAD"
+            ],
+            "offsets": [
+              1,
+              0
+            ],
+            "payload_declarations": [
+              "required-struct",
+              "nullable-struct"
+            ],
+            "defaults": [
+              "required-foldable-struct",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "RESPECT",
+              "IGNORE"
+            ],
+            "shape": "struct<required-int,nullable-int,required-struct<required-int,nullable-boolean>>",
+            "metadata": "outer,child,grandchild,nested-metadata-object",
+            "state": "all-NULL-v"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_null_offset_nested_fields",
+          "ansi": false,
+          "sql": "SELECT id,r AS required_source,v AS nullable_source,LEAD(r,1,NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))) RESPECT NULLS OVER (ORDER BY id) AS required_default,LEAD(r,1,NULL) RESPECT NULLS OVER (ORDER BY id) AS required_null,LEAD(r,1) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LEAD(v,1,NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LEAD(v,1,NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore,LEAD(r,0) RESPECT NULLS OVER (ORDER BY id) AS required_zero FROM null_offset_nested ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "typed_nested_fields",
+            "provider": "null_offset_nested",
+            "functions": [
+              "LEAD"
+            ],
+            "offsets": [
+              1,
+              0
+            ],
+            "payload_declarations": [
+              "required-struct",
+              "nullable-struct"
+            ],
+            "defaults": [
+              "required-foldable-struct",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "RESPECT",
+              "IGNORE"
+            ],
+            "shape": "struct<required-int,nullable-int,required-struct<required-int,nullable-boolean>>",
+            "metadata": "outer,child,grandchild,nested-metadata-object",
+            "state": "all-NULL-v"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_offset_nested_array_constructors",
+          "ansi": true,
+          "sql": "SELECT id,a_required AS source_array,a_nullable_element AS source_nullable_elements,a_nested AS source_nested_array,LEAD(a_required,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))))) RESPECT NULLS OVER (ORDER BY id) AS required_array,LEAD(a_nullable_element,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))),NULL)) RESPECT NULLS OVER (ORDER BY id) AS required_nullable_elements,LEAD(a_nested,1,ARRAY(ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))))) RESPECT NULLS OVER (ORDER BY id) AS required_nested_array,LEAD(a_nullable_struct,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))))) RESPECT NULLS OVER (ORDER BY id) AS required_nullable_structs,LEAD(a_required,1) RESPECT NULLS OVER (ORDER BY id) AS array_omitted,LEAD(a_nullable,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))))) RESPECT NULLS OVER (ORDER BY id) AS nullable_array,LEAD(a_nullable,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))))) IGNORE NULLS OVER (ORDER BY id) AS nullable_array_ignore FROM (SELECT id,ARRAY(r) AS a_required,ARRAY(r,NULL) AS a_nullable_element,ARRAY(ARRAY(r)) AS a_nested,ARRAY(v) AS a_nullable_struct,IF(id%2=0,NULL,ARRAY(r)) AS a_nullable FROM offset_nested) arrays ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "sql_array_constructors",
+            "provider": "offset_nested",
+            "functions": [
+              "LEAD"
+            ],
+            "offsets": [
+              1
+            ],
+            "payload_declarations": [
+              "required-array",
+              "nullable-array"
+            ],
+            "defaults": [
+              "required-foldable-array",
+              "omitted"
+            ],
+            "null_treatment": [
+              "RESPECT",
+              "IGNORE"
+            ],
+            "shape": "SQL arrays of typed structs, nullable elements and nested arrays",
+            "metadata": "typed struct children flow through SQL array constructors",
+            "provider_array_declarations": false,
+            "state": "mixed"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_offset_nested_array_constructors",
+          "ansi": false,
+          "sql": "SELECT id,a_required AS source_array,a_nullable_element AS source_nullable_elements,a_nested AS source_nested_array,LEAD(a_required,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))))) RESPECT NULLS OVER (ORDER BY id) AS required_array,LEAD(a_nullable_element,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))),NULL)) RESPECT NULLS OVER (ORDER BY id) AS required_nullable_elements,LEAD(a_nested,1,ARRAY(ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))))) RESPECT NULLS OVER (ORDER BY id) AS required_nested_array,LEAD(a_nullable_struct,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))))) RESPECT NULLS OVER (ORDER BY id) AS required_nullable_structs,LEAD(a_required,1) RESPECT NULLS OVER (ORDER BY id) AS array_omitted,LEAD(a_nullable,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))))) RESPECT NULLS OVER (ORDER BY id) AS nullable_array,LEAD(a_nullable,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))))) IGNORE NULLS OVER (ORDER BY id) AS nullable_array_ignore FROM (SELECT id,ARRAY(r) AS a_required,ARRAY(r,NULL) AS a_nullable_element,ARRAY(ARRAY(r)) AS a_nested,ARRAY(v) AS a_nullable_struct,IF(id%2=0,NULL,ARRAY(r)) AS a_nullable FROM offset_nested) arrays ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "sql_array_constructors",
+            "provider": "offset_nested",
+            "functions": [
+              "LEAD"
+            ],
+            "offsets": [
+              1
+            ],
+            "payload_declarations": [
+              "required-array",
+              "nullable-array"
+            ],
+            "defaults": [
+              "required-foldable-array",
+              "omitted"
+            ],
+            "null_treatment": [
+              "RESPECT",
+              "IGNORE"
+            ],
+            "shape": "SQL arrays of typed structs, nullable elements and nested arrays",
+            "metadata": "typed struct children flow through SQL array constructors",
+            "provider_array_declarations": false,
+            "state": "mixed"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_empty_offset_nested_array_constructors",
+          "ansi": true,
+          "sql": "SELECT id,a_required AS source_array,a_nullable_element AS source_nullable_elements,a_nested AS source_nested_array,LEAD(a_required,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))))) RESPECT NULLS OVER (ORDER BY id) AS required_array,LEAD(a_nullable_element,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))),NULL)) RESPECT NULLS OVER (ORDER BY id) AS required_nullable_elements,LEAD(a_nested,1,ARRAY(ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))))) RESPECT NULLS OVER (ORDER BY id) AS required_nested_array,LEAD(a_nullable_struct,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))))) RESPECT NULLS OVER (ORDER BY id) AS required_nullable_structs,LEAD(a_required,1) RESPECT NULLS OVER (ORDER BY id) AS array_omitted,LEAD(a_nullable,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))))) RESPECT NULLS OVER (ORDER BY id) AS nullable_array,LEAD(a_nullable,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))))) IGNORE NULLS OVER (ORDER BY id) AS nullable_array_ignore FROM (SELECT id,ARRAY(r) AS a_required,ARRAY(r,NULL) AS a_nullable_element,ARRAY(ARRAY(r)) AS a_nested,ARRAY(v) AS a_nullable_struct,IF(id%2=0,NULL,ARRAY(r)) AS a_nullable FROM empty_offset_nested) arrays ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "sql_array_constructors",
+            "provider": "empty_offset_nested",
+            "functions": [
+              "LEAD"
+            ],
+            "offsets": [
+              1
+            ],
+            "payload_declarations": [
+              "required-array",
+              "nullable-array"
+            ],
+            "defaults": [
+              "required-foldable-array",
+              "omitted"
+            ],
+            "null_treatment": [
+              "RESPECT",
+              "IGNORE"
+            ],
+            "shape": "SQL arrays of typed structs, nullable elements and nested arrays",
+            "metadata": "typed struct children flow through SQL array constructors",
+            "provider_array_declarations": false,
+            "state": "empty"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_empty_offset_nested_array_constructors",
+          "ansi": false,
+          "sql": "SELECT id,a_required AS source_array,a_nullable_element AS source_nullable_elements,a_nested AS source_nested_array,LEAD(a_required,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))))) RESPECT NULLS OVER (ORDER BY id) AS required_array,LEAD(a_nullable_element,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))),NULL)) RESPECT NULLS OVER (ORDER BY id) AS required_nullable_elements,LEAD(a_nested,1,ARRAY(ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN)))))) RESPECT NULLS OVER (ORDER BY id) AS required_nested_array,LEAD(a_nullable_struct,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))))) RESPECT NULLS OVER (ORDER BY id) AS required_nullable_structs,LEAD(a_required,1) RESPECT NULLS OVER (ORDER BY id) AS array_omitted,LEAD(a_nullable,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))))) RESPECT NULLS OVER (ORDER BY id) AS nullable_array,LEAD(a_nullable,1,ARRAY(NAMED_STRUCT('value',-99,'maybe',CAST(NULL AS INT),'detail',NAMED_STRUCT('token',-999,'flag',CAST(NULL AS BOOLEAN))))) IGNORE NULLS OVER (ORDER BY id) AS nullable_array_ignore FROM (SELECT id,ARRAY(r) AS a_required,ARRAY(r,NULL) AS a_nullable_element,ARRAY(ARRAY(r)) AS a_nested,ARRAY(v) AS a_nullable_struct,IF(id%2=0,NULL,ARRAY(r)) AS a_nullable FROM empty_offset_nested) arrays ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "sql_array_constructors",
+            "provider": "empty_offset_nested",
+            "functions": [
+              "LEAD"
+            ],
+            "offsets": [
+              1
+            ],
+            "payload_declarations": [
+              "required-array",
+              "nullable-array"
+            ],
+            "defaults": [
+              "required-foldable-array",
+              "omitted"
+            ],
+            "null_treatment": [
+              "RESPECT",
+              "IGNORE"
+            ],
+            "shape": "SQL arrays of typed structs, nullable elements and nested arrays",
+            "metadata": "typed struct children flow through SQL array constructors",
+            "provider_array_declarations": false,
+            "state": "empty"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_alias_null_projection",
+          "ansi": true,
+          "sql": "SELECT id,payload_alias,required_result,nullable_result,omitted_result,zero_result,required_result IS NULL AS required_is_null,required_result IS NOT NULL AS required_is_not_null,nullable_result IS NULL AS nullable_is_null,omitted_result IS NULL AS omitted_is_null,zero_result IS NULL AS zero_is_null,COALESCE(required_result,-999) AS coalesced,CASE WHEN required_result IS NULL THEN -999 ELSE required_result END AS null_branch FROM (SELECT id,r AS payload_alias,LEAD(r,2,-99) OVER (ORDER BY id) AS required_result,LEAD(v,2,-99) OVER (ORDER BY id) AS nullable_result,LEAD(r,2) OVER (ORDER BY id) AS omitted_result,LEAD(r,0,CAST(NULL AS INT)) OVER (ORDER BY id) AS zero_result FROM offset_scalar) q ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "outer_consumers",
+            "provider": "offset_scalar",
+            "functions": [
+              "LEAD"
+            ],
+            "consumer": "alias,IS NULL,IS NOT NULL,COALESCE,CASE",
+            "offsets": [
+              2,
+              0
+            ],
+            "optimizer_sensitive": true
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_alias_null_projection",
+          "ansi": false,
+          "sql": "SELECT id,payload_alias,required_result,nullable_result,omitted_result,zero_result,required_result IS NULL AS required_is_null,required_result IS NOT NULL AS required_is_not_null,nullable_result IS NULL AS nullable_is_null,omitted_result IS NULL AS omitted_is_null,zero_result IS NULL AS zero_is_null,COALESCE(required_result,-999) AS coalesced,CASE WHEN required_result IS NULL THEN -999 ELSE required_result END AS null_branch FROM (SELECT id,r AS payload_alias,LEAD(r,2,-99) OVER (ORDER BY id) AS required_result,LEAD(v,2,-99) OVER (ORDER BY id) AS nullable_result,LEAD(r,2) OVER (ORDER BY id) AS omitted_result,LEAD(r,0,CAST(NULL AS INT)) OVER (ORDER BY id) AS zero_result FROM offset_scalar) q ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "outer_consumers",
+            "provider": "offset_scalar",
+            "functions": [
+              "LEAD"
+            ],
+            "consumer": "alias,IS NULL,IS NOT NULL,COALESCE,CASE",
+            "offsets": [
+              2,
+              0
+            ],
+            "optimizer_sensitive": true
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_required_null_filter",
+          "ansi": true,
+          "sql": "SELECT id,required_result FROM (SELECT id,r AS payload_alias,LEAD(r,2,-99) OVER (ORDER BY id) AS required_result,LEAD(v,2,-99) OVER (ORDER BY id) AS nullable_result,LEAD(r,2) OVER (ORDER BY id) AS omitted_result,LEAD(r,0,CAST(NULL AS INT)) OVER (ORDER BY id) AS zero_result FROM offset_scalar) q WHERE required_result IS NULL ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "outer_consumers",
+            "provider": "offset_scalar",
+            "functions": [
+              "LEAD"
+            ],
+            "consumer": "required-result IS NULL filter",
+            "offsets": [
+              2
+            ],
+            "optimizer_sensitive": true
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_required_null_filter",
+          "ansi": false,
+          "sql": "SELECT id,required_result FROM (SELECT id,r AS payload_alias,LEAD(r,2,-99) OVER (ORDER BY id) AS required_result,LEAD(v,2,-99) OVER (ORDER BY id) AS nullable_result,LEAD(r,2) OVER (ORDER BY id) AS omitted_result,LEAD(r,0,CAST(NULL AS INT)) OVER (ORDER BY id) AS zero_result FROM offset_scalar) q WHERE required_result IS NULL ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "outer_consumers",
+            "provider": "offset_scalar",
+            "functions": [
+              "LEAD"
+            ],
+            "consumer": "required-result IS NULL filter",
+            "offsets": [
+              2
+            ],
+            "optimizer_sensitive": true
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_nullable_null_filter",
+          "ansi": true,
+          "sql": "SELECT id,nullable_result,omitted_result FROM (SELECT id,r AS payload_alias,LEAD(r,2,-99) OVER (ORDER BY id) AS required_result,LEAD(v,2,-99) OVER (ORDER BY id) AS nullable_result,LEAD(r,2) OVER (ORDER BY id) AS omitted_result,LEAD(r,0,CAST(NULL AS INT)) OVER (ORDER BY id) AS zero_result FROM offset_scalar) q WHERE nullable_result IS NULL OR omitted_result IS NULL ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "outer_consumers",
+            "provider": "offset_scalar",
+            "functions": [
+              "LEAD"
+            ],
+            "consumer": "nullable/omitted-result IS NULL filter",
+            "offsets": [
+              2
+            ],
+            "optimizer_sensitive": true
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_nullable_null_filter",
+          "ansi": false,
+          "sql": "SELECT id,nullable_result,omitted_result FROM (SELECT id,r AS payload_alias,LEAD(r,2,-99) OVER (ORDER BY id) AS required_result,LEAD(v,2,-99) OVER (ORDER BY id) AS nullable_result,LEAD(r,2) OVER (ORDER BY id) AS omitted_result,LEAD(r,0,CAST(NULL AS INT)) OVER (ORDER BY id) AS zero_result FROM offset_scalar) q WHERE nullable_result IS NULL OR omitted_result IS NULL ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "outer_consumers",
+            "provider": "offset_scalar",
+            "functions": [
+              "LEAD"
+            ],
+            "consumer": "nullable/omitted-result IS NULL filter",
+            "offsets": [
+              2
+            ],
+            "optimizer_sensitive": true
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_nonfoldable_offset",
+          "ansi": true,
+          "sql": "SELECT id,LEAD(r,id,-99) OVER (ORDER BY id) AS result FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "offset_frame_admission",
+            "provider": "offset_scalar",
+            "functions": [
+              "LEAD"
+            ],
+            "boundary": "non-foldable integer offset",
+            "policy": "regression-control-only; no new #1048 admission or diagnostic policy"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_nonfoldable_offset",
+          "ansi": false,
+          "sql": "SELECT id,LEAD(r,id,-99) OVER (ORDER BY id) AS result FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "offset_frame_admission",
+            "provider": "offset_scalar",
+            "functions": [
+              "LEAD"
+            ],
+            "boundary": "non-foldable integer offset",
+            "policy": "regression-control-only; no new #1048 admission or diagnostic policy"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_mismatched_rows",
+          "ansi": true,
+          "sql": "SELECT id,LEAD(r,2,-99) OVER (ORDER BY id ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING) AS result FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "offset_frame_admission",
+            "provider": "offset_scalar",
+            "functions": [
+              "LEAD"
+            ],
+            "boundary": "offset 2 with single-row frame at offset 1",
+            "policy": "regression-control-only; preserve observed causes/phases"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_mismatched_rows",
+          "ansi": false,
+          "sql": "SELECT id,LEAD(r,2,-99) OVER (ORDER BY id ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING) AS result FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "offset_frame_admission",
+            "provider": "offset_scalar",
+            "functions": [
+              "LEAD"
+            ],
+            "boundary": "offset 2 with single-row frame at offset 1",
+            "policy": "regression-control-only; preserve observed causes/phases"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_missing_order",
+          "ansi": true,
+          "sql": "SELECT id,LEAD(r,2,-99) OVER () AS result FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "offset_frame_admission",
+            "provider": "offset_scalar",
+            "functions": [
+              "LEAD"
+            ],
+            "boundary": "missing window ORDER BY",
+            "policy": "regression-control-only; preserve observed causes/phases"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_missing_order",
+          "ansi": false,
+          "sql": "SELECT id,LEAD(r,2,-99) OVER () AS result FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "offset_frame_admission",
+            "provider": "offset_scalar",
+            "functions": [
+              "LEAD"
+            ],
+            "boundary": "missing window ORDER BY",
+            "policy": "regression-control-only; preserve observed causes/phases"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "opposite_order_alias_consumer",
+          "ansi": true,
+          "sql": "SELECT id,lag_forward,lead_reverse,lead_partitioned,lag_partitioned,lag_forward IS NULL AS lag_is_null,lead_reverse IS NULL AS lead_is_null,lead_partitioned IS NULL AS partitioned_lead_is_null,lag_partitioned IS NULL AS partitioned_lag_is_null FROM (SELECT id,LAG(r,2,-99) OVER (ORDER BY id ASC) AS lag_forward,LEAD(r,2,-99) OVER (ORDER BY id DESC) AS lead_reverse,LEAD(v,2,-99) OVER (PARTITION BY g ORDER BY id ASC) AS lead_partitioned,LAG(v,2,-99) OVER (PARTITION BY g ORDER BY id DESC) AS lag_partitioned FROM offset_scalar) q WHERE lag_forward IS NOT NULL OR lead_partitioned IS NULL ORDER BY id DESC",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "outer_consumers",
+            "provider": "offset_scalar",
+            "functions": [
+              "LAG",
+              "LEAD"
+            ],
+            "consumer": "opposite order and partitioned windows through aliases and NULL filter",
+            "offsets": [
+              2
+            ],
+            "optimizer_sensitive": true
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "opposite_order_alias_consumer",
+          "ansi": false,
+          "sql": "SELECT id,lag_forward,lead_reverse,lead_partitioned,lag_partitioned,lag_forward IS NULL AS lag_is_null,lead_reverse IS NULL AS lead_is_null,lead_partitioned IS NULL AS partitioned_lead_is_null,lag_partitioned IS NULL AS partitioned_lag_is_null FROM (SELECT id,LAG(r,2,-99) OVER (ORDER BY id ASC) AS lag_forward,LEAD(r,2,-99) OVER (ORDER BY id DESC) AS lead_reverse,LEAD(v,2,-99) OVER (PARTITION BY g ORDER BY id ASC) AS lead_partitioned,LAG(v,2,-99) OVER (PARTITION BY g ORDER BY id DESC) AS lag_partitioned FROM offset_scalar) q WHERE lag_forward IS NOT NULL OR lead_partitioned IS NULL ORDER BY id DESC",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "outer_consumers",
+            "provider": "offset_scalar",
+            "functions": [
+              "LAG",
+              "LEAD"
+            ],
+            "consumer": "opposite order and partitioned windows through aliases and NULL filter",
+            "offsets": [
+              2
+            ],
+            "optimizer_sensitive": true
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "offset_count_consumer",
+          "ansi": true,
+          "sql": "SELECT COUNT(*) AS row_count,COUNT(lag_forward) AS required_lag_count,COUNT(lead_reverse) AS required_lead_count,COUNT(lead_partitioned) AS nullable_lead_count,COUNT(lag_partitioned) AS nullable_lag_count FROM (SELECT id,LAG(r,2,-99) OVER (ORDER BY id ASC) AS lag_forward,LEAD(r,2,-99) OVER (ORDER BY id DESC) AS lead_reverse,LEAD(v,2,-99) OVER (PARTITION BY g ORDER BY id ASC) AS lead_partitioned,LAG(v,2,-99) OVER (PARTITION BY g ORDER BY id DESC) AS lag_partitioned FROM offset_scalar) q",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "outer_consumers",
+            "provider": "offset_scalar",
+            "functions": [
+              "LAG",
+              "LEAD"
+            ],
+            "consumer": "outer COUNT(column) declaration-sensitive rewrite",
+            "offsets": [
+              2
+            ],
+            "optimizer_sensitive": true
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "offset_count_consumer",
+          "ansi": false,
+          "sql": "SELECT COUNT(*) AS row_count,COUNT(lag_forward) AS required_lag_count,COUNT(lead_reverse) AS required_lead_count,COUNT(lead_partitioned) AS nullable_lead_count,COUNT(lag_partitioned) AS nullable_lag_count FROM (SELECT id,LAG(r,2,-99) OVER (ORDER BY id ASC) AS lag_forward,LEAD(r,2,-99) OVER (ORDER BY id DESC) AS lead_reverse,LEAD(v,2,-99) OVER (PARTITION BY g ORDER BY id ASC) AS lead_partitioned,LAG(v,2,-99) OVER (PARTITION BY g ORDER BY id DESC) AS lag_partitioned FROM offset_scalar) q",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "outer_consumers",
+            "provider": "offset_scalar",
+            "functions": [
+              "LAG",
+              "LEAD"
+            ],
+            "consumer": "outer COUNT(column) declaration-sensitive rewrite",
+            "offsets": [
+              2
+            ],
+            "optimizer_sensitive": true
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_case_stage_discriminator",
+          "ansi": true,
+          "sql": "SELECT id,LAG(CASE WHEN false THEN CAST(NULL AS INT) ELSE 1 END,2,-99) OVER (ORDER BY id) AS folded_payload,LAG(1,2,CASE WHEN false THEN CAST(NULL AS INT) ELSE -99 END) OVER (ORDER BY id) AS folded_default,LAG(CASE WHEN false THEN CAST(NULL AS INT) ELSE r END,2,-99) OVER (ORDER BY id) AS column_payload_case,LAG(r,2,CASE WHEN false THEN CAST(NULL AS INT) ELSE -99 END) OVER (ORDER BY id) AS column_default_case FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "optimized_nullability",
+            "provider": "offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "offsets": [
+              2
+            ],
+            "stage_discriminator": "nullable CASE input/default can simplify across corresponding stages; declarations UNKNOWN",
+            "expression_forms": [
+              "foldable-literal-payload",
+              "foldable-literal-default",
+              "column-payload-case",
+              "column-default-case"
+            ],
+            "optimizer_sensitive": true
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_case_stage_discriminator",
+          "ansi": false,
+          "sql": "SELECT id,LAG(CASE WHEN false THEN CAST(NULL AS INT) ELSE 1 END,2,-99) OVER (ORDER BY id) AS folded_payload,LAG(1,2,CASE WHEN false THEN CAST(NULL AS INT) ELSE -99 END) OVER (ORDER BY id) AS folded_default,LAG(CASE WHEN false THEN CAST(NULL AS INT) ELSE r END,2,-99) OVER (ORDER BY id) AS column_payload_case,LAG(r,2,CASE WHEN false THEN CAST(NULL AS INT) ELSE -99 END) OVER (ORDER BY id) AS column_default_case FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "optimized_nullability",
+            "provider": "offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "offsets": [
+              2
+            ],
+            "stage_discriminator": "nullable CASE input/default can simplify across corresponding stages; declarations UNKNOWN",
+            "expression_forms": [
+              "foldable-literal-payload",
+              "foldable-literal-default",
+              "column-payload-case",
+              "column-default-case"
+            ],
+            "optimizer_sensitive": true
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_case_stage_discriminator",
+          "ansi": true,
+          "sql": "SELECT id,LEAD(CASE WHEN false THEN CAST(NULL AS INT) ELSE 1 END,2,-99) OVER (ORDER BY id) AS folded_payload,LEAD(1,2,CASE WHEN false THEN CAST(NULL AS INT) ELSE -99 END) OVER (ORDER BY id) AS folded_default,LEAD(CASE WHEN false THEN CAST(NULL AS INT) ELSE r END,2,-99) OVER (ORDER BY id) AS column_payload_case,LEAD(r,2,CASE WHEN false THEN CAST(NULL AS INT) ELSE -99 END) OVER (ORDER BY id) AS column_default_case FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "optimized_nullability",
+            "provider": "offset_scalar",
+            "functions": [
+              "LEAD"
+            ],
+            "offsets": [
+              2
+            ],
+            "stage_discriminator": "nullable CASE input/default can simplify across corresponding stages; declarations UNKNOWN",
+            "expression_forms": [
+              "foldable-literal-payload",
+              "foldable-literal-default",
+              "column-payload-case",
+              "column-default-case"
+            ],
+            "optimizer_sensitive": true
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_case_stage_discriminator",
+          "ansi": false,
+          "sql": "SELECT id,LEAD(CASE WHEN false THEN CAST(NULL AS INT) ELSE 1 END,2,-99) OVER (ORDER BY id) AS folded_payload,LEAD(1,2,CASE WHEN false THEN CAST(NULL AS INT) ELSE -99 END) OVER (ORDER BY id) AS folded_default,LEAD(CASE WHEN false THEN CAST(NULL AS INT) ELSE r END,2,-99) OVER (ORDER BY id) AS column_payload_case,LEAD(r,2,CASE WHEN false THEN CAST(NULL AS INT) ELSE -99 END) OVER (ORDER BY id) AS column_default_case FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "optimized_nullability",
+            "provider": "offset_scalar",
+            "functions": [
+              "LEAD"
+            ],
+            "offsets": [
+              2
+            ],
+            "stage_discriminator": "nullable CASE input/default can simplify across corresponding stages; declarations UNKNOWN",
+            "expression_forms": [
+              "foldable-literal-payload",
+              "foldable-literal-default",
+              "column-payload-case",
+              "column-default-case"
+            ],
+            "optimizer_sensitive": true
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_column_default_controls",
+          "ansi": true,
+          "sql": "SELECT id,LAG(r,2,d) RESPECT NULLS OVER (ORDER BY id) AS required_column_default,LAG(r,2,v) RESPECT NULLS OVER (ORDER BY id) AS nullable_column_default,LAG(v,2,v) RESPECT NULLS OVER (ORDER BY id) AS nullable_both,LAG(r,0,v) RESPECT NULLS OVER (ORDER BY id) AS zero_nullable_default,LAG(r,2,CASE WHEN false THEN CAST(NULL AS INT) ELSE d END) OVER (ORDER BY id) AS column_case_default FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "column_defaults",
+            "provider": "offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "offsets": [
+              2,
+              0
+            ],
+            "payload_declarations": [
+              "required",
+              "nullable"
+            ],
+            "defaults": [
+              "required-column",
+              "nullable-column",
+              "nullable-case-column"
+            ],
+            "null_treatment": [
+              "RESPECT"
+            ],
+            "isolation": "column-default support is independent of literal/nested primary Fields"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_column_default_controls",
+          "ansi": false,
+          "sql": "SELECT id,LAG(r,2,d) RESPECT NULLS OVER (ORDER BY id) AS required_column_default,LAG(r,2,v) RESPECT NULLS OVER (ORDER BY id) AS nullable_column_default,LAG(v,2,v) RESPECT NULLS OVER (ORDER BY id) AS nullable_both,LAG(r,0,v) RESPECT NULLS OVER (ORDER BY id) AS zero_nullable_default,LAG(r,2,CASE WHEN false THEN CAST(NULL AS INT) ELSE d END) OVER (ORDER BY id) AS column_case_default FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "column_defaults",
+            "provider": "offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "offsets": [
+              2,
+              0
+            ],
+            "payload_declarations": [
+              "required",
+              "nullable"
+            ],
+            "defaults": [
+              "required-column",
+              "nullable-column",
+              "nullable-case-column"
+            ],
+            "null_treatment": [
+              "RESPECT"
+            ],
+            "isolation": "column-default support is independent of literal/nested primary Fields"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_column_default_controls",
+          "ansi": true,
+          "sql": "SELECT id,LEAD(r,2,d) RESPECT NULLS OVER (ORDER BY id) AS required_column_default,LEAD(r,2,v) RESPECT NULLS OVER (ORDER BY id) AS nullable_column_default,LEAD(v,2,v) RESPECT NULLS OVER (ORDER BY id) AS nullable_both,LEAD(r,0,v) RESPECT NULLS OVER (ORDER BY id) AS zero_nullable_default,LEAD(r,2,CASE WHEN false THEN CAST(NULL AS INT) ELSE d END) OVER (ORDER BY id) AS column_case_default FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "column_defaults",
+            "provider": "offset_scalar",
+            "functions": [
+              "LEAD"
+            ],
+            "offsets": [
+              2,
+              0
+            ],
+            "payload_declarations": [
+              "required",
+              "nullable"
+            ],
+            "defaults": [
+              "required-column",
+              "nullable-column",
+              "nullable-case-column"
+            ],
+            "null_treatment": [
+              "RESPECT"
+            ],
+            "isolation": "column-default support is independent of literal/nested primary Fields"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_column_default_controls",
+          "ansi": false,
+          "sql": "SELECT id,LEAD(r,2,d) RESPECT NULLS OVER (ORDER BY id) AS required_column_default,LEAD(r,2,v) RESPECT NULLS OVER (ORDER BY id) AS nullable_column_default,LEAD(v,2,v) RESPECT NULLS OVER (ORDER BY id) AS nullable_both,LEAD(r,0,v) RESPECT NULLS OVER (ORDER BY id) AS zero_nullable_default,LEAD(r,2,CASE WHEN false THEN CAST(NULL AS INT) ELSE d END) OVER (ORDER BY id) AS column_case_default FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "column_defaults",
+            "provider": "offset_scalar",
+            "functions": [
+              "LEAD"
+            ],
+            "offsets": [
+              2,
+              0
+            ],
+            "payload_declarations": [
+              "required",
+              "nullable"
+            ],
+            "defaults": [
+              "required-column",
+              "nullable-column",
+              "nullable-case-column"
+            ],
+            "null_treatment": [
+              "RESPECT"
+            ],
+            "isolation": "column-default support is independent of literal/nested primary Fields"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_offset_scalar_defaults_without_frame",
+          "ansi": true,
+          "sql": "SELECT id,LAG(r,2,-99) OVER (ORDER BY id) AS required_literal,LAG(r,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS required_null,LAG(r,2) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LAG(v,2,-99) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LAG(v,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS nullable_null,LAG(v,2) RESPECT NULLS OVER (ORDER BY id) AS nullable_omitted,LAG(r,2,-99) IGNORE NULLS OVER (ORDER BY id) AS required_ignore,LAG(v,2,-99) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "lag_defaults_without_frame",
+            "provider": "offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "source_id": "lag_offset_scalar_defaults",
+            "source_change": "Remove only packed required_exact_frame; preserve all other expressions and outer ORDER BY.",
+            "offsets": [
+              2
+            ],
+            "payload_declarations": [
+              "required",
+              "nullable"
+            ],
+            "defaults": [
+              "required-literal",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "implicit-respect",
+              "RESPECT",
+              "IGNORE"
+            ],
+            "state": "mixed-v"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_offset_scalar_defaults_without_frame",
+          "ansi": false,
+          "sql": "SELECT id,LAG(r,2,-99) OVER (ORDER BY id) AS required_literal,LAG(r,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS required_null,LAG(r,2) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LAG(v,2,-99) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LAG(v,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS nullable_null,LAG(v,2) RESPECT NULLS OVER (ORDER BY id) AS nullable_omitted,LAG(r,2,-99) IGNORE NULLS OVER (ORDER BY id) AS required_ignore,LAG(v,2,-99) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "lag_defaults_without_frame",
+            "provider": "offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "source_id": "lag_offset_scalar_defaults",
+            "source_change": "Remove only packed required_exact_frame; preserve all other expressions and outer ORDER BY.",
+            "offsets": [
+              2
+            ],
+            "payload_declarations": [
+              "required",
+              "nullable"
+            ],
+            "defaults": [
+              "required-literal",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "implicit-respect",
+              "RESPECT",
+              "IGNORE"
+            ],
+            "state": "mixed-v"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_empty_offset_scalar_defaults_without_frame",
+          "ansi": true,
+          "sql": "SELECT id,LAG(r,2,-99) OVER (ORDER BY id) AS required_literal,LAG(r,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS required_null,LAG(r,2) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LAG(v,2,-99) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LAG(v,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS nullable_null,LAG(v,2) RESPECT NULLS OVER (ORDER BY id) AS nullable_omitted,LAG(r,2,-99) IGNORE NULLS OVER (ORDER BY id) AS required_ignore,LAG(v,2,-99) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "lag_defaults_without_frame",
+            "provider": "empty_offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "source_id": "lag_empty_offset_scalar_defaults",
+            "source_change": "Remove only packed required_exact_frame; preserve all other expressions and outer ORDER BY.",
+            "offsets": [
+              2
+            ],
+            "payload_declarations": [
+              "required",
+              "nullable"
+            ],
+            "defaults": [
+              "required-literal",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "implicit-respect",
+              "RESPECT",
+              "IGNORE"
+            ],
+            "state": "empty"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_empty_offset_scalar_defaults_without_frame",
+          "ansi": false,
+          "sql": "SELECT id,LAG(r,2,-99) OVER (ORDER BY id) AS required_literal,LAG(r,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS required_null,LAG(r,2) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LAG(v,2,-99) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LAG(v,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS nullable_null,LAG(v,2) RESPECT NULLS OVER (ORDER BY id) AS nullable_omitted,LAG(r,2,-99) IGNORE NULLS OVER (ORDER BY id) AS required_ignore,LAG(v,2,-99) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "lag_defaults_without_frame",
+            "provider": "empty_offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "source_id": "lag_empty_offset_scalar_defaults",
+            "source_change": "Remove only packed required_exact_frame; preserve all other expressions and outer ORDER BY.",
+            "offsets": [
+              2
+            ],
+            "payload_declarations": [
+              "required",
+              "nullable"
+            ],
+            "defaults": [
+              "required-literal",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "implicit-respect",
+              "RESPECT",
+              "IGNORE"
+            ],
+            "state": "empty"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_null_offset_scalar_defaults_without_frame",
+          "ansi": true,
+          "sql": "SELECT id,LAG(r,2,-99) OVER (ORDER BY id) AS required_literal,LAG(r,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS required_null,LAG(r,2) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LAG(v,2,-99) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LAG(v,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS nullable_null,LAG(v,2) RESPECT NULLS OVER (ORDER BY id) AS nullable_omitted,LAG(r,2,-99) IGNORE NULLS OVER (ORDER BY id) AS required_ignore,LAG(v,2,-99) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore FROM null_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "lag_defaults_without_frame",
+            "provider": "null_offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "source_id": "lag_null_offset_scalar_defaults",
+            "source_change": "Remove only packed required_exact_frame; preserve all other expressions and outer ORDER BY.",
+            "offsets": [
+              2
+            ],
+            "payload_declarations": [
+              "required",
+              "nullable"
+            ],
+            "defaults": [
+              "required-literal",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "implicit-respect",
+              "RESPECT",
+              "IGNORE"
+            ],
+            "state": "all-NULL-v"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_null_offset_scalar_defaults_without_frame",
+          "ansi": false,
+          "sql": "SELECT id,LAG(r,2,-99) OVER (ORDER BY id) AS required_literal,LAG(r,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS required_null,LAG(r,2) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LAG(v,2,-99) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LAG(v,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS nullable_null,LAG(v,2) RESPECT NULLS OVER (ORDER BY id) AS nullable_omitted,LAG(r,2,-99) IGNORE NULLS OVER (ORDER BY id) AS required_ignore,LAG(v,2,-99) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore FROM null_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "lag_defaults_without_frame",
+            "provider": "null_offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "source_id": "lag_null_offset_scalar_defaults",
+            "source_change": "Remove only packed required_exact_frame; preserve all other expressions and outer ORDER BY.",
+            "offsets": [
+              2
+            ],
+            "payload_declarations": [
+              "required",
+              "nullable"
+            ],
+            "defaults": [
+              "required-literal",
+              "NULL",
+              "omitted"
+            ],
+            "null_treatment": [
+              "implicit-respect",
+              "RESPECT",
+              "IGNORE"
+            ],
+            "state": "all-NULL-v"
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_offset_scalar_literal_null_payloads",
+          "ansi": true,
+          "sql": "SELECT id,LAG(CAST(NULL AS INT),2,-99) OVER (ORDER BY id) AS typed_required,LAG(CAST(NULL AS INT),2,CAST(NULL AS INT)) OVER (ORDER BY id) AS typed_null,LAG(CAST(NULL AS INT),2) OVER (ORDER BY id) AS typed_omitted,LAG(NULL,2,-99) OVER (ORDER BY id) AS untyped_required,LAG(NULL,2,NULL) OVER (ORDER BY id) AS untyped_null,LAG(NULL,2) OVER (ORDER BY id) AS untyped_omitted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "literal_null_payloads",
+            "provider": "offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "offsets": [
+              2
+            ],
+            "payload_expressions": [
+              "CAST(NULL AS INT)",
+              "NULL"
+            ],
+            "defaults": [
+              "required-integer-literal",
+              "explicit-NULL",
+              "omitted"
+            ],
+            "state": "nonempty",
+            "type_refinement": "Observe complete Fields and values; no inferred golden type or nullability."
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_offset_scalar_literal_null_payloads",
+          "ansi": false,
+          "sql": "SELECT id,LAG(CAST(NULL AS INT),2,-99) OVER (ORDER BY id) AS typed_required,LAG(CAST(NULL AS INT),2,CAST(NULL AS INT)) OVER (ORDER BY id) AS typed_null,LAG(CAST(NULL AS INT),2) OVER (ORDER BY id) AS typed_omitted,LAG(NULL,2,-99) OVER (ORDER BY id) AS untyped_required,LAG(NULL,2,NULL) OVER (ORDER BY id) AS untyped_null,LAG(NULL,2) OVER (ORDER BY id) AS untyped_omitted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "literal_null_payloads",
+            "provider": "offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "offsets": [
+              2
+            ],
+            "payload_expressions": [
+              "CAST(NULL AS INT)",
+              "NULL"
+            ],
+            "defaults": [
+              "required-integer-literal",
+              "explicit-NULL",
+              "omitted"
+            ],
+            "state": "nonempty",
+            "type_refinement": "Observe complete Fields and values; no inferred golden type or nullability."
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_empty_offset_scalar_literal_null_payloads",
+          "ansi": true,
+          "sql": "SELECT id,LAG(CAST(NULL AS INT),2,-99) OVER (ORDER BY id) AS typed_required,LAG(CAST(NULL AS INT),2,CAST(NULL AS INT)) OVER (ORDER BY id) AS typed_null,LAG(CAST(NULL AS INT),2) OVER (ORDER BY id) AS typed_omitted,LAG(NULL,2,-99) OVER (ORDER BY id) AS untyped_required,LAG(NULL,2,NULL) OVER (ORDER BY id) AS untyped_null,LAG(NULL,2) OVER (ORDER BY id) AS untyped_omitted FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "literal_null_payloads",
+            "provider": "empty_offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "offsets": [
+              2
+            ],
+            "payload_expressions": [
+              "CAST(NULL AS INT)",
+              "NULL"
+            ],
+            "defaults": [
+              "required-integer-literal",
+              "explicit-NULL",
+              "omitted"
+            ],
+            "state": "empty",
+            "type_refinement": "Observe complete Fields and values; no inferred golden type or nullability."
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lag_empty_offset_scalar_literal_null_payloads",
+          "ansi": false,
+          "sql": "SELECT id,LAG(CAST(NULL AS INT),2,-99) OVER (ORDER BY id) AS typed_required,LAG(CAST(NULL AS INT),2,CAST(NULL AS INT)) OVER (ORDER BY id) AS typed_null,LAG(CAST(NULL AS INT),2) OVER (ORDER BY id) AS typed_omitted,LAG(NULL,2,-99) OVER (ORDER BY id) AS untyped_required,LAG(NULL,2,NULL) OVER (ORDER BY id) AS untyped_null,LAG(NULL,2) OVER (ORDER BY id) AS untyped_omitted FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "literal_null_payloads",
+            "provider": "empty_offset_scalar",
+            "functions": [
+              "LAG"
+            ],
+            "offsets": [
+              2
+            ],
+            "payload_expressions": [
+              "CAST(NULL AS INT)",
+              "NULL"
+            ],
+            "defaults": [
+              "required-integer-literal",
+              "explicit-NULL",
+              "omitted"
+            ],
+            "state": "empty",
+            "type_refinement": "Observe complete Fields and values; no inferred golden type or nullability."
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_offset_scalar_literal_null_payloads",
+          "ansi": true,
+          "sql": "SELECT id,LEAD(CAST(NULL AS INT),2,-99) OVER (ORDER BY id) AS typed_required,LEAD(CAST(NULL AS INT),2,CAST(NULL AS INT)) OVER (ORDER BY id) AS typed_null,LEAD(CAST(NULL AS INT),2) OVER (ORDER BY id) AS typed_omitted,LEAD(NULL,2,-99) OVER (ORDER BY id) AS untyped_required,LEAD(NULL,2,NULL) OVER (ORDER BY id) AS untyped_null,LEAD(NULL,2) OVER (ORDER BY id) AS untyped_omitted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "literal_null_payloads",
+            "provider": "offset_scalar",
+            "functions": [
+              "LEAD"
+            ],
+            "offsets": [
+              2
+            ],
+            "payload_expressions": [
+              "CAST(NULL AS INT)",
+              "NULL"
+            ],
+            "defaults": [
+              "required-integer-literal",
+              "explicit-NULL",
+              "omitted"
+            ],
+            "state": "nonempty",
+            "type_refinement": "Observe complete Fields and values; no inferred golden type or nullability."
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_offset_scalar_literal_null_payloads",
+          "ansi": false,
+          "sql": "SELECT id,LEAD(CAST(NULL AS INT),2,-99) OVER (ORDER BY id) AS typed_required,LEAD(CAST(NULL AS INT),2,CAST(NULL AS INT)) OVER (ORDER BY id) AS typed_null,LEAD(CAST(NULL AS INT),2) OVER (ORDER BY id) AS typed_omitted,LEAD(NULL,2,-99) OVER (ORDER BY id) AS untyped_required,LEAD(NULL,2,NULL) OVER (ORDER BY id) AS untyped_null,LEAD(NULL,2) OVER (ORDER BY id) AS untyped_omitted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "literal_null_payloads",
+            "provider": "offset_scalar",
+            "functions": [
+              "LEAD"
+            ],
+            "offsets": [
+              2
+            ],
+            "payload_expressions": [
+              "CAST(NULL AS INT)",
+              "NULL"
+            ],
+            "defaults": [
+              "required-integer-literal",
+              "explicit-NULL",
+              "omitted"
+            ],
+            "state": "nonempty",
+            "type_refinement": "Observe complete Fields and values; no inferred golden type or nullability."
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_empty_offset_scalar_literal_null_payloads",
+          "ansi": true,
+          "sql": "SELECT id,LEAD(CAST(NULL AS INT),2,-99) OVER (ORDER BY id) AS typed_required,LEAD(CAST(NULL AS INT),2,CAST(NULL AS INT)) OVER (ORDER BY id) AS typed_null,LEAD(CAST(NULL AS INT),2) OVER (ORDER BY id) AS typed_omitted,LEAD(NULL,2,-99) OVER (ORDER BY id) AS untyped_required,LEAD(NULL,2,NULL) OVER (ORDER BY id) AS untyped_null,LEAD(NULL,2) OVER (ORDER BY id) AS untyped_omitted FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "literal_null_payloads",
+            "provider": "empty_offset_scalar",
+            "functions": [
+              "LEAD"
+            ],
+            "offsets": [
+              2
+            ],
+            "payload_expressions": [
+              "CAST(NULL AS INT)",
+              "NULL"
+            ],
+            "defaults": [
+              "required-integer-literal",
+              "explicit-NULL",
+              "omitted"
+            ],
+            "state": "empty",
+            "type_refinement": "Observe complete Fields and values; no inferred golden type or nullability."
+          }
+        },
+        {
+          "corpus": "offset-window-fields-1044-supplement",
+          "id": "lead_empty_offset_scalar_literal_null_payloads",
+          "ansi": false,
+          "sql": "SELECT id,LEAD(CAST(NULL AS INT),2,-99) OVER (ORDER BY id) AS typed_required,LEAD(CAST(NULL AS INT),2,CAST(NULL AS INT)) OVER (ORDER BY id) AS typed_null,LEAD(CAST(NULL AS INT),2) OVER (ORDER BY id) AS typed_omitted,LEAD(NULL,2,-99) OVER (ORDER BY id) AS untyped_required,LEAD(NULL,2,NULL) OVER (ORDER BY id) AS untyped_null,LEAD(NULL,2) OVER (ORDER BY id) AS untyped_omitted FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "literal_null_payloads",
+            "provider": "empty_offset_scalar",
+            "functions": [
+              "LEAD"
+            ],
+            "offsets": [
+              2
+            ],
+            "payload_expressions": [
+              "CAST(NULL AS INT)",
+              "NULL"
+            ],
+            "defaults": [
+              "required-integer-literal",
+              "explicit-NULL",
+              "omitted"
+            ],
+            "state": "empty",
+            "type_refinement": "Observe complete Fields and values; no inferred golden type or nullability."
+          }
+        }
+      ]
+    }
+  ],
+  "source_revision": 2,
+  "original_provider_source": {
+    "path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/new1044-oracle-source-v1/offset-window-fields-1044-cases.json",
+    "sha256": "12459425992e8c7d70910f479b91ed7856bdb22c88fcfe6a2622ebb14834ec0d",
+    "corpus": "offset-window-fields-1044-supplement",
+    "provider_names": [
+      "offset_scalar",
+      "empty_offset_scalar",
+      "null_offset_scalar",
+      "offset_nested",
+      "empty_offset_nested",
+      "null_offset_nested"
+    ],
+    "preserved": "Provider row values, types, field names, nullability and metadata keys/meaning; only non-String metadata values become String representations."
+  },
+  "source_changes": {
+    "original_case_records_preserved": 80,
+    "original_literal_sql_changed": 0,
+    "added_sql_definitions": 7,
+    "added_case_records": 14,
+    "metadata_requirement": "Every provider Field metadata value must be a String, matching the existing Arrow fixture reader.",
+    "metadata_value_changes": [
+      {
+        "provider": "offset_nested",
+        "field_path": "schema.r",
+        "metadata_key": "version",
+        "old_value": 1,
+        "new_value": "1",
+        "change": "input metadata representation only; no expected result supplied"
+      },
+      {
+        "provider": "offset_nested",
+        "field_path": "schema.r.detail.token",
+        "metadata_key": "lineage",
+        "old_value": {
+          "origin": "1044-fixture",
+          "ordinal": 1
+        },
+        "new_value": "{\"origin\":\"1044-fixture\",\"ordinal\":1}",
+        "change": "input metadata representation only; no expected result supplied"
+      },
+      {
+        "provider": "offset_nested",
+        "field_path": "schema.v",
+        "metadata_key": "version",
+        "old_value": 1,
+        "new_value": "1",
+        "change": "input metadata representation only; no expected result supplied"
+      },
+      {
+        "provider": "offset_nested",
+        "field_path": "schema.v.detail.token",
+        "metadata_key": "lineage",
+        "old_value": {
+          "origin": "1044-fixture",
+          "ordinal": 1
+        },
+        "new_value": "{\"origin\":\"1044-fixture\",\"ordinal\":1}",
+        "change": "input metadata representation only; no expected result supplied"
+      },
+      {
+        "provider": "empty_offset_nested",
+        "field_path": "schema.r",
+        "metadata_key": "version",
+        "old_value": 1,
+        "new_value": "1",
+        "change": "input metadata representation only; no expected result supplied"
+      },
+      {
+        "provider": "empty_offset_nested",
+        "field_path": "schema.r.detail.token",
+        "metadata_key": "lineage",
+        "old_value": {
+          "origin": "1044-fixture",
+          "ordinal": 1
+        },
+        "new_value": "{\"origin\":\"1044-fixture\",\"ordinal\":1}",
+        "change": "input metadata representation only; no expected result supplied"
+      },
+      {
+        "provider": "empty_offset_nested",
+        "field_path": "schema.v",
+        "metadata_key": "version",
+        "old_value": 1,
+        "new_value": "1",
+        "change": "input metadata representation only; no expected result supplied"
+      },
+      {
+        "provider": "empty_offset_nested",
+        "field_path": "schema.v.detail.token",
+        "metadata_key": "lineage",
+        "old_value": {
+          "origin": "1044-fixture",
+          "ordinal": 1
+        },
+        "new_value": "{\"origin\":\"1044-fixture\",\"ordinal\":1}",
+        "change": "input metadata representation only; no expected result supplied"
+      },
+      {
+        "provider": "null_offset_nested",
+        "field_path": "schema.r",
+        "metadata_key": "version",
+        "old_value": 1,
+        "new_value": "1",
+        "change": "input metadata representation only; no expected result supplied"
+      },
+      {
+        "provider": "null_offset_nested",
+        "field_path": "schema.r.detail.token",
+        "metadata_key": "lineage",
+        "old_value": {
+          "origin": "1044-fixture",
+          "ordinal": 1
+        },
+        "new_value": "{\"origin\":\"1044-fixture\",\"ordinal\":1}",
+        "change": "input metadata representation only; no expected result supplied"
+      },
+      {
+        "provider": "null_offset_nested",
+        "field_path": "schema.v",
+        "metadata_key": "version",
+        "old_value": 1,
+        "new_value": "1",
+        "change": "input metadata representation only; no expected result supplied"
+      },
+      {
+        "provider": "null_offset_nested",
+        "field_path": "schema.v.detail.token",
+        "metadata_key": "lineage",
+        "old_value": {
+          "origin": "1044-fixture",
+          "ordinal": 1
+        },
+        "new_value": "{\"origin\":\"1044-fixture\",\"ordinal\":1}",
+        "change": "input metadata representation only; no expected result supplied"
+      }
+    ],
+    "lag_defaults_derivation": [
+      {
+        "provider": "offset_scalar",
+        "original_id": "lag_offset_scalar_defaults",
+        "original_sql": "SELECT id,LAG(r,2,-99) OVER (ORDER BY id) AS required_literal,LAG(r,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS required_null,LAG(r,2) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LAG(v,2,-99) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LAG(v,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS nullable_null,LAG(v,2) RESPECT NULLS OVER (ORDER BY id) AS nullable_omitted,LAG(r,2,-99) IGNORE NULLS OVER (ORDER BY id) AS required_ignore,LAG(v,2,-99) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore,LAG(r,2,-99) OVER (ORDER BY id ROWS BETWEEN 2 PRECEDING AND 2 PRECEDING) AS required_exact_frame FROM offset_scalar ORDER BY id",
+        "removed_expression": ",LAG(r,2,-99) OVER (ORDER BY id ROWS BETWEEN 2 PRECEDING AND 2 PRECEDING) AS required_exact_frame",
+        "addendum_id": "lag_offset_scalar_defaults_without_frame"
+      },
+      {
+        "provider": "empty_offset_scalar",
+        "original_id": "lag_empty_offset_scalar_defaults",
+        "original_sql": "SELECT id,LAG(r,2,-99) OVER (ORDER BY id) AS required_literal,LAG(r,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS required_null,LAG(r,2) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LAG(v,2,-99) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LAG(v,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS nullable_null,LAG(v,2) RESPECT NULLS OVER (ORDER BY id) AS nullable_omitted,LAG(r,2,-99) IGNORE NULLS OVER (ORDER BY id) AS required_ignore,LAG(v,2,-99) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore,LAG(r,2,-99) OVER (ORDER BY id ROWS BETWEEN 2 PRECEDING AND 2 PRECEDING) AS required_exact_frame FROM empty_offset_scalar ORDER BY id",
+        "removed_expression": ",LAG(r,2,-99) OVER (ORDER BY id ROWS BETWEEN 2 PRECEDING AND 2 PRECEDING) AS required_exact_frame",
+        "addendum_id": "lag_empty_offset_scalar_defaults_without_frame"
+      },
+      {
+        "provider": "null_offset_scalar",
+        "original_id": "lag_null_offset_scalar_defaults",
+        "original_sql": "SELECT id,LAG(r,2,-99) OVER (ORDER BY id) AS required_literal,LAG(r,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS required_null,LAG(r,2) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LAG(v,2,-99) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LAG(v,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS nullable_null,LAG(v,2) RESPECT NULLS OVER (ORDER BY id) AS nullable_omitted,LAG(r,2,-99) IGNORE NULLS OVER (ORDER BY id) AS required_ignore,LAG(v,2,-99) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore,LAG(r,2,-99) OVER (ORDER BY id ROWS BETWEEN 2 PRECEDING AND 2 PRECEDING) AS required_exact_frame FROM null_offset_scalar ORDER BY id",
+        "removed_expression": ",LAG(r,2,-99) OVER (ORDER BY id ROWS BETWEEN 2 PRECEDING AND 2 PRECEDING) AS required_exact_frame",
+        "addendum_id": "lag_null_offset_scalar_defaults_without_frame"
+      }
+    ],
+    "original_lag_frame_cases_retained": true,
+    "original_six_historical_references_unchanged": true,
+    "no_expected_results_edited_or_supplied": true,
+    "separate_addendum_capture_requested": false
+  }
+}
