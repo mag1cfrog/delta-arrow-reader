@@ -659,10 +659,13 @@ malformed STRING seconds fail without Spark's `NUMERIC_VALUE_OUT_OF_RANGE` and
 `CAST_INVALID_INPUT` conditions (#1124). With several failing rows, the first row's error
 is reported, whichever argument cast or the arithmetic fails there, as Spark evaluates row by
 row (#1148): MAKE_INTERVAL and MAKE_YM_INTERVAL ask DataFusion's row-ordered evaluation for
-it, and they and the BIGINT, DOUBLE, DECIMAL and STRING-to-DECIMAL argument casts report their
-first failing row. A shared helper, `invoke_rows_until_first_failing_row`, finds that row by
-evaluating single rows, only after the batch has failed. It used to report the first failing
-argument across the batch. The [MAKE_INTERVAL
+it, and the BIGINT, DOUBLE, DECIMAL and STRING-to-DECIMAL argument casts report their first
+failing row, as the STRING-to-INT cast already did. A shared helper,
+`strict_cast_rows_until_error`, finds that row in one pass: the cast's TRY form gives NULL
+where the strict cast fails, and each such row is checked in order by the strict cast of that
+one value. It used to report the first failing argument across the batch. An argument computed
+by checked arithmetic, or an earlier expression of the projection, can still fail on a later
+row first at batch sizes above 1 (#1180). The [MAKE_INTERVAL
 references](tests/fixtures/make-interval/README.md) record the checks.
 
 TRY_MAKE_INTERVAL, which was not registered, plans the same function with one to seven

@@ -111,14 +111,39 @@ impl ScalarUDFImpl for SparkCastStringToDecimal {
         )))
     }
 
-    // A parent that keeps Spark's row order of errors needs this cast's first failing row.
+    // A parent that keeps Spark's row order of errors needs this cast's first failing row,
+    // which only a strict cast can have.
     fn invoke_rows_until_error(
         &self,
         args: ScalarFunctionArgs,
     ) -> Result<datafusion_expr::EvaluatedRowPrefix> {
-        crate::scalar::row_errors::invoke_rows_until_first_failing_row(args, |args| {
-            self.invoke_with_args(args)
-        })
+        let [value] = args.args.as_slice() else {
+            return self
+                .invoke_with_args(args)
+                .map(datafusion_expr::EvaluatedRowPrefix::complete);
+        };
+        if self.safe {
+            return self
+                .invoke_with_args(args)
+                .map(datafusion_expr::EvaluatedRowPrefix::complete);
+        }
+        let lenient = Self::new(self.precision, self.scale, true);
+        let lenient_values = make_scalar_function(
+            move |arrays| lenient.invoke_array(arrays),
+            vec![],
+        )(std::slice::from_ref(value))?;
+        let (precision, scale) = (self.precision, self.scale);
+        crate::scalar::row_errors::strict_cast_rows_until_error(
+            value,
+            lenient_values,
+            args.number_rows,
+            |value| {
+                let strict = Self::new(precision, scale, false);
+                make_scalar_function(move |arrays| strict.invoke_array(arrays), vec![])(
+                    std::slice::from_ref(value),
+                )
+            },
+        )
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {

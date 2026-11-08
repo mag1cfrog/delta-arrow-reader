@@ -133,18 +133,11 @@ impl ScalarUDFImpl for SparkMakeInterval {
     }
 
     // Spark evaluates the arguments and the arithmetic row by row, so with several failing rows
-    // it reports the first row's error, whichever argument or the arithmetic fails there.
+    // it reports the first row's error, whichever argument or the arithmetic fails there. Each
+    // argument then stops at its first failing row; this function runs over the rows before the
+    // earliest one and fails, if at all, in an earlier row.
     fn requires_row_ordered_errors(&self) -> bool {
         true
-    }
-
-    fn invoke_rows_until_error(
-        &self,
-        args: ScalarFunctionArgs,
-    ) -> Result<datafusion_expr::EvaluatedRowPrefix> {
-        crate::scalar::row_errors::invoke_rows_until_first_failing_row(args, |args| {
-            self.invoke_with_args(args)
-        })
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
