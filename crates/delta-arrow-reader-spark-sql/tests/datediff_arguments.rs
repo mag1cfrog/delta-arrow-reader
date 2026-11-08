@@ -38,7 +38,7 @@ fn datediff_argument_references() -> TestResult<Vec<Value>> {
             |build| build.contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
         )
     );
-    assert_eq!(records.len() - 1, 260);
+    assert_eq!(records.len() - 1, 268);
     Ok(records)
 }
 
@@ -266,6 +266,76 @@ fn register_inputs(session: &SessionContext, metadata: &Value, batch_size: usize
         let name = input["name"].as_str().ok_or("missing table name")?;
         register(session, name, &decode_recorded_batch(input)?, batch_size)?;
     }
+    Ok(())
+}
+
+/// The recorded inputs with STRING columns dictionary-encoded, as Delta's provider gives a
+/// STRING partition column.
+fn register_dictionary_inputs(
+    session: &SessionContext,
+    metadata: &Value,
+    batch_size: usize,
+) -> TestResult {
+    let dictionary = DataType::Dictionary(Box::new(DataType::UInt16), Box::new(DataType::Utf8));
+    for input in metadata["inputs"].as_array().ok_or("missing inputs")? {
+        let name = input["name"].as_str().ok_or("missing table name")?;
+        let batch = decode_recorded_batch(input)?;
+        let mut fields = Vec::new();
+        let mut columns = Vec::new();
+        for (field, column) in batch.schema().fields().iter().zip(batch.columns()) {
+            if field.data_type() == &DataType::Utf8 {
+                fields.push(field.as_ref().clone().with_data_type(dictionary.clone()));
+                columns.push(arrow::compute::cast(column, &dictionary)?);
+            } else {
+                fields.push(field.as_ref().clone());
+                columns.push(column.clone());
+            }
+        }
+        let batch = RecordBatch::try_new(Arc::new(arrow::datatypes::Schema::new(fields)), columns)?;
+        register(session, name, &batch, batch_size)?;
+    }
+    Ok(())
+}
+
+/// A dictionary-encoded STRING argument casts to DATE like a STRING, so the Spark records over
+/// the STRING column hold for its dictionary-encoded copy.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn dictionary_encoded_string_arguments_resolve_like_strings() -> TestResult {
+    const RECORDS: [&str; 2] = [
+        "column_datediff_string_end",
+        "column_date_diff_string_start",
+    ];
+    let records = datediff_argument_references()?;
+    let cases = records[1..]
+        .iter()
+        .filter(|case| case["id"].as_str().is_some_and(|id| RECORDS.contains(&id)))
+        .collect::<Vec<_>>();
+    assert_eq!(cases.len(), RECORDS.len() * 4);
+    let mut differences = Vec::new();
+    for batch_size in [1, 32] {
+        let session = session_context(batch_size);
+        register_dictionary_inputs(&session, &records[0], batch_size)?;
+        for case in &cases {
+            let observation = observe(&session, case).await;
+            let differing = differing_parts(case, &observation)?;
+            if !differing.is_empty() {
+                differences.push(json!({
+                    "id": case["id"], "timezone": case["timezone"], "ansi": case["ansi"],
+                    "batch": batch_size, "differing": differing, "observed": observation,
+                }));
+            }
+        }
+    }
+    assert!(
+        differences.is_empty(),
+        "{} differences:\n{}",
+        differences.len(),
+        differences
+            .iter()
+            .map(Value::to_string)
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
     Ok(())
 }
 

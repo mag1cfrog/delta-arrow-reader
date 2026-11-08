@@ -4,7 +4,7 @@ Records analyzed, optimized and executed schemas, typed internal-row values and 
 stages, with the innermost Java exception of a failure, for DATEDIFF and DATE_DIFF with INT,
 BIGINT, DOUBLE, DECIMAL, BOOLEAN, interval, BINARY, ARRAY and MAP arguments in either
 position, as literals and columns, beside NULL, in an unreached filter, and beside DATE,
-TIMESTAMP and TIMESTAMP_NTZ controls. Spark casts only DATE, TIMESTAMP, TIMESTAMP_NTZ, STRING
+TIMESTAMP, TIMESTAMP_NTZ and STRING column controls. Spark casts only DATE, TIMESTAMP, TIMESTAMP_NTZ, STRING
 and NULL arguments to DATE, and rejects the others during analysis. Every query runs in both
 ANSI modes in UTC and America/Los_Angeles. Run from the crate root in the reference environment
 described in README.md; the output path must not exist.
@@ -23,11 +23,11 @@ SPARK_REVISION = "32f7299601108917fb01920a54e084595b7b3bf8"
 CONVERT_TO_LOCAL_RELATION = "org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation"
 ZONES = ["UTC", "America/Los_Angeles"]
 
-# (DATE, INT, DOUBLE, BOOLEAN)
+# (DATE, INT, DOUBLE, BOOLEAN, STRING)
 ROWS = [
-    ("2024-01-02", 1, 1.5, True),
-    ("2024-03-11", -1, -0.5, False),
-    (None, None, None, None),
+    ("2024-01-02", 1, 1.5, True, "2024-01-01"),
+    ("2024-03-11", -1, -0.5, False, "2024-01-31"),
+    (None, None, None, None, None),
 ]
 
 
@@ -47,12 +47,13 @@ INPUTS = [{
         {"name": "d", "type": "date", "nullable": True, "metadata": {}},
         {"name": "i", "type": "integer", "nullable": True, "metadata": {}},
         {"name": "f", "type": "double", "nullable": True, "metadata": {}},
-        {"name": "b", "type": "boolean", "nullable": True, "metadata": {}}]},
+        {"name": "b", "type": "boolean", "nullable": True, "metadata": {}},
+        {"name": "t", "type": "string", "nullable": True, "metadata": {}}]},
     "rows": [[str(key), None if day is None else str(days(day)),
               None if number is None else str(number),
               None if real is None else double_bits(real),
-              None if flag is None else str(flag).lower()]
-             for key, (day, number, real, flag) in enumerate(ROWS)]}]
+              None if flag is None else str(flag).lower(), text]
+             for key, (day, number, real, flag, text) in enumerate(ROWS)]}]
 
 DATE = "DATE '2024-01-01'"
 
@@ -89,6 +90,8 @@ def definitions():
            "SELECT k, datediff(d, i) AS r FROM inputs WHERE false")
     # Arguments Spark casts to DATE.
     yield "column_datediff_date", f"SELECT k, datediff(d, {DATE}) AS r FROM inputs"
+    yield "column_datediff_string_end", "SELECT k, datediff(t, d) AS r FROM inputs"
+    yield "column_date_diff_string_start", "SELECT k, date_diff(d, t) AS r FROM inputs"
     yield ("literal_datediff_timestamp",
            f"SELECT datediff(TIMESTAMP '2024-01-02 23:00:00', {DATE}) AS r")
     yield ("literal_date_diff_timestamp_ntz",
@@ -107,6 +110,8 @@ def python_value(value, kind):
         return struct.unpack(">d", bytes.fromhex(value))[0]
     if kind == "boolean":
         return {"true": True, "false": False}[value]
+    if kind == "string":
+        return value
     raise AssertionError(kind)
 
 
