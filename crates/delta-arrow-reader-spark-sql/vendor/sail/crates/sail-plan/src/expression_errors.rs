@@ -243,7 +243,7 @@ fn preparation_error_candidate(
         || (spark_array_index_errors && array_index_error_candidate(expr)?))
 }
 
-fn permits_constant_preparation(expr: &Expr) -> Result<bool> {
+pub(crate) fn permits_constant_preparation(expr: &Expr) -> Result<bool> {
     Ok(!expr.exists(|expr| {
         Ok(expr.is_volatile_node()
             || matches!(expr, Expr::ScalarFunction(function)
@@ -1745,6 +1745,7 @@ fn literal_regexp_input_permitted(input: &LogicalPlan) -> Result<bool> {
 }
 
 // Structural eligibility for local evaluation, not execution or guaranteed success.
+// Evaluators must separately check permits_constant_preparation before invoking calls.
 // Aggregates, subqueries and outer references need their own planning context;
 // volatile calls remain in execution even when local columns are available.
 pub(crate) fn is_locally_evaluable(expr: &Expr, allow_columns: bool) -> Result<bool> {
@@ -3735,7 +3736,7 @@ impl Prepare {
         let Some(expr) = expr else {
             return Ok(Some(default));
         };
-        if !is_locally_evaluable(expr, false)? {
+        if !is_locally_evaluable(expr, false)? || !permits_constant_preparation(expr)? {
             return Ok(None);
         }
         // Before simplification, LIMIT/OFFSET can still be casts or arithmetic.
@@ -3872,9 +3873,10 @@ impl Prepare {
                 if !arithmetic && !array_index {
                     return Ok(TreeNodeRecursion::Continue);
                 }
+                let constant_preparation_permitted = permits_constant_preparation(expr)?;
                 if !arithmetic
                     && array_index
-                    && (!permits_constant_preparation(expr)?
+                    && (!constant_preparation_permitted
                         || !node.inputs().iter().try_fold(true, |allowed, input| {
                             Ok::<_, datafusion_common::DataFusionError>(
                                 allowed && input_permits_array_index_preparation(input)?,
@@ -3892,6 +3894,9 @@ impl Prepare {
                 } else {
                     None
                 };
+                // Empty local conversion consumes the expression without invoking it.
+                let batch =
+                    batch.filter(|batch| batch.num_rows() == 0 || constant_preparation_permitted);
                 match batch {
                     Some(batch)
                         if check_local_inputs
@@ -4031,7 +4036,21 @@ impl Prepare {
                 })
                 .map(|_| ());
         }
-        if constants && is_locally_evaluable(expr, false)? {
+        // SLICE opts out of generic evaluation but still validates reached literal parameters.
+        if constants
+            && let Expr::ScalarFunction(function) = expr
+            && function.func.inner().is::<SparkArraySlice>()
+            && let [
+                Expr::Literal(array, _),
+                Expr::Literal(ScalarValue::Int64(Some(start)), _),
+                Expr::Literal(ScalarValue::Int64(Some(length)), _),
+            ] = function.args.as_slice()
+            && !array.is_null()
+        {
+            let _ = create_physical_expr(expr, &DFSchema::empty(), &self.props)?;
+            SparkArraySlice::validate_parameters(*start, *length)?;
+        }
+        if constants && is_locally_evaluable(expr, false)? && permits_constant_preparation(expr)? {
             self.eval_constant(expr)?;
             return Ok(());
         }
@@ -4081,7 +4100,9 @@ impl Prepare {
             LogicalPlan::Values(values) if !values.values.is_empty() => {
                 if !values.values.iter().flatten().try_fold(true, |valid, e| {
                     Ok::<_, datafusion_common::DataFusionError>(
-                        valid && is_locally_evaluable(e, false)?,
+                        valid
+                            && is_locally_evaluable(e, false)?
+                            && permits_constant_preparation(e)?,
                     )
                 })? {
                     return Ok(None);
@@ -4115,7 +4136,7 @@ impl Prepare {
                 }
                 if !project.expr.iter().try_fold(true, |valid, e| {
                     Ok::<_, datafusion_common::DataFusionError>(
-                        valid && is_locally_evaluable(e, true)?,
+                        valid && is_locally_evaluable(e, true)? && permits_constant_preparation(e)?,
                     )
                 })? {
                     return Ok(None);
@@ -4158,7 +4179,9 @@ impl Prepare {
                         .filter(|e| !e.contains_outer()),
                 )
                 .unwrap_or_else(|| lit(true));
-                if !is_locally_evaluable(&predicate, true)? {
+                if !is_locally_evaluable(&predicate, true)?
+                    || !permits_constant_preparation(&predicate)?
+                {
                     return Ok(None);
                 }
                 let predicate = self.precheck_expression(predicate, filter.input.schema(), true)?;

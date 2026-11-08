@@ -165,7 +165,7 @@ impl SparkArraySlice {
             if message == Self::START_ERROR || message == Self::LENGTH_ERROR)
     }
 
-    fn validate_parameters(start: i64, length: i64) -> datafusion_common::Result<()> {
+    pub(crate) fn validate_parameters(start: i64, length: i64) -> datafusion_common::Result<()> {
         if start == 0 {
             return exec_err!("{}", Self::START_ERROR);
         }

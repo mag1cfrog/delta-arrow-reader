@@ -1074,7 +1074,8 @@ required by CSE remain evaluated even when extraction sources are NULL. Native
 callback controls preserve selection and producer folding permissions; async
 arguments retain the existing scalar fallback. A separate current async fixture
 preserves all six whole observations; the frozen be21 fixture and header remain
-unchanged. Scalar-parent and CAST-only planning callbacks remain under #893.
+unchanged. Shared local-row preparation honors callback folding opt-outs through
+scalar parents and CAST-only producers.
 Broader C06 acceptance also retains ARRAY declarations under #1000 and public
 names under #1042/#778. The references compare the native
 public resolved query schema, captured before the DataFusion session analyzer
@@ -1219,9 +1220,11 @@ The default-true UDF folding capability is separate from volatility and delegate
 through aliases. Optimizer ancestor folding and successful Spark constant STRUCT
 preparation honor descendant opt-outs. Spark-marked ARRAY/STRUCT parents retain
 their complete child declarations before children fold; native defaults remain.
-The bounded local cast preview honors expression and input-producer opt-outs
-before physical evaluation and retains checks for eligible projection siblings.
-Scalar-parent and CAST-only planning callbacks retain the separate #893 gap.
+Shared arithmetic and local-row preparation check folding permission before
+physical evaluation, including aliases, scalar parents and CAST-only producers.
+Opaque ancestors remain unevaluated while eligible constant children retain
+their error checks and ordinary folding. Structural local-input classification
+and type validation remain separate from permission to invoke a function.
 
 The result-field adapter prepares its owned whole operands without descending
 into user conditional branches. This retains required constant cast errors even
@@ -1239,7 +1242,8 @@ retain the native storage. Direct, STRUCT, ISNULL and overlap consumers share
 that declaration. Native ARRAY_SLICE registration and evaluation remain
 separate. SLICE rejects zero starts before negative lengths on rows whose three
 arguments are non-NULL. A targeted preparation check reports constant parameter
-errors after required ISNULL and dead CASE pruning; provider-dependent errors
+errors after required ISNULL and dead CASE pruning, using parameter validation
+without invoking the folding-disabled SLICE wrapper. Provider-dependent errors
 remain at collection. Constant lambda bodies validate before whole higher-order
 calls fold, including empty inputs. Folding-disabled and volatile extension
 contexts retain their existing preparation path. A known literal NULL discards
@@ -1598,9 +1602,10 @@ Foldable positions reuse the substring adapter's native STRING, Decimal and
 numeric INT cast builders in the query's ANSI mode. Conversion and positive-range
 validation precede replacement evaluation. The logical cast remains visible for
 analyzed nullability; ordinary optimization can later refine its field.
-New coercion paths reject custom operands that disable constant folding before
-literal evaluation. Already-INT synchronous operands keep their existing folding
-behavior. Positions with a native async function in the expression tree fail
+Positions reject custom operands that disable constant folding before literal
+evaluation, including already-INT operands and calls beneath aliases or casts.
+The shared preparation permission check also rejects volatile calls. Positions
+with a native async function in the expression tree fail
 with `NON_FOLDABLE_INPUT` before literal evaluation, including through expression
 aliases and casts. Async source, pattern and replacement arguments keep their
 execution path.

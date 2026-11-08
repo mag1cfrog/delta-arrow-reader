@@ -54,6 +54,7 @@ use sail_function::scalar::string::spark_to_char::SparkToChar;
 use sail_function::scalar::string::spark_to_number::SparkToNumber;
 
 use crate::error::{PlanError, PlanResult};
+use crate::expression_errors::permits_constant_preparation;
 use crate::function::common::{
     ScalarFunction, ScalarFunctionBuilder, ScalarFunctionInput, literal_value_without_evaluation,
     without_inherited_column_metadata, without_metadata_annotations,
@@ -146,17 +147,12 @@ fn regexp_replace(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         function_context.plan_config.ansi_mode,
         "regexp_replace position",
     )?;
-    if position.is_volatile()
+    if !permits_constant_preparation(&position)?
         || !position.column_refs().is_empty()
         || position.exists(|expression| {
             Ok(matches!(expression, expr::Expr::ScalarFunction(function)
                 if function.func.as_async().is_some()))
         })?
-        || (coerced_position
-            && position.exists(|expression| {
-                Ok(matches!(expression, expr::Expr::ScalarFunction(function)
-                    if !function.func.inner().supports_constant_folding()))
-            })?)
     {
         return Err(PlanError::invalid(
             "[DATATYPE_MISMATCH.NON_FOLDABLE_INPUT] regexp_replace position must be a foldable INT expression",

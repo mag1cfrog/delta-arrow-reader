@@ -546,7 +546,8 @@ fn concat_constant_descendants_keep_native_conditional_reachability() -> Result<
 }
 
 #[tokio::test]
-async fn mixed_numeric_array_preparation_preserves_inherited_callback_limit() -> Result<()> {
+async fn mixed_numeric_array_preparation_preserves_required_error_without_opt_out_calls()
+-> Result<()> {
     use datafusion::execution::SessionStateBuilder;
     use datafusion::physical_plan::collect;
     use datafusion::prelude::{SessionConfig, SessionContext};
@@ -621,10 +622,6 @@ async fn mixed_numeric_array_preparation_preserves_inherited_callback_limit() ->
             .ends_with("Arrow error: Divide by zero error"),
         "{error}"
     );
-    // The accepted numeric precheck invoked this opt-out twice; #893 owns that inherited policy.
-    assert!(
-        count <= 2,
-        "existing numeric callback count increased: {count}"
-    );
+    assert_eq!(count, 0, "required numeric error invoked an opaque sibling");
     Ok(())
 }

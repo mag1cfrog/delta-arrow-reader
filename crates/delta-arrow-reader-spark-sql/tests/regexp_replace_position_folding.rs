@@ -69,7 +69,7 @@ async fn regexp_replace_position_preserves_folding_permissions() -> TestResult {
     let (metadata, profiles) = records.split_first().ok_or("missing native profiles")?;
     assert_eq!(profiles.len(), 36);
     assert_eq!(metadata["spark_oracle_credit"], false);
-    let mut host_contract_differences = 0;
+    let mut repaired_host_contracts = 0;
     let mut observed = 0;
     for ansi_mode in [true, false] {
         for folding in [true, false] {
@@ -192,30 +192,43 @@ async fn regexp_replace_position_preserves_folding_permissions() -> TestResult {
                         })
                         .ok_or("missing exact callback key")?;
                     assert_eq!(profile["sql"], sql);
-                    assert_eq!(
-                        actual, profile["actual"],
-                        "{kind} folding={folding} {surface} ANSI={ansi_mode}"
-                    );
+                    let repaired_int_position =
+                        kind == "int" && surface == "regexp_replace" && !folding;
+                    if repaired_int_position {
+                        // Keep the captured #893 violation unchanged as historical evidence.
+                        assert_eq!(profile["strict_host_contract"], false);
+                        assert_eq!(profile["owner"], "#893");
+                        assert_eq!(
+                            actual,
+                            json!({
+                                "error_stage":"resolve",
+                                "error":"External error: invalid argument: [DATATYPE_MISMATCH.NON_FOLDABLE_INPUT] regexp_replace position must be a foldable INT expression",
+                                "after_resolve":0
+                            }),
+                            "INT position ANSI={ansi_mode}"
+                        );
+                        repaired_host_contracts += 1;
+                    } else {
+                        assert_eq!(
+                            actual, profile["actual"],
+                            "{kind} folding={folding} {surface} ANSI={ansi_mode}"
+                        );
+                        assert_eq!(profile["strict_host_contract"], true);
+                    }
                     let strict_host_contract = folding
                         || (actual["after_resolve"] == 0
                             && actual
                                 .get("after_physical")
                                 .is_none_or(|count| count.as_u64() == Some(0)));
-                    assert_eq!(profile["strict_host_contract"], strict_host_contract);
-                    if !strict_host_contract {
-                        assert_eq!(kind, "int");
-                        assert_eq!(surface, "regexp_replace");
-                        assert!(!folding);
-                        assert_eq!(profile["owner"], "#893");
-                        host_contract_differences += 1;
-                    }
+                    assert!(strict_host_contract, "{kind} {surface} ANSI={ansi_mode}");
                     observed += 1;
                     eprintln!(
                         "c06 position callback regression: {}",
                         json!({
                             "kind":kind,"folding":folding,"surface":surface,"ansi":ansi_mode,
                             "sql":sql,"actual":actual,"strict_host_contract":strict_host_contract,
-                            "owner":profile["owner"],"spark_oracle_credit":false
+                            "original_profile":profile,"repaired_int_position":repaired_int_position,
+                            "spark_oracle_credit":false
                         })
                     );
                 }
@@ -223,7 +236,7 @@ async fn regexp_replace_position_preserves_folding_permissions() -> TestResult {
         }
     }
     assert_eq!(observed, 36);
-    assert_eq!(host_contract_differences, 2);
+    assert_eq!(repaired_host_contracts, 2);
     // Exercise the shared numeric conversion without permitting speculative callbacks.
     for ansi_mode in [true, false] {
         for source in ["FLOAT", "DOUBLE"] {
@@ -312,8 +325,9 @@ async fn regexp_replace_position_preserves_folding_permissions() -> TestResult {
     eprintln!(
         "c06 position callback summary: {}",
         json!({
-            "observations":observed,"host_contract_differences":host_contract_differences,
-            "full_host_contract_pass":false,"spark_oracle_credit":false
+            "observations":observed,"host_contract_differences":0,
+            "repaired_host_contracts":repaired_host_contracts,
+            "full_host_contract_pass":true,"spark_oracle_credit":false
         })
     );
     Ok(())
