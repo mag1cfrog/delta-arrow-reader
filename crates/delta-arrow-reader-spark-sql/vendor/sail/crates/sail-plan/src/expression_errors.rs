@@ -1690,6 +1690,9 @@ pub(crate) fn try_check_local_row_errors(
     }
     let expr = prepare_clock(expr.clone())?.data;
     let expr = prepare.precheck_expression(expr, input.schema(), true)?;
+    if !permits_constant_preparation(&expr)? {
+        return Ok(false);
+    }
     create_physical_expr(&expr, input.schema(), &prepare.props)?.evaluate(&batch)?;
     Ok(true)
 }
@@ -3543,6 +3546,9 @@ impl Prepare {
                             .data;
                         let expr = materialize_metadata_literals(expr)?.data;
                         let expr = simplifier.simplify(expr)?;
+                        if !permits_constant_preparation(&expr)? {
+                            continue;
+                        }
                         create_physical_expr(&expr, project.input.schema(), &self.props)?
                             .evaluate(batch)?;
                     }
@@ -3973,10 +3979,12 @@ impl Prepare {
                             && is_locally_evaluable(expr, true)? =>
                     {
                         let expr = self.precheck_expression(expr.clone(), &schema, true)?;
-                        if !constant_preparation_permitted {
-                            // Opaque array-only candidates were excluded above; arithmetic children
-                            // retain the admitted rows without invoking their opaque ancestors.
-                            self.check_expr(&expr, true, Some((&schema, &batch)))?;
+                        if !permits_constant_preparation(&expr)? {
+                            // A rewrite can introduce an opaque parent. Preserve reached
+                            // child errors against the admitted rows.
+                            if arithmetic {
+                                self.check_expr(&expr, true, Some((&schema, &batch)))?;
+                            }
                         } else if arithmetic {
                             self.check_local_expression_errors(&expr, &schema, &batch)?;
                         } else if let Err(error) =
@@ -4175,17 +4183,18 @@ impl Prepare {
                 })? {
                     return Ok(None);
                 }
-                let columns = project
-                    .expr
-                    .iter()
-                    .map(|e| {
-                        let e =
-                            self.precheck_expression(e.clone(), project.input.schema(), true)?;
+                let mut columns = Vec::with_capacity(project.expr.len());
+                for e in &project.expr {
+                    let e = self.precheck_expression(e.clone(), project.input.schema(), true)?;
+                    if !permits_constant_preparation(&e)? {
+                        return Ok(None);
+                    }
+                    columns.push(
                         create_physical_expr(&e, project.input.schema(), &self.props)?
                             .evaluate(input)?
-                            .into_array(input.num_rows())
-                    })
-                    .collect::<Result<Vec<_>>>()?;
+                            .into_array(input.num_rows())?,
+                    );
+                }
                 RecordBatch::try_new_with_options(
                     Arc::clone(project.schema.inner()),
                     columns,
@@ -4219,6 +4228,9 @@ impl Prepare {
                     return Ok(None);
                 }
                 let predicate = self.precheck_expression(predicate, filter.input.schema(), true)?;
+                if !permits_constant_preparation(&predicate)? {
+                    return Ok(None);
+                }
                 let mask = create_physical_expr(&predicate, filter.input.schema(), &self.props)?
                     .evaluate(input)?
                     .into_array(input.num_rows())?;

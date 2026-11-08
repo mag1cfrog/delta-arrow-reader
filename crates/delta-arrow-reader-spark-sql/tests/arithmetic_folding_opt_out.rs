@@ -10,6 +10,7 @@ use std::sync::{
 use arrow::datatypes::{DataType, Field, FieldRef, Schema};
 use datafusion::common::{Result, ScalarValue, exec_err};
 use datafusion::execution::SessionStateBuilder;
+use datafusion::logical_expr::simplify::{ExprSimplifyResult, SimplifyContext};
 use datafusion::logical_expr::{
     ColumnarValue, Expr, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature,
     Volatility,
@@ -54,6 +55,7 @@ struct CountedIdentity {
     short_circuits: bool,
     error_if_invoked: bool,
     clone_argument_field: bool,
+    rewrite_target: Option<Arc<ScalarUDF>>,
     calls: Arc<AtomicUsize>,
 }
 
@@ -65,6 +67,7 @@ impl PartialEq for CountedIdentity {
             && self.short_circuits == other.short_circuits
             && self.error_if_invoked == other.error_if_invoked
             && self.clone_argument_field == other.clone_argument_field
+            && self.rewrite_target == other.rewrite_target
     }
 }
 impl Eq for CountedIdentity {}
@@ -76,6 +79,7 @@ impl Hash for CountedIdentity {
         self.short_circuits.hash(state);
         self.error_if_invoked.hash(state);
         self.clone_argument_field.hash(state);
+        self.rewrite_target.hash(state);
     }
 }
 
@@ -100,6 +104,10 @@ impl ScalarUDFImpl for CountedIdentity {
         Ok(arguments[0].clone())
     }
     fn return_field_from_args(&self, arguments: ReturnFieldArgs) -> Result<FieldRef> {
+        // A rewrite preserves the complete target Field, including its name.
+        if let Some(target) = &self.rewrite_target {
+            return target.return_field_from_args(arguments);
+        }
         if self.clone_argument_field {
             return Ok(Arc::clone(&arguments.arg_fields[0]));
         }
@@ -114,6 +122,12 @@ impl ScalarUDFImpl for CountedIdentity {
             self.return_type(&types)?,
             true,
         )))
+    }
+    fn simplify(&self, arguments: Vec<Expr>, _: &SimplifyContext) -> Result<ExprSimplifyResult> {
+        Ok(match &self.rewrite_target {
+            Some(target) => ExprSimplifyResult::Simplified(target.call(arguments)),
+            None => ExprSimplifyResult::Original(arguments),
+        })
     }
     fn invoke_with_args(&self, arguments: ScalarFunctionArgs) -> Result<ColumnarValue> {
         self.calls.fetch_add(1, Ordering::SeqCst);
@@ -138,7 +152,7 @@ fn session(spark: bool, error_if_invoked: bool) -> (SessionContext, InvocationCo
         builder.build()
     });
     let counters = InvocationCounters::default();
-    session.register_udf(
+    let retained_identity = Arc::new(
         ScalarUDF::from(CountedIdentity {
             name: "retain_constant",
             signature: Signature::exact(vec![DataType::Float64], Volatility::Immutable),
@@ -146,11 +160,23 @@ fn session(spark: bool, error_if_invoked: bool) -> (SessionContext, InvocationCo
             short_circuits: false,
             error_if_invoked,
             clone_argument_field: false,
+            rewrite_target: None,
             calls: Arc::clone(&counters.opaque),
         })
         .with_aliases(["retained_alias"]),
     );
+    session.register_udf(retained_identity.as_ref().clone());
     for probe in [
+        CountedIdentity {
+            name: "rewrite_to_retained",
+            signature: Signature::exact(vec![DataType::Float64], Volatility::Immutable),
+            folding_permitted: true,
+            short_circuits: true,
+            error_if_invoked,
+            clone_argument_field: false,
+            rewrite_target: Some(retained_identity),
+            calls: Arc::clone(&counters.permitted),
+        },
         CountedIdentity {
             name: "index_callback",
             signature: Signature::any(1, Volatility::Immutable),
@@ -158,6 +184,7 @@ fn session(spark: bool, error_if_invoked: bool) -> (SessionContext, InvocationCo
             short_circuits: false,
             error_if_invoked,
             clone_argument_field: false,
+            rewrite_target: None,
             calls: Arc::clone(&counters.opaque),
         },
         CountedIdentity {
@@ -167,6 +194,7 @@ fn session(spark: bool, error_if_invoked: bool) -> (SessionContext, InvocationCo
             short_circuits: false,
             error_if_invoked,
             clone_argument_field: true,
+            rewrite_target: None,
             calls: Arc::clone(&counters.opaque),
         },
         CountedIdentity {
@@ -176,6 +204,7 @@ fn session(spark: bool, error_if_invoked: bool) -> (SessionContext, InvocationCo
             short_circuits: true,
             error_if_invoked,
             clone_argument_field: false,
+            rewrite_target: None,
             calls: Arc::clone(&counters.opaque),
         },
         CountedIdentity {
@@ -185,6 +214,7 @@ fn session(spark: bool, error_if_invoked: bool) -> (SessionContext, InvocationCo
             short_circuits: false,
             error_if_invoked: false,
             clone_argument_field: false,
+            rewrite_target: None,
             calls: Arc::clone(&counters.permitted),
         },
     ] {
@@ -608,6 +638,16 @@ async fn required_children_and_siblings_keep_the_first_error_without_invoking_op
             "Arrow error: Divide by zero error",
         ),
         (
+            "SELECT rewrite_to_retained(v/0) AS r FROM VALUES(1.0) AS t(v)",
+            vec![Field::new("r", DataType::Float64, true)],
+            "Arrow error: Divide by zero error",
+        ),
+        (
+            "SELECT rewrite_to_retained(CAST(v AS INT)/1) AS r FROM VALUES('bad') AS t(v)",
+            vec![Field::new("r", DataType::Float64, true)],
+            "Arrow error: Cast error: Cannot cast string 'bad' to value of Int32 type",
+        ),
+        (
             "SELECT retain_constant(v/0) AS r FROM VALUES(1.0) AS t(v)",
             vec![Field::new("r", DataType::Float64, true)],
             "Arrow error: Divide by zero error",
@@ -972,6 +1012,111 @@ async fn local_rows_preserve_opaque_execution_and_legacy_child_nulls() -> TestRe
                     )
                     .await?;
                 }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn post_rewrite_permissions_preserve_local_and_closed_identity_controls() -> TestResult {
+    for ansi in [true, false] {
+        for spark in [true, false] {
+            for error_if_invoked in [false, true] {
+                // A closed permitted call can fold before its rewrite; a failing call is retained.
+                let mut closed_rewrite = scalar_case(
+                    "SELECT rewrite_to_retained(1/1) AS r".into(),
+                    DataType::Float64,
+                    vec![vec![ScalarValue::Float64(Some(1.0))]],
+                    usize::from(error_if_invoked),
+                    // Source-bound permitted preview ceilings, not a UDF exact-once guarantee.
+                    if error_if_invoked {
+                        if spark { 3 } else { 2 }
+                    } else {
+                        1
+                    },
+                );
+                closed_rewrite.physical_fields[0] = closed_rewrite.physical_fields[0]
+                    .clone()
+                    .with_nullable(error_if_invoked);
+                for case in [
+                    scalar_case(
+                        "SELECT rewrite_to_retained(v/1) AS r FROM VALUES(CAST(1 AS DOUBLE)) AS t(v)".into(),
+                        DataType::Float64,
+                        vec![vec![ScalarValue::Float64(Some(1.0))]],
+                        1,
+                        0,
+                    ),
+                    scalar_case(
+                        "SELECT retain_constant(v/1) AS r FROM VALUES(CAST(1 AS DOUBLE)) AS t(v)".into(),
+                        DataType::Float64,
+                        vec![vec![ScalarValue::Float64(Some(1.0))]],
+                        1,
+                        0,
+                    ),
+                    closed_rewrite,
+                    scalar_case(
+                        "SELECT retain_constant(1/1) AS r".into(),
+                        DataType::Float64,
+                        vec![vec![ScalarValue::Float64(Some(1.0))]],
+                        1,
+                        0,
+                    ),
+                ] {
+                    check_case(case, spark, ansi, error_if_invoked).await?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn post_rewrite_local_consumers_keep_opaque_targets_for_execution() -> TestResult {
+    for ansi in [true, false] {
+        for error_if_invoked in [false, true] {
+            let result_field = Field::new("r", DataType::Float64, true);
+            check_case(
+                FoldingCase {
+                    sql: "SELECT r,(SELECT 1) AS q FROM (SELECT rewrite_to_retained(v/1) AS r FROM VALUES(CAST(1 AS DOUBLE)) AS t(v)) AS u".into(),
+                    analyzed_fields: vec![result_field.clone(), Field::new("q", DataType::Int32, true)],
+                    physical_fields: vec![result_field, Field::new("q", DataType::Int32, false)],
+                    rows: vec![vec![ScalarValue::Float64(Some(1.0)), ScalarValue::Int32(Some(1))]],
+                    expected_opt_out_calls: 1,
+                    permitted_planning_limit: 0,
+                    expected_execution_error: None,
+                },
+                true,
+                ansi,
+                error_if_invoked,
+            ).await?;
+            check_case(
+                scalar_case(
+                    "SELECT CAST(NULL AS DOUBLE) AS r FROM VALUES(CAST(1 AS DOUBLE)) AS t(v) WHERE rewrite_to_retained(v/1)=CAST(1 AS DOUBLE)".into(),
+                    DataType::Float64,
+                    vec![vec![ScalarValue::Float64(None)]],
+                    1,
+                    0,
+                ),
+                true,
+                ansi,
+                error_if_invoked,
+            ).await?;
+            for spark in [true, false] {
+                let mut cast_null_predicate = scalar_case(
+                    "SELECT CAST(rewrite_to_retained(v/1) AS BIGINT) IS NULL AS r FROM VALUES(CAST(1 AS DOUBLE)) AS t(v)".into(),
+                    DataType::Boolean,
+                    vec![vec![ScalarValue::Boolean(Some(false))]],
+                    1,
+                    0,
+                );
+                cast_null_predicate.analyzed_fields[0] = cast_null_predicate.analyzed_fields[0]
+                    .clone()
+                    .with_nullable(false);
+                cast_null_predicate.physical_fields[0] = cast_null_predicate.physical_fields[0]
+                    .clone()
+                    .with_nullable(false);
+                check_case(cast_null_predicate, spark, ansi, error_if_invoked).await?;
             }
         }
     }
