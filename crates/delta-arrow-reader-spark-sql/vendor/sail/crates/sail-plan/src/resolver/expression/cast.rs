@@ -101,45 +101,31 @@ impl PlanResolver<'_> {
             } => end_field.or(*start_field),
             _ => None,
         };
+        // The length of the target qualifier's end field in stored months or microseconds.
+        // Spark reads a number cast to the qualifier as a count of that field.
+        let end_field = match &cast_to_type {
+            spec::DataType::Interval {
+                interval_unit: spec::IntervalUnit::YearMonth | spec::IntervalUnit::DayTime,
+                start_field,
+                end_field,
+            } => end_field.or(*start_field),
+            _ => None,
+        };
+        let end_field_length: Option<i64> = match end_field {
+            Some(spec::IntervalFieldType::Year) => Some(12),
+            Some(spec::IntervalFieldType::Month) => Some(1),
+            Some(_) => day_time_interval_field.map(day_time_field_to_microseconds),
+            None => None,
+        };
         // Spark keeps only the target's units when it casts an interval to a qualifier of its
         // family, truncating the stored count toward zero to the length of the target's end
-        // field. Only YEAR, DAY, HOUR and MINUTE span more than one stored month or microsecond.
-        let interval_unit_length: Option<i64> = match (&cast_to_type, day_time_interval_field) {
-            (
-                spec::DataType::Interval {
-                    interval_unit: spec::IntervalUnit::YearMonth,
-                    start_field,
-                    end_field,
-                },
-                _,
-            ) if end_field.or(*start_field) == Some(spec::IntervalFieldType::Year) => Some(12),
-            (
-                _,
-                Some(
-                    field @ (spec::IntervalFieldType::Day
-                    | spec::IntervalFieldType::Hour
-                    | spec::IntervalFieldType::Minute),
-                ),
-            ) => Some(day_time_field_to_microseconds(field)),
-            _ => None,
-        };
-        // Spark reads a number cast to an interval qualifier as a count of its end field.
-        let number_unit_length: Option<i64> = match (&cast_to_type, day_time_interval_field) {
-            (
-                spec::DataType::Interval {
-                    interval_unit: spec::IntervalUnit::YearMonth,
-                    start_field,
-                    end_field,
-                },
-                _,
-            ) => match end_field.or(*start_field) {
-                Some(spec::IntervalFieldType::Year) => Some(12),
-                Some(spec::IntervalFieldType::Month) => Some(1),
-                _ => None,
-            },
-            (_, Some(field)) => Some(day_time_field_to_microseconds(field)),
-            _ => None,
-        };
+        // field. MONTH and SECOND, which store whole months and microseconds, keep the count.
+        let truncating_unit_length = end_field_length.filter(|_| {
+            !matches!(
+                end_field,
+                Some(spec::IntervalFieldType::Month | spec::IntervalFieldType::Second)
+            )
+        });
         let interval_type_name = match &cast_to_type {
             spec::DataType::Interval {
                 start_field: Some(start),
@@ -160,24 +146,28 @@ impl PlanResolver<'_> {
                 &named.expr,
                 expr::Expr::Alias(_) | expr::Expr::Column(_) | expr::Expr::OuterReferenceColumn(..)
             );
-        let name = if include_cast_in_name || !named_input {
-            let data_type_string = match interval_type_name.clone() {
-                Some(name) => name,
-                None => SparkPlanFormatter.data_type_to_simple_string(&cast_to_type)?,
-            };
-            vec![format!(
-                "{}CAST({} AS {})",
+        let data_type_string = match interval_type_name.clone() {
+            Some(name) => name,
+            None => SparkPlanFormatter.data_type_to_simple_string(&cast_to_type)?,
+        };
+        // The cast as Spark prints it, for the name and for a rejection's message.
+        let cast_text = |expression_name: String| {
+            format!(
+                "{}CAST({expression_name} AS {})",
                 if is_try { "TRY_" } else { "" },
-                named.expression_name()?,
                 data_type_string.to_ascii_uppercase()
-            )]
+            )
+        };
+        let expression_name = named.expression_name().ok();
+        let name = if include_cast_in_name || !named_input {
+            vec![cast_text(named.expression_name()?)]
         } else {
             named.name
         };
         let expr = named.expr;
         // Equal Arrow types mean the source is an interval of the target's family; numeric,
         // string and NULL sources keep their conversions below.
-        if let Some(unit_length) = interval_unit_length
+        if let Some(unit_length) = truncating_unit_length
             && expr_type == cast_to_type
         {
             let expr =
@@ -187,7 +177,7 @@ impl PlanResolver<'_> {
                 named_input,
             ));
         }
-        if let (Some(unit_length), Some(target_name)) = (number_unit_length, &interval_type_name) {
+        if let (Some(unit_length), Some(target_name)) = (end_field_length, &interval_type_name) {
             match expr_type {
                 DataType::Int8
                 | DataType::Int16
@@ -208,15 +198,19 @@ impl PlanResolver<'_> {
                 }
                 // Spark casts only exact numbers to intervals.
                 DataType::Float16 | DataType::Float32 | DataType::Float64 => {
-                    let source = SparkPlanFormatter.data_type_to_cast_error_string(&expr_type)?;
+                    let source = SparkPlanFormatter
+                        .data_type_to_cast_error_string(&expr_type)?
+                        .to_ascii_uppercase();
                     return Err(PlanError::analysis(format!(
-                        "[DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION] cannot cast \"{source}\" to \"{}\". SQLSTATE: 42K09",
-                        target_name.to_ascii_lowercase()
+                        "[DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION] Cannot resolve \"{}\" due to data type mismatch: cannot cast \"{source}\" to \"{target_name}\". SQLSTATE: 42K09",
+                        cast_text(expression_name.unwrap_or_default())
                     )));
                 }
                 _ => {}
             }
         }
+        // Other numeric Arrow types, which Spark SQL does not produce, keep Arrow's cast of a
+        // multiplied number, which wraps on overflow.
         if expr_type.is_numeric()
             && matches!(cast_to_type, DataType::Duration(_))
             && let Some(field) = day_time_interval_field

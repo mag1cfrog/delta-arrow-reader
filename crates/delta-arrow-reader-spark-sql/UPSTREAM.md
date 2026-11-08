@@ -293,15 +293,20 @@ SQL are unchanged; numeric casts follow below.
 
 CAST and TRY_CAST of a TINYINT, SMALLINT, INT, BIGINT or DECIMAL to a year-month or day-time
 qualifier use a local function, `SparkNumberToInterval`, as Spark reads the number as a count of
-the qualifier's end field: `CAST(-7 AS INTERVAL YEAR)` is -84 months. A DECIMAL product is
-rounded HALF_UP to a whole month or microsecond. A result beyond INT months or BIGINT
+the qualifier's end field: `CAST(-7 AS INTERVAL YEAR)` is -84 months. Like Spark, which multiplies
+a DECIMAL with Scala's DECIMAL128 context, the function keeps 34 significant digits of a DECIMAL
+product, rounded HALF_EVEN, and then rounds HALF_UP to a whole month or microsecond; it computes
+the product in 256 bits, so DECIMAL(38, s) values do not overflow on the way. A MONTH target is
+not multiplied, so its DECIMAL rounds HALF_UP once. A result beyond INT months or BIGINT
 microseconds fails with Spark's `CAST_OVERFLOW` message in both ANSI modes, while optimizing for
-a constant, and TRY_CAST gives NULL. The result is nullable only for a nullable number or
-TRY_CAST. FLOAT and DOUBLE sources fail during analysis with
-`DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION`, as in Spark. Year-month targets used to read every
-number as months and rejected BIGINT, DECIMAL, TINYINT and SMALLINT sources. Day-time targets
-wrapped on overflow, truncated DECIMAL fractions and accepted FLOAT and DOUBLE sources. NULL
-sources and native DataFusion SQL are unchanged. The
+a constant, and TRY_CAST gives NULL. The message names a BIGINT that fits INT as an INT for a
+year-month target, as Spark narrows it first. The result is nullable only for a nullable number
+or TRY_CAST. FLOAT and DOUBLE sources fail during analysis with Spark's
+`DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION` message. Year-month targets used to read every number
+as months and rejected BIGINT, DECIMAL, TINYINT and SMALLINT sources. Day-time targets wrapped on
+overflow, truncated DECIMAL fractions and accepted FLOAT and DOUBLE. Numbers nested in ARRAY,
+STRUCT and MAP casts to intervals still use Arrow's cast, which reads them as months or
+microseconds (#995). NULL sources and native DataFusion SQL are unchanged. The
 [numeric interval cast references](tests/fixtures/numeric-interval-casts/README.md) record the
 checks.
 

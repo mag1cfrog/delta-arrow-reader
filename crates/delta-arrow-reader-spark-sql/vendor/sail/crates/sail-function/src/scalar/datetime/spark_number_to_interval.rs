@@ -1,8 +1,10 @@
 // Local Spark numeric-to-interval cast. See the host crate's UPSTREAM.md.
 //! Spark's CAST and TRY_CAST of a TINYINT, SMALLINT, INT, BIGINT or DECIMAL number to a
 //! year-month or day-time interval qualifier. The number counts the qualifier's end field, so it
-//! is multiplied by that field's length in stored months or microseconds. A DECIMAL product is
-//! rounded HALF_UP to a whole stored unit. A result beyond the stored INT months or BIGINT
+//! is multiplied by that field's length in stored months or microseconds. Spark multiplies a
+//! DECIMAL with Scala's DECIMAL128 context, which keeps 34 significant digits of the product,
+//! rounded HALF_EVEN, and then rounds HALF_UP to a whole stored unit. A MONTH target is not
+//! multiplied, so its DECIMAL rounds HALF_UP once. A result beyond the stored INT months or BIGINT
 //! microseconds fails with `CAST_OVERFLOW` in both ANSI modes, or gives NULL for TRY_CAST.
 
 use std::sync::Arc;
@@ -12,12 +14,15 @@ use datafusion::arrow::array::{
 };
 use datafusion::arrow::datatypes::{
     DataType, Decimal128Type, Field, FieldRef, Int8Type, Int16Type, Int32Type, Int64Type,
-    IntervalUnit, TimeUnit,
+    IntervalUnit, TimeUnit, i256,
 };
 use datafusion_common::{Result, ScalarValue, internal_err};
 use datafusion_expr::{
     ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
 };
+
+/// The significant digits Scala's DECIMAL128 context keeps of a product.
+const PRODUCT_DIGITS: u32 = 34;
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkNumberToInterval {
@@ -59,28 +64,36 @@ impl SparkNumberToInterval {
     }
 
     /// The stored count for `value` units, or None beyond the target's storage.
-    fn scale_integer(&self, value: i64) -> Option<i64> {
+    fn stored_count_of_integer(&self, value: i64) -> Option<i64> {
         let count = value.checked_mul(self.unit_length)?;
-        self.in_storage(count.into())
+        self.fit_storage(count.into())
     }
 
-    /// The stored count for a DECIMAL `unscaled` / 10^`scale` units, rounded HALF_UP, or None
-    /// beyond the target's storage.
-    fn scale_decimal(&self, unscaled: i128, scale: i8) -> Option<i64> {
-        let product = unscaled.checked_mul(self.unit_length.into())?;
-        let divisor = 10_i128.checked_pow(u32::try_from(scale).ok()?)?;
-        let quotient = product / divisor;
-        let remainder = product % divisor;
-        // HALF_UP moves a half away from zero.
-        let rounded = if remainder.unsigned_abs() * 2 >= divisor.unsigned_abs() {
-            quotient + product.signum()
-        } else {
-            quotient
-        };
-        self.in_storage(rounded)
+    /// The stored count for a DECIMAL `unscaled` / 10^`fraction_digits` units, rounded as Spark
+    /// does, or None beyond the target's storage.
+    fn stored_count_of_decimal(&self, unscaled: i128, fraction_digits: i8) -> Option<i64> {
+        let mut fraction_digits = u32::try_from(fraction_digits).ok()?;
+        let mut value = i256::from_i128(unscaled);
+        if self.unit_length != 1 {
+            value = value.checked_mul(i256::from_i128(self.unit_length.into()))?;
+            let digits = decimal_digits(value);
+            if digits > PRODUCT_DIGITS {
+                let dropped = digits - PRODUCT_DIGITS;
+                value = divide_rounding(value, dropped, Rounding::HalfEven)?;
+                if dropped > fraction_digits {
+                    value = value.checked_mul(power_of_ten(dropped - fraction_digits)?)?;
+                    fraction_digits = 0;
+                } else {
+                    fraction_digits -= dropped;
+                }
+            }
+        }
+        let count = divide_rounding(value, fraction_digits, Rounding::HalfUp)?;
+        self.fit_storage(count.to_i128()?)
     }
 
-    fn in_storage(&self, count: i128) -> Option<i64> {
+    /// The count narrowed to the target's INT months or BIGINT microseconds.
+    fn fit_storage(&self, count: i128) -> Option<i64> {
         match self.target {
             DataType::Interval(IntervalUnit::YearMonth) => i32::try_from(count).ok().map(i64::from),
             _ => i64::try_from(count).ok(),
@@ -99,33 +112,46 @@ impl SparkNumberToInterval {
 
     fn convert(&self, numbers: &ArrayRef) -> Result<ArrayRef> {
         let mut counts = Vec::with_capacity(numbers.len());
+        let year_month = matches!(self.target, DataType::Interval(IntervalUnit::YearMonth));
         macro_rules! integers {
-            ($type:ty, $suffix:expr, $source:expr) => {
+            ($type:ty) => {
                 for value in numbers.as_primitive::<$type>().iter() {
                     counts.push(match value {
                         None => None,
-                        Some(value) => match self.scale_integer(value.into()) {
-                            Some(count) => Some(count),
-                            None if self.is_try => None,
-                            None => {
-                                return Err(self.overflow(&format!("{value}{}", $suffix), $source));
+                        Some(value) => {
+                            let value = i64::from(value);
+                            match self.stored_count_of_integer(value) {
+                                Some(count) => Some(count),
+                                None if self.is_try => None,
+                                // Spark widens TINYINT and SMALLINT to INT, and narrows a BIGINT
+                                // that fits INT for a year-month target, before it multiplies.
+                                None => {
+                                    return Err(match i32::try_from(value) {
+                                        Ok(value)
+                                            if year_month
+                                                || numbers.data_type() != &DataType::Int64 =>
+                                        {
+                                            self.overflow(&value.to_string(), "INT")
+                                        }
+                                        _ => self.overflow(&format!("{value}L"), "BIGINT"),
+                                    });
+                                }
                             }
-                        },
+                        }
                     });
                 }
             };
         }
         match numbers.data_type() {
-            DataType::Null => counts.resize(numbers.len(), None),
-            DataType::Int8 => integers!(Int8Type, "Y", "TINYINT"),
-            DataType::Int16 => integers!(Int16Type, "S", "SMALLINT"),
-            DataType::Int32 => integers!(Int32Type, "", "INT"),
-            DataType::Int64 => integers!(Int64Type, "L", "BIGINT"),
+            DataType::Int8 => integers!(Int8Type),
+            DataType::Int16 => integers!(Int16Type),
+            DataType::Int32 => integers!(Int32Type),
+            DataType::Int64 => integers!(Int64Type),
             DataType::Decimal128(precision, scale) => {
                 for value in numbers.as_primitive::<Decimal128Type>().iter() {
                     counts.push(match value {
                         None => None,
-                        Some(value) => match self.scale_decimal(value, *scale) {
+                        Some(value) => match self.stored_count_of_decimal(value, *scale) {
                             Some(count) => Some(count),
                             None if self.is_try => None,
                             None => {
@@ -149,6 +175,47 @@ impl SparkNumberToInterval {
             ),
             _ => Arc::new(counts.into_iter().collect::<DurationMicrosecondArray>()),
         })
+    }
+}
+
+#[derive(Clone, Copy)]
+enum Rounding {
+    HalfUp,
+    HalfEven,
+}
+
+fn power_of_ten(exponent: u32) -> Option<i256> {
+    i256::from_i128(10).checked_pow(exponent)
+}
+
+/// The number of decimal digits of `value`'s magnitude.
+fn decimal_digits(value: i256) -> u32 {
+    value.wrapping_abs().to_string().len() as u32
+}
+
+/// `value` / 10^`digits`, rounded HALF_UP (a half away from zero) or HALF_EVEN.
+fn divide_rounding(value: i256, digits: u32, rounding: Rounding) -> Option<i256> {
+    if digits == 0 {
+        return Some(value);
+    }
+    let divisor = power_of_ten(digits)?;
+    let quotient = value.checked_div(divisor)?;
+    let twice_remainder = value
+        .checked_rem(divisor)?
+        .checked_abs()?
+        .checked_mul(i256::from_i128(2))?;
+    let away = match twice_remainder.cmp(&divisor) {
+        std::cmp::Ordering::Greater => true,
+        std::cmp::Ordering::Equal => match rounding {
+            Rounding::HalfUp => true,
+            Rounding::HalfEven => quotient.checked_rem(i256::from_i128(2))? != i256::from_i128(0),
+        },
+        std::cmp::Ordering::Less => false,
+    };
+    if away {
+        quotient.checked_add(value.signum())
+    } else {
+        Some(quotient)
     }
 }
 
@@ -179,8 +246,7 @@ impl ScalarUDFImpl for SparkNumberToInterval {
     fn coerce_types(&self, types: &[DataType]) -> Result<Vec<DataType>> {
         match types {
             [
-                number @ (DataType::Null
-                | DataType::Int8
+                number @ (DataType::Int8
                 | DataType::Int16
                 | DataType::Int32
                 | DataType::Int64
@@ -293,6 +359,65 @@ mod tests {
         );
         assert_eq!(decimal_text(5, 3), "0.005");
         assert_eq!(decimal_text(42, 0), "42");
+        Ok(())
+    }
+
+    #[test]
+    fn wide_decimal_products_keep_34_digits_except_for_months() -> Result<()> {
+        let decimal = |unscaled: i128, scale: i8| -> Result<ArrayRef> {
+            Ok(Arc::new(
+                Decimal128Array::from(vec![Some(unscaled), Some(-unscaled)])
+                    .with_precision_and_scale(38, scale)?,
+            ))
+        };
+        // 0.9583333333333333333333333333333333333 years is 11.4999...996 months, which keeps
+        // 34 digits as 11.5 and rounds to 12.
+        let years = decimal(9_583_333_333_333_333_333_333_333_333_333_333_333, 37)?;
+        assert_eq!(
+            year()?.convert(&years)?.as_primitive::<IntervalYearMonthType>(),
+            &IntervalYearMonthArray::from(vec![Some(12), Some(-12)])
+        );
+        // A MONTH target is not multiplied, so 2.4999...9 rounds to 2.
+        let month = SparkNumberToInterval::try_new(
+            DataType::Interval(IntervalUnit::YearMonth),
+            1,
+            "INTERVAL MONTH",
+            false,
+        )?;
+        let months = decimal(24_999_999_999_999_999_999_999_999_999_999_999_999, 37)?;
+        assert_eq!(
+            month.convert(&months)?.as_primitive::<IntervalYearMonthType>(),
+            &IntervalYearMonthArray::from(vec![Some(2), Some(-2)])
+        );
+        // One day in DECIMAL(38, 30) needs more than 128 bits once multiplied.
+        let day = SparkNumberToInterval::try_new(
+            DataType::Duration(TimeUnit::Microsecond),
+            86_400_000_000,
+            "INTERVAL DAY",
+            false,
+        )?;
+        let days = decimal(10_i128.pow(30), 30)?;
+        assert_eq!(
+            day.convert(&days)?.as_primitive::<DurationMicrosecondType>(),
+            &DurationMicrosecondArray::from(vec![Some(86_400_000_000), Some(-86_400_000_000)])
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_bigint_that_fits_int_overflows_a_year_month_target_as_an_int() -> Result<()> {
+        let bigints: ArrayRef = Arc::new(Int64Array::from(vec![178_956_971]));
+        let error = year()?.convert(&bigints).unwrap_err().to_string();
+        assert!(error.contains("The value 178956971 of the type \"INT\""));
+        let day = SparkNumberToInterval::try_new(
+            DataType::Duration(TimeUnit::Microsecond),
+            86_400_000_000,
+            "INTERVAL DAY",
+            false,
+        )?;
+        let bigints: ArrayRef = Arc::new(Int64Array::from(vec![2_147_483_647]));
+        let error = day.convert(&bigints).unwrap_err().to_string();
+        assert!(error.contains("The value 2147483647L of the type \"BIGINT\""));
         Ok(())
     }
 }
