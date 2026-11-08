@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use arrow_schema::extension::{EXTENSION_TYPE_METADATA_KEY, EXTENSION_TYPE_NAME_KEY};
 use datafusion::arrow::compute::{can_cast_types, cast as arrow_cast};
-use datafusion::arrow::datatypes::{DataType, Field, FieldRef, TimeUnit};
+use datafusion::arrow::datatypes::{DataType, Field, FieldRef, IntervalUnit, TimeUnit};
 use datafusion::logical_expr::expr::NullTreatment;
 use datafusion::prelude::SessionContext;
 use datafusion_common::metadata::FieldMetadata;
@@ -25,6 +25,7 @@ use sail_function::sketch::{DEFAULT_HLL_LG_CONFIG_K, DEFAULT_THETA_LG_NOM_ENTRIE
 
 use crate::config::PlanConfig;
 use crate::error::{IntoPlanResult, PlanError, PlanResult};
+use crate::formatter::SparkPlanFormatter;
 use crate::function::comparison::{
     nanosecond_comparison_cast, string_comparison_cast, string_comparison_type,
     temporal_comparison_type,
@@ -675,6 +676,149 @@ fn integer_needs_double(value: &expr::Expr, data_type: &DataType) -> bool {
     double.is_some_and(|v| f64::from(v as f32) != v)
 }
 
+/// Whether a type is or holds, inside an ARRAY or STRUCT, a calendar interval, which Spark can
+/// neither order nor compare.
+pub(crate) fn holds_calendar_interval(data_type: &DataType) -> bool {
+    match data_type {
+        DataType::Interval(IntervalUnit::MonthDayNano) => true,
+        DataType::List(field)
+        | DataType::LargeList(field)
+        | DataType::FixedSizeList(field, _)
+        | DataType::ListView(field)
+        | DataType::LargeListView(field) => holds_calendar_interval(field.data_type()),
+        DataType::Struct(fields) => fields
+            .iter()
+            .any(|field| holds_calendar_interval(field.data_type())),
+        _ => false,
+    }
+}
+
+/// Spark's name for a type in its errors, such as `ARRAY<INTERVAL>`.
+fn spark_error_type_name(data_type: &DataType) -> String {
+    match data_type {
+        DataType::Interval(IntervalUnit::MonthDayNano) => "INTERVAL".to_owned(),
+        DataType::List(field)
+        | DataType::LargeList(field)
+        | DataType::FixedSizeList(field, _)
+        | DataType::ListView(field)
+        | DataType::LargeListView(field) => {
+            format!("ARRAY<{}>", spark_error_type_name(field.data_type()))
+        }
+        DataType::Struct(fields) => format!(
+            "STRUCT<{}>",
+            fields
+                .iter()
+                .map(|field| format!(
+                    "{}: {}",
+                    field.name(),
+                    spark_error_type_name(field.data_type())
+                ))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        other => SparkPlanFormatter
+            .data_type_to_cast_error_string(other)
+            .map(|name| name.to_uppercase())
+            .unwrap_or_else(|_| other.to_string()),
+    }
+}
+
+/// Whether `other` has the shape of `interval`, which holds a calendar interval, where a
+/// calendar interval sits: a NULL matches anything, and ARRAY and STRUCT shapes must match
+/// there. Positions without a calendar interval on either side are not compared, so an
+/// incompatible field beside one still gets the ordering error where Spark reports its type
+/// mismatch (#1163).
+fn matches_calendar_interval_shape(interval: &DataType, other: &DataType) -> bool {
+    if *interval == DataType::Null || *other == DataType::Null {
+        return true;
+    }
+    if !holds_calendar_interval(interval) && !holds_calendar_interval(other) {
+        return true;
+    }
+    match (interval, other) {
+        (
+            DataType::Interval(IntervalUnit::MonthDayNano),
+            DataType::Interval(IntervalUnit::MonthDayNano),
+        ) => true,
+        (
+            DataType::List(left)
+            | DataType::LargeList(left)
+            | DataType::FixedSizeList(left, _)
+            | DataType::ListView(left)
+            | DataType::LargeListView(left),
+            DataType::List(right)
+            | DataType::LargeList(right)
+            | DataType::FixedSizeList(right, _)
+            | DataType::ListView(right)
+            | DataType::LargeListView(right),
+        ) => matches_calendar_interval_shape(left.data_type(), right.data_type()),
+        (DataType::Struct(left), DataType::Struct(right)) => {
+            left.len() == right.len()
+                && left.iter().zip(right.iter()).all(|(left, right)| {
+                    matches_calendar_interval_shape(left.data_type(), right.data_type())
+                })
+        }
+        _ => false,
+    }
+}
+
+/// Spark's analysis of `function_name` over operands of `operand_types`
+/// (`TypeUtils.checkForOrderingExpr` after its type checks). A calendar interval beside an
+/// operand of another shape fails first with `mismatch_condition`; otherwise a calendar
+/// interval fails with `DATATYPE_MISMATCH.INVALID_ORDERING_TYPE`.
+pub(crate) fn reject_calendar_interval_ordering(
+    operand_types: &[DataType],
+    function_name: &str,
+    mismatch_condition: &str,
+) -> PlanResult<()> {
+    let Some(interval) = operand_types
+        .iter()
+        .find(|data_type| holds_calendar_interval(data_type))
+    else {
+        return Ok(());
+    };
+    let names = operand_types
+        .iter()
+        .map(|data_type| format!("\"{}\"", spark_error_type_name(data_type)))
+        .collect::<Vec<_>>()
+        .join(", ");
+    if operand_types
+        .iter()
+        .any(|data_type| !matches_calendar_interval_shape(interval, data_type))
+    {
+        return Err(PlanError::analysis(format!(
+            "[{mismatch_condition}] The operands of `{function_name}` have incompatible types: {names}. SQLSTATE: 42K09"
+        )));
+    }
+    Err(PlanError::analysis(format!(
+        "[DATATYPE_MISMATCH.INVALID_ORDERING_TYPE] The `{function_name}` does not support ordering on type \"{}\". SQLSTATE: 42K09",
+        spark_error_type_name(interval)
+    )))
+}
+
+/// Spark's check of a window partition key, which it sorts.
+pub(crate) fn reject_calendar_interval_partition_key(
+    display_name: &str,
+    data_type: &DataType,
+) -> PlanResult<()> {
+    if !holds_calendar_interval(data_type) {
+        return Ok(());
+    }
+    Err(PlanError::analysis(format!(
+        "[EXPRESSION_TYPE_IS_NOT_ORDERABLE] Column expression \"{display_name}\" cannot be sorted because its type \"{}\" is not orderable. SQLSTATE: 42822",
+        spark_error_type_name(data_type)
+    )))
+}
+
+/// Spark's check of a sort key.
+pub(crate) fn reject_calendar_interval_sort_key(data_type: &DataType) -> PlanResult<()> {
+    reject_calendar_interval_ordering(
+        std::slice::from_ref(data_type),
+        "sortorder",
+        "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+    )
+}
+
 pub(crate) fn spark_in_list(
     value: expr::Expr,
     list: Vec<expr::Expr>,
@@ -682,6 +826,11 @@ pub(crate) fn spark_in_list(
     schema: &DFSchemaRef,
     ansi_mode: bool,
 ) -> PlanResult<expr::Expr> {
+    let operand_types = std::iter::once(&value)
+        .chain(&list)
+        .map(|operand| operand.get_type(schema))
+        .collect::<Result<Vec<_>, _>>()?;
+    reject_calendar_interval_ordering(&operand_types, "in", "DATATYPE_MISMATCH.DATA_DIFF_TYPES")?;
     let mut input = expr::InList::new(Box::new(value), list, negated);
     let (mut decimal, mut floating, mut double, mut single, mut integer) =
         (false, false, false, false, false);
@@ -801,6 +950,25 @@ pub(crate) fn spark_binary_expr(
     ) {
         let mut left_type = left.get_type(schema)?;
         let mut right_type = right.get_type(schema)?;
+        // Spark's `<>` is the negation of `=`, which it names.
+        let comparison = match op {
+            Operator::Eq | Operator::NotEq => "=",
+            Operator::Lt => "<",
+            Operator::LtEq => "<=",
+            Operator::Gt => ">",
+            Operator::GtEq => ">=",
+            Operator::IsDistinctFrom | Operator::IsNotDistinctFrom => "<=>",
+            other => {
+                return Err(PlanError::internal(format!(
+                    "unexpected comparison operator {other}"
+                )));
+            }
+        };
+        reject_calendar_interval_ordering(
+            &[left_type.clone(), right_type.clone()],
+            comparison,
+            "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+        )?;
         if let Some(conversion) =
             nanosecond_comparison_cast(&left_type, &right_type, &config.session_timezone)
         {

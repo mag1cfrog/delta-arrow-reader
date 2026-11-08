@@ -1,8 +1,9 @@
 use datafusion_common::{Column, DFSchemaRef};
-use datafusion_expr::expr;
+use datafusion_expr::{ExprSchemable, expr};
 use sail_common::spec;
 
 use crate::error::{PlanError, PlanResult};
+use crate::function::common::reject_calendar_interval_sort_key;
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
 use crate::resolver::state::PlanResolverState;
@@ -33,7 +34,26 @@ impl PlanResolver<'_> {
         Ok(NamedExpr::new(vec![], sort.expr))
     }
 
+    /// A sort key, which like Spark cannot be a calendar interval.
     pub(in super::super) async fn resolve_sort_order(
+        &self,
+        sort: spec::SortOrder,
+        resolve_literals: bool,
+        schema: &DFSchemaRef,
+        state: &mut PlanResolverState,
+    ) -> PlanResult<expr::Sort> {
+        let sort = self
+            .resolve_sort_order_allowing_calendar_intervals(sort, resolve_literals, schema, state)
+            .await?;
+        if let Ok(data_type) = sort.expr.get_type(schema) {
+            reject_calendar_interval_sort_key(&data_type)?;
+        }
+        Ok(sort)
+    }
+
+    /// A sort key that may be a calendar interval, for callers that try several plans and
+    /// check the key once it resolves.
+    pub(in super::super) async fn resolve_sort_order_allowing_calendar_intervals(
         &self,
         sort: spec::SortOrder,
         resolve_literals: bool,

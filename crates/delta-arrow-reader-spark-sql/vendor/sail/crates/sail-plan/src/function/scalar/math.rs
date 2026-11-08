@@ -60,7 +60,8 @@ pub(crate) use super::integer_divide::SparkIntegerDivide;
 use crate::error::{PlanError, PlanResult};
 use crate::expression_errors::is_locally_evaluable;
 use crate::function::common::{
-    FunctionContextInput, ScalarFunction, ScalarFunctionInput, without_metadata_annotations,
+    FunctionContextInput, ScalarFunction, ScalarFunctionInput, reject_calendar_interval_ordering,
+    without_metadata_annotations,
 };
 use crate::function::result_coercion::{coerce_to_temporal, is_temporal_type};
 use crate::function::scalar::datetime::replan_make_interval_for_try;
@@ -2765,14 +2766,23 @@ fn spark_rand_with_validated_seed(input: ScalarFunctionInput) -> PlanResult<Expr
 /// CAST. Other arguments keep DataFusion's coercion.
 fn extremum_with_temporal_widening(
     input: ScalarFunctionInput,
+    function_name: &str,
     extremum: fn(Vec<Expr>) -> Expr,
 ) -> PlanResult<Expr> {
+    // Spark checks the argument count before the argument types.
+    if input.arguments.len() < 2 {
+        return Err(PlanError::invalid(format!(
+            "[WRONG_NUM_ARGS.WITHOUT_SUGGESTION] The `{function_name}` requires > 1 parameters but the actual number is {}.",
+            input.arguments.len()
+        )));
+    }
     let schema = input.function_context.schema;
     let types = input
         .arguments
         .iter()
         .map(|argument| argument.get_type(schema))
         .collect::<Result<Vec<_>, _>>()?;
+    reject_calendar_interval_ordering(&types, function_name, "DATATYPE_MISMATCH.DATA_DIFF_TYPES")?;
     let temporal = types
         .iter()
         .all(|data_type| is_temporal_type(data_type) || *data_type == DataType::Null);
@@ -2829,13 +2839,15 @@ pub(super) fn list_built_in_math_functions() -> Vec<(&'static str, ScalarFunctio
         ("floor", F::custom(|arg| ceil_floor(arg, "floor"))),
         (
             "greatest",
-            F::custom(|input| extremum_with_temporal_widening(input, expr_fn::greatest)),
+            F::custom(|input| {
+                extremum_with_temporal_widening(input, "greatest", expr_fn::greatest)
+            }),
         ),
         ("hex", F::custom(hex)),
         ("hypot", F::binary(hypot)),
         (
             "least",
-            F::custom(|input| extremum_with_temporal_widening(input, expr_fn::least)),
+            F::custom(|input| extremum_with_temporal_widening(input, "least", expr_fn::least)),
         ),
         ("ln", F::unary(double(ln))),
         ("log", F::binary(double2(log))),

@@ -23,6 +23,7 @@ use crate::error::{PlanError, PlanResult};
 use crate::formatter::SparkPlanFormatter;
 use crate::function::common::{
     FunctionContextInput, WinFunctionInput, drop_inherited_column_metadata,
+    reject_calendar_interval_partition_key, reject_calendar_interval_sort_key,
     without_inherited_column_metadata,
 };
 use crate::function::{get_built_in_window_function, require_deterministic_scalar_expression};
@@ -129,12 +130,23 @@ impl PlanResolver<'_> {
                 .resolve_expression_arguments(vec![*sort.child], schema, state)
                 .await?;
             let (asc, nulls_first) = sort_order_options(sort.direction, sort.null_ordering);
+            let expression = expressions.one()?;
+            if let Ok(data_type) = expression.get_type(schema) {
+                reject_calendar_interval_sort_key(&data_type)?;
+            }
             order_display_names.push(names.one()?);
             sorts.push(expr::Sort {
-                expr: expressions.one()?,
+                expr: expression,
                 asc,
                 nulls_first,
             });
+        }
+        // Spark checks the ORDER BY keys first, then sorts each partition key, so a calendar
+        // interval cannot be one.
+        for (name, expression) in partition_display.iter().zip(&partition_by) {
+            if let Ok(data_type) = expression.get_type(schema) {
+                reject_calendar_interval_partition_key(name, &data_type)?;
+            }
         }
         let (name, window) = match window_function {
             spec::Expr::UnresolvedFunction(spec::UnresolvedFunction {
