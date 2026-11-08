@@ -43,7 +43,7 @@ fn calendar_interval_ordering_references() -> TestResult<Vec<Value>> {
             |build| build.contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
         )
     );
-    assert_eq!(records.len() - 1, 740);
+    assert_eq!(records.len() - 1, 748);
     Ok(records)
 }
 
@@ -60,7 +60,8 @@ enum RetainedDifference {
     /// declares it NOT NULL.
     GreatestNullability,
     /// #1176: DAR coerces STRUCT and ARRAY comparison and IN operands with DataFusion's
-    /// comparison coercion, which accepts field pairs Spark rejects and fails some it accepts.
+    /// comparison coercion, which accepts field pairs Spark rejects and fails some it accepts,
+    /// and compares STRUCT fields by position where Spark requires equal names to widen one.
     /// Beside a calendar interval those pairs get the ordering error, and the controls without
     /// one give DAR's results.
     NestedComparisonCoercion,
@@ -85,7 +86,7 @@ enum NestedCoercionResult {
 }
 
 /// Records of the #1176 class and DAR's result for each.
-const NESTED_COERCION_RECORDS: [(&str, NestedCoercionResult); 15] = [
+const NESTED_COERCION_RECORDS: [(&str, NestedCoercionResult); 16] = [
     (
         "field_int_decimal_struct_equal",
         NestedCoercionResult::OrderingError,
@@ -108,6 +109,10 @@ const NESTED_COERCION_RECORDS: [(&str, NestedCoercionResult); 15] = [
     ),
     (
         "field_int_date_struct_in",
+        NestedCoercionResult::OrderingError,
+    ),
+    (
+        "field_renamed_widened_struct_equal",
         NestedCoercionResult::OrderingError,
     ),
     (
@@ -656,7 +661,7 @@ async fn calendar_interval_ordering_matches_spark() -> TestResult {
             (RetainedDifference::OrderingConsumer, 24),
             (RetainedDifference::PivotImplicitGrouping, 6),
             (RetainedDifference::GreatestNullability, 4),
-            (RetainedDifference::NestedComparisonCoercion, 60),
+            (RetainedDifference::NestedComparisonCoercion, 64),
             (RetainedDifference::DateTimestampZone, 2),
         ])
     );

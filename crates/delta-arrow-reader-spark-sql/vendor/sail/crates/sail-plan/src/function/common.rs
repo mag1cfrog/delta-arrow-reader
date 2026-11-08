@@ -725,11 +725,13 @@ fn spark_error_type_name(data_type: &DataType) -> String {
 }
 
 /// Whether two operand types of an ordering check have a common type, as Spark checks before it
-/// rejects a calendar interval. A NULL matches anything. ARRAY elements and STRUCT fields are
-/// compared by position, as Spark compares STRUCTs whatever their field names, and STRUCTs
-/// must have as many fields. A calendar interval matches only a calendar interval. Other types
-/// must have a common type under the comparison's own coercion; where it differs from Spark's,
-/// so does this check (#1176).
+/// rejects a calendar interval. A NULL matches anything. ARRAY elements, MAP entries and STRUCT
+/// fields are compared by position, and STRUCTs must have as many fields. Spark also compares
+/// STRUCT fields by position, but requires equal names where a field widens, which this check
+/// does not. A calendar interval matches only a calendar interval. Other types must have a
+/// common type under the comparison's own coercion, so DataFusion's name-matching STRUCT
+/// coercion is never used. Where that coercion differs from Spark's, so does this check
+/// (#1176).
 fn ordering_operand_types_compatible(left: &DataType, right: &DataType) -> bool {
     if *left == DataType::Null || *right == DataType::Null {
         return true;
@@ -756,6 +758,9 @@ fn ordering_operand_types_compatible(left: &DataType, right: &DataType) -> bool 
                 && left.iter().zip(right.iter()).all(|(left, right)| {
                     ordering_operand_types_compatible(left.data_type(), right.data_type())
                 })
+        }
+        (DataType::Map(left, _), DataType::Map(right, _)) => {
+            ordering_operand_types_compatible(left.data_type(), right.data_type())
         }
         _ if holds_calendar_interval(left) || holds_calendar_interval(right) => false,
         _ => comparison_coercion(left, right).is_some(),
