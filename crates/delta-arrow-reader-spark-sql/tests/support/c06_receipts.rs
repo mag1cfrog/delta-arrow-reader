@@ -62,14 +62,19 @@ pub(crate) fn failure(error: &(dyn std::error::Error + 'static), stage: &str) ->
     json!({"stage":stage,"display":error.to_string(),"debug":format!("{error:?}"),"chain":chain})
 }
 
-pub(crate) fn finish(receipt: &mut Value) {
+fn availability(actual: &Value, keys: &[&str]) -> Value {
     let mut availability = serde_json::Map::new();
-    for key in ["public_names", "analyzed", "optimized", "before_collect", "physical", "output", "error"] {
-        availability.insert(key.into(), json!(match receipt.get(key) {
+    for &key in keys {
+        availability.insert(key.into(), json!(match actual.get(key) {
             None => "absent", Some(Value::Null) => "null", Some(_) => "available",
         }));
     }
-    receipt["availability"] = Value::Object(availability);
+    Value::Object(availability)
+}
+
+pub(crate) fn finish(receipt: &mut Value) {
+    receipt["availability"] = availability(receipt,
+        &["public_names", "analyzed", "optimized", "before_collect", "physical", "output", "error"]);
 }
 
 pub(crate) fn batches(
@@ -122,6 +127,19 @@ pub(crate) fn registration(
             "partitions":partitions.iter().map(|partition|batches(partition,encode)).collect::<TestResult<Vec<_>>>()?}}))
 }
 
+fn provider_failure(
+    completed: &mut Vec<Value>,
+    mut receipt: Value,
+    error: &(dyn std::error::Error + 'static),
+    stage: &str,
+) -> Value {
+    receipt["provider"]["error"] = failure(error, stage);
+    receipt["provider"]["availability"] = availability(&receipt["provider"],
+        &["schema", "readback_sql", "readback", "error"]);
+    completed.push(receipt);
+    json!({"providers":completed,"error":failure(error, stage)})
+}
+
 pub(crate) async fn provider_readbacks(
     session: &SessionContext,
     registrations: Vec<Value>,
@@ -129,15 +147,31 @@ pub(crate) async fn provider_readbacks(
 ) -> TestResult<Value> {
     let mut receipts = Vec::new();
     for mut receipt in registrations {
-        let name=receipt["name"].as_str().ok_or("missing provider name")?;
-        let provider=session.table_provider(name).await?;
-        let actual_schema=provider.schema();
-        let quote=|value: &str| format!("\"{}\"",value.replace('"',"\"\""));
-        let sql=format!("SELECT * FROM {} ORDER BY {}",quote(name),quote(actual_schema.field(0).name()));
-        let readback=session.sql(&sql).await?.collect().await?;
-        receipt["provider"]=json!({"schema":schema(actual_schema.as_ref()),
-            "readback_sql":sql,"readback_order":"sorted_by_first_actual_provider_field",
-            "readback":batches(&readback,encode)?});
+        receipt["provider"] = json!({"schema":null,"readback_sql":null,"readback":null,"error":null});
+        let mut stage = "provider_lookup";
+        let result: TestResult<()> = async {
+            let name=receipt["name"].as_str().ok_or("missing provider name")?;
+            let provider=session.table_provider(name).await?;
+            let actual_schema=provider.schema();
+            let quote=|value: &str| format!("\"{}\"",value.replace('"',"\"\""));
+            let sql=format!("SELECT * FROM {} ORDER BY {}",quote(name),quote(actual_schema.field(0).name()));
+            receipt["provider"]=json!({"schema":schema(actual_schema.as_ref()),
+                "readback_sql":sql,"readback_order":"sorted_by_first_actual_provider_field",
+                "readback":null,"error":null});
+            stage = "readback_sql";
+            let frame=session.sql(&sql).await?;
+            stage = "readback_collect";
+            let readback=frame.collect().await?;
+            stage = "readback_encode";
+            receipt["provider"]["readback"]=batches(&readback,encode)?;
+            Ok(())
+        }.await;
+        if let Err(error) = result {
+            let retained = provider_failure(&mut receipts, receipt, error.as_ref(), stage);
+            emit("provider_failure",json!({"batch_size":session.state().config().batch_size(),
+                "target_partitions":session.state().config().target_partitions()}),retained);
+            return Err(error);
+        }
         receipts.push(receipt);
     }
     Ok(json!(receipts))
@@ -172,6 +206,18 @@ fn receipts_retain_nested_actual_fields_batches_and_error_sources() -> TestResul
     assert_eq!(observed["chain"][1]["display"],"inner");
     assert_eq!(observed["chain"].as_array().map(Vec::len),Some(2));
     assert!(observed["debug"].as_str().is_some_and(|text|text.contains("inner")));
+    let completed=json!({"name":"completed","provider":{"readback":output}});
+    let failed=json!({"name":"failed","provider":{"schema":null,"readback_sql":null,"readback":null,"error":null}});
+    let mut providers=vec![completed.clone()];
+    let retained=provider_failure(&mut providers,failed,&error,"provider_lookup");
+    assert_eq!(retained["providers"][0],completed);
+    assert_eq!(retained["providers"][1]["name"],"failed");
+    assert_eq!(retained["providers"][1]["provider"]["error"]["stage"],"provider_lookup");
+    assert_eq!(retained["providers"][1]["provider"]["error"]["chain"][1]["display"],"inner");
+    assert_eq!(retained["providers"][1]["provider"]["availability"]["readback"],"null");
+    assert_eq!(retained["error"]["display"],error.to_string());
+    assert_eq!(availability(&json!({"output_batches":null}),&["output_batches", "missing"]),
+        json!({"output_batches":"null","missing":"absent"}));
     let mut receipt=new("test");
     receipt["output"]=output;
     finish(&mut receipt);

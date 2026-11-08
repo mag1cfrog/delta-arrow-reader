@@ -258,13 +258,16 @@ fn session(batch_size: usize) -> SessionContext {
 async fn capture_case_with_receipt(
     session: &SessionContext,
     case: &Value,
-    registration_error: Option<&str>,
+    registration_error: Option<&(dyn std::error::Error + Send + Sync + 'static)>,
 ) -> (Value, bool, Value) {
     if let Some(error) = registration_error {
+        let mut receipt = c06_receipts::new("input_registration");
+        receipt["error"] = c06_receipts::failure(error, "input_registration");
+        c06_receipts::finish(&mut receipt);
         return (
-            json!({"capture_error":error,"capture_stage":"input_registration"}),
+            json!({"capture_error":error.to_string(),"capture_stage":"input_registration"}),
             true,
-            json!({"stage":"input_registration","availability":"unavailable"}),
+            receipt,
         );
     }
     let task_session = session.clone();
@@ -274,6 +277,22 @@ async fn capture_case_with_receipt(
         Ok(Err(error)) => (json!({"capture_error":error.to_string()}), true, c06_receipts::failure(error.as_ref(), "capture")),
         Err(error) => (json!({"capture_task_error":error.to_string()}), true, c06_receipts::failure(&error, "capture_task")),
     }
+}
+
+#[tokio::test]
+async fn input_registration_failure_retains_error_detail_without_planning() -> TestResult {
+    let error = std::io::Error::other("input registration failed");
+    let (actual, failed, receipt) = capture_case_with_receipt(
+        &session(1), &json!({}), Some(&error),
+    ).await;
+    assert!(failed);
+    assert_eq!(actual,json!({"capture_error":error.to_string(),"capture_stage":"input_registration"}));
+    assert_eq!(receipt["error"]["display"],error.to_string());
+    assert_eq!(receipt["error"]["debug"],format!("{error:?}"));
+    assert_eq!(receipt["error"]["chain"][0]["display"],error.to_string());
+    assert_eq!(receipt["availability"]["analyzed"],"null");
+    assert_eq!(receipt["availability"]["error"],"available");
+    Ok(())
 }
 
 #[tokio::test]
@@ -337,7 +356,7 @@ async fn substring_descendants_retain_all_660_comparisons() -> TestResult {
                             "representation":representation,"batch_size":batch_size,"target_partitions":2}),provider.clone());
                     }
                 }
-                let registration_error = registration.err().map(|error|error.to_string());
+                let registration_error = registration.err();
                 for case in &records[1..] {
                     let context = context(matrix, case, representation, batch_size);
                     let key = context.to_string();
@@ -951,7 +970,7 @@ async fn run_positive_matrix(cse: bool) -> TestResult {
                         "representation":representation,"batch_size":batch_size,"target_partitions":2}),provider.clone());
                 }
             }
-            let registration_error = registration.err().map(|error|error.to_string());
+            let registration_error = registration.err();
             for case in &records[1..] {
                 let context = context(matrix, case, representation, batch_size);
                 if !observed_contexts.insert(context.to_string()) {
