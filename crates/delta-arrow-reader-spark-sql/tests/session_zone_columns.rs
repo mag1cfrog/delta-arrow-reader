@@ -274,9 +274,6 @@ enum RetainedDifference {
     /// #1087: calendar functions fail on 0001-01-02 and 9999-12-31, outside Arrow's
     /// nanosecond range, which fails the whole query.
     NanosecondRange,
-    /// #1089: DATE_TRUNC to MINUTE truncates the UTC minute under Los Angeles local mean
-    /// time, whose offset has seconds.
-    UtcMinuteTruncation,
     /// #1090: GREATEST is nullable where Spark declares it required.
     NullableGreatest,
     /// #1029: in a session zone Spark accepts but Arrow cannot parse, such as `PST`, a
@@ -323,10 +320,6 @@ const NANOSECOND_RANGE_FAILURES: [(&str, &str); 12] = [
     ("weekofyear", "Arithmetic overflow"),
 ];
 
-/// 1883-11-18 20:00 UTC, when Los Angeles leaves local mean time (-07:52:58).
-const LOCAL_MEAN_TIME_END: i64 = -2_717_640_000_000_000;
-const MICROS_PER_MINUTE: i64 = 60_000_000;
-
 fn retained_difference(case: &Value) -> Option<RetainedDifference> {
     let id = case["id"].as_str()?;
     let timezone = case["timezone"].as_str()?;
@@ -341,8 +334,6 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
         .any(|(range_id, _)| *range_id == id)
     {
         Some(RetainedDifference::NanosecondRange)
-    } else if id == "date_trunc_minute" && timezone == "America/Los_Angeles" {
-        Some(RetainedDifference::UtcMinuteTruncation)
     } else if id == "greatest_hour" {
         Some(RetainedDifference::NullableGreatest)
     } else {
@@ -466,33 +457,6 @@ fn current_expectation(
                 .as_object_mut()
                 .ok_or("missing schema stages")?
                 .remove("executed");
-        }
-        RetainedDifference::UtcMinuteTruncation => {
-            let instants = registered_instants(metadata)?;
-            let rows = current["expected"]["rows"]
-                .as_array_mut()
-                .ok_or("missing rows")?;
-            let mut changed = 0;
-            for row in rows.iter_mut() {
-                let instant = instants
-                    .iter()
-                    .find(|(key, _)| *key == row[0])
-                    .ok_or("missing registered row")?
-                    .1;
-                let Some(instant) = instant else { continue };
-                let utc_minute = instant.div_euclid(MICROS_PER_MINUTE) * MICROS_PER_MINUTE;
-                let local_minute = row[1].as_str().ok_or("missing value")?.parse::<i64>()?;
-                if utc_minute != local_minute {
-                    if instant >= LOCAL_MEAN_TIME_END {
-                        return Err(format!("unexpected minute in {row:?}").into());
-                    }
-                    row[1] = json!(utc_minute.to_string());
-                    changed += 1;
-                }
-            }
-            if changed == 0 {
-                return Err("expected a local mean time minute".into());
-            }
         }
         RetainedDifference::NullableGreatest => {
             for stage in ["analyzed", "optimized", "executed"] {
@@ -690,7 +654,6 @@ async fn timestamp_columns_follow_the_session_zone_like_spark() -> TestResult {
         retained,
         BTreeMap::from([
             (RetainedDifference::NanosecondRange, 48),
-            (RetainedDifference::UtcMinuteTruncation, 2),
             (RetainedDifference::NullableGreatest, 4),
             (RetainedDifference::UnparsedSessionZone, 12),
             (RetainedDifference::ElapsedDayArithmetic, 10),
