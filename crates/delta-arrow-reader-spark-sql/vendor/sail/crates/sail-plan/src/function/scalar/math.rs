@@ -2766,16 +2766,23 @@ fn spark_rand_with_validated_seed(input: ScalarFunctionInput) -> PlanResult<Expr
 /// CAST. Other arguments keep DataFusion's coercion.
 fn extremum_with_temporal_widening(
     input: ScalarFunctionInput,
-    name: &str,
+    function_name: &str,
     extremum: fn(Vec<Expr>) -> Expr,
 ) -> PlanResult<Expr> {
+    // Spark checks the argument count before the argument types.
+    if input.arguments.len() < 2 {
+        return Err(PlanError::invalid(format!(
+            "[WRONG_NUM_ARGS.WITHOUT_SUGGESTION] The `{function_name}` requires > 1 parameters but the actual number is {}.",
+            input.arguments.len()
+        )));
+    }
     let schema = input.function_context.schema;
     let types = input
         .arguments
         .iter()
         .map(|argument| argument.get_type(schema))
         .collect::<Result<Vec<_>, _>>()?;
-    reject_calendar_interval_ordering(&types, name, "DATATYPE_MISMATCH.DATA_DIFF_TYPES")?;
+    reject_calendar_interval_ordering(&types, function_name, "DATATYPE_MISMATCH.DATA_DIFF_TYPES")?;
     let temporal = types
         .iter()
         .all(|data_type| is_temporal_type(data_type) || *data_type == DataType::Null);

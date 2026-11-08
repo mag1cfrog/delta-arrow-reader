@@ -23,7 +23,8 @@ use crate::error::{PlanError, PlanResult};
 use crate::formatter::SparkPlanFormatter;
 use crate::function::common::{
     FunctionContextInput, WinFunctionInput, drop_inherited_column_metadata,
-    holds_calendar_interval, reject_calendar_interval_sort_key, without_inherited_column_metadata,
+    reject_calendar_interval_partition_key, reject_calendar_interval_sort_key,
+    without_inherited_column_metadata,
 };
 use crate::function::{get_built_in_window_function, require_deterministic_scalar_expression};
 use crate::resolver::PlanResolver;
@@ -121,16 +122,6 @@ impl PlanResolver<'_> {
         let (partition_display, partition_by) = self
             .resolve_expression_arguments(partition_by, schema, state)
             .await?;
-        // Spark sorts each partition key, so a calendar interval cannot be one.
-        for (name, expression) in partition_display.iter().zip(&partition_by) {
-            if let Ok(data_type) = expression.get_type(schema)
-                && holds_calendar_interval(&data_type)
-            {
-                return Err(PlanError::analysis(format!(
-                    "[EXPRESSION_TYPE_IS_NOT_ORDERABLE] Column expression \"{name}\" cannot be sorted because its type is not orderable. SQLSTATE: 42822"
-                )));
-            }
-        }
         // Spark treats literals as constants in ORDER BY window definition
         let mut order_display_names = Vec::with_capacity(order_by.len());
         let mut sorts = Vec::with_capacity(order_by.len());
@@ -149,6 +140,13 @@ impl PlanResolver<'_> {
                 asc,
                 nulls_first,
             });
+        }
+        // Spark checks the ORDER BY keys first, then sorts each partition key, so a calendar
+        // interval cannot be one.
+        for (name, expression) in partition_display.iter().zip(&partition_by) {
+            if let Ok(data_type) = expression.get_type(schema) {
+                reject_calendar_interval_partition_key(name, &data_type)?;
+            }
         }
         let (name, window) = match window_function {
             spec::Expr::UnresolvedFunction(spec::UnresolvedFunction {

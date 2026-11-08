@@ -43,7 +43,7 @@ impl PlanResolver<'_> {
         state: &mut PlanResolverState,
     ) -> PlanResult<expr::Sort> {
         let sort = self
-            .resolve_sort_order_without_type_check(sort, resolve_literals, schema, state)
+            .resolve_sort_order_allowing_calendar_intervals(sort, resolve_literals, schema, state)
             .await?;
         if let Ok(data_type) = sort.expr.get_type(schema) {
             reject_calendar_interval_sort_key(&data_type)?;
@@ -51,8 +51,9 @@ impl PlanResolver<'_> {
         Ok(sort)
     }
 
-    /// A sort key without the calendar interval check, for callers that try several plans.
-    pub(in super::super) async fn resolve_sort_order_without_type_check(
+    /// A sort key that may be a calendar interval, for callers that try several plans and
+    /// check the key once it resolves.
+    pub(in super::super) async fn resolve_sort_order_allowing_calendar_intervals(
         &self,
         sort: spec::SortOrder,
         resolve_literals: bool,

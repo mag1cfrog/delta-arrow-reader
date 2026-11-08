@@ -723,10 +723,47 @@ fn spark_error_type_name(data_type: &DataType) -> String {
     }
 }
 
+/// Whether Spark's type checks accept `other` beside `interval`, which holds a calendar
+/// interval: a NULL matches anything, types without calendar intervals are left to the usual
+/// coercion, and ARRAY and STRUCT shapes must match where a calendar interval sits.
+fn matches_calendar_interval_shape(interval: &DataType, other: &DataType) -> bool {
+    if *interval == DataType::Null || *other == DataType::Null {
+        return true;
+    }
+    if !holds_calendar_interval(interval) && !holds_calendar_interval(other) {
+        return true;
+    }
+    match (interval, other) {
+        (
+            DataType::Interval(IntervalUnit::MonthDayNano),
+            DataType::Interval(IntervalUnit::MonthDayNano),
+        ) => true,
+        (
+            DataType::List(left)
+            | DataType::LargeList(left)
+            | DataType::FixedSizeList(left, _)
+            | DataType::ListView(left)
+            | DataType::LargeListView(left),
+            DataType::List(right)
+            | DataType::LargeList(right)
+            | DataType::FixedSizeList(right, _)
+            | DataType::ListView(right)
+            | DataType::LargeListView(right),
+        ) => matches_calendar_interval_shape(left.data_type(), right.data_type()),
+        (DataType::Struct(left), DataType::Struct(right)) => {
+            left.len() == right.len()
+                && left.iter().zip(right.iter()).all(|(left, right)| {
+                    matches_calendar_interval_shape(left.data_type(), right.data_type())
+                })
+        }
+        _ => false,
+    }
+}
+
 /// Spark's analysis of `function_name` over operands of `operand_types`
-/// (`TypeUtils.checkForOrderingExpr` after its type checks). A calendar interval beside a
-/// non-NULL operand that holds none fails first with `mismatch_condition`; otherwise a
-/// calendar interval fails with `DATATYPE_MISMATCH.INVALID_ORDERING_TYPE`.
+/// (`TypeUtils.checkForOrderingExpr` after its type checks). A calendar interval beside an
+/// operand of another shape fails first with `mismatch_condition`; otherwise a calendar
+/// interval fails with `DATATYPE_MISMATCH.INVALID_ORDERING_TYPE`.
 pub(crate) fn reject_calendar_interval_ordering(
     operand_types: &[DataType],
     function_name: &str,
@@ -745,7 +782,7 @@ pub(crate) fn reject_calendar_interval_ordering(
         .join(", ");
     if operand_types
         .iter()
-        .any(|data_type| *data_type != DataType::Null && !holds_calendar_interval(data_type))
+        .any(|data_type| !matches_calendar_interval_shape(interval, data_type))
     {
         return Err(PlanError::analysis(format!(
             "[{mismatch_condition}] The operands of `{function_name}` have incompatible types: {names}. SQLSTATE: 42K09"
@@ -757,7 +794,21 @@ pub(crate) fn reject_calendar_interval_ordering(
     )))
 }
 
-/// Spark's check of a sort key or window partition key.
+/// Spark's check of a window partition key, which it sorts.
+pub(crate) fn reject_calendar_interval_partition_key(
+    display_name: &str,
+    data_type: &DataType,
+) -> PlanResult<()> {
+    if !holds_calendar_interval(data_type) {
+        return Ok(());
+    }
+    Err(PlanError::analysis(format!(
+        "[EXPRESSION_TYPE_IS_NOT_ORDERABLE] Column expression \"{display_name}\" cannot be sorted because its type \"{}\" is not orderable. SQLSTATE: 42822",
+        spark_error_type_name(data_type)
+    )))
+}
+
+/// Spark's check of a sort key.
 pub(crate) fn reject_calendar_interval_sort_key(data_type: &DataType) -> PlanResult<()> {
     reject_calendar_interval_ordering(
         std::slice::from_ref(data_type),

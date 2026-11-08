@@ -52,7 +52,7 @@ impl PlanResolver<'_> {
                     subquery.schema().field(0).data_type().clone(),
                 ],
                 "insubquery",
-                "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+                "DATATYPE_MISMATCH.IN_SUBQUERY_DATA_TYPE_MISMATCH",
             )?;
             // Use the same Spark common-type and floating-value normalization
             // as IN lists. Resolver field IDs are unique across these scopes.
@@ -179,7 +179,7 @@ impl PlanResolver<'_> {
             reject_calendar_interval_ordering(
                 &[value_type.clone(), field.data_type().clone()],
                 "insubquery",
-                "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+                "DATATYPE_MISMATCH.IN_SUBQUERY_DATA_TYPE_MISMATCH",
             )?;
         }
         let filter_expr = outer_refs

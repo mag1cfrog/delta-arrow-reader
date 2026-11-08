@@ -318,7 +318,12 @@ impl PlanResolver<'_> {
         // The ordering type is checked once the key is resolved, so that a calendar interval
         // fails with Spark's error instead of retrying the child plans.
         let sort_expr = self
-            .resolve_sort_order_without_type_check(sort.clone(), true, plan.schema(), state)
+            .resolve_sort_order_allowing_calendar_intervals(
+                sort.clone(),
+                true,
+                plan.schema(),
+                state,
+            )
             .await;
         match sort_expr {
             Ok(sort_expr) => Ok(sort_expr),
