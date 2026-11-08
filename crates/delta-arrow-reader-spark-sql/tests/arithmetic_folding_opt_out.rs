@@ -215,6 +215,7 @@ impl HigherOrderUDFImpl for HigherOrderIdentity {
 struct ScalarToHigherOrderRewriter {
     name: &'static str,
     target: Arc<HigherOrderUDF>,
+    folding_permitted: bool,
     error_if_invoked: bool,
     calls: Arc<AtomicUsize>,
 }
@@ -223,6 +224,7 @@ impl PartialEq for ScalarToHigherOrderRewriter {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name
             && self.target == other.target
+            && self.folding_permitted == other.folding_permitted
             && self.error_if_invoked == other.error_if_invoked
     }
 }
@@ -231,11 +233,15 @@ impl Hash for ScalarToHigherOrderRewriter {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.name.hash(state);
         self.target.hash(state);
+        self.folding_permitted.hash(state);
         self.error_if_invoked.hash(state);
     }
 }
 
 impl ScalarUDFImpl for ScalarToHigherOrderRewriter {
+    fn supports_constant_folding(&self) -> bool {
+        self.folding_permitted
+    }
     fn name(&self) -> &str {
         self.name
     }
@@ -414,7 +420,7 @@ fn session(spark: bool, error_if_invoked: bool) -> (SessionContext, InvocationCo
         builder.build()
     });
     let counters = InvocationCounters::default();
-    // The named counters track runtime-only targets and the permitted scalar rewriter.
+    // The counters distinguish opaque kernels from folding-permitted scalar sources.
     let higher_order_target = Arc::new(HigherOrderUDF::new_from_impl(HigherOrderIdentity {
         volatile: false,
         error_if_invoked,
@@ -422,9 +428,17 @@ fn session(spark: bool, error_if_invoked: bool) -> (SessionContext, InvocationCo
     }));
     session.register_udf(ScalarUDF::from(ScalarToHigherOrderRewriter {
         name: "rewrite_to_higher_no_fold",
-        target: higher_order_target,
+        target: Arc::clone(&higher_order_target),
+        folding_permitted: true,
         error_if_invoked,
         calls: Arc::clone(&counters.permitted),
+    }));
+    session.register_udf(ScalarUDF::from(ScalarToHigherOrderRewriter {
+        name: "rewrite_opaque_source_to_higher_no_fold",
+        target: higher_order_target,
+        folding_permitted: false,
+        error_if_invoked,
+        calls: Arc::clone(&counters.opaque),
     }));
     session.register_udf(ScalarUDF::from(ScalarToHigherOrderRewriter {
         name: "rewrite_to_volatile_higher",
@@ -433,6 +447,7 @@ fn session(spark: bool, error_if_invoked: bool) -> (SessionContext, InvocationCo
             error_if_invoked,
             calls: Arc::clone(&counters.opaque),
         })),
+        folding_permitted: true,
         error_if_invoked,
         calls: Arc::clone(&counters.permitted),
     }));
@@ -1758,14 +1773,14 @@ async fn higher_order_case_fields_do_not_evaluate_opaque_predicates() -> TestRes
     for ansi in [true, false] {
         for spark in [true, false] {
             for error_if_invoked in [false, true] {
+                // The opaque source must survive constant evaluation until its HOF rewrite.
                 check_case(
                     scalar_case(
-                        "SELECT CASE WHEN rewrite_to_higher_no_fold(CAST(1 AS DOUBLE))>0 THEN CAST(NULL AS DOUBLE) ELSE CAST(7 AS DOUBLE) END AS r".into(),
+                        "SELECT CASE WHEN rewrite_opaque_source_to_higher_no_fold(CAST(1 AS DOUBLE))>0 THEN CAST(NULL AS DOUBLE) ELSE CAST(7 AS DOUBLE) END AS r".into(),
                         DataType::Float64,
                         vec![vec![ScalarValue::Float64(None)]],
                         1,
-                        // Field inference may invoke the permitted scalar source before its rewrite.
-                        if error_if_invoked { 6 } else { 1 },
+                        0,
                     ),
                     spark,
                     ansi,
