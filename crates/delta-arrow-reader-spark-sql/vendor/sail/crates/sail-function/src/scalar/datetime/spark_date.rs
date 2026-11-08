@@ -69,6 +69,10 @@ impl ScalarUDFImpl for SparkDate {
         &self.signature
     }
 
+    fn propagates_constant_folding_errors(&self) -> bool {
+        !self.is_try
+    }
+
     fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType> {
         Ok(DataType::Date32)
     }

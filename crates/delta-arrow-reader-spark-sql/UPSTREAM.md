@@ -1167,6 +1167,15 @@ literal CASTs already do. A call inside a short-circuiting expression other than
 OR, such as CASE or COALESCE, still defers its error, and so does an expression over a lambda
 variable, which has no value to fold. `AliasedScalarUDFImpl` forwards the choice. TIMESTAMPDIFF and the TIMESTAMP to TIMESTAMP_NTZ conversion opt in.
 
+Strict DATE and TIMESTAMP parser calls, including TIMESTAMP_NTZ mode, also use
+this hook. Their existing reachability check runs before folding, preserving
+unused-projection pruning. Safe and TRY variants keep their existing NULL
+policy. The [temporal parser folding references](tests/fixtures/temporal-parser-folding/README.md)
+record 44 independent Spark UTC observations for direct/formatted calls,
+guarded or unused expressions and explicit LAG/LEAD CAST defaults. They retain
+complete available Fields, values and optimization-time errors; the wider C07
+temporal fixtures retain their original source observations.
+
 Spark REGEXP_REPLACE checks admitted literal arguments in its own simplify callback,
 after native operand simplification, and reports only its own kernel errors. The
 existing conditional simplifier defers these errors in guarded branches. Async operands

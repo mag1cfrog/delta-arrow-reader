@@ -240,9 +240,6 @@ enum RetainedDifference {
     /// #1003: the implicit cast of a NOT NULL TIMESTAMP_NTZ to DATE is NOT NULL, where Spark
     /// declares it nullable, until constant folding for a literal.
     RequiredNtzDateCast,
-    /// #937: DAYOFWEEK of a STRING literal Spark cannot read fails while collecting rows under
-    /// ANSI, where Spark fails while folding constants during optimization.
-    LateConstantConversionErrors,
 }
 
 /// DAR's current result for a record: Spark's record with each retained part replaced by
@@ -266,14 +263,6 @@ fn current_expectation(case: &Value) -> TestResult<(Value, Vec<RetainedDifferenc
         if changed {
             retained.push(RetainedDifference::RequiredNtzDateCast);
         }
-    }
-    if matches!(
-        id,
-        "dayofweek_literal_bad" | "dayofweek_literal_empty" | "dayofweek_literal_lowercase_t"
-    ) && case["spark_error_phase"] == "optimized"
-    {
-        current["spark_error_phase"] = json!("collect");
-        retained.push(RetainedDifference::LateConstantConversionErrors);
     }
     Ok((current, retained))
 }
@@ -360,10 +349,7 @@ async fn weekday_and_dayofweek_match_spark() -> TestResult {
     );
     assert_eq!(
         retained,
-        BTreeMap::from([
-            (RetainedDifference::RequiredNtzDateCast, 16),
-            (RetainedDifference::LateConstantConversionErrors, 6),
-        ])
+        BTreeMap::from([(RetainedDifference::RequiredNtzDateCast, 16)])
     );
     Ok(())
 }

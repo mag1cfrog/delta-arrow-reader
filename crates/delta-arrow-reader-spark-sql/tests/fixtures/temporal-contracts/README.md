@@ -55,14 +55,13 @@ replaces only the owned part with the current DAR result, derived from other
 Spark records where possible, and checks each class's record count. A record can
 belong to several classes:
 
-- #937: 242 constant conversions that DAR rejects fail while collecting rows
-  instead of during optimization. They include formatted parsing and 29
-  out-of-range strings that Spark parses (#1011).
 - #943: 12 typed TIMESTAMP literals with second 60 roll over to the next minute;
   their fields are those of the same literal for a valid time.
 - #1003: 24 `CAST(DATE AS TIMESTAMP_NTZ)` literals are required at analysis.
-- #1010: 324 invalid patterns fail with DAR's message while collecting rows;
-  `#`, `{` and `}` are formatted as text.
+- #1010: 324 invalid-pattern or reserved-character cases retain DAR's error
+  message or literal formatting. Strict ANSI formatted-parser literals fail
+  during optimization; the other retained errors occur during collection.
+  `#`, `{` and `}` are still formatted as text.
 - #1011: 212 strings beyond the date library's range behave like `'bad'`.
 - #1014: 96 DATE_FORMAT results print other zone names and `O` offsets, including
   the Los Angeles local mean time offset without its seconds, or UTC zone tokens

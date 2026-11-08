@@ -893,6 +893,15 @@ failing stages at batch sizes 1 and 32. See the [temporal fixture
 notes](temporal-contracts/README.md) for the inputs, accepted parser messages,
 the retained differences and their owners, and the capture command.
 
+## Temporal parser constant folding
+
+`temporal-parser-folding/temporal-fold-1123-spark.jsonl` records 44 independent
+UTC observations for DATE, TIMESTAMP and TIMESTAMP_NTZ constant parsing in both
+ANSI modes. Direct and formatted calls, TRY_CAST, lazy guards, unused
+projections, LIMIT 0 and LAG/LEAD defaults retain complete available Fields,
+values and error phases. The [fixture notes](temporal-parser-folding/README.md)
+describe the source protocol, hashes, reproduction command and scope.
+
 ## UTC timestamp conversions
 
 `utc-timestamp-conversions/utc-timestamp-conversions-spark.jsonl` contains 4,356
