@@ -1,6 +1,7 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
+use datafusion::arrow::datatypes::{DataType, Field};
 use datafusion_common::DFSchemaRef;
 use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode};
 use datafusion_expr::logical_plan::{Filter, Projection};
@@ -175,13 +176,32 @@ impl PlanResolver<'_> {
                 subquery_cols.len()
             )));
         }
-        for (value_type, field) in value_types.iter().zip(subquery_plan.schema().fields()) {
-            reject_calendar_interval_ordering(
-                &[value_type.clone(), field.data_type().clone()],
-                "insubquery",
-                "DATATYPE_MISMATCH.IN_SUBQUERY_DATA_TYPE_MISMATCH",
-            )?;
-        }
+        // Spark compares the values with the subquery's columns as one STRUCT, so an
+        // incompatible column fails before a calendar interval in another can.
+        let as_struct = |types: Vec<DataType>| {
+            DataType::Struct(
+                types
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, data_type)| Field::new(format!("_{index}"), data_type, true))
+                    .collect(),
+            )
+        };
+        reject_calendar_interval_ordering(
+            &[
+                as_struct(value_types.clone()),
+                as_struct(
+                    subquery_plan
+                        .schema()
+                        .fields()
+                        .iter()
+                        .map(|field| field.data_type().clone())
+                        .collect(),
+                ),
+            ],
+            "insubquery",
+            "DATATYPE_MISMATCH.IN_SUBQUERY_DATA_TYPE_MISMATCH",
+        )?;
         let filter_expr = outer_refs
             .into_iter()
             .zip(subquery_cols)

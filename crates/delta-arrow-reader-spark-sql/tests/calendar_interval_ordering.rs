@@ -43,7 +43,7 @@ fn calendar_interval_ordering_references() -> TestResult<Vec<Value>> {
             |build| build.contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
         )
     );
-    assert_eq!(records.len() - 1, 452);
+    assert_eq!(records.len() - 1, 748);
     Ok(records)
 }
 
@@ -59,6 +59,129 @@ enum RetainedDifference {
     /// #1090: GREATEST over a NOT NULL DAY TO SECOND interval and NULL is nullable, where Spark
     /// declares it NOT NULL.
     GreatestNullability,
+    /// #1176: DAR coerces STRUCT and ARRAY comparison and IN operands with DataFusion's
+    /// comparison coercion, which accepts field pairs Spark rejects and fails some it accepts,
+    /// and compares STRUCT fields by position where Spark requires equal names to widen one.
+    /// Beside a calendar interval those pairs get the ordering error, and the controls without
+    /// one give DAR's results.
+    NestedComparisonCoercion,
+    /// #1122: DATE beside TIMESTAMP in a STRUCT comparison starts the DATE at UTC midnight, not
+    /// at the session zone's, so the America/Los_Angeles control is false where Spark's is
+    /// true.
+    DateTimestampZone,
+}
+
+/// DAR's current result for a record of the #1176 class.
+enum NestedCoercionResult {
+    /// The ordering error during analysis, where Spark reports a type mismatch.
+    OrderingError,
+    /// Rows of `k` and a NOT NULL BOOLEAN `r`, as JSON.
+    Rows(&'static str),
+    /// A failure at `phase` with DAR's `message`, after the recorded `stages`.
+    Failure {
+        phase: &'static str,
+        message: &'static str,
+        stages: &'static [&'static str],
+    },
+}
+
+/// Records of the #1176 class and DAR's result for each.
+const NESTED_COERCION_RECORDS: [(&str, NestedCoercionResult); 16] = [
+    (
+        "field_int_decimal_struct_equal",
+        NestedCoercionResult::OrderingError,
+    ),
+    (
+        "field_int_string_struct_equal",
+        NestedCoercionResult::OrderingError,
+    ),
+    (
+        "field_int_date_struct_equal",
+        NestedCoercionResult::OrderingError,
+    ),
+    (
+        "field_string_date_struct_equal",
+        NestedCoercionResult::OrderingError,
+    ),
+    (
+        "field_array_int_string_struct_equal",
+        NestedCoercionResult::OrderingError,
+    ),
+    (
+        "field_int_date_struct_in",
+        NestedCoercionResult::OrderingError,
+    ),
+    (
+        "field_renamed_widened_struct_equal",
+        NestedCoercionResult::OrderingError,
+    ),
+    (
+        "field_int_date_in_subquery",
+        NestedCoercionResult::OrderingError,
+    ),
+    (
+        "field_int_decimal_control",
+        NestedCoercionResult::Rows(r#"[["0","false"],["1","false"],["2","false"]]"#),
+    ),
+    (
+        "field_int_string_control",
+        NestedCoercionResult::Rows(r#"[["0","true"],["1","true"],["2","true"]]"#),
+    ),
+    (
+        "field_int_date_control",
+        NestedCoercionResult::Rows(r#"[["0","false"],["1","false"],["2","false"]]"#),
+    ),
+    (
+        "field_string_date_control",
+        NestedCoercionResult::Rows(r#"[["0","true"],["1","true"],["2","true"]]"#),
+    ),
+    (
+        "field_array_int_string_control",
+        NestedCoercionResult::Failure {
+            phase: "collect",
+            message: "While casting struct field 'a'\ncaused by\nArrow error: Cast error: Cannot cast \
+             string 'a' to value of Int32 type",
+            stages: &["analyzed", "optimized"],
+        },
+    ),
+    (
+        "field_struct_names_control",
+        NestedCoercionResult::Failure {
+            phase: "optimized",
+            message: "This feature is not implemented: Unsupported CAST from Struct(\"a\": non-null \
+             Struct(\"y\": non-null Int32), \"b\": non-null Int32) to Struct(\"a\": non-null \
+             Struct(\"x\": non-null Int32), \"b\": non-null Int32)",
+            stages: &["analyzed"],
+        },
+    ),
+    (
+        "field_int_boolean_control",
+        NestedCoercionResult::Failure {
+            phase: "sql",
+            message: "Cannot infer common argument type for comparison operation Struct(\"a\": non-null \
+             Int32, \"b\": non-null Int32) = Struct(\"a\": non-null Boolean, \"b\": non-null \
+             Int32)",
+            stages: &[],
+        },
+    ),
+    (
+        "field_int_array_control",
+        NestedCoercionResult::Failure {
+            phase: "sql",
+            message: "Cannot infer common argument type for comparison operation Struct(\"a\": non-null \
+             Int32, \"b\": non-null Int32) = Struct(\"a\": non-null List(non-null Int32), \
+             \"b\": non-null Int32)",
+            stages: &[],
+        },
+    ),
+];
+
+/// The fields of `k` and a NOT NULL BOOLEAN `r` at every stage, as Spark records them.
+fn key_and_boolean_stages() -> Value {
+    let schema = json!({"type": "struct", "fields": [
+        {"name": "k", "type": "integer", "nullable": false, "metadata": {}},
+        {"name": "r", "type": "boolean", "nullable": false, "metadata": {}}]});
+    json!({"analyzed": schema, "optimized": schema, "executed": schema})
 }
 
 /// DAR's current fields and rows for each record of the #1161 class.
@@ -135,6 +258,13 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
         Some(RetainedDifference::PivotImplicitGrouping)
     } else if id == "greatest_day_time_null_control" {
         Some(RetainedDifference::GreatestNullability)
+    } else if NESTED_COERCION_RECORDS
+        .iter()
+        .any(|(record, _)| *record == id)
+    {
+        Some(RetainedDifference::NestedComparisonCoercion)
+    } else if id == "field_date_timestamp_control" && case["timezone"] == "America/Los_Angeles" {
+        Some(RetainedDifference::DateTimestampZone)
     } else {
         None
     }
@@ -144,6 +274,59 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
 fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResult<Value> {
     let mut current = case.clone();
     match difference {
+        RetainedDifference::NestedComparisonCoercion => {
+            let id = case["id"].as_str().ok_or("missing record id")?;
+            let result = NESTED_COERCION_RECORDS
+                .iter()
+                .find_map(|(record, result)| (*record == id).then_some(result))
+                .ok_or("missing DAR result")?;
+            let spark_ok = case["expected"]["status"] == "ok";
+            let spark_mismatch = case["spark_error_phase"] == "sql"
+                && matches!(
+                    case["expected"]["condition"].as_str(),
+                    Some(
+                        "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES"
+                            | "DATATYPE_MISMATCH.DATA_DIFF_TYPES"
+                            | "DATATYPE_MISMATCH.IN_SUBQUERY_DATA_TYPE_MISMATCH"
+                    )
+                );
+            if !(spark_ok || spark_mismatch) {
+                return Err(format!("expected Spark's rows or type mismatch: {case}").into());
+            }
+            match result {
+                NestedCoercionResult::OrderingError => {
+                    current["expected"] = json!({"status": "error",
+                        "condition": "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE"});
+                    current["spark_error_phase"] = json!("sql");
+                }
+                NestedCoercionResult::Rows(rows) => {
+                    current["schema_stages"] = key_and_boolean_stages();
+                    current["expected"] =
+                        json!({"status": "ok", "rows": serde_json::from_str::<Value>(rows)?});
+                    current["spark_error_phase"] = Value::Null;
+                }
+                NestedCoercionResult::Failure {
+                    phase,
+                    message,
+                    stages,
+                } => {
+                    let all = key_and_boolean_stages();
+                    current["schema_stages"] = stages
+                        .iter()
+                        .map(|stage| ((*stage).to_owned(), all[*stage].clone()))
+                        .collect::<serde_json::Map<_, _>>()
+                        .into();
+                    current["expected"] = json!({"status": "error", "dar_message": message});
+                    current["spark_error_phase"] = json!(phase);
+                }
+            }
+        }
+        RetainedDifference::DateTimestampZone => {
+            if case["expected"]["rows"] != json!([["0", "true"], ["1", "true"], ["2", "true"]]) {
+                return Err(format!("expected Spark's equal rows: {case}").into());
+            }
+            current["expected"]["rows"] = json!([["0", "false"], ["1", "false"], ["2", "false"]]);
+        }
         RetainedDifference::OrderingConsumer => {
             if case["expected"]["condition"] != "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE" {
                 return Err(format!("expected Spark's ordering rejection: {case}").into());
@@ -382,9 +565,13 @@ fn optimize(session: &SessionContext, plan: &LogicalPlan) -> TestResult<LogicalP
     Ok(state.optimize(plan)?)
 }
 
-/// The text DAR's error must contain for a recorded Spark failure: its condition. Every
-/// recorded failure is an analysis failure, whose message quotes Spark's plan.
+/// The text DAR's error must contain for a recorded Spark failure: a retained difference's
+/// pinned text, or the condition. Every recorded Spark failure is an analysis failure, whose
+/// message quotes Spark's plan.
 fn expected_error_text(case: &Value) -> Option<String> {
+    if let Some(message) = case["expected"]["dar_message"].as_str() {
+        return Some(message.to_owned());
+    }
     if case["spark_error_phase"] != "sql" {
         return None;
     }
@@ -474,6 +661,8 @@ async fn calendar_interval_ordering_matches_spark() -> TestResult {
             (RetainedDifference::OrderingConsumer, 24),
             (RetainedDifference::PivotImplicitGrouping, 6),
             (RetainedDifference::GreatestNullability, 4),
+            (RetainedDifference::NestedComparisonCoercion, 64),
+            (RetainedDifference::DateTimestampZone, 2),
         ])
     );
     let mut differences = Vec::new();

@@ -1,13 +1,13 @@
 # Ordering and comparing calendar intervals
 
-`calendar-interval-ordering-spark.jsonl` records 452 observations from Spark 4.2.0, revision
-`32f7299601108917fb01920a54e084595b7b3bf8`, Java 17.0.20.1 and Python 3.12.14 (#1149).
+`calendar-interval-ordering-spark.jsonl` records 748 observations from Spark 4.2.0, revision
+`32f7299601108917fb01920a54e084595b7b3bf8`, Java 17.0.20.1 and Python 3.12.14 (#1149, #1163).
 The header stores the build properties, capture script hash, settings and the registered
 `required` table of NOT NULL INT keys `k` and day counts `d`. Each failure keeps Spark's error
 condition and the class and message of its innermost Java exception. Two captures were
 byte-identical.
 
-113 queries run in both ANSI modes in UTC and America/Los_Angeles over calendar intervals built
+187 queries run in both ANSI modes in UTC and America/Los_Angeles over calendar intervals built
 by `make_interval(0, 0, 0, d)`:
 - ORDER BY an expression, DESC NULLS LAST, an alias, an ordinal, a constant, a second key, an
   ARRAY and a STRUCT holding an interval, with LIMIT, SORT BY, window ORDER BY with and without
@@ -28,7 +28,16 @@ by `make_interval(0, 0, 0, d)`:
 - MAX, MIN, MAX_BY, SORT_ARRAY, ARRAY_SORT and ARRAY_MAX, and GROUP BY, ROLLUP and DISTINCT;
 - the same ORDER BY, window ORDER BY and comparisons over DAY TO SECOND and YEAR TO MONTH
   intervals from `make_dt_interval(d)` and `make_ym_interval(d)`, whose ordered rows are
-  recorded in Spark's order.
+  recorded in Spark's order;
+- 74 queries from #1163: a STRUCT comparison, a STRUCT IN list and a multi-column IN subquery
+  holding a calendar interval beside a field pair, and the STRUCT comparison without the interval as
+  a control, for 14 pairs: INT beside BIGINT, DOUBLE, DECIMAL, STRING, BOOLEAN, ARRAY and DATE,
+  STRING beside DATE, DATE beside TIMESTAMP, ARRAY<INT> beside ARRAY<BIGINT> and ARRAY<STRING>,
+  STRUCTs whose field widens or is renamed, and NULL beside INT; STRUCTs with renamed interval
+  fields or another field count; nested STRUCTs with duplicate, reordered, or renamed and widened
+  field names, and duplicate names inside a MAP; and NULLIF, GREATEST, a simple CASE, JOIN ON, a
+  single-column IN subquery and an ARRAY of STRUCTs, each beside INT and BIGINT and beside INT and
+  ARRAY.
 
 Spark rejects every ordering and comparison of a calendar interval during analysis with
 `DATATYPE_MISMATCH.INVALID_ORDERING_TYPE`, in both ANSI modes. Beside a value of another shape,
@@ -46,13 +55,22 @@ internal rows, collected through the Dataset API. `ConvertToLocalRelation` is ex
 
 `calendar_interval_ordering.rs` compares names, type families, nullability, metadata and typed
 rows at batch sizes 1 and 32, keeping row order where Spark's record does. An analysis failure
-must have Spark's condition. Three differences are retained, each at DAR's exact current result:
+must have Spark's condition. Five differences are retained, each at DAR's exact current result:
 - #1160: MAX, MIN, MAX_BY, SORT_ARRAY, ARRAY_SORT and ARRAY_MAX accept calendar intervals and
   return DAR's fields and rows, where Spark rejects them (24 records);
 - #1161: PIVOT also groups by the aggregate's argument column, so the PIVOT controls return a
   row per value (6 records);
 - #1090: `greatest(make_dt_interval(d), NULL)` is nullable where Spark declares it NOT NULL
-  (4 records).
+  (4 records);
+- #1176: DataFusion's comparison coercion, which decides whether a field beside a calendar
+  interval is compatible, accepts INT beside DECIMAL, STRING or DATE and STRING beside DATE in a
+  comparison, ARRAY<INT> beside ARRAY<STRING>, and INT beside DATE in an IN list or subquery.
+  Those records get the ordering error, and their controls give DAR's rows or errors, where
+  Spark reports a type mismatch. So does a nested STRUCT field renamed and widened, as Spark
+  requires equal names where a field widens. The INT beside BOOLEAN and ARRAY controls fail
+  without Spark's condition, and the renamed STRUCT control fails while optimizing (64 records);
+- #1122: the DATE beside TIMESTAMP control in America/Los_Angeles starts the DATE at UTC
+  midnight and gives false where Spark gives true (2 records).
 
 Recapture from the crate root:
 

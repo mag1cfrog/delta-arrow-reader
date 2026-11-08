@@ -11,6 +11,7 @@ use datafusion_common::metadata::FieldMetadata;
 use datafusion_common::tree_node::{Transformed, TreeNode};
 use datafusion_common::{DFSchema, DFSchemaRef, ScalarValue};
 use datafusion_expr::expr::{AggregateFunction, AggregateFunctionParams, WindowFunctionParams};
+use datafusion_expr::type_coercion::binary::comparison_coercion;
 use datafusion_expr::{
     AggregateUDF, BinaryExpr, ColumnarValue, ExprSchemable, ExpressionPlacement, Operator,
     ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
@@ -723,19 +724,19 @@ fn spark_error_type_name(data_type: &DataType) -> String {
     }
 }
 
-/// Whether `other` has the shape of `interval`, which holds a calendar interval, where a
-/// calendar interval sits: a NULL matches anything, and ARRAY and STRUCT shapes must match
-/// there. Positions without a calendar interval on either side are not compared, so an
-/// incompatible field beside one still gets the ordering error where Spark reports its type
-/// mismatch (#1163).
-fn matches_calendar_interval_shape(interval: &DataType, other: &DataType) -> bool {
-    if *interval == DataType::Null || *other == DataType::Null {
+/// Whether two operand types of an ordering check have a common type, as Spark checks before it
+/// rejects a calendar interval. A NULL matches anything. ARRAY elements, MAP entries and STRUCT
+/// fields are compared by position, and STRUCTs must have as many fields. Spark also compares
+/// STRUCT fields by position, but requires equal names where a field widens, which this check
+/// does not. A calendar interval matches only a calendar interval. Other types must have a
+/// common type under the comparison's own coercion, so DataFusion's name-matching STRUCT
+/// coercion is never used. Where that coercion differs from Spark's, so does this check
+/// (#1176).
+fn ordering_operand_types_compatible(left: &DataType, right: &DataType) -> bool {
+    if *left == DataType::Null || *right == DataType::Null {
         return true;
     }
-    if !holds_calendar_interval(interval) && !holds_calendar_interval(other) {
-        return true;
-    }
-    match (interval, other) {
+    match (left, right) {
         (
             DataType::Interval(IntervalUnit::MonthDayNano),
             DataType::Interval(IntervalUnit::MonthDayNano),
@@ -751,21 +752,26 @@ fn matches_calendar_interval_shape(interval: &DataType, other: &DataType) -> boo
             | DataType::FixedSizeList(right, _)
             | DataType::ListView(right)
             | DataType::LargeListView(right),
-        ) => matches_calendar_interval_shape(left.data_type(), right.data_type()),
+        ) => ordering_operand_types_compatible(left.data_type(), right.data_type()),
         (DataType::Struct(left), DataType::Struct(right)) => {
             left.len() == right.len()
                 && left.iter().zip(right.iter()).all(|(left, right)| {
-                    matches_calendar_interval_shape(left.data_type(), right.data_type())
+                    ordering_operand_types_compatible(left.data_type(), right.data_type())
                 })
         }
-        _ => false,
+        (DataType::Map(left, _), DataType::Map(right, _)) => {
+            ordering_operand_types_compatible(left.data_type(), right.data_type())
+        }
+        _ if holds_calendar_interval(left) || holds_calendar_interval(right) => false,
+        _ => comparison_coercion(left, right).is_some(),
     }
 }
 
 /// Spark's analysis of `function_name` over operands of `operand_types`
-/// (`TypeUtils.checkForOrderingExpr` after its type checks). A calendar interval beside an
-/// operand of another shape fails first with `mismatch_condition`; otherwise a calendar
-/// interval fails with `DATATYPE_MISMATCH.INVALID_ORDERING_TYPE`.
+/// (`TypeUtils.checkForOrderingExpr` after its type checks), where one holds a calendar
+/// interval. Operands without a common type, field by field, fail first with
+/// `mismatch_condition`; otherwise a calendar interval fails with
+/// `DATATYPE_MISMATCH.INVALID_ORDERING_TYPE`.
 pub(crate) fn reject_calendar_interval_ordering(
     operand_types: &[DataType],
     function_name: &str,
@@ -784,7 +790,7 @@ pub(crate) fn reject_calendar_interval_ordering(
         .join(", ");
     if operand_types
         .iter()
-        .any(|data_type| !matches_calendar_interval_shape(interval, data_type))
+        .any(|data_type| !ordering_operand_types_compatible(interval, data_type))
     {
         return Err(PlanError::analysis(format!(
             "[{mismatch_condition}] The operands of `{function_name}` have incompatible types: {names}. SQLSTATE: 42K09"

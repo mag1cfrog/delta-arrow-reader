@@ -1,12 +1,13 @@
-"""Capture Spark's rejection of ordering and comparing calendar intervals (#1149).
+"""Capture Spark's rejection of ordering and comparing calendar intervals (#1149, #1163).
 
-Records analyzed, optimized and executed schemas, typed internal-row values and failing
-stages, with the innermost Java exception of a failure, for ORDER BY, window ORDER BY and
-comparisons over calendar intervals built by MAKE_INTERVAL, as expressions, aliases,
-ordinals and constants, and for the same over DAY TO SECOND and YEAR TO MONTH intervals,
-which Spark orders. Every query runs in both ANSI modes in UTC and America/Los_Angeles. Run
-from the crate root in the reference environment described in README.md; the output path
-must not exist.
+Records analyzed, optimized and executed schemas, typed internal-row values and failing stages,
+with the innermost Java exception of a failure, for ORDER BY, window ORDER BY and comparisons
+over calendar intervals built by MAKE_INTERVAL, as expressions, aliases, ordinals and constants,
+for the same over DAY TO SECOND and YEAR TO MONTH intervals, which Spark orders, and for STRUCT
+comparisons, STRUCT IN lists and multi-column IN subqueries holding a calendar interval beside
+compatible and incompatible fields. Every query runs in both ANSI modes in UTC and
+America/Los_Angeles. Run from the crate root in the reference environment described in
+README.md; the output path must not exist.
 """
 import argparse
 import hashlib
@@ -216,6 +217,86 @@ QUERIES = [
      f"SELECT k, row_number() OVER (ORDER BY {DAY_TIME}) AS r FROM required"),
     ("day_time_less_than", f"SELECT k, {DAY_TIME} < INTERVAL '2' DAY AS r FROM required"),
     ("year_month_equal", f"SELECT k, {YEAR_MONTH} = INTERVAL '1' YEAR AS r FROM required"),
+]
+
+# #1163: a calendar interval beside another field whose types are compatible or not, in a
+# STRUCT comparison, a STRUCT IN list and a multi-column IN subquery, and the same comparison
+# without the interval.
+FIELD_PAIRS = [
+    ("int_bigint", "1", "1L"),
+    ("int_double", "1", "1.5D"),
+    ("int_decimal", "1", "1.5"),
+    # Spark cannot parse a bare STRING literal right after SELECT inside IN (...).
+    ("int_string", "1", "CAST('1' AS STRING)"),
+    ("int_boolean", "1", "true"),
+    ("int_array", "1", "array(1)"),
+    ("int_date", "1", "DATE '2024-01-01'"),
+    ("string_date", "'2024-01-01'", "DATE '2024-01-01'"),
+    ("date_timestamp", "DATE '2024-01-01'", "TIMESTAMP '2024-01-01 00:00:00'"),
+    ("array_int_bigint", "array(1)", "array(1L)"),
+    ("array_int_string", "array(1)", "array('a')"),
+    ("struct_widening", "named_struct('x', 1)", "named_struct('x', 1L)"),
+    ("struct_names", "named_struct('x', 1)", "named_struct('y', 1)"),
+    ("null_int", "NULL", "1"),
+]
+for pair, left, right in FIELD_PAIRS:
+    QUERIES += [
+        (f"field_{pair}_struct_equal",
+         f"SELECT k, named_struct('a', {left}, 'i', {CALENDAR}) = "
+         f"named_struct('a', {right}, 'i', {CALENDAR}) AS r FROM required"),
+        (f"field_{pair}_struct_in",
+         f"SELECT k, named_struct('a', {left}, 'i', {CALENDAR}) IN "
+         f"(named_struct('a', {right}, 'i', {CALENDAR})) AS r FROM required"),
+        (f"field_{pair}_in_subquery",
+         f"SELECT k FROM required WHERE ({left}, {CALENDAR}) IN "
+         f"(SELECT {right}, make_interval(0, 0, 0, 1))"),
+        (f"field_{pair}_control",
+         f"SELECT k, named_struct('a', {left}, 'b', d) = named_struct('a', {right}, 'b', d) AS r "
+         "FROM required"),
+    ]
+# The other check sites, for a compatible and an incompatible pair.
+for pair, left, right in [("int_bigint", "1", "1L"), ("int_array", "1", "array(1)")]:
+    left_struct = f"named_struct('a', {left}, 'i', {CALENDAR})"
+    right_struct = f"named_struct('a', {right}, 'i', {CALENDAR})"
+    QUERIES += [
+        (f"field_{pair}_nullif",
+         f"SELECT k, nullif({left_struct}, {right_struct}) AS r FROM required"),
+        (f"field_{pair}_greatest",
+         f"SELECT k, greatest({left_struct}, {right_struct}) AS r FROM required"),
+        (f"field_{pair}_simple_case",
+         f"SELECT k, CASE {left_struct} WHEN {right_struct} THEN 1 ELSE 0 END AS r "
+         "FROM required"),
+        (f"field_{pair}_join",
+         f"SELECT a.k FROM required a JOIN required b ON "
+         f"named_struct('a', {left}, 'i', make_interval(0, 0, 0, a.d)) = "
+         f"named_struct('a', {right}, 'i', make_interval(0, 0, 0, b.d))"),
+        (f"field_{pair}_single_in_subquery",
+         f"SELECT k FROM required WHERE {left_struct} IN "
+         f"(SELECT named_struct('a', {right}, 'i', make_interval(0, 0, 0, 1)))"),
+        (f"field_{pair}_array_of_struct",
+         f"SELECT k, array({left_struct}) = array({right_struct}) AS r FROM required"),
+    ]
+QUERIES += [
+    ("field_duplicate_names_struct_equal",
+     f"SELECT k, named_struct('a', named_struct('x', 1, 'x', true), 'i', {CALENDAR}) = "
+     f"named_struct('a', named_struct('x', 1L, 'x', false), 'i', {CALENDAR}) AS r FROM required"),
+    ("field_reordered_names_struct_equal",
+     f"SELECT k, named_struct('a', named_struct('x', 1, 'y', true), 'i', {CALENDAR}) = "
+     f"named_struct('a', named_struct('y', IF(k > 5, NULL, 2), 'x', false), 'i', {CALENDAR}) "
+     "AS r FROM required"),
+    ("field_map_duplicate_names_struct_equal",
+     f"SELECT k, named_struct('a', map('k', named_struct('x', 1, 'x', true)), 'i', {CALENDAR}) = "
+     f"named_struct('a', map('k', named_struct('x', 1L, 'x', false)), 'i', {CALENDAR}) AS r "
+     "FROM required"),
+    ("field_renamed_widened_struct_equal",
+     f"SELECT k, named_struct('a', named_struct('x', 1), 'i', {CALENDAR}) = "
+     f"named_struct('a', named_struct('y', 1L), 'i', {CALENDAR}) AS r FROM required"),
+    ("field_interval_names_struct_equal",
+     f"SELECT k, named_struct('i', {CALENDAR}) = named_struct('j', {CALENDAR}) AS r "
+     "FROM required"),
+    ("field_count_struct_equal",
+     f"SELECT k, named_struct('a', 1, 'i', {CALENDAR}) = named_struct('i', {CALENDAR}) AS r "
+     "FROM required"),
 ]
 
 
