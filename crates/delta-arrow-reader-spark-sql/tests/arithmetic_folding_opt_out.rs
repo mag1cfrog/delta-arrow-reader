@@ -7,11 +7,12 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
 };
 
-use arrow::datatypes::{DataType, Field, Schema};
+use arrow::datatypes::{DataType, Field, FieldRef, Schema};
 use datafusion::common::{Result, ScalarValue, exec_err};
 use datafusion::execution::SessionStateBuilder;
 use datafusion::logical_expr::{
-    ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
+    ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature,
+    Volatility,
 };
 use datafusion::physical_plan::collect;
 use datafusion::prelude::{SessionConfig, SessionContext};
@@ -29,6 +30,7 @@ struct CountedIdentity {
     name: &'static str,
     signature: Signature,
     error_if_invoked: bool,
+    clone_argument_field: bool,
     calls: Arc<AtomicUsize>,
 }
 
@@ -37,6 +39,7 @@ impl PartialEq for CountedIdentity {
         self.name == other.name
             && self.signature == other.signature
             && self.error_if_invoked == other.error_if_invoked
+            && self.clone_argument_field == other.clone_argument_field
     }
 }
 impl Eq for CountedIdentity {}
@@ -45,6 +48,7 @@ impl Hash for CountedIdentity {
         self.name.hash(state);
         self.signature.hash(state);
         self.error_if_invoked.hash(state);
+        self.clone_argument_field.hash(state);
     }
 }
 
@@ -60,6 +64,22 @@ impl ScalarUDFImpl for CountedIdentity {
     }
     fn return_type(&self, arguments: &[DataType]) -> Result<DataType> {
         Ok(arguments[0].clone())
+    }
+    fn return_field_from_args(&self, arguments: ReturnFieldArgs) -> Result<FieldRef> {
+        if self.clone_argument_field {
+            return Ok(Arc::clone(&arguments.arg_fields[0]));
+        }
+        // Preserve DataFusion's default nullable return Field for the original probes.
+        let types = arguments
+            .arg_fields
+            .iter()
+            .map(|field| field.data_type().clone())
+            .collect::<Vec<_>>();
+        Ok(Arc::new(Field::new(
+            self.name(),
+            self.return_type(&types)?,
+            true,
+        )))
     }
     fn invoke_with_args(&self, arguments: ScalarFunctionArgs) -> Result<ColumnarValue> {
         self.calls.fetch_add(1, Ordering::SeqCst);
@@ -88,10 +108,13 @@ fn session(spark: bool, error_if_invoked: bool) -> (SessionContext, [Arc<AtomicU
     for (name, calls) in [
         ("retain_constant", Arc::clone(&retained)),
         ("index_callback", Arc::clone(&retained)),
+        ("mixed_counted_producer", Arc::clone(&retained)),
         ("allowed_constant", Arc::clone(&allowed)),
     ] {
         let signature = if name == "index_callback" {
             Signature::any(1, Volatility::Immutable)
+        } else if name == "mixed_counted_producer" {
+            Signature::exact(vec![DataType::Int32], Volatility::Immutable)
         } else {
             Signature::exact(vec![DataType::Float64], Volatility::Immutable)
         };
@@ -99,6 +122,7 @@ fn session(spark: bool, error_if_invoked: bool) -> (SessionContext, [Arc<AtomicU
             name,
             signature,
             error_if_invoked: error_if_invoked && name != "allowed_constant",
+            clone_argument_field: name == "mixed_counted_producer",
             calls,
         });
         let function = if name == "retain_constant" {
@@ -124,6 +148,7 @@ struct FoldingCase {
     rows: Vec<Vec<ScalarValue>>,
     expected_opt_out_calls: usize,
     permitted_planning_limit: usize,
+    expected_execution_error: Option<&'static str>,
 }
 
 async fn check_case(
@@ -224,8 +249,19 @@ async fn check_case(
             );
             json!({"error":error.to_string(), "root_error":error.find_root().to_string(), "error_stage":"execute"})
         }
-        Err(error) => return Err(error.into()),
+        Err(error) => match case.expected_execution_error {
+            Some(expected) => {
+                assert_eq!(error.find_root().to_string(), expected);
+                json!({"error":error.to_string(), "root_error":error.find_root().to_string(), "error_stage":"execute"})
+            }
+            None => return Err(error.into()),
+        },
         Ok(batches) => {
+            assert!(
+                case.expected_execution_error.is_none(),
+                "missing execution error: {}",
+                case.sql
+            );
             assert!(
                 !error_if_invoked || case.expected_opt_out_calls == 0,
                 "missing callback error: {}",
@@ -281,6 +317,7 @@ fn scalar_case(
         rows,
         expected_opt_out_calls,
         permitted_planning_limit,
+        expected_execution_error: None,
     }
 }
 
@@ -360,6 +397,7 @@ async fn arithmetic_descendants_aliases_and_parents_wait_for_execution() -> Test
                             ))]],
                             expected_opt_out_calls: 1,
                             permitted_planning_limit: 0,
+                            expected_execution_error: None,
                         },
                         spark,
                         ansi,
@@ -396,6 +434,7 @@ async fn scalar_parents_and_cast_producers_preserve_empty_and_live_opt_outs() ->
                             fields[0].clone(), Field::new("q", DataType::Int32, false)],
                         rows:if empty {vec![]} else {vec![vec![if data_type == DataType::Utf8 {ScalarValue::Utf8(Some(value.into()))} else {ScalarValue::Int64(Some(1))},ScalarValue::Int32(Some(1))]]},
                         expected_opt_out_calls:usize::from(!empty),permitted_planning_limit:0,
+                        expected_execution_error:None,
                     }, true, ansi, error_if_invoked).await?;
                 }
             }
@@ -493,6 +532,11 @@ async fn required_children_and_siblings_keep_the_first_error_without_invoking_op
             "Arrow error: Divide by zero error",
         ),
         (
+            "SELECT (1 DIV 0)+ARRAY(mixed_counted_producer(7))[0] AS r",
+            vec![Field::new("r", DataType::Int64, true)],
+            "Arrow error: Divide by zero error",
+        ),
+        (
             "SELECT retain_constant(CAST('bad' AS INT)) AS r",
             vec![Field::new("r", DataType::Float64, true)],
             "Arrow error: Cast error: Cannot cast string 'bad' to value of Int32 type",
@@ -575,6 +619,111 @@ async fn required_children_and_siblings_keep_the_first_error_without_invoking_op
                 error_if_invoked,
             )
             .await?;
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn array_index_parent_inference_does_not_invoke_opaque_int_producers() -> TestResult {
+    for ansi in [true, false] {
+        for error_if_invoked in [false, true] {
+            for (expression, data_type, value, physical_nullable) in [
+                (
+                    "(1 DIV 1)+ARRAY(mixed_counted_producer(7))[0]",
+                    DataType::Int64,
+                    ScalarValue::Int64(Some(8)),
+                    true,
+                ),
+                (
+                    "ARRAY(mixed_counted_producer(7))[0]+(1 DIV 1)",
+                    DataType::Int64,
+                    ScalarValue::Int64(Some(8)),
+                    true,
+                ),
+                (
+                    "1+ARRAY(mixed_counted_producer(7))[0]",
+                    DataType::Int32,
+                    ScalarValue::Int32(Some(8)),
+                    true,
+                ),
+                (
+                    "ARRAY(mixed_counted_producer(7))[0]+1",
+                    DataType::Int32,
+                    ScalarValue::Int32(Some(8)),
+                    true,
+                ),
+                (
+                    "(1 DIV 1)+mixed_counted_producer(7)",
+                    DataType::Int64,
+                    ScalarValue::Int64(Some(8)),
+                    false,
+                ),
+                (
+                    "mixed_counted_producer(7)+(1 DIV 1)",
+                    DataType::Int64,
+                    ScalarValue::Int64(Some(8)),
+                    false,
+                ),
+            ] {
+                let mut case = scalar_case(
+                    format!("SELECT {expression} AS r"),
+                    data_type,
+                    vec![vec![value]],
+                    1,
+                    0,
+                );
+                // An opaque index cannot prove the generated error branch unreachable during inference.
+                case.physical_fields[0] = case.physical_fields[0]
+                    .clone()
+                    .with_nullable(physical_nullable);
+                check_case(case, true, ansi, error_if_invoked).await?;
+            }
+            for spark in [true, false] {
+                let mut standalone = scalar_case(
+                    "SELECT mixed_counted_producer(CAST(7 AS INT)) AS r".into(),
+                    DataType::Int32,
+                    vec![vec![ScalarValue::Int32(Some(7))]],
+                    1,
+                    0,
+                );
+                standalone.analyzed_fields[0] =
+                    standalone.analyzed_fields[0].clone().with_nullable(false);
+                standalone.physical_fields[0] =
+                    standalone.physical_fields[0].clone().with_nullable(false);
+                check_case(standalone, spark, ansi, error_if_invoked).await?;
+                check_case(scalar_case(
+                    "SELECT CASE WHEN mixed_counted_producer(CAST(7 AS INT))=7 THEN CAST(NULL AS INT) ELSE CAST(8 AS INT) END AS r".into(),
+                    DataType::Int32, vec![vec![ScalarValue::Int32(None)]], 1, 0),
+                    spark, ansi, error_if_invoked).await?;
+            }
+            let mut reversed = scalar_case(
+                "SELECT ARRAY(mixed_counted_producer(7))[0]+(1 DIV 0) AS r".into(),
+                DataType::Int64,
+                vec![vec![ScalarValue::Int64(None)]],
+                usize::from(ansi),
+                0,
+            );
+            if ansi {
+                // The live left callback precedes the lazy right DIV error; its sentinel wins if it fails.
+                reversed.expected_execution_error = Some("Arrow error: Divide by zero error");
+            }
+            check_case(reversed, true, ansi, error_if_invoked).await?;
+            if !ansi {
+                check_case(
+                    scalar_case(
+                        "SELECT (1 DIV 0)+ARRAY(mixed_counted_producer(7))[0] AS r".into(),
+                        DataType::Int64,
+                        vec![vec![ScalarValue::Int64(None)]],
+                        0,
+                        0,
+                    ),
+                    true,
+                    ansi,
+                    error_if_invoked,
+                )
+                .await?;
+            }
         }
     }
     Ok(())
