@@ -13,7 +13,9 @@ use sail_common_datafusion::utils::items::ItemTaker;
 use sail_logical_plan::sort::SortWithinPartitionsNode;
 
 use crate::error::{PlanError, PlanResult};
-use crate::function::common::{check_orderable, preserve_hidden_sort_output_declaration};
+use crate::function::common::{
+    preserve_hidden_sort_output_declaration, reject_calendar_interval_sort_key,
+};
 use crate::function::sort_keys::spark_sort_key;
 use crate::resolver::PlanResolver;
 use crate::resolver::state::PlanResolverState;
@@ -43,7 +45,7 @@ impl PlanResolver<'_> {
         if let LogicalPlan::Sort(sort) = sort {
             for key in &sort.expr {
                 if let Ok(data_type) = key.expr.get_type(sort.input.schema()) {
-                    check_orderable(&data_type, "sortorder")?;
+                    reject_calendar_interval_sort_key(&data_type)?;
                 }
             }
         }
@@ -316,7 +318,7 @@ impl PlanResolver<'_> {
         // The ordering type is checked once the key is resolved, so that a calendar interval
         // fails with Spark's error instead of retrying the child plans.
         let sort_expr = self
-            .resolve_unchecked_sort_order(sort.clone(), true, plan.schema(), state)
+            .resolve_sort_order_without_type_check(sort.clone(), true, plan.schema(), state)
             .await;
         match sort_expr {
             Ok(sort_expr) => Ok(sort_expr),

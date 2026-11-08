@@ -3,7 +3,7 @@ use datafusion_expr::{ExprSchemable, expr};
 use sail_common::spec;
 
 use crate::error::{PlanError, PlanResult};
-use crate::function::common::check_orderable;
+use crate::function::common::reject_calendar_interval_sort_key;
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
 use crate::resolver::state::PlanResolverState;
@@ -43,16 +43,16 @@ impl PlanResolver<'_> {
         state: &mut PlanResolverState,
     ) -> PlanResult<expr::Sort> {
         let sort = self
-            .resolve_unchecked_sort_order(sort, resolve_literals, schema, state)
+            .resolve_sort_order_without_type_check(sort, resolve_literals, schema, state)
             .await?;
         if let Ok(data_type) = sort.expr.get_type(schema) {
-            check_orderable(&data_type, "sortorder")?;
+            reject_calendar_interval_sort_key(&data_type)?;
         }
         Ok(sort)
     }
 
-    /// A sort key without the ordering type check, for callers that try several plans.
-    pub(in super::super) async fn resolve_unchecked_sort_order(
+    /// A sort key without the calendar interval check, for callers that try several plans.
+    pub(in super::super) async fn resolve_sort_order_without_type_check(
         &self,
         sort: spec::SortOrder,
         resolve_literals: bool,

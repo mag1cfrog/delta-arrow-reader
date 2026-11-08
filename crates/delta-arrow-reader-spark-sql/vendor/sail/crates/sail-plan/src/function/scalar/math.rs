@@ -60,7 +60,7 @@ pub(crate) use super::integer_divide::SparkIntegerDivide;
 use crate::error::{PlanError, PlanResult};
 use crate::expression_errors::is_locally_evaluable;
 use crate::function::common::{
-    FunctionContextInput, ScalarFunction, ScalarFunctionInput, check_orderable,
+    FunctionContextInput, ScalarFunction, ScalarFunctionInput, reject_calendar_interval_ordering,
     without_metadata_annotations,
 };
 use crate::function::result_coercion::{coerce_to_temporal, is_temporal_type};
@@ -2775,9 +2775,7 @@ fn extremum_with_temporal_widening(
         .iter()
         .map(|argument| argument.get_type(schema))
         .collect::<Result<Vec<_>, _>>()?;
-    for data_type in &types {
-        check_orderable(data_type, name)?;
-    }
+    reject_calendar_interval_ordering(&types, name, "DATATYPE_MISMATCH.DATA_DIFF_TYPES")?;
     let temporal = types
         .iter()
         .all(|data_type| is_temporal_type(data_type) || *data_type == DataType::Null);

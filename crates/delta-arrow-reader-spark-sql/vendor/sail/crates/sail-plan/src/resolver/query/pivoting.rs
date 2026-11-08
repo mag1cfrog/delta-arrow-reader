@@ -18,7 +18,9 @@ use sail_function::scalar::explode;
 use sail_function::scalar::struct_function::StructFunction;
 
 use crate::error::{PlanError, PlanResult};
-use crate::function::common::{drop_inherited_column_metadata, spark_binary_expr};
+use crate::function::common::{
+    drop_inherited_column_metadata, holds_calendar_interval, spark_binary_expr,
+};
 use crate::function::scalar::UnpivotFieldDeclaration;
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
@@ -59,6 +61,12 @@ impl PlanResolver<'_> {
             1 => pivot_columns[0].clone(),
             _ => make_pivot_struct(pivot_columns.clone()),
         };
+        // Spark compares pivot values, so a calendar interval cannot be pivoted.
+        if holds_calendar_interval(&pivot_column.get_type(&schema)?) {
+            return Err(PlanError::analysis(
+                "[INCOMPARABLE_PIVOT_COLUMN] Invalid pivot column. Pivot columns must be comparable. SQLSTATE: 42818",
+            ));
+        }
 
         let aggregates = self
             .resolve_named_output_expressions(aggregate, &schema, state)

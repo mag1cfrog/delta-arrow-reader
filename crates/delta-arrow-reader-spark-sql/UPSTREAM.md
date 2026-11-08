@@ -291,15 +291,20 @@ DataFusion SQL are unchanged.
 
 ### Calendar interval ordering
 
-Spark cannot order or compare calendar intervals and rejects them during analysis with
-`DATATYPE_MISMATCH.INVALID_ORDERING_TYPE`. A shared check, `check_orderable`, does the same for
-a calendar interval, also inside an ARRAY or STRUCT, as a sort key of ORDER BY, SORT BY or a
-window ORDER BY, and as an operand of `=`, `<>`, `<`, `<=`, `>`, `>=`, `<=>`, BETWEEN, IN, NOT
-IN, GREATEST and LEAST. DAR sorted and compared them. The query sort resolver now tries child
-plans without the check and applies it once the sort node is built, so the type error is not
-taken for an unresolved key. GROUP BY and DISTINCT, which Spark allows, DAY TO SECOND and YEAR
-TO MONTH intervals, and native DataFusion SQL are unchanged. Ordering aggregates and array
-functions still accept calendar intervals (#1160). The
+Spark cannot order or compare calendar intervals and rejects them during analysis. Shared
+checks in `function/common.rs` do the same for a calendar interval, also inside an ARRAY or
+STRUCT. As a sort key of ORDER BY, SORT BY, a window ORDER BY or WITHIN GROUP, and as an
+operand of `=`, `<>`, `<`, `<=`, `>`, `>=`, `<=>`, IS [NOT] DISTINCT FROM, EQUAL_NULL, NULLIF,
+a simple CASE, BETWEEN, IN, NOT IN, IN subqueries, JOIN ON, USING and NATURAL JOIN, GREATEST
+and LEAST, it fails with `DATATYPE_MISMATCH.INVALID_ORDERING_TYPE`. Beside a non-NULL value of
+another type it fails first with Spark's `DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES` or
+`DATATYPE_MISMATCH.DATA_DIFF_TYPES`. A PIVOT over one fails with `INCOMPARABLE_PIVOT_COLUMN`,
+and a window PARTITION BY with `EXPRESSION_TYPE_IS_NOT_ORDERABLE`. DAR sorted, compared,
+pivoted and partitioned them. The query sort resolver tries child plans without the check and
+applies it once the sort node is built, so the type error is not taken for an unresolved key.
+GROUP BY, ROLLUP and DISTINCT, which Spark allows, DAY TO SECOND and YEAR TO MONTH intervals,
+and native DataFusion SQL are unchanged. Ordering aggregates and array functions still accept
+calendar intervals (#1160). The
 [calendar interval ordering references](tests/fixtures/calendar-interval-ordering/README.md)
 record the checks.
 

@@ -43,7 +43,7 @@ fn calendar_interval_ordering_references() -> TestResult<Vec<Value>> {
             |build| build.contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
         )
     );
-    assert_eq!(records.len() - 1, 152);
+    assert_eq!(records.len() - 1, 260);
     Ok(records)
 }
 
@@ -51,8 +51,7 @@ fn calendar_interval_ordering_references() -> TestResult<Vec<Value>> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum RetainedDifference {
     /// #1160: aggregates and array functions that order their values accept calendar
-    /// intervals, where Spark rejects them during analysis. Spark records no fields, so DAR's
-    /// rows are pinned.
+    /// intervals, where Spark rejects them during analysis. DAR's fields and rows are pinned.
     OrderingConsumer,
     /// #1159: MAKE_YM_INTERVAL of a NOT NULL argument is nullable, so a comparison over it is
     /// too, where Spark declares the result NOT NULL.
@@ -72,6 +71,24 @@ fn ordering_consumer_rows(id: &str) -> Option<Value> {
         "array_max" => json!([["0", days("1")], ["1", days("-2")], ["2", days("3")]]),
         _ => return None,
     })
+}
+
+/// DAR's current fields, at every stage, for each record of the #1160 class. MAKE_INTERVAL is
+/// nullable outside ANSI, so an ARRAY of it holds nullable elements there.
+fn ordering_consumer_schema(id: &str, ansi: bool) -> Option<Value> {
+    let field = |name: &str, data_type: Value, nullable: bool| json!({"name": name, "type": data_type, "nullable": nullable, "metadata": {}});
+    let k = field("k", json!("integer"), false);
+    let intervals = json!({"type": "array", "elementType": "interval", "containsNull": !ansi});
+    let fields = match id {
+        "max" | "min" => vec![field("r", json!("interval"), true)],
+        "max_by" => vec![field("r", json!("integer"), true)],
+        "sort_array" => vec![k, field("r", intervals, false)],
+        "array_sort" => vec![k, field("r", intervals, true)],
+        "array_max" => vec![k, field("r", json!("interval"), true)],
+        _ => return None,
+    };
+    let schema = json!({"type": "struct", "fields": fields});
+    Some(json!({"analyzed": schema, "optimized": schema, "executed": schema}))
 }
 
 fn retained_difference(case: &Value) -> Option<RetainedDifference> {
@@ -95,6 +112,8 @@ fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResu
             }
             let id = case["id"].as_str().ok_or("missing record id")?;
             let rows = ordering_consumer_rows(id).ok_or("missing DAR rows")?;
+            current["schema_stages"] =
+                ordering_consumer_schema(id, case["ansi"] == true).ok_or("missing DAR fields")?;
             current["expected"] = json!({"status": "ok", "rows": rows});
             current["spark_error_phase"] = Value::Null;
         }
