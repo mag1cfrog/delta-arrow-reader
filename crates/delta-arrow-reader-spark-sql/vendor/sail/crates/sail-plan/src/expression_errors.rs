@@ -250,7 +250,8 @@ pub(crate) fn permits_constant_preparation(expr: &Expr) -> Result<bool> {
             || matches!(expr, Expr::ScalarFunction(function)
             if !function.func.inner().supports_constant_folding())
             || matches!(expr, Expr::HigherOrderFunction(function)
-            if !function.func.supports_constant_folding()))
+            if !function.func.supports_constant_folding()
+                || function.func.signature().volatility == datafusion_expr::Volatility::Volatile))
     })?)
 }
 
@@ -1758,16 +1759,34 @@ pub(crate) fn is_locally_evaluable(expr: &Expr, allow_columns: bool) -> Result<b
     is_locally_evaluable_with_volatility(expr, allow_columns, false)
 }
 
+fn can_check_local_expression_errors(expr: &Expr, allow_columns: bool) -> Result<bool> {
+    local_expression_eligibility(expr, allow_columns, false, true)
+}
+
 fn is_locally_evaluable_with_volatility(
     expr: &Expr,
     allow_columns: bool,
     allow_volatile: bool,
 ) -> Result<bool> {
+    local_expression_eligibility(expr, allow_columns, allow_volatile, false)
+}
+
+fn local_expression_eligibility(
+    expr: &Expr,
+    allow_columns: bool,
+    allow_volatile: bool,
+    allow_opaque_higher_order_value_arguments: bool,
+) -> Result<bool> {
     let mut eligible = true;
     expr.apply(|node| {
         if let Some(bodies) = local_string_argument_bodies(node)? {
             for body in bodies {
-                if !is_locally_evaluable_with_volatility(body, allow_columns, allow_volatile)? {
+                if !local_expression_eligibility(
+                    body,
+                    allow_columns,
+                    allow_volatile,
+                    allow_opaque_higher_order_value_arguments,
+                )? {
                     eligible = false;
                     return Ok(TreeNodeRecursion::Stop);
                 }
@@ -1797,6 +1816,14 @@ fn is_locally_evaluable_with_volatility(
             | Expr::Like(_)
             | Expr::SimilarTo(_) => false,
             Expr::ScalarFunction(_) => !allow_volatile && node.is_volatile_node(),
+            // Check opaque value children; Lambda nodes still stop traversal below.
+            Expr::HigherOrderFunction(function)
+                if allow_opaque_higher_order_value_arguments
+                    && !function.func.supports_constant_folding() =>
+            {
+                !allow_volatile
+                    && function.func.signature().volatility == datafusion_expr::Volatility::Volatile
+            }
             _ => true,
         };
         if unsupported {
@@ -3864,23 +3891,73 @@ impl Prepare {
         expr: &Expr,
         schema: &DFSchemaRef,
         batch: &RecordBatch,
-        arguments_only: bool,
     ) -> Result<()> {
-        let evaluate = |_: &Expr, physical: &dyn PhysicalExpr| {
-            if arguments_only {
-                physical
-                    .downcast_ref::<ScalarFunctionExpr>()
-                    .ok_or_else(|| {
-                        datafusion_common::internal_datafusion_err!(
-                            "Expected a scalar function for argument preparation"
-                        )
-                    })?
-                    .check_eager_argument_errors(batch)
-            } else {
-                physical.evaluate(batch).map(|_| ())
+        self.check_local_expression_errors_with(expr, schema, |_, physical| {
+            physical.evaluate(batch).map(|_| ())
+        })
+    }
+
+    fn check_scalar_argument_errors(
+        &self,
+        expr: &Expr,
+        local_input: Option<(&DFSchemaRef, &RecordBatch)>,
+    ) -> Result<()> {
+        let constant_input;
+        let (schema, batch) = match local_input {
+            Some(input) => input,
+            None => {
+                constant_input = (
+                    Arc::new(DFSchema::empty()),
+                    RecordBatch::try_new_with_options(
+                        Arc::new(Schema::empty()),
+                        vec![],
+                        &RecordBatchOptions::new().with_row_count(Some(1)),
+                    )?,
+                );
+                (&constant_input.0, &constant_input.1)
             }
         };
-        self.check_local_expression_errors_with(expr, schema, evaluate)
+        let evaluate = |expression: &Expr, physical: &dyn PhysicalExpr| {
+            let Expr::ScalarFunction(function) = expression else {
+                return datafusion_common::internal_err!(
+                    "Expected a scalar function for argument preparation"
+                );
+            };
+            physical
+                .downcast_ref::<ScalarFunctionExpr>()
+                .ok_or_else(|| {
+                    datafusion_common::internal_datafusion_err!(
+                        "Expected a scalar function for argument preparation"
+                    )
+                })?
+                .check_argument_errors(batch, |index, input, active| {
+                    let argument = &function.args[index];
+                    if permits_constant_preparation(argument)? {
+                        return Ok(true);
+                    }
+                    let selected_input;
+                    let selected = match active {
+                        Some(mask) => {
+                            if !mask.has_true() {
+                                return Ok(false);
+                            }
+                            selected_input = filter_record_batch(input, mask)?;
+                            &selected_input
+                        }
+                        None => input,
+                    };
+                    self.check_expr(argument, true, local_input.map(|_| (schema, selected)))?;
+                    Ok(false)
+                })
+        };
+        if local_input.is_some() {
+            self.check_local_expression_errors_with(expr, schema, evaluate)
+        } else {
+            evaluate(
+                expr,
+                create_physical_expr(expr, schema, &self.props)?.as_ref(),
+            )
+        }
     }
 
     fn check_local_expression_errors_with(
@@ -4009,7 +4086,7 @@ impl Prepare {
                     Some(batch)
                         if check_local_inputs
                             && batch.num_rows() > 0
-                            && is_locally_evaluable(expr, true)? =>
+                            && can_check_local_expression_errors(expr, true)? =>
                     {
                         let expr = self.precheck_expression(expr.clone(), &schema, true)?;
                         if !permits_constant_preparation(&expr)? {
@@ -4019,7 +4096,7 @@ impl Prepare {
                                 self.check_expr(&expr, true, Some((&schema, &batch)))?;
                             }
                         } else if arithmetic {
-                            self.check_local_expression_errors(&expr, &schema, &batch, false)?;
+                            self.check_local_expression_errors(&expr, &schema, &batch)?;
                         } else if let Err(error) =
                             create_physical_expr(&expr, &schema, &self.props)?.evaluate(&batch)
                             && SparkArrayIndexError::is(&error)
@@ -4105,7 +4182,7 @@ impl Prepare {
             && permits_constant_preparation(expr)?
         {
             if let Some((schema, batch)) = local_input {
-                self.check_local_expression_errors(expr, schema, batch, false)?;
+                self.check_local_expression_errors(expr, schema, batch)?;
             } else {
                 self.eval_constant(expr)?;
             }
@@ -4114,7 +4191,7 @@ impl Prepare {
         // Native CASE selection keeps reached child errors without evaluating opaque results.
         if check_values
             && matches!(expr, Expr::Case(_))
-            && is_locally_evaluable(expr, local_input.is_some())?
+            && can_check_local_expression_errors(expr, local_input.is_some())?
         {
             let constant_input;
             let (schema, batch) = match local_input {
@@ -4192,21 +4269,22 @@ impl Prepare {
                 )
             };
         }
-        // Local AnyNull arguments retain their native row masks without invoking the opaque parent.
+        // Native NULL-sensitive selection checks reached arguments without invoking the opaque owner.
         if check_values
-            && let Some((schema, batch)) = local_input
             && let Expr::ScalarFunction(function) = expr
-            && function.func.inner().short_circuits_on_any_null_argument()
-            && !function.func.short_circuits()
+            && ((local_input.is_some()
+                && function.func.inner().short_circuits_on_any_null_argument())
+                || function.func.inner().short_circuits_on_null_first_arg()
+                || function.func.inner().returns_first_non_null_argument())
+            && !function
+                .func
+                .inner()
+                .downcast_ref::<SparkSubstring>()
+                .is_some_and(SparkSubstring::has_logical_arguments)
             && function.func.as_async().is_none()
-            && is_locally_evaluable(expr, true)?
-            && function.args.iter().try_fold(true, |allowed, argument| {
-                Ok::<_, datafusion_common::DataFusionError>(
-                    allowed && permits_constant_preparation(argument)?,
-                )
-            })?
+            && can_check_local_expression_errors(expr, local_input.is_some())?
         {
-            return self.check_local_expression_errors(expr, schema, batch, true);
+            return self.check_scalar_argument_errors(expr, local_input);
         }
         // An opaque parent still checks eager arguments; only conditional arguments defer errors.
         let conditional = match expr {
@@ -4218,6 +4296,20 @@ impl Prepare {
                         .downcast_ref::<SparkSubstring>()
                         .is_some_and(SparkSubstring::has_logical_arguments) =>
             {
+                if let Some((eager_arguments, conditional_arguments)) =
+                    function.func.conditional_arguments(&function.args)
+                {
+                    for argument in eager_arguments {
+                        self.check_expr(argument, check_values, local_input)?;
+                    }
+                    for argument in conditional_arguments {
+                        self.check_expr(argument, false, local_input)?;
+                    }
+                    return Ok(());
+                }
+                false
+            }
+            Expr::HigherOrderFunction(function) if function.func.short_circuits() => {
                 if let Some((eager_arguments, conditional_arguments)) =
                     function.func.conditional_arguments(&function.args)
                 {

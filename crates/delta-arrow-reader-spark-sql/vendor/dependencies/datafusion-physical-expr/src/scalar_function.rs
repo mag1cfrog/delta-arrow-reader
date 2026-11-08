@@ -38,7 +38,7 @@ use crate::PhysicalExpr;
 use crate::expressions::{Column, Literal};
 use crate::utils::plan_expression_input_projection;
 
-use arrow::array::{Array, RecordBatch};
+use arrow::array::{Array, BooleanArray, RecordBatch};
 use arrow::datatypes::{DataType, FieldRef, Schema};
 use datafusion_common::config::{ConfigEntry, ConfigOptions};
 use datafusion_common::{Result, ScalarValue, internal_err};
@@ -77,24 +77,41 @@ impl Debug for ScalarFunctionExpr {
 }
 
 impl ScalarFunctionExpr {
-    /// Check the eager argument path without invoking this function's kernel.
-    /// The caller must separately permit preparation of every argument.
-    pub fn check_eager_argument_errors(&self, batch: &RecordBatch) -> Result<()> {
-        if batch.num_rows() == 0 && self.short_circuit_any_arg_null {
+    /// Check native NULL-sensitive argument selection without invoking the owner kernel.
+    /// The callback checks each known input domain and may decline an opaque argument.
+    pub fn check_argument_errors(
+        &self,
+        batch: &RecordBatch,
+        mut prepare_argument: impl FnMut(usize, &RecordBatch, Option<&BooleanArray>) -> Result<bool>,
+    ) -> Result<()> {
+        if batch.num_rows() == 0 {
             return Ok(());
         }
-        match self.evaluate_eager_arguments(batch, true)?.1 {
-            Some(failure) => Err(failure.error),
-            None => Ok(()),
+        if self.returns_first_non_null {
+            return self.evaluate_first_non_null_with(batch, &mut prepare_argument).map(|_| ());
         }
+        if self.short_circuit_any_arg_null {
+            return match self.evaluate_eager_arguments(batch, true, &mut prepare_argument)?.1 {
+                Some(failure) => Err(failure.error),
+                None => Ok(()),
+            };
+        }
+        if self.short_circuit_first_arg_null {
+            return self.evaluate_legacy_arguments(
+                batch,
+                &mut prepare_argument,
+                &mut |_, _| Ok(ColumnarValue::Scalar(ScalarValue::try_new_null(self.return_type())?)),
+            ).map(|_| ());
+        }
+        internal_err!("Expected a NULL-sensitive function for argument preparation")
     }
 
     fn evaluate_eager_arguments(
         &self,
         batch: &RecordBatch,
         retain_row_errors: bool,
+        prepare_argument: &mut impl FnMut(usize, &RecordBatch, Option<&BooleanArray>) -> Result<bool>,
     ) -> Result<(Vec<ColumnarValue>, Option<RowEvaluationFailure>)> {
-        use arrow::array::BooleanArray;
 
         let mut active: Option<BooleanArray> = None;
         let mut args: Vec<ColumnarValue> = Vec::with_capacity(self.args.len());
@@ -109,7 +126,7 @@ impl ScalarFunctionExpr {
                         .map(EvaluatedRowPrefix::complete)
                 }
             };
-        for expr in &self.args {
+        for (index, expr) in self.args.iter().enumerate() {
             let prefix_batch;
             let input = if rows == batch.num_rows() {
                 batch
@@ -117,6 +134,9 @@ impl ScalarFunctionExpr {
                 prefix_batch = batch.slice(0, rows);
                 &prefix_batch
             };
+            if !prepare_argument(index, input, active.as_ref())? {
+                break;
+            }
             let mut output = match &active {
                 Some(mask) => {
                     if !mask.has_true() {
@@ -184,8 +204,11 @@ impl ScalarFunctionExpr {
         batch: &RecordBatch,
         retain_row_errors: bool,
     ) -> Result<EvaluatedRowPrefix> {
-        let (args, pending_failure) =
-            self.evaluate_eager_arguments(batch, retain_row_errors)?;
+        let (args, pending_failure) = self.evaluate_eager_arguments(
+            batch,
+            retain_row_errors,
+            &mut |_, _, _| Ok(true),
+        )?;
         let rows = pending_failure
             .as_ref()
             .map_or(batch.num_rows(), |failure| failure.row_index);
@@ -215,21 +238,38 @@ impl ScalarFunctionExpr {
     }
 
     fn evaluate_first_non_null(&self, batch: &RecordBatch) -> Result<ColumnarValue> {
+        self.evaluate_first_non_null_with(batch, &mut |_, _, _| Ok(true))
+    }
+
+    fn evaluate_first_non_null_with(
+        &self,
+        batch: &RecordBatch,
+        prepare_argument: &mut impl FnMut(usize, &RecordBatch, Option<&BooleanArray>) -> Result<bool>,
+    ) -> Result<ColumnarValue> {
         use arrow::compute::{is_null, kernels::zip::zip};
 
         let Some((first, rest)) = self.args.split_first() else {
             return internal_err!("{} requires at least one argument", self.name);
         };
+        if !prepare_argument(0, batch, None)? {
+            return Ok(ColumnarValue::Scalar(ScalarValue::try_new_null(self.return_type())?));
+        }
         let mut result = first.evaluate(batch)?;
-        for expr in rest {
+        for (index, expr) in rest.iter().enumerate() {
             result = match result {
                 ColumnarValue::Scalar(value) if value.is_null() => {
+                    if !prepare_argument(index + 1, batch, None)? {
+                        return Ok(ColumnarValue::Scalar(value));
+                    }
                     expr.evaluate(batch)?
                 }
                 ColumnarValue::Scalar(_) => break,
                 ColumnarValue::Array(array) => {
                     let pending = is_null(&array)?;
                     if pending.true_count() == 0 {
+                        return Ok(ColumnarValue::Array(array));
+                    }
+                    if !prepare_argument(index + 1, batch, Some(&pending))? {
                         return Ok(ColumnarValue::Array(array));
                     }
                     if pending.true_count() == batch.num_rows() {
@@ -330,9 +370,25 @@ impl ScalarFunctionExpr {
         if self.short_circuit_any_arg_null {
             return self.evaluate_eager_and_invoke(batch, false)?.into_result();
         }
+        self.evaluate_legacy_arguments(
+            batch,
+            &mut |_, _, _| Ok(true),
+            &mut |input, args| self.invoke_evaluated(input, args),
+        )
+    }
+
+    fn evaluate_legacy_arguments(
+        &self,
+        batch: &RecordBatch,
+        prepare_argument: &mut impl FnMut(usize, &RecordBatch, Option<&BooleanArray>) -> Result<bool>,
+        invoke_result: &mut impl FnMut(&RecordBatch, Vec<ColumnarValue>) -> Result<ColumnarValue>,
+    ) -> Result<ColumnarValue> {
         let Some(first) = self.args.first() else {
-            return self.invoke_evaluated(batch, Vec::new());
+            return invoke_result(batch, Vec::new());
         };
+        if !prepare_argument(0, batch, None)? {
+            return Ok(ColumnarValue::Scalar(ScalarValue::try_new_null(self.return_type())?));
+        }
         let first = first.evaluate(batch)?;
         if self.short_circuit_first_arg_null {
             use arrow::array::{Array, BooleanArray, new_null_array};
@@ -366,11 +422,12 @@ impl ScalarFunctionExpr {
                             };
                         let mut args = Vec::with_capacity(self.args.len());
                         args.push(ColumnarValue::Array(selected_first));
-                        for expr in &self.args[1..] {
-                            args.push(expr.evaluate(&selected)?);
+                        for (index, expr) in self.args[1..].iter().enumerate() {
+                            if prepare_argument(index + 1, &selected, None)? {
+                                args.push(expr.evaluate(&selected)?);
+                            }
                         }
-                        let result = self
-                            .invoke_evaluated(&selected, args)?
+                        let result = invoke_result(&selected, args)?
                             .into_array(selected.num_rows())?;
                         return Ok(ColumnarValue::Array(scatter(
                             &mask,
@@ -383,10 +440,12 @@ impl ScalarFunctionExpr {
         }
         let mut args = Vec::with_capacity(self.args.len());
         args.push(first);
-        for expr in &self.args[1..] {
-            args.push(expr.evaluate(batch)?);
+        for (index, expr) in self.args[1..].iter().enumerate() {
+            if prepare_argument(index + 1, batch, None)? {
+                args.push(expr.evaluate(batch)?);
+            }
         }
-        self.invoke_evaluated(batch, args)
+        invoke_result(batch, args)
     }
 
     /// Create a new Scalar function

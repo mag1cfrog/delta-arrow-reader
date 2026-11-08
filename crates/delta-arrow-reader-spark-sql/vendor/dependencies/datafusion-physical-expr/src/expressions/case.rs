@@ -19,7 +19,7 @@
 mod literal_lookup_table;
 
 use super::{Column, Literal};
-use crate::{PhysicalExpr, ScalarFunctionExpr};
+use crate::{HigherOrderFunctionExpr, PhysicalExpr, ScalarFunctionExpr};
 use crate::expressions::{LambdaExpr, LambdaVariable, lit, try_cast};
 use crate::utils::rewrite_expr_columns;
 use arrow::array::*;
@@ -1504,7 +1504,10 @@ fn evaluate_predicate(predicate: &Arc<dyn PhysicalExpr>) -> Result<Option<bool>>
     if predicate.exists(|expr| {
         Ok(expr
             .downcast_ref::<ScalarFunctionExpr>()
-            .is_some_and(|function| !function.fun().inner().supports_constant_folding()))
+            .is_some_and(|function| !function.fun().inner().supports_constant_folding())
+            || expr
+                .downcast_ref::<HigherOrderFunctionExpr>()
+                .is_some_and(|function| !function.fun().supports_constant_folding()))
     })? {
         return Ok(None);
     }
