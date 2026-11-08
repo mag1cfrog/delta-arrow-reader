@@ -4,8 +4,9 @@ Records analyzed, optimized and executed schemas, typed internal-row values and 
 stages, with the innermost Java exception of a failure, for TRY_MAKE_INTERVAL with literal,
 column and NULL arguments, every argument count from none to eight, overflowing months, days
 and values beyond Arrow's nanoseconds, BIGINT, DECIMAL, DOUBLE, STRING, malformed STRING and
-BOOLEAN arguments, NULL arguments before failing ones, and for TRY_MAKE_INTERVAL in a
-TIMESTAMP subtraction and in TRY_ADD. Every query runs in both ANSI modes in UTC and
+BOOLEAN arguments, malformed STRING seconds, NULL arguments before failing ones, unaliased
+generated names, and for TRY_MAKE_INTERVAL in a TIMESTAMP subtraction and in TRY_ADD and
+TRY_SUBTRACT, with constant failing casts beside a column. Every query runs in both ANSI modes in UTC and
 America/Los_Angeles. Run from the crate root in the reference environment described in
 README.md; the output path must not exist.
 """
@@ -100,6 +101,18 @@ COLUMNS = [
      "inputs", "true"),
     ("try_add_invalid_string",
      "try_add(TIMESTAMP '2024-01-01 00:00:00', try_make_interval(0, 0, 0, t))", "others", "true"),
+    ("try_add_bigint_hours",
+     "try_add(TIMESTAMP '2024-01-01 00:00:00', try_make_interval(0, 0, 0, 0, b))", "others", "true"),
+    ("string_seconds_invalid", "try_make_interval(0, 0, 0, 0, 0, 0, t)", "others", "k = 1"),
+    ("try_add_constant_invalid_string", "try_add(timestamp_seconds(k), try_make_interval('x'))",
+     "required", "true"),
+    ("try_add_constant_bigint", "try_add(timestamp_seconds(k), try_make_interval(4294967297L))",
+     "required", "true"),
+    ("try_subtract_constant_invalid_seconds",
+     "try_subtract(timestamp_seconds(k), try_make_interval(0, 0, 0, 0, 0, 0, 'x'))",
+     "required", "true"),
+    ("try_add_constant_cast_in_column_call",
+     "try_add(TIMESTAMP '2024-01-01 00:00:00', try_make_interval(k, 'x'))", "required", "true"),
 ]
 
 LITERALS = [
@@ -127,6 +140,13 @@ LITERALS = [
     ("timestamp_minus_smallest_months",
      "TIMESTAMP '2024-01-01 00:00:00' - try_make_interval(-178956970, -8)"),
     ("try_add_invalid_string", "try_add(TIMESTAMP '2024-01-01 00:00:00', try_make_interval('x'))"),
+    ("string_seconds_invalid", "try_make_interval(0, 0, 0, 0, 0, 0, 'x')"),
+]
+
+# Unaliased queries, whose generated names Spark derives from all seven cast arguments.
+NAMES = [
+    ("name_years", "SELECT try_make_interval(1)"),
+    ("name_column", "SELECT k, try_make_interval(0, 0, 0, d) FROM required"),
 ]
 
 
@@ -136,6 +156,7 @@ def definitions():
         yield f"column_{name}", f"SELECT k, {expression} AS r FROM {table} WHERE {condition}"
     for name, expression in LITERALS:
         yield f"literal_{name}", f"SELECT {expression} AS r"
+    yield from NAMES
 
 
 def python_value(value, kind):
