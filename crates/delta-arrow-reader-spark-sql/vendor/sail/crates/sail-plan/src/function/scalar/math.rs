@@ -19,6 +19,7 @@ use sail_common_datafusion::literal::LiteralEvaluator;
 use sail_common_datafusion::utils::items::ItemTaker;
 use sail_function::error::generic_exec_err;
 use sail_function::scalar::datetime::negate_duration::NegateDuration;
+use sail_function::scalar::datetime::spark_date_to_timestamp::SparkDateToTimestamp;
 use sail_function::scalar::datetime::spark_subtract_timestamps::SparkSubtractTimestamps;
 use sail_function::scalar::datetime::spark_timestamp::SparkTimestamp;
 use sail_function::scalar::datetime::spark_timestamp_add_interval::SparkTimestampAddInterval;
@@ -380,6 +381,36 @@ fn is_ltz_subtraction(end: &DataType, start: &DataType) -> bool {
     (is_ltz(end) && (is_ltz(start) || local(start))) || (local(end) && is_ltz(start))
 }
 
+/// Whether Spark subtracts these types as a DATE and a TIMESTAMP_NTZ, in either order.
+fn is_date_ntz_subtraction(end: &DataType, start: &DataType) -> bool {
+    let date = |data_type: &DataType| matches!(data_type, DataType::Date32 | DataType::Date64);
+    let ntz = |data_type: &DataType| matches!(data_type, DataType::Timestamp(_, None));
+    (ntz(end) && date(start)) || (date(end) && ntz(start))
+}
+
+/// `end` minus `start`, a DATE and a TIMESTAMP_NTZ in either order, with `subtraction`. Spark
+/// casts the DATE to TIMESTAMP_NTZ at its midnight, a nullable cast that fails with
+/// `long overflow` beyond BIGINT microseconds, or gives NULL for `date_null_on_overflow`. The
+/// midnight is read here as the same instant in UTC.
+fn subtract_date_and_timestamp_ntz(
+    subtraction: SparkSubtractTimestamps,
+    (end, end_type): (Expr, &DataType),
+    (start, start_type): (Expr, &DataType),
+    date_null_on_overflow: bool,
+) -> Expr {
+    let operand = |argument, data_type: &DataType| match data_type {
+        DataType::Date32 | DataType::Date64 => ScalarUDF::from(SparkDateToTimestamp::new(
+            Arc::from("UTC"),
+            date_null_on_overflow,
+        ))
+        .call(vec![argument]),
+        DataType::Timestamp(TimeUnit::Microsecond, None) => argument,
+        _ => cast(argument, DataType::Timestamp(TimeUnit::Microsecond, None)),
+    };
+    ScalarUDF::from(subtraction.with_nullable_result())
+        .call(vec![operand(end, end_type), operand(start, start_type)])
+}
+
 /// `end` minus `start` with `subtraction`, after Spark's conversion of a DATE operand to a
 /// TIMESTAMP in the session time zone.
 fn subtract_timestamps(
@@ -448,9 +479,9 @@ fn try_add(input: ScalarFunctionInput) -> PlanResult<Expr> {
 }
 
 /// Spark's TRY_SUBTRACT: an interval from a TIMESTAMP or TIMESTAMP_NTZ; a TIMESTAMP and a
-/// TIMESTAMP, TIMESTAMP_NTZ, DATE or untyped NULL; and two TIMESTAMP_NTZ values subtract like
-/// `-` and give NULL where it fails. Other operands, including two DATE values or a DATE and a
-/// TIMESTAMP_NTZ, keep `SparkTrySubtract`.
+/// TIMESTAMP, TIMESTAMP_NTZ, DATE or untyped NULL; two TIMESTAMP_NTZ values; and a DATE and a
+/// TIMESTAMP_NTZ subtract like `-` and give NULL where it fails. Other operands, including two
+/// DATE values, keep `SparkTrySubtract`.
 fn try_subtract(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let ScalarFunctionInput {
         arguments,
@@ -481,6 +512,23 @@ fn try_subtract(input: ScalarFunctionInput) -> PlanResult<Expr> {
                 || (ntz(&end_type) && ntz(&start_type)) =>
         {
             difference(left, &end_type, right, &start_type)
+        }
+        (Ok(end_type), Ok(start_type)) if is_date_ntz_subtraction(&end_type, &start_type) => {
+            // Spark folds the cast of a constant DATE while optimizing, outside TRY, unless the
+            // whole subtraction is constant and folds inside it.
+            let foldable = |expr: &Expr| is_locally_evaluable(expr, false).unwrap_or(false);
+            let (date, other) = if matches!(end_type, DataType::Date32 | DataType::Date64) {
+                (&left, &right)
+            } else {
+                (&right, &left)
+            };
+            let date_null_on_overflow = !foldable(date) || foldable(other);
+            subtract_date_and_timestamp_ntz(
+                SparkSubtractTimestamps::try_subtract(),
+                (left, &end_type),
+                (right, &start_type),
+                date_null_on_overflow,
+            )
         }
         // Spark reads an untyped NULL beside a TIMESTAMP as a value of its type.
         (Ok(end_type @ DataType::Timestamp(TimeUnit::Microsecond, _)), Ok(DataType::Null)) => {
@@ -550,6 +598,14 @@ fn spark_minus(input: ScalarFunctionInput) -> PlanResult<Expr> {
                     (left, &end_type),
                     (right, &start_type),
                     &function_context.plan_config.session_timezone,
+                )
+            }
+            (Ok(end_type), Ok(start_type)) if is_date_ntz_subtraction(&end_type, &start_type) => {
+                subtract_date_and_timestamp_ntz(
+                    SparkSubtractTimestamps::new(),
+                    (left, &end_type),
+                    (right, &start_type),
+                    false,
                 )
             }
             (Ok(DataType::Date32), Ok(DataType::Duration(TimeUnit::Microsecond))) => {
