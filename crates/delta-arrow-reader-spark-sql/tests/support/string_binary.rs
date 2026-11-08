@@ -48,7 +48,13 @@ pub(crate) async fn register_inputs_with_receipts(
     session: &SessionContext, metadata: &Value, representation: usize, batch_size: usize,
 ) -> TestResult<Value> {
     let mut registrations = Vec::new();
-    register_inputs_impl(session, metadata, representation, batch_size, Some(&mut registrations))?;
+    if let Err(error) = register_inputs_impl(session, metadata, representation, batch_size, Some(&mut registrations)) {
+        c06_receipts::emit("provider_setup_failure",json!({"representation":representation,
+            "batch_size":batch_size,"target_partitions":session.state().config().target_partitions(),
+            "input_metadata":metadata}),json!({"registrations":registrations,
+                "error":c06_receipts::failure(error.as_ref(),"input_registration")}));
+        return Err(error);
+    }
     c06_receipts::provider_readbacks(session, registrations, encode_value).await
 }
 

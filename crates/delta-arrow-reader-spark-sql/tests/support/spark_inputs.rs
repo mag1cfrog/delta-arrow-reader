@@ -252,7 +252,14 @@ pub(crate) async fn register_recorded_inputs_with_slices_and_receipts(
     session: &SessionContext, metadata: &Value, batch_size: usize,
 ) -> TestResult<Value> {
     let mut registrations = Vec::new();
-    register_recorded_inputs_with_slices_impl(session, metadata, batch_size, Some(&mut registrations))?;
+    if let Err(error) = register_recorded_inputs_with_slices_impl(session, metadata, batch_size, Some(&mut registrations)) {
+        super::spark_results::c06_receipts::emit("provider_setup_failure",serde_json::json!({
+            "representation":null,"batch_size":batch_size,
+            "target_partitions":session.state().config().target_partitions(),"input_metadata":metadata}),
+            serde_json::json!({"registrations":registrations,
+                "error":super::spark_results::c06_receipts::failure(error.as_ref(),"input_registration")}));
+        return Err(error);
+    }
     super::spark_results::c06_receipts::provider_readbacks(
         session, registrations, super::spark_results::encode_value,
     ).await

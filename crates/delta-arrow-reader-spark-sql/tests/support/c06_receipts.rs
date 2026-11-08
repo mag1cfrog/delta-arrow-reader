@@ -130,6 +130,7 @@ pub(crate) fn registration(
 fn provider_failure(
     completed: &mut Vec<Value>,
     mut receipt: Value,
+    pending: Vec<Value>,
     error: &(dyn std::error::Error + 'static),
     stage: &str,
 ) -> Value {
@@ -137,6 +138,13 @@ fn provider_failure(
     receipt["provider"]["availability"] = availability(&receipt["provider"],
         &["schema", "readback_sql", "readback", "error"]);
     completed.push(receipt);
+    for mut receipt in pending {
+        receipt["provider"] = json!({"schema":null,"readback_sql":null,"readback":null,"error":null,
+            "attempt_status":"unattempted"});
+        receipt["provider"]["availability"] = availability(&receipt["provider"],
+            &["schema", "readback_sql", "readback", "error"]);
+        completed.push(receipt);
+    }
     json!({"providers":completed,"error":failure(error, stage)})
 }
 
@@ -146,7 +154,8 @@ pub(crate) async fn provider_readbacks(
     encode: impl Fn(&dyn Array, usize) -> TestResult<Value> + Copy,
 ) -> TestResult<Value> {
     let mut receipts = Vec::new();
-    for mut receipt in registrations {
+    let mut registrations = registrations.into_iter();
+    while let Some(mut receipt) = registrations.next() {
         receipt["provider"] = json!({"schema":null,"readback_sql":null,"readback":null,"error":null});
         let mut stage = "provider_lookup";
         let result: TestResult<()> = async {
@@ -167,7 +176,7 @@ pub(crate) async fn provider_readbacks(
             Ok(())
         }.await;
         if let Err(error) = result {
-            let retained = provider_failure(&mut receipts, receipt, error.as_ref(), stage);
+            let retained = provider_failure(&mut receipts, receipt, registrations.collect(), error.as_ref(), stage);
             emit("provider_failure",json!({"batch_size":session.state().config().batch_size(),
                 "target_partitions":session.state().config().target_partitions()}),retained);
             return Err(error);
@@ -208,13 +217,18 @@ fn receipts_retain_nested_actual_fields_batches_and_error_sources() -> TestResul
     assert!(observed["debug"].as_str().is_some_and(|text|text.contains("inner")));
     let completed=json!({"name":"completed","provider":{"readback":output}});
     let failed=json!({"name":"failed","provider":{"schema":null,"readback_sql":null,"readback":null,"error":null}});
+    let pending=json!({"name":"pending","registration":{"visible":output,"partitions":[]}});
     let mut providers=vec![completed.clone()];
-    let retained=provider_failure(&mut providers,failed,&error,"provider_lookup");
+    let retained=provider_failure(&mut providers,failed,vec![pending.clone()],&error,"provider_lookup");
     assert_eq!(retained["providers"][0],completed);
     assert_eq!(retained["providers"][1]["name"],"failed");
     assert_eq!(retained["providers"][1]["provider"]["error"]["stage"],"provider_lookup");
     assert_eq!(retained["providers"][1]["provider"]["error"]["chain"][1]["display"],"inner");
     assert_eq!(retained["providers"][1]["provider"]["availability"]["readback"],"null");
+    assert_eq!(retained["providers"].as_array().map(Vec::len),Some(3));
+    assert_eq!(retained["providers"][2]["registration"],pending["registration"]);
+    assert_eq!(retained["providers"][2]["provider"]["attempt_status"],"unattempted");
+    assert_eq!(retained["providers"][2]["provider"]["availability"]["readback"],"null");
     assert_eq!(retained["error"]["display"],error.to_string());
     assert_eq!(availability(&json!({"output_batches":null}),&["output_batches", "missing"]),
         json!({"output_batches":"null","missing":"absent"}));
