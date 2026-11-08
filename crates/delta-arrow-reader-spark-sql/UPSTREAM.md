@@ -242,6 +242,28 @@ constants, so a failing constant scaling or negation under either check returns
 a value. The expression-error analyzer's NULL-inspection precheck in the
 DataFusion simplifier fork now folds IS NOT NULL as well as IS NULL.
 
+### CAST and TRY_CAST admission
+
+Spark resolution checks casts delegated to DataFusion before returning a query,
+so NULL propagation and branch pruning cannot discard an unsupported type pair.
+Generic conversions and conversions after positional STRUCT field renaming use
+this check. Unsupported pairs report `DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION`,
+SQLSTATE `42K09`, and the original source and target types without including SQL,
+values or Field metadata. Cast-error type strings retain nested NOT NULL and
+Arrow storage constraints that can reject a conversion. Ordinary type/display
+strings retain their existing contract. Spark kernels keep their existing
+coercion and error phases; display names and metadata wrappers stay in place.
+
+Ordinary CAST reuses DataFusion's native conversion predicate, which selects
+name-based nested STRUCT validation or Arrow's type rules. TRY_CAST retains
+Arrow's separate rules. Type-only identity casts keep their existing bypass;
+explicit native target Fields still receive the previous compatibility checks.
+No values are evaluated to decide type admission.
+
+VARIANT uses separate conversion paths. Native capability
+does not establish all Spark ARRAY/STRUCT or mode-specific cast rules; this
+change does not add that broader validation.
+
 ### Interval addition and subtraction
 
 `+` and `-` of two DAY TO SECOND or two YEAR TO MONTH intervals use another local

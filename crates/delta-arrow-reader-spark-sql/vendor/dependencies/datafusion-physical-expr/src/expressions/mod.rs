@@ -1,3 +1,4 @@
+// Modified for the DAR Spark SQL runtime. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -42,7 +43,7 @@ pub use crate::aggregate::stats::StatsType;
 
 pub use binary::{BinaryExpr, binary, similar_to};
 pub use case::{CaseExpr, case};
-pub use cast::{CastExpr, cast};
+pub use cast::{CastExpr, can_cast_types, cast};
 pub use column::{Column, col, with_new_schema};
 pub use datafusion_expr::utils::format_state_name;
 pub use dynamic_filters::{DynamicFilterPhysicalExpr, Inner as DynamicFilterInner};

@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import struct
 from zipfile import ZipFile
 
 import pyspark
@@ -51,6 +52,14 @@ def decode(value, data_type):
     if isinstance(data_type, types.BooleanType):
         assert value in ["True", "False", "true", "false"], value
         return value.lower() == "true"
+    if isinstance(data_type, types.StringType):
+        assert isinstance(value, str), value
+        return value
+    if isinstance(data_type, types.BinaryType):
+        return bytes.fromhex(value)
+    if isinstance(data_type, (types.FloatType, types.DoubleType)):
+        encoding = "!f" if isinstance(data_type, types.FloatType) else "!d"
+        return struct.unpack(encoding, bytes.fromhex(value))[0]
     assert isinstance(data_type, types.IntegerType), data_type
     return int(value)
 

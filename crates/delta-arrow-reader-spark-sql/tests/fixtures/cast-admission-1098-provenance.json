@@ -1,0 +1,151 @@
+{
+  "format_version": 1,
+  "issue": 1098,
+  "request_sha256": "4e0a1b523714c098fb8180856d0088b8bd6db34d616fcc42fb9614ba04c91d37",
+  "spark_capture_sha256": "f3d6a6ff8f7c849fd78603582a6b9908bd721abb1cae70d6180ca0a166814961",
+  "capture_source_commit": "66a5108352f3e3067d2a74def10546cb96af05a6",
+  "spark_records": 30,
+  "original_records": 8,
+  "provider_readbacks": 32,
+  "source_receipts": [
+    {
+      "path": "/home/hanbo/repo/delta-arrow-reader-spark-sql/crates/delta-arrow-reader-spark-sql/tests/fixtures/capture_cast_admission_1098_spark.py",
+      "bytes": 10288,
+      "sha256": "a59341e7213141bca23b14f24139967e53940da2a5d6dfbaa4e1f4bcb64d87e0"
+    },
+    {
+      "path": "/home/hanbo/repo/delta-arrow-reader-spark-sql/crates/delta-arrow-reader-spark-sql/tests/fixtures/cast-admission-1098-cases.json",
+      "bytes": 24251,
+      "sha256": "4e0a1b523714c098fb8180856d0088b8bd6db34d616fcc42fb9614ba04c91d37"
+    },
+    {
+      "path": "/home/hanbo/repo/delta-arrow-reader-spark-sql/crates/delta-arrow-reader-spark-sql/tests/fixtures/capture_spark_requests.py",
+      "bytes": 9259,
+      "sha256": "21b574657bd930abd741b8dc0bd1ad608ce9ac151b28609449976bd776301885"
+    },
+    {
+      "path": "/home/hanbo/repo/delta-arrow-reader-spark-sql/crates/delta-arrow-reader-spark-sql/tests/fixtures/capture_date_range_747_spark.py",
+      "bytes": 22694,
+      "sha256": "b8ec7266c62a60a60262d8b0a988f712d8995c58c6a8410e105c13ac0afa3922"
+    },
+    {
+      "path": "/home/hanbo/repo/delta-arrow-reader-spark-sql/crates/delta-arrow-reader-spark-sql/tests/fixtures/capture_floating_group_keys_spark.py",
+      "bytes": 10379,
+      "sha256": "22ec8491dbb8373da0744f4d4ef0bdb0a94a26f51476a18d9abed3dd7f8c9356"
+    },
+    {
+      "path": "/home/hanbo/repo/delta-arrow-reader-spark-sql/crates/delta-arrow-reader-spark-sql/tests/fixtures/capture_window_name_stages_spark.py",
+      "bytes": 8959,
+      "sha256": "03de018cb18d673356aeb53d3e8b8f29c3b83b548804f5f851637bd9c9132879"
+    },
+    {
+      "path": "/home/hanbo/repo/delta-arrow-reader-spark-sql/crates/delta-arrow-reader-spark-sql/tests/fixtures/recapture_string_binary_spark.py",
+      "bytes": 13412,
+      "sha256": "3fa0da4a0a44fb7560097285442819f0e722af2c3791ce2622e02e64712d03b8"
+    },
+    {
+      "path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/new1098-independent-source-v3-root.py",
+      "bytes": 12142,
+      "sha256": "f6b9ad88309295f61d6865c67bfa43ed2f35e801bbab776090de640d0b0e831f"
+    },
+    {
+      "path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/new754-oracle-capture-v3.py",
+      "bytes": 17427,
+      "sha256": "eaaf2c1ad93a542a87f3b294739e09c1949802454451eaf66c5305ab1a1d8697"
+    }
+  ],
+  "runtime_identity": {
+    "owned_java_pid": 3180252,
+    "parent_and_process_group_verified": true,
+    "canonical_loaded_runtime_files": [
+      {
+        "kind": "spark_core",
+        "loaded_path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-array-null-2026-10-31/reference-venv/lib/python3.12/site-packages/pyspark/jars/spark-core_2.13-4.2.0.jar",
+        "resolved_path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-array-null-2026-10-31/reference-venv/lib/python3.12/site-packages/pyspark/jars/spark-core_2.13-4.2.0.jar",
+        "declared_pin_path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-array-null-2026-10-31/reference-venv/lib/python3.12/site-packages/pyspark/jars/spark-core_2.13-4.2.0.jar",
+        "bytes": 15977232,
+        "sha256": "8e0a03b66338a4a38c9089d9f798ab6a6c6583aefe93f910311704a5ec90ffc4"
+      },
+      {
+        "kind": "spark_sql",
+        "loaded_path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-array-null-2026-10-31/reference-venv/lib/python3.12/site-packages/pyspark/jars/spark-sql_2.13-4.2.0.jar",
+        "resolved_path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-array-null-2026-10-31/reference-venv/lib/python3.12/site-packages/pyspark/jars/spark-sql_2.13-4.2.0.jar",
+        "declared_pin_path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-array-null-2026-10-31/reference-venv/lib/python3.12/site-packages/pyspark/jars/spark-sql_2.13-4.2.0.jar",
+        "bytes": 14825720,
+        "sha256": "ec0a0d699c6c57300ee47ba5d54b4d1f71d3e5401fb90a2bcdcd83b942084dbf"
+      },
+      {
+        "kind": "spark_catalyst",
+        "loaded_path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-array-null-2026-10-31/reference-venv/lib/python3.12/site-packages/pyspark/jars/spark-catalyst_2.13-4.2.0.jar",
+        "resolved_path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-array-null-2026-10-31/reference-venv/lib/python3.12/site-packages/pyspark/jars/spark-catalyst_2.13-4.2.0.jar",
+        "declared_pin_path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-array-null-2026-10-31/reference-venv/lib/python3.12/site-packages/pyspark/jars/spark-catalyst_2.13-4.2.0.jar",
+        "bytes": 18637753,
+        "sha256": "aef4f68a687de8174d06c5cb451c48019847f90c0b0604ec1928ee313b2a6c40"
+      },
+      {
+        "kind": "pyspark_module",
+        "loaded_path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-array-null-2026-10-31/reference-venv/lib64/python3.12/site-packages/pyspark/__init__.py",
+        "resolved_path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-array-null-2026-10-31/reference-venv/lib/python3.12/site-packages/pyspark/__init__.py",
+        "declared_pin_path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-array-null-2026-10-31/reference-venv/lib/python3.12/site-packages/pyspark/__init__.py",
+        "bytes": 5098,
+        "sha256": "b44b02e935756b474889c2706c4b0bdaeaf0674e41149e2b84aacee5af91a2fe"
+      },
+      {
+        "kind": "python_executable",
+        "loaded_path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-array-null-2026-10-31/reference-venv/bin/python",
+        "resolved_path": "/usr/bin/python3.12",
+        "declared_pin_path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-array-null-2026-10-31/reference-venv/bin/python",
+        "bytes": 11544,
+        "sha256": "7b879a9aa6d30c197e4f3aaf00c55986d5388b6c56672252d2c08ca60eb7bca7"
+      },
+      {
+        "kind": "owned_java_executable",
+        "loaded_path": "/proc/3180252/exe",
+        "resolved_path": "/home/hanbo/.cache/hermit/pkg/openjdk-21.0.8_9/bin/java",
+        "declared_pin_path": "/home/hanbo/.cache/hermit/pkg/openjdk-21.0.8_9/bin/java",
+        "bytes": 12248,
+        "sha256": "90d0a6d25da103678013f193db078b90ed8aeb27b66ebe78e0149616c9c1b811"
+      }
+    ]
+  },
+  "runtime_manifest_sha256": "aa3091d8862b7cf3da2ee9d59a9202c71c7a33ebda2a4998446a0739d86cf2cd",
+  "runtime_file_count": 1474,
+  "owned_jvm_lifecycle": {
+    "spark_only": true,
+    "reads_expected_outputs": false,
+    "capture_pid": 3180251,
+    "foreign_gateway_reuse_rejected": true,
+    "capture_status": "completed",
+    "shutdown": {
+      "owned_gateway": true,
+      "errors": [],
+      "owned_pid": 3180252,
+      "spark.stop": "completed",
+      "gateway.shutdown": "completed",
+      "gateway.close": "completed",
+      "close_thread_finished": true,
+      "stdin_closed": true,
+      "exit_code": 0,
+      "reaped": true
+    }
+  },
+  "root_controller_sha256": "f6b9ad88309295f61d6865c67bfa43ed2f35e801bbab776090de640d0b0e831f",
+  "root_log_sha256": "7e57a14e20cdf2d489cb98b52b14d1c06701a527fb9f88ba9bba58ef78c9d00d",
+  "limits": [
+    "Fresh Linux Python 3.12 / JDK 21 capture of the exact four reported SQL forms and recovered provider inputs; original Mac JDK 17 raw illegal-cast records and their input manifest were not available.",
+    "Recovered provider carrier is branch fix/1092-substring-coerced-null-length at 57d9ef35ca41a596a3bb47547b4d82ea6a640812. Its eight valid queries are not reused as illegal-cast expectations.",
+    "Host standard library and OS dynamic libraries are outside the packaged runtime manifest.",
+    "Private capture and observer commits were not merged into the product branch. Source/runtime hashes and raw observations remain the reproduction identities."
+  ],
+  "prior_capture": {
+    "records": 26,
+    "sha256": "59f5e96d241a8542e07d8803fdb940c1dbbbdda1f4fae7cdec260c2c76a96219",
+    "request_sha256": "6a9734a155ed7cfc96d6129a09897d60539afcbd4dde5f7374993c70f662aa25",
+    "status": "Immutable v1 raw file retained in root evidence; v2 appended required_struct_child x both ANSI modes."
+  },
+  "prior_constraint_capture": {
+    "records": 28,
+    "sha256": "b8fd5b1010ba96f1cb8f8194b268052502a729f0a43956f6e0e02eb0faf9ed01",
+    "status": "Immutable v2 raw file retained in root evidence; v3 appended quoted_struct_field x both ANSI modes."
+  }
+}

@@ -1,10 +1,11 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
+use std::borrow::Cow;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
 
 use datafusion::arrow::array::Array;
 use datafusion::arrow::array::timezone::Tz;
-use datafusion::arrow::datatypes::{DataType, IntervalUnit, TimeUnit};
+use datafusion::arrow::datatypes::{DataType, Field, IntervalUnit, TimeUnit, UnionMode};
 use datafusion_common::{Result, ScalarValue, not_impl_err, plan_err};
 use datafusion_expr::expr;
 use half::f16;
@@ -160,6 +161,43 @@ impl SparkPlanFormatter {
     }
 
     pub fn data_type_to_simple_string(&self, data_type: &DataType) -> Result<String> {
+        self.format_data_type(data_type, false)
+    }
+
+    /// Retain nested nullability and storage constraints that can reject a cast.
+    pub fn data_type_to_cast_error_string(&self, data_type: &DataType) -> Result<String> {
+        self.format_data_type(data_type, true)
+    }
+
+    fn format_type_field_name(name: &str, quote: bool) -> Cow<'_, str> {
+        if !quote {
+            return Cow::Borrowed(name);
+        }
+        let mut characters = name.chars();
+        let simple = characters
+            .next()
+            .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+            && characters.all(|c| c.is_ascii_alphanumeric() || c == '_');
+        if simple {
+            Cow::Borrowed(name)
+        } else {
+            Cow::Owned(format!("`{}`", name.replace('`', "``")))
+        }
+    }
+
+    fn format_data_type(
+        &self,
+        data_type: &DataType,
+        include_cast_constraints: bool,
+    ) -> Result<String> {
+        let format_field_type = |field: &Field| -> Result<String> {
+            let mut type_name =
+                self.format_data_type(field.data_type(), include_cast_constraints)?;
+            if include_cast_constraints && !field.is_nullable() {
+                type_name.push_str(" not null");
+            }
+            Ok(type_name)
+        };
         match data_type {
             DataType::Null => Ok("void".to_string()),
             DataType::Binary
@@ -178,9 +216,10 @@ impl SparkPlanFormatter {
             DataType::Float16 => Ok("half float".to_string()),
             DataType::Float32 => Ok("float".to_string()),
             DataType::Float64 => Ok("double".to_string()),
-            DataType::Decimal128(precision, scale) | DataType::Decimal256(precision, scale) => {
-                Ok(format!("decimal({precision},{scale})"))
-            }
+            DataType::Decimal32(precision, scale)
+            | DataType::Decimal64(precision, scale)
+            | DataType::Decimal128(precision, scale)
+            | DataType::Decimal256(precision, scale) => Ok(format!("decimal({precision},{scale})")),
             DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => Ok("string".to_string()),
             DataType::Date32 => Ok("date".to_string()),
             DataType::Date64 => Ok("date64".to_string()),
@@ -210,50 +249,66 @@ impl SparkPlanFormatter {
             | DataType::FixedSizeList(field, _)
             | DataType::LargeList(field)
             | DataType::ListView(field)
-            | DataType::LargeListView(field) => Ok(format!(
-                "array<{}>",
-                self.data_type_to_simple_string(field.data_type())?
-            )),
+            | DataType::LargeListView(field) => Ok(format!("array<{}>", format_field_type(field)?)),
             DataType::Struct(fields) => {
                 let fields = fields
                     .iter()
                     .map(|field| {
                         Ok(format!(
                             "{}:{}",
-                            field.name(),
-                            self.data_type_to_simple_string(field.data_type())?
+                            Self::format_type_field_name(field.name(), include_cast_constraints),
+                            format_field_type(field)?
                         ))
                     })
                     .collect::<Result<Vec<String>>>()?;
                 Ok(format!("struct<{}>", fields.join(",")))
             }
-            DataType::Map(field, _keys_sorted) => {
+            DataType::Map(field, keys_sorted) => {
                 let DataType::Struct(fields) = field.data_type() else {
                     return plan_err!("expected a struct field for map data type");
                 };
                 let [key_field, value_field] = fields.as_ref() else {
                     return plan_err!("expected a struct field with two fields for map data type");
                 };
-                Ok(format!(
+                let map = format!(
                     "map<{},{}>",
-                    self.data_type_to_simple_string(key_field.data_type())?,
-                    self.data_type_to_simple_string(value_field.data_type())?
-                ))
+                    self.format_data_type(key_field.data_type(), include_cast_constraints)?,
+                    format_field_type(value_field)?
+                );
+                Ok(if include_cast_constraints && *keys_sorted {
+                    format!("{map} [keys_sorted=true]")
+                } else {
+                    map
+                })
             }
-            DataType::Union(_union_fields, _union_mode) => {
-                // TODO: Add union_fields and union_mode
-                Ok("union".to_string())
+            DataType::Union(_, _) if !include_cast_constraints => Ok("union".into()),
+            DataType::Union(fields, mode) => {
+                let mode = match mode {
+                    UnionMode::Dense => "dense_union",
+                    UnionMode::Sparse => "sparse_union",
+                };
+                let children = fields
+                    .iter()
+                    .map(|(type_id, field)| {
+                        Ok(format!(
+                            "{type_id}:{}:{}",
+                            Self::format_type_field_name(field.name(), include_cast_constraints),
+                            format_field_type(field)?
+                        ))
+                    })
+                    .collect::<Result<Vec<String>>>()?;
+                Ok(format!("{mode}<{}>", children.join(",")))
             }
             DataType::Dictionary(key_type, value_type) => Ok(format!(
                 "dictionary<{},{}>",
-                self.data_type_to_simple_string(key_type)?,
-                self.data_type_to_simple_string(value_type)?
+                self.format_data_type(key_type, include_cast_constraints)?,
+                self.format_data_type(value_type, include_cast_constraints)?
             )),
-            DataType::RunEndEncoded(_, _)
-            | DataType::Decimal32(_, _)
-            | DataType::Decimal64(_, _) => {
-                not_impl_err!("data type: {data_type:?}")
-            }
+            DataType::RunEndEncoded(run_ends, values) => Ok(format!(
+                "run_end_encoded<{},{}>",
+                format_field_type(run_ends)?,
+                format_field_type(values)?
+            )),
         }
     }
 
@@ -1444,6 +1499,71 @@ mod tests {
             ])?)))?,
             "struct(array(1, NULL) AS foo, struct(hello AS baz) AS bar)",
         );
+        Ok(())
+    }
+
+    #[test]
+    fn arrow_storage_type_names_omit_field_metadata() -> PlanResult<()> {
+        let encoded = DataType::RunEndEncoded(
+            Arc::new(Field::new("ends", DataType::Int32, false)),
+            Arc::new(
+                Field::new("values", DataType::Decimal32(7, 2), true)
+                    .with_metadata([("private".into(), "metadata-value".into())].into()),
+            ),
+        );
+        let nested = DataType::Struct(vec![Field::new("encoded", encoded, true)].into());
+        assert_eq!(
+            SparkPlanFormatter.data_type_to_simple_string(&nested)?,
+            "struct<encoded:run_end_encoded<int,decimal(7,2)>>"
+        );
+        assert_eq!(
+            SparkPlanFormatter.data_type_to_cast_error_string(&nested)?,
+            "struct<encoded:run_end_encoded<int not null,decimal(7,2)>>"
+        );
+        assert_eq!(
+            SparkPlanFormatter.data_type_to_simple_string(&DataType::Decimal64(15, 3))?,
+            "decimal(15,3)"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn cast_type_strings_escape_field_names_without_changing_simple_strings()
+    -> datafusion_common::Result<()> {
+        for (name, quoted) in [
+            ("x:int,y", "`x:int,y`"),
+            ("a`b", "`a``b`"),
+            ("a b", "`a b`"),
+            ("", "``"),
+            ("1x", "`1x`"),
+            ("x", "x"),
+        ] {
+            let fields = vec![Field::new(name, DataType::Binary, true)].into();
+            let structure = DataType::Struct(fields);
+            assert_eq!(
+                SparkPlanFormatter.data_type_to_cast_error_string(&structure)?,
+                format!("struct<{quoted}:binary>")
+            );
+            assert_eq!(
+                SparkPlanFormatter.data_type_to_simple_string(&structure)?,
+                format!("struct<{name}:binary>")
+            );
+            let union = DataType::Union(
+                arrow::datatypes::UnionFields::try_new(
+                    [7],
+                    [Field::new(name, DataType::Binary, true)],
+                )?,
+                UnionMode::Dense,
+            );
+            assert_eq!(
+                SparkPlanFormatter.data_type_to_cast_error_string(&union)?,
+                format!("dense_union<7:{quoted}:binary>")
+            );
+            assert_eq!(
+                SparkPlanFormatter.data_type_to_simple_string(&union)?,
+                "union"
+            );
+        }
         Ok(())
     }
 

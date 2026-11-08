@@ -2,7 +2,9 @@
 use std::ops::{Div, Mul};
 use std::sync::Arc;
 
+use arrow::compute::can_cast_types;
 use arrow::datatypes::{DataType, Field, Fields, IntervalUnit, TimeUnit};
+use datafusion::physical_expr::expressions::can_cast_types as can_cast_native_types;
 use datafusion_common::{DFSchemaRef, ScalarValue};
 use datafusion_expr::{ExprSchemable, ScalarUDF, cast, expr, lit, try_cast};
 use sail_common::spec;
@@ -230,7 +232,9 @@ impl PlanResolver<'_> {
                 | DataType::Struct(_)
                 | DataType::Map(_, _)
         );
-        let expr = match (expr_type, cast_to_type.clone(), is_try) {
+        // Spark kernels keep their existing coercion and error phases.
+        let mut delegated_cast_types = None;
+        let expr = match (expr_type.clone(), cast_to_type.clone(), is_try) {
             (DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View, DataType::Boolean, _) => {
                 ScalarUDF::new_from_impl(SparkCastStringToBoolean::new(
                     is_try || !self.config.ansi_mode,
@@ -399,10 +403,13 @@ impl PlanResolver<'_> {
                         .call(vec![expr]);
                 if renamed_target == to {
                     renamed
-                } else if is_try {
-                    try_cast(renamed, to)
                 } else {
-                    cast(renamed, to)
+                    delegated_cast_types = Some((renamed_target, to.clone(), is_try));
+                    if is_try {
+                        try_cast(renamed, to)
+                    } else {
+                        cast(renamed, to)
+                    }
                 }
             }
             (
@@ -439,9 +446,30 @@ impl PlanResolver<'_> {
                 )?)
                 .call(vec![expr])
             }
-            (_, to, true) => try_cast(expr, to),
-            (_, to, _) => cast(expr, to),
+            (from, to, is_try) => {
+                delegated_cast_types = Some((from, to.clone(), is_try));
+                if is_try {
+                    try_cast(expr, to)
+                } else {
+                    cast(expr, to)
+                }
+            }
         };
+        if let Some((source_type, target_type, is_try)) = delegated_cast_types {
+            let supported = source_type == target_type
+                || if is_try {
+                    can_cast_types(&source_type, &target_type)
+                } else {
+                    can_cast_native_types(&source_type, &target_type)
+                };
+            if !supported {
+                let source = SparkPlanFormatter.data_type_to_cast_error_string(&expr_type)?;
+                let target = SparkPlanFormatter.data_type_to_cast_error_string(&target_type)?;
+                return Err(PlanError::analysis(format!(
+                    "[DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION] cannot cast \"{source}\" to \"{target}\". SQLSTATE: 42K09"
+                )));
+            }
+        }
         Ok(expr)
     }
 }

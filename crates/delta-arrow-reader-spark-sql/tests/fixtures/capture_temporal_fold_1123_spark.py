@@ -32,10 +32,10 @@ FAMILY_COUNTS = {
     "explicit_offset_temporal_default": 12,
 }
 HELPERS = {
-    "capture_spark_requests.py": "1a813099731f8dc6bba26bb71bcc2fd56cd0b4e9c7b430f27a0a86950d35ef17",
+    "capture_spark_requests.py": "21b574657bd930abd741b8dc0bd1ad608ce9ac151b28609449976bd776301885",
     "capture_date_range_747_spark.py": "b8ec7266c62a60a60262d8b0a988f712d8995c58c6a8410e105c13ac0afa3922",
-    "capture_floating_group_keys_spark.py": "9db227451bea43d54e8dcd30d24501e78b18e752f22d971d285f863f058fd934",
-    "capture_window_name_stages_spark.py": "52a3efa953716f7c1770952990beb655de1414561f278ef65c25599d29739633",
+    "capture_floating_group_keys_spark.py": "22ec8491dbb8373da0744f4d4ef0bdb0a94a26f51476a18d9abed3dd7f8c9356",
+    "capture_window_name_stages_spark.py": "03de018cb18d673356aeb53d3e8b8f29c3b83b548804f5f851637bd9c9132879",
     "recapture_string_binary_spark.py": "3fa0da4a0a44fb7560097285442819f0e722af2c3791ce2622e02e64712d03b8",
 }
 AUTHOR_SQL = {
