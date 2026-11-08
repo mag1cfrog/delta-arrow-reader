@@ -244,6 +244,46 @@ pub(crate) fn register_recorded_inputs_with_slices(
     metadata: &Value,
     batch_size: usize,
 ) -> TestResult {
+    register_recorded_inputs_with_slices_impl(session, metadata, batch_size, None)
+}
+
+#[allow(dead_code, reason = "Only C06 callers request additive receipts.")]
+pub(crate) async fn register_recorded_inputs_with_slices_and_receipts(
+    session: &SessionContext,
+    metadata: &Value,
+    batch_size: usize,
+) -> TestResult<Value> {
+    let mut registrations = Vec::new();
+    if let Err(error) = register_recorded_inputs_with_slices_impl(
+        session,
+        metadata,
+        batch_size,
+        Some(&mut registrations),
+    ) {
+        super::spark_results::c06_receipts::emit(
+            "provider_setup_failure",
+            serde_json::json!({
+            "representation":null,"batch_size":batch_size,
+            "target_partitions":session.state().config().target_partitions(),"input_metadata":metadata}),
+            serde_json::json!({"registrations":registrations,
+                "error":super::spark_results::c06_receipts::failure(error.as_ref(),"input_registration")}),
+        );
+        return Err(error);
+    }
+    super::spark_results::c06_receipts::provider_readbacks(
+        session,
+        registrations,
+        super::spark_results::encode_value,
+    )
+    .await
+}
+
+fn register_recorded_inputs_with_slices_impl(
+    session: &SessionContext,
+    metadata: &Value,
+    batch_size: usize,
+    mut receipts: Option<&mut Vec<Value>>,
+) -> TestResult {
     for input in metadata["inputs"].as_array().ok_or("missing inputs")? {
         let mut storage = input.clone();
         let visible_rows = input["rows"].as_array().ok_or("missing rows")?.len();
@@ -257,6 +297,19 @@ pub(crate) fn register_recorded_inputs_with_slices(
         let mut partitions = vec![Vec::new(), Vec::new()];
         for (chunk, offset) in (0..visible_rows).step_by(batch_size).enumerate() {
             partitions[chunk % 2].push(batch.slice(offset, batch_size.min(visible_rows - offset)));
+        }
+        if let Some(receipts) = receipts.as_deref_mut() {
+            let mut receipt = super::spark_results::c06_receipts::registration(
+                input,
+                &storage,
+                &batch,
+                &partitions,
+                super::spark_results::encode_value,
+            )?;
+            receipt["registration"]["slice"] = serde_json::json!({
+                "offset":usize::from(input["native_slice"] == true),"length":visible_rows,
+                "storage_rows":storage.num_rows()});
+            receipts.push(receipt);
         }
         session.register_table(
             input["name"].as_str().ok_or("missing table name")?,
