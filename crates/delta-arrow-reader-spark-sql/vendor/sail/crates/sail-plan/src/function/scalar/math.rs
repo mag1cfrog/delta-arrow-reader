@@ -477,6 +477,8 @@ fn try_add(input: ScalarFunctionInput) -> PlanResult<Expr> {
         (Ok(DataType::Null), Ok(DataType::Timestamp(TimeUnit::Microsecond, _))) => {
             add(right, null_interval(left))
         }
+        // Spark adds two untyped NULLs as DOUBLE values.
+        (Ok(DataType::Null), Ok(DataType::Null)) => lit(ScalarValue::Float64(None)),
         _ => ScalarUDF::from(SparkTryAdd::new()).call(vec![left, right]),
     })
 }
@@ -531,6 +533,8 @@ fn try_subtract(input: ScalarFunctionInput) -> PlanResult<Expr> {
             let end = cast(left, start_type.clone());
             difference(end, &start_type, right, &start_type)
         }
+        // Spark subtracts two untyped NULLs as DOUBLE values.
+        (Ok(DataType::Null), Ok(DataType::Null)) => lit(ScalarValue::Float64(None)),
         _ => ScalarUDF::from(SparkTrySubtract::new()).call(vec![left, right]),
     })
 }

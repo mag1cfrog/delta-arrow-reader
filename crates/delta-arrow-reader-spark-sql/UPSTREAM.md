@@ -525,9 +525,9 @@ inside TRY (#1133). The
 [TRY timestamp references](tests/fixtures/try-timestamp-intervals/README.md) record the
 checks.
 
-`SparkTryAdd` and `SparkTrySubtract` also take two DAY TO SECOND intervals, which Spark adds
-and subtracts exactly with a nullable result that is NULL on overflow; they failed during
-planning. The
+`SparkTryAdd` and `SparkTrySubtract` also take two DAY TO SECOND intervals of any
+qualifiers, which Spark adds and subtracts exactly with a nullable result that is NULL on
+overflow; they failed during planning. Two untyped NULLs give a NULL DOUBLE, as in Spark. The
 [TRY interval references](tests/fixtures/try-day-time-intervals/README.md) record the checks.
 
 A DATE and a TIMESTAMP_NTZ, in either order, subtract with `-` and TRY_SUBTRACT like Spark:

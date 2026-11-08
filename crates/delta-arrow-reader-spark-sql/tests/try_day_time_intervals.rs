@@ -1,5 +1,5 @@
-//! TRY_ADD and TRY_SUBTRACT of DAY TO SECOND intervals add exactly and return NULL on overflow,
-//! like Spark.
+//! TRY_ADD and TRY_SUBTRACT of DAY TO SECOND intervals of every qualifier match Spark: exact
+//! arithmetic, NULL on overflow, nullability by stage and default column names.
 
 use std::sync::Arc;
 
@@ -41,7 +41,7 @@ fn interval_references() -> TestResult<Vec<Value>> {
             |build| build.contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
         )
     );
-    assert_eq!(records.len() - 1, 72);
+    assert_eq!(records.len() - 1, 124);
     Ok(records)
 }
 
@@ -63,6 +63,7 @@ fn spark_family(spark_type: &Value) -> TestResult<Value> {
     Ok(json!(match spark_type {
         "integer" => "int32",
         "long" => "int64",
+        "double" => "float64",
         _ if fields(&["day", "hour", "minute", "second"]) => "day-time interval",
         _ if fields(&["year", "month"]) => "year-month interval",
         other => return Err(format!("unexpected Spark type {other}").into()),
@@ -74,6 +75,7 @@ fn dar_family(data_type: &DataType) -> Value {
     json!(match data_type {
         DataType::Int32 => "int32".to_owned(),
         DataType::Int64 => "int64".to_owned(),
+        DataType::Float64 => "float64".to_owned(),
         DataType::Duration(TimeUnit::Microsecond) => "day-time interval".to_owned(),
         DataType::Interval(IntervalUnit::YearMonth) => "year-month interval".to_owned(),
         DataType::List(item) => {
@@ -293,7 +295,7 @@ fn register_inputs(session: &SessionContext, metadata: &Value, batch_size: usize
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn try_interval_arithmetic_returns_null_on_overflow_like_spark() -> TestResult {
+async fn try_interval_arithmetic_matches_spark() -> TestResult {
     let records = interval_references()?;
     let mut differences = Vec::new();
     for batch_size in [1, 32] {

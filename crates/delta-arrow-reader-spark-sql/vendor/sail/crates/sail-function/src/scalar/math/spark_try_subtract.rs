@@ -21,6 +21,11 @@ use crate::scalar::math::utils::try_op::{
     try_op_interval_yearmonth, try_op_timestamp_duration,
 };
 
+/// The operand pairs `SparkTrySubtract` accepts, for its errors.
+const ACCEPTED_TYPES: &str = "Int32 or Int64 numbers, a Date32 with Int32 days or an \
+    interval, two Interval(YearMonth), Interval(MonthDayNano) or Duration(Microsecond) values, \
+    or a Timestamp(Microsecond) and a Duration(Microsecond)";
+
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkTrySubtract {
     signature: Signature,
@@ -94,7 +99,7 @@ impl ScalarUDFImpl for SparkTrySubtract {
             _ => {
                 return Err(unsupported_data_types_exec_err(
                     "try_subtract",
-                    "Int32, Int64, Date32, Interval(YearMonth), Interval(MonthDayNano), Timestamp(Microsecond), Duration(Microsecond)",
+                    ACCEPTED_TYPES,
                     &arg_types,
                 ));
             }
@@ -212,7 +217,7 @@ impl ScalarUDFImpl for SparkTrySubtract {
 
             (l, r) => Err(unsupported_data_types_exec_err(
                 "spark_try_subtract",
-                "Int32, Int64, Date32, Interval(YearMonth), Interval(MonthDayNano), Timestamp(Microsecond, [None | Some(tz)]) - Duration(Microsecond)",
+                ACCEPTED_TYPES,
                 &[l.clone(), r.clone()],
             )),
         }
@@ -263,7 +268,7 @@ impl ScalarUDFImpl for SparkTrySubtract {
 
             _ => Err(unsupported_data_types_exec_err(
                 "spark_try_subtract",
-                "Int32, Int64, Date32 or Interval(YearMonth)",
+                ACCEPTED_TYPES,
                 types,
             )),
         }
