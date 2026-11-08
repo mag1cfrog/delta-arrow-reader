@@ -3,12 +3,13 @@
 Records analyzed, optimized and executed schemas, typed internal-row values and failing
 stages, with the innermost Java exception of a failure, for TRY_ADD and TRY_SUBTRACT of
 TIMESTAMP and TIMESTAMP_NTZ values with DAY TO SECOND, YEAR TO MONTH and calendar intervals in
-both argument orders, and TRY_SUBTRACT of TIMESTAMP, TIMESTAMP_NTZ and DATE values. Inputs
-are a registered table of TIMESTAMP and TIMESTAMP_NTZ values with DAY TO SECOND and
-YEAR TO MONTH intervals, literals, and BIGINT microsecond edges. The instants sit a day or a
-month before a skipped or repeated Los Angeles local time in 2024, in local mean time, and in
-years 1 and 9999; the TIMESTAMP_NTZ values sit in the skipped and repeated hours, at a month
-end and in years 1 and 9999; some values are NULL. Every query runs in both ANSI modes in
+both argument orders, TRY_SUBTRACT of TIMESTAMP, TIMESTAMP_NTZ and DATE values, untyped NULL
+operands and wrong argument counts. Inputs are a registered table of TIMESTAMP and
+TIMESTAMP_NTZ values with DAY TO SECOND and YEAR TO MONTH intervals, literals, and BIGINT
+microsecond edges. The instants sit a day or a month before a skipped or repeated Los Angeles
+local time in 2024, in local mean time, and at the start of year 1 and the end of year 9999;
+the TIMESTAMP_NTZ values sit in the skipped and repeated hours, at a month end, in local mean
+time and at the same year bounds; one row is NULL. Every query runs in both ANSI modes in
 UTC and America/Los_Angeles. Run from the crate root in the reference environment described
 in README.md; the output path must not exist.
 """
@@ -96,6 +97,12 @@ COLUMNS = [
     ("ntz_try_subtract_day", "try_subtract(l, INTERVAL '1' DAY)"),
     ("ntz_try_subtract_month", "try_subtract(l, INTERVAL '1' MONTH)"),
     ("ntz_try_subtract_calendar", f"try_subtract(l, {CALENDAR})"),
+    # Negating the smallest day count overflows; Spark runs TRY_SUBTRACT under ANSI.
+    ("ntz_try_subtract_smallest_calendar_days",
+     "try_subtract(l, make_interval(0, -70555328, 0, -2147483648))"),
+    ("ntz_try_add_untyped_null", "try_add(l, NULL)"),
+    ("ntz_try_subtract_untyped_null", "try_subtract(l, NULL)"),
+    ("ntz_try_subtract_from_untyped_null", "try_subtract(NULL, l)"),
     ("try_subtract_timestamp", "try_subtract(ts, TIMESTAMP '2024-01-01 00:00:00')"),
     ("try_subtract_timestamp_ntz", "try_subtract(ts, l)"),
     ("try_subtract_from_timestamp_ntz", "try_subtract(l, ts)"),
@@ -115,6 +122,16 @@ LITERALS = [
      "try_subtract(TIMESTAMP '2024-01-01 00:00:00', INTERVAL '-178956970-8' YEAR TO MONTH)"),
     ("try_subtract_smallest_calendar_months",
      "try_subtract(TIMESTAMP '2024-01-01 00:00:00', make_interval(-178956970, -8))"),
+    ("try_subtract_smallest_calendar_days",
+     "try_subtract(TIMESTAMP '2024-01-01 00:00:00', make_interval(0, -70555328, 0, -2147483648))"),
+    ("try_add_untyped_null", "try_add(TIMESTAMP '2024-03-09 02:30:00', NULL)"),
+    ("try_add_untyped_null_first", "try_add(NULL, TIMESTAMP '2024-03-09 02:30:00')"),
+    ("try_subtract_untyped_null", "try_subtract(TIMESTAMP '2024-03-09 02:30:00', NULL)"),
+    ("try_subtract_from_untyped_null", "try_subtract(NULL, TIMESTAMP '2024-03-09 02:30:00')"),
+    ("try_add_one_argument", "try_add(TIMESTAMP '2024-03-09 02:30:00')"),
+    ("try_subtract_three_arguments", "try_subtract(TIMESTAMP '2024-03-09 02:30:00', "
+                                     "INTERVAL '1' DAY, INTERVAL '1' DAY)"),
+    ("try_add_overflow", "try_add(timestamp_micros(9223372036854775807), INTERVAL '1' DAY)"),
     ("try_subtract_timestamps", "try_subtract(TIMESTAMP '2024-03-10 03:00:00', "
                                 "TIMESTAMP '2024-01-01 00:00:00')"),
     ("try_subtract_timestamp_ntz_in_gap", "try_subtract(TIMESTAMP '2024-03-10 04:00:00', "
