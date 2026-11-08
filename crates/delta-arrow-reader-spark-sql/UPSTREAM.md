@@ -530,9 +530,20 @@ the session zone with that same builder, so a local time or midnight skipped by 
 change moves forward and a repeated one takes its earlier instant, where Arrow's cast
 failed. The [UTC conversion references](tests/fixtures/README.md#utc-timestamp-conversions)
 cover the 2024 Los Angeles transitions and their neighbors and the Havana midnight
-changes. An explicit CAST from DATE still uses Arrow's cast (#1027). In named-zone
-and UTC sessions each row now runs ConvertTz, as an explicit TIMESTAMP_NTZ cast already
-does; fixed-offset sessions keep Arrow's cast. In a local debug-build
+changes. A DATE instead starts at the first instant of its day, as Java's
+`LocalDate.atStartOfDay` gives it: a midnight skipped by a gap that began before it moves
+only to the end of the gap, such as 00:30 for Toronto's 1919-03-31, and days beyond Chrono's
+years take offsets from a nearer 400-year cycle (without DST after 2099, #1052), failing with
+`long overflow` past BIGINT (NULL under TRY_CAST). Legacy IDs such as `PST` name their
+regions, as in CONVERT_TIMEZONE. Explicit CAST and TRY_CAST from DATE to TIMESTAMP, and every caller
+of the shared builder, use this rule in fixed-offset and named zones; GREATEST and LEAST now
+widen mixed DATE, TIMESTAMP and TIMESTAMP_NTZ arguments through it too, where DataFusion's
+coercion to a zone-less nanosecond TIMESTAMP failed for year 1. Their nullability still
+differs (#1090), and IN lists, VALUES, arrays and DATE arguments of timestamp functions
+still read DATE values another way (#1122). The
+[DATE to TIMESTAMP references](tests/fixtures/date-to-timestamp/README.md) record the
+checks. For TIMESTAMP_NTZ, named-zone and UTC sessions run ConvertTz on each row, as an
+explicit TIMESTAMP_NTZ cast already does, and fixed-offset sessions keep Arrow's cast. In a local debug-build
 timing of 1,000,000 TIMESTAMP_NTZ rows, execution took 159 ms instead of 147 ms in a
 Los Angeles session and 136 ms instead of 121 ms in a UTC session, with planning
 unchanged at about 1 ms.
@@ -1143,8 +1154,8 @@ execution, so a branch that never runs cannot fail the query. Spark instead fail
 folding, during optimization. A scalar UDF can return `true` from
 `propagates_constant_folding_errors` (default `false`) to fail during optimization, as
 literal CASTs already do. A call inside a short-circuiting expression other than AND and
-OR, such as CASE or COALESCE, still defers its error. `AliasedScalarUDFImpl` forwards the
-choice. TIMESTAMPDIFF and the TIMESTAMP to TIMESTAMP_NTZ conversion opt in.
+OR, such as CASE or COALESCE, still defers its error, and so does an expression over a lambda
+variable, which has no value to fold. `AliasedScalarUDFImpl` forwards the choice. TIMESTAMPDIFF and the TIMESTAMP to TIMESTAMP_NTZ conversion opt in.
 
 Spark REGEXP_REPLACE checks admitted literal arguments in its own simplify callback,
 after native operand simplification, and reports only its own kernel errors. The

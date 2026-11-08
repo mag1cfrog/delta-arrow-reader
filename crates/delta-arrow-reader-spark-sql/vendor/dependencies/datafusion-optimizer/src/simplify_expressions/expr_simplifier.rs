@@ -659,10 +659,12 @@ impl TreeNodeRewriter for ConstEvaluator<'_> {
                         return Err(err);
                     }
                     // Functions that fold like Spark's constant folding fail during optimization
-                    // unless a conditional branch may skip them.
+                    // unless a conditional branch may skip them. A lambda variable has no value
+                    // to fold, so an expression over one is not a constant.
                     if let Expr::ScalarFunction(ScalarFunction { ref func, .. }) = expr
                         && func.inner().propagates_constant_folding_errors()
                         && !conditional
+                        && !expr.exists(|e| Ok(matches!(e, Expr::LambdaVariable(_))))?
                     {
                         return Err(err);
                     }
