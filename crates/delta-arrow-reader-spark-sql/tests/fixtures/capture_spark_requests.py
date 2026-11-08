@@ -13,8 +13,18 @@ from capture_date_range_747_spark import (
 )
 
 
-def capture_requested_queries(request, output_path, source_paths, request_paths):
+def capture_requested_queries(request, output_path, source_paths, request_paths, *,
+                              capture_query=capture, spark_settings=None):
     assert sys.version_info[:2] == (3, 12), "use Python 3.12"
+    assert callable(capture_query), "provide a query capture callback"
+    run_settings = dict(SETTINGS)
+    if spark_settings is not None:
+        assert isinstance(spark_settings, dict), "Spark settings overrides must be a dict"
+        assert all(isinstance(key, str) and key.startswith("spark.") and len(key) > 6
+                   and isinstance(value, str) for key, value in spark_settings.items()), (
+            "Spark settings overrides must map spark.* keys to strings")
+        run_settings.update(spark_settings)
+    observed_settings = list(dict.fromkeys([*OBSERVED_SETTINGS, *run_settings]))
     assert output_path is not None and output_path.parent.is_dir(), "provide a fresh output path"
     lifecycle_path = output_path.with_suffix(".lifecycle.json")
     for path in [output_path, lifecycle_path]:
@@ -34,7 +44,7 @@ def capture_requested_queries(request, output_path, source_paths, request_paths)
     assert SparkSession._instantiatedSession is None and SparkSession._activeSession is None
     sources = [Path(path).resolve() for path in source_paths]
     sources.extend(Path(sys.modules[function.__module__].__file__).resolve()
-                   for function in [capture, encode, decode, file_sha256])
+                   for function in [capture_query, capture, encode, decode, file_sha256])
     sources.append(Path(__file__).resolve())
     sources = list(dict.fromkeys(sources))
     source_receipts = [{"path": str(path), "sha256": file_sha256(path)} for path in sources]
@@ -48,7 +58,7 @@ def capture_requested_queries(request, output_path, source_paths, request_paths)
         try:
             builder = SparkSession.builder.master("local[1]").appName(f"dar-{request['issue']}-reference-recapture")
             builder = builder.config("spark.ui.enabled", "false")
-            for key, value in SETTINGS.items():
+            for key, value in run_settings.items():
                 builder = builder.config(key, value)
             spark = builder.getOrCreate()
             gateway = SparkContext._gateway
@@ -63,8 +73,9 @@ def capture_requested_queries(request, output_path, source_paths, request_paths)
             sessions, registered = [], []
             for corpus in request["corpora"]:
                 session = spark.newSession()
-                for key, value in SETTINGS.items():
-                    session.conf.set(key, value)
+                for key, value in run_settings.items():
+                    if key.startswith("spark.sql."):
+                        session.conf.set(key, value)
                 providers = []
                 for item in corpus["metadata"]["inputs"]:
                     schema = types.StructType.fromJson(item["schema"])
@@ -84,13 +95,18 @@ def capture_requested_queries(request, output_path, source_paths, request_paths)
                       "input_request": request_receipts[0], "input_requests": request_receipts,
                       "capture_driver": source_receipts[0],
                       "capture_session_helper": receipt_by_path[str(Path(__file__).resolve())],
-                      "capture_files": source_receipts, "requested_settings": SETTINGS,
-                      "effective_settings": {key: spark.conf.get(key) for key in OBSERVED_SETTINGS},
+                      "capture_files": source_receipts, "requested_settings": run_settings,
+                      "effective_settings": {
+                          key: (spark.conf.get(key) if key.startswith("spark.sql.") else
+                                spark.sparkContext.getConf().get(key))
+                          for key in observed_settings},
                       "master": spark.sparkContext.master,
                       "spark_context_settings": dict(spark.sparkContext.getConf().getAll()),
                       "owned_gateway": {"pid": gateway.proc.pid, "parent_pid": os.getpid()},
                       "expected_record_count": request["expected_record_count"],
-                      "adaptive_policy": "Not explicitly set; actual effective default observed.",
+                      "adaptive_policy": ("Explicitly configured; actual effective value observed."
+                                          if "spark.sql.adaptive.enabled" in run_settings else
+                                          "Not explicitly set; actual effective default observed."),
                       "historical_source_provenance": "Historical source paths and hashes are provenance labels. Only the caller's validated source_paths are opened and hashed."}
             output.write(json.dumps(header, separators=(",", ":")) + "\n")
             output.flush()
@@ -98,8 +114,11 @@ def capture_requested_queries(request, output_path, source_paths, request_paths)
             for corpus, session in sessions:
                 for case in corpus["cases"]:
                     session.conf.set("spark.sql.ansi.enabled", str(case["ansi"]).lower())
-                    observed = capture(session, case, encode)
-                    observed["effective_settings"] = {key: session.conf.get(key) for key in OBSERVED_SETTINGS}
+                    observed = capture_query(session, case, encode)
+                    observed["effective_settings"] = {
+                        key: (session.conf.get(key) if key.startswith("spark.sql.") else
+                              session.sparkContext.getConf().get(key))
+                        for key in observed_settings}
                     observations.append(observed)
                     output.write(json.dumps(observed, separators=(",", ":")) + "\n")
                     output.flush()

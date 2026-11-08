@@ -2195,6 +2195,44 @@ python tests/fixtures/capture_nested_window_frames_spark.py
 cargo test --locked --workspace --test nested_ordering --test nested_float_ordering --test nested_window_frames
 ```
 
+## Cast admission before NULL simplification
+
+`cast-admission-1098-cases.json` contains four original illegal CAST/TRY_CAST
+forms and eleven adjacent controls, each in both ANSI modes. The independent
+Spark 4.2.0 capture retains 30 complete observations and 32 provider readbacks.
+`capture_cast_admission_1098_spark.py` captures them without reading expected
+outputs; `cast-admission-1098-provenance.json` records its source/runtime hashes
+and owned JVM shutdown. These are fresh Linux observations. The original Mac
+illegal-cast raw records and their input manifest were unavailable; the recovered
+provider carrier does not independently prove those historical input bytes.
+
+`cast_admission.rs` requires the original four forms to fail in `plan_query`,
+before returning a query or analyzed Fields. Both ANSI modes, three string/binary
+representations and batches 1/32 cover 48 contexts and 192 provider readbacks.
+The error must retain the Spark condition, SQLSTATE and complete source/target
+types without echoing the original string or binary literals. Controls cover
+NULL parents, pruned CASE branches, renamed nested casts, valid NULL/empty
+Structs and numeric-to-timestamp scaling. Native DataFusion controls preserve
+identity elision and explicit target-Field validation and metadata.
+Registered Arrow Union columns retain their storage mode, type IDs and child
+types in rejection diagnostics, while omitting Field metadata. Required nested
+children and sorted Maps retain their rejecting constraints, so distinct source
+and target types remain distinguishable.
+Diagnostic field names use escaped identifiers, so a name containing type
+punctuation stays distinct from multiple fields.
+A positive TRY_CAST control distinguishes its broader Arrow admission from
+ordinary native CAST. It preserves the existing native behavior without claiming
+Spark compatibility for that extra pair.
+
+Four legal controls remain strict analyzed-nullability differences, retained
+with their complete pre-fix observations in
+`cast-admission-1098-native-controls.json`: NAMED_STRUCT under
+[#766](https://github.com/mag1cfrog/delta-arrow-reader/issues/766) and floating
+TIMESTAMP casts under
+[#1139](https://github.com/mag1cfrog/delta-arrow-reader/issues/1139).
+Their values and optimized/executed Fields match Spark. Exact conservation of
+these controls prevents a new regression; it does not establish Spark parity.
+
 ## Offset-window result Fields
 
 `offset-window-fields-1044-spark.jsonl` records 94 independent Spark cases.
