@@ -244,6 +244,9 @@ impl SparkPlanFormatter {
             DataType::Timestamp(_time_unit, None) => Ok("timestamp_ntz".to_string()),
             DataType::Interval(IntervalUnit::MonthDayNano) => Ok("interval".to_string()),
             DataType::Interval(IntervalUnit::YearMonth) => Ok("interval year to month".to_string()),
+            DataType::Interval(IntervalUnit::DayTime) if include_cast_constraints => {
+                Ok("interval day to second [storage=days,milliseconds]".to_string())
+            }
             DataType::Interval(IntervalUnit::DayTime) => Ok("interval day to second".to_string()),
             DataType::List(field)
             | DataType::FixedSizeList(field, _)

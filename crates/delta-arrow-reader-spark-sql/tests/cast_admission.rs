@@ -647,3 +647,130 @@ fn cast_diagnostic_comparison_keeps_identifier_boundaries_and_spaces() {
         "int",
     ));
 }
+
+#[tokio::test]
+async fn cast_rejections_distinguish_interval_storage() -> TestResult {
+    use arrow::datatypes::{DataType, Field, IntervalUnit, Schema};
+    use datafusion::datasource::MemTable;
+    use std::sync::Arc;
+
+    let session = session(32);
+    let schema = Arc::new(Schema::new(vec![Field::new(
+        "v",
+        DataType::Interval(IntervalUnit::DayTime),
+        true,
+    )]));
+    session.register_table("t", Arc::new(MemTable::try_new(schema, vec![vec![]])?))?;
+    for ansi_mode in [true, false] {
+        for function in ["CAST", "TRY_CAST"] {
+            let sql = format!("SELECT {function}(v AS INTERVAL DAY TO SECOND) AS r FROM t");
+            let error = plan_query(
+                &session,
+                &sql,
+                &SparkSqlOptions {
+                    ansi_mode,
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect_err("unsupported interval storage cast exposed Fields")
+            .to_string();
+            assert!(
+                original_cast_admission_error_matches(
+                    &error,
+                    "interval day to second [storage=days,milliseconds]",
+                    "interval day to second",
+                ),
+                "{error}"
+            );
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn same_logical_type_rejections_explain_native_storage_limits() -> TestResult {
+    use arrow::datatypes::{DataType, Field, Fields, Schema};
+    use datafusion::datasource::MemTable;
+    use std::sync::Arc;
+
+    let session = session(32);
+    let empty_struct = DataType::Struct(Fields::empty());
+    let private_child = Field::new("item", empty_struct.clone(), true)
+        .with_metadata([("private".into(), "metadata-sentinel".into())].into());
+    let private_struct_child = Field::new("x", empty_struct.clone(), true)
+        .with_metadata([("private".into(), "metadata-sentinel".into())].into());
+    let array_identity = DataType::List(Arc::new(Field::new("item", empty_struct.clone(), true)));
+    let struct_identity =
+        DataType::Struct(vec![Field::new("x", empty_struct.clone(), true)].into());
+    let schema = Arc::new(Schema::new(vec![
+        Field::new(
+            "array_name",
+            DataType::List(Arc::new(Field::new("noncanonical", empty_struct, true))),
+            true,
+        ),
+        Field::new(
+            "array_metadata",
+            DataType::List(Arc::new(private_child)),
+            true,
+        ),
+        Field::new(
+            "struct_metadata",
+            DataType::Struct(vec![private_struct_child].into()),
+            true,
+        ),
+        Field::new("array_identity", array_identity, true),
+        Field::new("struct_identity", struct_identity, true),
+    ]));
+    session.register_table("t", Arc::new(MemTable::try_new(schema, vec![vec![]])?))?;
+    for ansi_mode in [true, false] {
+        let options = SparkSqlOptions {
+            ansi_mode,
+            ..Default::default()
+        };
+        for (column, target, logical_type) in [
+            ("array_name", "ARRAY<STRUCT<>>", "array<struct<>>"),
+            ("array_metadata", "ARRAY<STRUCT<>>", "array<struct<>>"),
+            (
+                "struct_metadata",
+                "STRUCT<x:STRUCT<>>",
+                "struct<x:struct<>>",
+            ),
+        ] {
+            let error = plan_query(
+                &session,
+                &format!("SELECT CAST({column} AS {target}) AS r FROM t"),
+                &options,
+            )
+            .await
+            .expect_err("unsupported nested native cast exposed Fields")
+            .to_string();
+            assert_eq!(
+                error,
+                format!(
+                    "External error: analysis error: [DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION] cannot cast \"{logical_type}\" to \"{logical_type}\". The native cast does not support these Arrow representations. SQLSTATE: 42K09"
+                )
+            );
+            let query = plan_query(
+                &session,
+                &format!("SELECT TRY_CAST({column} AS {target}) AS r FROM t"),
+                &options,
+            )
+            .await?;
+            query.create_physical_plan(&session).await?;
+        }
+        for (column, target) in [
+            ("array_identity", "ARRAY<STRUCT<>>"),
+            ("struct_identity", "STRUCT<x:STRUCT<>>"),
+        ] {
+            let query = plan_query(
+                &session,
+                &format!("SELECT CAST({column} AS {target}) AS r FROM t"),
+                &options,
+            )
+            .await?;
+            query.create_physical_plan(&session).await?;
+        }
+    }
+    Ok(())
+}

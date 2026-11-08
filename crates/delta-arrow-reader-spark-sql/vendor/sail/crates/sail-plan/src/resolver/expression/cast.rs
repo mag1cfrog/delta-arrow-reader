@@ -465,8 +465,13 @@ impl PlanResolver<'_> {
             if !supported {
                 let source = SparkPlanFormatter.data_type_to_cast_error_string(&expr_type)?;
                 let target = SparkPlanFormatter.data_type_to_cast_error_string(&target_type)?;
+                let representation_reason = if source == target {
+                    " The native cast does not support these Arrow representations."
+                } else {
+                    ""
+                };
                 return Err(PlanError::analysis(format!(
-                    "[DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION] cannot cast \"{source}\" to \"{target}\". SQLSTATE: 42K09"
+                    "[DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION] cannot cast \"{source}\" to \"{target}\".{representation_reason} SQLSTATE: 42K09"
                 )));
             }
         }
