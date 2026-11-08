@@ -63,7 +63,7 @@ use crate::function::common::{
     FunctionContextInput, ScalarFunction, ScalarFunctionInput, without_metadata_annotations,
 };
 use crate::function::result_coercion::{coerce_to_temporal, is_temporal_type};
-use crate::function::scalar::datetime::make_interval_within_try;
+use crate::function::scalar::datetime::replan_make_interval_for_try;
 use crate::function::temporal_coercion::{cast_local_timestamp_expr_to_ltz, common_temporal_type};
 
 // Byte inputs retain Spark's input nullability while sharing native HEX formatting.
@@ -453,6 +453,42 @@ fn two_arguments(arguments: Vec<Expr>, function: &str) -> PlanResult<(Expr, Expr
     }
 }
 
+/// Spark evaluates TRY arithmetic over numbers in its TRY mode, which catches only the
+/// arithmetic's own failures, and over other operands inside `TryEval`, which turns any failure
+/// in them into NULL. For the latter, re-plan each failing MAKE_INTERVAL in the operands to
+/// give NULL.
+fn try_eval_operands(operands: Vec<Expr>, schema: &DFSchemaRef) -> PlanResult<Vec<Expr>> {
+    let numeric = operands.iter().all(|operand| {
+        operand
+            .get_type(schema)
+            .is_ok_and(|data_type| data_type.is_numeric())
+    });
+    if numeric {
+        return Ok(operands);
+    }
+    operands
+        .into_iter()
+        .map(|operand| replan_make_interval_for_try(operand, schema))
+        .collect()
+}
+
+/// Spark's TRY_DIVIDE and TRY_MULTIPLY: `function` over operands that Spark evaluates inside
+/// `TryEval` unless both are numbers.
+fn try_operands<T>(function: T) -> ScalarFunction
+where
+    T: ScalarUDFImpl + Send + Sync + 'static,
+{
+    let function = ScalarUDF::from(function);
+    Arc::new(
+        move |ScalarFunctionInput {
+                  arguments,
+                  function_context,
+              }| {
+            Ok(function.call(try_eval_operands(arguments, function_context.schema)?))
+        },
+    )
+}
+
 /// Spark's TRY_ADD: a TIMESTAMP or TIMESTAMP_NTZ and an interval or an untyped NULL, in either
 /// order, add like `+` and give NULL where it fails; two untyped NULLs are a NULL DOUBLE. Other
 /// operands keep `SparkTryAdd`.
@@ -463,8 +499,7 @@ fn try_add(input: ScalarFunctionInput) -> PlanResult<Expr> {
     } = input;
     let (left, right) = two_arguments(arguments, "try_add")?;
     let schema = function_context.schema;
-    let left = make_interval_within_try(left, schema)?;
-    let right = make_interval_within_try(right, schema)?;
+    let (left, right) = try_eval_operands(vec![left, right], schema)?.two()?;
     let add = |timestamp, interval| {
         ScalarUDF::from(SparkTimestampAddInterval::try_add()).call(vec![timestamp, interval])
     };
@@ -504,8 +539,7 @@ fn try_subtract(input: ScalarFunctionInput) -> PlanResult<Expr> {
     } = input;
     let (left, right) = two_arguments(arguments, "try_subtract")?;
     let schema = function_context.schema;
-    let left = make_interval_within_try(left, schema)?;
-    let right = make_interval_within_try(right, schema)?;
+    let (left, right) = try_eval_operands(vec![left, right], schema)?.two()?;
     let timezone = &function_context.plan_config.session_timezone;
     let ntz = |data_type: &DataType| {
         matches!(data_type, DataType::Timestamp(TimeUnit::Microsecond, None))
@@ -2813,8 +2847,8 @@ pub(super) fn list_built_in_math_functions() -> Vec<(&'static str, ScalarFunctio
         ("tan", F::unary(double(expr_fn::tan))),
         ("tanh", F::unary(double(expr_fn::tanh))),
         ("try_add", F::custom(try_add)),
-        ("try_divide", F::udf(SparkTryDiv::new())),
-        ("try_multiply", F::udf(SparkTryMult::new())),
+        ("try_divide", try_operands(SparkTryDiv::new())),
+        ("try_multiply", try_operands(SparkTryMult::new())),
         ("try_mod", F::udf(SparkTryMod::new())),
         ("try_subtract", F::custom(try_subtract)),
         ("unhex", F::udf(SparkUnHex::new())),

@@ -41,7 +41,7 @@ fn make_interval_references() -> TestResult<Vec<Value>> {
             |build| build.contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
         )
     );
-    assert_eq!(records.len() - 1, 340);
+    assert_eq!(records.len() - 1, 372);
     Ok(records)
 }
 
@@ -50,12 +50,12 @@ fn make_interval_references() -> TestResult<Vec<Value>> {
 enum RetainedDifference {
     /// #1145: Spark returns microseconds beyond the BIGINT nanoseconds of Arrow's calendar
     /// intervals, from INT hours or DECIMAL seconds, or outside ANSI from a BIGINT hour count
-    /// that wraps to an INT. DAR fails, while optimizing a constant under ANSI and while
-    /// collecting rows otherwise.
+    /// that wraps to an INT. DAR fails, while optimizing a constant under ANSI outside TRY and
+    /// while collecting rows otherwise.
     NanosecondRange,
-    /// #1133: inside TRY_ADD beside a non-constant operand, Spark folds a constant
-    /// MAKE_INTERVAL outside TRY and fails while optimizing under ANSI. DAR returns NULL, as
-    /// TRY does for the same MAKE_INTERVAL over columns.
+    /// #1133: inside TRY_ADD or TRY_SUBTRACT beside a non-constant operand, Spark folds a
+    /// constant MAKE_INTERVAL outside TRY and fails while optimizing under ANSI. DAR returns
+    /// NULL, as TRY does for the same MAKE_INTERVAL over columns.
     ConstantOutsideTry,
     /// #1124: under ANSI, the cast of seconds beyond DECIMAL(18, 6) fails at Spark's stage with
     /// Arrow's precision error, without Spark's `NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION`,
@@ -93,26 +93,81 @@ fn decimal_cast_message(id: &str) -> Option<&'static str> {
         .find_map(|(record, message)| (*record == id).then_some(*message))
 }
 
-/// Records whose microseconds are beyond Arrow's nanoseconds in both ANSI modes.
-const NANOSECOND_RANGE_RECORDS: [&str; 3] = [
-    "literal_int_hours_beyond_nanoseconds",
-    "literal_largest_seconds",
-    "column_int_hours_beyond_nanoseconds",
+/// A record of the #1145 class.
+struct NanosecondRangeRecord {
+    id: &'static str,
+    /// The microseconds in DAR's error.
+    micros: &'static str,
+    /// Whether the value is beyond Arrow's nanoseconds only outside ANSI, where an hour count
+    /// wraps to an INT.
+    outside_ansi_only: bool,
+    /// Whether DAR folds the failing constant while optimizing under ANSI.
+    folds_under_ansi: bool,
+}
+
+const NANOSECOND_RANGE_RECORDS: [NanosecondRangeRecord; 7] = [
+    NanosecondRangeRecord {
+        id: "literal_bigint_hours_beyond_int",
+        micros: "-6238510225200000000",
+        outside_ansi_only: true,
+        folds_under_ansi: false,
+    },
+    NanosecondRangeRecord {
+        id: "literal_bigint_hours_beyond_int_with_seconds",
+        micros: "-6238510228745224192",
+        outside_ansi_only: true,
+        folds_under_ansi: false,
+    },
+    NanosecondRangeRecord {
+        id: "literal_int_hours_beyond_nanoseconds",
+        micros: "10800000000000000",
+        outside_ansi_only: false,
+        folds_under_ansi: true,
+    },
+    NanosecondRangeRecord {
+        id: "literal_largest_seconds",
+        micros: "999999999999999999",
+        outside_ansi_only: false,
+        folds_under_ansi: true,
+    },
+    NanosecondRangeRecord {
+        id: "column_int_hours_beyond_nanoseconds",
+        micros: "10800000000000000",
+        outside_ansi_only: false,
+        folds_under_ansi: false,
+    },
+    // Inside TRY, MAKE_INTERVAL does not fail on error, so its constant is not folded.
+    NanosecondRangeRecord {
+        id: "literal_try_add_hours_beyond_nanoseconds",
+        micros: "10800000000000000",
+        outside_ansi_only: false,
+        folds_under_ansi: false,
+    },
+    NanosecondRangeRecord {
+        id: "column_try_add_hours_beyond_nanoseconds",
+        micros: "10800000000000000",
+        outside_ansi_only: false,
+        folds_under_ansi: false,
+    },
 ];
 
-/// Records whose BIGINT hour count wraps beyond Arrow's nanoseconds outside ANSI.
-const WRAPPED_NANOSECOND_RANGE_RECORDS: [&str; 2] = [
-    "literal_bigint_hours_beyond_int",
-    "literal_bigint_hours_beyond_int_with_seconds",
+fn nanosecond_range_record(case: &Value) -> Option<&'static NanosecondRangeRecord> {
+    NANOSECOND_RANGE_RECORDS.iter().find(|record| {
+        case["id"] == record.id && (!record.outside_ansi_only || case["ansi"] == false)
+    })
+}
+
+/// Records of the #1133 class under ANSI.
+const CONSTANT_OUTSIDE_TRY_RECORDS: [&str; 2] = [
+    "column_try_add_constant_overflow",
+    "column_try_subtract_constant_overflow",
 ];
 
 fn retained_difference(case: &Value) -> Option<RetainedDifference> {
     let id = case["id"].as_str()?;
-    if NANOSECOND_RANGE_RECORDS.contains(&id)
-        || (WRAPPED_NANOSECOND_RANGE_RECORDS.contains(&id) && case["ansi"] == false)
-    {
+    if nanosecond_range_record(case).is_some() {
         Some(RetainedDifference::NanosecondRange)
-    } else if id == "column_try_add_constant_overflow" && case["ansi"] == true {
+    } else if CONSTANT_OUTSIDE_TRY_RECORDS.contains(&id) && case["ansi"] == true {
         Some(RetainedDifference::ConstantOutsideTry)
     } else if decimal_cast_message(id).is_some() && case["ansi"] == true {
         Some(RetainedDifference::DecimalCastCondition)
@@ -126,16 +181,12 @@ fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResu
     let mut current = case.clone();
     match difference {
         RetainedDifference::NanosecondRange => {
-            // Spark's single row ends with the interval [months, days, microseconds].
-            let micros = case["expected"]["rows"]
-                .as_array()
-                .filter(|rows| rows.len() == 1)
-                .and_then(|rows| rows[0].as_array()?.last()?.get(2)?.as_str())
-                .ok_or_else(|| format!("expected one Spark interval: {case}"))?;
-            let constant_under_ansi = case["ansi"] == true
-                && case["id"]
-                    .as_str()
-                    .is_some_and(|id| id.starts_with("literal_"));
+            if case["expected"]["status"] != "ok" {
+                return Err(format!("expected a Spark result: {case}").into());
+            }
+            let record = nanosecond_range_record(case).ok_or("missing #1145 record")?;
+            let micros = record.micros;
+            let constant_under_ansi = record.folds_under_ansi && case["ansi"] == true;
             let stages = current["schema_stages"]
                 .as_object_mut()
                 .ok_or("missing schema stages")?;
@@ -496,8 +547,8 @@ async fn make_interval_matches_spark() -> TestResult {
     assert_eq!(
         retained,
         BTreeMap::from([
-            (RetainedDifference::NanosecondRange, 16),
-            (RetainedDifference::ConstantOutsideTry, 2),
+            (RetainedDifference::NanosecondRange, 24),
+            (RetainedDifference::ConstantOutsideTry, 4),
             (RetainedDifference::DecimalCastCondition, 10),
         ])
     );
