@@ -695,6 +695,43 @@ impl CaseExpr {
         )
     }
 
+    /// Check reached branches in native order without invoking their result kernels.
+    /// A guard returning None stops its unknown remainder; None as guard index denotes the base.
+    /// ELSE has index `when_then_expr().len()`.
+    pub fn check_reached_branches(
+        &self,
+        batch: &RecordBatch,
+        mut evaluate_guard: impl FnMut(
+            Option<usize>,
+            &Arc<dyn PhysicalExpr>,
+            &RecordBatch,
+        ) -> Result<Option<ColumnarValue>>,
+        mut check: impl FnMut(usize, &RecordBatch) -> Result<()>,
+    ) -> Result<()> {
+        let return_type = self.data_type(&batch.schema())?;
+        let mut evaluate_result = |index, _: &Arc<dyn PhysicalExpr>, input: &RecordBatch| {
+            check(index, input)?;
+            // Result values are discarded; typed NULLs let the existing selection loop finish.
+            Ok(ColumnarValue::Scalar(ScalarValue::try_new_null(&return_type)?))
+        };
+        if self.body.expr.is_some() {
+            self.body.case_when_with_expr(
+                batch,
+                &return_type,
+                &mut evaluate_guard,
+                &mut evaluate_result,
+            )?;
+        } else {
+            self.body.case_when_no_expr(
+                batch,
+                &return_type,
+                &mut evaluate_guard,
+                &mut evaluate_result,
+            )?;
+        }
+        Ok(())
+    }
+
     /// Optional base expression that can be compared to literal values in the "when" expressions
     pub fn expr(&self) -> Option<&Arc<dyn PhysicalExpr>> {
         self.body.expr.as_ref()
@@ -737,6 +774,16 @@ impl CaseBody {
         &self,
         batch: &RecordBatch,
         return_type: &DataType,
+        evaluate_guard: &mut impl FnMut(
+            Option<usize>,
+            &Arc<dyn PhysicalExpr>,
+            &RecordBatch,
+        ) -> Result<Option<ColumnarValue>>,
+        evaluate_result: &mut impl FnMut(
+            usize,
+            &Arc<dyn PhysicalExpr>,
+            &RecordBatch,
+        ) -> Result<ColumnarValue>,
     ) -> Result<ColumnarValue> {
         let mut result_builder = ResultBuilder::new(return_type, batch.num_rows());
 
@@ -747,12 +794,10 @@ impl CaseBody {
         let mut remainder_batch = Cow::Borrowed(batch);
 
         // evaluate the base expression
-        let mut base_values = self
-            .expr
-            .as_ref()
-            .unwrap()
-            .evaluate(batch)?
-            .into_array(batch.num_rows())?;
+        let Some(base_values) = evaluate_guard(None, self.expr.as_ref().unwrap(), batch)? else {
+            return result_builder.finish();
+        };
+        let mut base_values = base_values.into_array(batch.num_rows())?;
 
         // Fill in a result value already for rows where the base expression value is null
         // Since each when expression is tested against the base expression using the equality
@@ -773,7 +818,11 @@ impl CaseBody {
 
                 if base_all_null {
                     // All base values were null, so no need to filter
-                    let nulls_value = expr.evaluate(&remainder_batch)?;
+                    let nulls_value = evaluate_result(
+                        self.when_then_expr.len(),
+                        &expr,
+                        &remainder_batch,
+                    )?;
                     result_builder.add_branch_result(&remainder_rows, nulls_value)?;
                 } else {
                     // Filter out the null rows and evaluate the else expression for those
@@ -781,7 +830,11 @@ impl CaseBody {
                     let nulls_batch =
                         filter_record_batch(&remainder_batch, &nulls_filter)?;
                     let nulls_rows = filter_array(&remainder_rows, &nulls_filter)?;
-                    let nulls_value = expr.evaluate(&nulls_batch)?;
+                    let nulls_value = evaluate_result(
+                        self.when_then_expr.len(),
+                        &expr,
+                        &nulls_batch,
+                    )?;
                     result_builder.add_branch_result(&nulls_rows, nulls_value)?;
                 }
             }
@@ -807,7 +860,10 @@ impl CaseBody {
             // Evaluate the 'when' predicate for the remainder batch
             // This results in a boolean array with the same length as the remaining number of rows
             let when_expr = &self.when_then_expr[i].0;
-            let when_value = match when_expr.evaluate(&remainder_batch)? {
+            let Some(when_value) = evaluate_guard(Some(i), when_expr, &remainder_batch)? else {
+                return result_builder.finish();
+            };
+            let when_value = match when_value {
                 ColumnarValue::Array(a) => {
                     compare_with_eq(&a, &base_values, base_value_is_nested)
                 }
@@ -826,7 +882,7 @@ impl CaseBody {
             // If the 'when' predicate matched all remaining rows, there is no need to filter
             if when_value.null_count() == 0 && !when_value.has_false() {
                 let then_expression = &self.when_then_expr[i].1;
-                let then_value = then_expression.evaluate(&remainder_batch)?;
+                let then_value = evaluate_result(i, then_expression, &remainder_batch)?;
                 result_builder.add_branch_result(&remainder_rows, then_value)?;
                 return result_builder.finish();
             }
@@ -841,7 +897,7 @@ impl CaseBody {
             let then_rows = filter_array(&remainder_rows, &then_filter)?;
 
             let then_expression = &self.when_then_expr[i].1;
-            let then_value = then_expression.evaluate(&then_batch)?;
+            let then_value = evaluate_result(i, then_expression, &then_batch)?;
             result_builder.add_branch_result(&then_rows, then_value)?;
 
             // If this is the last 'when' branch and there is no 'else' expression, there's no
@@ -871,7 +927,11 @@ impl CaseBody {
         if let Some(e) = &self.else_expr {
             // keep `else_expr`'s data type and return type consistent
             let expr = try_cast(Arc::clone(e), &batch.schema(), return_type.clone())?;
-            let else_value = expr.evaluate(&remainder_batch)?;
+            let else_value = evaluate_result(
+                self.when_then_expr.len(),
+                &expr,
+                &remainder_batch,
+            )?;
             result_builder.add_branch_result(&remainder_rows, else_value)?;
         }
 
@@ -883,6 +943,16 @@ impl CaseBody {
         &self,
         batch: &RecordBatch,
         return_type: &DataType,
+        evaluate_guard: &mut impl FnMut(
+            Option<usize>,
+            &Arc<dyn PhysicalExpr>,
+            &RecordBatch,
+        ) -> Result<Option<ColumnarValue>>,
+        evaluate_result: &mut impl FnMut(
+            usize,
+            &Arc<dyn PhysicalExpr>,
+            &RecordBatch,
+        ) -> Result<ColumnarValue>,
     ) -> Result<ColumnarValue> {
         let mut result_builder = ResultBuilder::new(return_type, batch.num_rows());
 
@@ -896,9 +966,10 @@ impl CaseBody {
             // Evaluate the 'when' predicate for the remainder batch
             // This results in a boolean array with the same length as the remaining number of rows
             let when_predicate = &self.when_then_expr[i].0;
-            let when_value = when_predicate
-                .evaluate(&remainder_batch)?
-                .into_array(remainder_batch.num_rows())?;
+            let Some(when_value) = evaluate_guard(Some(i), when_predicate, &remainder_batch)? else {
+                return result_builder.finish();
+            };
+            let when_value = when_value.into_array(remainder_batch.num_rows())?;
             let when_value = as_boolean_array(&when_value).map_err(|_| {
                 internal_datafusion_err!("WHEN expression did not return a BooleanArray")
             })?;
@@ -913,7 +984,7 @@ impl CaseBody {
             // If the 'when' predicate matched all remaining rows, there is no need to filter
             if when_value.null_count() == 0 && !when_value.has_false() {
                 let then_expression = &self.when_then_expr[i].1;
-                let then_value = then_expression.evaluate(&remainder_batch)?;
+                let then_value = evaluate_result(i, then_expression, &remainder_batch)?;
                 result_builder.add_branch_result(&remainder_rows, then_value)?;
                 return result_builder.finish();
             }
@@ -928,7 +999,7 @@ impl CaseBody {
             let then_rows = filter_array(&remainder_rows, &then_filter)?;
 
             let then_expression = &self.when_then_expr[i].1;
-            let then_value = then_expression.evaluate(&then_batch)?;
+            let then_value = evaluate_result(i, then_expression, &then_batch)?;
             result_builder.add_branch_result(&then_rows, then_value)?;
 
             // If this is the last 'when' branch and there is no 'else' expression, there's no
@@ -957,7 +1028,11 @@ impl CaseBody {
         if let Some(e) = &self.else_expr {
             // keep `else_expr`'s data type and return type consistent
             let expr = try_cast(Arc::clone(e), &batch.schema(), return_type.clone())?;
-            let else_value = expr.evaluate(&remainder_batch)?;
+            let else_value = evaluate_result(
+                self.when_then_expr.len(),
+                &expr,
+                &remainder_batch,
+            )?;
             result_builder.add_branch_result(&remainder_rows, else_value)?;
         }
 
@@ -1041,9 +1116,19 @@ impl CaseExpr {
             let projected_batch = batch.project(projection)?;
             projected
                 .body
-                .case_when_with_expr(&projected_batch, &return_type)
+                .case_when_with_expr(
+                    &projected_batch,
+                    &return_type,
+                    &mut |_, expr, batch| expr.evaluate(batch).map(Some),
+                    &mut |_, expr, batch| expr.evaluate(batch),
+                )
         } else {
-            self.body.case_when_with_expr(batch, &return_type)
+            self.body.case_when_with_expr(
+                batch,
+                &return_type,
+                &mut |_, expr, batch| expr.evaluate(batch).map(Some),
+                &mut |_, expr, batch| expr.evaluate(batch),
+            )
         }
     }
 
@@ -1065,9 +1150,19 @@ impl CaseExpr {
             let projected_batch = batch.project(projection)?;
             projected
                 .body
-                .case_when_no_expr(&projected_batch, &return_type)
+                .case_when_no_expr(
+                    &projected_batch,
+                    &return_type,
+                    &mut |_, expr, batch| expr.evaluate(batch).map(Some),
+                    &mut |_, expr, batch| expr.evaluate(batch),
+                )
         } else {
-            self.body.case_when_no_expr(batch, &return_type)
+            self.body.case_when_no_expr(
+                batch,
+                &return_type,
+                &mut |_, expr, batch| expr.evaluate(batch).map(Some),
+                &mut |_, expr, batch| expr.evaluate(batch),
+            )
         }
     }
 

@@ -3,17 +3,19 @@
 
 use std::hash::{Hash, Hasher};
 use std::sync::{
-    Arc,
+    Arc, LazyLock,
     atomic::{AtomicUsize, Ordering},
 };
 
 use arrow::datatypes::{DataType, Field, FieldRef, Schema};
 use datafusion::common::{Result, ScalarValue, exec_err};
 use datafusion::execution::SessionStateBuilder;
+use datafusion::logical_expr::expr::HigherOrderFunction;
 use datafusion::logical_expr::simplify::{ExprSimplifyResult, SimplifyContext};
 use datafusion::logical_expr::{
-    ColumnarValue, Expr, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature,
-    Volatility,
+    ColumnarValue, Expr, HigherOrderFunctionArgs, HigherOrderReturnFieldArgs, HigherOrderSignature,
+    HigherOrderUDF, HigherOrderUDFImpl, LambdaParametersProgress, ReturnFieldArgs,
+    ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, ValueOrLambda, Volatility,
 };
 use datafusion::physical_plan::collect;
 use datafusion::prelude::{SessionConfig, SessionContext};
@@ -144,6 +146,117 @@ impl ScalarUDFImpl for CountedIdentity {
     }
 }
 
+// A value-only higher-order identity is valid under the SDK's Any(1) signature.
+#[derive(Debug)]
+struct NoFoldHigherOrderIdentity {
+    error_if_invoked: bool,
+    calls: Arc<AtomicUsize>,
+}
+
+impl PartialEq for NoFoldHigherOrderIdentity {
+    fn eq(&self, other: &Self) -> bool {
+        self.error_if_invoked == other.error_if_invoked
+    }
+}
+impl Eq for NoFoldHigherOrderIdentity {}
+impl Hash for NoFoldHigherOrderIdentity {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.error_if_invoked.hash(state);
+    }
+}
+
+impl HigherOrderUDFImpl for NoFoldHigherOrderIdentity {
+    fn name(&self) -> &str {
+        "higher_no_fold_identity"
+    }
+    fn signature(&self) -> &HigherOrderSignature {
+        static SIGNATURE: LazyLock<HigherOrderSignature> =
+            LazyLock::new(|| HigherOrderSignature::any(1, Volatility::Immutable));
+        &SIGNATURE
+    }
+    fn lambda_parameters(
+        &self,
+        _: usize,
+        _: &[ValueOrLambda<FieldRef, Option<FieldRef>>],
+    ) -> Result<LambdaParametersProgress> {
+        Ok(LambdaParametersProgress::Complete(vec![]))
+    }
+    fn supports_constant_folding(&self) -> bool {
+        false
+    }
+    fn return_field_from_args(&self, arguments: HigherOrderReturnFieldArgs) -> Result<FieldRef> {
+        match arguments.arg_fields {
+            [ValueOrLambda::Value(field)] => Ok(Arc::clone(field)),
+            _ => exec_err!("higher identity requires one value argument"),
+        }
+    }
+    fn invoke_with_args(&self, arguments: HigherOrderFunctionArgs) -> Result<ColumnarValue> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        if self.error_if_invoked {
+            return exec_err!("folding_opt_out_invoked");
+        }
+        match arguments.args.as_slice() {
+            [ValueOrLambda::Value(value)] => Ok(value.clone()),
+            _ => exec_err!("higher identity requires one value argument"),
+        }
+    }
+}
+
+#[derive(Debug)]
+struct ScalarToHigherOrderRewriter {
+    target: Arc<HigherOrderUDF>,
+    error_if_invoked: bool,
+    calls: Arc<AtomicUsize>,
+}
+
+impl PartialEq for ScalarToHigherOrderRewriter {
+    fn eq(&self, other: &Self) -> bool {
+        self.target == other.target && self.error_if_invoked == other.error_if_invoked
+    }
+}
+impl Eq for ScalarToHigherOrderRewriter {}
+impl Hash for ScalarToHigherOrderRewriter {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.target.hash(state);
+        self.error_if_invoked.hash(state);
+    }
+}
+
+impl ScalarUDFImpl for ScalarToHigherOrderRewriter {
+    fn name(&self) -> &str {
+        "rewrite_to_higher_no_fold"
+    }
+    fn signature(&self) -> &Signature {
+        static SIGNATURE: LazyLock<Signature> =
+            LazyLock::new(|| Signature::exact(vec![DataType::Float64], Volatility::Immutable));
+        &SIGNATURE
+    }
+    fn return_type(&self, arguments: &[DataType]) -> Result<DataType> {
+        Ok(arguments[0].clone())
+    }
+    fn return_field_from_args(&self, arguments: ReturnFieldArgs) -> Result<FieldRef> {
+        Ok(Arc::clone(&arguments.arg_fields[0]))
+    }
+    fn short_circuits(&self) -> bool {
+        true
+    }
+    fn conditional_arguments<'a>(&self, _: &'a [Expr]) -> Option<(Vec<&'a Expr>, Vec<&'a Expr>)> {
+        None
+    }
+    fn simplify(&self, arguments: Vec<Expr>, _: &SimplifyContext) -> Result<ExprSimplifyResult> {
+        Ok(ExprSimplifyResult::Simplified(Expr::HigherOrderFunction(
+            HigherOrderFunction::new(Arc::clone(&self.target), arguments),
+        )))
+    }
+    fn invoke_with_args(&self, arguments: ScalarFunctionArgs) -> Result<ColumnarValue> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        if self.error_if_invoked {
+            return exec_err!("folding_opt_out_invoked");
+        }
+        Ok(arguments.args[0].clone())
+    }
+}
+
 fn session(spark: bool, error_if_invoked: bool) -> (SessionContext, InvocationCounters) {
     let builder = SessionStateBuilder::new()
         .with_default_features()
@@ -158,6 +271,16 @@ fn session(spark: bool, error_if_invoked: bool) -> (SessionContext, InvocationCo
         builder.build()
     });
     let counters = InvocationCounters::default();
+    // The named counter roles are opaque=NoFold higher-order target, permitted=scalar rewriter.
+    let higher_order_target = Arc::new(HigherOrderUDF::new_from_impl(NoFoldHigherOrderIdentity {
+        error_if_invoked,
+        calls: Arc::clone(&counters.opaque),
+    }));
+    session.register_udf(ScalarUDF::from(ScalarToHigherOrderRewriter {
+        target: higher_order_target,
+        error_if_invoked,
+        calls: Arc::clone(&counters.permitted),
+    }));
     let retained_identity = Arc::new(
         ScalarUDF::from(CountedIdentity {
             name: "retain_constant",
@@ -651,6 +774,51 @@ async fn required_children_and_siblings_keep_the_first_error_without_invoking_op
     ];
     for (sql, expected_fields, expected_root) in [
         (
+            "SELECT CASE WHEN (1 DIV d)=1 THEN CAST(7 AS DOUBLE) WHEN retain_constant(v)>0 THEN CAST(8 AS DOUBLE) ELSE CAST(9 AS DOUBLE) END AS r FROM VALUES(0,CAST(1 AS DOUBLE)) AS t(d,v)",
+            vec![Field::new("r", DataType::Float64, false)],
+            "Arrow error: Divide by zero error",
+        ),
+        (
+            "SELECT CASE WHEN first_flag THEN retain_constant(1 DIV d) WHEN retain_constant(v)>0 THEN CAST(8 AS DOUBLE) ELSE CAST(9 AS DOUBLE) END AS r FROM VALUES(true,0,CAST(1 AS DOUBLE)),(false,1,CAST(1 AS DOUBLE)) AS t(first_flag,d,v)",
+            vec![Field::new("r", DataType::Float64, true)],
+            "Arrow error: Divide by zero error",
+        ),
+        (
+            "SELECT CASE WHEN retain_constant(v/0)>0 THEN CAST(7 AS DOUBLE) ELSE CAST(8 AS DOUBLE) END AS r FROM VALUES(CAST(1 AS DOUBLE)) AS t(v)",
+            vec![Field::new("r", DataType::Float64, false)],
+            "Arrow error: Divide by zero error",
+        ),
+        (
+            "SELECT CASE WHEN (1 DIV 0)=1 THEN retain_constant(1/1) ELSE CAST(7 AS DOUBLE) END AS r",
+            vec![Field::new("r", DataType::Float64, true)],
+            "Arrow error: Divide by zero error",
+        ),
+        (
+            "SELECT CASE WHEN v/0=CAST(1 AS DOUBLE) THEN retain_constant(1/1) ELSE CAST(7 AS DOUBLE) END AS r FROM VALUES(CAST(1 AS DOUBLE)) AS t(v)",
+            vec![Field::new("r", DataType::Float64, true)],
+            "Arrow error: Divide by zero error",
+        ),
+        (
+            "SELECT CASE WHEN true THEN retain_constant(1 DIV 0) ELSE CAST(7 AS DOUBLE) END AS r",
+            vec![Field::new("r", DataType::Float64, true)],
+            "Arrow error: Divide by zero error",
+        ),
+        (
+            "SELECT CASE WHEN false THEN CAST(7 AS DOUBLE) ELSE retain_constant(1 DIV 0) END AS r",
+            vec![Field::new("r", DataType::Float64, true)],
+            "Arrow error: Divide by zero error",
+        ),
+        (
+            "SELECT CASE WHEN flag THEN retain_constant(v/0) ELSE CAST(7 AS DOUBLE) END AS r FROM VALUES(true,CAST(1 AS DOUBLE)) AS t(flag,v)",
+            vec![Field::new("r", DataType::Float64, true)],
+            "Arrow error: Divide by zero error",
+        ),
+        (
+            "SELECT CASE WHEN flag THEN retain_constant(1/v) ELSE CAST(7 AS DOUBLE) END AS r FROM VALUES(false,CAST(0 AS DOUBLE)),(true,CAST(0 AS DOUBLE)) AS t(flag,v)",
+            vec![Field::new("r", DataType::Float64, true)],
+            "Arrow error: Divide by zero error",
+        ),
+        (
             "SELECT retain_constant(1 DIV 0) AS r",
             vec![Field::new("r", DataType::Float64, true)],
             "Arrow error: Divide by zero error",
@@ -717,68 +885,70 @@ async fn required_children_and_siblings_keep_the_first_error_without_invoking_op
             "Arrow error: Divide by zero error",
         ),
     ] {
-        // If an opaque call runs, its sentinel must not replace the required division failure.
-        let (session, counters) = session(true, true);
-        let query = plan_query(&session, sql, &SparkSqlOptions::default()).await?;
-        let after_resolve = counters.snapshot();
-        assert_eq!(
-            after_resolve,
-            InvocationSnapshot {
-                opaque: 0,
-                permitted: 0
-            },
-            "{sql}"
-        );
-        let analyzed = query.logical_plan.schema();
-        let public_fields = analyzed
-            .fields()
-            .iter()
-            .zip(&query.column_names)
-            .map(|(field, name)| field.as_ref().clone().with_name(name.clone()))
-            .collect::<Vec<_>>();
-        assert_eq!(analyzed.fields().len(), expected_fields.len());
-        assert_eq!(
-            query.column_names,
-            expected_fields
+        for error_if_invoked in [false, true] {
+            // If an opaque call runs, its sentinel must not replace the required division failure.
+            let (session, counters) = session(true, error_if_invoked);
+            let query = plan_query(&session, sql, &SparkSqlOptions::default()).await?;
+            let after_resolve = counters.snapshot();
+            assert_eq!(
+                after_resolve,
+                InvocationSnapshot {
+                    opaque: 0,
+                    permitted: 0
+                },
+                "{sql}"
+            );
+            let analyzed = query.logical_plan.schema();
+            let public_fields = analyzed
+                .fields()
                 .iter()
-                .map(|field| field.name().clone())
-                .collect::<Vec<_>>()
-        );
-        assert_eq!(
-            Schema::new_with_metadata(public_fields, analyzed.metadata().clone()),
-            Schema::new(expected_fields)
-        );
-        let error = match query.create_physical_plan(&session).await {
-            Err(error) => error,
-            Ok(_) => return Err(format!("required child failure was deferred: {sql}").into()),
-        };
-        let after_physical = counters.snapshot();
-        assert_eq!(
-            after_physical,
-            InvocationSnapshot {
-                opaque: 0,
-                permitted: 0
-            },
-            "{sql}: {error}"
-        );
-        assert_eq!(error.find_root().to_string(), expected_root);
-        if expected_root.contains("Cast error") {
-            assert!(
-                error.to_string().contains("[CAST_INVALID_INPUT]"),
-                "{error}"
+                .zip(&query.column_names)
+                .map(|(field, name)| field.as_ref().clone().with_name(name.clone()))
+                .collect::<Vec<_>>();
+            assert_eq!(analyzed.fields().len(), expected_fields.len());
+            assert_eq!(
+                query.column_names,
+                expected_fields
+                    .iter()
+                    .map(|field| field.name().clone())
+                    .collect::<Vec<_>>()
+            );
+            assert_eq!(
+                Schema::new_with_metadata(public_fields, analyzed.metadata().clone()),
+                Schema::new(expected_fields.clone())
+            );
+            let error = match query.create_physical_plan(&session).await {
+                Err(error) => error,
+                Ok(_) => return Err(format!("required child failure was deferred: {sql}").into()),
+            };
+            let after_physical = counters.snapshot();
+            assert_eq!(
+                after_physical,
+                InvocationSnapshot {
+                    opaque: 0,
+                    permitted: 0
+                },
+                "{sql}: {error}"
+            );
+            assert_eq!(error.find_root().to_string(), expected_root);
+            if expected_root.contains("Cast error") {
+                assert!(
+                    error.to_string().contains("[CAST_INVALID_INPUT]"),
+                    "{error}"
+                );
+            }
+            eprintln!(
+                "shared folding required error: {}",
+                json!({
+                    "sql":sql,"ansi":true,"error_if_invoked":error_if_invoked,"spark_oracle_credit":false,
+                    "after_resolve":[after_resolve.opaque,after_resolve.permitted],"after_physical":[after_physical.opaque,after_physical.permitted],
+                    "analyzed_arrow_schema":format!("{:?}", analyzed.as_arrow()),
+                    "column_names":query.column_names,"error_stage":"physical",
+                    "error":error.to_string(),"root_error":error.find_root().to_string(),
+                    "physical_fields_available":false,"rows_available":false
+                })
             );
         }
-        eprintln!(
-            "shared folding required error: {}",
-            json!({
-                "sql":sql,"ansi":true,"spark_oracle_credit":false,
-                "after_resolve":[after_resolve.opaque,after_resolve.permitted],"after_physical":[after_physical.opaque,after_physical.permitted],
-                "analyzed_arrow_schema":format!("{:?}", analyzed.as_arrow()),
-                "column_names":query.column_names,"error_stage":"physical",
-                "error":error.to_string(),"root_error":error.find_root().to_string(),
-                "physical_fields_available":false,"rows_available":false
-            })
-        );
     }
     for error_if_invoked in [false, true] {
         for sql in [
@@ -1165,6 +1335,181 @@ async fn local_any_null_parent_waits_for_execution() -> TestResult {
                     error_if_invoked,
                 )
                 .await?;
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn scalar_rewrite_to_higher_order_preserves_target_folding_permission() -> TestResult {
+    for ansi in [true, false] {
+        for spark in [true, false] {
+            for error_if_invoked in [false, true] {
+                for (argument, spark_analyzed_nullable) in [("v/1", true), ("v", false)] {
+                    let mut case = scalar_case(
+                        format!(
+                            "SELECT rewrite_to_higher_no_fold({argument}) AS r FROM VALUES(CAST(1 AS DOUBLE)) AS t(v)"
+                        ),
+                        DataType::Float64,
+                        vec![vec![ScalarValue::Float64(Some(1.0))]],
+                        1,
+                        0,
+                    );
+                    case.analyzed_fields[0] = case.analyzed_fields[0]
+                        .clone()
+                        .with_nullable(!spark || spark_analyzed_nullable);
+                    case.physical_fields[0] = case.physical_fields[0].clone().with_nullable(!spark);
+                    check_case(case, spark, ansi, error_if_invoked).await?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn case_reachability_preserves_required_errors_and_opaque_execution() -> TestResult {
+    for ansi in [true, false] {
+        for error_if_invoked in [false, true] {
+            for (sql, value, calls, physical_nullable) in [
+                (
+                    "SELECT CASE WHEN (1 DIV 1)=1 THEN retain_constant(1/1) ELSE CAST(7 AS DOUBLE) END AS r",
+                    1.0,
+                    1,
+                    true,
+                ),
+                (
+                    "SELECT CASE WHEN false THEN retain_constant(1 DIV 0) ELSE CAST(7 AS DOUBLE) END AS r",
+                    7.0,
+                    0,
+                    false,
+                ),
+                (
+                    "SELECT CASE WHEN flag THEN retain_constant(v/0) ELSE CAST(7 AS DOUBLE) END AS r FROM VALUES(false,CAST(1 AS DOUBLE)) AS t(flag,v)",
+                    7.0,
+                    0,
+                    true,
+                ),
+            ] {
+                let mut case = scalar_case(
+                    sql.into(),
+                    DataType::Float64,
+                    vec![vec![ScalarValue::Float64(Some(value))]],
+                    calls,
+                    0,
+                );
+                case.physical_fields[0] = case.physical_fields[0]
+                    .clone()
+                    .with_nullable(physical_nullable);
+                check_case(case, true, ansi, error_if_invoked).await?;
+            }
+            for spark in [true, false] {
+                // One guard call and one selected-arm call occur in this one-batch fixture.
+                check_case(
+                    scalar_case(
+                        "SELECT CASE WHEN retain_constant(v)>0 THEN retain_constant(1/d) ELSE CAST(7 AS DOUBLE) END AS r FROM VALUES(CAST(1 AS DOUBLE),CAST(1 AS DOUBLE)),(CAST(-1 AS DOUBLE),CAST(0 AS DOUBLE)) AS t(v,d)".into(),
+                        DataType::Float64,
+                        vec![vec![ScalarValue::Float64(Some(1.0))], vec![ScalarValue::Float64(Some(7.0))]],
+                        if error_if_invoked { 1 } else { 2 }, 0,
+                    ), spark, ansi, error_if_invoked,
+                ).await?;
+                // One local batch has one selected row; the false row must not evaluate 1/0.
+                check_case(
+                    scalar_case(
+                        "SELECT CASE WHEN flag THEN retain_constant(1/v) ELSE CAST(7 AS DOUBLE) END AS r FROM VALUES(true,CAST(1 AS DOUBLE)),(false,CAST(0 AS DOUBLE)) AS t(flag,v)".into(),
+                        DataType::Float64,
+                        vec![vec![ScalarValue::Float64(Some(1.0))], vec![ScalarValue::Float64(Some(7.0))]],
+                        1, 0,
+                    ), spark, ansi, error_if_invoked,
+                ).await?;
+            }
+            if !ansi {
+                for sql in [
+                    "SELECT CASE WHEN (1 DIV 0)=1 THEN retain_constant(1/1) ELSE CAST(7 AS DOUBLE) END AS r",
+                    "SELECT CASE WHEN v/0=CAST(1 AS DOUBLE) THEN retain_constant(1/1) ELSE CAST(7 AS DOUBLE) END AS r FROM VALUES(CAST(1 AS DOUBLE)) AS t(v)",
+                ] {
+                    let mut case = scalar_case(
+                        sql.into(),
+                        DataType::Float64,
+                        vec![vec![ScalarValue::Float64(Some(7.0))]],
+                        0,
+                        0,
+                    );
+                    case.physical_fields[0] = case.physical_fields[0].clone().with_nullable(false);
+                    check_case(case, true, ansi, error_if_invoked).await?;
+                }
+                for sql in [
+                    "SELECT CASE WHEN true THEN retain_constant(1 DIV 0) ELSE CAST(7 AS DOUBLE) END AS r",
+                    "SELECT CASE WHEN false THEN CAST(7 AS DOUBLE) ELSE retain_constant(1 DIV 0) END AS r",
+                    "SELECT CASE WHEN flag THEN retain_constant(v/0) ELSE CAST(7 AS DOUBLE) END AS r FROM VALUES(true,CAST(1 AS DOUBLE)) AS t(flag,v)",
+                ] {
+                    check_case(
+                        scalar_case(
+                            sql.into(),
+                            DataType::Float64,
+                            vec![vec![ScalarValue::Float64(None)]],
+                            1,
+                            0,
+                        ),
+                        true,
+                        ansi,
+                        error_if_invoked,
+                    )
+                    .await?;
+                }
+                check_case(
+                    scalar_case(
+                        "SELECT CASE WHEN flag THEN retain_constant(1/v) ELSE CAST(7 AS DOUBLE) END AS r FROM VALUES(false,CAST(0 AS DOUBLE)),(true,CAST(0 AS DOUBLE)) AS t(flag,v)".into(),
+                        DataType::Float64,
+                        vec![vec![ScalarValue::Float64(Some(7.0))], vec![ScalarValue::Float64(None)]],
+                        1, 0,
+                    ), true, ansi, error_if_invoked,
+                ).await?;
+            }
+            // The native surface succeeds on its ordinary-division condition control.
+            check_case(
+                scalar_case(
+                    "SELECT CASE WHEN v/0=CAST(1 AS DOUBLE) THEN retain_constant(1/1) ELSE CAST(7 AS DOUBLE) END AS r FROM VALUES(CAST(1 AS DOUBLE)) AS t(v)".into(),
+                    DataType::Float64,
+                    vec![vec![ScalarValue::Float64(Some(7.0))]], 0, 0,
+                ), false, ansi, error_if_invoked,
+            ).await?;
+            for (sql, expected_error) in [
+                (
+                    "SELECT CASE WHEN (1 DIV 0)=1 THEN retain_constant(1/1) ELSE CAST(7 AS DOUBLE) END AS r",
+                    "SQL error: ParserError(\"Expected: end of statement, found: ( at Line: 1, Column: 18\")",
+                ),
+                (
+                    "SELECT CASE WHEN (1 DIV 1)=1 THEN retain_constant(1/1) ELSE CAST(7 AS DOUBLE) END AS r",
+                    "SQL error: ParserError(\"Expected: end of statement, found: ( at Line: 1, Column: 18\")",
+                ),
+                (
+                    "SELECT CASE WHEN true THEN retain_constant(1 DIV 0) ELSE CAST(7 AS DOUBLE) END AS r",
+                    "SQL error: ParserError(\"Expected: end of statement, found: true at Line: 1, Column: 18\")",
+                ),
+                (
+                    "SELECT CASE WHEN false THEN CAST(7 AS DOUBLE) ELSE retain_constant(1 DIV 0) END AS r",
+                    "SQL error: ParserError(\"Expected: end of statement, found: false at Line: 1, Column: 18\")",
+                ),
+                (
+                    "SELECT CASE WHEN false THEN retain_constant(1 DIV 0) ELSE CAST(7 AS DOUBLE) END AS r",
+                    "SQL error: ParserError(\"Expected: end of statement, found: false at Line: 1, Column: 18\")",
+                ),
+            ] {
+                let (native, counters) = session(false, error_if_invoked);
+                let error = native
+                    .sql(sql)
+                    .await
+                    .expect_err("native DIV syntax remains rejected");
+                assert_eq!(error.to_string(), expected_error, "{sql}");
+                assert_eq!(
+                    counters.snapshot(),
+                    InvocationSnapshot {
+                        opaque: 0,
+                        permitted: 0
+                    }
+                );
             }
         }
     }

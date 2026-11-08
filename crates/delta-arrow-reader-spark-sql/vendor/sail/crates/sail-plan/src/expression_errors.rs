@@ -13,6 +13,7 @@ use datafusion::optimizer::propagate_empty_relation::PropagateEmptyRelation;
 use datafusion::optimizer::push_down_filter::PushDownFilter;
 use datafusion::optimizer::simplify_expressions::{ExprSimplifier, prune_null};
 use datafusion::optimizer::{AnalyzerRule, OptimizerContext, OptimizerRule};
+use datafusion::physical_expr::expressions::CaseExpr;
 use datafusion::physical_expr::{PhysicalExpr, ScalarFunctionExpr, create_physical_expr};
 use datafusion_common::config::{ConfigExtension, ConfigOptions};
 use datafusion_common::metadata::FieldMetadata;
@@ -247,7 +248,9 @@ pub(crate) fn permits_constant_preparation(expr: &Expr) -> Result<bool> {
     Ok(!expr.exists(|expr| {
         Ok(expr.is_volatile_node()
             || matches!(expr, Expr::ScalarFunction(function)
-            if !function.func.inner().supports_constant_folding()))
+            if !function.func.inner().supports_constant_folding())
+            || matches!(expr, Expr::HigherOrderFunction(function)
+            if !function.func.supports_constant_folding()))
     })?)
 }
 
@@ -3863,7 +3866,7 @@ impl Prepare {
         batch: &RecordBatch,
         arguments_only: bool,
     ) -> Result<()> {
-        let evaluate = |physical: &dyn PhysicalExpr| {
+        let evaluate = |_: &Expr, physical: &dyn PhysicalExpr| {
             if arguments_only {
                 physical
                     .downcast_ref::<ScalarFunctionExpr>()
@@ -3877,7 +3880,19 @@ impl Prepare {
                 physical.evaluate(batch).map(|_| ())
             }
         };
-        let error = match evaluate(create_physical_expr(expr, schema, &self.props)?.as_ref()) {
+        self.check_local_expression_errors_with(expr, schema, evaluate)
+    }
+
+    fn check_local_expression_errors_with(
+        &self,
+        expr: &Expr,
+        schema: &DFSchemaRef,
+        evaluate: impl Fn(&Expr, &dyn PhysicalExpr) -> Result<()>,
+    ) -> Result<()> {
+        let error = match evaluate(
+            expr,
+            create_physical_expr(expr, schema, &self.props)?.as_ref(),
+        ) {
             Ok(_) => return Ok(()),
             Err(error) => error,
         };
@@ -3939,7 +3954,10 @@ impl Prepare {
         if !expr.transformed {
             return Err(error);
         }
-        evaluate(create_physical_expr(&expr.data, schema, &self.props)?.as_ref())?;
+        evaluate(
+            &expr.data,
+            create_physical_expr(&expr.data, schema, &self.props)?.as_ref(),
+        )?;
         Ok(())
     }
 
@@ -4092,6 +4110,87 @@ impl Prepare {
                 self.eval_constant(expr)?;
             }
             return Ok(());
+        }
+        // Native CASE selection keeps reached child errors without evaluating opaque results.
+        if check_values
+            && matches!(expr, Expr::Case(_))
+            && is_locally_evaluable(expr, local_input.is_some())?
+        {
+            let constant_input;
+            let (schema, batch) = match local_input {
+                Some(input) => input,
+                None => {
+                    constant_input = (
+                        Arc::new(DFSchema::empty()),
+                        RecordBatch::try_new_with_options(
+                            Arc::new(Schema::empty()),
+                            vec![],
+                            &RecordBatchOptions::new().with_row_count(Some(1)),
+                        )?,
+                    );
+                    (&constant_input.0, &constant_input.1)
+                }
+            };
+            let evaluate = |expression: &Expr, physical: &dyn PhysicalExpr| {
+                let Expr::Case(case) = expression else {
+                    return datafusion_common::internal_err!(
+                        "Expected CASE for reached branch preparation"
+                    );
+                };
+                physical
+                    .downcast_ref::<CaseExpr>()
+                    .ok_or_else(|| {
+                        datafusion_common::internal_datafusion_err!(
+                            "Expected CASE for reached branch preparation"
+                        )
+                    })?
+                    .check_reached_branches(
+                        batch,
+                        |index, physical, selected| {
+                            let guard = match index {
+                                Some(index) => case.when_then_expr[index].0.as_ref(),
+                                None => case.expr.as_deref().ok_or_else(|| {
+                                    datafusion_common::internal_datafusion_err!(
+                                        "Expected a CASE base for guard preparation"
+                                    )
+                                })?,
+                            };
+                            if permits_constant_preparation(guard)? {
+                                physical.evaluate(selected).map(Some)
+                            } else {
+                                self.check_expr(
+                                    guard,
+                                    true,
+                                    local_input.map(|_| (schema, selected)),
+                                )?;
+                                Ok(None)
+                            }
+                        },
+                        |index, selected| {
+                            if let Some(result) = case
+                                .when_then_expr
+                                .get(index)
+                                .map(|(_, result)| result.as_ref())
+                                .or_else(|| case.else_expr.as_deref())
+                            {
+                                self.check_expr(
+                                    result,
+                                    true,
+                                    local_input.map(|_| (schema, selected)),
+                                )?;
+                            }
+                            Ok(())
+                        },
+                    )
+            };
+            return if local_input.is_some() {
+                self.check_local_expression_errors_with(expr, schema, evaluate)
+            } else {
+                evaluate(
+                    expr,
+                    create_physical_expr(expr, schema, &self.props)?.as_ref(),
+                )
+            };
         }
         // Local AnyNull arguments retain their native row masks without invoking the opaque parent.
         if check_values

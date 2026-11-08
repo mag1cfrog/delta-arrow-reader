@@ -1221,15 +1221,16 @@ through aliases. Optimizer ancestor folding and successful Spark constant STRUCT
 preparation honor descendant opt-outs. Spark-marked ARRAY/STRUCT parents retain
 their complete child declarations before children fold; native defaults remain.
 Shared arithmetic and local-row preparation check folding permission before
-physical evaluation, including aliases, scalar parents and CAST-only producers.
+physical evaluation, including aliases, scalar parents, CAST-only producers and
+higher-order calls introduced by rewrites.
 Opaque ancestors remain unevaluated while eligible constant children retain
 their error checks and ordinary folding. Short-circuit functions keep their
 declared eager argument checks; conditional arguments retain deferred errors.
 Physical CASE field inference treats predicates containing folding-disabled
-scalar calls as inconclusive instead of evaluating them. Local argument checks
-reuse the physical evaluator's NULL row selection without invoking the opaque
-parent. Structural local-input classification and type validation remain separate
-from invocation permission.
+scalar calls as inconclusive instead of evaluating them. Local argument and CASE
+checks reuse the physical evaluator's row selection and guard order while keeping
+opaque calls unevaluated. Structural local-input classification and type validation
+remain separate from invocation permission.
 
 The result-field adapter prepares its owned whole operands without descending
 into user conditional branches. This retains required constant cast errors even
