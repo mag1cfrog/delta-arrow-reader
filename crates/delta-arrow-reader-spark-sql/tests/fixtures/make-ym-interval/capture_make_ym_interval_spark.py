@@ -6,8 +6,9 @@ nullable-column, NOT NULL-column, empty-input and NULL arguments, none, one and 
 signs, the YEAR TO MONTH limits and one month past them, INT, TINYINT, SMALLINT, BIGINT,
 DECIMAL, DOUBLE, BOOLEAN, STRING, malformed and empty STRING arguments, a NULL beside an
 overflowing argument or a failing argument cast in either order, STRING arguments beside a NULL
-literal, failing STRING arguments in row order, INT() of a STRING, unaliased generated names,
-and for comparisons, negation, IS NULL and TRY_ADD over its result. Every query runs in both
+literal, a cast NULL or a computed NULL, failing STRING arguments in row order, INT() of a
+STRING, unaliased generated names, and for comparisons, negation, IS NULL and TRY arithmetic
+over its result. Every query runs in both
 ANSI modes in UTC and America/Los_Angeles. Run from the crate root in the reference environment
 described in README.md; the output path must not exist.
 """
@@ -104,6 +105,7 @@ COLUMNS = [
     ("required_string_null_month", "make_ym_interval(t, NULL)", "required", "true"),
     ("required_string_string_null_month", "make_ym_interval(t, CAST(NULL AS STRING))",
      "required", "true"),
+    ("required_string_computed_null_month", "make_ym_interval(t, NULL + 1)", "required", "true"),
     ("nullable_null_year_string", "make_ym_interval(NULL, t)", "nullable", "true"),
     ("required_string_failures_in_row_order",
      "make_ym_interval(t, CASE WHEN k = 0 THEN 'bad' ELSE '1' END)", "required", "true"),
@@ -139,6 +141,10 @@ LITERALS = [
     ("string_malformed", "make_ym_interval('x')"),
     ("string_empty", "make_ym_interval('')"),
     ("string_malformed_null_month", "make_ym_interval('x', NULL)"),
+    ("string_malformed_string_null_month", "make_ym_interval('x', CAST(NULL AS STRING))"),
+    ("string_malformed_cast_null_month",
+     "make_ym_interval('x', CAST(CAST(NULL AS STRING) AS INT))"),
+    ("string_malformed_computed_null_month", "make_ym_interval('x', NULL + 1)"),
     ("null_year_string_malformed", "make_ym_interval(NULL, 'x')"),
     ("bigints", "make_ym_interval(1L, 2L)"),
     ("bigint_beyond_int", "make_ym_interval(4294967297L)"),
@@ -148,6 +154,11 @@ LITERALS = [
     ("boolean", "make_ym_interval(true)"),
     ("comparison", "make_ym_interval(1) = INTERVAL '1' YEAR"),
     ("try_add_overflow", "try_add(make_ym_interval(178956970, 8), INTERVAL '1' MONTH)"),
+    ("try_subtract_overflow",
+     "try_subtract(make_ym_interval(178956970, 8), INTERVAL '1' MONTH)"),
+    ("try_multiply_overflow", "try_multiply(make_ym_interval(178956970, 8), 2)"),
+    ("try_divide_overflow", "try_divide(make_ym_interval(178956970, 8), 2)"),
+    ("try_add_date_overflow", "try_add(DATE '2024-01-01', make_ym_interval(178956970, 8))"),
 ]
 
 # Unaliased queries, whose generated names Spark derives from both arguments.
