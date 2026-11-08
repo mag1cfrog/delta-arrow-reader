@@ -277,9 +277,9 @@ pub(crate) fn replan_make_interval_for_try(
         .data)
 }
 
-/// Spark's MAKE_YM_INTERVAL: BIGINT and STRING arguments are cast to INT with Spark's casts
-/// for the session's ANSI mode. A STRING cast is nullable, as Spark's is, so the result is
-/// nullable for a STRING argument.
+/// Spark's MAKE_YM_INTERVAL: BIGINT and STRING arguments, also dictionary-encoded ones, are
+/// cast to INT with Spark's casts for the session's ANSI mode. A STRING cast is nullable, as
+/// Spark's is, so the result is nullable for a STRING argument.
 fn make_ym_interval(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let mut arguments = input.arguments;
     let function = ScalarUDF::from(SparkMakeYmInterval::new());
@@ -297,6 +297,14 @@ fn make_ym_interval(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let ansi_mode = input.function_context.plan_config.ansi_mode;
     let mut bigint_argument = false;
     for (argument, data_type) in arguments.iter_mut().zip(argument_types) {
+        // Spark has no dictionary encoding; Delta uses one for STRING partition columns.
+        let data_type = match data_type {
+            DataType::Dictionary(_, value_type) => {
+                *argument = cast(argument.clone(), (*value_type).clone());
+                *value_type
+            }
+            data_type => data_type,
+        };
         if data_type == DataType::Int64 {
             bigint_argument = true;
             *argument = ScalarUDF::from(SparkCastNumericToInteger::try_new(

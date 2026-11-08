@@ -1,7 +1,8 @@
 //! Spark's MAKE_YM_INTERVAL over its INT years and months: `MakeYMInterval`'s exact
 //! arithmetic, which fails on overflow in both ANSI modes. Like Spark's, the result is
-//! nullable only for a nullable argument, a constant overflow fails while optimizing, and a
-//! NULL year skips the months for its row.
+//! nullable only for a nullable argument, a constant overflow fails while optimizing, a NULL
+//! literal argument gives NULL before either argument is evaluated, and a NULL year skips the
+//! months for its row.
 
 use std::sync::Arc;
 
@@ -11,8 +12,10 @@ use datafusion::arrow::datatypes::{DataType, Field, FieldRef, Int32Type, Interva
 use datafusion::arrow::error::ArrowError;
 use datafusion_common::types::NativeType;
 use datafusion_common::{Result, ScalarValue, plan_err};
+use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
 use datafusion_expr::{
-    ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
+    ColumnarValue, Expr, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
+    lit,
 };
 
 use crate::error::invalid_arg_count_exec_err;
@@ -75,6 +78,20 @@ impl ScalarUDFImpl for SparkMakeYmInterval {
     // months, so a NULL year skips the months' cast for its row.
     fn short_circuits_on_any_null_argument(&self) -> bool {
         true
+    }
+
+    // Spark's NullPropagation replaces the call with NULL for a NULL literal argument before
+    // folding constants, so a NULL literal discards failures of the other argument's cast.
+    fn simplify(&self, args: Vec<Expr>, _info: &SimplifyContext) -> Result<ExprSimplifyResult> {
+        if args
+            .iter()
+            .any(|arg| matches!(arg, Expr::Literal(value, _) if value.is_null()))
+        {
+            return Ok(ExprSimplifyResult::Simplified(lit(
+                ScalarValue::IntervalYearMonth(None),
+            )));
+        }
+        Ok(ExprSimplifyResult::Original(args))
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {

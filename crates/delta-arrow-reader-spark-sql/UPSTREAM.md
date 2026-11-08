@@ -648,20 +648,28 @@ defaults (#749). The [TRY_MAKE_INTERVAL references](tests/fixtures/try-make-inte
 record the checks.
 
 MAKE_YM_INTERVAL follows Spark's `MakeYMInterval`. Its result is nullable only for a nullable
-argument, where it was always nullable, so expressions over MAKE_YM_INTERVAL of NOT NULL INT or
-BIGINT values are NOT NULL. A STRING argument uses Spark's STRING-to-INT cast for the session's
-ANSI mode: it trims spaces, fails with `CAST_INVALID_INPUT` under ANSI or gives NULL, and is
-nullable in both modes, as Spark's cast is. It used Arrow's cast, which failed on spaces,
-malformed values and values beyond INT in both modes without Spark's condition. A NULL year
-skips the months' cast for its row, as Spark evaluates the years first. An overflow fails with
-Spark's whole `INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION` message in both modes, while
-optimizing for a constant through [constant folding errors](#constant-folding-errors); it used to
-fail while collecting rows, and its message stopped after the first sentence. DECIMAL and DOUBLE
-arguments, which Spark casts to INT, and BOOLEAN arguments, which Spark rejects with
-`DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE`, still fail while planning without Spark's condition
-(#1165). Unaliased names keep the arguments as written where Spark adds the defaulted months
-(#749). The [MAKE_YM_INTERVAL references](tests/fixtures/make-ym-interval/README.md) record the
-checks.
+argument, where it was always nullable. So comparisons and negation over MAKE_YM_INTERVAL of
+NOT NULL INT or BIGINT values are NOT NULL; CAST to STRING (#982) and GREATEST (#1090) are still
+nullable. A STRING argument, also a dictionary-encoded one such as a Delta STRING partition
+column, uses Spark's STRING-to-INT cast for the session's ANSI mode. It trims spaces, fails with
+`CAST_INVALID_INPUT` under ANSI or gives NULL, and is nullable in both modes, as Spark's cast is.
+It used Arrow's cast, which failed on spaces, malformed values and values beyond INT in both
+modes without Spark's condition. As in Spark, a NULL literal argument gives NULL before either
+argument is evaluated, and a NULL year skips the months' cast for its row. An overflow fails
+with Spark's whole `INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION` message in both modes, while
+optimizing for a constant through [constant folding errors](#constant-folding-errors). It used
+to fail while collecting rows, and its message stopped after the first sentence. Retained:
+- DECIMAL and DOUBLE arguments, which Spark casts to INT, and BOOLEAN arguments, which Spark
+  rejects with `DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE`, fail while planning without Spark's
+  condition (#1165).
+- INT() and the other integer functions over a STRING use Arrow's cast, declared NOT NULL for a
+  NOT NULL STRING, so MAKE_YM_INTERVAL over them is NOT NULL where Spark's is nullable (#1166).
+- TRY_ADD over an overflowing MAKE_YM_INTERVAL fails, where Spark gives NULL (#1151).
+- Under ANSI, with failing years and months in different rows of one batch, the years' failure
+  can be reported first (#1148).
+- Unaliased names keep the arguments as written where Spark adds the defaulted months (#749).
+
+The [MAKE_YM_INTERVAL references](tests/fixtures/make-ym-interval/README.md) record the checks.
 
 WEEKDAY numbers Monday 0 through Sunday 6, where it returned -1 for Sunday. WEEKDAY and
 DAYOFWEEK cast a TIMESTAMP_NTZ or NULL argument to DATE like Spark, and convert a STRING with

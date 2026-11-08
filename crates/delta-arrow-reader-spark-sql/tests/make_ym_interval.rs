@@ -5,8 +5,9 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use arrow::array::{Array, AsArray};
+use arrow::compute::cast;
 use arrow::datatypes::{
-    DataType, Fields, Int32Type, Int64Type, IntervalUnit, IntervalYearMonthType,
+    DataType, Fields, Int32Type, Int64Type, IntervalUnit, IntervalYearMonthType, Schema,
 };
 use arrow::record_batch::RecordBatch;
 use datafusion::datasource::MemTable;
@@ -40,7 +41,7 @@ fn make_ym_interval_references() -> TestResult<Vec<Value>> {
             |build| build.contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
         )
     );
-    assert_eq!(records.len() - 1, 232);
+    assert_eq!(records.len() - 1, 276);
     Ok(records)
 }
 
@@ -55,6 +56,20 @@ enum RetainedDifference {
     /// #749: Spark names an unaliased call with its arguments and the defaulted months; DAR
     /// keeps the arguments as written.
     GeneratedName,
+    /// #1166: DAR plans INT() of a STRING as Arrow's cast, declared NOT NULL for a NOT NULL
+    /// STRING where Spark's cast is nullable, so MAKE_YM_INTERVAL over it is NOT NULL too. IS
+    /// NULL over it folds to false, where Spark gives true outside ANSI and fails under ANSI.
+    /// Over a dictionary-encoded column, Arrow's cast converts every dictionary value, so a
+    /// malformed value fails even in rows the filter removed.
+    IntFunctionCast,
+    /// #1151: TRY_ADD over an overflowing MAKE_YM_INTERVAL fails with its overflow, while
+    /// optimizing for a constant and while collecting rows otherwise, where Spark's `TryEval`
+    /// gives NULL.
+    TryArithmetic,
+    /// #1148: under ANSI at batch size 32, DAR casts every row's years before the months, so a
+    /// later row's malformed year is reported before an earlier row's malformed month. At batch
+    /// size 1 DAR reports Spark's value.
+    ArgumentErrorRowOrder,
 }
 
 /// DAR's argument types in its planning error for each record of the #1165 class.
@@ -67,6 +82,25 @@ const ADMISSION_RECORDS: [(&str, &str); 3] = [
 /// DAR's current name for each unaliased record of the #749 class.
 const GENERATED_NAME_RECORDS: [(&str, &str); 1] = [("name_year", "make_ym_interval(1)")];
 
+/// Records of the #1166 class: MAKE_YM_INTERVAL of INT() over NOT NULL STRING values, and IS
+/// NULL over it where the value is malformed.
+const INT_FUNCTION_RECORD: &str = "column_required_int_function";
+const INT_FUNCTION_IS_NULL_RECORD: &str = "column_required_int_function_is_null";
+
+/// Records of the #1151 class and the stage at which DAR fails.
+const TRY_ARITHMETIC_RECORDS: [(&str, &str); 2] = [
+    ("column_required_try_add_overflow", "collect"),
+    ("literal_try_add_overflow", "optimized"),
+];
+
+/// The #1148 record under ANSI: row 0 has a malformed month and row 3 a malformed year.
+const ROW_ORDER_RECORD: &str = "column_required_string_failures_in_row_order";
+
+/// Spark's MAKE_YM_INTERVAL overflow message, which DAR repeats.
+const OVERFLOW_MESSAGE: &str = "[INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION] Integer \
+    overflow while operating with intervals. Try devising appropriate values for the interval \
+    parameters. SQLSTATE: 22015";
+
 fn retained_difference(case: &Value) -> Option<RetainedDifference> {
     let id = case["id"].as_str()?;
     if ADMISSION_RECORDS.iter().any(|(record, _)| *record == id) {
@@ -76,13 +110,28 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
         .any(|(record, _)| *record == id)
     {
         Some(RetainedDifference::GeneratedName)
+    } else if id == INT_FUNCTION_RECORD || id == INT_FUNCTION_IS_NULL_RECORD {
+        Some(RetainedDifference::IntFunctionCast)
+    } else if TRY_ARITHMETIC_RECORDS
+        .iter()
+        .any(|(record, _)| *record == id)
+    {
+        Some(RetainedDifference::TryArithmetic)
+    } else if id == ROW_ORDER_RECORD && case["ansi"] == true {
+        Some(RetainedDifference::ArgumentErrorRowOrder)
     } else {
         None
     }
 }
 
-/// Replace only the retained part of Spark's expectation with DAR's current result.
-fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResult<Value> {
+/// Replace only the retained part of Spark's expectation with DAR's current result at
+/// `batch_size`, over dictionary-encoded STRING columns if `dictionary`.
+fn current_expectation(
+    case: &Value,
+    difference: RetainedDifference,
+    batch_size: usize,
+    dictionary: bool,
+) -> TestResult<Value> {
     let mut current = case.clone();
     let id = case["id"].as_str().ok_or("missing record id")?;
     match difference {
@@ -122,6 +171,76 @@ fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResu
                     return Err(format!("expected Spark's generated name: {case}").into());
                 }
                 field["name"] = json!(name);
+            }
+        }
+        RetainedDifference::IntFunctionCast if id == INT_FUNCTION_RECORD => {
+            for stage in ["analyzed", "optimized", "executed"] {
+                let field = &mut current["schema_stages"][stage]["fields"][1];
+                if field["type"] != "interval year to month" || field["nullable"] != true {
+                    return Err(format!("expected Spark's nullable interval: {case}").into());
+                }
+                field["nullable"] = json!(false);
+            }
+            if dictionary {
+                // The rows kept, 3 and -3, parse; ' 7 ' is in a removed row.
+                current["schema_stages"]
+                    .as_object_mut()
+                    .ok_or("missing schema stages")?
+                    .remove("executed");
+                current["expected"] = json!({"status": "error", "dar_message":
+                    "Arrow error: Cast error: Cannot cast string ' 7 ' to value of Int32 type"});
+                current["spark_error_phase"] = json!("collect");
+            }
+        }
+        RetainedDifference::IntFunctionCast => {
+            let malformed = case["expected"]["rows"] == json!([["3", true]])
+                || (case["expected"]["condition"] == "CAST_INVALID_INPUT"
+                    && case["spark_error_phase"] == "collect");
+            if !malformed {
+                return Err(format!("expected Spark's NULL or cast failure: {case}").into());
+            }
+            let stages = current["schema_stages"]
+                .as_object_mut()
+                .ok_or("missing schema stages")?;
+            let analyzed = stages.get("analyzed").cloned().ok_or("missing analyzed")?;
+            stages.insert("executed".to_owned(), analyzed);
+            current["expected"] = json!({"status": "ok", "rows": [["3", false]]});
+            current["spark_error_phase"] = Value::Null;
+        }
+        RetainedDifference::TryArithmetic => {
+            if case["expected"]["rows"]
+                .as_array()
+                .and_then(|rows| rows.first()?.as_array()?.last())
+                != Some(&Value::Null)
+            {
+                return Err(format!("expected Spark's NULL: {case}").into());
+            }
+            let phase = TRY_ARITHMETIC_RECORDS
+                .iter()
+                .find_map(|(record, phase)| (*record == id).then_some(*phase))
+                .ok_or("missing DAR phase")?;
+            let stages = current["schema_stages"]
+                .as_object_mut()
+                .ok_or("missing schema stages")?;
+            stages.remove("executed");
+            if phase == "optimized" {
+                stages.remove("optimized");
+            }
+            current["expected"] = json!({"status": "error", "dar_message": OVERFLOW_MESSAGE});
+            current["spark_error_phase"] = json!(phase);
+        }
+        RetainedDifference::ArgumentErrorRowOrder => {
+            if !case["expected"]["java_message"]
+                .as_str()
+                .is_some_and(|message| message.starts_with("[CAST_INVALID_INPUT] The value 'bad'"))
+            {
+                return Err(format!("expected Spark's malformed month: {case}").into());
+            }
+            if batch_size != 1 {
+                current["expected"]["dar_message"] = json!(
+                    "[CAST_INVALID_INPUT]\ncaused by\nArrow error: Cast error: Cannot cast \
+                     string 'x' to value of Int32 type"
+                );
             }
         }
     }
@@ -270,31 +389,47 @@ fn optimize(session: &SessionContext, plan: &LogicalPlan) -> TestResult<LogicalP
     Ok(state.optimize(plan)?)
 }
 
-/// Conditions raised by the shared INT casts of MAKE_YM_INTERVAL's arguments. Their messages
-/// give Spark's condition over the cast's own cause, not Spark's text (#1147).
-const CAST_CONDITIONS: [&str; 2] = ["CAST_INVALID_INPUT", "CAST_OVERFLOW"];
-
-/// The text DAR's error must contain for a recorded Spark failure: a retained difference's
-/// pinned text; the condition alone for an analysis failure, whose message quotes Spark's
-/// plan, or for an argument cast; or Spark's whole message, without the query context on its
-/// later lines, for another condition.
-fn expected_error_text(case: &Value) -> Option<String> {
-    let expected = &case["expected"];
-    if let Some(message) = expected["dar_message"].as_str() {
-        return Some(message.to_owned());
-    }
-    let message = expected["java_message"].as_str()?.lines().next()?;
-    match expected["condition"].as_str() {
-        Some(condition)
-            if case["spark_error_phase"] == "sql" || CAST_CONDITIONS.contains(&condition) =>
-        {
-            Some(format!("[{condition}]"))
+/// The failing value of an INT argument cast as DAR's cast error names it, from Spark's
+/// message. The shared casts give Spark's condition over the cast's own cause, not Spark's text
+/// (#1147).
+fn cast_failure_value(condition: &str, message: &str) -> Option<String> {
+    match condition {
+        "CAST_INVALID_INPUT" => {
+            let (_, rest) = message.split_once("The value '")?;
+            let (value, _) = rest.split_once("' of the type \"STRING\"")?;
+            Some(format!(
+                "Cannot cast string '{value}' to value of Int32 type"
+            ))
         }
-        Some(condition) if message.starts_with(&format!("[{condition}]")) => {
-            Some(message.to_owned())
+        "CAST_OVERFLOW" => {
+            let (_, rest) = message.split_once("The value ")?;
+            let (value, _) = rest.split_once("L of the type \"BIGINT\"")?;
+            Some(format!("Can't cast value {value} to type Int32"))
         }
         _ => None,
     }
+}
+
+/// The texts DAR's error must contain for a recorded Spark failure: a retained difference's
+/// pinned text; the condition alone for an analysis failure, whose message quotes Spark's
+/// plan; the condition and the failing value for an argument cast; or Spark's whole message,
+/// without the query context on its later lines, for another condition.
+fn expected_error_texts(case: &Value) -> Option<Vec<String>> {
+    let expected = &case["expected"];
+    if let Some(message) = expected["dar_message"].as_str() {
+        return Some(vec![message.to_owned()]);
+    }
+    let message = expected["java_message"].as_str()?.lines().next()?;
+    let condition = expected["condition"].as_str()?;
+    if case["spark_error_phase"] == "sql" {
+        return Some(vec![format!("[{condition}]")]);
+    }
+    if let Some(value) = cast_failure_value(condition, message) {
+        return Some(vec![format!("[{condition}]"), value]);
+    }
+    message
+        .starts_with(&format!("[{condition}]"))
+        .then(|| vec![message.to_owned()])
 }
 
 /// The recorded stages and outcome that differ from the observation. A failure must occur
@@ -312,9 +447,9 @@ fn differing_parts(case: &Value, observation: &Value) -> TestResult<Vec<&'static
         Some("ok") => observation["rows"] == case["expected"]["rows"],
         Some("error") => {
             observation["error_phase"] == case["spark_error_phase"]
-                && expected_error_text(case)
+                && expected_error_texts(case)
                     .zip(observation["error"].as_str())
-                    .is_some_and(|(message, error)| error.contains(&message))
+                    .is_some_and(|(texts, error)| texts.iter().all(|text| error.contains(text)))
         }
         _ => false,
     };
@@ -356,10 +491,40 @@ fn register(
     Ok(())
 }
 
-fn register_inputs(session: &SessionContext, metadata: &Value, batch_size: usize) -> TestResult {
+/// Dictionary-encode STRING columns as Delta's provider does for STRING partition columns,
+/// keeping each field's name, nullability and metadata.
+fn dictionary_encoded(batch: &RecordBatch) -> TestResult<RecordBatch> {
+    let dictionary = DataType::Dictionary(Box::new(DataType::UInt16), Box::new(DataType::Utf8));
+    let mut fields = Vec::new();
+    let mut columns = Vec::new();
+    for (field, column) in batch.schema().fields().iter().zip(batch.columns()) {
+        if field.data_type() == &DataType::Utf8 {
+            fields.push(field.as_ref().clone().with_data_type(dictionary.clone()));
+            columns.push(cast(column, &dictionary)?);
+        } else {
+            fields.push(field.as_ref().clone());
+            columns.push(Arc::clone(column));
+        }
+    }
+    Ok(RecordBatch::try_new(
+        Arc::new(Schema::new(fields)),
+        columns,
+    )?)
+}
+
+fn register_inputs(
+    session: &SessionContext,
+    metadata: &Value,
+    batch_size: usize,
+    dictionary: bool,
+) -> TestResult {
     for input in metadata["inputs"].as_array().ok_or("missing inputs")? {
         let name = input["name"].as_str().ok_or("missing table name")?;
-        register(session, name, &decode_recorded_batch(input)?, batch_size)?;
+        let mut batch = decode_recorded_batch(input)?;
+        if dictionary {
+            batch = dictionary_encoded(&batch)?;
+        }
+        register(session, name, &batch, batch_size)?;
     }
     Ok(())
 }
@@ -378,15 +543,19 @@ async fn make_ym_interval_matches_spark() -> TestResult {
         BTreeMap::from([
             (RetainedDifference::ArgumentAdmission, 12),
             (RetainedDifference::GeneratedName, 4),
+            (RetainedDifference::IntFunctionCast, 8),
+            (RetainedDifference::TryArithmetic, 8),
+            (RetainedDifference::ArgumentErrorRowOrder, 2),
         ])
     );
     let mut differences = Vec::new();
-    for batch_size in [1, 32] {
+    // Every record runs over plain and dictionary-encoded STRING columns.
+    for (batch_size, dictionary) in [(1, false), (32, false), (1, true), (32, true)] {
         let session = session_context(batch_size);
-        register_inputs(&session, &records[0], batch_size)?;
+        register_inputs(&session, &records[0], batch_size, dictionary)?;
         for case in &records[1..] {
             let expectation = match retained_difference(case) {
-                Some(difference) => current_expectation(case, difference)?,
+                Some(difference) => current_expectation(case, difference, batch_size, dictionary)?,
                 None => case.clone(),
             };
             let observation = observe(&session, case).await;
@@ -394,7 +563,7 @@ async fn make_ym_interval_matches_spark() -> TestResult {
             if !differing.is_empty() {
                 differences.push(json!({
                     "id": case["id"], "timezone": case["timezone"], "ansi": case["ansi"],
-                    "batch": batch_size, "differing": differing,
+                    "batch": batch_size, "dictionary": dictionary, "differing": differing,
                     "expected": expectation["expected"],
                     "schema_stages": expectation["schema_stages"],
                     "observed": observation,
