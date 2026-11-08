@@ -3,7 +3,8 @@
 //! `TimestampAddYMInterval` give it: months and days move the local date-time in the
 //! TIMESTAMP's time zone, and the rest of a DAY TO SECOND interval moves the instant. Arrow
 //! adds a DAY TO SECOND interval as elapsed time and fails where months or days reach a local
-//! date-time a DST change skips or repeats.
+//! date-time a DST change skips or repeats. A TIMESTAMP_NTZ moves in UTC. TRY_ADD and
+//! TRY_SUBTRACT give NULL where the arithmetic fails.
 
 use std::sync::Arc;
 
@@ -34,39 +35,50 @@ enum Direction {
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkTimestampAddInterval {
     direction: Direction,
+    /// TRY_ADD and TRY_SUBTRACT: NULL where the negation or the arithmetic overflows.
+    null_on_error: bool,
     signature: Signature,
 }
 
 impl SparkTimestampAddInterval {
     /// TIMESTAMP plus an interval.
     pub fn add() -> Self {
-        Self::new(Direction::Add)
+        Self::new(Direction::Add, false)
     }
 
     /// TIMESTAMP minus an interval.
     pub fn subtract(ansi_mode: bool) -> Self {
-        Self::new(Direction::Subtract { ansi_mode })
+        Self::new(Direction::Subtract { ansi_mode }, false)
     }
 
-    fn new(direction: Direction) -> Self {
+    /// TRY_ADD of a TIMESTAMP and an interval.
+    pub fn try_add() -> Self {
+        Self::new(Direction::Add, true)
+    }
+
+    /// TRY_SUBTRACT of an interval from a TIMESTAMP. Spark evaluates the subtraction under
+    /// ANSI inside TRY, so even a calendar interval is negated exactly, and an overflow is NULL.
+    pub fn try_subtract() -> Self {
+        Self::new(Direction::Subtract { ansi_mode: true }, true)
+    }
+
+    fn new(direction: Direction, null_on_error: bool) -> Self {
         Self {
             direction,
+            null_on_error,
             signature: Signature::any(2, Volatility::Immutable),
         }
     }
 
-    /// Whether the kernel adds an interval of `interval` type to a TIMESTAMP of `timestamp`
-    /// type: a TIMESTAMP with a time zone and a DAY TO SECOND, YEAR TO MONTH or calendar
-    /// interval.
+    /// Whether the kernel adds an interval of `interval` type to a value of `timestamp` type:
+    /// a TIMESTAMP or TIMESTAMP_NTZ and a DAY TO SECOND, YEAR TO MONTH or calendar interval.
     pub fn accepts(timestamp: &DataType, interval: &DataType) -> bool {
-        matches!(
-            timestamp,
-            DataType::Timestamp(TimeUnit::Microsecond, Some(_))
-        ) && matches!(
-            interval,
-            DataType::Duration(TimeUnit::Microsecond)
-                | DataType::Interval(IntervalUnit::YearMonth | IntervalUnit::MonthDayNano)
-        )
+        matches!(timestamp, DataType::Timestamp(TimeUnit::Microsecond, _))
+            && matches!(
+                interval,
+                DataType::Duration(TimeUnit::Microsecond)
+                    | DataType::Interval(IntervalUnit::YearMonth | IntervalUnit::MonthDayNano)
+            )
     }
 }
 
@@ -158,9 +170,11 @@ impl IntervalParts {
 
 impl ScalarUDFImpl for SparkTimestampAddInterval {
     fn name(&self) -> &str {
-        match self.direction {
-            Direction::Add => "spark_timestamp_add_interval",
-            Direction::Subtract { .. } => "spark_timestamp_subtract_interval",
+        match (self.direction, self.null_on_error) {
+            (Direction::Add, false) => "spark_timestamp_add_interval",
+            (Direction::Subtract { .. }, false) => "spark_timestamp_subtract_interval",
+            (Direction::Add, true) => "spark_try_timestamp_add_interval",
+            (Direction::Subtract { .. }, true) => "spark_try_timestamp_subtract_interval",
         }
     }
 
@@ -184,24 +198,25 @@ impl ScalarUDFImpl for SparkTimestampAddInterval {
         Ok(Arc::new(Field::new(
             self.name(),
             self.return_type(&types)?,
-            args.arg_fields.iter().any(|field| field.is_nullable()),
+            self.null_on_error || args.arg_fields.iter().any(|field| field.is_nullable()),
         )))
     }
 
     // Spark folds a constant addition during optimization, raising its overflow error.
     fn propagates_constant_folding_errors(&self) -> bool {
-        true
+        !self.null_on_error
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
         let [timestamps, intervals] = args.args.as_slice() else {
             return internal_err!("{} requires two arguments", self.name());
         };
-        let DataType::Timestamp(TimeUnit::Microsecond, Some(zone)) = timestamps.data_type() else {
+        let DataType::Timestamp(TimeUnit::Microsecond, zone) = timestamps.data_type() else {
             return internal_err!("{} requires a TIMESTAMP", self.name());
         };
-        let Some(parsed) = TimestampZone::parse(&zone) else {
-            return exec_err!("invalid time zone {zone}");
+        // Spark computes TIMESTAMP_NTZ arithmetic in UTC.
+        let Some(parsed) = TimestampZone::parse(zone.as_deref().unwrap_or("UTC")) else {
+            return exec_err!("invalid time zone {zone:?}");
         };
         let scalar = matches!(
             (timestamps, intervals),
@@ -215,10 +230,14 @@ impl ScalarUDFImpl for SparkTimestampAddInterval {
             .enumerate()
             .map(|(row, micros)| match micros {
                 Some(micros) if intervals.is_valid(row) => {
-                    let parts = IntervalParts::at(&intervals, row, self.direction)?;
+                    let parts = match IntervalParts::at(&intervals, row, self.direction) {
+                        Err(_) if self.null_on_error => return Ok(None),
+                        parts => parts?,
+                    };
                     let months = i64::from(parts.months);
                     match add_interval(micros, months, parts.days, parts.micros, &parsed) {
                         Some(result) => Ok(Some(result)),
+                        None if self.null_on_error => Ok(None),
                         // Java's exact arithmetic message.
                         None => exec_err!("long overflow"),
                     }
@@ -226,7 +245,7 @@ impl ScalarUDFImpl for SparkTimestampAddInterval {
                 _ => Ok(None),
             })
             .collect::<Result<TimestampMicrosecondArray>>()?
-            .with_timezone(zone);
+            .with_timezone_opt(zone);
         if scalar {
             Ok(ColumnarValue::Scalar(ScalarValue::try_from_array(
                 &result, 0,

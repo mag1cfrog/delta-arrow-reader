@@ -509,6 +509,22 @@ DataFusion SQL are unchanged. The
 [local day arithmetic references](tests/fixtures/local-day-arithmetic/README.md) record the
 checks.
 
+TRY_ADD and TRY_SUBTRACT of a TIMESTAMP or TIMESTAMP_NTZ and a DAY TO SECOND, YEAR TO MONTH
+or calendar interval, in either order for TRY_ADD, use the same local arithmetic and give a
+nullable result that is NULL where `+` or `-` fails, as Spark's `TryEval` does. A
+TIMESTAMP_NTZ moves in UTC, and TRY_SUBTRACT negates even a calendar interval exactly, as
+Spark evaluates it under ANSI inside TRY. An untyped NULL beside a TIMESTAMP is a NULL
+interval for TRY_ADD and a NULL TIMESTAMP for TRY_SUBTRACT. TRY_SUBTRACT of a TIMESTAMP and
+a TIMESTAMP, TIMESTAMP_NTZ or DATE, or of two TIMESTAMP_NTZ values, subtracts like `-` and
+gives NULL on overflow; two DATE values or a DATE and a TIMESTAMP_NTZ still fail (#987,
+#1135). `SparkTryAdd` and `SparkTrySubtract` used elapsed time, returned TIMESTAMP_NTZ, and
+rejected YEAR TO MONTH and calendar intervals, interval-first arguments, untyped NULLs and
+TIMESTAMP differences; they still serve other operands. Spark folds the negation of a
+constant interval beside a column while optimizing, outside TRY; DAR negates it per row
+inside TRY (#1133). The
+[TRY timestamp references](tests/fixtures/try-timestamp-intervals/README.md) record the
+checks.
+
 WEEKDAY numbers Monday 0 through Sunday 6, where it returned -1 for Sunday. WEEKDAY and
 DAYOFWEEK cast a TIMESTAMP_NTZ or NULL argument to DATE like Spark, and convert a STRING with
 Spark's STRING-to-DATE rules. Spaces, short months and days and years outside Arrow's
