@@ -46,9 +46,9 @@ internal rows, collected through the Dataset API. `ConvertToLocalRelation` is ex
 `date_subtraction.rs` compares names, type families, nullability, metadata and typed rows at
 batch sizes 1 and 32. Every Spark day-time qualifier is Arrow's microsecond duration. A failure
 must occur at Spark's stage with Spark's condition, or Java's exact arithmetic message. A
-second test runs the records over the `inputs` and `required` DATE columns as Arrow's Date64,
-which Spark lacks, and requires the same results. Six differences are retained, each at DAR's
-exact current result:
+second test runs seven `-`, TRY_SUBTRACT and division records over Date64 copies of the
+`inputs` and `required` DATE columns, which Spark lacks, and requires Spark's results. Six
+differences are retained, each at DAR's exact current result:
 - #953: a CAST of the difference to STRING gives DAY TO SECOND text, `INTERVAL '1 00:00:00' DAY
   TO SECOND` where Spark gives `INTERVAL '1' DAY` (4 records);
 - #1152: a CAST of the difference to BIGINT counts seconds, where Spark counts days (4 records);
