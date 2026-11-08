@@ -455,9 +455,13 @@ fn two_arguments(arguments: Vec<Expr>, function: &str) -> PlanResult<(Expr, Expr
 
 /// Spark evaluates TRY arithmetic over numbers in its TRY mode, which catches only the
 /// arithmetic's own failures, and over other operands inside `TryEval`, which turns any failure
-/// in them into NULL. For the latter, re-plan each failing MAKE_INTERVAL in the operands to
-/// give NULL.
-fn try_eval_operands(operands: Vec<Expr>, schema: &DFSchemaRef) -> PlanResult<Vec<Expr>> {
+/// in them into NULL. For the latter, under ANSI, re-plan each MAKE_INTERVAL and
+/// TRY_MAKE_INTERVAL in the operands to give NULL.
+fn try_eval_operands(
+    operands: Vec<Expr>,
+    schema: &DFSchemaRef,
+    ansi_mode: bool,
+) -> PlanResult<Vec<Expr>> {
     let numeric = operands.iter().all(|operand| {
         operand
             .get_type(schema)
@@ -468,7 +472,7 @@ fn try_eval_operands(operands: Vec<Expr>, schema: &DFSchemaRef) -> PlanResult<Ve
     }
     operands
         .into_iter()
-        .map(|operand| replan_make_interval_for_try(operand, schema))
+        .map(|operand| replan_make_interval_for_try(operand, schema, ansi_mode))
         .collect()
 }
 
@@ -484,7 +488,11 @@ where
                   arguments,
                   function_context,
               }| {
-            Ok(function.call(try_eval_operands(arguments, function_context.schema)?))
+            Ok(function.call(try_eval_operands(
+                arguments,
+                function_context.schema,
+                function_context.plan_config.ansi_mode,
+            )?))
         },
     )
 }
@@ -499,7 +507,12 @@ fn try_add(input: ScalarFunctionInput) -> PlanResult<Expr> {
     } = input;
     let (left, right) = two_arguments(arguments, "try_add")?;
     let schema = function_context.schema;
-    let (left, right) = try_eval_operands(vec![left, right], schema)?.two()?;
+    let (left, right) = try_eval_operands(
+        vec![left, right],
+        schema,
+        function_context.plan_config.ansi_mode,
+    )?
+    .two()?;
     let add = |timestamp, interval| {
         ScalarUDF::from(SparkTimestampAddInterval::try_add()).call(vec![timestamp, interval])
     };
@@ -539,7 +552,12 @@ fn try_subtract(input: ScalarFunctionInput) -> PlanResult<Expr> {
     } = input;
     let (left, right) = two_arguments(arguments, "try_subtract")?;
     let schema = function_context.schema;
-    let (left, right) = try_eval_operands(vec![left, right], schema)?.two()?;
+    let (left, right) = try_eval_operands(
+        vec![left, right],
+        schema,
+        function_context.plan_config.ansi_mode,
+    )?
+    .two()?;
     let timezone = &function_context.plan_config.session_timezone;
     let ntz = |data_type: &DataType| {
         matches!(data_type, DataType::Timestamp(TimeUnit::Microsecond, None))
