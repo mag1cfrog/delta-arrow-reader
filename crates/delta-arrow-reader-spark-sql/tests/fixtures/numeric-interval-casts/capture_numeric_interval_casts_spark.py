@@ -3,8 +3,10 @@
 Records analyzed, optimized and executed schemas, typed internal-row values and failing stages,
 with the innermost Java exception of a failure, for CAST and TRY_CAST of TINYINT, SMALLINT, INT,
 BIGINT and DECIMAL values to every year-month and day-time qualifier: positive, negative and
-zero values, NULL, fractional DECIMALs and their rounding, each type's limits, values whose
-interval overflows, literal and column inputs, unaliased generated names, and FLOAT, DOUBLE and
+zero values, NULL, fractional DECIMALs and their rounding, DECIMAL(38, s) values whose products
+exceed 128 bits or 34 significant digits, each type's limits, BIGINT values inside and outside
+INT whose interval overflows, values whose interval overflows, numbers nested in ARRAY, STRUCT
+and MAP casts, literal and column inputs, unaliased generated names, and FLOAT, DOUBLE and
 BOOLEAN sources, which Spark rejects. Every query runs in both ANSI modes in UTC and
 America/Los_Angeles. Run from the crate root in the reference environment described in
 README.md; the output path must not exist.
@@ -53,6 +55,16 @@ NUMBERS = [
     (1, 1, 1, 1, "0.50", "0.000001"),
 ]
 
+# DECIMAL(38, 36), DECIMAL(38, 37) and DECIMAL(38, 38) values whose products by a unit length
+# exceed 128-bit integers or 34 significant digits.
+WIDE = [
+    ("1.500000000000000000000000000000000000", "0.9583333333333333333333333333333333333",
+     "0.25312872227430555555555555555555555555"),
+    ("-8.458333333333333333333333333333333333", "-0.9583333333333333333333333333333333333",
+     "-0.25312872227430555555555555555555555555"),
+    (None, None, None),
+]
+
 REQUIRED = [
     (5, 5, 5, 5, "5.50", "0.500000"),
     (-5, -5, -5, -5, "-5.50", "-0.500000"),
@@ -76,6 +88,12 @@ INPUTS = [
      "rows": rows(NUMBERS)},
     {"name": "required", "schema": {"type": "struct", "fields": number_fields(False)},
      "rows": rows(REQUIRED)},
+    {"name": "wide", "schema": {"type": "struct", "fields": [
+        {"name": "k", "type": "integer", "nullable": False, "metadata": {}},
+        {"name": "w36", "type": "decimal(38,36)", "nullable": True, "metadata": {}},
+        {"name": "w37", "type": "decimal(38,37)", "nullable": True, "metadata": {}},
+        {"name": "w38", "type": "decimal(38,38)", "nullable": True, "metadata": {}}]},
+     "rows": rows(WIDE)},
     {"name": "floats", "schema": {"type": "struct", "fields": [
         {"name": "k", "type": "integer", "nullable": False, "metadata": {}},
         {"name": "f", "type": "double", "nullable": True, "metadata": {}}]},
@@ -130,6 +148,21 @@ def definitions():
         yield (f"try_decimal_limits_{name}", column.format(cast="TRY_CAST", source="dw",
                                                            qualifier=qualifier,
                                                            table="numbers", where="k IN (4, 5)"))
+        for source in ["w36", "w37"]:
+            yield (f"{source}_{name}", column.format(cast="CAST", source=source,
+                                                     qualifier=qualifier, table="wide",
+                                                     where="true"))
+        yield (f"try_w38_{name}", column.format(cast="TRY_CAST", source="w38",
+                                                qualifier=qualifier, table="wide", where="true"))
+    for name, source, qualifier, where in [
+        ("int_sized_bigint_max_year", "CAST(i AS BIGINT)", "YEAR", "k = 4"),
+        ("int_sized_bigint_min_year", "CAST(i AS BIGINT)", "YEAR", "k = 5"),
+        ("int_sized_bigint_max_day", "CAST(i AS BIGINT)", "DAY", "k = 4"),
+        ("bigint_min_month", "b", "MONTH", "k = 5"),
+        ("bigint_min_second", "b", "SECOND", "k = 5"),
+    ]:
+        yield name, column.format(cast="CAST", source=source, qualifier=qualifier,
+                                  table="numbers", where=where)
     yield ("double_column_day", "SELECT k, CAST(f AS INTERVAL DAY) AS r FROM floats")
     literals = [
         ("negative_year", "CAST(-7 AS INTERVAL YEAR)"),
@@ -151,6 +184,17 @@ def definitions():
         ("day_limit", "CAST(106751991 AS INTERVAL DAY)"),
         ("null_year", "CAST(NULL AS INTERVAL YEAR)"),
         ("typed_null_day", "CAST(CAST(NULL AS INT) AS INTERVAL DAY)"),
+        ("wide_one_day", "CAST(CAST(1 AS DECIMAL(38,30)) AS INTERVAL DAY)"),
+        ("wide_near_one_second",
+         "CAST(0.99999999999999999999999999999999999999 AS INTERVAL SECOND)"),
+        ("wide_rounded_year", "CAST(8.458333333333333333333333333333333333 AS INTERVAL YEAR)"),
+        ("wide_rounded_month", "CAST(2.4999999999999999999999999999999999999 AS INTERVAL MONTH)"),
+        ("wide_rounded_second", "CAST(1.4999994999999999999999999999999999999 AS INTERVAL SECOND)"),
+        ("int_sized_bigint_year_overflow", "CAST(178956971L AS INTERVAL YEAR)"),
+        ("bigint_month_overflow", "CAST(2147483648L AS INTERVAL MONTH)"),
+        ("nested_array_year", "CAST(ARRAY(1, -2) AS ARRAY<INTERVAL YEAR>)[0]"),
+        ("nested_struct_year", "CAST(NAMED_STRUCT('a', 3) AS STRUCT<a: INTERVAL YEAR>).a"),
+        ("nested_map_hour", "CAST(MAP('k', 2) AS MAP<STRING, INTERVAL HOUR>)['k']"),
         ("double_year", "CAST(1.5D AS INTERVAL YEAR)"),
         ("float_second", "CAST(CAST(1.5 AS FLOAT) AS INTERVAL SECOND)"),
         ("boolean_day", "CAST(true AS INTERVAL DAY)"),
