@@ -41,7 +41,7 @@ fn make_ym_interval_references() -> TestResult<Vec<Value>> {
             |build| build.contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
         )
     );
-    assert_eq!(records.len() - 1, 420);
+    assert_eq!(records.len() - 1, 452);
     Ok(records)
 }
 
@@ -59,9 +59,13 @@ enum RetainedDifference {
     /// malformed value fails even in rows the filter removed.
     IntFunctionCast,
     /// #1151: TRY_ADD, TRY_SUBTRACT, TRY_MULTIPLY and TRY_DIVIDE over an overflowing
-    /// MAKE_YM_INTERVAL fail with its overflow, while optimizing for a constant and while
-    /// collecting rows otherwise, where Spark's `TryEval` gives NULL.
+    /// MAKE_YM_INTERVAL fail with its overflow, and under ANSI TRY_ADD over a failing argument
+    /// cast fails with it, while optimizing for a constant and while collecting rows otherwise,
+    /// where Spark's `TryEval` gives NULL.
     TryArithmetic,
+    /// #1168: under ANSI, Spark's DECIMAL-to-INT cast rounds a value near an integer up to it,
+    /// as through a DOUBLE, where DAR truncates exactly.
+    DecimalCastUnderAnsi,
     /// #1157: under ANSI, a constant call with a malformed STRING beside a NULL that a constant
     /// expression computes, `NULL + 1` or an explicit STRING-to-INT cast of NULL, fails while
     /// optimizing, where Spark's NullPropagation gives NULL.
@@ -90,6 +94,38 @@ const TRY_ARITHMETIC_RECORDS: [(&str, &str); 6] = [
     ("literal_try_add_date_overflow", "optimized"),
 ];
 
+/// Records of the #1151 class under ANSI only, where an argument cast fails, and the stage at
+/// which DAR fails.
+const TRY_CAST_RECORDS: [(&str, &str); 2] = [
+    ("column_numbers_try_add_double_beyond_int", "collect"),
+    ("literal_try_add_double_beyond_int", "optimized"),
+];
+
+/// DAR's error for the #1151 records whose DOUBLE argument is beyond INT.
+const TRY_CAST_MESSAGE: &str = "[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value 10000000000.0 to type \
+     Int32";
+
+/// Records of the #1168 class under ANSI, with Spark's result and DAR's rows. Spark fails while
+/// optimizing where its cast rounds a value beyond its limit.
+const DECIMAL_CAST_RECORDS: [(&str, &str, &str); 4] = [
+    ("literal_wide_decimal_near_one", r#"[["12"]]"#, r#"[["0"]]"#),
+    (
+        "column_wide_decimals",
+        r#"[["0","1"],["1","-1"],["2","3"]]"#,
+        r#"[["0","0"],["1","0"],["2","2"]]"#,
+    ),
+    (
+        "literal_decimal_near_int_limit",
+        "CAST_OVERFLOW",
+        r#"[["2147483647"]]"#,
+    ),
+    (
+        "literal_decimal_near_years_limit",
+        "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION",
+        r#"[["2147483640"]]"#,
+    ),
+];
+
 /// The #1157 records under ANSI.
 const COMPUTED_NULL_RECORDS: [&str; 2] = [
     "literal_string_malformed_computed_null_month",
@@ -116,8 +152,15 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
     } else if TRY_ARITHMETIC_RECORDS
         .iter()
         .any(|(record, _)| *record == id)
+        || (TRY_CAST_RECORDS.iter().any(|(record, _)| *record == id) && case["ansi"] == true)
     {
         Some(RetainedDifference::TryArithmetic)
+    } else if DECIMAL_CAST_RECORDS
+        .iter()
+        .any(|(record, _, _)| *record == id)
+        && case["ansi"] == true
+    {
+        Some(RetainedDifference::DecimalCastUnderAnsi)
     } else if id == ROW_ORDER_RECORD && case["ansi"] == true {
         Some(RetainedDifference::ArgumentErrorRowOrder)
     } else if COMPUTED_NULL_RECORDS.contains(&id) && case["ansi"] == true {
@@ -197,9 +240,14 @@ fn current_expectation(
             {
                 return Err(format!("expected Spark's NULL: {case}").into());
             }
-            let phase = TRY_ARITHMETIC_RECORDS
+            let (phase, message) = TRY_ARITHMETIC_RECORDS
                 .iter()
-                .find_map(|(record, phase)| (*record == id).then_some(*phase))
+                .find_map(|(record, phase)| (*record == id).then_some((*phase, OVERFLOW_MESSAGE)))
+                .or_else(|| {
+                    TRY_CAST_RECORDS.iter().find_map(|(record, phase)| {
+                        (*record == id).then_some((*phase, TRY_CAST_MESSAGE))
+                    })
+                })
                 .ok_or("missing DAR phase")?;
             let stages = current["schema_stages"]
                 .as_object_mut()
@@ -208,8 +256,33 @@ fn current_expectation(
             if phase == "optimized" {
                 stages.remove("optimized");
             }
-            current["expected"] = json!({"status": "error", "dar_message": OVERFLOW_MESSAGE});
+            current["expected"] = json!({"status": "error", "dar_message": message});
             current["spark_error_phase"] = json!(phase);
+        }
+        RetainedDifference::DecimalCastUnderAnsi => {
+            let (spark, dar_rows) = DECIMAL_CAST_RECORDS
+                .iter()
+                .find_map(|(record, spark, rows)| (*record == id).then_some((*spark, *rows)))
+                .ok_or("missing DAR rows")?;
+            if case["expected"]["status"] == "ok" {
+                if case["expected"]["rows"] != serde_json::from_str::<Value>(spark)? {
+                    return Err(format!("expected Spark's rounded rows: {case}").into());
+                }
+            } else {
+                if case["expected"]["condition"] != spark
+                    || case["spark_error_phase"] != "optimized"
+                {
+                    return Err(format!("expected Spark's folded failure: {case}").into());
+                }
+                // DAR folds the constant, so its optimized and executed field is NOT NULL.
+                let mut folded = case["schema_stages"]["analyzed"].clone();
+                folded["fields"][0]["nullable"] = json!(false);
+                current["schema_stages"]["optimized"] = folded.clone();
+                current["schema_stages"]["executed"] = folded;
+                current["spark_error_phase"] = Value::Null;
+            }
+            current["expected"] =
+                json!({"status": "ok", "rows": serde_json::from_str::<Value>(dar_rows)?});
         }
         RetainedDifference::ComputedNullBesideFailingConstant => {
             if case["expected"]["rows"] != json!([[null]]) {
@@ -407,12 +480,16 @@ fn dar_cast_failure_text(condition: &str, message: &str) -> Option<String> {
                 Some(format!("Can't cast value {value} to type Int32"))
             } else if source.starts_with("DECIMAL(") {
                 // DAR names the DECIMAL's integer part.
-                let (integer, _) = value.strip_suffix("BD")?.split_once('.')?;
+                let value = value.strip_suffix("BD")?;
+                let integer = value.split_once('.').map_or(value, |(integer, _)| integer);
                 Some(format!("value of {integer} is out of range Int32"))
-            } else if source.starts_with("DOUBLE\"") || source.starts_with("FLOAT\"") {
-                // Java prints 1.0E10 and Infinity where Rust prints 10000000000.0 and inf.
-                let value = value.strip_suffix('D').unwrap_or(value);
-                let value: f64 = value.parse().ok()?;
+            } else if source.starts_with("DOUBLE\"") {
+                // Java prints 1.0E10D and Infinity where Rust prints 10000000000.0 and inf.
+                let value: f64 = value.strip_suffix('D').unwrap_or(value).parse().ok()?;
+                Some(format!("Can't cast value {value:?} to type Int32"))
+            } else if source.starts_with("FLOAT\"") {
+                // DAR prints a FLOAT as Rust prints an f32.
+                let value: f32 = value.parse().ok()?;
                 Some(format!("Can't cast value {value:?} to type Int32"))
             } else {
                 None
@@ -555,7 +632,8 @@ async fn make_ym_interval_matches_spark() -> TestResult {
         BTreeMap::from([
             (RetainedDifference::GeneratedName, 4),
             (RetainedDifference::IntFunctionCast, 8),
-            (RetainedDifference::TryArithmetic, 24),
+            (RetainedDifference::TryArithmetic, 28),
+            (RetainedDifference::DecimalCastUnderAnsi, 8),
             (RetainedDifference::ArgumentErrorRowOrder, 2),
             (RetainedDifference::ComputedNullBesideFailingConstant, 4),
         ])

@@ -213,11 +213,12 @@ const RECORDED_ADMISSION_MESSAGE: &str =
 const ADMISSION_MESSAGE: &str = "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] The arguments of \
     Spark `make_ym_interval` must be numbers, strings or NULL";
 
-/// The recorded native control with MAKE_YM_INTERVAL's messages as they are now. Since #1159 the
-/// overflow is Spark's whole message, without the query context on its later lines, and since
-/// #1165 the admission message is `ADMISSION_MESSAGE`. Each is replaced only where the control
+/// The recorded native control with MAKE_YM_INTERVAL's messages as they are now, and the match
+/// verdicts derived from them. Since #1159 the overflow is Spark's whole message, without the
+/// query context on its later lines, and since #1165 the admission message is
+/// `ADMISSION_MESSAGE`, which names Spark's condition. Each is replaced only where the control
 /// holds the recorded message.
-fn control_with_current_messages(case: &Value, control: &Value) -> Value {
+fn control_with_current_messages_and_verdicts(case: &Value, control: &Value) -> Value {
     let mut observation = control["observation"].clone();
     if case["expected"]["condition"] == "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION"
         && observation["error"] == RECORDED_OVERFLOW_ERROR
@@ -280,7 +281,7 @@ fn conversion_contract_matches(case: &Value, observation: &Value, control: &Valu
     );
     if !low_bits {
         return full_spark_matches(case, observation)
-            || observation == &control_with_current_messages(case, control);
+            || observation == &control_with_current_messages_and_verdicts(case, control);
     }
     let stages = [
         ("analyzed", "public_schema"),
@@ -432,7 +433,7 @@ fn argument_boundary_gate_rejects_changed_causes_fields_and_null_priority() -> T
         .iter()
         .find(|control| control["id"] == "ym_arguments_incompatible_type_with_overflow")
         .ok_or("missing admission control")?;
-    let current = control_with_current_messages(&inherited["reference"], inherited);
+    let current = control_with_current_messages_and_verdicts(&inherited["reference"], inherited);
     assert_ne!(current, inherited["observation"]);
     assert!(conversion_contract_matches(
         &inherited["reference"],
@@ -464,7 +465,7 @@ fn argument_boundary_gate_rejects_changed_causes_fields_and_null_priority() -> T
                 control["reference"]["expected"]["condition"] == case["expected"]["condition"]
             })
             .ok_or("missing original admission")?;
-        let current = control_with_current_messages(&original["reference"], original);
+        let current = control_with_current_messages_and_verdicts(&original["reference"], original);
         assert!(admission_contract_matches(&case, &current));
         let mut overflow = current.clone();
         overflow["error"] =

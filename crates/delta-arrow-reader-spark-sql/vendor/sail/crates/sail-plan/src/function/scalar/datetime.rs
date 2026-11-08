@@ -67,9 +67,11 @@ use crate::function::temporal_coercion::{
     cast_local_timestamp_expr_to_ltz, ltz_expr_to_local_timestamp,
 };
 
-/// How the casts of MAKE_INTERVAL's arguments treat a failure: as Spark's casts do outside ANSI,
-/// under ANSI, and under ANSI inside `TryEval`, which turns every failure into NULL. Whether the
-/// interval arithmetic fails on overflow is separate: Spark's `failOnError`.
+/// How the casts of MAKE_INTERVAL's and MAKE_YM_INTERVAL's arguments treat a failure: as Spark's
+/// casts do outside ANSI, under ANSI, and under ANSI inside `TryEval`, which turns every failure
+/// into NULL. Only MAKE_INTERVAL re-plans its casts for `TryEval`; MAKE_YM_INTERVAL uses the
+/// session's mode. Whether MAKE_INTERVAL's arithmetic fails on overflow is separate: Spark's
+/// `failOnError`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MakeIntervalCastMode {
     Legacy,

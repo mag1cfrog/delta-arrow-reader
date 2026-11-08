@@ -1,18 +1,20 @@
 # MAKE_YM_INTERVAL values, errors and nullability
 
-`make-ym-interval-spark.jsonl` records 420 observations from Spark 4.2.0, revision
+`make-ym-interval-spark.jsonl` records 452 observations from Spark 4.2.0, revision
 `32f7299601108917fb01920a54e084595b7b3bf8`, Java 17.0.20.1 and Python 3.12.14 (#1159, #1165).
 The header stores the build properties, capture script hash, settings and the registered
 tables:
 - `nullable`, `required` and `empty`: INT keys `k`, INT years `y` and months `mo`, BIGINT `b` and
   STRING `t`, nullable in `nullable` and NOT NULL in the others;
 - `numbers` and `numbers_required`: INT keys `k`, DECIMAL(12, 2) `dc`, DOUBLE `f` and FLOAT `fl`,
-  nullable in `numbers` and NOT NULL in `numbers_required`.
+  nullable in `numbers` and NOT NULL in `numbers_required`;
+- `wide_decimals`: INT keys `k` and NOT NULL DECIMAL(38, 17) `w` values a DOUBLE would round to
+  the next integer.
 
 Each failure keeps Spark's error condition and the class and message of its innermost Java
 exception. Two captures were byte-identical.
 
-105 queries run in both ANSI modes in UTC and America/Los_Angeles:
+113 queries run in both ANSI modes in UTC and America/Los_Angeles:
 - over the tables, years and months, years alone and months alone over nullable and NOT NULL
   columns and an empty table; rows at the YEAR TO MONTH limits and one month past them; BIGINT
   arguments that fit, wrap past INT or overflow the interval; STRING months that fit, carry
@@ -24,15 +26,17 @@ exception. Two captures were byte-identical.
   comparison, a negation, IS NULL and TRY_ADD over the result;
 - over the number tables, DECIMAL, DOUBLE and FLOAT arguments with fractions, signs and NULL,
   values beyond INT, DECIMAL years that overflow the interval, NaN and both infinities, a NULL
-  DECIMAL year beside a DOUBLE month beyond INT and the reverse, NOT NULL arguments, and a
-  comparison over the result;
+  DECIMAL year beside a DOUBLE month beyond INT and the reverse, NOT NULL arguments, a
+  comparison and TRY_ADD over the result, and the wide DECIMALs;
 - literals with none, one and two arguments, negative values, both limits and one month past
   them, overflowing years, NULL arguments, an overflowing year beside a NULL, a malformed STRING
   beside a NULL literal, a cast NULL, `NULL + 1`, `nullif(1, 1)` or `IF(false, 1, NULL)`,
   STRING, malformed and empty STRING, BIGINT, BIGINT beyond INT, TINYINT and SMALLINT, DECIMAL,
-  DOUBLE and FLOAT arguments, negative DECIMALs, DECIMAL and DOUBLE beyond INT and a NaN
-  DOUBLE; BOOLEAN, DATE, TIMESTAMP, BINARY, ARRAY and interval arguments; a comparison; and
-  TRY_ADD, TRY_SUBTRACT, TRY_MULTIPLY, TRY_DIVIDE and TRY_ADD to a DATE over an overflow;
+  DOUBLE and FLOAT arguments, negative DECIMALs, DECIMAL and DOUBLE beyond INT, a whole
+  DECIMAL beyond INT, a FLOAT of 2^31, a NaN DOUBLE, and DECIMALs near 1, near the INT limit and
+  near the years limit; BOOLEAN, DATE, TIMESTAMP, BINARY, ARRAY and interval arguments; a
+  comparison; TRY_ADD, TRY_SUBTRACT, TRY_MULTIPLY, TRY_DIVIDE and TRY_ADD to a DATE over an
+  overflow; and TRY_ADD over a DOUBLE beyond INT;
 - unaliased calls, whose generated names Spark builds from the arguments and the defaulted
   months.
 
@@ -43,7 +47,8 @@ constant. Other argument types fail during analysis with
 `DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE`.
 
 The casts are Spark's CAST rules:
-- DECIMAL, FLOAT and DOUBLE truncate toward zero.
+- DECIMAL, FLOAT and DOUBLE truncate toward zero, except that under ANSI a DECIMAL near an
+  integer rounds up to it, as through a DOUBLE.
 - Under ANSI a value beyond INT, NaN or an infinity fails with `CAST_OVERFLOW`. Otherwise a
   DECIMAL wraps, a FLOAT or DOUBLE saturates and NaN gives 0.
 - The STRING, DECIMAL, FLOAT and DOUBLE casts are nullable during analysis in both modes.
@@ -65,11 +70,11 @@ same columns dictionary-encoded with UInt16 keys, as Delta's provider reads STRI
 columns. A failure must occur at Spark's stage:
 - an analysis failure must have Spark's condition;
 - an argument cast failure must have Spark's condition and name Spark's failing value, as DAR
-  prints it: a STRING as written, a BIGINT's digits, a DECIMAL's integer part, and a FLOAT or
-  DOUBLE as Rust prints it; the rest of its message differs (#1147);
+  prints it: a STRING as written, a BIGINT's digits, a DECIMAL's integer part, and a DOUBLE or
+  FLOAT as Rust prints an f64 or f32; the rest of its message differs (#1147);
 - any other failure must have the first line of Spark's message, without its query context.
 
-Five differences are retained, each at DAR's exact current result:
+Six differences are retained, each at DAR's exact current result:
 - #749: an unaliased call is named with the arguments as written, where Spark adds the
   defaulted months (4 records, each at all three stages);
 - #1166: MAKE_YM_INTERVAL of INT() over NOT NULL STRING values is NOT NULL, where Spark's is
@@ -77,8 +82,12 @@ Five differences are retained, each at DAR's exact current result:
   outside ANSI and fails under ANSI. Over dictionary-encoded columns Arrow's cast also fails on
   a malformed value in a row the filter removed (8 records);
 - #1151: TRY_ADD, TRY_SUBTRACT, TRY_MULTIPLY and TRY_DIVIDE over an overflowing
-  MAKE_YM_INTERVAL fail with the overflow, while optimizing a constant and while collecting rows
-  otherwise, where Spark gives NULL (24 records);
+  MAKE_YM_INTERVAL fail with the overflow, and under ANSI TRY_ADD over a DOUBLE beyond INT fails
+  with `CAST_OVERFLOW`, while optimizing a constant and while collecting rows otherwise, where
+  Spark gives NULL (28 records);
+- #1168: under ANSI, the DECIMALs near 1, near the INT limit and near the years limit, and the
+  wide DECIMAL column, are truncated exactly, where Spark rounds them up; Spark's rounded value
+  beyond a limit fails while optimizing (8 records);
 - #1157: under ANSI, a constant call with a malformed STRING beside `NULL + 1` or an explicit
   cast of a NULL STRING to INT fails while optimizing, where Spark gives NULL (4 records);
 - #1148: under ANSI at batch size 32, a malformed year in row 3 is reported before row 0's
