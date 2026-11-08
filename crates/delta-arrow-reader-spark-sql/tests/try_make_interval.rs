@@ -41,7 +41,7 @@ fn try_make_interval_references() -> TestResult<Vec<Value>> {
             |build| build.contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
         )
     );
-    assert_eq!(records.len() - 1, 144);
+    assert_eq!(records.len() - 1, 180);
     Ok(records)
 }
 
@@ -52,11 +52,55 @@ enum RetainedDifference {
     /// BIGINT nanoseconds of Arrow's calendar intervals. DAR fails while collecting rows: TRY
     /// does not fail on error, so its constant is not folded.
     NanosecondRange,
-    /// #1124: under ANSI, the cast of 9223372036854.775807 seconds to DECIMAL(18, 6) fails
-    /// while optimizing with Arrow's precision error, without Spark's
-    /// `NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION`.
+    /// #1124: under ANSI, the cast of 9223372036854.775807 seconds to DECIMAL(18, 6) fails at
+    /// Spark's stage with Arrow's precision error, without Spark's
+    /// `NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION`, and of malformed STRING seconds without
+    /// Spark's `CAST_INVALID_INPUT`.
     DecimalCastCondition,
+    /// #1133: under ANSI, inside TRY_ADD or TRY_SUBTRACT beside a non-constant operand, Spark
+    /// folds a failing constant argument cast outside TRY and fails while optimizing. DAR
+    /// returns NULL, as TRY does for the same casts over columns.
+    ConstantOutsideTry,
+    /// #749: Spark names an unaliased call with all seven cast arguments; DAR keeps the
+    /// arguments as written.
+    GeneratedName,
 }
+
+/// DAR's current error for each record of the #1124 Decimal cast class.
+const DECIMAL_CAST_RECORDS: [(&str, &str); 3] = [
+    (
+        "literal_large_seconds",
+        "9223372036854.775807 is too large to store in a Decimal128 of precision 18",
+    ),
+    (
+        "literal_string_seconds_invalid",
+        "Cannot cast Some(\"x\") to DECIMAL(18,6)",
+    ),
+    (
+        "column_string_seconds_invalid",
+        "Cannot cast Some(\"abc\") to DECIMAL(18,6)",
+    ),
+];
+
+fn decimal_cast_message(id: &str) -> Option<&'static str> {
+    DECIMAL_CAST_RECORDS
+        .iter()
+        .find_map(|(record, message)| (*record == id).then_some(*message))
+}
+
+/// Records of the #1133 class under ANSI, each over the two rows of `required`.
+const CONSTANT_OUTSIDE_TRY_RECORDS: [&str; 4] = [
+    "column_try_add_constant_invalid_string",
+    "column_try_add_constant_bigint",
+    "column_try_subtract_constant_invalid_seconds",
+    "column_try_add_constant_cast_in_column_call",
+];
+
+/// DAR's current name for each unaliased record of the #749 class.
+const GENERATED_NAME_RECORDS: [(&str, &str); 2] = [
+    ("name_years", "try_make_interval(1)"),
+    ("name_column", "try_make_interval(0, 0, 0, d)"),
+];
 
 /// Records whose 3000000 INT hours are beyond Arrow's nanoseconds in both ANSI modes.
 const NANOSECOND_RANGE_RECORDS: [&str; 2] = [
@@ -68,8 +112,15 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
     let id = case["id"].as_str()?;
     if NANOSECOND_RANGE_RECORDS.contains(&id) {
         Some(RetainedDifference::NanosecondRange)
-    } else if id == "literal_large_seconds" && case["ansi"] == true {
+    } else if decimal_cast_message(id).is_some() && case["ansi"] == true {
         Some(RetainedDifference::DecimalCastCondition)
+    } else if CONSTANT_OUTSIDE_TRY_RECORDS.contains(&id) && case["ansi"] == true {
+        Some(RetainedDifference::ConstantOutsideTry)
+    } else if GENERATED_NAME_RECORDS
+        .iter()
+        .any(|(record, _)| *record == id)
+    {
+        Some(RetainedDifference::GeneratedName)
     } else {
         None
     }
@@ -101,11 +152,50 @@ fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResu
             current["spark_error_phase"] = json!("collect");
         }
         RetainedDifference::DecimalCastCondition => {
-            if case["expected"]["condition"] != "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION" {
-                return Err(format!("expected Spark's DECIMAL overflow: {case}").into());
+            let condition = case["expected"]["condition"].as_str();
+            if !matches!(
+                condition,
+                Some("NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION" | "CAST_INVALID_INPUT")
+            ) {
+                return Err(format!("expected Spark's DECIMAL cast failure: {case}").into());
             }
-            current["expected"] = json!({"status": "error", "dar_message":
-                "9223372036854.775807 is too large to store in a Decimal128 of precision 18"});
+            let id = case["id"].as_str().ok_or("missing record id")?;
+            let message = decimal_cast_message(id).ok_or("missing DAR message")?;
+            current["expected"] = json!({"status": "error", "dar_message": message});
+        }
+        RetainedDifference::ConstantOutsideTry => {
+            if case["spark_error_phase"] != "optimized" {
+                return Err(format!("expected Spark's folded failure: {case}").into());
+            }
+            let stages = current["schema_stages"]
+                .as_object_mut()
+                .ok_or("missing schema stages")?;
+            let analyzed = stages.get("analyzed").cloned().ok_or("missing analyzed")?;
+            stages.insert("optimized".to_owned(), analyzed.clone());
+            stages.insert("executed".to_owned(), analyzed);
+            // Each row of `required` gives NULL.
+            current["expected"] = json!({"status": "ok", "rows": [["0", null], ["1", null]]});
+            current["spark_error_phase"] = Value::Null;
+        }
+        RetainedDifference::GeneratedName => {
+            let id = case["id"].as_str().ok_or("missing record id")?;
+            let name = GENERATED_NAME_RECORDS
+                .iter()
+                .find_map(|(record, name)| (*record == id).then_some(*name))
+                .ok_or("missing DAR name")?;
+            for stage in ["analyzed", "optimized", "executed"] {
+                let fields = current["schema_stages"][stage]["fields"]
+                    .as_array_mut()
+                    .ok_or("missing fields")?;
+                let field = fields.last_mut().ok_or("missing interval field")?;
+                // Spark lists the defaulted arguments through the zero seconds.
+                if !field["name"].as_str().is_some_and(|spark| {
+                    spark.starts_with("try_make_interval(") && spark.ends_with(", 0, 0, 0.000000)")
+                }) {
+                    return Err(format!("expected Spark's generated name: {case}").into());
+                }
+                field["name"] = json!(name);
+            }
         }
     }
     Ok(current)
@@ -418,7 +508,9 @@ async fn try_make_interval_matches_spark() -> TestResult {
         retained,
         BTreeMap::from([
             (RetainedDifference::NanosecondRange, 8),
-            (RetainedDifference::DecimalCastCondition, 2),
+            (RetainedDifference::DecimalCastCondition, 6),
+            (RetainedDifference::ConstantOutsideTry, 8),
+            (RetainedDifference::GeneratedName, 8),
         ])
     );
     let mut differences = Vec::new();

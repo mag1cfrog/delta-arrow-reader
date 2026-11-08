@@ -67,16 +67,17 @@ use crate::function::temporal_coercion::{
     cast_local_timestamp_expr_to_ltz, ltz_expr_to_local_timestamp,
 };
 
-/// How MAKE_INTERVAL and the casts of its arguments evaluate: as Spark does outside ANSI, under
-/// ANSI, and under ANSI inside `TryEval`, which turns every failure into NULL.
+/// How the casts of MAKE_INTERVAL's arguments treat a failure: as Spark's casts do outside ANSI,
+/// under ANSI, and under ANSI inside `TryEval`, which turns every failure into NULL. Whether the
+/// interval arithmetic fails on overflow is separate: Spark's `failOnError`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum MakeIntervalMode {
+enum MakeIntervalCastMode {
     Legacy,
     Ansi,
     Try,
 }
 
-impl MakeIntervalMode {
+impl MakeIntervalCastMode {
     fn of_session(ansi_mode: bool) -> Self {
         if ansi_mode { Self::Ansi } else { Self::Legacy }
     }
@@ -111,12 +112,12 @@ fn make_interval(input: ScalarFunctionInput) -> PlanResult<Expr> {
             arguments.len()
         )));
     }
-    let mode = MakeIntervalMode::of_session(function_context.plan_config.ansi_mode);
+    let mode = MakeIntervalCastMode::of_session(function_context.plan_config.ansi_mode);
     plan_make_interval(
         arguments,
         function_context.schema,
         mode,
-        mode == MakeIntervalMode::Ansi,
+        mode == MakeIntervalCastMode::Ansi,
     )
 }
 
@@ -134,15 +135,17 @@ fn try_make_interval(input: ScalarFunctionInput) -> PlanResult<Expr> {
             arguments.len()
         )));
     }
-    let mode = MakeIntervalMode::of_session(function_context.plan_config.ansi_mode);
-    plan_make_interval(arguments, function_context.schema, mode, false)
+    let mode = MakeIntervalCastMode::of_session(function_context.plan_config.ansi_mode);
+    let fail_on_error = false;
+    plan_make_interval(arguments, function_context.schema, mode, fail_on_error)
 }
 
-/// MAKE_INTERVAL over `arguments` cast in `mode`, failing on overflow if `fail_on_error`.
+/// MAKE_INTERVAL over `arguments` cast in `mode`, failing on overflow if `fail_on_error`
+/// (Spark's `failOnError`) and giving NULL otherwise.
 fn plan_make_interval(
     arguments: Vec<Expr>,
     schema: &DFSchemaRef,
-    mode: MakeIntervalMode,
+    mode: MakeIntervalCastMode,
     fail_on_error: bool,
 ) -> PlanResult<Expr> {
     let mut arguments = arguments.into_iter();
@@ -167,7 +170,7 @@ fn plan_make_interval(
 fn cast_make_interval_part(
     part: Expr,
     schema: &DFSchemaRef,
-    mode: MakeIntervalMode,
+    mode: MakeIntervalCastMode,
 ) -> PlanResult<Expr> {
     Ok(match part.get_type(schema)? {
         DataType::Int32 => part,
@@ -175,8 +178,8 @@ fn cast_make_interval_part(
         DataType::Int64 | DataType::Float32 | DataType::Float64 => {
             ScalarUDF::from(SparkCastNumericToInteger::try_new(
                 DataType::Int32,
-                mode == MakeIntervalMode::Ansi,
-                mode == MakeIntervalMode::Try,
+                mode == MakeIntervalCastMode::Ansi,
+                mode == MakeIntervalCastMode::Try,
             )?)
             .call(vec![part])
         }
@@ -200,7 +203,7 @@ fn cast_make_interval_part(
 fn cast_make_interval_seconds(
     seconds: Expr,
     schema: &DFSchemaRef,
-    mode: MakeIntervalMode,
+    mode: MakeIntervalCastMode,
 ) -> PlanResult<Expr> {
     let DataType::Decimal128(precision, scale) = MAKE_INTERVAL_SECONDS_TYPE else {
         unreachable!("MAKE_INTERVAL seconds are a DECIMAL");
@@ -209,7 +212,7 @@ fn cast_make_interval_seconds(
         DataType::Decimal128(18, 6) => seconds,
         DataType::Null => cast(seconds, MAKE_INTERVAL_SECONDS_TYPE),
         data_type if data_type.is_string() => ScalarUDF::new_from_impl(
-            SparkCastStringToDecimal::new(precision, scale, mode != MakeIntervalMode::Ansi),
+            SparkCastStringToDecimal::new(precision, scale, mode != MakeIntervalCastMode::Ansi),
         )
         .call(vec![seconds]),
         data_type if data_type.is_numeric() => ScalarUDF::from(SparkDecimalCast::to_decimal(
@@ -263,7 +266,8 @@ pub(crate) fn replan_make_interval_for_try(
                     .into_iter()
                     .map(uncast_make_interval_argument)
                     .collect();
-                plan_make_interval(arguments, schema, MakeIntervalMode::Try, false)
+                let fail_on_error = false;
+                plan_make_interval(arguments, schema, MakeIntervalCastMode::Try, fail_on_error)
                     .map(Transformed::yes)
                     .map_err(|error| DataFusionError::External(Box::new(error)))
             }

@@ -606,10 +606,13 @@ TRY_MAKE_INTERVAL, which was not registered, plans the same function with one to
 arguments and Spark's `failOnError = false`: an overflow gives NULL and the result is nullable
 in both ANSI modes. As in Spark, its argument casts still follow the session's ANSI mode, so a
 malformed or overflowing argument fails under ANSI, except inside TRY arithmetic over a
-non-numeric operand, which re-plans it like MAKE_INTERVAL. Results beyond Arrow's nanoseconds
-fail while collecting rows (#1145), and seconds beyond DECIMAL(18, 6) fail without Spark's
-condition (#1124). The [TRY_MAKE_INTERVAL
-references](tests/fixtures/try-make-interval/README.md) record the checks.
+non-numeric operand, which re-plans it like MAKE_INTERVAL; there Spark still fails while
+optimizing a constant argument cast beside a non-constant operand, outside TRY, where DAR
+returns NULL (#1133). Results beyond Arrow's nanoseconds fail while collecting rows (#1145),
+seconds beyond DECIMAL(18, 6) and malformed STRING seconds fail without Spark's conditions
+(#1124), and unaliased names keep the arguments as written where Spark lists all seven (#749).
+The [TRY_MAKE_INTERVAL references](tests/fixtures/try-make-interval/README.md) record the
+checks.
 
 WEEKDAY numbers Monday 0 through Sunday 6, where it returned -1 for Sunday. WEEKDAY and
 DAYOFWEEK cast a TIMESTAMP_NTZ or NULL argument to DATE like Spark, and convert a STRING with
