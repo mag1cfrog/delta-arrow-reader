@@ -18,6 +18,7 @@ pub mod spark_make_timestamp_ntz;
 pub mod spark_make_ym_interval;
 pub mod spark_next_day;
 pub mod spark_number_to_interval;
+pub mod spark_subtract_dates;
 pub mod spark_subtract_timestamps;
 pub mod spark_time;
 pub mod spark_time_diff;

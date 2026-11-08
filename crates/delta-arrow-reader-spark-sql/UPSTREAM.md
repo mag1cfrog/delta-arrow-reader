@@ -610,7 +610,7 @@ TIMESTAMP_NTZ moves in UTC, and TRY_SUBTRACT negates even a calendar interval ex
 Spark evaluates it under ANSI inside TRY. An untyped NULL beside a TIMESTAMP is a NULL
 interval for TRY_ADD and a NULL TIMESTAMP for TRY_SUBTRACT. TRY_SUBTRACT of a TIMESTAMP and
 a TIMESTAMP, TIMESTAMP_NTZ or DATE, or of two TIMESTAMP_NTZ values, subtracts like `-` and
-gives NULL on overflow; two DATE values still fail (#987). `SparkTryAdd` and
+gives NULL on overflow, and so do two DATE values, as below. `SparkTryAdd` and
 `SparkTrySubtract` used elapsed time, returned TIMESTAMP_NTZ, and
 rejected YEAR TO MONTH and calendar intervals, interval-first arguments, untyped NULLs and
 TIMESTAMP differences; they still serve other operands. Spark folds the negation of a
@@ -634,6 +634,23 @@ also folds the cast of a constant DATE while optimizing, outside TRY, beside a n
 operand outside a conditional branch, and fails there; DAR returns NULL (#1133). The
 [DATE and TIMESTAMP_NTZ subtraction references](tests/fixtures/date-ntz-subtraction/README.md)
 record the checks.
+
+Two DATE values subtract with `-` and TRY_SUBTRACT as Spark's `SubtractDates` does outside its
+legacy interval mode, with a local function, `SparkSubtractDates`: the result is the DAY
+interval between the dates, in microseconds, nullable only for a nullable operand. The day
+numbers are subtracted as INT values, which fails with `integer overflow`, and the days give
+BIGINT microseconds, which fails with `long overflow`, while optimizing a constant and while
+collecting rows otherwise; TRY_SUBTRACT gives NULL there, with a nullable result. An untyped
+NULL beside a DATE, on either side, is a NULL DATE. DataFusion returned a number of days, so
+interval scaling, comparison and other consumers saw a number, and TRY_SUBTRACT failed while
+planning. Arrow's microsecond duration carries no qualifier, so a CAST of the difference to
+STRING gives DAY TO SECOND text (#953) and a CAST to an integer counts seconds (#1152), where
+Spark uses the DAY unit; a DATE plus a difference beyond Arrow's nanosecond calendar intervals
+fails (#952). As for other day-time intervals, a comparison with a YEAR TO MONTH interval is
+accepted where Spark rejects it (#1182), CONCAT writes Arrow's duration text, ISO 8601 for a
+column and `1 days 0 hours 0 mins 0.000000 secs` for a constant (#953), and TRY_SUM rejects it
+while planning (#1183). An Arrow Date64 operand subtracts like a DATE. The
+[DATE subtraction references](tests/fixtures/date-subtraction/README.md) record the checks.
 
 MAKE_INTERVAL uses a local function, `SparkMakeInterval`, in place of `datafusion-spark`'s,
 following Spark's `MakeInterval`. Missing trailing arguments are 0, and more than seven fail
