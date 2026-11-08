@@ -217,13 +217,19 @@ fn dar_message(case: &Value) -> Option<&str> {
 
 /// The recorded stages and outcome that differ from the observation. A failure must occur
 /// at Spark's stage with DAR's message for it.
+/// An omitted stage makes no claim; an explicit NULL requires that stage to be unavailable.
 fn differing_parts(case: &Value, observation: &Value) -> TestResult<Vec<&'static str>> {
     let mut differing = Vec::new();
     for stage in ["analyzed", "optimized", "executed"] {
-        if let Some(expected) = case["schema_stages"].get(stage)
-            && observation[stage] != spark_fields(expected)?
-        {
-            differing.push(stage);
+        if let Some(expected) = case["schema_stages"].get(stage) {
+            let matches = if expected.is_null() {
+                observation[stage].is_null()
+            } else {
+                observation[stage] == spark_fields(expected)?
+            };
+            if !matches {
+                differing.push(stage);
+            }
         }
     }
     let outcome_matches = match case["expected"]["status"].as_str() {
@@ -268,7 +274,8 @@ enum RetainedDifference {
     /// which fails while collecting rows. Spark returns -1.
     NullInRequiredTryCast,
     /// #1107: formatted TO_TIMESTAMP and TO_TIMESTAMP_NTZ of a TIMESTAMP fail in the string
-    /// parser while collecting rows, and declare a nullable result.
+    /// parser and declare a nullable result. Strict literals fail during optimization;
+    /// other calls fail while collecting rows.
     StringOnlyFormattedParsing,
     /// #1107: TIMESTAMP() returns a TIMESTAMP_NTZ holding the UTC date-time.
     NtzTimestampFunction,
@@ -433,10 +440,23 @@ fn current_expectation(
         _ => None,
     };
     if let Some(message) = failure {
+        let fails_during_optimization = difference
+            == RetainedDifference::StringOnlyFormattedParsing
+            && id == "literal_to_timestamp_ntz_format"
+            && case["ansi"] == true;
         current["expected"] = json!({"status": "error", "dar_message": message});
-        current["spark_error_phase"] = json!("collect");
+        current["spark_error_phase"] = json!(if fails_during_optimization {
+            "optimized"
+        } else {
+            "collect"
+        });
         if let Some(stages) = current["schema_stages"].as_object_mut() {
-            stages.remove("executed");
+            if fails_during_optimization {
+                stages.insert("optimized".into(), Value::Null);
+                stages.insert("executed".into(), Value::Null);
+            } else {
+                stages.remove("executed");
+            }
         }
         return Ok(current);
     }
@@ -484,6 +504,43 @@ fn current_expectation(
     }
     rows.sort_by_key(|row| row.to_string());
     Ok(current)
+}
+
+#[test]
+fn strict_formatted_literal_errors_require_unavailable_later_stages() -> TestResult {
+    let records = conversion_references()?;
+    let reference = records
+        .iter()
+        .find(|case| {
+            case["id"] == "literal_to_timestamp_ntz_format"
+                && case["ansi"] == true
+                && case["timezone"] == "UTC"
+        })
+        .ok_or("missing strict formatted literal reference")?;
+    let expectation = current_expectation(
+        reference,
+        RetainedDifference::StringOnlyFormattedParsing,
+        &records[0],
+    )?;
+    let fields = json!([{"name":"r", "type":"timestamp_ntz", "nullable":true, "metadata":{}}]);
+    let observation = json!({
+        "analyzed":fields,
+        "error_phase":"optimized",
+        "error":"Optimizer rule 'simplify_expressions' failed\ncaused by\nExecution error: expected string scalar for `timestamp`",
+    });
+    assert!(differing_parts(&expectation, &observation)?.is_empty());
+    for stage in ["optimized", "executed"] {
+        let mut late_failure = observation.clone();
+        late_failure[stage] = fields.clone();
+        assert_eq!(differing_parts(&expectation, &late_failure)?, [stage]);
+        let mut unknown_stage = expectation.clone();
+        unknown_stage["schema_stages"]
+            .as_object_mut()
+            .ok_or("missing expected schema stages")?
+            .remove(stage);
+        assert!(differing_parts(&unknown_stage, &late_failure)?.is_empty());
+    }
+    Ok(())
 }
 
 fn session_context(batch_size: usize) -> SessionContext {

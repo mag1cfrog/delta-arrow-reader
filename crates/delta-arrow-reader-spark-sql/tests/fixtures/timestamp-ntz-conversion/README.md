@@ -80,8 +80,9 @@ The test replaces only the retained part with the current DAR result and checks 
   - 4 TRY_CAST calls over a NOT NULL column fail because they return NULL in a NOT NULL
     field, where Spark returns -1.
 - #1107: 30 records of TIMESTAMP arguments:
-  - 18 formatted TO_TIMESTAMP_NTZ and TO_TIMESTAMP calls fail in the string parser while
-    collecting rows, and the literal ones declare a nullable result;
+  - 18 formatted TO_TIMESTAMP_NTZ and TO_TIMESTAMP calls fail in the string parser.
+    Strict ANSI literals fail during optimization; the other calls fail while collecting
+    rows. The literal ones declare a nullable result;
   - 12 TIMESTAMP() calls return TIMESTAMP_NTZ holding the UTC date-time.
 
 Recapture from the crate root:

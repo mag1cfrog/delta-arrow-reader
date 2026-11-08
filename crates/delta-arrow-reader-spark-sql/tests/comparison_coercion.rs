@@ -17,6 +17,9 @@ use std::sync::Arc;
 
 type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
 
+#[path = "support/timestamp_parser_errors.rs"]
+mod timestamp_parser_errors;
+
 fn spark_type_name(data_type: &DataType) -> TestResult<String> {
     Ok(match data_type {
         DataType::Decimal128(precision, scale) => format!("decimal({precision},{scale})"),
@@ -286,8 +289,8 @@ async fn match_spark_comparison_coercion() -> TestResult {
                         || (case["id"]
                             .as_str()
                             .is_some_and(|id| id.ends_with("bad_left_required"))
-                            && message.starts_with(
-                                "Execution error: error in SQL parser: found b at 0:1",
+                            && timestamp_parser_errors::matches_recorded_bad_input_error(
+                                error.as_ref(),
                             ))
                 }
                 _ => false,

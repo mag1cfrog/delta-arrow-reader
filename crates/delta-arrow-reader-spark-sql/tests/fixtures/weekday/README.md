@@ -38,8 +38,6 @@ retained part with the current DAR result and checks each count:
 - #1003: 16 records cast a NOT NULL TIMESTAMP_NTZ to DATE as NOT NULL. Spark declares the
   implicit cast nullable: at analysis for the 8 literal records, and at every stage for the
   8 NOT NULL column records.
-- #937: 6 ANSI DAYOFWEEK records of a STRING literal Spark cannot read fail while collecting
-  rows, where Spark fails during optimization. WEEKDAY already fails during optimization.
 
 Recapture from the crate root:
 

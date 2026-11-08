@@ -15,6 +15,9 @@ use std::sync::Arc;
 
 type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
 
+#[path = "support/timestamp_parser_errors.rs"]
+mod timestamp_parser_errors;
+
 async fn execute_reference_query(session: &SessionContext, case: &Value) -> TestResult<Value> {
     let options = SparkSqlOptions {
         ansi_mode: case["ansi"].as_bool().ok_or("missing ANSI mode")?,
@@ -244,6 +247,7 @@ async fn match_spark_conditional_results_and_admission() -> TestResult {
                             "CAST_INVALID_INPUT"
                             | "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
                         ) => {
+                            let native_error = error.as_ref();
                             let error = error.to_string();
                             error.contains("[CAST_INVALID_INPUT]")
                             || (case["float_encoding"] == "ieee754_bits" && error.contains("Cast error: Cannot cast string 'bad' to value of Int32 type"))
@@ -255,9 +259,7 @@ async fn match_spark_conditional_results_and_admission() -> TestResult {
                             || (case["id"]
                                 .as_str()
                                 .is_some_and(|id| id.contains("_timestamp"))
-                                && error.starts_with(
-                                    "Execution error: error in SQL parser: found b at 0:1",
-                                ))
+                                && timestamp_parser_errors::matches_recorded_bad_input_error(native_error))
                         }
                         Some("WRONG_NUM_ARGS.WITHOUT_SUGGESTION") => {
                             error.to_string().contains("two values expected")
