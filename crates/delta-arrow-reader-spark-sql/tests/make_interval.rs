@@ -536,8 +536,9 @@ async fn make_interval_matches_spark() -> TestResult {
     Ok(())
 }
 
-/// An unreached CASE branch with a constant overflow does not fail over an empty batch, as
-/// Spark returns no rows for `column_case_overflow_without_rows`.
+/// An unreached CASE branch with a constant overflow does not fail over an empty batch. Spark's
+/// `column_case_overflow_without_rows` filters every row out; here the empty batch reaches the
+/// CASE itself, and the result must still be Spark's: no rows and the same fields.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn unreached_overflow_skips_empty_batches() -> TestResult {
     let records = make_interval_references()?;
@@ -562,8 +563,14 @@ async fn unreached_overflow_skips_empty_batches() -> TestResult {
                 vec![vec![empty.clone()]],
             )?),
         )?;
-        let observation = observe(&session, case).await;
-        let differing = differing_parts(case, &observation)?;
+        let sql = case["sql"].as_str().ok_or("missing SQL")?;
+        let unfiltered = sql
+            .strip_suffix(" WHERE k < 0")
+            .ok_or("expected the record's filter")?;
+        let mut case = case.clone();
+        case["sql"] = json!(unfiltered);
+        let observation = observe(&session, &case).await;
+        let differing = differing_parts(&case, &observation)?;
         assert!(differing.is_empty(), "{differing:?}: {observation}");
     }
     Ok(())
