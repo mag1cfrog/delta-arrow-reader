@@ -482,7 +482,7 @@ async fn capture_spark_optimized_observation_impl(
     extensions.insert(SparkSqlExpressionSemantics::default());
     extensions.insert(PreserveAggregateStatisticsSchema::default());
     let optimized = state.optimize(&query.logical_plan)?;
-    if let Some(receipt) = receipt.as_deref_mut() {
+    if let Some(receipt) = receipt {
         receipt["optimized"] = c06_receipts::schema(optimized.schema().as_arrow());
         receipt["optimized_plan"] = json!(format!("{optimized:?}"));
     }
@@ -646,7 +646,7 @@ async fn compare_exact_spark_query_stages_impl(
         phase = "encode";
         let mut rows = Vec::new();
         for batch in &batches {
-            validate_batch(schema.as_ref(), &batch)?;
+            validate_batch(schema.as_ref(), batch)?;
             for row in 0..batch.num_rows() {
                 rows.push(
                     batch
@@ -665,7 +665,7 @@ async fn compare_exact_spark_query_stages_impl(
         Ok(rows)
     }
     .await;
-    if let (Some(receipt), Err(error)) = (receipt.as_deref_mut(), &actual) {
+    if let (Some(receipt), Err(error)) = (receipt, &actual) {
         receipt["error"] = c06_receipts::failure(error.as_ref(), phase);
     }
     let recorded_stage = |stage: &str, alias: &str| -> TestResult<Option<&Value>> {

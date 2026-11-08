@@ -443,7 +443,7 @@ async fn capture_observation_impl(
             rows.push(values);
         }
     }
-    if let Some(receipt) = receipt.as_deref_mut() {
+    if let Some(receipt) = receipt {
         let mut output = capture_batches(&batches)?;
         let typed = c06_receipts::batches(&batches, encode_value)?;
         for (batch, actual) in output["batches"]
