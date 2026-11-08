@@ -4,3 +4,5 @@
 # Keep frozen Spark fixture checksums stable across checkouts.
 /crates/delta-arrow-reader-spark-sql/tests/fixtures/slice-row-priority-902/* text eol=lf
 /crates/delta-arrow-reader-spark-sql/tests/fixtures/slice-shared-projection-errors-920/* text eol=lf
+/crates/delta-arrow-reader-spark-sql/tests/fixtures/regexp-replace-pattern-preparation-inputs.json text eol=lf
+/crates/delta-arrow-reader-spark-sql/tests/fixtures/regexp-replace-pattern-preparation-spark.jsonl text eol=lf

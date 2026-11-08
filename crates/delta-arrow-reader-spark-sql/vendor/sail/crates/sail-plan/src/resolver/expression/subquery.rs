@@ -4,11 +4,13 @@ use std::sync::Arc;
 use datafusion_common::DFSchemaRef;
 use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode};
 use datafusion_expr::logical_plan::{Filter, Projection};
-use datafusion_expr::{Expr, LogicalPlan, LogicalPlanBuilder, expr_fn};
+use datafusion_expr::{Expr, ExprSchemable, LogicalPlan, LogicalPlanBuilder, expr_fn};
 use sail_common::spec;
 
 use crate::error::{PlanError, PlanResult};
-use crate::function::common::{drop_scalar_subquery_metadata, spark_in_list};
+use crate::function::common::{
+    drop_scalar_subquery_metadata, reject_calendar_interval_ordering, spark_in_list,
+};
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
 use crate::resolver::state::PlanResolverState;
@@ -44,6 +46,14 @@ impl PlanResolver<'_> {
             }
         };
         if subquery.schema().fields().len() == 1 {
+            reject_calendar_interval_ordering(
+                &[
+                    expr.get_type(schema)?,
+                    subquery.schema().field(0).data_type().clone(),
+                ],
+                "insubquery",
+                "DATATYPE_MISMATCH.IN_SUBQUERY_DATA_TYPE_MISMATCH",
+            )?;
             // Use the same Spark common-type and floating-value normalization
             // as IN lists. Resolver field IDs are unique across these scopes.
             let output = Expr::Column(subquery.schema().columns()[0].clone());
@@ -131,8 +141,10 @@ impl PlanResolver<'_> {
         state: &mut PlanResolverState,
     ) -> PlanResult<NamedExpr> {
         let mut outer_refs = Vec::with_capacity(in_subquery_values.len());
+        let mut value_types = Vec::with_capacity(in_subquery_values.len());
         for value in in_subquery_values {
             let expr = self.resolve_expression(value, schema, state).await?;
+            value_types.push(expr.get_type(schema)?);
             // Recursively convert column references to OuterReferenceColumn so
             // DataFusion's decorrelation pass recognizes them as correlated
             // references. This handles both bare columns (e.g. `a`) and
@@ -162,6 +174,13 @@ impl PlanResolver<'_> {
                 outer_refs.len(),
                 subquery_cols.len()
             )));
+        }
+        for (value_type, field) in value_types.iter().zip(subquery_plan.schema().fields()) {
+            reject_calendar_interval_ordering(
+                &[value_type.clone(), field.data_type().clone()],
+                "insubquery",
+                "DATATYPE_MISMATCH.IN_SUBQUERY_DATA_TYPE_MISMATCH",
+            )?;
         }
         let filter_expr = outer_refs
             .into_iter()

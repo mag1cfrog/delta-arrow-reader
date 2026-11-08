@@ -9,7 +9,9 @@ use datafusion_expr::{ExprSchemable, ScalarUDF, ScalarUDFImpl, expr, lit};
 use sail_common_datafusion::utils::items::ItemTaker;
 
 use crate::error::{PlanError, PlanResult};
-use crate::function::common::{ScalarFunction, ScalarFunctionInput};
+use crate::function::common::{
+    ScalarFunction, ScalarFunctionInput, reject_calendar_interval_ordering,
+};
 use crate::function::numeric_coercion::common_numeric_type;
 use crate::function::result_coercion::{
     coerce_coalesce_result_values, coerce_if_result_values, coerce_result_values,
@@ -185,6 +187,13 @@ pub(super) fn list_built_in_conditional_functions() -> Vec<(&'static str, Scalar
             "nullif",
             F::custom(|input| {
                 let (left, right) = input.arguments.two()?;
+                let schema = input.function_context.schema;
+                // Spark's NULLIF compares its arguments with `=`.
+                reject_calendar_interval_ordering(
+                    &[left.get_type(schema)?, right.get_type(schema)?],
+                    "=",
+                    "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+                )?;
                 Ok(ScalarUDF::from(SparkNullIf::new(
                     input.function_context.plan_config.ansi_mode,
                     input.function_context.plan_config.session_timezone.clone(),

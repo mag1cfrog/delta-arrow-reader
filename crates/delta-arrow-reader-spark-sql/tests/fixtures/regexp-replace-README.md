@@ -138,12 +138,11 @@ every captured observation remains byte-for-byte unchanged.
 
 The shared C06 observer replays exact per-case settings across the three string
 representations and batch sizes 1/32. All 600 successful results require complete
-analyzed/physical fields and ordered rows; 96 replacement errors require their
-recorded source, pattern, replacement, position and cause at native execution.
-Thirty-six literal-error contexts retain the separately measured timing gap:
-Spark fails during optimization and native execution fails later. Their phase
-comparison remains false under [#1064](https://github.com/mag1cfrog/delta-arrow-reader/issues/1064);
-this test changes no preparation or regex kernel. The 24 syntax errors require
+analyzed/physical fields and ordered rows. The 96 replacement errors require
+their recorded source, pattern, replacement, position and cause: 60 at execution
+and 36 literal-error contexts during preparation, matching Spark's optimization
+phase. Those 36 contexts require their real analyzed fields and explicit absence
+of physical fields. The original captures remain unchanged. The 24 syntax errors require
 parser rejection before fields exist. Another 24 cycle errors require resolution
 failure with no fields and the exact independently
 recorded `java.lang.IllegalArgumentException` cause/message. Spark supplied no
@@ -154,10 +153,10 @@ compatibility credit. Complete Spark cycle stacks remain in the fixture; the
 native diagnostic comparison does not claim JVM-stack identity.
 
 All 744 contexts require the complete result or meaningful native cause and
-available fields. The strict reference predicate requires 660 matches. It gives
-no strict credit to the 36 phase differences, 24 parser identifier differences,
-or 24 cycle errors whose structured identifier is unavailable. These facets
-remain separate from semantic cause/field comparisons.
+available fields. The strict reference predicate requires 696 matches and zero
+phase differences. It gives no strict credit to the 24 parser identifier
+differences or 24 cycle errors whose structured identifier is unavailable. These
+facets remain separate from semantic cause/field comparisons.
 
 ## Raw nonword boundary
 
@@ -295,6 +294,18 @@ raw Arrow schemas remain visible in observations. Native optimized fields stay
 unavailable; analyzed and physical fields never substitute for them. Profile
 approval requires replay of the complete combined reference matrix on the final
 current staging source and independent review.
+
+`regex-native-preparation-limit-profiles.jsonl` records 48 complete outcomes at
+`ac5f16fd495b2f3fb7a4f8218c116214c1c7617b`: 12 literal lookbehind errors and
+36 literal surrogate-region errors across four exact case IDs, both ANSI modes,
+three representations and batch sizes 1/32. Their causes and analyzed fields
+remain unchanged; preparation fails before physical fields exist. These exact
+keys supersede 36 historical execution profiles and the 12 manual
+`position_supplementary_3` execution checks. Historical profile bytes remain
+unchanged, and the 480 other historical keys retain their exact contracts.
+All 48 current outcomes remain strict Spark differences under #779/#798.
+Source, whole-log hashes and raw JSON byte locations accompany every profile.
+This phase update grants no additional native regex or UTF-16 capability.
 
 Recognizing a recorded limit admits its regression observation while keeping
 `matches_reference` and `full_compatibility_pass` false. A changed value, field,

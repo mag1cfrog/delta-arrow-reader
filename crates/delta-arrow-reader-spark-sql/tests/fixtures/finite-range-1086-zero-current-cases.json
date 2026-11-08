@@ -1,0 +1,1248 @@
+{
+  "version": 1,
+  "issue": 1086,
+  "purpose": "Separate source-only zero-expression and CURRENT ROW RANGE admission controls. Capture the actual signed-width, shorthand, legacy wrapping, error phase, Fields and rows before changing zero-bound normalization. No statuses, rows, or error conditions are authored.",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "expected_record_count": 30,
+  "sql_source_count": 15,
+  "signed_key_types": [
+    "TINYINT",
+    "SMALLINT",
+    "INT",
+    "BIGINT"
+  ],
+  "wrapped_zero_pairs": [
+    {
+      "key_type": "TINYINT",
+      "source_offset_type": "INT",
+      "positive_offset": "256"
+    },
+    {
+      "key_type": "SMALLINT",
+      "source_offset_type": "INT",
+      "positive_offset": "65536"
+    },
+    {
+      "key_type": "INT",
+      "source_offset_type": "BIGINT",
+      "positive_offset": "4294967296"
+    }
+  ],
+  "ownership_policy": "Every source receives the unchanged five-stage capture, full Fields and availability, raw and multiset rows, eight actual settings, and complete actual error details.",
+  "corpora": [
+    {
+      "corpus": "finite-range-1086-zero-current-controls",
+      "source": {
+        "kind": "independent issue1086 zero-expression/current-row source-only SQL inventory"
+      },
+      "metadata": {
+        "spark_version": "4.2.0",
+        "timezone": "UTC",
+        "inputs": []
+      },
+      "cases": [
+        {
+          "corpus": "finite-range-1086-zero-current-controls",
+          "id": "zero_tinyint_zero_preceding_current",
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN 0 PRECEDING AND CURRENT ROW) AS n FROM VALUES (0,CAST(NULL AS TINYINT)),(1,CAST(NULL AS TINYINT)),(2,CAST(0 AS TINYINT)),(3,CAST(0 AS TINYINT)),(4,CAST(1 AS TINYINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_zero_current_control",
+          "coverage": {
+            "family": "zero_current",
+            "key_type": "TINYINT",
+            "source_offset_type": "INT",
+            "positive_offset": "0",
+            "shape": "zero_preceding_current",
+            "frame": "RANGE BETWEEN 0 PRECEDING AND CURRENT ROW",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS TINYINT)"
+              ],
+              [
+                1,
+                "CAST(NULL AS TINYINT)"
+              ],
+              [
+                2,
+                "CAST(0 AS TINYINT)"
+              ],
+              [
+                3,
+                "CAST(0 AS TINYINT)"
+              ],
+              [
+                4,
+                "CAST(1 AS TINYINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "outer_order": "id"
+          },
+          "ansi": true
+        },
+        {
+          "corpus": "finite-range-1086-zero-current-controls",
+          "id": "zero_tinyint_zero_preceding_current",
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN 0 PRECEDING AND CURRENT ROW) AS n FROM VALUES (0,CAST(NULL AS TINYINT)),(1,CAST(NULL AS TINYINT)),(2,CAST(0 AS TINYINT)),(3,CAST(0 AS TINYINT)),(4,CAST(1 AS TINYINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_zero_current_control",
+          "coverage": {
+            "family": "zero_current",
+            "key_type": "TINYINT",
+            "source_offset_type": "INT",
+            "positive_offset": "0",
+            "shape": "zero_preceding_current",
+            "frame": "RANGE BETWEEN 0 PRECEDING AND CURRENT ROW",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS TINYINT)"
+              ],
+              [
+                1,
+                "CAST(NULL AS TINYINT)"
+              ],
+              [
+                2,
+                "CAST(0 AS TINYINT)"
+              ],
+              [
+                3,
+                "CAST(0 AS TINYINT)"
+              ],
+              [
+                4,
+                "CAST(1 AS TINYINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "outer_order": "id"
+          },
+          "ansi": false
+        },
+        {
+          "corpus": "finite-range-1086-zero-current-controls",
+          "id": "zero_tinyint_zero_preceding_shorthand",
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE 0 PRECEDING) AS n FROM VALUES (0,CAST(NULL AS TINYINT)),(1,CAST(NULL AS TINYINT)),(2,CAST(0 AS TINYINT)),(3,CAST(0 AS TINYINT)),(4,CAST(1 AS TINYINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_zero_current_control",
+          "coverage": {
+            "family": "zero_current",
+            "key_type": "TINYINT",
+            "source_offset_type": "INT",
+            "positive_offset": "0",
+            "shape": "zero_preceding_shorthand",
+            "frame": "RANGE 0 PRECEDING",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS TINYINT)"
+              ],
+              [
+                1,
+                "CAST(NULL AS TINYINT)"
+              ],
+              [
+                2,
+                "CAST(0 AS TINYINT)"
+              ],
+              [
+                3,
+                "CAST(0 AS TINYINT)"
+              ],
+              [
+                4,
+                "CAST(1 AS TINYINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "outer_order": "id"
+          },
+          "ansi": true
+        },
+        {
+          "corpus": "finite-range-1086-zero-current-controls",
+          "id": "zero_tinyint_zero_preceding_shorthand",
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE 0 PRECEDING) AS n FROM VALUES (0,CAST(NULL AS TINYINT)),(1,CAST(NULL AS TINYINT)),(2,CAST(0 AS TINYINT)),(3,CAST(0 AS TINYINT)),(4,CAST(1 AS TINYINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_zero_current_control",
+          "coverage": {
+            "family": "zero_current",
+            "key_type": "TINYINT",
+            "source_offset_type": "INT",
+            "positive_offset": "0",
+            "shape": "zero_preceding_shorthand",
+            "frame": "RANGE 0 PRECEDING",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS TINYINT)"
+              ],
+              [
+                1,
+                "CAST(NULL AS TINYINT)"
+              ],
+              [
+                2,
+                "CAST(0 AS TINYINT)"
+              ],
+              [
+                3,
+                "CAST(0 AS TINYINT)"
+              ],
+              [
+                4,
+                "CAST(1 AS TINYINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "outer_order": "id"
+          },
+          "ansi": false
+        },
+        {
+          "corpus": "finite-range-1086-zero-current-controls",
+          "id": "zero_tinyint_zero_following_current",
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN 0 FOLLOWING AND CURRENT ROW) AS n FROM VALUES (0,CAST(NULL AS TINYINT)),(1,CAST(NULL AS TINYINT)),(2,CAST(0 AS TINYINT)),(3,CAST(0 AS TINYINT)),(4,CAST(1 AS TINYINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_zero_current_control",
+          "coverage": {
+            "family": "zero_current",
+            "key_type": "TINYINT",
+            "source_offset_type": "INT",
+            "positive_offset": "0",
+            "shape": "zero_following_current",
+            "frame": "RANGE BETWEEN 0 FOLLOWING AND CURRENT ROW",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS TINYINT)"
+              ],
+              [
+                1,
+                "CAST(NULL AS TINYINT)"
+              ],
+              [
+                2,
+                "CAST(0 AS TINYINT)"
+              ],
+              [
+                3,
+                "CAST(0 AS TINYINT)"
+              ],
+              [
+                4,
+                "CAST(1 AS TINYINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "outer_order": "id"
+          },
+          "ansi": true
+        },
+        {
+          "corpus": "finite-range-1086-zero-current-controls",
+          "id": "zero_tinyint_zero_following_current",
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN 0 FOLLOWING AND CURRENT ROW) AS n FROM VALUES (0,CAST(NULL AS TINYINT)),(1,CAST(NULL AS TINYINT)),(2,CAST(0 AS TINYINT)),(3,CAST(0 AS TINYINT)),(4,CAST(1 AS TINYINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_zero_current_control",
+          "coverage": {
+            "family": "zero_current",
+            "key_type": "TINYINT",
+            "source_offset_type": "INT",
+            "positive_offset": "0",
+            "shape": "zero_following_current",
+            "frame": "RANGE BETWEEN 0 FOLLOWING AND CURRENT ROW",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS TINYINT)"
+              ],
+              [
+                1,
+                "CAST(NULL AS TINYINT)"
+              ],
+              [
+                2,
+                "CAST(0 AS TINYINT)"
+              ],
+              [
+                3,
+                "CAST(0 AS TINYINT)"
+              ],
+              [
+                4,
+                "CAST(1 AS TINYINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "outer_order": "id"
+          },
+          "ansi": false
+        },
+        {
+          "corpus": "finite-range-1086-zero-current-controls",
+          "id": "zero_smallint_zero_preceding_current",
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN 0 PRECEDING AND CURRENT ROW) AS n FROM VALUES (0,CAST(NULL AS SMALLINT)),(1,CAST(NULL AS SMALLINT)),(2,CAST(0 AS SMALLINT)),(3,CAST(0 AS SMALLINT)),(4,CAST(1 AS SMALLINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_zero_current_control",
+          "coverage": {
+            "family": "zero_current",
+            "key_type": "SMALLINT",
+            "source_offset_type": "INT",
+            "positive_offset": "0",
+            "shape": "zero_preceding_current",
+            "frame": "RANGE BETWEEN 0 PRECEDING AND CURRENT ROW",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS SMALLINT)"
+              ],
+              [
+                1,
+                "CAST(NULL AS SMALLINT)"
+              ],
+              [
+                2,
+                "CAST(0 AS SMALLINT)"
+              ],
+              [
+                3,
+                "CAST(0 AS SMALLINT)"
+              ],
+              [
+                4,
+                "CAST(1 AS SMALLINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "outer_order": "id"
+          },
+          "ansi": true
+        },
+        {
+          "corpus": "finite-range-1086-zero-current-controls",
+          "id": "zero_smallint_zero_preceding_current",
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN 0 PRECEDING AND CURRENT ROW) AS n FROM VALUES (0,CAST(NULL AS SMALLINT)),(1,CAST(NULL AS SMALLINT)),(2,CAST(0 AS SMALLINT)),(3,CAST(0 AS SMALLINT)),(4,CAST(1 AS SMALLINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_zero_current_control",
+          "coverage": {
+            "family": "zero_current",
+            "key_type": "SMALLINT",
+            "source_offset_type": "INT",
+            "positive_offset": "0",
+            "shape": "zero_preceding_current",
+            "frame": "RANGE BETWEEN 0 PRECEDING AND CURRENT ROW",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS SMALLINT)"
+              ],
+              [
+                1,
+                "CAST(NULL AS SMALLINT)"
+              ],
+              [
+                2,
+                "CAST(0 AS SMALLINT)"
+              ],
+              [
+                3,
+                "CAST(0 AS SMALLINT)"
+              ],
+              [
+                4,
+                "CAST(1 AS SMALLINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "outer_order": "id"
+          },
+          "ansi": false
+        },
+        {
+          "corpus": "finite-range-1086-zero-current-controls",
+          "id": "zero_smallint_zero_preceding_shorthand",
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE 0 PRECEDING) AS n FROM VALUES (0,CAST(NULL AS SMALLINT)),(1,CAST(NULL AS SMALLINT)),(2,CAST(0 AS SMALLINT)),(3,CAST(0 AS SMALLINT)),(4,CAST(1 AS SMALLINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_zero_current_control",
+          "coverage": {
+            "family": "zero_current",
+            "key_type": "SMALLINT",
+            "source_offset_type": "INT",
+            "positive_offset": "0",
+            "shape": "zero_preceding_shorthand",
+            "frame": "RANGE 0 PRECEDING",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS SMALLINT)"
+              ],
+              [
+                1,
+                "CAST(NULL AS SMALLINT)"
+              ],
+              [
+                2,
+                "CAST(0 AS SMALLINT)"
+              ],
+              [
+                3,
+                "CAST(0 AS SMALLINT)"
+              ],
+              [
+                4,
+                "CAST(1 AS SMALLINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "outer_order": "id"
+          },
+          "ansi": true
+        },
+        {
+          "corpus": "finite-range-1086-zero-current-controls",
+          "id": "zero_smallint_zero_preceding_shorthand",
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE 0 PRECEDING) AS n FROM VALUES (0,CAST(NULL AS SMALLINT)),(1,CAST(NULL AS SMALLINT)),(2,CAST(0 AS SMALLINT)),(3,CAST(0 AS SMALLINT)),(4,CAST(1 AS SMALLINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_zero_current_control",
+          "coverage": {
+            "family": "zero_current",
+            "key_type": "SMALLINT",
+            "source_offset_type": "INT",
+            "positive_offset": "0",
+            "shape": "zero_preceding_shorthand",
+            "frame": "RANGE 0 PRECEDING",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS SMALLINT)"
+              ],
+              [
+                1,
+                "CAST(NULL AS SMALLINT)"
+              ],
+              [
+                2,
+                "CAST(0 AS SMALLINT)"
+              ],
+              [
+                3,
+                "CAST(0 AS SMALLINT)"
+              ],
+              [
+                4,
+                "CAST(1 AS SMALLINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "outer_order": "id"
+          },
+          "ansi": false
+        },
+        {
+          "corpus": "finite-range-1086-zero-current-controls",
+          "id": "zero_smallint_zero_following_current",
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN 0 FOLLOWING AND CURRENT ROW) AS n FROM VALUES (0,CAST(NULL AS SMALLINT)),(1,CAST(NULL AS SMALLINT)),(2,CAST(0 AS SMALLINT)),(3,CAST(0 AS SMALLINT)),(4,CAST(1 AS SMALLINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_zero_current_control",
+          "coverage": {
+            "family": "zero_current",
+            "key_type": "SMALLINT",
+            "source_offset_type": "INT",
+            "positive_offset": "0",
+            "shape": "zero_following_current",
+            "frame": "RANGE BETWEEN 0 FOLLOWING AND CURRENT ROW",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS SMALLINT)"
+              ],
+              [
+                1,
+                "CAST(NULL AS SMALLINT)"
+              ],
+              [
+                2,
+                "CAST(0 AS SMALLINT)"
+              ],
+              [
+                3,
+                "CAST(0 AS SMALLINT)"
+              ],
+              [
+                4,
+                "CAST(1 AS SMALLINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "outer_order": "id"
+          },
+          "ansi": true
+        },
+        {
+          "corpus": "finite-range-1086-zero-current-controls",
+          "id": "zero_smallint_zero_following_current",
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN 0 FOLLOWING AND CURRENT ROW) AS n FROM VALUES (0,CAST(NULL AS SMALLINT)),(1,CAST(NULL AS SMALLINT)),(2,CAST(0 AS SMALLINT)),(3,CAST(0 AS SMALLINT)),(4,CAST(1 AS SMALLINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_zero_current_control",
+          "coverage": {
+            "family": "zero_current",
+            "key_type": "SMALLINT",
+            "source_offset_type": "INT",
+            "positive_offset": "0",
+            "shape": "zero_following_current",
+            "frame": "RANGE BETWEEN 0 FOLLOWING AND CURRENT ROW",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS SMALLINT)"
+              ],
+              [
+                1,
+                "CAST(NULL AS SMALLINT)"
+              ],
+              [
+                2,
+                "CAST(0 AS SMALLINT)"
+              ],
+              [
+                3,
+                "CAST(0 AS SMALLINT)"
+              ],
+              [
+                4,
+                "CAST(1 AS SMALLINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "outer_order": "id"
+          },
+          "ansi": false
+        },
+        {
+          "corpus": "finite-range-1086-zero-current-controls",
+          "id": "zero_int_zero_preceding_current",
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN 0 PRECEDING AND CURRENT ROW) AS n FROM VALUES (0,CAST(NULL AS INT)),(1,CAST(NULL AS INT)),(2,CAST(0 AS INT)),(3,CAST(0 AS INT)),(4,CAST(1 AS INT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_zero_current_control",
+          "coverage": {
+            "family": "zero_current",
+            "key_type": "INT",
+            "source_offset_type": "INT",
+            "positive_offset": "0",
+            "shape": "zero_preceding_current",
+            "frame": "RANGE BETWEEN 0 PRECEDING AND CURRENT ROW",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS INT)"
+              ],
+              [
+                1,
+                "CAST(NULL AS INT)"
+              ],
+              [
+                2,
+                "CAST(0 AS INT)"
+              ],
+              [
+                3,
+                "CAST(0 AS INT)"
+              ],
+              [
+                4,
+                "CAST(1 AS INT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "outer_order": "id"
+          },
+          "ansi": true
+        },
+        {
+          "corpus": "finite-range-1086-zero-current-controls",
+          "id": "zero_int_zero_preceding_current",
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN 0 PRECEDING AND CURRENT ROW) AS n FROM VALUES (0,CAST(NULL AS INT)),(1,CAST(NULL AS INT)),(2,CAST(0 AS INT)),(3,CAST(0 AS INT)),(4,CAST(1 AS INT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_zero_current_control",
+          "coverage": {
+            "family": "zero_current",
+            "key_type": "INT",
+            "source_offset_type": "INT",
+            "positive_offset": "0",
+            "shape": "zero_preceding_current",
+            "frame": "RANGE BETWEEN 0 PRECEDING AND CURRENT ROW",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS INT)"
+              ],
+              [
+                1,
+                "CAST(NULL AS INT)"
+              ],
+              [
+                2,
+                "CAST(0 AS INT)"
+              ],
+              [
+                3,
+                "CAST(0 AS INT)"
+              ],
+              [
+                4,
+                "CAST(1 AS INT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "outer_order": "id"
+          },
+          "ansi": false
+        },
+        {
+          "corpus": "finite-range-1086-zero-current-controls",
+          "id": "zero_int_zero_preceding_shorthand",
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE 0 PRECEDING) AS n FROM VALUES (0,CAST(NULL AS INT)),(1,CAST(NULL AS INT)),(2,CAST(0 AS INT)),(3,CAST(0 AS INT)),(4,CAST(1 AS INT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_zero_current_control",
+          "coverage": {
+            "family": "zero_current",
+            "key_type": "INT",
+            "source_offset_type": "INT",
+            "positive_offset": "0",
+            "shape": "zero_preceding_shorthand",
+            "frame": "RANGE 0 PRECEDING",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS INT)"
+              ],
+              [
+                1,
+                "CAST(NULL AS INT)"
+              ],
+              [
+                2,
+                "CAST(0 AS INT)"
+              ],
+              [
+                3,
+                "CAST(0 AS INT)"
+              ],
+              [
+                4,
+                "CAST(1 AS INT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "outer_order": "id"
+          },
+          "ansi": true
+        },
+        {
+          "corpus": "finite-range-1086-zero-current-controls",
+          "id": "zero_int_zero_preceding_shorthand",
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE 0 PRECEDING) AS n FROM VALUES (0,CAST(NULL AS INT)),(1,CAST(NULL AS INT)),(2,CAST(0 AS INT)),(3,CAST(0 AS INT)),(4,CAST(1 AS INT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_zero_current_control",
+          "coverage": {
+            "family": "zero_current",
+            "key_type": "INT",
+            "source_offset_type": "INT",
+            "positive_offset": "0",
+            "shape": "zero_preceding_shorthand",
+            "frame": "RANGE 0 PRECEDING",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS INT)"
+              ],
+              [
+                1,
+                "CAST(NULL AS INT)"
+              ],
+              [
+                2,
+                "CAST(0 AS INT)"
+              ],
+              [
+                3,
+                "CAST(0 AS INT)"
+              ],
+              [
+                4,
+                "CAST(1 AS INT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "outer_order": "id"
+          },
+          "ansi": false
+        },
+        {
+          "corpus": "finite-range-1086-zero-current-controls",
+          "id": "zero_int_zero_following_current",
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN 0 FOLLOWING AND CURRENT ROW) AS n FROM VALUES (0,CAST(NULL AS INT)),(1,CAST(NULL AS INT)),(2,CAST(0 AS INT)),(3,CAST(0 AS INT)),(4,CAST(1 AS INT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_zero_current_control",
+          "coverage": {
+            "family": "zero_current",
+            "key_type": "INT",
+            "source_offset_type": "INT",
+            "positive_offset": "0",
+            "shape": "zero_following_current",
+            "frame": "RANGE BETWEEN 0 FOLLOWING AND CURRENT ROW",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS INT)"
+              ],
+              [
+                1,
+                "CAST(NULL AS INT)"
+              ],
+              [
+                2,
+                "CAST(0 AS INT)"
+              ],
+              [
+                3,
+                "CAST(0 AS INT)"
+              ],
+              [
+                4,
+                "CAST(1 AS INT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "outer_order": "id"
+          },
+          "ansi": true
+        },
+        {
+          "corpus": "finite-range-1086-zero-current-controls",
+          "id": "zero_int_zero_following_current",
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN 0 FOLLOWING AND CURRENT ROW) AS n FROM VALUES (0,CAST(NULL AS INT)),(1,CAST(NULL AS INT)),(2,CAST(0 AS INT)),(3,CAST(0 AS INT)),(4,CAST(1 AS INT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_zero_current_control",
+          "coverage": {
+            "family": "zero_current",
+            "key_type": "INT",
+            "source_offset_type": "INT",
+            "positive_offset": "0",
+            "shape": "zero_following_current",
+            "frame": "RANGE BETWEEN 0 FOLLOWING AND CURRENT ROW",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS INT)"
+              ],
+              [
+                1,
+                "CAST(NULL AS INT)"
+              ],
+              [
+                2,
+                "CAST(0 AS INT)"
+              ],
+              [
+                3,
+                "CAST(0 AS INT)"
+              ],
+              [
+                4,
+                "CAST(1 AS INT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "outer_order": "id"
+          },
+          "ansi": false
+        },
+        {
+          "corpus": "finite-range-1086-zero-current-controls",
+          "id": "zero_bigint_zero_preceding_current",
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN 0 PRECEDING AND CURRENT ROW) AS n FROM VALUES (0,CAST(NULL AS BIGINT)),(1,CAST(NULL AS BIGINT)),(2,CAST(0 AS BIGINT)),(3,CAST(0 AS BIGINT)),(4,CAST(1 AS BIGINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_zero_current_control",
+          "coverage": {
+            "family": "zero_current",
+            "key_type": "BIGINT",
+            "source_offset_type": "INT",
+            "positive_offset": "0",
+            "shape": "zero_preceding_current",
+            "frame": "RANGE BETWEEN 0 PRECEDING AND CURRENT ROW",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS BIGINT)"
+              ],
+              [
+                1,
+                "CAST(NULL AS BIGINT)"
+              ],
+              [
+                2,
+                "CAST(0 AS BIGINT)"
+              ],
+              [
+                3,
+                "CAST(0 AS BIGINT)"
+              ],
+              [
+                4,
+                "CAST(1 AS BIGINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "outer_order": "id"
+          },
+          "ansi": true
+        },
+        {
+          "corpus": "finite-range-1086-zero-current-controls",
+          "id": "zero_bigint_zero_preceding_current",
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN 0 PRECEDING AND CURRENT ROW) AS n FROM VALUES (0,CAST(NULL AS BIGINT)),(1,CAST(NULL AS BIGINT)),(2,CAST(0 AS BIGINT)),(3,CAST(0 AS BIGINT)),(4,CAST(1 AS BIGINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_zero_current_control",
+          "coverage": {
+            "family": "zero_current",
+            "key_type": "BIGINT",
+            "source_offset_type": "INT",
+            "positive_offset": "0",
+            "shape": "zero_preceding_current",
+            "frame": "RANGE BETWEEN 0 PRECEDING AND CURRENT ROW",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS BIGINT)"
+              ],
+              [
+                1,
+                "CAST(NULL AS BIGINT)"
+              ],
+              [
+                2,
+                "CAST(0 AS BIGINT)"
+              ],
+              [
+                3,
+                "CAST(0 AS BIGINT)"
+              ],
+              [
+                4,
+                "CAST(1 AS BIGINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "outer_order": "id"
+          },
+          "ansi": false
+        },
+        {
+          "corpus": "finite-range-1086-zero-current-controls",
+          "id": "zero_bigint_zero_preceding_shorthand",
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE 0 PRECEDING) AS n FROM VALUES (0,CAST(NULL AS BIGINT)),(1,CAST(NULL AS BIGINT)),(2,CAST(0 AS BIGINT)),(3,CAST(0 AS BIGINT)),(4,CAST(1 AS BIGINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_zero_current_control",
+          "coverage": {
+            "family": "zero_current",
+            "key_type": "BIGINT",
+            "source_offset_type": "INT",
+            "positive_offset": "0",
+            "shape": "zero_preceding_shorthand",
+            "frame": "RANGE 0 PRECEDING",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS BIGINT)"
+              ],
+              [
+                1,
+                "CAST(NULL AS BIGINT)"
+              ],
+              [
+                2,
+                "CAST(0 AS BIGINT)"
+              ],
+              [
+                3,
+                "CAST(0 AS BIGINT)"
+              ],
+              [
+                4,
+                "CAST(1 AS BIGINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "outer_order": "id"
+          },
+          "ansi": true
+        },
+        {
+          "corpus": "finite-range-1086-zero-current-controls",
+          "id": "zero_bigint_zero_preceding_shorthand",
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE 0 PRECEDING) AS n FROM VALUES (0,CAST(NULL AS BIGINT)),(1,CAST(NULL AS BIGINT)),(2,CAST(0 AS BIGINT)),(3,CAST(0 AS BIGINT)),(4,CAST(1 AS BIGINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_zero_current_control",
+          "coverage": {
+            "family": "zero_current",
+            "key_type": "BIGINT",
+            "source_offset_type": "INT",
+            "positive_offset": "0",
+            "shape": "zero_preceding_shorthand",
+            "frame": "RANGE 0 PRECEDING",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS BIGINT)"
+              ],
+              [
+                1,
+                "CAST(NULL AS BIGINT)"
+              ],
+              [
+                2,
+                "CAST(0 AS BIGINT)"
+              ],
+              [
+                3,
+                "CAST(0 AS BIGINT)"
+              ],
+              [
+                4,
+                "CAST(1 AS BIGINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "outer_order": "id"
+          },
+          "ansi": false
+        },
+        {
+          "corpus": "finite-range-1086-zero-current-controls",
+          "id": "zero_bigint_zero_following_current",
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN 0 FOLLOWING AND CURRENT ROW) AS n FROM VALUES (0,CAST(NULL AS BIGINT)),(1,CAST(NULL AS BIGINT)),(2,CAST(0 AS BIGINT)),(3,CAST(0 AS BIGINT)),(4,CAST(1 AS BIGINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_zero_current_control",
+          "coverage": {
+            "family": "zero_current",
+            "key_type": "BIGINT",
+            "source_offset_type": "INT",
+            "positive_offset": "0",
+            "shape": "zero_following_current",
+            "frame": "RANGE BETWEEN 0 FOLLOWING AND CURRENT ROW",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS BIGINT)"
+              ],
+              [
+                1,
+                "CAST(NULL AS BIGINT)"
+              ],
+              [
+                2,
+                "CAST(0 AS BIGINT)"
+              ],
+              [
+                3,
+                "CAST(0 AS BIGINT)"
+              ],
+              [
+                4,
+                "CAST(1 AS BIGINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "outer_order": "id"
+          },
+          "ansi": true
+        },
+        {
+          "corpus": "finite-range-1086-zero-current-controls",
+          "id": "zero_bigint_zero_following_current",
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN 0 FOLLOWING AND CURRENT ROW) AS n FROM VALUES (0,CAST(NULL AS BIGINT)),(1,CAST(NULL AS BIGINT)),(2,CAST(0 AS BIGINT)),(3,CAST(0 AS BIGINT)),(4,CAST(1 AS BIGINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_zero_current_control",
+          "coverage": {
+            "family": "zero_current",
+            "key_type": "BIGINT",
+            "source_offset_type": "INT",
+            "positive_offset": "0",
+            "shape": "zero_following_current",
+            "frame": "RANGE BETWEEN 0 FOLLOWING AND CURRENT ROW",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS BIGINT)"
+              ],
+              [
+                1,
+                "CAST(NULL AS BIGINT)"
+              ],
+              [
+                2,
+                "CAST(0 AS BIGINT)"
+              ],
+              [
+                3,
+                "CAST(0 AS BIGINT)"
+              ],
+              [
+                4,
+                "CAST(1 AS BIGINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "outer_order": "id"
+          },
+          "ansi": false
+        },
+        {
+          "corpus": "finite-range-1086-zero-current-controls",
+          "id": "zero_tinyint_wrapped_preceding_current",
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN CAST(256 AS INT) PRECEDING AND CURRENT ROW) AS n FROM VALUES (0,CAST(NULL AS TINYINT)),(1,CAST(NULL AS TINYINT)),(2,CAST(0 AS TINYINT)),(3,CAST(0 AS TINYINT)),(4,CAST(1 AS TINYINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_zero_current_control",
+          "coverage": {
+            "family": "wrapped_zero_current",
+            "key_type": "TINYINT",
+            "source_offset_type": "INT",
+            "positive_offset": "256",
+            "shape": "wrapped_preceding_current",
+            "frame": "RANGE BETWEEN CAST(256 AS INT) PRECEDING AND CURRENT ROW",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS TINYINT)"
+              ],
+              [
+                1,
+                "CAST(NULL AS TINYINT)"
+              ],
+              [
+                2,
+                "CAST(0 AS TINYINT)"
+              ],
+              [
+                3,
+                "CAST(0 AS TINYINT)"
+              ],
+              [
+                4,
+                "CAST(1 AS TINYINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "outer_order": "id"
+          },
+          "ansi": true
+        },
+        {
+          "corpus": "finite-range-1086-zero-current-controls",
+          "id": "zero_tinyint_wrapped_preceding_current",
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN CAST(256 AS INT) PRECEDING AND CURRENT ROW) AS n FROM VALUES (0,CAST(NULL AS TINYINT)),(1,CAST(NULL AS TINYINT)),(2,CAST(0 AS TINYINT)),(3,CAST(0 AS TINYINT)),(4,CAST(1 AS TINYINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_zero_current_control",
+          "coverage": {
+            "family": "wrapped_zero_current",
+            "key_type": "TINYINT",
+            "source_offset_type": "INT",
+            "positive_offset": "256",
+            "shape": "wrapped_preceding_current",
+            "frame": "RANGE BETWEEN CAST(256 AS INT) PRECEDING AND CURRENT ROW",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS TINYINT)"
+              ],
+              [
+                1,
+                "CAST(NULL AS TINYINT)"
+              ],
+              [
+                2,
+                "CAST(0 AS TINYINT)"
+              ],
+              [
+                3,
+                "CAST(0 AS TINYINT)"
+              ],
+              [
+                4,
+                "CAST(1 AS TINYINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "outer_order": "id"
+          },
+          "ansi": false
+        },
+        {
+          "corpus": "finite-range-1086-zero-current-controls",
+          "id": "zero_smallint_wrapped_preceding_current",
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN CAST(65536 AS INT) PRECEDING AND CURRENT ROW) AS n FROM VALUES (0,CAST(NULL AS SMALLINT)),(1,CAST(NULL AS SMALLINT)),(2,CAST(0 AS SMALLINT)),(3,CAST(0 AS SMALLINT)),(4,CAST(1 AS SMALLINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_zero_current_control",
+          "coverage": {
+            "family": "wrapped_zero_current",
+            "key_type": "SMALLINT",
+            "source_offset_type": "INT",
+            "positive_offset": "65536",
+            "shape": "wrapped_preceding_current",
+            "frame": "RANGE BETWEEN CAST(65536 AS INT) PRECEDING AND CURRENT ROW",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS SMALLINT)"
+              ],
+              [
+                1,
+                "CAST(NULL AS SMALLINT)"
+              ],
+              [
+                2,
+                "CAST(0 AS SMALLINT)"
+              ],
+              [
+                3,
+                "CAST(0 AS SMALLINT)"
+              ],
+              [
+                4,
+                "CAST(1 AS SMALLINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "outer_order": "id"
+          },
+          "ansi": true
+        },
+        {
+          "corpus": "finite-range-1086-zero-current-controls",
+          "id": "zero_smallint_wrapped_preceding_current",
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN CAST(65536 AS INT) PRECEDING AND CURRENT ROW) AS n FROM VALUES (0,CAST(NULL AS SMALLINT)),(1,CAST(NULL AS SMALLINT)),(2,CAST(0 AS SMALLINT)),(3,CAST(0 AS SMALLINT)),(4,CAST(1 AS SMALLINT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_zero_current_control",
+          "coverage": {
+            "family": "wrapped_zero_current",
+            "key_type": "SMALLINT",
+            "source_offset_type": "INT",
+            "positive_offset": "65536",
+            "shape": "wrapped_preceding_current",
+            "frame": "RANGE BETWEEN CAST(65536 AS INT) PRECEDING AND CURRENT ROW",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS SMALLINT)"
+              ],
+              [
+                1,
+                "CAST(NULL AS SMALLINT)"
+              ],
+              [
+                2,
+                "CAST(0 AS SMALLINT)"
+              ],
+              [
+                3,
+                "CAST(0 AS SMALLINT)"
+              ],
+              [
+                4,
+                "CAST(1 AS SMALLINT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "outer_order": "id"
+          },
+          "ansi": false
+        },
+        {
+          "corpus": "finite-range-1086-zero-current-controls",
+          "id": "zero_int_wrapped_preceding_current",
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN CAST(4294967296 AS BIGINT) PRECEDING AND CURRENT ROW) AS n FROM VALUES (0,CAST(NULL AS INT)),(1,CAST(NULL AS INT)),(2,CAST(0 AS INT)),(3,CAST(0 AS INT)),(4,CAST(1 AS INT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_zero_current_control",
+          "coverage": {
+            "family": "wrapped_zero_current",
+            "key_type": "INT",
+            "source_offset_type": "BIGINT",
+            "positive_offset": "4294967296",
+            "shape": "wrapped_preceding_current",
+            "frame": "RANGE BETWEEN CAST(4294967296 AS BIGINT) PRECEDING AND CURRENT ROW",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS INT)"
+              ],
+              [
+                1,
+                "CAST(NULL AS INT)"
+              ],
+              [
+                2,
+                "CAST(0 AS INT)"
+              ],
+              [
+                3,
+                "CAST(0 AS INT)"
+              ],
+              [
+                4,
+                "CAST(1 AS INT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "outer_order": "id"
+          },
+          "ansi": true
+        },
+        {
+          "corpus": "finite-range-1086-zero-current-controls",
+          "id": "zero_int_wrapped_preceding_current",
+          "sql": "SELECT id,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN CAST(4294967296 AS BIGINT) PRECEDING AND CURRENT ROW) AS n FROM VALUES (0,CAST(NULL AS INT)),(1,CAST(NULL AS INT)),(2,CAST(0 AS INT)),(3,CAST(0 AS INT)),(4,CAST(1 AS INT)) AS t(id,k) ORDER BY id",
+          "ordered": true,
+          "ownership": "finite_signed_integer_zero_current_control",
+          "coverage": {
+            "family": "wrapped_zero_current",
+            "key_type": "INT",
+            "source_offset_type": "BIGINT",
+            "positive_offset": "4294967296",
+            "shape": "wrapped_preceding_current",
+            "frame": "RANGE BETWEEN CAST(4294967296 AS BIGINT) PRECEDING AND CURRENT ROW",
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS INT)"
+              ],
+              [
+                1,
+                "CAST(NULL AS INT)"
+              ],
+              [
+                2,
+                "CAST(0 AS INT)"
+              ],
+              [
+                3,
+                "CAST(0 AS INT)"
+              ],
+              [
+                4,
+                "CAST(1 AS INT)"
+              ]
+            ],
+            "order": "ASC NULLS FIRST",
+            "outer_order": "id"
+          },
+          "ansi": false
+        }
+      ]
+    }
+  ]
+}

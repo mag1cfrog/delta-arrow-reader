@@ -18,19 +18,22 @@
 
 //! Structures used to hold window function state (for implementing WindowUDFs)
 
-use std::{collections::VecDeque, fmt, ops::Range, sync::Arc};
+use std::{cmp::Ordering, collections::VecDeque, fmt, ops::Range, sync::Arc};
 
+use crate::window_frame::RangeOffsetArithmetic;
 use crate::{WindowFrame, WindowFrameBound, WindowFrameUnits};
 
 use arrow::compute::kernels::sort::{LexicographicalComparator, SortColumn};
 use arrow::{
     array::ArrayRef,
     compute::{SortOptions, concat, concat_batches},
-    datatypes::{DataType, SchemaRef},
+    datatypes::{DataType, SchemaRef, i256},
+    error::ArrowError,
     record_batch::RecordBatch,
 };
 use datafusion_common::{
-    Result, ScalarValue, internal_datafusion_err, internal_err,
+    DataFusionError, Result, ScalarValue, exec_datafusion_err, internal_datafusion_err,
+    internal_err,
     utils::{compare_rows, get_row_at_idx, search_in_slice},
 };
 
@@ -124,9 +127,8 @@ impl WindowAggState {
 pub enum WindowFrameContext {
     /// ROWS frames are inherently stateless.
     Rows(Arc<WindowFrame>),
-    /// RANGE frames are stateful, they store indices specifying where the
-    /// previous search left off. This amortizes the overall cost to O(n)
-    /// where n denotes the row count.
+    /// RANGE frames retain committed search indices. Their forward movement
+    /// totals O(n) for n rows; pending rows may rescan buffered input.
     Range {
         window_frame: Arc<WindowFrame>,
         state: WindowFrameStateRange,
@@ -174,13 +176,7 @@ impl WindowFrameContext {
             WindowFrameContext::Range {
                 window_frame,
                 state,
-            } => state.calculate_range(
-                window_frame,
-                last_range,
-                range_columns,
-                length,
-                idx,
-            ),
+            } => state.calculate_range(window_frame, last_range, range_columns, length, idx),
             // Sort options is not used in GROUPS mode calculations as the
             // inequality of two rows indicates a group change, and ordering
             // or position of NULLs do not impact inequality.
@@ -214,7 +210,10 @@ impl WindowFrameContext {
                 std::cmp::min(idx + n as usize, length)
             }
             // ERRONEOUS FRAMES
-            WindowFrameBound::Preceding(_) | WindowFrameBound::Following(_) => {
+            WindowFrameBound::Preceding(_)
+            | WindowFrameBound::Following(_)
+            | WindowFrameBound::PrecedingNullOffset(_)
+            | WindowFrameBound::FollowingNullOffset(_) => {
                 return internal_err!("Rows should be UInt64");
             }
         };
@@ -239,7 +238,10 @@ impl WindowFrameContext {
                 std::cmp::min(idx + n as usize + 1, length)
             }
             // ERRONEOUS FRAMES
-            WindowFrameBound::Preceding(_) | WindowFrameBound::Following(_) => {
+            WindowFrameBound::Preceding(_)
+            | WindowFrameBound::Following(_)
+            | WindowFrameBound::PrecedingNullOffset(_)
+            | WindowFrameBound::FollowingNullOffset(_) => {
                 return internal_err!("Rows should be UInt64");
             }
         };
@@ -261,6 +263,8 @@ pub struct PartitionBatchState {
     pub is_end: bool,
     /// Number of rows emitted for each partition
     pub n_out_row: usize,
+    /// Exclusive current-row output index in the retained batch; membership uses the full batch.
+    pub output_end_index: Option<usize>,
 }
 
 impl PartitionBatchState {
@@ -270,6 +274,7 @@ impl PartitionBatchState {
             most_recent_row: None,
             is_end: false,
             n_out_row: 0,
+            output_end_index: None,
         }
     }
 
@@ -279,6 +284,7 @@ impl PartitionBatchState {
             most_recent_row: None,
             is_end: false,
             n_out_row: 0,
+            output_end_index: None,
         }
     }
 
@@ -350,6 +356,183 @@ pub fn date32_range_target(
     }
 }
 
+/// Computes a RANGE comparison target, widening Spark Decimal128 to Decimal256.
+/// Other targets retain the ORDER BY key type. `None` denotes a native unbounded
+/// bound or a DataFusion checked-arithmetic edge. Spark checked integer overflow
+/// is an error; non-ANSI signed targets wrap.
+pub fn range_bound_target(
+    current_key: &ScalarValue,
+    bound: &WindowFrameBound,
+    descending: bool,
+    arithmetic: RangeOffsetArithmetic,
+) -> Result<Option<ScalarValue>> {
+    let (delta, preceding) = match bound {
+        WindowFrameBound::Preceding(delta) | WindowFrameBound::Following(delta)
+            if delta.is_null() =>
+        {
+            return Ok(None);
+        }
+        WindowFrameBound::PrecedingNullOffset(_)
+        | WindowFrameBound::FollowingNullOffset(_) => {
+            return ScalarValue::try_from(&current_key.data_type()).map(Some);
+        }
+        WindowFrameBound::CurrentRow => return Ok(Some(current_key.clone())),
+        WindowFrameBound::Preceding(delta) => (delta, true),
+        WindowFrameBound::Following(delta) => (delta, false),
+    };
+    if current_key.is_null() {
+        return Ok(Some(current_key.clone()));
+    }
+    if let RangeOffsetArithmetic::Spark { ansi_mode } = arithmetic {
+        let is_date = matches!(current_key, ScalarValue::Date32(_));
+        let (key, mut offset) = match (current_key, delta) {
+            (
+                ScalarValue::Decimal128(Some(value), _, scale),
+                ScalarValue::Decimal128(Some(delta), _, delta_scale),
+            ) if scale == delta_scale => {
+                // Two admitted 38-digit operands need at most 39 digits at the same scale.
+                (
+                    ScalarValue::Decimal256(Some(i256::from_i128(*value)), 76, *scale),
+                    ScalarValue::Decimal256(Some(i256::from_i128(*delta)), 76, *scale),
+                )
+            }
+            (ScalarValue::Int8(_), ScalarValue::Int8(_))
+            | (ScalarValue::Int16(_), ScalarValue::Int16(_))
+            | (ScalarValue::Int32(_), ScalarValue::Int32(_))
+            | (ScalarValue::Int64(_), ScalarValue::Int64(_))
+            | (ScalarValue::Date32(_), ScalarValue::Int32(_))
+            | (ScalarValue::Float32(_), ScalarValue::Float32(_))
+            | (ScalarValue::Float64(_), ScalarValue::Float64(_)) => {
+                (current_key.clone(), delta.clone())
+            }
+            _ => {
+                return internal_err!(
+                    "Spark RANGE offset arithmetic requires admitted signed-integer, floating, same-scale Decimal128, or Date32/INT values"
+                );
+            }
+        };
+        let is_float_or_decimal = matches!(
+            key,
+            ScalarValue::Float32(_)
+                | ScalarValue::Float64(_)
+                | ScalarValue::Decimal256(_, _, _)
+        );
+        let negate = |offset: &ScalarValue| -> Result<ScalarValue> {
+            if is_float_or_decimal {
+                return offset.arithmetic_negate();
+            }
+            if !ansi_mode {
+                return ScalarValue::new_zero(&offset.data_type())?.sub(offset);
+            }
+            offset.arithmetic_negate().map_err(|error| {
+                if matches!(&error, DataFusionError::ArrowError(cause, _)
+                    if matches!(cause.as_ref(), ArrowError::ArithmeticOverflow(_)))
+                {
+                    exec_datafusion_err!(
+                        "{} overflow on negative({offset})",
+                        offset.data_type()
+                    )
+                    .context(if is_date {
+                        "[ARITHMETIC_OVERFLOW] DATE RANGE offset negation"
+                    } else {
+                        "[ARITHMETIC_OVERFLOW] RANGE offset negation"
+                    })
+                } else {
+                    error
+                }
+            })
+        };
+        if preceding {
+            offset = negate(&offset)?;
+        }
+        if descending {
+            offset = negate(&offset)?;
+        }
+        if is_date {
+            return Ok(date32_range_target(current_key, &offset, true));
+        }
+        if is_float_or_decimal {
+            return key.add_checked(&offset).map(Some);
+        }
+        return if ansi_mode {
+            current_key.add_checked(&offset).map(Some).map_err(|error| {
+                if matches!(&error, DataFusionError::ArrowError(cause, _)
+                    if matches!(cause.as_ref(), ArrowError::ArithmeticOverflow(_)))
+                {
+                    error.context(
+                        if matches!(current_key, ScalarValue::Int8(_) | ScalarValue::Int16(_)) {
+                            "[BINARY_ARITHMETIC_OVERFLOW] RANGE comparison target"
+                        } else {
+                            "[ARITHMETIC_OVERFLOW] RANGE comparison target"
+                        },
+                    )
+                } else {
+                    error
+                }
+            })
+        } else {
+            current_key.add(&offset).map(Some)
+        };
+    }
+    let add_offset = preceding == descending;
+    if let Some(target) = date32_range_target(current_key, delta, add_offset) {
+        Ok(Some(target))
+    } else if add_offset {
+        Ok(current_key.add_checked(delta).ok())
+    } else if current_key.is_unsigned() && current_key < delta {
+        current_key.sub(current_key).map(Some)
+    } else {
+        Ok(current_key.sub_checked(delta).ok())
+    }
+}
+
+/// Compare a Spark target without narrowing decimal values or ordering NaN payload bits.
+fn compare_spark_range_target(
+    candidate_key: &ScalarValue,
+    target: &ScalarValue,
+    sort_options: &SortOptions,
+) -> Result<Ordering> {
+    if candidate_key.is_null() || target.is_null() {
+        return compare_rows(
+            std::slice::from_ref(candidate_key),
+            std::slice::from_ref(target),
+            std::slice::from_ref(sort_options),
+        );
+    }
+    let order = match (candidate_key, target) {
+        (
+            ScalarValue::Decimal128(Some(value), _, scale),
+            ScalarValue::Decimal256(_, _, target_scale),
+        ) if scale == target_scale => {
+            let widened_key =
+                ScalarValue::Decimal256(Some(i256::from_i128(*value)), 76, *scale);
+            return compare_rows(
+                std::slice::from_ref(&widened_key),
+                std::slice::from_ref(target),
+                std::slice::from_ref(sort_options),
+            );
+        }
+        (ScalarValue::Float32(Some(left)), ScalarValue::Float32(Some(right))) => left
+            .partial_cmp(right)
+            .unwrap_or_else(|| left.is_nan().cmp(&right.is_nan())),
+        (ScalarValue::Float64(Some(left)), ScalarValue::Float64(Some(right))) => left
+            .partial_cmp(right)
+            .unwrap_or_else(|| left.is_nan().cmp(&right.is_nan())),
+        _ => {
+            return compare_rows(
+                std::slice::from_ref(candidate_key),
+                std::slice::from_ref(target),
+                std::slice::from_ref(sort_options),
+            );
+        }
+    };
+    Ok(if sort_options.descending {
+        order.reverse()
+    } else {
+        order
+    })
+}
+
 impl WindowFrameStateRange {
     /// Create a new object to store the search state.
     fn new(sort_options: Vec<SortOptions>) -> Self {
@@ -360,10 +543,9 @@ impl WindowFrameStateRange {
     }
 
     /// This function calculates beginning/ending indices for the frame of the current row.
-    // Argument `last_range` stores the resulting indices from the previous search. Since the indices only
-    // advance forward, we start from `last_range` subsequently. Thus, the overall
-    // time complexity of linear search amortizes to O(n) where n denotes the total
-    // row count.
+    // `last_range` stores the previous committed indices. They only advance,
+    // so committed cursor movement totals O(n) for n rows. Pending rows may
+    // rescan buffered rows as more input arrives.
     fn calculate_range(
         &mut self,
         window_frame: &Arc<WindowFrame>,
@@ -375,31 +557,53 @@ impl WindowFrameStateRange {
         let date32_wrapping_bound = range_columns.first().is_some_and(|column| {
             [&window_frame.start_bound, &window_frame.end_bound]
                 .iter()
-                .any(|bound| {
-                    date32_range_can_wrap(column.data_type(), window_frame.units, bound)
-                })
+                .any(|bound| date32_range_can_wrap(column.data_type(), window_frame.units, bound))
         });
-        if date32_wrapping_bound {
+        if date32_wrapping_bound
+            || window_frame.has_null_offset()
+            || window_frame.has_nonzero_spark_integer_range_offset()
+        {
             let end = self.calculate_index_of_bound::<false>(
-                &window_frame.end_bound, range_columns, last_range, idx, length,
+                window_frame,
+                &window_frame.end_bound,
+                range_columns,
+                last_range,
+                idx,
+                length,
             )?;
             // Spark advances the lower cursor only over input consumed by the upper cursor.
             let start = self.calculate_index_of_bound::<true>(
-                &window_frame.start_bound, range_columns, last_range, idx, end,
+                window_frame,
+                &window_frame.start_bound,
+                range_columns,
+                last_range,
+                idx,
+                end,
             )?;
             return Ok(Range { start, end });
         }
         let start = self.calculate_index_of_bound::<true>(
-            &window_frame.start_bound, range_columns, last_range, idx, length,
+            window_frame,
+            &window_frame.start_bound,
+            range_columns,
+            last_range,
+            idx,
+            length,
         )?;
         let end = self.calculate_index_of_bound::<false>(
-            &window_frame.end_bound, range_columns, last_range, idx, length,
+            window_frame,
+            &window_frame.end_bound,
+            range_columns,
+            last_range,
+            idx,
+            length,
         )?;
         Ok(Range { start, end })
     }
 
     fn calculate_index_of_bound<const SIDE: bool>(
         &mut self,
+        window_frame: &WindowFrame,
         bound: &WindowFrameBound,
         range_columns: &[ArrayRef],
         last_range: &Range<usize>,
@@ -409,25 +613,30 @@ impl WindowFrameStateRange {
         match bound {
             WindowFrameBound::Preceding(n) if SIDE && n.is_null() => Ok(0),
             WindowFrameBound::Following(n) if !SIDE && n.is_null() => Ok(length),
-            WindowFrameBound::Preceding(n) => self.calculate_index_of_row::<SIDE, true>(
-                range_columns,
-                last_range,
-                idx,
-                Some(n),
-                length,
-            ),
-            WindowFrameBound::Following(n) => self.calculate_index_of_row::<SIDE, false>(
-                range_columns,
-                last_range,
-                idx,
-                Some(n),
-                length,
-            ),
+            WindowFrameBound::Preceding(_) | WindowFrameBound::PrecedingNullOffset(_) => self
+                .calculate_index_of_row::<SIDE, true>(
+                    window_frame,
+                    range_columns,
+                    last_range,
+                    idx,
+                    bound,
+                    length,
+                ),
+            WindowFrameBound::Following(_) | WindowFrameBound::FollowingNullOffset(_) => self
+                .calculate_index_of_row::<SIDE, false>(
+                    window_frame,
+                    range_columns,
+                    last_range,
+                    idx,
+                    bound,
+                    length,
+                ),
             WindowFrameBound::CurrentRow => self.calculate_index_of_row::<SIDE, false>(
+                window_frame,
                 range_columns,
                 last_range,
                 idx,
-                None,
+                bound,
                 length,
             ),
         }
@@ -438,10 +647,11 @@ impl WindowFrameStateRange {
     /// supplied as true and false, respectively).
     fn calculate_index_of_row<const SIDE: bool, const SEARCH_SIDE: bool>(
         &mut self,
+        window_frame: &WindowFrame,
         range_columns: &[ArrayRef],
         last_range: &Range<usize>,
         idx: usize,
-        delta: Option<&ScalarValue>,
+        bound: &WindowFrameBound,
         length: usize,
     ) -> Result<usize> {
         let search_start = if SIDE {
@@ -449,7 +659,12 @@ impl WindowFrameStateRange {
         } else {
             last_range.end
         };
-        let Some(delta) = delta else {
+        if (window_frame.has_null_offset() || window_frame.has_nonzero_spark_integer_range_offset())
+            && search_start == length
+        {
+            return Ok(length);
+        }
+        if matches!(bound, WindowFrameBound::CurrentRow) {
             // Peer boundaries must use the same nested ordering as the sort.
             if !self.peer_comparator.as_ref().is_some_and(|(columns, _)| {
                 columns.len() == range_columns.len()
@@ -481,7 +696,7 @@ impl WindowFrameStateRange {
                     if SIDE { !order.is_lt() } else { !order.is_le() }
                 })
                 .unwrap_or(length));
-        };
+        }
         let current_row_values = get_row_at_idx(range_columns, idx)?;
         let end_range = {
             let is_descending: bool = self
@@ -494,7 +709,7 @@ impl WindowFrameStateRange {
                 })?
                 .descending;
 
-            // On overflow the boundary exceeds the type's range and is
+            // On DataFusion overflow the boundary exceeds the type's range and is
             // effectively unbounded within the partition. Collapse to the
             // partition edge rather than feeding `search_in_slice` a
             // wrapped-around target: PRECEDING searches reach `search_start`,
@@ -502,36 +717,35 @@ impl WindowFrameStateRange {
             let unbounded_edge = if SEARCH_SIDE { search_start } else { length };
             let mut targets = Vec::with_capacity(current_row_values.len());
             for value in &current_row_values {
-                if value.is_null() {
-                    targets.push(value.clone());
-                    continue;
-                }
-                let target = if let Some(target) =
-                    date32_range_target(value, delta, SEARCH_SIDE == is_descending)
-                {
-                    target
-                } else if SEARCH_SIDE == is_descending {
-                    match value.add_checked(delta) {
-                        Ok(v) => v,
-                        Err(_) => return Ok(unbounded_edge),
-                    }
-                } else if value.is_unsigned() && value < delta {
-                    // NOTE: This gets a polymorphic zero without having long coercion code for ScalarValue.
-                    //       If we decide to implement a "default" construction mechanism for ScalarValue,
-                    //       change the following statement to use that.
-                    value.sub(value)?
-                } else {
-                    match value.sub_checked(delta) {
-                        Ok(v) => v,
-                        Err(_) => return Ok(unbounded_edge),
-                    }
+                let Some(target) = range_bound_target(
+                    value,
+                    bound,
+                    is_descending,
+                    window_frame.range_offset_arithmetic(),
+                )?
+                else {
+                    return Ok(unbounded_edge);
                 };
                 targets.push(target);
             }
             targets
         };
         let compare_fn = |current: &[ScalarValue], target: &[ScalarValue]| {
-            let cmp = compare_rows(current, target, &self.sort_options)?;
+            let cmp = if matches!(
+                window_frame.range_offset_arithmetic(),
+                RangeOffsetArithmetic::Spark { .. }
+            ) {
+                let ([key], [target], [options]) =
+                    (current, target, self.sort_options.as_slice())
+                else {
+                    return internal_err!(
+                        "Spark RANGE comparison requires one ORDER BY key"
+                    );
+                };
+                compare_spark_range_target(key, target, options)?
+            } else {
+                compare_rows(current, target, &self.sort_options)?
+            };
             Ok(if SIDE { cmp.is_lt() } else { cmp.is_le() })
         };
         search_in_slice(range_columns, &end_range, compare_fn, search_start, length)
@@ -586,42 +800,26 @@ impl WindowFrameStateGroups {
                     // UNBOUNDED PRECEDING
                     0
                 } else {
-                    self.calculate_index_of_row::<true, true>(
-                        range_columns,
-                        idx,
-                        Some(n),
-                        length,
-                    )?
+                    self.calculate_index_of_row::<true, true>(range_columns, idx, Some(n), length)?
                 }
             }
-            WindowFrameBound::CurrentRow => self.calculate_index_of_row::<true, true>(
-                range_columns,
-                idx,
-                None,
-                length,
-            )?,
-            WindowFrameBound::Following(ref n) => self
-                .calculate_index_of_row::<true, false>(
-                    range_columns,
-                    idx,
-                    Some(n),
-                    length,
-                )?,
+            WindowFrameBound::CurrentRow => {
+                self.calculate_index_of_row::<true, true>(range_columns, idx, None, length)?
+            }
+            WindowFrameBound::Following(ref n) => {
+                self.calculate_index_of_row::<true, false>(range_columns, idx, Some(n), length)?
+            }
+            WindowFrameBound::PrecedingNullOffset(_) | WindowFrameBound::FollowingNullOffset(_) => {
+                return internal_err!("NULL offsets require a RANGE window frame");
+            }
         };
         let end = match window_frame.end_bound {
-            WindowFrameBound::Preceding(ref n) => self
-                .calculate_index_of_row::<false, true>(
-                    range_columns,
-                    idx,
-                    Some(n),
-                    length,
-                )?,
-            WindowFrameBound::CurrentRow => self.calculate_index_of_row::<false, false>(
-                range_columns,
-                idx,
-                None,
-                length,
-            )?,
+            WindowFrameBound::Preceding(ref n) => {
+                self.calculate_index_of_row::<false, true>(range_columns, idx, Some(n), length)?
+            }
+            WindowFrameBound::CurrentRow => {
+                self.calculate_index_of_row::<false, false>(range_columns, idx, None, length)?
+            }
             WindowFrameBound::Following(ref n) => {
                 if n.is_null() {
                     // UNBOUNDED FOLLOWING
@@ -634,6 +832,10 @@ impl WindowFrameStateGroups {
                         length,
                     )?
                 }
+            }
+            WindowFrameBound::PrecedingNullOffset(_)
+            | WindowFrameBound::FollowingNullOffset(_) => {
+                return internal_err!("NULL offsets require a RANGE window frame");
             }
         };
         Ok(Range { start, end })
@@ -844,10 +1046,21 @@ mod tests {
                 WindowFrameBound::Preceding(ScalarValue::Int32(Some(0))),
                 WindowFrameBound::Following(ScalarValue::Int32(Some(0))),
             ));
-            let mut state = WindowFrameContext::new(frame, vec![SortOptions { descending, nulls_first }]);
+            let mut state = WindowFrameContext::new(
+                frame,
+                vec![SortOptions {
+                    descending,
+                    nulls_first,
+                }],
+            );
             let mut last_range = 0..0;
             for (idx, expected) in [0..1, 1..3, 1..3, 3..4].into_iter().enumerate() {
-                last_range = state.calculate_range(std::slice::from_ref(&column), &last_range, column.len(), idx)?;
+                last_range = state.calculate_range(
+                    std::slice::from_ref(&column),
+                    &last_range,
+                    column.len(),
+                    idx,
+                )?;
                 assert_eq!(last_range, expected);
             }
         }
@@ -940,12 +1153,8 @@ mod tests {
         for (idx, (expected_range, expected_group_idx)) in
             expected_results.into_iter().enumerate()
         {
-            let range = window_frame_groups.calculate_range(
-                window_frame,
-                &range_columns,
-                n_row,
-                idx,
-            )?;
+            let range =
+                window_frame_groups.calculate_range(window_frame, &range_columns, n_row, idx)?;
             assert_eq!(range, expected_range);
             assert_eq!(window_frame_groups.current_group_idx, expected_group_idx);
         }
@@ -962,12 +1171,8 @@ mod tests {
         let n_row = range_columns[0].len();
         let mut last_range = Range { start: 0, end: 0 };
         for (idx, expected_range) in expected_results.into_iter().enumerate() {
-            let range = window_frame_context.calculate_range(
-                &range_columns,
-                &last_range,
-                n_row,
-                idx,
-            )?;
+            let range =
+                window_frame_context.calculate_range(&range_columns, &last_range, n_row, idx)?;
             assert_eq!(range, expected_range);
             last_range = range;
         }

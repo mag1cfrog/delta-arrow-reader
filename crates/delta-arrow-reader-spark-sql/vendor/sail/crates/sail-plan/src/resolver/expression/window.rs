@@ -1,11 +1,13 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::cmp::Ordering;
 
+use arrow::compute::can_cast_types;
 use arrow::datatypes::{DataType, FieldRef};
 use datafusion::optimizer::simplify_expressions::ExprSimplifier;
 use datafusion_common::tree_node::TreeNode;
 use datafusion_common::{DFSchemaRef, DataFusionError, ScalarValue};
 use datafusion_expr::simplify::SimplifyContextBuilder;
+use datafusion_expr::window_frame::RangeOffsetArithmetic;
 use datafusion_expr::{
     ColumnarValue, ExprSchemable, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl,
     Signature, Volatility, WindowFrame, WindowFrameBound, WindowFrameUnits, expr,
@@ -15,15 +17,77 @@ use sail_common_datafusion::literal::LiteralEvaluator;
 use sail_common_datafusion::utils::items::ItemTaker;
 use sail_function::scalar::datetime::spark_date_day_arithmetic::SparkDateDayArithmetic;
 use sail_function::scalar::math::spark_negative::SparkNegative;
+use sail_function::scalar::spark_cast_numeric_to_integer::SparkCastNumericToInteger;
 
 use crate::error::{PlanError, PlanResult};
 use crate::formatter::SparkPlanFormatter;
-use crate::function::common::{FunctionContextInput, WinFunctionInput};
+use crate::function::common::{
+    FunctionContextInput, WinFunctionInput, drop_inherited_column_metadata,
+    reject_calendar_interval_partition_key, reject_calendar_interval_sort_key,
+    without_inherited_column_metadata,
+};
 use crate::function::{get_built_in_window_function, require_deterministic_scalar_expression};
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
 use crate::resolver::expression::sort::sort_order_options;
 use crate::resolver::state::PlanResolverState;
+
+struct PlannedRangeBoundary {
+    display: String,
+    frame_bound: WindowFrameBound,
+    deferred_check: Option<expr::Expr>,
+}
+
+impl PlannedRangeBoundary {
+    fn new(display: String, frame_bound: WindowFrameBound) -> Self {
+        Self {
+            display,
+            frame_bound,
+            deferred_check: None,
+        }
+    }
+}
+
+enum ResolvedOffsetBoundary {
+    Native(String, WindowFrameBound),
+    Expression {
+        display: String,
+        converted_bound: Option<WindowFrameBound>,
+        source_type: DataType,
+        is_null: bool,
+    },
+}
+
+impl ResolvedOffsetBoundary {
+    fn validate_rows_type(&self, location: &str) -> PlanResult<()> {
+        if let Self::Expression { source_type, .. } = self
+            && *source_type != DataType::Int32
+        {
+            let data_type = SparkPlanFormatter
+                .data_type_to_simple_string(source_type)?
+                .to_ascii_uppercase();
+            return Err(PlanError::invalid(format!(
+                "[DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE] The data type of the {location} bound \"{data_type}\" does not match the expected data type \"INT\"."
+            )));
+        }
+        Ok(())
+    }
+
+    fn into_native_bound(self) -> PlanResult<(String, WindowFrameBound)> {
+        match self {
+            Self::Native(display, bound) => Ok((display, bound)),
+            Self::Expression {
+                display,
+                converted_bound,
+                ..
+            } => Ok((
+                display,
+                converted_bound
+                    .ok_or_else(|| PlanError::invalid("invalid window boundary offset"))?,
+            )),
+        }
+    }
+}
 
 impl PlanResolver<'_> {
     pub(super) async fn resolve_expression_window(
@@ -66,12 +130,23 @@ impl PlanResolver<'_> {
                 .resolve_expression_arguments(vec![*sort.child], schema, state)
                 .await?;
             let (asc, nulls_first) = sort_order_options(sort.direction, sort.null_ordering);
+            let expression = expressions.one()?;
+            if let Ok(data_type) = expression.get_type(schema) {
+                reject_calendar_interval_sort_key(&data_type)?;
+            }
             order_display_names.push(names.one()?);
             sorts.push(expr::Sort {
-                expr: expressions.one()?,
+                expr: expression,
                 asc,
                 nulls_first,
             });
+        }
+        // Spark checks the ORDER BY keys first, then sorts each partition key, so a calendar
+        // interval cannot be one.
+        for (name, expression) in partition_display.iter().zip(&partition_by) {
+            if let Ok(data_type) = expression.get_type(schema) {
+                reject_calendar_interval_partition_key(name, &data_type)?;
+            }
         }
         let (name, window) = match window_function {
             spec::Expr::UnresolvedFunction(spec::UnresolvedFunction {
@@ -150,7 +225,7 @@ impl PlanResolver<'_> {
                     )));
                 }
                 let (mut frame_display, mut window_frame) = if let Some(frame) = frame {
-                    self.resolve_window_frame(frame, &sorts, schema, state)
+                    self.resolve_window_frame(frame, &mut sorts, schema, state)
                         .await?
                 } else if let Some(units) = required_units {
                     let frame = WindowFrame::new_bounds(
@@ -274,7 +349,7 @@ impl PlanResolver<'_> {
                             &frame_display,
                         )
                     });
-                self.normalize_date_range_frame(&mut window_frame, &mut sorts, schema)?;
+                self.normalize_range_frame(&mut window_frame, &mut sorts, schema)?;
                 let input = WinFunctionInput {
                     arguments,
                     partition_by,
@@ -291,6 +366,11 @@ impl PlanResolver<'_> {
                     },
                 };
                 let window = function(input)?;
+                let window = if offset_function {
+                    self.coerce_offset_window_default(window, schema)?
+                } else {
+                    window
+                };
                 (name?, window)
             }
             spec::Expr::CommonInlineUserDefinedFunction { .. } => {
@@ -306,6 +386,33 @@ impl PlanResolver<'_> {
         };
 
         Ok(NamedExpr::new(vec![name], window))
+    }
+
+    fn coerce_offset_window_default(
+        &self,
+        expression: expr::Expr,
+        schema: &DFSchemaRef,
+    ) -> PlanResult<expr::Expr> {
+        let mut window = without_inherited_column_metadata(&expression).clone();
+        let expr::Expr::WindowFunction(function) = &mut window else {
+            return Ok(expression);
+        };
+        let [payload, _, default] = function.params.args.as_mut_slice() else {
+            return Ok(expression);
+        };
+        let payload_type = payload.get_type(schema)?;
+        let default_type = default.get_type(schema)?;
+        if payload_type.is_null()
+            || default_type.is_null()
+            || payload_type.is_nested()
+            || default_type.is_nested()
+            || payload_type.equals_datatype(&default_type)
+            || !can_cast_types(&default_type, &payload_type)
+        {
+            return Ok(expression);
+        }
+        *default = self.cast_resolved_expression(default.clone(), payload_type, false, schema)?;
+        Ok(drop_inherited_column_metadata(window))
     }
 
     fn resolve_offset_window_boundary(
@@ -400,7 +507,7 @@ impl PlanResolver<'_> {
     async fn resolve_window_frame(
         &self,
         frame: spec::WindowFrame,
-        order_by: &[expr::Sort],
+        order_by: &mut [expr::Sort],
         schema: &DFSchemaRef,
         state: &mut PlanResolverState,
     ) -> PlanResult<(String, WindowFrame)> {
@@ -431,43 +538,127 @@ impl PlanResolver<'_> {
                 WindowFrame::new(None),
             ));
         }
+        let mut deferred_checks = [None, None];
         let ((lower_display, start), (upper_display, end)) = match units {
-            WindowFrameUnits::Rows | WindowFrameUnits::Groups => (
-                self.resolve_window_boundary_offset(lower, schema, state)
-                    .await?,
-                self.resolve_window_boundary_offset(upper, schema, state)
-                    .await?,
-            ),
-            WindowFrameUnits::Range => (
-                self.resolve_window_boundary_value(lower, order_by, schema, state)
-                    .await?,
-                self.resolve_window_boundary_value(upper, order_by, schema, state)
-                    .await?,
-            ),
+            WindowFrameUnits::Rows | WindowFrameUnits::Groups => {
+                let retain_null = units == WindowFrameUnits::Rows;
+                let lower = self
+                    .resolve_window_boundary_offset(lower, retain_null, true, schema, state)
+                    .await?;
+                let lower_null = matches!(
+                    &lower,
+                    ResolvedOffsetBoundary::Expression { is_null: true, .. }
+                );
+                if retain_null && lower_null {
+                    lower.validate_rows_type("lower")?;
+                }
+                // A NULL lower bound needs upper type admission, never upper integer conversion.
+                let upper = self
+                    .resolve_window_boundary_offset(upper, retain_null, !lower_null, schema, state)
+                    .await?;
+                if retain_null
+                    && [&lower, &upper].iter().any(|bound| {
+                        matches!(
+                            bound,
+                            ResolvedOffsetBoundary::Expression { is_null: true, .. }
+                        )
+                    })
+                {
+                    // Preserve Spark's lower/upper type admission before rejecting typed NULLs.
+                    lower.validate_rows_type("lower")?;
+                    upper.validate_rows_type("upper")?;
+                    if matches!(&lower, ResolvedOffsetBoundary::Native(_, WindowFrameBound::Following(value)) if value.is_null())
+                        || matches!(&upper, ResolvedOffsetBoundary::Native(_, WindowFrameBound::Preceding(value)) if value.is_null())
+                    {
+                        return Err(PlanError::invalid(
+                            "[DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_INVALID_BOUND] invalid UNBOUNDED frame boundary",
+                        ));
+                    }
+                    let location = if matches!(
+                        &lower,
+                        ResolvedOffsetBoundary::Expression { is_null: true, .. }
+                    ) {
+                        "lower"
+                    } else {
+                        "upper"
+                    };
+                    return Err(PlanError::unsupported(format!(
+                        "NULL ROWS frame {location} bound"
+                    )));
+                }
+                (lower.into_native_bound()?, upper.into_native_bound()?)
+            }
+            WindowFrameUnits::Range => {
+                let lower = self
+                    .resolve_window_boundary_value(lower, order_by, schema, state)
+                    .await?;
+                let upper = self
+                    .resolve_window_boundary_value(upper, order_by, schema, state)
+                    .await?;
+                deferred_checks = [lower.deferred_check, upper.deferred_check];
+                (
+                    (lower.display, lower.frame_bound),
+                    (upper.display, upper.frame_bound),
+                )
+            }
         };
         let frame = WindowFrame::new_bounds(units, start, end);
-        let valid = if let Some((start, end)) = date_range_displacements(&frame, order_by, schema)?
-        {
-            // Spark compares expression endpoints; CURRENT ROW and UNBOUNDED skip this fold.
-            if let (Some(start), Some(end)) = (start, end) {
-                if self.config.ansi_mode {
-                    for bound in [&frame.start_bound, &frame.end_bound] {
-                        if matches!(
-                            bound,
-                            WindowFrameBound::Preceding(ScalarValue::Int32(Some(i32::MIN)))
-                        ) {
-                            LiteralEvaluator::new().evaluate(
-                                &ScalarUDF::from(SparkDateRangeNegation)
-                                    .call(vec![datafusion_expr::lit(i32::MIN)]),
-                            )?;
-                        }
-                    }
-                }
-                start <= end
-            } else {
-                !matches!(&frame.start_bound, WindowFrameBound::Following(value) if value.is_null())
-                    && !matches!(&frame.end_bound, WindowFrameBound::Preceding(value) if value.is_null())
+        let signed_integer_range = frame.units == WindowFrameUnits::Range
+            && order_by
+                .first()
+                .map(|order| order.expr.get_type(schema))
+                .transpose()?
+                .is_some_and(|key_type| key_type.is_signed_integer());
+        if frame.has_null_offset() || signed_integer_range {
+            if matches!(&frame.start_bound, WindowFrameBound::Following(value) if value.is_null())
+                || matches!(&frame.end_bound, WindowFrameBound::Preceding(value) if value.is_null())
+            {
+                return Err(PlanError::invalid(
+                    "[DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_INVALID_BOUND] invalid UNBOUNDED frame boundary",
+                ));
             }
+            let expression_type = |bound: &WindowFrameBound| match bound {
+                WindowFrameBound::PrecedingNullOffset(data_type)
+                | WindowFrameBound::FollowingNullOffset(data_type) => Some(data_type.clone()),
+                WindowFrameBound::Preceding(value) | WindowFrameBound::Following(value)
+                    if !value.is_null() =>
+                {
+                    Some(value.data_type())
+                }
+                _ => None,
+            };
+            if let (Some(start), Some(end)) = (
+                expression_type(&frame.start_bound),
+                expression_type(&frame.end_bound),
+            ) && start != end
+            {
+                return Err(PlanError::invalid(
+                    "[DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_DIFF_TYPES] expression frame bounds require the same type",
+                ));
+            }
+        }
+        let expression_bound = |bound: &WindowFrameBound| {
+            !bound.is_unbounded() && !matches!(bound, WindowFrameBound::CurrentRow)
+        };
+        if expression_bound(&frame.start_bound) && expression_bound(&frame.end_bound) {
+            if let Some(check) = &deferred_checks[0] {
+                LiteralEvaluator::new().evaluate(check)?;
+            }
+            if !matches!(
+                &frame.start_bound,
+                WindowFrameBound::PrecedingNullOffset(_) | WindowFrameBound::FollowingNullOffset(_)
+            ) && let Some(check) = &deferred_checks[1]
+            {
+                LiteralEvaluator::new().evaluate(check)?;
+            }
+        }
+        let valid = if let Some((start, end)) = range_frame_displacements(&frame, order_by, schema)?
+        {
+            start.zip(end).is_none_or(|(start, end)| start <= end)
+                && !matches!(&frame.start_bound, WindowFrameBound::Following(value) if value.is_null())
+                && !matches!(&frame.end_bound, WindowFrameBound::Preceding(value) if value.is_null())
+        } else if frame.has_null_offset() {
+            true
         } else {
             datafusion::physical_planner::is_window_frame_bound_valid(&frame)
         };
@@ -477,57 +668,91 @@ impl PlanResolver<'_> {
                 frame.start_bound, frame.end_bound,
             )));
         }
+        for check in deferred_checks.into_iter().flatten() {
+            let key_type = order_by[0].expr.get_type(schema)?;
+            let check_type = check.get_type(schema)?;
+            order_by[0].expr =
+                ScalarUDF::from(WindowKeyWithCheckedRangeOffset::new(key_type, check_type))
+                    .call(vec![order_by[0].expr.clone(), check]);
+        }
         Ok((
             format!("{units} BETWEEN {lower_display} AND {upper_display}"),
             frame,
         ))
     }
 
-    fn normalize_date_range_frame(
+    fn normalize_range_frame(
         &self,
         frame: &mut WindowFrame,
         order_by: &mut [expr::Sort],
         schema: &DFSchemaRef,
     ) -> PlanResult<()> {
-        let Some((start, end)) = date_range_displacements(frame, order_by, schema)? else {
-            return Ok(());
+        let spark_key_type = spark_range_arithmetic_key_type(frame, order_by, schema)?;
+        let key_type = if frame.units == WindowFrameUnits::Range {
+            order_by
+                .first()
+                .map(|order| order.expr.get_type(schema))
+                .transpose()?
+        } else {
+            None
         };
-        if self.config.ansi_mode {
-            let minimum_preceding = [&frame.start_bound, &frame.end_bound].iter().any(|bound| {
-                matches!(
-                    bound,
-                    WindowFrameBound::Preceding(ScalarValue::Int32(Some(i32::MIN)))
-                )
-            });
-            if minimum_preceding {
-                // The scalar-only frame cannot retain Spark's optimizer-time boundary expression.
-                order_by[0].expr = ScalarUDF::from(SparkDateRangeBoundCheck).call(vec![
-                    order_by[0].expr.clone(),
-                    datafusion_expr::lit(i32::MIN),
-                ]);
-            } else if !order_by[0].asc && [start, end].contains(&Some(i32::MIN)) {
-                // DESC negation belongs to non-NULL key evaluation, including constant DATE keys.
-                order_by[0].expr =
-                    ScalarUDF::from(SparkDateDayArithmetic::new(datafusion_expr::Operator::Plus))
-                        .call(vec![
-                            order_by[0].expr.clone(),
-                            ScalarUDF::from(SparkDateRangeNegation)
-                                .call(vec![datafusion_expr::lit(i32::MIN)]),
-                        ]);
+        if let Some(key_type) = &key_type
+            && range_order_key_type(key_type).is_signed_integer()
+        {
+            // Expression zero must stay distinct from CURRENT ROW until SQL admission.
+            let zero = ScalarValue::new_zero(range_order_key_type(key_type))?;
+            for bound in [&mut frame.start_bound, &mut frame.end_bound] {
+                if matches!(bound, WindowFrameBound::Preceding(value) | WindowFrameBound::Following(value) if *value == zero)
+                {
+                    *bound = WindowFrameBound::CurrentRow;
+                }
             }
         }
-        let start = match start {
-            Some(days) if frame.end_bound == WindowFrameBound::CurrentRow => {
-                WindowFrameBound::Preceding(ScalarValue::Int32(Some(days.wrapping_neg())))
-            }
-            Some(days) => WindowFrameBound::Following(ScalarValue::Int32(Some(days))),
-            None => frame.start_bound.clone(),
+        let date_displacements = if key_type == Some(DataType::Date32) {
+            range_frame_displacements(frame, order_by, schema)?
+        } else {
+            None
         };
-        let end = match end {
-            Some(days) => WindowFrameBound::Following(ScalarValue::Int32(Some(days))),
-            None => frame.end_bound.clone(),
-        };
-        *frame = WindowFrame::new_bounds(frame.units, start, end);
+        if self.config.ansi_mode
+            && let Some((start, end)) = &date_displacements
+            && !frame.has_null_offset()
+            && !order_by[0].asc
+            && [start, end].iter().any(|value| matches!(value, Some(ScalarValue::Int32(Some(i32::MIN)))))
+            && ![&frame.start_bound, &frame.end_bound].iter().any(|bound| {
+                matches!(bound, WindowFrameBound::Preceding(value) if is_signed_integer_minimum(value))
+            })
+        {
+            // DESC negation belongs to non-NULL key evaluation, including constant DATE keys.
+            order_by[0].expr = ScalarUDF::from(SparkDateDayArithmetic::new(
+                datafusion_expr::Operator::Plus,
+            ))
+            .call(vec![
+                order_by[0].expr.clone(),
+                ScalarUDF::from(SparkRangeOffsetNegation::new(DataType::Date32))
+                    .call(vec![datafusion_expr::lit(i32::MIN)]),
+            ]);
+        }
+        if let Some((start, end)) = date_displacements {
+            let start = match start {
+                Some(days) if frame.end_bound == WindowFrameBound::CurrentRow => {
+                    WindowFrameBound::Preceding(range_offset_displacement(&days, true)?)
+                }
+                Some(days) => WindowFrameBound::Following(days),
+                None => frame.start_bound.clone(),
+            };
+            let end = match end {
+                Some(days) => WindowFrameBound::Following(days),
+                None => frame.end_bound.clone(),
+            };
+            *frame = WindowFrame::new_bounds(frame.units, start, end);
+        }
+        if spark_key_type.is_some() {
+            *frame = frame
+                .clone()
+                .with_range_offset_arithmetic(RangeOffsetArithmetic::Spark {
+                    ansi_mode: self.config.ansi_mode,
+                });
+        }
         Ok(())
     }
 
@@ -573,53 +798,71 @@ impl PlanResolver<'_> {
     async fn resolve_window_boundary_offset(
         &self,
         value: spec::WindowFrameBoundary,
+        retain_null: bool,
+        convert_offset: bool,
         schema: &DFSchemaRef,
         state: &mut PlanResolverState,
-    ) -> PlanResult<(String, WindowFrameBound)> {
+    ) -> PlanResult<ResolvedOffsetBoundary> {
         let preceding = matches!(value, spec::WindowFrameBoundary::Preceding(_));
-        match value {
-            spec::WindowFrameBoundary::CurrentRow => {
-                Ok(("CURRENT ROW".into(), WindowFrameBound::CurrentRow))
+        let bound = match value {
+            spec::WindowFrameBoundary::CurrentRow => WindowFrameBound::CurrentRow,
+            spec::WindowFrameBoundary::UnboundedPreceding => {
+                WindowFrameBound::Preceding(ScalarValue::UInt64(None))
             }
-            spec::WindowFrameBoundary::UnboundedPreceding => Ok((
-                "UNBOUNDED PRECEDING".into(),
-                WindowFrameBound::Preceding(ScalarValue::UInt64(None)),
-            )),
-            spec::WindowFrameBoundary::UnboundedFollowing => Ok((
-                "UNBOUNDED FOLLOWING".into(),
-                WindowFrameBound::Following(ScalarValue::UInt64(None)),
-            )),
+            spec::WindowFrameBoundary::UnboundedFollowing => {
+                WindowFrameBound::Following(ScalarValue::UInt64(None))
+            }
             spec::WindowFrameBoundary::Preceding(expr)
             | spec::WindowFrameBoundary::Following(expr) => {
                 let (display, value) = self.resolve_window_boundary(*expr, schema, state).await?;
-                let ScalarValue::Int64(Some(offset)) = value.cast_to(&DataType::Int64)? else {
-                    return Err(PlanError::invalid("invalid window boundary offset"));
-                };
-                let bound = if offset == 0 {
-                    WindowFrameBound::CurrentRow
-                } else if preceding == (offset > 0) {
-                    WindowFrameBound::Preceding(ScalarValue::UInt64(Some(offset.unsigned_abs())))
+                // Spark gives unary minus on an untyped NULL a DOUBLE operand.
+                let source_type = if preceding && matches!(value, ScalarValue::Null) {
+                    DataType::Float64
                 } else {
-                    WindowFrameBound::Following(ScalarValue::UInt64(Some(offset.unsigned_abs())))
+                    value.data_type()
+                };
+                let is_null = value.is_null();
+                let converted_bound = if !convert_offset || (retain_null && is_null) {
+                    None
+                } else {
+                    let ScalarValue::Int64(Some(offset)) = value.cast_to(&DataType::Int64)? else {
+                        return Err(PlanError::invalid("invalid window boundary offset"));
+                    };
+                    Some(if offset == 0 {
+                        WindowFrameBound::CurrentRow
+                    } else if preceding == (offset > 0) {
+                        WindowFrameBound::Preceding(ScalarValue::UInt64(Some(
+                            offset.unsigned_abs(),
+                        )))
+                    } else {
+                        WindowFrameBound::Following(ScalarValue::UInt64(Some(
+                            offset.unsigned_abs(),
+                        )))
+                    })
                 };
                 let direction = if preceding { "PRECEDING" } else { "FOLLOWING" };
-                Ok((format!("{display} {direction}"), bound))
+                return Ok(ResolvedOffsetBoundary::Expression {
+                    display: format!("{display} {direction}"),
+                    converted_bound,
+                    source_type,
+                    is_null,
+                });
             }
             spec::WindowFrameBoundary::Value(expr) => {
                 let (_, value) = self.resolve_window_boundary(*expr, schema, state).await?;
                 let ScalarValue::Int64(Some(value)) = value.cast_to(&DataType::Int64)? else {
                     return Err(PlanError::invalid("invalid window boundary offset"));
                 };
-                let bound = match value {
+                match value {
                     i64::MIN => WindowFrameBound::Preceding(ScalarValue::UInt64(None)),
                     i64::MAX => WindowFrameBound::Following(ScalarValue::UInt64(None)),
                     0 => WindowFrameBound::CurrentRow,
                     x if x < 0 => WindowFrameBound::Preceding(ScalarValue::UInt64(Some(-x as u64))),
                     x => WindowFrameBound::Following(ScalarValue::UInt64(Some(x as u64))),
-                };
-                Ok((bound.to_string(), bound))
+                }
             }
-        }
+        };
+        Ok(ResolvedOffsetBoundary::Native(bound.to_string(), bound))
     }
 
     async fn resolve_window_boundary_value(
@@ -628,7 +871,7 @@ impl PlanResolver<'_> {
         order_by: &[expr::Sort],
         schema: &DFSchemaRef,
         state: &mut PlanResolverState,
-    ) -> PlanResult<(String, WindowFrameBound)> {
+    ) -> PlanResult<PlannedRangeBoundary> {
         // Helper to get the data type from the order_by expression for casting
         let get_order_by_type = || -> PlanResult<DataType> {
             let [order_by] = order_by else {
@@ -637,37 +880,63 @@ impl PlanResolver<'_> {
                 ));
             };
             let field = order_by.expr.to_field(schema)?.1;
-            let mut data_type = field.data_type();
-            while let DataType::Dictionary(_, value_type) = data_type {
-                data_type = value_type;
-            }
-            // The late window rewrite decodes scalar dictionary floats to numeric keys.
-            if matches!(data_type, DataType::Float32 | DataType::Float64) {
-                return Ok(data_type.clone());
-            }
-            Ok(field.data_type().clone())
+            Ok(range_order_key_type(field.data_type()).clone())
         };
 
         let preceding = matches!(value, spec::WindowFrameBoundary::Preceding(_));
         match value {
-            spec::WindowFrameBoundary::CurrentRow => {
-                Ok(("CURRENT ROW".into(), WindowFrameBound::CurrentRow))
-            }
-            spec::WindowFrameBoundary::UnboundedPreceding => Ok((
+            spec::WindowFrameBoundary::CurrentRow => Ok(PlannedRangeBoundary::new(
+                "CURRENT ROW".into(),
+                WindowFrameBound::CurrentRow,
+            )),
+            spec::WindowFrameBoundary::UnboundedPreceding => Ok(PlannedRangeBoundary::new(
                 "UNBOUNDED PRECEDING".into(),
                 WindowFrameBound::Preceding(ScalarValue::Null),
             )),
-            spec::WindowFrameBoundary::UnboundedFollowing => Ok((
+            spec::WindowFrameBoundary::UnboundedFollowing => Ok(PlannedRangeBoundary::new(
                 "UNBOUNDED FOLLOWING".into(),
                 WindowFrameBound::Following(ScalarValue::Null),
             )),
             spec::WindowFrameBoundary::Preceding(expr)
             | spec::WindowFrameBoundary::Following(expr) => {
                 let (display, value) = self.resolve_window_boundary(*expr, schema, state).await?;
-                // Cast numeric boundaries to match the ORDER BY type.
-                // Non-numeric boundaries (e.g. INTERVAL for TIMESTAMP ORDER BY) are left as-is
-                // since DataFusion handles interval arithmetic directly.
+                // Spark gives unary minus on an untyped NULL a DOUBLE operand.
+                let value = if preceding && matches!(value, ScalarValue::Null) {
+                    ScalarValue::Float64(None)
+                } else {
+                    value
+                };
+                if order_by.len() > 1 {
+                    return Err(PlanError::invalid(
+                        "[DATATYPE_MISMATCH.RANGE_FRAME_MULTI_ORDER] range window frame requires exactly one order by expression",
+                    ));
+                }
                 let data_type = get_order_by_type()?;
+                if value.is_null() {
+                    let source_type = value.data_type();
+                    let coerced_type =
+                        if !matches!(data_type, DataType::Date32 | DataType::Timestamp(_, _))
+                            && can_cast_types(&source_type, &data_type)
+                        {
+                            &data_type
+                        } else {
+                            &source_type
+                        };
+                    if !coerced_type.is_numeric()
+                        && !matches!(coerced_type, DataType::Interval(_) | DataType::Duration(_))
+                    {
+                        return Err(PlanError::invalid(
+                            "[DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE] RANGE expression bounds require a numeric or interval type",
+                        ));
+                    }
+                    if !data_type.is_numeric()
+                        && !matches!(data_type, DataType::Date32 | DataType::Timestamp(_, _))
+                    {
+                        return Err(PlanError::invalid(
+                            "[DATATYPE_MISMATCH.RANGE_FRAME_INVALID_TYPE] unsupported RANGE order key and offset type",
+                        ));
+                    }
+                }
                 if data_type == DataType::Date32
                     && !matches!(
                         value.data_type(),
@@ -681,17 +950,83 @@ impl PlanResolver<'_> {
                         "[DATATYPE_MISMATCH.RANGE_FRAME_INVALID_TYPE] numeric DATE RANGE bounds require INT days",
                     ));
                 }
+                let direction = if preceding { "PRECEDING" } else { "FOLLOWING" };
+                let display = format!("{display} {direction}");
+                if data_type.is_signed_integer()
+                    && value.data_type().is_signed_integer()
+                    && !value.is_null()
+                {
+                    // Negate the source width before coercion to the ORDER key width.
+                    let mut deferred_check =
+                        (self.config.ansi_mode && preceding && is_signed_integer_minimum(&value))
+                            .then(|| {
+                                ScalarUDF::from(SparkRangeOffsetNegation::new(value.data_type()))
+                                    .call(vec![datafusion_expr::lit(value.clone())])
+                            });
+                    let value = range_offset_displacement(&value, preceding)?;
+                    let cast = SparkCastNumericToInteger::try_new(data_type.clone(), false, false)?;
+                    let value = if cast.coerce_types(&[value.data_type()]).is_ok() {
+                        if self.config.ansi_mode && value.cast_to(&data_type).is_err() {
+                            let source = deferred_check
+                                .take()
+                                .unwrap_or_else(|| datafusion_expr::lit(value.clone()));
+                            deferred_check = Some(
+                                ScalarUDF::from(SparkCastNumericToInteger::try_new(
+                                    data_type.clone(),
+                                    true,
+                                    false,
+                                )?)
+                                .call(vec![source]),
+                            );
+                        }
+                        let ColumnarValue::Scalar(value) =
+                            cast.cast_value(&ColumnarValue::Scalar(value))?
+                        else {
+                            return Err(PlanError::invalid("scalar RANGE boundary expected"));
+                        };
+                        value
+                    } else {
+                        value.cast_to(&data_type)?
+                    };
+                    return Ok(PlannedRangeBoundary {
+                        display,
+                        frame_bound: WindowFrameBound::Following(value),
+                        deferred_check,
+                    });
+                }
+                let deferred_check = (self.config.ansi_mode
+                    && preceding
+                    && data_type == DataType::Date32
+                    && is_signed_integer_minimum(&value))
+                .then(|| {
+                    ScalarUDF::from(SparkRangeOffsetNegation::new(DataType::Date32))
+                        .call(vec![datafusion_expr::lit(value.clone())])
+                });
+                // Temporal offsets retain their admitted Interval/Duration representation.
                 let value = if data_type.is_numeric() {
                     value.cast_to(&data_type)?
                 } else {
                     value
                 };
-                let (direction, bound) = if preceding {
-                    ("PRECEDING", WindowFrameBound::Preceding(value))
+                let bound = if value.is_null()
+                    && (data_type.is_numeric()
+                        || (data_type == DataType::Date32 && value.data_type() == DataType::Int32))
+                {
+                    if preceding {
+                        WindowFrameBound::PrecedingNullOffset(value.data_type())
+                    } else {
+                        WindowFrameBound::FollowingNullOffset(value.data_type())
+                    }
+                } else if preceding {
+                    WindowFrameBound::Preceding(value)
                 } else {
-                    ("FOLLOWING", WindowFrameBound::Following(value))
+                    WindowFrameBound::Following(value)
                 };
-                Ok((format!("{display} {direction}"), bound))
+                Ok(PlannedRangeBoundary {
+                    display,
+                    frame_bound: bound,
+                    deferred_check,
+                })
             }
             spec::WindowFrameBoundary::Value(expr) => {
                 let (_, value) = self.resolve_window_boundary(*expr, schema, state).await?;
@@ -718,55 +1053,160 @@ impl PlanResolver<'_> {
                         Some(Ordering::Greater) => WindowFrameBound::Following(value),
                         Some(Ordering::Equal) => WindowFrameBound::CurrentRow,
                     };
-                    Ok((bound.to_string(), bound))
+                    Ok(PlannedRangeBoundary::new(bound.to_string(), bound))
                 }
             }
         }
     }
 }
 
-// Special boundaries remain distinct from an expression whose signed displacement is zero.
-fn date_range_displacements(
+// The late window rewrite decodes scalar dictionary floats to numeric keys.
+fn range_order_key_type(data_type: &DataType) -> &DataType {
+    let mut value_type = data_type;
+    while let DataType::Dictionary(_, dictionary_value_type) = value_type {
+        value_type = dictionary_value_type;
+    }
+    if matches!(value_type, DataType::Float32 | DataType::Float64) {
+        value_type
+    } else {
+        data_type
+    }
+}
+
+fn spark_range_arithmetic_key_type(
     frame: &WindowFrame,
     order_by: &[expr::Sort],
     schema: &DFSchemaRef,
-) -> PlanResult<Option<(Option<i32>, Option<i32>)>> {
+) -> PlanResult<Option<DataType>> {
+    if frame.units != WindowFrameUnits::Range {
+        return Ok(None);
+    }
     let [order] = order_by else {
         return Ok(None);
     };
-    if frame.units != WindowFrameUnits::Range || order.expr.get_type(schema)? != DataType::Date32 {
-        return Ok(None);
-    }
-    let displacement = |bound: &WindowFrameBound| match bound {
-        WindowFrameBound::Preceding(ScalarValue::Int32(Some(days))) => {
-            Some(Some(days.wrapping_neg()))
-        }
-        WindowFrameBound::Following(ScalarValue::Int32(Some(days))) => Some(Some(*days)),
-        WindowFrameBound::CurrentRow => Some(None),
-        WindowFrameBound::Preceding(value) | WindowFrameBound::Following(value)
-            if value.is_null() =>
-        {
-            Some(None)
-        }
-        _ => None,
-    };
-    Ok(displacement(&frame.start_bound).zip(displacement(&frame.end_bound)))
+    let key_type = order.expr.get_type(schema)?;
+    let key_type = range_order_key_type(&key_type);
+    let has_nonzero_integer_offset = key_type.is_signed_integer()
+        && [&frame.start_bound, &frame.end_bound].iter().any(|bound| {
+            matches!(bound, WindowFrameBound::Preceding(value) | WindowFrameBound::Following(value)
+                if !value.is_null() && ScalarValue::new_zero(&value.data_type()).is_ok_and(|zero| *value != zero))
+        });
+    Ok(((frame.has_null_offset() || has_nonzero_integer_offset)
+        && matches!(
+            key_type,
+            DataType::Int8
+                | DataType::Int16
+                | DataType::Int32
+                | DataType::Int64
+                | DataType::Date32
+                | DataType::Float32
+                | DataType::Float64
+                | DataType::Decimal128(_, _)
+        ))
+    .then(|| key_type.clone()))
 }
 
-// Only this exact INT negation cause receives Spark's arithmetic condition.
-#[derive(Debug, PartialEq, Eq, Hash)]
-struct SparkDateRangeNegation;
+fn is_signed_integer_minimum(value: &ScalarValue) -> bool {
+    matches!(
+        value,
+        ScalarValue::Int8(Some(i8::MIN))
+            | ScalarValue::Int16(Some(i16::MIN))
+            | ScalarValue::Int32(Some(i32::MIN))
+            | ScalarValue::Int64(Some(i64::MIN))
+    )
+}
 
-impl ScalarUDFImpl for SparkDateRangeNegation {
+fn range_offset_displacement(
+    value: &ScalarValue,
+    preceding: bool,
+) -> datafusion_common::Result<ScalarValue> {
+    if preceding {
+        ScalarValue::new_zero(&value.data_type())?.sub(value)
+    } else {
+        Ok(value.clone())
+    }
+}
+
+// Special boundaries remain distinct from an expression whose signed displacement is zero.
+fn range_frame_displacements(
+    frame: &WindowFrame,
+    order_by: &[expr::Sort],
+    schema: &DFSchemaRef,
+) -> PlanResult<Option<(Option<ScalarValue>, Option<ScalarValue>)>> {
+    let [order] = order_by else {
+        return Ok(None);
+    };
+    let key_type = order.expr.get_type(schema)?;
+    if frame.units != WindowFrameUnits::Range
+        || !(key_type == DataType::Date32 || key_type.is_signed_integer())
+    {
+        return Ok(None);
+    }
+    let offset_type = if key_type == DataType::Date32 {
+        DataType::Int32
+    } else {
+        key_type
+    };
+    let displacement = |bound: &WindowFrameBound| -> PlanResult<Option<Option<ScalarValue>>> {
+        Ok(match bound {
+            WindowFrameBound::Preceding(value) | WindowFrameBound::Following(value)
+                if !value.is_null() && value.data_type() == offset_type =>
+            {
+                Some(Some(range_offset_displacement(
+                    value,
+                    matches!(bound, WindowFrameBound::Preceding(_)),
+                )?))
+            }
+            WindowFrameBound::CurrentRow => Some(None),
+            WindowFrameBound::PrecedingNullOffset(data_type)
+            | WindowFrameBound::FollowingNullOffset(data_type)
+                if *data_type == offset_type =>
+            {
+                Some(None)
+            }
+            WindowFrameBound::Preceding(value) | WindowFrameBound::Following(value)
+                if value.is_null() =>
+            {
+                Some(None)
+            }
+            _ => None,
+        })
+    };
+    Ok(displacement(&frame.start_bound)?.zip(displacement(&frame.end_bound)?))
+}
+
+// Delegate negation, adding Spark's condition only to this offset type's exact overflow cause.
+#[derive(Debug, PartialEq, Eq, Hash)]
+struct SparkRangeOffsetNegation {
+    negation_type: DataType,
+    signature: Signature,
+}
+
+impl SparkRangeOffsetNegation {
+    fn new(negation_type: DataType) -> Self {
+        let offset_type = if negation_type == DataType::Date32 {
+            DataType::Int32
+        } else {
+            negation_type.clone()
+        };
+        Self {
+            negation_type,
+            signature: Signature::exact(vec![offset_type], Volatility::Immutable),
+        }
+    }
+}
+
+impl ScalarUDFImpl for SparkRangeOffsetNegation {
     fn name(&self) -> &str {
-        "spark_date_range_negation"
+        if self.negation_type == DataType::Date32 {
+            "spark_date_range_negation"
+        } else {
+            "spark_range_offset_negation"
+        }
     }
 
     fn signature(&self) -> &Signature {
-        static SIGNATURE: std::sync::LazyLock<Signature> = std::sync::LazyLock::new(|| {
-            Signature::exact(vec![DataType::Int32], Volatility::Immutable)
-        });
-        &SIGNATURE
+        &self.signature
     }
 
     fn return_type(&self, types: &[DataType]) -> datafusion_common::Result<DataType> {
@@ -784,10 +1224,21 @@ impl ScalarUDFImpl for SparkDateRangeNegation {
         SparkNegative::new(true)
             .invoke_with_args(args)
             .map_err(|error| {
-                if matches!(&error, DataFusionError::Execution(message)
-                if message == "Int32 overflow on negative(-2147483648)")
-                {
-                    error.context("[ARITHMETIC_OVERFLOW] DATE RANGE offset negation")
+                let expected_cause = match self.negation_type {
+                    DataType::Int8 => "Int8 overflow on negative(-128)",
+                    DataType::Int16 => "Int16 overflow on negative(-32768)",
+                    DataType::Int32 | DataType::Date32 => {
+                        "Int32 overflow on negative(-2147483648)"
+                    }
+                    DataType::Int64 => "Int64 overflow on negative(-9223372036854775808)",
+                    _ => return error,
+                };
+                if matches!(&error, DataFusionError::Execution(message) if message == expected_cause) {
+                    error.context(if self.negation_type == DataType::Date32 {
+                        "[ARITHMETIC_OVERFLOW] DATE RANGE offset negation"
+                    } else {
+                        "[ARITHMETIC_OVERFLOW] RANGE offset negation"
+                    })
                 } else {
                     error
                 }
@@ -795,27 +1246,40 @@ impl ScalarUDFImpl for SparkDateRangeNegation {
     }
 }
 
-// Retain the original key declaration while a PRECEDING expression awaits constant folding.
+// Retain the original key declaration while a checked offset expression awaits constant folding.
 #[derive(Debug, PartialEq, Eq, Hash)]
-struct SparkDateRangeBoundCheck;
+struct WindowKeyWithCheckedRangeOffset {
+    order_key_type: DataType,
+    signature: Signature,
+}
 
-impl ScalarUDFImpl for SparkDateRangeBoundCheck {
+impl WindowKeyWithCheckedRangeOffset {
+    fn new(order_key_type: DataType, check_result_type: DataType) -> Self {
+        Self {
+            signature: Signature::exact(
+                vec![order_key_type.clone(), check_result_type],
+                Volatility::Immutable,
+            ),
+            order_key_type,
+        }
+    }
+}
+
+impl ScalarUDFImpl for WindowKeyWithCheckedRangeOffset {
     fn name(&self) -> &str {
-        "spark_date_range_bound_check"
+        if self.order_key_type == DataType::Date32 {
+            "spark_date_range_bound_check"
+        } else {
+            "window_key_with_checked_range_offset"
+        }
     }
 
     fn signature(&self) -> &Signature {
-        static SIGNATURE: std::sync::LazyLock<Signature> = std::sync::LazyLock::new(|| {
-            Signature::exact(
-                vec![DataType::Date32, DataType::Int32],
-                Volatility::Immutable,
-            )
-        });
-        &SIGNATURE
+        &self.signature
     }
 
     fn return_type(&self, _: &[DataType]) -> datafusion_common::Result<DataType> {
-        Ok(DataType::Date32)
+        Ok(self.order_key_type.clone())
     }
 
     fn return_field_from_args(&self, args: ReturnFieldArgs) -> datafusion_common::Result<FieldRef> {
@@ -827,9 +1291,8 @@ impl ScalarUDFImpl for SparkDateRangeBoundCheck {
         args: Vec<expr::Expr>,
         _: &datafusion_expr::simplify::SimplifyContext,
     ) -> datafusion_common::Result<datafusion_expr::simplify::ExprSimplifyResult> {
-        let [key, bound] = datafusion_common::utils::take_function_args(self.name(), args)?;
-        LiteralEvaluator::new()
-            .evaluate(&ScalarUDF::from(SparkDateRangeNegation).call(vec![bound]))?;
+        let [key, check] = datafusion_common::utils::take_function_args(self.name(), args)?;
+        LiteralEvaluator::new().evaluate(&check)?;
         Ok(datafusion_expr::simplify::ExprSimplifyResult::Simplified(
             key,
         ))
@@ -839,20 +1302,14 @@ impl ScalarUDFImpl for SparkDateRangeBoundCheck {
         &self,
         args: ScalarFunctionArgs,
     ) -> datafusion_common::Result<ColumnarValue> {
-        let [key, bound] =
+        let [key, _check] =
             datafusion_common::utils::take_function_args(self.name(), args.args.clone())?;
-        SparkDateRangeNegation.invoke_with_args(ScalarFunctionArgs {
-            args: vec![bound],
-            arg_fields: vec![args.arg_fields[1].clone()],
-            return_field: args.arg_fields[1].clone(),
-            ..args
-        })?;
         Ok(key)
     }
 }
 
 #[cfg(test)]
-mod date_range_tests {
+mod range_frame_tests {
     use std::collections::HashMap;
     use std::sync::Arc;
 
@@ -865,17 +1322,18 @@ mod date_range_tests {
 
     use super::*;
 
+    fn require_error_message<T>(
+        result: datafusion_common::Result<T>,
+    ) -> datafusion_common::Result<String> {
+        result
+            .err()
+            .map(|error| error.to_string())
+            .ok_or_else(|| DataFusionError::Internal("expected RANGE failure".into()))
+    }
+
     #[test]
     fn date_range_negation_keeps_declarations_and_spark_failure_phases()
     -> datafusion_common::Result<()> {
-        fn error_message<T>(
-            result: datafusion_common::Result<T>,
-        ) -> datafusion_common::Result<String> {
-            result
-                .err()
-                .map(|error| error.to_string())
-                .ok_or_else(|| DataFusionError::Internal("expected DATE RANGE failure".into()))
-        }
         let key_field = Arc::new(
             Field::new("day", DataType::Date32, true)
                 .with_metadata(HashMap::from([("source".into(), "kept".into())])),
@@ -884,10 +1342,23 @@ mod date_range_tests {
         let schema = Arc::new(DFSchema::try_from(Schema::new(vec![key_field.clone()]))?);
         let fields = [key_field.clone(), offset_field];
         let minimum = ScalarValue::Int32(Some(i32::MIN));
-        let actual = SparkDateRangeBoundCheck.return_field_from_args(ReturnFieldArgs {
-            arg_fields: &fields,
-            scalar_arguments: &[None, Some(&minimum)],
-        })?;
+        assert_eq!(
+            SparkRangeOffsetNegation::new(DataType::Date32).name(),
+            "spark_date_range_negation"
+        );
+        assert_eq!(
+            SparkRangeOffsetNegation::new(DataType::Date32).signature(),
+            &Signature::exact(vec![DataType::Int32], Volatility::Immutable)
+        );
+        assert_eq!(
+            WindowKeyWithCheckedRangeOffset::new(DataType::Date32, DataType::Int32).name(),
+            "spark_date_range_bound_check"
+        );
+        let actual = WindowKeyWithCheckedRangeOffset::new(DataType::Date32, DataType::Int32)
+            .return_field_from_args(ReturnFieldArgs {
+                arg_fields: &fields,
+                scalar_arguments: &[None, Some(&minimum)],
+            })?;
         assert_eq!(actual, key_field);
         let simplifier = ExprSimplifier::new(
             SimplifyContextBuilder::default()
@@ -899,8 +1370,16 @@ mod date_range_tests {
             lit(ScalarValue::Date32(None)),
             lit(ScalarValue::Date32(Some(0))),
         ] {
-            let checked = ScalarUDF::from(SparkDateRangeBoundCheck).call(vec![key, lit(i32::MIN)]);
-            let error = error_message(simplifier.simplify(checked))?;
+            let checked = ScalarUDF::from(WindowKeyWithCheckedRangeOffset::new(
+                DataType::Date32,
+                DataType::Int32,
+            ))
+            .call(vec![
+                key,
+                ScalarUDF::from(SparkRangeOffsetNegation::new(DataType::Date32))
+                    .call(vec![lit(i32::MIN)]),
+            ]);
+            let error = require_error_message(simplifier.simplify(checked))?;
             assert!(error.contains("[ARITHMETIC_OVERFLOW]"), "{error}");
             assert!(
                 error.contains("Int32 overflow on negative(-2147483648)"),
@@ -917,8 +1396,9 @@ mod date_range_tests {
                 config_options: Arc::default(),
             }
         };
-        let error = error_message(
-            SparkDateRangeNegation.invoke_with_args(arguments(ScalarValue::Int64(Some(i64::MIN)))),
+        let error = require_error_message(
+            SparkRangeOffsetNegation::new(DataType::Date32)
+                .invoke_with_args(arguments(ScalarValue::Int64(Some(i64::MIN)))),
         )?;
         assert!(!error.contains("[ARITHMETIC_OVERFLOW]"), "{error}");
         let mut args = arguments(minimum);
@@ -926,15 +1406,17 @@ mod date_range_tests {
             .insert(0, ColumnarValue::Scalar(ScalarValue::Date32(Some(0))));
         args.arg_fields.insert(0, key_field.clone());
         args.return_field = key_field;
-        assert!(
-            error_message(SparkDateRangeBoundCheck.invoke_with_args(args))?
-                .contains("[ARITHMETIC_OVERFLOW]")
-        );
+        assert!(matches!(
+            WindowKeyWithCheckedRangeOffset::new(DataType::Date32, DataType::Int32)
+                .invoke_with_args(args)?,
+            ColumnarValue::Scalar(ScalarValue::Date32(Some(0)))
+        ));
 
         let desc_key = |key| {
             ScalarUDF::from(SparkDateDayArithmetic::new(Operator::Plus)).call(vec![
                 key,
-                ScalarUDF::from(SparkDateRangeNegation).call(vec![lit(i32::MIN)]),
+                ScalarUDF::from(SparkRangeOffsetNegation::new(DataType::Date32))
+                    .call(vec![lit(i32::MIN)]),
             ])
         };
         let null_key = simplifier.simplify(desc_key(lit(ScalarValue::Date32(None))))?;
@@ -944,13 +1426,130 @@ mod date_range_tests {
         );
         let non_null_key = simplifier.simplify(desc_key(lit(ScalarValue::Date32(Some(0)))))?;
         assert!(
-            error_message(LiteralEvaluator::new().evaluate(&non_null_key))?
+            require_error_message(LiteralEvaluator::new().evaluate(&non_null_key))?
                 .contains("[ARITHMETIC_OVERFLOW]")
         );
         let physical =
             create_physical_expr(&desc_key(col("day")), &schema, &ExecutionProps::new())?;
         let empty = RecordBatch::new_empty(schema.inner().clone());
         assert_eq!(physical.evaluate(&empty)?.into_array(0)?.len(), 0);
+        Ok(())
+    }
+
+    #[test]
+    fn integer_range_negation_checks_each_width_and_keeps_the_key_field()
+    -> datafusion_common::Result<()> {
+        for minimum in [
+            ScalarValue::Int8(Some(i8::MIN)),
+            ScalarValue::Int16(Some(i16::MIN)),
+            ScalarValue::Int32(Some(i32::MIN)),
+            ScalarValue::Int64(Some(i64::MIN)),
+        ] {
+            let key_type = minimum.data_type();
+            let zero = ScalarValue::new_zero(&key_type)?;
+            assert!(is_signed_integer_minimum(&minimum));
+            assert!(!is_signed_integer_minimum(&zero));
+            assert_eq!(range_offset_displacement(&minimum, true)?, minimum);
+            assert_eq!(range_offset_displacement(&zero, false)?, zero);
+            for nullable in [false, true] {
+                let key_field = Arc::new(
+                    Field::new("original_key", key_type.clone(), nullable)
+                        .with_metadata(HashMap::from([("source".into(), "kept".into())])),
+                );
+                let offset_field = Arc::new(Field::new("offset", key_type.clone(), false));
+                let fields = [key_field.clone(), offset_field.clone()];
+                let guard =
+                    WindowKeyWithCheckedRangeOffset::new(key_type.clone(), key_type.clone());
+                assert_eq!(
+                    guard.return_field_from_args(ReturnFieldArgs {
+                        arg_fields: &fields,
+                        scalar_arguments: &[None, Some(&minimum)],
+                    })?,
+                    key_field
+                );
+                assert_eq!(
+                    guard.signature(),
+                    &Signature::exact(
+                        vec![key_type.clone(), key_type.clone()],
+                        Volatility::Immutable
+                    )
+                );
+                let schema = Arc::new(DFSchema::try_from(Schema::new(vec![key_field.clone()]))?);
+                let simplifier = ExprSimplifier::new(
+                    SimplifyContextBuilder::default()
+                        .with_schema(schema)
+                        .build(),
+                );
+                for key in [
+                    col("original_key"),
+                    lit(ScalarValue::try_from(&key_type)?),
+                    lit(zero.clone()),
+                ] {
+                    let checked = ScalarUDF::from(WindowKeyWithCheckedRangeOffset::new(
+                        key_type.clone(),
+                        key_type.clone(),
+                    ))
+                    .call(vec![
+                        key,
+                        ScalarUDF::from(SparkRangeOffsetNegation::new(key_type.clone()))
+                            .call(vec![lit(minimum.clone())]),
+                    ]);
+                    let message = require_error_message(simplifier.simplify(checked))?;
+                    assert!(
+                        message.contains("[ARITHMETIC_OVERFLOW] RANGE offset negation"),
+                        "{message}"
+                    );
+                    assert!(
+                        message.contains(&format!("{key_type:?} overflow on negative(")),
+                        "{message}"
+                    );
+                }
+                let key_value = ScalarValue::try_from(&key_type)?;
+                let checked = guard.invoke_with_args(ScalarFunctionArgs {
+                    args: vec![
+                        ColumnarValue::Scalar(key_value.clone()),
+                        ColumnarValue::Scalar(zero.clone()),
+                    ],
+                    arg_fields: fields.to_vec(),
+                    number_rows: 1,
+                    return_field: key_field,
+                    config_options: Arc::default(),
+                })?;
+                assert!(matches!(checked, ColumnarValue::Scalar(value) if value == key_value));
+            }
+        }
+        let key_field = Arc::new(
+            Field::new("wide_key", DataType::Int64, true)
+                .with_metadata(HashMap::from([("source".into(), "kept".into())])),
+        );
+        let source_field = Arc::new(Field::new("narrow_source", DataType::Int8, false));
+        let guard = WindowKeyWithCheckedRangeOffset::new(DataType::Int64, DataType::Int8);
+        assert_eq!(
+            guard.signature(),
+            &Signature::exact(vec![DataType::Int64, DataType::Int8], Volatility::Immutable)
+        );
+        assert_eq!(
+            guard.return_field_from_args(ReturnFieldArgs {
+                arg_fields: &[key_field.clone(), source_field],
+                scalar_arguments: &[None, None],
+            })?,
+            key_field
+        );
+        let schema = Arc::new(DFSchema::try_from(Schema::new(vec![key_field]))?);
+        let checked = ScalarUDF::from(guard).call(vec![
+            col("wide_key"),
+            ScalarUDF::from(SparkRangeOffsetNegation::new(DataType::Int8))
+                .call(vec![lit(ScalarValue::Int8(Some(i8::MIN)))]),
+        ]);
+        let error = require_error_message(
+            ExprSimplifier::new(
+                SimplifyContextBuilder::default()
+                    .with_schema(schema)
+                    .build(),
+            )
+            .simplify(checked),
+        )?;
+        assert!(error.contains("Int8 overflow on negative(-128)"), "{error}");
         Ok(())
     }
 }

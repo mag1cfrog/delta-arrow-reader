@@ -142,8 +142,6 @@ fn matches_expected_error(case: &Value, observation: &Value) -> bool {
 /// the staging base they returned a wrong value instead of failing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum RetainedDifference {
-    /// #937: a constant conversion fails while collecting instead of optimizing.
-    ConstantConversionStage,
     /// #938: ANSI DATE_FORMAT returns NULL for a string Spark rejects.
     DateFormatAnsiNull,
     /// #939: DATE_FORMAT prints year -1 as year of era 2.
@@ -158,12 +156,6 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
         "date_format" if case["expected"]["status"] == "error" => {
             Some(RetainedDifference::DateFormatAnsiNull)
         }
-        "cast_date" | "cast_timestamp" | "cast_timestamp_ntz" | "to_timestamp"
-        | "to_timestamp_ntz"
-            if case["form"] == "literal" && case["spark_error_phase"] == "optimized" =>
-        {
-            Some(RetainedDifference::ConstantConversionStage)
-        }
         _ => None,
     }
 }
@@ -172,9 +164,6 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
 fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResult<Value> {
     let mut current = case.clone();
     match difference {
-        RetainedDifference::ConstantConversionStage => {
-            current["spark_error_phase"] = json!("collect");
-        }
         RetainedDifference::DateFormatAnsiNull => {
             let rows = if case["form"] == "literal" { 1 } else { 2 };
             current["expected"] = json!({"status": "ok", "rows": vec![[Value::Null]; rows]});
@@ -219,7 +208,6 @@ async fn timestamp_separators_match_spark() -> TestResult {
     assert_eq!(
         retained.into_iter().collect::<Vec<_>>(),
         [
-            (RetainedDifference::ConstantConversionStage, 218),
             (RetainedDifference::DateFormatAnsiNull, 92),
             (RetainedDifference::DateFormatNegativeYear, 8),
         ]

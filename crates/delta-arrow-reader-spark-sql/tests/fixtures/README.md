@@ -759,7 +759,8 @@ equality, NULLIF, BETWEEN and ON/USING joins share the reference checks.
 The capture's registered-table inputs are also registered as Arrow arrays by
 `comparison_coercion.rs`. Their LTZ column carries UTC while the session can use
 Phoenix or another zone. Comparisons must interpret DATE/NTZ in the session zone;
-NULLIF must retain its first input's original value, type and timezone annotation.
+NULLIF must retain its first input's original value and type, with the LTZ column
+annotated with the session zone as for any registered TIMESTAMP (#1012).
 The native DataFusion control retains its UTC interpretation. Runtime unit tests
 cover Date32/Date64/NTZ scalars, array slices, NULLs and empty inputs; volatile
 counters check that conversion does not repeat the original expression.
@@ -778,7 +779,8 @@ outside the i64-nanosecond range.
 
 `timestamp_precision.rs` checks both operand orders and ANSI modes, two batch
 sizes, sliced arrays, NULLs, empty results, all comparison operators, NULLIF,
-BETWEEN and ON/USING joins. NULLIF retains the original ticks, type and timezone.
+BETWEEN and ON/USING joins. NULLIF retains the original ticks and unit; a zoned
+input is annotated with the session zone (#1012).
 Local inputs outside the reused timezone converter's range fail explicitly;
 they must not silently become NULL. Equal-unit instants retain native comparison.
 
@@ -890,6 +892,15 @@ registered columns in both ANSI modes, UTC and America/Los_Angeles (#153).
 failing stages at batch sizes 1 and 32. See the [temporal fixture
 notes](temporal-contracts/README.md) for the inputs, accepted parser messages,
 the retained differences and their owners, and the capture command.
+
+## Temporal parser constant folding
+
+`temporal-parser-folding/temporal-fold-1123-spark.jsonl` records 44 independent
+UTC observations for DATE, TIMESTAMP and TIMESTAMP_NTZ constant parsing in both
+ANSI modes. Direct and formatted calls, TRY_CAST, lazy guards, unused
+projections, LIMIT 0 and LAG/LEAD defaults retain complete available Fields,
+values and error phases. The [fixture notes](temporal-parser-folding/README.md)
+describe the source protocol, hashes, reproduction command and scope.
 
 ## UTC timestamp conversions
 
@@ -1780,22 +1791,82 @@ specific error causes/phases. `window_names` separately requires the original
 window-generated PIVOT queries and their independent alias-free controls to
 match completely for nonempty, empty and all-NULL inputs.
 
-`pivot-source-aliases-retained-baseline-facets.json` records accepted native
-contracts for 16 contexts under [#786](https://github.com/mag1cfrog/delta-arrow-reader/issues/786)
+`pivot-source-aliases-retained-baseline-facets.json` preserves 16 historical
+native contexts under [#786](https://github.com/mag1cfrog/delta-arrow-reader/issues/786)
 (repeated projection identity) and [#1076](https://github.com/mag1cfrog/delta-arrow-reader/issues/1076)
-(UNPIVOT NULL filtering and result nullability). The exact four case IDs, ANSI
-mode, batch, SQL and full reference payload bind each contract. The newly
-admitted alias forms must retain the same complete public behavior as their
-accepted alias-free controls. The other 148 comparisons require exact Spark
-results. The report keeps raw `matches` and `actual` values, then adds separate
-`independent_gap_owner` and `regression_matches` fields. Native private field IDs
-and unordered raw-row order are not frozen by these contracts. New strict
-matches require retiring their obsolete native controls.
+(UNPIVOT NULL filtering and result nullability). Only the eight #786 contexts
+remain active regression allowances. The eight original UNPIVOT contexts now
+require complete Spark agreement; their historical entries grant no allowance.
+The unchanged 82-record corpus has 156 Spark comparisons and eight active
+inherited controls at batches 1 and 32.
+
+Each active contract binds the exact case ID, ANSI mode, batch, SQL and full
+reference payload. The report keeps raw `matches` and `actual` values, then
+adds separate `independent_gap_owner` and `regression_matches` fields. Native
+private field IDs and unordered raw-row order are not frozen. The tests retain
+all 16 historical identities, check the active eight against every retained
+facet, and reject #1076 credit even when a historical observation is supplied.
 
 ```sh
 DAR_PIVOT_SOURCE_ALIASES_REPORT=target/pivot-source-aliases-report.json \
 cargo +1.96.0 test --locked --workspace --no-fail-fast \
+  -p delta-arrow-reader-spark-sql \
   --test pivot_source_aliases --test window_names --test interval_qualifiers
+```
+
+
+## Single-value UNPIVOT NULL policy
+
+`unpivot-null-1076-spark.jsonl` contains 30 Spark 4.2.0 observations for default,
+EXCLUDE NULLS and INCLUDE NULLS over mixed, empty and all-NULL providers. It also
+covers accepted source/output aliases, renamed outputs, required inputs with
+field metadata and duplicate rows, and six analysis/parse errors. The original
+four default-mixed records remain in the two source-alias fixture files above.
+
+`unpivot-nullability-1076-spark.jsonl` adds eight observations for default and
+INCLUDE NULLS over mixed and empty providers whose `g` is required and `v` is
+nullable. Their `id`, `g` and `v` Fields have distinct source metadata. The
+source requests and thin capture drivers keep typed provider schemas and rows
+separate from captured outcomes. The mixed provider returns three rows by
+default and four with INCLUDE; both empty cases return no rows. Both drivers use `capture_spark_requests.py`
+and the maintained schema-stage and owned-JVM protocol.
+
+Default and EXCLUDE remove expanded rows whose value is NULL; INCLUDE retains
+them. Labels are nonnullable. Nullable source values stay nullable publicly and
+after logical optimization. Exclusion narrows the value only in the physical
+schema, including empty input. Required value inputs keep required outputs.
+Source id metadata survives; generated label/value metadata is empty. Duplicate
+input rows remain duplicate output rows.
+
+`unpivot_nulls.rs` replays all 42 source records at batch sizes 1 and 32,
+for 84 native contexts across both ANSI modes, two provider partitions and two
+target partitions. It compares complete
+public, analyzed, optimized and before/after-collect Fields, complete row
+multisets and returned-batch validity. The original producer records
+`frame.schema` in `expected.schema`; those bytes supply its public-stage
+comparison without changing the historical fixture format.
+
+All six error records require the captured cause, SQL/resolve phase, identical
+native planning/optimized errors, and no output Fields or rows. The missing
+column and missing-FOR cases use bounded native diagnostic equivalents; their
+raw shared-comparator differences remain visible in `UNPIVOT_OBSERVATION`.
+The incompatible INT/BOOLEAN error also requires the shared strict comparison.
+Negative controls reject unrelated error suffixes, wrong queries, missing or
+unexpected Fields and wrong phases. Native UNNEST padding, nullable filters
+and empty results retain their complete Fields and rows in plain and configured
+sessions before and after Spark UNPIVOT physical planning.
+
+Run these commands from `crates/delta-arrow-reader-spark-sql`. Recapture requires
+Python 3.12, the pinned PySpark 4.2.0 build and Java 21. Supply fresh output paths;
+the scripts refuse to overwrite existing captures.
+
+```sh
+python3.12 tests/fixtures/capture_unpivot_nulls_1076_spark.py --self-check
+python3.12 tests/fixtures/capture_unpivot_nullability_1076_spark.py --self-check
+TZ=UTC python3.12 tests/fixtures/capture_unpivot_nulls_1076_spark.py /tmp/unpivot-null-1076-spark.jsonl
+TZ=UTC python3.12 tests/fixtures/capture_unpivot_nullability_1076_spark.py /tmp/unpivot-nullability-1076-spark.jsonl
+cargo +1.96.0 test --locked --workspace --no-fail-fast \
+  -p delta-arrow-reader-spark-sql --test unpivot_nulls --test pivot_source_aliases
 ```
 
 ## Nested field expression names
@@ -2123,6 +2194,86 @@ python tests/fixtures/capture_nested_float_ordering_spark.py
 python tests/fixtures/capture_nested_window_frames_spark.py
 cargo test --locked --workspace --test nested_ordering --test nested_float_ordering --test nested_window_frames
 ```
+
+## Cast admission before NULL simplification
+
+`cast-admission-1098-cases.json` contains four original illegal CAST/TRY_CAST
+forms and eleven adjacent controls, each in both ANSI modes. The independent
+Spark 4.2.0 capture retains 30 complete observations and 32 provider readbacks.
+`capture_cast_admission_1098_spark.py` captures them without reading expected
+outputs; `cast-admission-1098-provenance.json` records its source/runtime hashes
+and owned JVM shutdown. These are fresh Linux observations. The original Mac
+illegal-cast raw records and their input manifest were unavailable; the recovered
+provider carrier does not independently prove those historical input bytes.
+
+`cast_admission.rs` requires the original four forms to fail in `plan_query`,
+before returning a query or analyzed Fields. Both ANSI modes, three string/binary
+representations and batches 1/32 cover 48 contexts and 192 provider readbacks.
+The error must retain the Spark condition, SQLSTATE and complete source/target
+types without echoing the original string or binary literals. Controls cover
+NULL parents, pruned CASE branches, renamed nested casts, valid NULL/empty
+Structs and numeric-to-timestamp scaling. Native DataFusion controls preserve
+identity elision and explicit target-Field validation and metadata.
+Registered Arrow Union columns retain their storage mode, type IDs and child
+types in rejection diagnostics, while omitting Field metadata. Required nested
+children and sorted Maps retain their rejecting constraints, so distinct source
+and target types remain distinguishable.
+Diagnostic field names use escaped identifiers, so a name containing type
+punctuation stays distinct from multiple fields.
+A positive TRY_CAST control distinguishes its broader Arrow admission from
+ordinary native CAST. It preserves the existing native behavior without claiming
+Spark compatibility for that extra pair.
+
+Four legal controls remain strict analyzed-nullability differences, retained
+with their complete pre-fix observations in
+`cast-admission-1098-native-controls.json`: NAMED_STRUCT under
+[#766](https://github.com/mag1cfrog/delta-arrow-reader/issues/766) and floating
+TIMESTAMP casts under
+[#1139](https://github.com/mag1cfrog/delta-arrow-reader/issues/1139).
+Their values and optimized/executed Fields match Spark. Exact conservation of
+these controls prevents a new regression; it does not establish Spark parity.
+
+## Offset-window result Fields
+
+`offset-window-fields-1044-spark.jsonl` records 94 independent Spark cases.
+`offset_window_fields.rs` checks both ANSI modes and batches 1/32, with 120
+strictly matching contexts and 68 separately owned native gaps retained as exact
+profiles. Complete available Fields are checked against Spark before those
+profiles are considered. The source request and capture script live beside the
+fixture; the Boolean codec check preserves literal strings and provider inputs.
+
+`offset-window-default-coercion-1044-spark.jsonl` adds 92 independent records
+using the same six providers. The test requires 184 contexts: 164 strict matches
+and 20 exact native profiles. The retained controls belong to
+[#1119](https://github.com/mag1cfrog/delta-arrow-reader/issues/1119) for untyped-NULL
+admission, [#1124](https://github.com/mag1cfrog/delta-arrow-reader/issues/1124) for
+Decimal error conditions, and
+[#1057](https://github.com/mag1cfrog/delta-arrow-reader/issues/1057) for Timestamp
+error conditions. Diagnostic profiles still require every available Spark Field
+and the exact native error, phase and optimizer cause. They cannot accept a
+nonliteral-default error that hides a temporal conversion failure.
+
+`capture_offset_default_coercion_1044_spark.py` validates the source request
+before capturing it. The shared codec distinguishes Boolean and Timestamp
+outputs from literal strings and provider inputs. Raw capture headers retain
+the paths and hashes used for that capture. When changing a producer or codec,
+keep historical captures unchanged and record any fresh capture with its own
+source and runtime provenance.
+
+`window_names.rs` compares the six original `literal_arguments` records in
+`window-name-stages-spark.jsonl` with Spark 4.2.0 revision
+`32f7299601108917fb01920a54e084595b7b3bf8`. Both ANSI modes and batch sizes 1/32
+check analyzed, optimized, before collection and executed schemas. The raw
+references stay unchanged, and their required LAG Fields have no nullability
+allowance.
+
+LAG/LEAD result Fields are required only when the payload and explicit default
+are both required. A nullable payload, nullable default or omitted default keeps
+the result nullable. The Spark field adapter reads current argument Fields, so
+folding can tighten the optimized declaration while retaining the native result
+type and nested Fields. The existing metadata rule still applies. Evaluation
+and native DataFusion SQL keep their existing path; offset/frame admission and
+default error policies retain their separate controls.
 
 ## Derived window metadata
 
@@ -2479,11 +2630,30 @@ its historical 888-match result. The index fixtures `regexp-extract-index-curren
 `regexp-extract-index-native-stages.json` retain those historical objects and
 source attributions. The separate literal
 preparation supplement checks 46 SQL/ANSI cases in 276 query contexts and 552
-provider receipts, with 204 strict matches and 72 complete native regression
-controls. Those controls include local VALUES group failures tracked by #1049,
-which remains required before #1036/#788 can close. Preserved differences receive
-no Spark-match credit. These focused results do not establish full C06 acceptance
-or complete raw diagnostic parity; `full_compatibility_pass` remains false.
+provider receipts. The authenticated `f69b1cb1` capture has 228 strict Spark
+matches and 48 remaining differences: 36 physical-schema differences, six
+phase/diagnostic/availability differences and six status/row differences.
+
+All 72 historical native controls remain unchanged. The separate
+`regexp-extract-literal-preparation-current-native.jsonl` fixture copies 30
+complete native objects from product `f69b1cb1`, execution `84818105`, and its
+archived full-276 executable: 24 newly strict local VALUES group-error contexts
+and six Legacy NaN contexts with the observed internal aliased input plan. Its
+SHA-256 is `9a613f2e6128ccd8cf77114381e3f4ca48b815f0225dc466056f97a4fe412025`.
+The original consumer uses those 30 current objects and the other 42 historical
+objects as exact whole-object controls. The selected local-producer consumer
+checks all 132 contexts and 324 provider receipts, with 126 strict matches and
+six explicit physical-schema differences using the same current NaN objects.
+Both consumers retain independent Spark facet checks alongside the native
+controls. Native Fields, plans and diagnostics come from the actual capture.
+
+These measured #1049 gains replace the historical pending group-error outcomes.
+Remaining differences receive no Spark-match credit. Source faults, restored
+passes, complete regression gates and final review are required before #1049
+readiness. The archived full-276 capture exited 101 against the obsolete grade;
+both repaired consumers still require passing runs. These focused results do not
+establish full C06 acceptance or complete raw diagnostic parity;
+`full_compatibility_pass` remains false.
 
 The main capture includes 74 controls beside the index corpus: 32 selection,
 six async, 24 NoFold and 12 alias observations. The 62 native-only callback
@@ -4201,9 +4371,10 @@ against `date-range-747-spark.jsonl`. A reference refresh must also update the
 owner controls' reference records, while preserving their native observations
 and the separate native control file.
 
-`date_range_frames.rs` requires 984 primary comparisons at batch sizes 1 and 32
-with two target partitions, including 12 TIMESTAMP control contexts. It also
-replays the exact original query and frame consumers separately in 108 contexts.
+`date_range_frames.rs` requires 1012 primary comparisons at batch sizes 1 and 32
+with two target partitions, including 28 explicit-NULL-offset and 12 TIMESTAMP
+control contexts. It also replays the exact original query and frame consumers
+separately in 108 contexts.
 All five schema stages retain complete names, types, nullability and metadata
 when available. Failures retain the condition, phase and available Fields;
 ordered queries retain raw output order, and unordered comparisons preserve
@@ -4214,10 +4385,159 @@ matching order reuses it, while opposite DATE order requires a sort.
 
 `date-range-747-prior-owner-controls.json` freezes 112 complete earlier DAR
 observations: 28 explicit-NULL-offset contexts under #754 and 84 DATE interval
-contexts under #749/#947. The test requires their prior profiles to remain
-unchanged, including existing Spark differences assigned to those issues. Only
-raw row order for unordered SQL may be canonicalized; Fields, causes, phases and
-row multiplicity stay fixed. `date-range-747-prior-native-controls.json` preserves
-six native SQL control pairs for DATE intervals, TIMESTAMP intervals and INT
-keys at both batch sizes, comparing configured and unconfigured sessions with
-their frozen complete observations.
+contexts under #749/#947. This file and the source manifest's ownership labels
+and `primary_record_count` retain their capture-time meaning. The replay compares
+all 28 NULL-offset contexts strictly with Spark and requires the 84 active interval
+profiles to stay unchanged. The historical NULL native observations remain as
+capture history, rather than current runtime expectations. Only raw row order for
+unordered SQL may be canonicalized; Fields, causes, phases and row multiplicity
+stay fixed.
+`date-range-747-prior-native-controls.json` preserves six native SQL control pairs
+for DATE intervals, TIMESTAMP intervals and INT keys at both batch sizes, comparing
+configured and unconfigured sessions with their frozen complete observations.
+
+### Explicit NULL RANGE bounds
+
+`null-range-754-cases.json` contains the 14 original DATE NULL-offset requests and
+568 supplementary requests. The source inventory has 582 unique corpus/ID/ANSI
+identities and 24 ordered queries. Providers, SQL, ANSI flags and ordering flags
+come from this source-only file. The capture validates the original requests
+against the sibling `date-range-747-cases.json`; historical absolute paths in its
+provenance metadata are not opened.
+
+Use the Python, Java and Spark revision specified above:
+
+```sh
+python3 tests/fixtures/capture_null_range_754_spark.py --self-check
+null_range_capture_dir="$(mktemp -d)"
+TZ=UTC PYTHONDONTWRITEBYTECODE=1 \
+  python3 tests/fixtures/capture_null_range_754_spark.py \
+  "$null_range_capture_dir/null-range-754-spark.jsonl"
+cargo +1.96.0 test --workspace --no-fail-fast --locked \
+  --test null_range_frames -- --nocapture --test-threads=1
+```
+
+The self-check validates the source inventory and exercises the shared capture
+protocol with fake objects, without importing Spark or starting a JVM. A capture
+requires fresh output and lifecycle paths, rejects an existing gateway and records
+registered provider schemas and source rows. It captures each of the five schema
+stages when available, structured error causes and phases, raw ordered rows and
+row multisets. It shuts
+down and reaps its owned JVM; cleanup failure makes the capture fail.
+
+`null_range_frames.rs` replays all 1164 case/batch contexts with batch sizes 1 and
+32, two provider partitions and two target partitions. It prints every native
+observation before asserting differences. Complete public, analyzed, optimized
+and physical Fields are required when available; unavailable error stages remain
+explicit. Ordered queries compare raw sequences, and unordered queries retain
+duplicate rows. It requires 1156 strict Spark comparisons, including the eight
+bare-NULL ROWS contexts, and eight explicit typed-NULL ROWS rejections described
+below. The original eight nonempty Spark records remain unchanged. The 16 old
+native profiles in `null-range-754-prior-rows-rejections.json` remain checked as
+historical evidence; the current replay no longer requires their generic error.
+
+`null-range-754-boundary-cases.json` and `null-range-754-boundary-spark.jsonl`
+retain eight ordered inline-VALUES queries in both ANSI modes. Their separate
+32-context replay checks FLOAT/DOUBLE Infinity and NaN targets and Decimal38
+extremes, including complete schema stages and exact ordered rows. Every boundary
+context requires strict Spark agreement.
+
+The capture script records both source files in one run, for 598 observations.
+Compare each corpus with its corresponding checked-in reference before
+refreshing it. Preserve the original source metadata, historical native profiles
+and separate native controls.
+
+### NULL ROWS bound admission
+
+`null-rows-1085-cases.json` supplies 46 SQL texts in both ANSI modes, including
+copies of the eight original nonempty requests above. The other 84 requests
+cover empty input, paired bounds, typed and folded NULL expressions, opposite
+PRECEDING/FOLLOWING directions, and function-specific frame and ordering checks.
+The source-only driver reuses the shared capture protocol and the original
+matching-schema empty and 78-row providers. The separate
+`null-rows-1085-string-partner-*` source/reference pair adds four SQL texts and
+eight observations. They establish that a bare lower NULL reports lower DOUBLE
+before an invalid STRING upper can cast, and a typed INT NULL lower reports the
+upper STRING type error. Both errors occur during SQL analysis with no Fields.
+
+`null-rows-1085-spark.jsonl` retains all 92 independent observations: 72 fail during
+SQL analysis with no available Fields; ten nonempty typed-INT-NULL requests fail
+during collection with `INTERNAL_ERROR` and all five Fields available; ten empty
+typed-INT-NULL requests succeed with zero rows and all five Fields available.
+These empty successes are part of the Spark reference.
+
+The native planner reports the bare-NULL type error with its actual lower or
+upper location: PRECEDING NULL has source type DOUBLE, while FOLLOWING NULL has
+source type VOID. Both bound types and invalid UNBOUNDED sides take precedence
+over the intentional typed-INT-NULL rejection. That rejection is
+`External error: not supported: NULL ROWS frame lower bound` or the corresponding
+`upper bound` message, during resolution with no available Fields. It applies to
+empty and nonempty input. The native planner does not reproduce Spark's internal
+failure or its empty typed-NULL result.
+
+```sh
+python3.12 tests/fixtures/capture_null_rows_1085_spark.py --self-check
+python3.12 tests/fixtures/capture_null_rows_1085_string_partner_spark.py --self-check
+null_rows_capture_dir="$(mktemp -d)"
+TZ=UTC PYTHONDONTWRITEBYTECODE=1 \
+  python3.12 tests/fixtures/capture_null_rows_1085_spark.py \
+  "$null_rows_capture_dir/null-rows-1085-spark.jsonl"
+TZ=UTC PYTHONDONTWRITEBYTECODE=1 \
+  python3.12 tests/fixtures/capture_null_rows_1085_string_partner_spark.py \
+  "$null_rows_capture_dir/null-rows-1085-string-partner-spark.jsonl"
+cargo +1.96.0 test --workspace --no-fail-fast --locked \
+  --test null_rows_frames --test null_range_frames -- --nocapture --test-threads=1
+```
+
+`null_rows_frames.rs` replays all 200 native contexts at batch sizes 1 and 32,
+with two provider and target partitions. It requires 160 Spark admission
+agreements and 40 intentional typed-NULL differences, checking exact native
+diagnostics, phase, and every unavailable Field and row observation. Of the 160
+admission agreements, 144 satisfy the generic strict Spark comparator. The other
+16 retain the existing ROW_NUMBER and LAG diagnostic aliases:
+`WINDOW_FRAME_MISMATCH` and `WINDOW_OFFSET_FRAME_MISMATCH` for Spark's
+`_LEGACY_ERROR_TEMP_1036` and `_LEGACY_ERROR_TEMP_1035`. The raw comparator flags
+and the explicit admission agreements are printed separately.
+The test also rejects wrong types, locations and messages, later failures,
+returned empty rows, lost observations and observer failures. Native
+`SessionContext::sql` controls and a lower-bound conversion failure check protect
+the existing planner and evaluation order.
+
+### Signed-integer RANGE bounds
+
+`finite-range-1086-cases.json` and `finite-range-1086-spark.jsonl` contain 188
+SQL/ANSI contexts, including the original 16 finite numeric controls. The separate
+`finite-range-1086-limited-*` pair contains eight contexts for matching-order
+LIMIT 1 and LIMIT 0 behavior. The `finite-range-1086-narrowing-*` pair adds 24
+contexts for the six signed narrowing pairs with special and expression endpoints.
+The `finite-range-1086-zero-current-*` pair adds 30 contexts for zero expressions
+with CURRENT ROW, shorthand frames and narrowing that wraps an offset to zero.
+Source files supply SQL and providers; every outcome comes from the pinned Spark
+runtime specified above.
+
+```sh
+python3 tests/fixtures/capture_finite_range_1086_spark.py --self-check
+python3 tests/fixtures/capture_finite_range_1086_limited_spark.py --self-check
+python3 tests/fixtures/capture_finite_range_1086_narrowing_spark.py --self-check
+python3 tests/fixtures/capture_finite_range_1086_zero_current_spark.py --self-check
+finite_range_capture_dir="$(mktemp -d)"
+TZ=UTC PYTHONDONTWRITEBYTECODE=1 \
+  python3 tests/fixtures/capture_finite_range_1086_spark.py \
+  "$finite_range_capture_dir/finite-range-1086-spark.jsonl"
+cargo +1.96.0 test --workspace --no-fail-fast --locked \
+  --test finite_range_frames --test native_window_frame_state \
+  --test linear_window_completion -- --nocapture --test-threads=1
+```
+
+Use the limited, narrowing and zero/current capture scripts with fresh output
+paths to refresh their corresponding JSONL files. All four wrappers reuse the existing capture
+protocol, including five schema stages, actual settings, complete error causes,
+ordered raw rows, duplicate-preserving multisets and owned-JVM cleanup.
+
+`finite_range_frames.rs` observes all 500 case/batch contexts at batch sizes 1 and
+32 with two target partitions before asserting differences. Registered providers
+use two partitions. It checks
+every available Field, unavailable stage and recorded result, including nested
+member-ID arrays. A native panic remains a failed observation and does not stop
+the remaining captures. Keep the original 188/8/24 references and historical
+native observations unchanged when extending the separate zero/current inventory.

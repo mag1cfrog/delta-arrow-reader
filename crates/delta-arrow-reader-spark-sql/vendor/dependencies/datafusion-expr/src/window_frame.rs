@@ -1,3 +1,4 @@
+// Modified for the DAR Spark SQL runtime. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -27,6 +28,7 @@ use crate::{expr::Sort, lit};
 use std::fmt::{self, Formatter};
 use std::hash::Hash;
 
+use arrow::datatypes::DataType;
 use datafusion_common::{Result, ScalarValue, plan_err};
 #[cfg(feature = "sql")]
 use sqlparser::ast::{self, ValueWithSpan};
@@ -90,6 +92,19 @@ pub struct WindowFrame {
     ///                +--------------+
     /// ```
     causal: bool,
+    /// Arithmetic selected by the admitted frame's producer.
+    range_offset_arithmetic: RangeOffsetArithmetic,
+}
+
+/// Arithmetic for finite RANGE offsets; native construction retains DataFusion semantics.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Hash)]
+pub enum RangeOffsetArithmetic {
+    DataFusion,
+    /// Spark integers honor ANSI, Date32 adds wrap, and decimal targets widen.
+    /// Floating targets use Spark NaN and signed-zero comparison semantics.
+    Spark {
+        ansi_mode: bool,
+    },
 }
 
 impl fmt::Display for WindowFrame {
@@ -107,10 +122,20 @@ impl fmt::Debug for WindowFrame {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "WindowFrame {{ units: {:?}, start_bound: {:?}, end_bound: {:?}, is_causal: {:?} }}",
-            self.units, self.start_bound, self.end_bound, self.causal
+            "WindowFrame {{ units: {:?}, start_bound: {:?}, end_bound: {:?}, is_causal: {:?}",
+            self.units,
+            self.start_bound,
+            self.end_bound,
+            self.is_causal()
         )?;
-        Ok(())
+        if self.range_offset_arithmetic != RangeOffsetArithmetic::DataFusion {
+            write!(
+                f,
+                ", range_offset_arithmetic: {:?}",
+                self.range_offset_arithmetic
+            )?;
+        }
+        f.write_str(" }")
     }
 }
 
@@ -161,6 +186,7 @@ impl WindowFrame {
                 start_bound: WindowFrameBound::Preceding(ScalarValue::UInt64(None)),
                 end_bound: WindowFrameBound::CurrentRow,
                 causal: strict,
+                range_offset_arithmetic: RangeOffsetArithmetic::DataFusion,
             }
         } else {
             // This window frame covers the whole table (or partition if `PARTITION BY`
@@ -171,6 +197,7 @@ impl WindowFrame {
                 start_bound: WindowFrameBound::Preceding(ScalarValue::UInt64(None)),
                 end_bound: WindowFrameBound::Following(ScalarValue::UInt64(None)),
                 causal: false,
+                range_offset_arithmetic: RangeOffsetArithmetic::DataFusion,
             }
         }
     }
@@ -180,29 +207,79 @@ impl WindowFrame {
     /// `2 ROWS PRECEDING AND 3 ROWS FOLLOWING`
     pub fn reverse(&self) -> Self {
         let start_bound = match &self.end_bound {
-            WindowFrameBound::Preceding(value) => {
-                WindowFrameBound::Following(value.clone())
-            }
-            WindowFrameBound::Following(value) => {
-                WindowFrameBound::Preceding(value.clone())
-            }
+            WindowFrameBound::Preceding(value) => WindowFrameBound::Following(value.clone()),
+            WindowFrameBound::Following(value) => WindowFrameBound::Preceding(value.clone()),
             WindowFrameBound::CurrentRow => WindowFrameBound::CurrentRow,
+            WindowFrameBound::PrecedingNullOffset(data_type) => {
+                WindowFrameBound::FollowingNullOffset(data_type.clone())
+            }
+            WindowFrameBound::FollowingNullOffset(data_type) => {
+                WindowFrameBound::PrecedingNullOffset(data_type.clone())
+            }
         };
         let end_bound = match &self.start_bound {
-            WindowFrameBound::Preceding(value) => {
-                WindowFrameBound::Following(value.clone())
-            }
-            WindowFrameBound::Following(value) => {
-                WindowFrameBound::Preceding(value.clone())
-            }
+            WindowFrameBound::Preceding(value) => WindowFrameBound::Following(value.clone()),
+            WindowFrameBound::Following(value) => WindowFrameBound::Preceding(value.clone()),
             WindowFrameBound::CurrentRow => WindowFrameBound::CurrentRow,
+            WindowFrameBound::PrecedingNullOffset(data_type) => {
+                WindowFrameBound::FollowingNullOffset(data_type.clone())
+            }
+            WindowFrameBound::FollowingNullOffset(data_type) => {
+                WindowFrameBound::PrecedingNullOffset(data_type.clone())
+            }
         };
-        Self::new_bounds(self.units, start_bound, end_bound)
+        let mut reversed = Self::new_bounds(self.units, start_bound, end_bound);
+        reversed.range_offset_arithmetic = self.range_offset_arithmetic;
+        reversed
     }
 
     /// Get whether window frame is causal
     pub fn is_causal(&self) -> bool {
-        self.causal
+        self.causal && !self.has_nonzero_spark_integer_range_offset()
+    }
+
+    /// Whether either endpoint is an explicit NULL offset rather than unbounded.
+    pub fn has_null_offset(&self) -> bool {
+        self.start_bound.is_null_offset() || self.end_bound.is_null_offset()
+    }
+
+    /// Whether Spark arithmetic applies to a finite nonzero signed RANGE offset.
+    /// These offsets cannot use native causality, reversal or ordering proofs.
+    pub fn has_nonzero_spark_integer_range_offset(&self) -> bool {
+        self.units == WindowFrameUnits::Range
+            && matches!(
+                self.range_offset_arithmetic,
+                RangeOffsetArithmetic::Spark { .. }
+            )
+            && [&self.start_bound, &self.end_bound]
+                .iter()
+                .any(|bound| match bound {
+                    WindowFrameBound::Preceding(value) | WindowFrameBound::Following(value) => {
+                        match value {
+                            ScalarValue::Int8(Some(0))
+                            | ScalarValue::Int16(Some(0))
+                            | ScalarValue::Int32(Some(0))
+                            | ScalarValue::Int64(Some(0)) => false,
+                            ScalarValue::Int8(Some(_))
+                            | ScalarValue::Int16(Some(_))
+                            | ScalarValue::Int32(Some(_))
+                            | ScalarValue::Int64(Some(_)) => true,
+                            _ => false,
+                        }
+                    }
+                    _ => false,
+                })
+    }
+
+    /// Select finite RANGE arithmetic after the producer has admitted the frame.
+    pub fn with_range_offset_arithmetic(mut self, arithmetic: RangeOffsetArithmetic) -> Self {
+        self.range_offset_arithmetic = arithmetic;
+        self
+    }
+
+    /// Arithmetic selected by the producer for finite RANGE offsets.
+    pub fn range_offset_arithmetic(&self) -> RangeOffsetArithmetic {
+        self.range_offset_arithmetic
     }
 
     /// Initializes window frame from units (type), start bound and end bound.
@@ -211,37 +288,40 @@ impl WindowFrame {
         start_bound: WindowFrameBound,
         end_bound: WindowFrameBound,
     ) -> Self {
-        let causal = match units {
-            WindowFrameUnits::Rows => match &end_bound {
-                WindowFrameBound::Following(value) => {
-                    if value.is_null() {
-                        // Unbounded following
-                        false
-                    } else {
-                        let zero = ScalarValue::new_zero(&value.data_type());
-                        zero.map(|zero| value.eq(&zero)).unwrap_or(false)
+        let causal = !start_bound.is_null_offset()
+            && !end_bound.is_null_offset()
+            && match units {
+                WindowFrameUnits::Rows => match &end_bound {
+                    WindowFrameBound::Following(value) => {
+                        if value.is_null() {
+                            // Unbounded following
+                            false
+                        } else {
+                            let zero = ScalarValue::new_zero(&value.data_type());
+                            zero.map(|zero| value.eq(&zero)).unwrap_or(false)
+                        }
                     }
-                }
-                _ => true,
-            },
-            WindowFrameUnits::Range | WindowFrameUnits::Groups => match &end_bound {
-                WindowFrameBound::Preceding(value) => {
-                    if value.is_null() {
-                        // Unbounded preceding
-                        true
-                    } else {
-                        let zero = ScalarValue::new_zero(&value.data_type());
-                        zero.map(|zero| value.gt(&zero)).unwrap_or(false)
+                    _ => true,
+                },
+                WindowFrameUnits::Range | WindowFrameUnits::Groups => match &end_bound {
+                    WindowFrameBound::Preceding(value) => {
+                        if value.is_null() {
+                            // Unbounded preceding
+                            true
+                        } else {
+                            let zero = ScalarValue::new_zero(&value.data_type());
+                            zero.map(|zero| value.gt(&zero)).unwrap_or(false)
+                        }
                     }
-                }
-                _ => false,
-            },
-        };
+                    _ => false,
+                },
+            };
         Self {
             units,
             start_bound,
             end_bound,
             causal,
+            range_offset_arithmetic: RangeOffsetArithmetic::DataFusion,
         }
     }
 
@@ -326,13 +406,29 @@ pub enum WindowFrameBound {
     /// 5. UNBOUNDED FOLLOWING
     ///    The frame boundary is the last row in the partition.
     Following(ScalarValue),
+    /// An explicit NULL PRECEDING offset in a RANGE frame. The payload is the
+    /// admitted/coerced offset type; its comparison target uses the ORDER BY key type.
+    PrecedingNullOffset(DataType),
+    /// An explicit NULL FOLLOWING offset in a RANGE frame, with the admitted/coerced
+    /// offset type. Legacy `Following(NULL)` remains UNBOUNDED FOLLOWING.
+    FollowingNullOffset(DataType),
 }
 
 impl WindowFrameBound {
+    /// Whether this is an explicit NULL RANGE offset, not a native unbounded sentinel.
+    pub fn is_null_offset(&self) -> bool {
+        matches!(
+            self,
+            Self::PrecedingNullOffset(_) | Self::FollowingNullOffset(_)
+        )
+    }
+
     pub fn is_unbounded(&self) -> bool {
         match self {
             WindowFrameBound::Preceding(elem) => elem.is_null(),
-            WindowFrameBound::CurrentRow => false,
+            WindowFrameBound::CurrentRow
+            | WindowFrameBound::PrecedingNullOffset(_)
+            | WindowFrameBound::FollowingNullOffset(_) => false,
             WindowFrameBound::Following(elem) => elem.is_null(),
         }
     }
@@ -340,23 +436,16 @@ impl WindowFrameBound {
 
 impl WindowFrameBound {
     #[cfg(feature = "sql")]
-    fn try_parse(
-        value: ast::WindowFrameBound,
-        units: &ast::WindowFrameUnits,
-    ) -> Result<Self> {
+    fn try_parse(value: ast::WindowFrameBound, units: &ast::WindowFrameUnits) -> Result<Self> {
         Ok(match value {
             ast::WindowFrameBound::Preceding(Some(v)) => {
                 Self::Preceding(convert_frame_bound_to_scalar_value(*v, units)?)
             }
-            ast::WindowFrameBound::Preceding(None) => {
-                Self::Preceding(ScalarValue::UInt64(None))
-            }
+            ast::WindowFrameBound::Preceding(None) => Self::Preceding(ScalarValue::UInt64(None)),
             ast::WindowFrameBound::Following(Some(v)) => {
                 Self::Following(convert_frame_bound_to_scalar_value(*v, units)?)
             }
-            ast::WindowFrameBound::Following(None) => {
-                Self::Following(ScalarValue::UInt64(None))
-            }
+            ast::WindowFrameBound::Following(None) => Self::Following(ScalarValue::UInt64(None)),
             ast::WindowFrameBound::CurrentRow => Self::CurrentRow,
         })
     }
@@ -443,6 +532,8 @@ impl fmt::Display for WindowFrameBound {
                 }
             }
             WindowFrameBound::CurrentRow => f.write_str("CURRENT ROW"),
+            WindowFrameBound::PrecedingNullOffset(_) => f.write_str("NULL PRECEDING"),
+            WindowFrameBound::FollowingNullOffset(_) => f.write_str("NULL FOLLOWING"),
             WindowFrameBound::Following(n) => {
                 if n.is_null() {
                     f.write_str("UNBOUNDED FOLLOWING")
@@ -524,9 +615,9 @@ mod tests {
 
         let window_frame = ast::WindowFrame {
             units: ast::WindowFrameUnits::Rows,
-            start_bound: ast::WindowFrameBound::Preceding(Some(Box::new(
-                ast::Expr::value(ast::Value::Number("2".to_string(), false)),
-            ))),
+            start_bound: ast::WindowFrameBound::Preceding(Some(Box::new(ast::Expr::value(
+                ast::Value::Number("2".to_string(), false),
+            )))),
             end_bound: Some(ast::WindowFrameBound::Preceding(Some(Box::new(
                 ast::Expr::value(ast::Value::Number("1".to_string(), false)),
             )))),

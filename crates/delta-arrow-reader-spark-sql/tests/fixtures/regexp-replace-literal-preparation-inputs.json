@@ -1,0 +1,508 @@
+{
+  "settings": {
+    "spark.sql.session.timeZone": "UTC",
+    "spark.sql.adaptive.enabled": "false",
+    "spark.sql.shuffle.partitions": "1",
+    "spark.sql.caseSensitive": "false",
+    "spark.sql.parser.escapedStringLiterals": "false",
+    "spark.sql.variable.substitute": "false"
+  },
+  "providers": [
+    {
+      "name": "rr789_required",
+      "fields": [
+        {
+          "name": "k",
+          "type": "integer",
+          "nullable": false,
+          "metadata": {
+            "column": "k",
+            "source": "789-shared-substitution"
+          }
+        },
+        {
+          "name": "s",
+          "type": "string",
+          "nullable": false,
+          "metadata": {
+            "column": "s",
+            "source": "789-shared-substitution"
+          }
+        },
+        {
+          "name": "re",
+          "type": "string",
+          "nullable": false,
+          "metadata": {
+            "column": "re",
+            "source": "789-shared-substitution"
+          }
+        },
+        {
+          "name": "replacement",
+          "type": "string",
+          "nullable": false,
+          "metadata": {
+            "column": "replacement",
+            "source": "789-shared-substitution"
+          }
+        }
+      ],
+      "rows": [
+        [
+          "0",
+          "ab",
+          "(?<x>a)(b)",
+          "${x}-$2"
+        ],
+        [
+          "1",
+          "a",
+          "(a)",
+          "${missing}"
+        ],
+        [
+          "2",
+          "abc",
+          "z",
+          "${missing}"
+        ],
+        [
+          "3",
+          "b",
+          "(?<x>a)?(b)",
+          "${x}/$2"
+        ],
+        [
+          "4",
+          "",
+          "(a)",
+          "${missing}"
+        ],
+        [
+          "5",
+          "a",
+          "(a)",
+          "$1"
+        ]
+      ]
+    },
+    {
+      "name": "rr789_nullable",
+      "fields": [
+        {
+          "name": "k",
+          "type": "integer",
+          "nullable": false,
+          "metadata": {
+            "column": "k",
+            "source": "789-shared-substitution"
+          }
+        },
+        {
+          "name": "s",
+          "type": "string",
+          "nullable": true,
+          "metadata": {
+            "column": "s",
+            "source": "789-shared-substitution"
+          }
+        },
+        {
+          "name": "re",
+          "type": "string",
+          "nullable": true,
+          "metadata": {
+            "column": "re",
+            "source": "789-shared-substitution"
+          }
+        },
+        {
+          "name": "replacement",
+          "type": "string",
+          "nullable": true,
+          "metadata": {
+            "column": "replacement",
+            "source": "789-shared-substitution"
+          }
+        }
+      ],
+      "rows": [
+        [
+          "0",
+          null,
+          "(a)",
+          "${missing}"
+        ],
+        [
+          "1",
+          "a",
+          null,
+          "${missing}"
+        ],
+        [
+          "2",
+          "a",
+          "(a)",
+          null
+        ],
+        [
+          "3",
+          "ab",
+          "(?<x>a)(b)",
+          "${x}-$2"
+        ]
+      ]
+    },
+    {
+      "name": "rr_utf16_empty",
+      "fields": [
+        {
+          "name": "k",
+          "type": "integer",
+          "nullable": false,
+          "metadata": {}
+        },
+        {
+          "name": "s",
+          "type": "string",
+          "nullable": true,
+          "metadata": {}
+        },
+        {
+          "name": "re",
+          "type": "string",
+          "nullable": true,
+          "metadata": {}
+        },
+        {
+          "name": "replacement",
+          "type": "string",
+          "nullable": true,
+          "metadata": {}
+        }
+      ],
+      "rows": []
+    }
+  ],
+  "cases": [
+    {
+      "id": "disabled_undefined_regexp_replace_literal_bad_named_group",
+      "sql": "SELECT regexp_replace('a','(a)','${missing}') AS r",
+      "ansi": true,
+      "original_id": "regexp_replace_literal_bad_named_group",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      },
+      "timezone": "UTC"
+    },
+    {
+      "id": "disabled_undefined_regexp_replace_literal_bad_named_group",
+      "sql": "SELECT regexp_replace('a','(a)','${missing}') AS r",
+      "ansi": false,
+      "original_id": "regexp_replace_literal_bad_named_group",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      },
+      "timezone": "UTC"
+    },
+    {
+      "id": "disabled_undefined_provider_missing_group",
+      "sql": "SELECT k,replacement,regexp_replace(s,re,replacement) AS r FROM rr789_required WHERE k=1 ORDER BY k",
+      "ansi": true,
+      "original_id": "provider_missing_group",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      },
+      "timezone": "UTC"
+    },
+    {
+      "id": "disabled_undefined_provider_missing_group",
+      "sql": "SELECT k,replacement,regexp_replace(s,re,replacement) AS r FROM rr789_required WHERE k=1 ORDER BY k",
+      "ansi": false,
+      "original_id": "provider_missing_group",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      },
+      "timezone": "UTC"
+    },
+    {
+      "id": "disabled_defined_regexp_replace_literal_bad_named_group",
+      "sql": "SELECT regexp_replace('a','(a)','${missing}') AS r",
+      "ansi": true,
+      "original_id": "regexp_replace_literal_bad_named_group",
+      "settings": {
+        "spark.sql.variable.substitute": "false",
+        "x": "CONFIG_X",
+        "missing": "CONFIG_MISSING"
+      },
+      "timezone": "UTC"
+    },
+    {
+      "id": "disabled_defined_regexp_replace_literal_bad_named_group",
+      "sql": "SELECT regexp_replace('a','(a)','${missing}') AS r",
+      "ansi": false,
+      "original_id": "regexp_replace_literal_bad_named_group",
+      "settings": {
+        "spark.sql.variable.substitute": "false",
+        "x": "CONFIG_X",
+        "missing": "CONFIG_MISSING"
+      },
+      "timezone": "UTC"
+    },
+    {
+      "id": "defined_invalid_replacement_group",
+      "sql": "SELECT regexp_replace('a','(a)','${dar789.replacement}') AS r",
+      "ansi": true,
+      "settings": {
+        "spark.sql.variable.substitute": "true",
+        "dar789.replacement": "$9"
+      },
+      "timezone": "UTC"
+    },
+    {
+      "id": "defined_invalid_replacement_group",
+      "sql": "SELECT regexp_replace('a','(a)','${dar789.replacement}') AS r",
+      "ansi": false,
+      "settings": {
+        "spark.sql.variable.substitute": "true",
+        "dar789.replacement": "$9"
+      },
+      "timezone": "UTC"
+    },
+    {
+      "id": "replacement_prepare_reached_case",
+      "sql": "SELECT CASE WHEN true THEN regexp_replace('a','(a)','$9') ELSE 'ok' END AS r",
+      "ansi": true,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      }
+    },
+    {
+      "id": "replacement_prepare_reached_case",
+      "sql": "SELECT CASE WHEN true THEN regexp_replace('a','(a)','$9') ELSE 'ok' END AS r",
+      "ansi": false,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      }
+    },
+    {
+      "id": "replacement_prepare_dead_case",
+      "sql": "SELECT CASE WHEN false THEN regexp_replace('a','(a)','$9') ELSE 'ok' END AS r",
+      "ansi": true,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      }
+    },
+    {
+      "id": "replacement_prepare_dead_case",
+      "sql": "SELECT CASE WHEN false THEN regexp_replace('a','(a)','$9') ELSE 'ok' END AS r",
+      "ansi": false,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      }
+    },
+    {
+      "id": "replacement_prepare_dead_named_case",
+      "sql": "SELECT CASE WHEN false THEN regexp_replace('a','(a)','${missing}') ELSE 'ok' END AS r",
+      "ansi": true,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      }
+    },
+    {
+      "id": "replacement_prepare_dead_named_case",
+      "sql": "SELECT CASE WHEN false THEN regexp_replace('a','(a)','${missing}') ELSE 'ok' END AS r",
+      "ansi": false,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      }
+    },
+    {
+      "id": "replacement_prepare_where_false",
+      "sql": "SELECT regexp_replace('a','(a)','$9') AS r WHERE false",
+      "ansi": true,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      }
+    },
+    {
+      "id": "replacement_prepare_where_false",
+      "sql": "SELECT regexp_replace('a','(a)','$9') AS r WHERE false",
+      "ansi": false,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      }
+    },
+    {
+      "id": "replacement_prepare_outer_limit_zero",
+      "sql": "SELECT regexp_replace('a','(a)','$9') AS r LIMIT 0",
+      "ansi": true,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      }
+    },
+    {
+      "id": "replacement_prepare_outer_limit_zero",
+      "sql": "SELECT regexp_replace('a','(a)','$9') AS r LIMIT 0",
+      "ansi": false,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      }
+    },
+    {
+      "id": "replacement_prepare_values_plain",
+      "sql": "SELECT regexp_replace('a','(a)','$9') AS r FROM VALUES(1) AS t(k)",
+      "ansi": true,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      }
+    },
+    {
+      "id": "replacement_prepare_values_plain",
+      "sql": "SELECT regexp_replace('a','(a)','$9') AS r FROM VALUES(1) AS t(k)",
+      "ansi": false,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      }
+    },
+    {
+      "id": "replacement_prepare_values_outer_limit_zero",
+      "sql": "SELECT regexp_replace('a','(a)','$9') AS r FROM VALUES(1) AS t(k) LIMIT 0",
+      "ansi": true,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      }
+    },
+    {
+      "id": "replacement_prepare_values_outer_limit_zero",
+      "sql": "SELECT regexp_replace('a','(a)','$9') AS r FROM VALUES(1) AS t(k) LIMIT 0",
+      "ansi": false,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      }
+    },
+    {
+      "id": "replacement_prepare_input_limit_zero",
+      "sql": "SELECT regexp_replace('a','(a)','$9') AS r FROM (SELECT k FROM VALUES(1) AS v(k) LIMIT 0) AS t",
+      "ansi": true,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      }
+    },
+    {
+      "id": "replacement_prepare_input_limit_zero",
+      "sql": "SELECT regexp_replace('a','(a)','$9') AS r FROM (SELECT k FROM VALUES(1) AS v(k) LIMIT 0) AS t",
+      "ansi": false,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      }
+    },
+    {
+      "id": "replacement_prepare_empty_provider_literal",
+      "sql": "SELECT regexp_replace('a','(a)','$9') AS r FROM rr_utf16_empty",
+      "ansi": true,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      }
+    },
+    {
+      "id": "replacement_prepare_empty_provider_literal",
+      "sql": "SELECT regexp_replace('a','(a)','$9') AS r FROM rr_utf16_empty",
+      "ansi": false,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      }
+    },
+    {
+      "id": "replacement_prepare_provider_guard_false",
+      "sql": "SELECT CASE WHEN k=0 THEN regexp_replace('a','(a)','$9') ELSE 'ok' END AS r FROM rr789_required WHERE k=1",
+      "ansi": true,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      }
+    },
+    {
+      "id": "replacement_prepare_provider_guard_false",
+      "sql": "SELECT CASE WHEN k=0 THEN regexp_replace('a','(a)','$9') ELSE 'ok' END AS r FROM rr789_required WHERE k=1",
+      "ansi": false,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      }
+    },
+    {
+      "id": "replacement_prepare_provider_guard_true",
+      "sql": "SELECT CASE WHEN k=0 THEN regexp_replace('a','(a)','$9') ELSE 'ok' END AS r FROM rr789_required WHERE k=0",
+      "ansi": true,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      }
+    },
+    {
+      "id": "replacement_prepare_provider_guard_true",
+      "sql": "SELECT CASE WHEN k=0 THEN regexp_replace('a','(a)','$9') ELSE 'ok' END AS r FROM rr789_required WHERE k=0",
+      "ansi": false,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      }
+    },
+    {
+      "id": "replacement_prepare_concat_null_first",
+      "sql": "SELECT concat(NULL,regexp_replace('a','(a)','$9')) AS r",
+      "ansi": true,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      }
+    },
+    {
+      "id": "replacement_prepare_concat_null_first",
+      "sql": "SELECT concat(NULL,regexp_replace('a','(a)','$9')) AS r",
+      "ansi": false,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      }
+    },
+    {
+      "id": "replacement_prepare_concat_null_last",
+      "sql": "SELECT concat(regexp_replace('a','(a)','$9'),NULL) AS r",
+      "ansi": true,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      }
+    },
+    {
+      "id": "replacement_prepare_concat_null_last",
+      "sql": "SELECT concat(regexp_replace('a','(a)','$9'),NULL) AS r",
+      "ansi": false,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      }
+    }
+  ]
+}

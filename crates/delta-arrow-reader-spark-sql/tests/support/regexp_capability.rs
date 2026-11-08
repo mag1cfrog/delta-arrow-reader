@@ -46,8 +46,8 @@ fn validate_profiles(profiles: Vec<Value>) -> Result<Vec<Value>, String> {
         .iter()
         .map(|profile| profile["key"].to_string())
         .collect::<HashSet<_>>();
-    if profiles.len() != 516 || keys.len() != profiles.len() {
-        return Err("recorded regex profile inventory requires 516 unique context keys".into());
+    if profiles.len() != 528 || keys.len() != profiles.len() {
+        return Err("recorded regex profile inventory requires 528 unique context keys".into());
     }
     Ok(profiles)
 }
@@ -56,14 +56,29 @@ fn profiles() -> Result<&'static [Value], &'static str> {
     static PROFILES: OnceLock<Result<Vec<Value>, String>> = OnceLock::new();
     PROFILES
         .get_or_init(|| {
-            include_str!("../fixtures/regex-native-limit-profiles.jsonl")
+            let mut profiles = include_str!("../fixtures/regex-native-limit-profiles.jsonl")
                 .split('\n')
                 .skip(1)
                 .filter(|line| !line.is_empty())
                 .map(serde_json::from_str)
                 .collect::<Result<Vec<_>, _>>()
-                .map_err(|error| format!("recorded regex profile JSON: {error}"))
-                .and_then(validate_profiles)
+                .map_err(|error| format!("recorded regex profile JSON: {error}"))?;
+            let current = include_str!("../fixtures/regex-native-preparation-limit-profiles.jsonl")
+                .lines()
+                .skip(1)
+                .map(serde_json::from_str::<Value>)
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|error| format!("current regex profile JSON: {error}"))?;
+            if current.len() != 48 {
+                return Err("current regex profile inventory requires 48 context keys".into());
+            }
+            profiles.retain(|profile: &Value| {
+                !current
+                    .iter()
+                    .any(|current| current["key"] == profile["key"])
+            });
+            profiles.extend(current);
+            validate_profiles(profiles)
         })
         .as_deref()
         .map_err(String::as_str)
@@ -136,6 +151,109 @@ pub(super) fn has_recorded_case(fixture: &str, case: &Value) -> Result<bool, &'s
 }
 
 #[test]
+fn replacement_preparation_profiles_reject_historical_execution_outcomes()
+-> crate::string_binary::TestResult {
+    use std::collections::BTreeMap;
+
+    let historical = include_str!("../fixtures/regex-native-limit-profiles.jsonl")
+        .lines()
+        .skip(1)
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    let current = include_str!("../fixtures/regex-native-preparation-limit-profiles.jsonl")
+        .lines()
+        .skip(1)
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut groups = BTreeMap::new();
+    let mut retired = 0;
+    for profile in &current {
+        let key = &profile["key"];
+        let fixture = key["fixture"].as_str().ok_or("missing fixture")?;
+        let id = key["id"].as_str().ok_or("missing ID")?;
+        let representation = key["representation"]
+            .as_u64()
+            .ok_or("missing representation")? as usize;
+        let batch_size = key["batch_size"].as_u64().ok_or("missing batch size")? as usize;
+        *groups.entry((fixture, id)).or_insert(0) += 1;
+        let case = json!({"id":id,"ansi":key["ansi"],"sql":profile["sql"],
+            "expected":profile["spark_expected"]});
+        let actual = &profile["native_actual"];
+        assert_eq!(actual["error_stage"], "physical");
+        assert_eq!(actual.get("physical_schema"), Some(&Value::Null));
+        assert_eq!(actual.get("physical_arrow_schema"), Some(&Value::Null));
+        assert_eq!(
+            actual["analyzed_schema"],
+            case["expected"]["analyzed_schema"]
+        );
+        assert_eq!(
+            recorded_limit(fixture, &case, representation, batch_size, actual)?,
+            profile["category"].as_str()
+        );
+        if let Some(previous) = historical.iter().find(|previous| previous["key"] == *key) {
+            retired += 1;
+            assert!(
+                recorded_limit(
+                    fixture,
+                    &case,
+                    representation,
+                    batch_size,
+                    &previous["native_actual"]
+                )?
+                .is_none()
+            );
+        }
+        for (field, value) in [
+            ("error_stage", json!("execute")),
+            ("error", json!("physical: unrelated cause")),
+            ("physical_schema", actual["analyzed_schema"].clone()),
+            ("rows", json!([])),
+        ] {
+            let mut changed = actual.clone();
+            changed[field] = value;
+            assert!(
+                recorded_limit(fixture, &case, representation, batch_size, &changed)?.is_none()
+            );
+        }
+    }
+    assert_eq!(retired, 36);
+    assert_eq!(
+        groups,
+        BTreeMap::from([
+            (
+                (
+                    "regex-syntax-missing-spark.jsonl",
+                    "regexp_replace_literal_lookbehind"
+                ),
+                12
+            ),
+            (
+                (
+                    "regexp-replace-expanded-spark.jsonl",
+                    "position_supplementary_3"
+                ),
+                12
+            ),
+            (
+                (
+                    "regexp-replace-empty-utf16-spark.jsonl",
+                    "nonempty_split_dot"
+                ),
+                12
+            ),
+            (
+                (
+                    "regexp-replace-nonboundary-spark.jsonl",
+                    "nonboundary_probe_retained_nonempty_split_dot"
+                ),
+                12
+            ),
+        ])
+    );
+    Ok(())
+}
+
+#[test]
 fn recorded_regex_limits_require_complete_identity_and_outcome() -> crate::string_binary::TestResult
 {
     use std::collections::BTreeMap;
@@ -166,7 +284,7 @@ fn recorded_regex_limits_require_complete_identity_and_outcome() -> crate::strin
             ("malformed_pattern_diagnostic", 36),
             ("native_unicode_word_classification", 96),
             ("utf16_optional_advancement", 48),
-            ("utf16_split_region", 36),
+            ("utf16_split_region", 48),
         ])
     );
     for category in counts.keys() {

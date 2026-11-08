@@ -1,6 +1,7 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
+use datafusion::arrow::array::timezone::Tz;
 use datafusion::arrow::compute::can_cast_types;
 use datafusion::arrow::datatypes::{
     DataType, IntervalDayTimeType, IntervalUnit, IntervalYearMonthType, TimeUnit,
@@ -8,8 +9,8 @@ use datafusion::arrow::datatypes::{
 use datafusion::functions::expr_fn;
 use datafusion::optimizer::simplify_expressions::ExprSimplifier;
 use datafusion::prelude::SessionContext;
-use datafusion_common::tree_node::TreeNode;
-use datafusion_common::{DFSchemaRef, ScalarValue};
+use datafusion_common::tree_node::{Transformed, TreeNode};
+use datafusion_common::{DFSchemaRef, DataFusionError, ScalarValue};
 use datafusion_expr::expr::{self, Expr};
 use datafusion_expr::simplify::SimplifyContextBuilder;
 use datafusion_expr::{
@@ -17,7 +18,6 @@ use datafusion_expr::{
 };
 use datafusion_functions::core::expr_ext::FieldAccessor;
 use datafusion_spark::function::datetime::make_dt_interval::SparkMakeDtInterval;
-use datafusion_spark::function::datetime::make_interval::SparkMakeInterval;
 use sail_common::utils::datetime::time_unit_to_multiplier;
 use sail_common_datafusion::literal::LiteralEvaluator;
 use sail_common_datafusion::utils::items::ItemTaker;
@@ -29,6 +29,9 @@ use sail_function::scalar::datetime::spark_date_format::SparkDateFormat;
 use sail_function::scalar::datetime::spark_date_part::SparkDatePart;
 use sail_function::scalar::datetime::spark_date_trunc::SparkDateTrunc;
 use sail_function::scalar::datetime::spark_last_day::SparkLastDay;
+use sail_function::scalar::datetime::spark_make_interval::{
+    MAKE_INTERVAL_SECONDS_TYPE, SparkMakeInterval,
+};
 use sail_function::scalar::datetime::spark_make_time::SparkMakeTime;
 use sail_function::scalar::datetime::spark_make_timestamp_ntz::SparkMakeTimestampNtz;
 use sail_function::scalar::datetime::spark_make_ym_interval::SparkMakeYmInterval;
@@ -37,6 +40,7 @@ use sail_function::scalar::datetime::spark_time::SparkTime;
 use sail_function::scalar::datetime::spark_time_diff::SparkTimeDiff;
 use sail_function::scalar::datetime::spark_time_trunc::SparkTimeTrunc;
 use sail_function::scalar::datetime::spark_timestamp::SparkTimestamp;
+use sail_function::scalar::datetime::spark_timestamp_add::SparkTimestampAdd;
 use sail_function::scalar::datetime::spark_timestamp_diff::SparkTimestampDiff;
 use sail_function::scalar::datetime::spark_unix_timestamp::SparkUnixTimestamp;
 use sail_function::scalar::datetime::spark_window_buckets::SparkWindowBuckets;
@@ -44,6 +48,11 @@ use sail_function::scalar::datetime::spark_year::SparkYear;
 use sail_function::scalar::datetime::timestamp_now::TimestampNow;
 use sail_function::scalar::explode::{Explode, ExplodeKind};
 use sail_function::scalar::spark_cast_numeric_to_integer::SparkCastNumericToInteger;
+use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
+use sail_function::scalar::spark_cast_string_to_integer::{
+    SparkCastStringToInteger, StringIntegerCastMode,
+};
+use sail_function::scalar::spark_decimal_cast::{DecimalCastMode, SparkDecimalCast};
 use sail_sql_analyzer::literal::interval::IntervalValue;
 use sail_sql_analyzer::parser::parse_interval;
 
@@ -54,8 +63,223 @@ use crate::function::common::{
     FunctionContextInput, ScalarFunction, ScalarFunctionInput, expr_contains_spark_cast_to_variant,
 };
 use crate::function::common::{literal_value_without_evaluation, without_metadata_annotations};
-use crate::function::temporal_coercion::cast_local_timestamp_expr_to_ltz;
+use crate::function::temporal_coercion::{
+    cast_local_timestamp_expr_to_ltz, ltz_expr_to_local_timestamp,
+};
 
+/// How the casts of MAKE_INTERVAL's arguments treat a failure: as Spark's casts do outside ANSI,
+/// under ANSI, and under ANSI inside `TryEval`, which turns every failure into NULL. Whether the
+/// interval arithmetic fails on overflow is separate: Spark's `failOnError`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MakeIntervalCastMode {
+    Legacy,
+    Ansi,
+    Try,
+}
+
+impl MakeIntervalCastMode {
+    fn of_session(ansi_mode: bool) -> Self {
+        if ansi_mode { Self::Ansi } else { Self::Legacy }
+    }
+
+    fn decimal_cast_mode(self) -> DecimalCastMode {
+        match self {
+            Self::Legacy => DecimalCastMode::Legacy,
+            Self::Ansi => DecimalCastMode::Ansi,
+            Self::Try => DecimalCastMode::Try,
+        }
+    }
+
+    fn string_integer_cast_mode(self) -> StringIntegerCastMode {
+        match self {
+            Self::Legacy => StringIntegerCastMode::Legacy,
+            Self::Ansi => StringIntegerCastMode::Ansi,
+            Self::Try => StringIntegerCastMode::Try,
+        }
+    }
+}
+
+/// Spark's MAKE_INTERVAL: missing arguments are 0, the first six are cast to INT and the
+/// seconds to DECIMAL(18, 6) with Spark's casts for the session's ANSI mode.
+fn make_interval(input: ScalarFunctionInput) -> PlanResult<Expr> {
+    let ScalarFunctionInput {
+        arguments,
+        function_context,
+    } = input;
+    if arguments.len() > 7 {
+        return Err(PlanError::invalid(format!(
+            "[WRONG_NUM_ARGS.WITHOUT_SUGGESTION] The `make_interval` requires [0, 1, 2, 3, 4, 5, 6, 7] parameters but the actual number is {}.",
+            arguments.len()
+        )));
+    }
+    let mode = MakeIntervalCastMode::of_session(function_context.plan_config.ansi_mode);
+    plan_make_interval(
+        arguments,
+        function_context.schema,
+        mode,
+        mode == MakeIntervalCastMode::Ansi,
+    )
+}
+
+/// Spark's TRY_MAKE_INTERVAL: MAKE_INTERVAL with one to seven arguments whose arithmetic gives
+/// NULL on overflow in both ANSI modes (`failOnError = false`). Its argument casts still follow
+/// the session's ANSI mode, so under ANSI a malformed or overflowing argument fails.
+fn try_make_interval(input: ScalarFunctionInput) -> PlanResult<Expr> {
+    let ScalarFunctionInput {
+        arguments,
+        function_context,
+    } = input;
+    if arguments.is_empty() || arguments.len() > 7 {
+        return Err(PlanError::invalid(format!(
+            "[WRONG_NUM_ARGS.WITHOUT_SUGGESTION] The `try_make_interval` requires [1, 2, 3, 4, 5, 6, 7] parameters but the actual number is {}.",
+            arguments.len()
+        )));
+    }
+    let mode = MakeIntervalCastMode::of_session(function_context.plan_config.ansi_mode);
+    let fail_on_error = false;
+    plan_make_interval(arguments, function_context.schema, mode, fail_on_error)
+}
+
+/// MAKE_INTERVAL over `arguments` cast in `mode`, failing on overflow if `fail_on_error`
+/// (Spark's `failOnError`) and giving NULL otherwise.
+fn plan_make_interval(
+    arguments: Vec<Expr>,
+    schema: &DFSchemaRef,
+    mode: MakeIntervalCastMode,
+    fail_on_error: bool,
+) -> PlanResult<Expr> {
+    let mut arguments = arguments.into_iter();
+    let mut cast_arguments = Vec::with_capacity(7);
+    for _ in 0..6 {
+        let part = match arguments.next() {
+            Some(part) => cast_make_interval_part(part, schema, mode)?,
+            None => lit(0_i32),
+        };
+        cast_arguments.push(part);
+    }
+    let seconds = match arguments.next() {
+        Some(seconds) => cast_make_interval_seconds(seconds, schema, mode)?,
+        None => lit(ScalarValue::Decimal128(Some(0), 18, 6)),
+    };
+    cast_arguments.push(seconds);
+    Ok(ScalarUDF::from(SparkMakeInterval::new(fail_on_error)).call(cast_arguments))
+}
+
+/// Spark's implicit cast of a MAKE_INTERVAL part to INT. `cast_string_function_int` in
+/// `string.rs` applies the same rule to string function arguments, without a TRY mode.
+fn cast_make_interval_part(
+    part: Expr,
+    schema: &DFSchemaRef,
+    mode: MakeIntervalCastMode,
+) -> PlanResult<Expr> {
+    Ok(match part.get_type(schema)? {
+        DataType::Int32 => part,
+        DataType::Int8 | DataType::Int16 | DataType::Null => cast(part, DataType::Int32),
+        DataType::Int64 | DataType::Float32 | DataType::Float64 => {
+            ScalarUDF::from(SparkCastNumericToInteger::try_new(
+                DataType::Int32,
+                mode == MakeIntervalCastMode::Ansi,
+                mode == MakeIntervalCastMode::Try,
+            )?)
+            .call(vec![part])
+        }
+        DataType::Decimal128(..) | DataType::Decimal256(..) => ScalarUDF::from(
+            SparkDecimalCast::to_integer(DataType::Int32, mode.decimal_cast_mode())?,
+        )
+        .call(vec![part]),
+        data_type if data_type.is_string() => {
+            SparkCastStringToInteger::try_new(DataType::Int32, mode.string_integer_cast_mode())?
+                .into_expr(part)
+        }
+        other => {
+            return Err(PlanError::invalid(format!(
+                "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] make_interval requires INT parts, got {other}"
+            )));
+        }
+    })
+}
+
+/// Spark's implicit cast of MAKE_INTERVAL seconds to DECIMAL(18, 6), with the casts CAST uses.
+fn cast_make_interval_seconds(
+    seconds: Expr,
+    schema: &DFSchemaRef,
+    mode: MakeIntervalCastMode,
+) -> PlanResult<Expr> {
+    let DataType::Decimal128(precision, scale) = MAKE_INTERVAL_SECONDS_TYPE else {
+        unreachable!("MAKE_INTERVAL seconds are a DECIMAL");
+    };
+    Ok(match seconds.get_type(schema)? {
+        DataType::Decimal128(18, 6) => seconds,
+        DataType::Null => cast(seconds, MAKE_INTERVAL_SECONDS_TYPE),
+        data_type if data_type.is_string() => ScalarUDF::new_from_impl(
+            SparkCastStringToDecimal::new(precision, scale, mode != MakeIntervalCastMode::Ansi),
+        )
+        .call(vec![seconds]),
+        data_type if data_type.is_numeric() => ScalarUDF::from(SparkDecimalCast::to_decimal(
+            precision,
+            scale,
+            mode.decimal_cast_mode(),
+        ))
+        .call(vec![seconds]),
+        other => {
+            return Err(PlanError::invalid(format!(
+                "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] make_interval requires DECIMAL seconds, got {other}"
+            )));
+        }
+    })
+}
+
+/// The value a MAKE_INTERVAL argument cast converts, or the argument itself.
+fn uncast_make_interval_argument(argument: Expr) -> Expr {
+    match argument {
+        Expr::ScalarFunction(expr::ScalarFunction { func, mut args })
+            if args.len() == 1
+                && (func.inner().is::<SparkCastNumericToInteger>()
+                    || func.inner().is::<SparkDecimalCast>()
+                    || func.inner().is::<SparkCastStringToInteger>()
+                    || func.inner().is::<SparkCastStringToDecimal>()) =>
+        {
+            args.remove(0)
+        }
+        argument => argument,
+    }
+}
+
+/// Spark evaluates TRY_ADD, TRY_SUBTRACT, TRY_MULTIPLY and TRY_DIVIDE over a non-numeric
+/// operand inside `TryEval`, which turns any failure into NULL. Under ANSI this re-plans each
+/// MAKE_INTERVAL or TRY_MAKE_INTERVAL in an operand, and the casts of its arguments, to give
+/// NULL instead; outside ANSI neither fails. Spark still fails while optimizing a constant
+/// MAKE_INTERVAL, or a constant argument cast, beside a non-constant operand, outside TRY
+/// (#1133).
+pub(crate) fn replan_make_interval_for_try(
+    operand: Expr,
+    schema: &DFSchemaRef,
+    ansi_mode: bool,
+) -> PlanResult<Expr> {
+    if !ansi_mode {
+        return Ok(operand);
+    }
+    Ok(operand
+        .transform_up(|expr| match expr {
+            Expr::ScalarFunction(call) if call.func.inner().is::<SparkMakeInterval>() => {
+                let arguments = call
+                    .args
+                    .into_iter()
+                    .map(uncast_make_interval_argument)
+                    .collect();
+                let fail_on_error = false;
+                plan_make_interval(arguments, schema, MakeIntervalCastMode::Try, fail_on_error)
+                    .map(Transformed::yes)
+                    .map_err(|error| DataFusionError::External(Box::new(error)))
+            }
+            expr => Ok(Transformed::no(expr)),
+        })?
+        .data)
+}
+
+/// Spark's MAKE_YM_INTERVAL: BIGINT and STRING arguments, also dictionary-encoded ones, are
+/// cast to INT with Spark's casts for the session's ANSI mode. A STRING cast is nullable, as
+/// Spark's is, so the result is nullable for a STRING argument.
 fn make_ym_interval(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let mut arguments = input.arguments;
     let function = ScalarUDF::from(SparkMakeYmInterval::new());
@@ -70,21 +294,36 @@ fn make_ym_interval(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let known_null = arguments.iter().any(|argument| {
         literal_value_without_evaluation(argument).is_some_and(|value| value.is_null())
     });
-    let mut bigint_argument = false;
+    let ansi_mode = input.function_context.plan_config.ansi_mode;
     for (argument, data_type) in arguments.iter_mut().zip(argument_types) {
+        // Spark has no dictionary encoding; Delta uses one for STRING partition columns.
+        let data_type = match data_type {
+            DataType::Dictionary(_, value_type) => {
+                *argument = cast(argument.clone(), (*value_type).clone());
+                *value_type
+            }
+            data_type => data_type,
+        };
         if data_type == DataType::Int64 {
-            bigint_argument = true;
             *argument = ScalarUDF::from(SparkCastNumericToInteger::try_new(
                 DataType::Int32,
-                input.function_context.plan_config.ansi_mode,
+                ansi_mode,
                 false,
             )?)
             .call(vec![argument.clone()]);
+        } else if data_type.is_string() {
+            *argument = SparkCastStringToInteger::try_new(
+                DataType::Int32,
+                MakeIntervalCastMode::of_session(ansi_mode).string_integer_cast_mode(),
+            )?
+            .into_expr(argument.clone());
         }
     }
     let interval = function.call(arguments);
-    if bigint_argument && known_null {
-        // Keep the original call available for type admission before NULL pruning.
+    if known_null {
+        // Spark's NullPropagation gives NULL for a NULL argument, also one behind casts, before
+        // constants fold, so a failing cast of the other argument is discarded. Keep the original
+        // call available for type admission before NULL pruning.
         return Ok(when(lit(true), lit(ScalarValue::IntervalYearMonth(None))).otherwise(interval)?);
     }
     Ok(interval)
@@ -95,6 +334,22 @@ fn integer_part(expr: Expr, part: &str) -> Expr {
         expr_fn::date_part(lit(part.to_uppercase()), expr),
         DataType::Int32,
     )
+}
+
+/// The argument of WEEKDAY and DAYOFWEEK. Spark casts a STRING, TIMESTAMP_NTZ or NULL argument
+/// to DATE, with its STRING-to-DATE rules for a STRING. DATE passes through, and a TIMESTAMP is
+/// read in its annotated zone, the session zone. Other types pass through unchecked, although
+/// Spark rejects them (#1116).
+fn day_of_week_argument(input: ScalarFunctionInput) -> PlanResult<Expr> {
+    let argument = input.arguments.one()?;
+    Ok(match argument.get_type(input.function_context.schema)? {
+        DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => ScalarUDF::from(
+            SparkDate::new(!input.function_context.plan_config.ansi_mode),
+        )
+        .call(vec![argument]),
+        DataType::Timestamp(_, None) | DataType::Null => cast(argument, DataType::Date32),
+        _ => argument,
+    })
 }
 
 fn years(arg: Expr) -> Expr {
@@ -285,72 +540,14 @@ fn date_offset_by_days(
     Ok(ScalarUDF::from(SparkDateDayArithmetic::new(op)).call(vec![date, days]))
 }
 
-fn timestampadd_interval(function_name: &str, unit: &str, quantity: Expr) -> PlanResult<Expr> {
-    let zero_i32 = || lit(0_i32);
-    let zero_f64 = || lit(0_f64);
-    let quantity_i32 = || cast(quantity.clone(), DataType::Int32);
-    let quantity_f64 = || cast(quantity.clone(), DataType::Float64);
-    let make_interval = |args: Vec<Expr>| ScalarUDF::from(SparkMakeInterval::new()).call(args);
-    let make_dt_interval = |args: Vec<Expr>| ScalarUDF::from(SparkMakeDtInterval::new()).call(args);
-
-    let normalized = unit.trim().to_uppercase();
-    match normalized.as_str() {
-        "YEAR" => Ok(make_interval(vec![quantity_i32()])),
-        "QUARTER" => Ok(make_interval(vec![
-            zero_i32(),
-            cast(quantity.clone() * lit(3_i32), DataType::Int32),
-        ])),
-        "MONTH" => Ok(make_interval(vec![zero_i32(), quantity_i32()])),
-        "WEEK" => Ok(make_dt_interval(vec![
-            cast(quantity.clone() * lit(7_i32), DataType::Int32),
-            zero_i32(),
-            zero_i32(),
-            zero_f64(),
-        ])),
-        "DAY" | "DAYOFYEAR" => Ok(make_dt_interval(vec![
-            quantity_i32(),
-            zero_i32(),
-            zero_i32(),
-            zero_f64(),
-        ])),
-        "HOUR" => Ok(make_dt_interval(vec![
-            zero_i32(),
-            quantity_i32(),
-            zero_i32(),
-            zero_f64(),
-        ])),
-        "MINUTE" => Ok(make_dt_interval(vec![
-            zero_i32(),
-            zero_i32(),
-            quantity_i32(),
-            zero_f64(),
-        ])),
-        "SECOND" => Ok(make_dt_interval(vec![
-            zero_i32(),
-            zero_i32(),
-            zero_i32(),
-            quantity_f64(),
-        ])),
-        "MILLISECOND" => Ok(make_dt_interval(vec![
-            zero_i32(),
-            zero_i32(),
-            zero_i32(),
-            quantity_f64() / lit(1_000_f64),
-        ])),
-        "MICROSECOND" => Ok(make_dt_interval(vec![
-            zero_i32(),
-            zero_i32(),
-            zero_i32(),
-            quantity_f64() / lit(1_000_000_f64),
-        ])),
-        _ => Err(PlanError::invalid(format!(
-            "{function_name} does not support interval unit type '{unit}'"
-        ))),
-    }
-}
-
+/// Spark's TIMESTAMPADD: `quantity` and `timestamp` take Spark's implicit casts to BIGINT and
+/// TIMESTAMP, which keeps a TIMESTAMP_NTZ.
 fn timestampadd_with_name(input: ScalarFunctionInput, function_name: &str) -> PlanResult<Expr> {
-    let (unit, quantity, timestamp) = input.arguments.three()?;
+    let ScalarFunctionInput {
+        arguments,
+        function_context,
+    } = input;
+    let (unit, quantity, timestamp) = arguments.three()?;
     let unit = match &unit {
         Expr::Literal(ScalarValue::Utf8(Some(s)), _)
         | Expr::Literal(ScalarValue::LargeUtf8(Some(s)), _) => s.clone(),
@@ -361,14 +558,82 @@ fn timestampadd_with_name(input: ScalarFunctionInput, function_name: &str) -> Pl
             )));
         }
     };
-    let interval = timestampadd_interval(function_name, &unit, quantity)?;
-    Ok(cast(
-        timestamp,
-        DataType::Timestamp(
-            TimeUnit::Microsecond,
-            Some(input.function_context.plan_config.session_timezone.clone()),
+    let schema = function_context.schema;
+    let config = function_context.plan_config;
+    let timezone = &config.session_timezone;
+    // Spark's casts from a string or fractional quantity, or from a string TIMESTAMP, are
+    // nullable.
+    let (quantity, cast_quantity_nullable) = match quantity.get_type(schema)? {
+        data_type if data_type.is_integer() || data_type == DataType::Null => {
+            (cast(quantity, DataType::Int64), false)
+        }
+        data_type if data_type.is_string() => {
+            let mode = if config.ansi_mode {
+                StringIntegerCastMode::Ansi
+            } else {
+                StringIntegerCastMode::Legacy
+            };
+            let cast = SparkCastStringToInteger::try_new(DataType::Int64, mode)?;
+            (ScalarUDF::from(cast).call(vec![quantity]), true)
+        }
+        DataType::Float32 | DataType::Float64 => {
+            let cast =
+                SparkCastNumericToInteger::try_new(DataType::Int64, config.ansi_mode, false)?;
+            (ScalarUDF::from(cast).call(vec![quantity]), true)
+        }
+        DataType::Decimal128(..) | DataType::Decimal256(..) => {
+            let mode = if config.ansi_mode {
+                DecimalCastMode::Ansi
+            } else {
+                DecimalCastMode::Legacy
+            };
+            let cast = SparkDecimalCast::to_integer(DataType::Int64, mode)?;
+            (ScalarUDF::from(cast).call(vec![quantity]), true)
+        }
+        other => {
+            return Err(PlanError::invalid(format!(
+                "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] {function_name} requires a BIGINT quantity, got {other}"
+            )));
+        }
+    };
+    let (timestamp, cast_timestamp_nullable) = match timestamp.get_type(schema)? {
+        DataType::Timestamp(TimeUnit::Microsecond, _) => (timestamp, false),
+        DataType::Timestamp(_, zone) => (
+            cast(timestamp, DataType::Timestamp(TimeUnit::Microsecond, zone)),
+            false,
         ),
-    ) + interval)
+        source @ (DataType::Date32 | DataType::Date64) => (
+            cast_local_timestamp_expr_to_ltz(timestamp, &source, timezone),
+            false,
+        ),
+        data_type if data_type.is_string() => (
+            ScalarUDF::from(SparkTimestamp::try_new(
+                Some(Arc::clone(timezone)),
+                config.ansi_mode,
+                false,
+            )?)
+            .call(vec![timestamp]),
+            true,
+        ),
+        DataType::Null => (
+            cast(
+                timestamp,
+                DataType::Timestamp(TimeUnit::Microsecond, Some(Arc::clone(timezone))),
+            ),
+            false,
+        ),
+        other => {
+            return Err(PlanError::invalid(format!(
+                "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] {function_name} requires a TIMESTAMP, got {other}"
+            )));
+        }
+    };
+    let add = SparkTimestampAdd::try_new(
+        &unit,
+        cast_quantity_nullable || cast_timestamp_nullable,
+        Arc::clone(timezone),
+    )?;
+    Ok(ScalarUDF::from(add).call(vec![quantity, timestamp]))
 }
 
 fn timestampadd(input: ScalarFunctionInput) -> PlanResult<Expr> {
@@ -443,8 +708,8 @@ fn cast_timestamp_diff_argument(
             cast_timestamp_diff_argument(function_name, ordinal, cast(expr, *value_type), context)
         }
         DataType::Timestamp(_, Some(_)) | DataType::Null => Ok(cast(expr, timestamp)),
-        DataType::Timestamp(_, None) | DataType::Date32 | DataType::Date64 => {
-            Ok(cast_local_timestamp_expr_to_ltz(expr, timezone))
+        source @ (DataType::Timestamp(_, None) | DataType::Date32 | DataType::Date64) => {
+            Ok(cast_local_timestamp_expr_to_ltz(expr, &source, timezone))
         }
         DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => {
             Ok(ScalarUDF::from(SparkTimestamp::try_new(
@@ -772,9 +1037,25 @@ fn timestamp_with_try(
             let udf = ScalarUDF::from(SparkTimestamp::try_new(timezone, ansi_mode, is_try)?);
             Ok(udf.call(vec![expr]))
         } else {
-            // Timestamp-with-tz is re-based to the session zone; other types cast.
+            // A TIMESTAMP_NTZ result is each instant's local date-time in the session zone.
+            if timestamp_ntz
+                && let DataType::Timestamp(unit, Some(zone)) = &expr_type
+                && let Some(local) = ltz_expr_to_local_timestamp(
+                    expr.clone(),
+                    *unit,
+                    zone,
+                    &input.function_context.plan_config.session_timezone,
+                    is_try,
+                )
+            {
+                return Ok(local);
+            }
+            // Spark also accepts session zones that Arrow cannot parse (#1029). A TIMESTAMP
+            // result keeps the instant; other types cast.
             let expr = match expr_type {
-                DataType::Timestamp(_, Some(_)) => expr_fn::to_local_time(vec![expr]),
+                DataType::Timestamp(_, Some(_)) if timestamp_ntz => {
+                    expr_fn::to_local_time(vec![expr])
+                }
                 _ => expr,
             };
             if is_try {
@@ -849,6 +1130,40 @@ fn unix_time_unit(input: ScalarFunctionInput, time_unit: TimeUnit) -> PlanResult
     ))
 }
 
+/// TIMESTAMP_SECONDS, TIMESTAMP_MILLIS and TIMESTAMP_MICROS: the instant `argument` units of
+/// `micros_per_unit` microseconds after the epoch. Like every Spark TIMESTAMP, it is annotated
+/// with the session time zone, so zone-dependent functions read its local date-time there. A
+/// session zone Arrow cannot parse, such as `PST`, keeps UTC (#1029).
+fn timestamp_from_epoch(input: ScalarFunctionInput, micros_per_unit: i64) -> PlanResult<Expr> {
+    let argument = input.arguments.one()?;
+    let session_timezone = &input.function_context.plan_config.session_timezone;
+    let zone = if session_timezone.parse::<Tz>().is_ok() {
+        Arc::clone(session_timezone)
+    } else {
+        "UTC".into()
+    };
+    let data_type = DataType::Timestamp(TimeUnit::Microsecond, Some(zone));
+    if micros_per_unit != 1 {
+        return Ok(cast(
+            cast(argument, DataType::Int64) * lit(micros_per_unit),
+            data_type,
+        ));
+    }
+    let argument_type = argument.get_type(input.function_context.schema)?;
+    Ok(
+        if argument_type.is_integer() || argument_type == DataType::Null {
+            cast(argument, data_type)
+        } else {
+            // Spark rejects other arguments (#1111). Arrow would read a STRING or DATE as a local
+            // date-time in the target zone, so they keep their UTC reading.
+            cast(
+                argument,
+                DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
+            )
+        },
+    )
+}
+
 fn current_timestamp_microseconds(input: ScalarFunctionInput) -> PlanResult<Expr> {
     if input.arguments.is_empty() {
         let timezone = input.function_context.plan_config.session_timezone.clone();
@@ -905,13 +1220,22 @@ fn validate_convert_timezone_zone(expr: &Expr, schema: &DFSchemaRef) -> PlanResu
     Ok(())
 }
 
-/// A helper function for processing the input NTZ timestamp.
+/// A helper function for processing the input NTZ timestamp. Spark converts a TIMESTAMP to
+/// its local date-time in the session time zone.
 fn ntz_timestamp_and_unit(
     ts: Expr,
     schema: &DFSchemaRef,
+    session_tz: &Arc<str>,
     ansi_mode: bool,
 ) -> PlanResult<(Expr, TimeUnit)> {
-    match ts.get_type(schema)? {
+    let data_type = ts.get_type(schema)?;
+    if let DataType::Timestamp(unit, Some(zone)) = &data_type
+        && let Some(local) = ltz_expr_to_local_timestamp(ts.clone(), *unit, zone, session_tz, false)
+    {
+        return Ok((local, TimeUnit::Microsecond));
+    }
+    match data_type {
+        // Spark also accepts session zones that Arrow cannot parse (#1029).
         DataType::Timestamp(unit, Some(_)) => Ok((expr_fn::to_local_time(vec![ts]), unit)),
         DataType::Timestamp(unit, None) => Ok((ts, unit)),
         DataType::Null => {
@@ -952,6 +1276,7 @@ fn convert_timezone(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let (ts, _unit) = ntz_timestamp_and_unit(
         ts,
         input.function_context.schema,
+        &session_tz,
         input.function_context.plan_config.ansi_mode,
     )?;
     let requires_scalar_evaluation =
@@ -987,11 +1312,15 @@ fn utc_ntz_timestamp_and_unit(
 ) -> PlanResult<(Expr, TimeUnit)> {
     let (ts, unit) = match ts.get_type(schema)? {
         DataType::Timestamp(unit, Some(_)) => (ts, unit),
-        // Spark casts TIMESTAMP_NTZ and DATE to TIMESTAMP in the session zone, moving a local
-        // time skipped by a DST change forward and taking the earlier instant of a repeated one.
-        DataType::Timestamp(unit, None) => (cast_local_timestamp_expr_to_ltz(ts, session_tz), unit),
-        DataType::Date32 | DataType::Date64 => (
-            cast_local_timestamp_expr_to_ltz(ts, session_tz),
+        // Spark casts TIMESTAMP_NTZ and DATE to TIMESTAMP in the session zone. A TIMESTAMP_NTZ
+        // skipped by a DST change moves forward and a repeated one takes its earlier instant; a
+        // DATE starts at the first instant of its day.
+        source @ DataType::Timestamp(unit, None) => (
+            cast_local_timestamp_expr_to_ltz(ts, &source, session_tz),
+            unit,
+        ),
+        source @ (DataType::Date32 | DataType::Date64) => (
+            cast_local_timestamp_expr_to_ltz(ts, &source, session_tz),
             TimeUnit::Microsecond,
         ),
         DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => {
@@ -1413,7 +1742,7 @@ pub(super) fn list_built_in_datetime_functions() -> Vec<(&'static str, ScalarFun
         ("dayofmonth", F::unary(|arg| integer_part(arg, "DAY"))),
         (
             "dayofweek",
-            F::unary(|arg| integer_part(arg, "DOW") + lit(1)),
+            F::custom(|input| Ok(integer_part(day_of_week_argument(input)?, "DOW") + lit(1))),
         ),
         ("dayofyear", F::unary(|arg| integer_part(arg, "DOY"))),
         ("extract", F::binary(date_part)),
@@ -1427,7 +1756,7 @@ pub(super) fn list_built_in_datetime_functions() -> Vec<(&'static str, ScalarFun
         ),
         ("make_date", F::ternary(make_date)),
         ("make_dt_interval", F::udf(SparkMakeDtInterval::new())),
-        ("make_interval", F::udf(SparkMakeInterval::new())),
+        ("make_interval", F::custom(make_interval)),
         ("make_time", F::udf(SparkMakeTime::new())),
         (
             "make_timestamp",
@@ -1469,28 +1798,15 @@ pub(super) fn list_built_in_datetime_functions() -> Vec<(&'static str, ScalarFun
         ("time_to_seconds", F::unknown("time_to_seconds")),
         (
             "timestamp_micros",
-            F::cast(DataType::Timestamp(
-                TimeUnit::Microsecond,
-                Some("UTC".into()),
-            )),
+            F::custom(|input| timestamp_from_epoch(input, 1)),
         ),
         (
             "timestamp_millis",
-            F::unary(|arg| {
-                cast(
-                    cast(arg, DataType::Int64) * lit(1_000_i64),
-                    DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
-                )
-            }),
+            F::custom(|input| timestamp_from_epoch(input, 1_000)),
         ),
         (
             "timestamp_seconds",
-            F::unary(|arg| {
-                cast(
-                    cast(arg, DataType::Int64) * lit(1_000_000_i64),
-                    DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
-                )
-            }),
+            F::custom(|input| timestamp_from_epoch(input, 1_000_000)),
         ),
         ("timestampadd", F::custom(timestampadd)),
         ("timestamp_add", F::custom(timestampadd)),
@@ -1525,7 +1841,7 @@ pub(super) fn list_built_in_datetime_functions() -> Vec<(&'static str, ScalarFun
         ("to_unix_timestamp", F::custom(to_unix_timestamp)),
         ("to_utc_timestamp", F::custom(to_utc_timestamp)),
         ("trunc", F::binary(trunc)),
-        ("try_make_interval", F::unknown("try_make_interval")),
+        ("try_make_interval", F::custom(try_make_interval)),
         (
             "try_make_timestamp",
             F::custom(|input| make_timestamp(input, true)),
@@ -1573,7 +1889,13 @@ pub(super) fn list_built_in_datetime_functions() -> Vec<(&'static str, ScalarFun
             F::custom(|input| unix_time_unit(input, TimeUnit::Second)),
         ),
         ("unix_timestamp", F::custom(unix_timestamp)),
-        ("weekday", F::unary(|arg| integer_part(arg, "DOW") - lit(1))),
+        // Spark numbers Monday 0 through Sunday 6; DOW numbers Sunday 0 through Saturday 6.
+        (
+            "weekday",
+            F::custom(|input| {
+                Ok((integer_part(day_of_week_argument(input)?, "DOW") + lit(6)) % lit(7))
+            }),
+        ),
         (
             "weekofyear",
             F::unary(|arg| cast(expr_fn::to_char(arg, lit("%V")), DataType::Int32)),

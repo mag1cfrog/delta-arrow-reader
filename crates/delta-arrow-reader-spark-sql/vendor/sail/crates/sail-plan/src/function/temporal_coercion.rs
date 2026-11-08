@@ -1,6 +1,7 @@
 //! DATE and TIMESTAMP_NTZ values acquire an instant in the session timezone.
 //! For example, midnight on 2026-01-02 in Phoenix becomes 07:00 UTC. Tagged
-//! timestamps already contain instants and only need their common type selected.
+//! timestamps already contain instants and only need their common type selected,
+//! unless they are converted to TIMESTAMP_NTZ, which takes their local date-time.
 // shortcut: named-zone conversion retains ConvertTz's Chrono range; extend it in
 // the full-range timestamp slice before claiming Spark's complete i64 range.
 
@@ -12,13 +13,22 @@ use datafusion_expr::{
     ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, cast, expr, lit,
 };
 use sail_function::scalar::datetime::convert_tz::ConvertTz;
+use sail_function::scalar::datetime::spark_date_to_timestamp::SparkDateToTimestamp;
+use sail_function::scalar::datetime::spark_timestamp_to_ntz::SparkTimestampToNtz;
 
 use crate::function::is_spark_compatible_arrow_fixed_offset;
 
+/// The TIMESTAMP in session zone `timezone` of `argument`, a TIMESTAMP_NTZ or DATE of type
+/// `source`. A local time skipped by a DST change moves forward by the skipped interval and a
+/// repeated one takes its earlier instant; a DATE starts at the first instant of its day.
 pub(crate) fn cast_local_timestamp_expr_to_ltz(
     argument: expr::Expr,
+    source: &DataType,
     timezone: &Arc<str>,
 ) -> expr::Expr {
+    if matches!(source, DataType::Date32 | DataType::Date64) {
+        return cast_date_expr_to_ltz(argument, timezone, false);
+    }
     let timestamp_ntz = cast(argument, DataType::Timestamp(TimeUnit::Microsecond, None));
     let timestamp_ltz = DataType::Timestamp(TimeUnit::Microsecond, Some(Arc::clone(timezone)));
     if is_spark_compatible_arrow_fixed_offset(timezone.as_ref()) {
@@ -33,11 +43,55 @@ pub(crate) fn cast_local_timestamp_expr_to_ltz(
     cast(cast(instant, DataType::Int64), timestamp_ltz)
 }
 
+/// Spark's TIMESTAMP to TIMESTAMP_NTZ conversion of `argument`, a TIMESTAMP in `unit` annotated
+/// with `argument_zone`: each instant's local date-time in `session_timezone`, whatever zone
+/// the annotation names. A local date-time beyond the BIGINT range fails, or is NULL for
+/// `null_on_overflow`. `None` when Arrow cannot parse the session zone, such as `Z` or `PST`
+/// (#1029); the caller then keeps its previous conversion.
+pub(crate) fn ltz_expr_to_local_timestamp(
+    argument: expr::Expr,
+    unit: TimeUnit,
+    argument_zone: &Arc<str>,
+    session_timezone: &Arc<str>,
+    null_on_overflow: bool,
+) -> Option<expr::Expr> {
+    let conversion =
+        SparkTimestampToNtz::for_session_zone(Arc::clone(session_timezone), null_on_overflow)?;
+    let argument = match unit {
+        TimeUnit::Microsecond => argument,
+        _ => cast(
+            argument,
+            DataType::Timestamp(TimeUnit::Microsecond, Some(Arc::clone(argument_zone))),
+        ),
+    };
+    Some(ScalarUDF::from(conversion).call(vec![argument]))
+}
+
+/// Spark's DATE to TIMESTAMP conversion in session zone `timezone`: the first instant of each
+/// day, as Java's `LocalDate.atStartOfDay` gives it. When a DST change skips midnight the day
+/// starts where the skipped interval ends, which differs from a TIMESTAMP_NTZ midnight when
+/// the interval begins before midnight. A start beyond the BIGINT range fails, or is NULL for
+/// `null_on_overflow`.
+pub(crate) fn cast_date_expr_to_ltz(
+    argument: expr::Expr,
+    timezone: &Arc<str>,
+    null_on_overflow: bool,
+) -> expr::Expr {
+    ScalarUDF::from(SparkDateToTimestamp::new(
+        Arc::clone(timezone),
+        null_on_overflow,
+    ))
+    .call(vec![argument])
+}
+
 pub(crate) fn cast_local_timestamp_value_to_ltz(
     mut input: ScalarFunctionArgs,
     timezone: &Arc<str>,
 ) -> datafusion_common::Result<ColumnarValue> {
     let [value] = take_function_args("local timestamp cast", input.args.as_slice())?;
+    if matches!(value.data_type(), DataType::Date32 | DataType::Date64) {
+        return SparkDateToTimestamp::new(Arc::clone(timezone), false).convert_dates(value);
+    }
     let timestamp_ntz = DataType::Timestamp(TimeUnit::Microsecond, None);
     let value = value.cast_to(&timestamp_ntz, None)?;
     let timestamp_ltz = DataType::Timestamp(TimeUnit::Microsecond, Some(timezone.clone()));

@@ -15,6 +15,13 @@ use datafusion::prelude::{SessionConfig, SessionContext};
 use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
 use serde_json::{Value, json};
 
+#[expect(
+    dead_code,
+    reason = "These controls use schema and collected-batch readback only."
+)]
+#[path = "support/string_binary.rs"]
+mod string_binary;
+
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 static CALLS: AtomicUsize = AtomicUsize::new(0);
 
@@ -239,9 +246,12 @@ async fn regexp_replace_position_preserves_folding_permissions() -> TestResult {
                     },
                 )
                 .await?;
-                assert_eq!(CALLS.load(Ordering::SeqCst), 0, "resolve: {sql}");
+                let after_resolve = CALLS.load(Ordering::SeqCst);
+                assert_eq!(after_resolve, 0, "resolve: {sql}");
                 let physical = query.create_physical_plan(&session).await?;
-                assert_eq!(CALLS.load(Ordering::SeqCst), 0, "prepare: {sql}");
+                let after_physical = CALLS.load(Ordering::SeqCst);
+                assert_eq!(after_physical, 0, "prepare: {sql}");
+                let schema = physical.schema();
                 let batches =
                     datafusion::physical_plan::collect(physical, session.task_ctx()).await?;
                 assert_eq!(CALLS.load(Ordering::SeqCst), 1, "collect: {sql}");
@@ -251,6 +261,19 @@ async fn regexp_replace_position_preserves_folding_permissions() -> TestResult {
                     array_value_to_string(batches[0].column(0).as_ref(), 0)?,
                     expected,
                     "{sql}"
+                );
+                eprintln!(
+                    "c06 position numeric callback: {}",
+                    json!({"sql":sql,"ansi":ansi_mode,"source_type":source,"folding":false,
+                        "actual":{
+                            "analyzed_schema":string_binary::capture_schema(query.logical_plan.schema().fields(), Some(&query.column_names))?,
+                            "analyzed_arrow_schema":format!("{:?}", query.logical_plan.schema()),
+                            "physical_schema":string_binary::capture_schema(schema.fields(), None)?,
+                            "physical_arrow_schema":format!("{schema:?}"),
+                            "after_resolve":after_resolve,"after_physical":after_physical,
+                            "after_execute":CALLS.load(Ordering::SeqCst),
+                            "result":string_binary::capture_batches(&batches)?,
+                        },"spark_custom_udf_oracle":false})
                 );
             }
             CALLS.store(0, Ordering::SeqCst);
@@ -274,6 +297,15 @@ async fn regexp_replace_position_preserves_folding_permissions() -> TestResult {
                     "[DATATYPE_MISMATCH.NON_FOLDABLE_INPUT] regexp_replace position must be a foldable INT expression"
                 ),
                 "{sql}: {error}"
+            );
+            eprintln!(
+                "c06 position nonfoldable numeric callback: {}",
+                json!({"sql":sql,"ansi":ansi_mode,"source_type":source,"folding":false,
+                    "actual":{"error":error.to_string(),"error_stage":"resolve",
+                        "analyzed_schema":null,"analyzed_arrow_schema":null,
+                        "physical_schema":null,"physical_arrow_schema":null,
+                        "after_resolve":CALLS.load(Ordering::SeqCst)},
+                    "spark_custom_udf_oracle":false})
             );
         }
     }

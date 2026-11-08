@@ -310,18 +310,7 @@ async fn regexp_replace_matches_spark_and_retains_external_boundaries() -> TestR
                         } else {
                             "required_admission_error"
                         }
-                    } else if limit == Some("utf16_split_region")
-                        || (id == "position_supplementary_3"
-                            && case["sql"] == "SELECT regexp_replace('a😀b','.','X',3) AS r"
-                            && observed["analyzed_schema"] == expected["analyzed_schema"]
-                            && observed["physical_schema"] == expected["physical_schema"]
-                            && expected["rows"] == json!([["a?XX"]])
-                            && observed["error_stage"] == "execute"
-                            && error
-                                == Some(
-                                    "execute: Execution error: regexp_replace cannot start a native regex region inside a UTF-16 surrogate pair",
-                                ))
-                    {
+                    } else if limit == Some("utf16_split_region") {
                         "external_java_utf16_region_798"
                     } else if limit == Some("utf16_optional_advancement") {
                         "external_java_utf16_empty_match_798"
@@ -675,6 +664,33 @@ async fn regexp_native_capability_limits_retain_strict_spark_differences() -> Te
     Ok(())
 }
 
+async fn native_batches(
+    session: &SessionContext,
+    sql: &str,
+    context: Value,
+) -> TestResult<Vec<arrow::record_batch::RecordBatch>> {
+    let frame = session.sql(sql).await?;
+    let analyzed_schema = string_binary::capture_schema(frame.schema().fields(), None)?;
+    let analyzed_arrow_schema = format!("{:?}", frame.schema());
+    let physical = frame.create_physical_plan().await?;
+    let before = physical.schema();
+    let batches = datafusion::physical_plan::collect(physical.clone(), session.task_ctx()).await?;
+    let schema = physical.schema();
+    let result = string_binary::capture_batches(&batches)?;
+    eprintln!(
+        "c06 replacement native SQL: {}",
+        json!({"sql":sql,"context":context,"actual":{
+            "public_schema":analyzed_schema,"public_arrow_schema":analyzed_arrow_schema,
+            "before_collect":string_binary::capture_schema(before.fields(), None)?,
+            "before_collect_arrow_schema":format!("{before:?}"),
+            "physical_schema":string_binary::capture_schema(schema.fields(), None)?,
+            "physical_arrow_schema":format!("{schema:?}"),
+            "rows":result["rows"],"error":null,"phase":"encode","result":result,
+        },"spark_custom_udf_oracle":false})
+    );
+    Ok(batches)
+}
+
 #[tokio::test]
 async fn regexp_replace_preserves_native_sql() -> TestResult {
     let plain = SessionContext::new();
@@ -686,8 +702,11 @@ async fn regexp_replace_preserves_native_sql() -> TestResult {
         r"SELECT regexp_replace('a😀b', E'\\B','X','g') AS r",
         "SELECT '${x}' AS literal_x,'${missing}' AS literal_missing,regexp_replace('a','(a)','${x}','g') AS r",
     ] {
-        let expected = plain.sql(sql).await?.collect().await?;
-        assert_eq!(session.sql(sql).await?.collect().await?, expected);
+        let expected = native_batches(&plain, sql, json!({"phase":"plain"})).await?;
+        assert_eq!(
+            native_batches(&session, sql, json!({"phase":"configured_before"})).await?,
+            expected
+        );
         native.push((sql, expected));
     }
     for ansi in [true, false] {
@@ -699,7 +718,10 @@ async fn regexp_replace_preserves_native_sql() -> TestResult {
             capture_result(&session, &json!({"sql":sql,"ansi":ansi})).await?;
         }
         for (sql, expected) in &native {
-            assert_eq!(session.sql(sql).await?.collect().await?, *expected);
+            assert_eq!(
+                native_batches(&session, sql, json!({"phase":"after_spark","ansi":ansi})).await?,
+                *expected
+            );
         }
         for enabled in [true, false] {
             let actual = capture_result(&session, &json!({
@@ -711,7 +733,15 @@ async fn regexp_replace_preserves_native_sql() -> TestResult {
                 json!([[if enabled { "configured" } else { "${x}" }]])
             );
             for (sql, expected) in &native {
-                assert_eq!(session.sql(sql).await?.collect().await?, *expected);
+                assert_eq!(
+                    native_batches(
+                        &session,
+                        sql,
+                        json!({"phase":"after_substitution","ansi":ansi,"enabled":enabled})
+                    )
+                    .await?,
+                    *expected
+                );
             }
         }
     }
@@ -761,8 +791,8 @@ fn substitution_error_matches(case: &Value, actual: &Value) -> bool {
             else {
                 return false;
             };
-            // #1064 retains literal-error timing; compare the execution cause separately.
-            let has_recorded_execution_phase = expected["phase"] == "collect"
+            let has_required_phase = (expected["phase"] == "collect"
+                && actual["error_stage"] == "execute")
                 || (expected["phase"] == "optimized_schema"
                     && matches!(
                         case["id"].as_str(),
@@ -771,9 +801,11 @@ fn substitution_error_matches(case: &Value, actual: &Value) -> bool {
                                 | "disabled_defined_regexp_replace_literal_bad_named_group"
                                 | "defined_invalid_replacement_group"
                         )
-                    ));
-            has_recorded_execution_phase
-                && actual["error_stage"] == "execute"
+                    )
+                    && actual["error_stage"] == "physical"
+                    && actual.get("physical_schema") == Some(&Value::Null)
+                    && actual.get("physical_arrow_schema") == Some(&Value::Null));
+            has_required_phase
                 && required_error_outcome_matches(error, actual.get("analyzed_schema"), expected)
                 && error.contains(&format!(
                     "[INVALID_REGEXP_REPLACE] source={source:?}, pattern={pattern:?}, replacement={replacement:?}, position={position}:"
@@ -918,9 +950,9 @@ async fn sql_variable_substitution_matches_spark_configuration_references() -> T
     assert_eq!(required_errors, 24 * 6);
     assert_eq!(parse_errors, 4 * 6);
     assert_eq!(cycle_errors, 4 * 6);
-    assert_eq!(phase_differences, 6 * 6);
+    assert_eq!(phase_differences, 0);
     assert_eq!(identifier_differences, 4 * 6);
-    assert_eq!(strict_matches, 110 * 6);
+    assert_eq!(strict_matches, 116 * 6);
     Ok(())
 }
 
@@ -948,9 +980,22 @@ async fn regexp_replace_preserves_declared_arrow_strings() -> TestResult {
             assert_eq!(query.logical_plan.schema().field(0).data_type(), &data_type);
             let physical = query.create_physical_plan(&session).await?;
             assert_eq!(physical.schema().field(0).data_type(), &data_type);
-            for batch in datafusion::physical_plan::collect(physical, session.task_ctx()).await? {
+            let schema = physical.schema();
+            let batches = datafusion::physical_plan::collect(physical, session.task_ctx()).await?;
+            for batch in &batches {
                 assert_eq!(batch.column(0).data_type(), &data_type);
             }
+            eprintln!(
+                "c06 replacement Arrow strings: {}",
+                json!({"representation":representation,"batch_size":batch_size,
+                    "sql":"SELECT regexp_replace(s,re,replacement) AS r FROM rr_valid ORDER BY k",
+                    "analyzed_schema":string_binary::capture_schema(query.logical_plan.schema().fields(), Some(&query.column_names))?,
+                    "analyzed_arrow_schema":format!("{:?}", query.logical_plan.schema()),
+                    "physical_schema":string_binary::capture_schema(schema.fields(), None)?,
+                    "physical_arrow_schema":format!("{schema:?}"),
+                    "result":string_binary::capture_batches(&batches)?,
+                })
+            );
         }
     }
     Ok(())
@@ -1004,33 +1049,261 @@ async fn regexp_replace_evaluates_each_volatile_argument_once() -> TestResult {
                             }),
                         ));
                     }
+                    let sql = format!(
+                        "SELECT k,regexp_replace(count_source(s),count_pattern(re),count_replacement(replacement)) AS r FROM {table} ORDER BY k"
+                    );
                     let query = plan_query(
                         &session,
-                        &format!("SELECT k,regexp_replace(count_source(s),count_pattern(re),count_replacement(replacement)) AS r FROM {table} ORDER BY k"),
-                        &SparkSqlOptions { ansi_mode, ..Default::default() },
+                        &sql,
+                        &SparkSqlOptions {
+                            ansi_mode,
+                            ..Default::default()
+                        },
                     )
                     .await?;
                     let physical = query.create_physical_plan(&session).await?;
-                    assert_eq!(
-                        evaluated_rows.each_ref().map(|n| n.load(Ordering::SeqCst)),
-                        [0; 3]
-                    );
+                    let before_collect =
+                        evaluated_rows.each_ref().map(|n| n.load(Ordering::SeqCst));
+                    assert_eq!(before_collect, [0; 3]);
+                    let schema = physical.schema();
                     let batches =
                         datafusion::physical_plan::collect(physical, session.task_ctx()).await?;
                     assert_eq!(
                         batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
                         14
                     );
-                    assert_eq!(
-                        evaluated_rows.each_ref().map(|n| n.load(Ordering::SeqCst)),
-                        [14; 3]
-                    );
-                    for batch in batches {
+                    let after_collect = evaluated_rows.each_ref().map(|n| n.load(Ordering::SeqCst));
+                    assert_eq!(after_collect, [14; 3]);
+                    for batch in &batches {
                         assert_eq!(batch.column(1).data_type(), &data_type);
                     }
+                    eprintln!(
+                        "c06 replacement volatile arguments: {}",
+                        json!({"table":table,"sql":sql,"representation":representation,"batch_size":batch_size,"ansi":ansi_mode,
+                            "analyzed_schema":string_binary::capture_schema(query.logical_plan.schema().fields(), Some(&query.column_names))?,
+                            "analyzed_arrow_schema":format!("{:?}", query.logical_plan.schema()),
+                            "physical_schema":string_binary::capture_schema(schema.fields(), None)?,
+                            "physical_arrow_schema":format!("{schema:?}"),
+                            "before_collect":before_collect,"after_collect":after_collect,
+                            "result":string_binary::capture_batches(&batches)?,"spark_custom_udf_oracle":false,
+                        })
+                    );
                 }
             }
         }
     }
+    Ok(())
+}
+
+#[tokio::test]
+async fn regexp_replace_reads_all_referenced_provider_layouts() -> TestResult {
+    use datafusion::physical_plan::{ExecutionPlanProperties, collect_partitioned};
+
+    // Bind only providers referenced by these replacement corpora.
+    let fixtures: &[(&str, &str, &[&str])] = &[
+        (
+            "regex-line-missing-spark.jsonl",
+            include_str!("fixtures/regex-line-missing-spark.jsonl"),
+            &["rr_line_boundary"],
+        ),
+        (
+            "regex-syntax-missing-spark.jsonl",
+            include_str!("fixtures/regex-syntax-missing-spark.jsonl"),
+            &["rr_syntax_boundary", "rr_syntax_empty"],
+        ),
+        (
+            "regex-utf16-missing-spark.jsonl",
+            include_str!("fixtures/regex-utf16-missing-spark.jsonl"),
+            &["rr_utf16", "rr_utf16_empty", "rr_nonboundary"],
+        ),
+        (
+            "regex-word-categories-spark.jsonl",
+            include_str!("fixtures/regex-word-categories-spark.jsonl"),
+            &["c06_word_categories"],
+        ),
+        (
+            "regexp-replace-empty-utf16-spark.jsonl",
+            include_str!("fixtures/regexp-replace-empty-utf16-spark.jsonl"),
+            &["rr_utf16", "rr_utf16_empty", "rr_utf16_errors"],
+        ),
+        (
+            "regexp-replace-expanded-spark.jsonl",
+            include_str!("fixtures/regexp-replace-expanded-spark.jsonl"),
+            &[
+                "rr_valid",
+                "rr_invalid",
+                "rr_nullable",
+                "rr_empty_required",
+                "rr_empty_nullable",
+                "rr_all_null",
+                "rr_guard",
+            ],
+        ),
+        (
+            "regexp-replace-nonboundary-spark.jsonl",
+            include_str!("fixtures/regexp-replace-nonboundary-spark.jsonl"),
+            &["rr_nonboundary", "rr_nonboundary_empty"],
+        ),
+        (
+            "regexp-replace-position-int-spark.jsonl",
+            include_str!("fixtures/regexp-replace-position-int-spark.jsonl"),
+            &["rp799", "rp799_empty"],
+        ),
+        (
+            "regexp-replace-position-type-priority-spark.jsonl",
+            include_str!("fixtures/regexp-replace-position-type-priority-spark.jsonl"),
+            &["type_priority", "type_priority_empty"],
+        ),
+        (
+            "regexp-replace-spark.jsonl",
+            include_str!("fixtures/regexp-replace-spark.jsonl"),
+            &[
+                "c06_strings_required",
+                "c06_strings_nullable",
+                "c06_strings_empty_required",
+                "c06_strings_empty_nullable",
+                "c06_regex_cases",
+            ],
+        ),
+        (
+            "sql-variable-substitution-spark.jsonl",
+            include_str!("fixtures/sql-variable-substitution-spark.jsonl"),
+            &["rr789_required", "rr789_nullable"],
+        ),
+    ];
+    let mut definitions: Vec<(Value, Vec<&str>)> = Vec::new();
+    let mut bindings = 0;
+    for (fixture, capture, names) in fixtures {
+        let header: Value = serde_json::from_str(capture.lines().next().ok_or("missing header")?)?;
+        let inputs = header
+            .get("registered_inputs")
+            .or_else(|| header.get("inputs"))
+            .and_then(Value::as_array)
+            .ok_or("missing providers")?;
+        for name in *names {
+            let matching = inputs
+                .iter()
+                .filter(|input| input["name"] == *name)
+                .collect::<Vec<_>>();
+            assert_eq!(matching.len(), 1, "{fixture}/{name}");
+            let input = matching[0];
+            if let Some(index) = definitions
+                .iter()
+                .position(|(definition, _)| definition == input)
+            {
+                definitions[index].1.push(fixture);
+            } else {
+                definitions.push((input.clone(), vec![fixture]));
+            }
+            bindings += 1;
+        }
+    }
+    assert_eq!(bindings, 30);
+    assert_eq!(definitions.len(), 27);
+    let mut observed = 0;
+    for (definition_id, (input, fixtures)) in definitions.iter().enumerate() {
+        let name = input["name"].as_str().ok_or("missing provider name")?;
+        for representation in 0..3 {
+            for batch_size in [1, 32] {
+                let session = session(batch_size);
+                register_inputs(
+                    &session,
+                    &json!({"registered_inputs":[input]}),
+                    representation,
+                    batch_size,
+                )?;
+                let provider = session.table_provider(name).await?;
+                let schema = provider.schema();
+                assert_eq!(
+                    string_binary::capture_schema(schema.fields(), None)?,
+                    input["schema"]
+                );
+                for (field, declared) in schema.fields().iter().zip(
+                    input["schema"]["fields"]
+                        .as_array()
+                        .ok_or("missing fields")?,
+                ) {
+                    let expected = match declared["type"].as_str().ok_or("missing type")? {
+                        "integer" => DataType::Int32,
+                        "long" => DataType::Int64,
+                        "string" => [DataType::Utf8, DataType::LargeUtf8, DataType::Utf8View]
+                            [representation]
+                            .clone(),
+                        "binary" => [
+                            DataType::Binary,
+                            DataType::LargeBinary,
+                            DataType::BinaryView,
+                        ][representation]
+                            .clone(),
+                        other => return Err(format!("unexpected provider type: {other}").into()),
+                    };
+                    assert_eq!(field.data_type(), &expected, "{name}/{}", field.name());
+                }
+                let frame = session.table(name).await?;
+                assert_eq!(frame.schema().inner().as_ref(), schema.as_ref());
+                let state = session.state();
+                let physical = provider.scan(&state, None, &[], None).await?;
+                let physical_schema = physical.schema();
+                assert_eq!(physical_schema, schema);
+                let partition_count = physical.output_partitioning().partition_count();
+                let partitions = collect_partitioned(physical.clone(), session.task_ctx()).await?;
+                let executed_schema = physical.schema();
+                assert_eq!(executed_schema, physical_schema);
+                assert_eq!(partition_count, 2);
+                assert_eq!(partitions.len(), partition_count);
+                let expected_rows = input["rows"].as_array().ok_or("missing provider rows")?;
+                let mut actual = Vec::new();
+                for (partition, batches) in partitions.iter().enumerate() {
+                    for batch in batches {
+                        assert_eq!(batch.schema(), schema);
+                    }
+                    let result = string_binary::capture_batches(batches)?;
+                    let expected_batches = expected_rows
+                        .chunks(batch_size)
+                        .enumerate()
+                        .filter(|(chunk, _)| chunk % 2 == partition)
+                        .map(|(_, rows)| rows)
+                        .collect::<Vec<_>>();
+                    assert_eq!(
+                        result["rows"],
+                        json!(
+                            expected_batches
+                                .iter()
+                                .flat_map(|rows| rows.iter())
+                                .collect::<Vec<_>>()
+                        )
+                    );
+                    assert_eq!(
+                        batches
+                            .iter()
+                            .map(|batch| batch.num_rows())
+                            .collect::<Vec<_>>(),
+                        expected_batches
+                            .iter()
+                            .map(|rows| rows.len())
+                            .collect::<Vec<_>>()
+                    );
+                    actual.push(json!({"partition":partition,"result":result}));
+                }
+                eprintln!(
+                    "c06 replacement provider layout: {}",
+                    json!({"definition_id":definition_id,"definition":input,"fixtures":fixtures,
+                        "settings":{"batch_size":state.config().batch_size(),"target_partitions":state.config().target_partitions()},"representation":representation,
+                        "name":name,"provider_schema":string_binary::capture_schema(schema.fields(), None)?,
+                        "provider_arrow_schema":format!("{schema:?}"),
+                        "public_schema":string_binary::capture_schema(frame.schema().fields(), None)?,
+                        "public_arrow_schema":format!("{:?}",frame.schema()),
+                        "before_collect_schema":string_binary::capture_schema(physical_schema.fields(), None)?,
+                        "before_collect_arrow_schema":format!("{physical_schema:?}"),
+                        "physical_schema":string_binary::capture_schema(executed_schema.fields(), None)?,
+                        "physical_arrow_schema":format!("{executed_schema:?}"),
+                        "actual_partition_count":partition_count,"partitions":actual,"error":null,
+                    })
+                );
+                observed += 1;
+            }
+        }
+    }
+    assert_eq!(observed, 162);
     Ok(())
 }

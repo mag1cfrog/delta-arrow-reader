@@ -66,6 +66,7 @@ use sail_function::scalar::spark_decimal_cast::{DecimalCastMode, SparkDecimalCas
 use sail_function::scalar::spark_evaluation::SparkInterpretedEvaluation;
 use sail_function::scalar::spark_to_string::{SparkToLargeUtf8, SparkToUtf8, SparkToUtf8View};
 use sail_function::scalar::string::spark_regexp_extract_all::SparkRegexpExtract;
+use sail_function::scalar::string::spark_regexp_replace::SparkRegexpReplace;
 use sail_function::scalar::string::spark_substring::SparkSubstring;
 use sail_function::scalar::struct_function::StructFunction;
 
@@ -696,7 +697,7 @@ impl PrepareSparkExpressions {
         };
         let mut found = false;
         let mut check_preparation_errors = false;
-        let mut check_cast = false;
+        let mut needs_reachability_check = false;
         let mut has_correlated_scalar = false;
         let mut check_groups = false;
         let mut has_null_sensitive_comparison = false;
@@ -725,7 +726,12 @@ impl PrepareSparkExpressions {
                 has_coalesce_declaration_casts |= is_spark_query && expr.exists(|expr| {
                     Ok(has_coalesce_declaration_cast(expr))
                 })?;
-                check_cast |= has_cast(expr)?;
+                // Strict constant UDFs need projection pruning before ordinary folding.
+                needs_reachability_check |= has_cast(expr)?
+                    || (is_spark_query && expr.exists(|expr| {
+                        Ok(matches!(expr, Expr::ScalarFunction(function)
+                            if function.func.inner().propagates_constant_folding_errors()))
+                    })?);
                 has_correlated_scalar |= is_spark_query && expr.exists(|expr| {
                     Ok(matches!(expr, Expr::ScalarSubquery(subquery) if !subquery.outer_ref_columns.is_empty()))
                 })?;
@@ -738,7 +744,7 @@ impl PrepareSparkExpressions {
                 })?;
                 Ok(TreeNodeRecursion::Continue)
             })?;
-            Ok(if found && check_preparation_errors && check_cast && check_groups && has_null_sensitive_comparison && has_constant_struct && has_coalesce_declaration_casts && has_slice_parameters {
+            Ok(if found && check_preparation_errors && needs_reachability_check && check_groups && has_null_sensitive_comparison && has_constant_struct && has_coalesce_declaration_casts && has_slice_parameters {
                 TreeNodeRecursion::Stop
             } else {
                 TreeNodeRecursion::Continue
@@ -746,7 +752,7 @@ impl PrepareSparkExpressions {
         })?;
         if !found
             && !check_preparation_errors
-            && !check_cast
+            && !needs_reachability_check
             && !has_correlated_scalar
             && !check_groups
             && !has_null_sensitive_comparison
@@ -783,7 +789,7 @@ impl PrepareSparkExpressions {
         } else {
             plan
         };
-        let plan = if check_cast || check_preparation_errors {
+        let plan = if needs_reachability_check || check_preparation_errors {
             plan.transform_down_up_with_subqueries(|node| {
                 // Correlated EXISTS drops unused filter subqueries before their preparation.
                 let simplified = if is_spark_query {
@@ -921,7 +927,7 @@ impl PrepareSparkExpressions {
                             }
                             // One-row scalar expressions follow their parent's
                             // reachability before standalone subquery folding.
-                            if check_cast && let Expr::ScalarSubquery(mut subquery) = expr {
+                            if needs_reachability_check && let Expr::ScalarSubquery(mut subquery) = expr {
                                 if let Some(mut expressions) = one_row_exprs(&subquery.subquery)?
                                     && expressions.len() == 1
                                     && is_locally_evaluable(&expressions[0], true)?
@@ -940,7 +946,7 @@ impl PrepareSparkExpressions {
                                 )?);
                                 return Ok(Transformed::yes(Expr::ScalarSubquery(subquery)));
                             }
-                            if check_cast {
+                            if needs_reachability_check {
                                 let restored = restore_inlined_scalar_metadata(expr);
                                 if restored.transformed {
                                     return Ok(restored);
@@ -958,7 +964,7 @@ impl PrepareSparkExpressions {
             plan
         };
         // The same OneRowRelation rewrite must work without an incidental CAST.
-        let plan = if has_correlated_scalar && !check_cast {
+        let plan = if has_correlated_scalar && !needs_reachability_check {
             plan.transform_up_with_subqueries(|node| {
                 let schema = datafusion_expr::utils::merge_schema(&node.inputs());
                 let names = datafusion_expr::expr_rewriter::NamePreserver::new(&node);
@@ -984,8 +990,8 @@ impl PrepareSparkExpressions {
             plan
         };
         if check_preparation_errors {
-            // CAST preparation already checked these scalar plans before pruning.
-            if !check_cast {
+            // Reachability preparation already checked these scalar plans before pruning.
+            if !needs_reachability_check {
                 // Spark prepares subqueries before pruning their outer expressions.
                 // Keep each plan's own local conversion and LIMIT 0 boundary.
                 plan.apply_with_subqueries(|node| {
@@ -1010,7 +1016,7 @@ impl PrepareSparkExpressions {
             prepare.check_preparation_error_plan(&plan, options, false)?;
         }
 
-        let plan = if check_cast {
+        let plan = if needs_reachability_check {
             prepare.cast_reachability(plan, options, false)?
         } else if check_preparation_errors {
             let prepared = prepare.prepare_distinct_limits(plan, 0)?;
@@ -1695,6 +1701,49 @@ fn local_string_argument_bodies(expr: &Expr) -> Result<Option<[&Expr; 3]>> {
         .or(SparkRegexpExtract::closed_argument_bodies(expr)?))
 }
 
+// Reuse the runtime lowerer's closed-literal admission without evaluating a body.
+fn local_literal_regexp_extract(expr: &Expr) -> Result<bool> {
+    let mut expr = without_metadata_annotations(expr);
+    while let Expr::Alias(alias) = expr {
+        expr = without_metadata_annotations(&alias.expr);
+    }
+    let Some(arguments) = SparkRegexpExtract::closed_argument_bodies(expr)? else {
+        return Ok(false);
+    };
+    let Expr::HigherOrderFunction(function) = expr else {
+        return Ok(false);
+    };
+    let Some(extract) = (function.func.inner().as_ref() as &dyn std::any::Any)
+        .downcast_ref::<SparkRegexpExtract>()
+        .filter(|extract| !extract.has_known_null_argument())
+    else {
+        return Ok(false);
+    };
+    let scalar = datafusion_expr::ScalarUDF::from(extract.clone())
+        .call(arguments.into_iter().cloned().collect());
+    Ok(!lower_runtime_regexp_extract(scalar, false)
+        .map_err(|error| datafusion_common::DataFusionError::External(Box::new(error)))?
+        .transformed)
+}
+
+// Keep the existing local folding permissions; async inputs require their planner.
+fn literal_regexp_input_permitted(input: &LogicalPlan) -> Result<bool> {
+    if !early_local_relation(input)? || !input_permits_array_index_preparation(input)? {
+        return Ok(false);
+    }
+    let mut asynchronous = false;
+    input.apply(|node| {
+        node.apply_expressions(|expr| {
+            asynchronous |= expr.exists(|expr| {
+                Ok(matches!(expr, Expr::ScalarFunction(function) if function.func.as_async().is_some()))
+            })?;
+            Ok(TreeNodeRecursion::Continue)
+        })?;
+        Ok(TreeNodeRecursion::Continue)
+    })?;
+    Ok(!asynchronous)
+}
+
 // Structural eligibility for local evaluation, not execution or guaranteed success.
 // Aggregates, subqueries and outer references need their own planning context;
 // volatile calls remain in execution even when local columns are available.
@@ -1751,6 +1800,231 @@ fn is_locally_evaluable_with_volatility(
         }
     })?;
     Ok(eligible)
+}
+
+#[test]
+fn local_literal_regexp_group_admission_reuses_runtime_routing() -> Result<()> {
+    use datafusion_expr::expr::{HigherOrderFunction, Lambda};
+    use datafusion_expr::{HigherOrderUDF, cast, col};
+
+    let closed = |source, pattern, index, known_null| {
+        Expr::HigherOrderFunction(HigherOrderFunction::new(
+            Arc::new(HigherOrderUDF::new_from_impl(
+                SparkRegexpExtract::new().with_null_short_circuit(known_null),
+            )),
+            vec![source, pattern, index]
+                .into_iter()
+                .map(|body| Expr::Lambda(Lambda::new(vec!["unused".into()], body)))
+                .collect(),
+        ))
+    };
+    for index in [-1_i32, 0, 2] {
+        let expr = closed(
+            lit("a"),
+            lit("(a)"),
+            cast(cast(lit(index), DataType::Int32), DataType::Int64),
+            false,
+        );
+        assert!(local_literal_regexp_extract(&expr)?);
+        assert!(local_literal_regexp_extract(&expr.alias("r"))?);
+    }
+    // Admission does not compile a pattern or evaluate a malformed index cast.
+    let invalid = SparkCastStringToInteger::try_new(
+        DataType::Int32,
+        sail_function::scalar::spark_cast_string_to_integer::StringIntegerCastMode::Ansi,
+    )?
+    .into_expr(lit("bad"));
+    assert!(local_literal_regexp_extract(&closed(
+        lit("a"),
+        lit("(a)"),
+        cast(invalid, DataType::Int64),
+        false,
+    ))?);
+    assert!(local_literal_regexp_extract(&closed(
+        lit("a"),
+        lit("["),
+        lit(2_i64),
+        false,
+    ))?);
+    for expr in [
+        closed(lit(ScalarValue::Utf8(None)), lit("(a)"), lit(2_i64), true),
+        closed(col("s"), lit("(a)"), lit(2_i64), false),
+        closed(lit("a"), lit("(a)"), col("i"), false),
+        closed(lit("a"), lit("(a)"), lit(1_i64) + lit(1_i64), false),
+    ] {
+        assert!(!local_literal_regexp_extract(&expr)?);
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+#[path = "test_utils/regexp_literal_producer.rs"]
+mod literal_producer;
+
+#[tokio::test]
+async fn literal_regexp_producer_permissions_and_retention()
+-> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    use self::literal_producer::{Kind, producer};
+    use crate::{config::PlanConfig, physical_plan::SparkQueryPlanner, resolver::PlanResolver};
+    use datafusion::execution::SessionStateBuilder;
+    use datafusion::prelude::SessionContext;
+    use datafusion_expr::expr::{HigherOrderFunction, Lambda};
+    use datafusion_expr::{HigherOrderUDF, LogicalPlanBuilder};
+    use std::sync::atomic::Ordering;
+
+    let outer = Expr::HigherOrderFunction(HigherOrderFunction::new(
+        Arc::new(HigherOrderUDF::new_from_impl(
+            SparkRegexpExtract::new().with_null_short_circuit(false),
+        )),
+        vec![lit("a"), lit("(a)"), lit(1_i64)]
+            .into_iter()
+            .map(|body| Expr::Lambda(Lambda::new(vec!["unused".into()], body)))
+            .collect(),
+    ))
+    .alias("r");
+    assert!(local_literal_regexp_extract(&outer)?);
+    for kind in [
+        Kind::ImmutableNoFold,
+        Kind::VolatileFold,
+        Kind::AsyncFold,
+        Kind::ImmutableFold,
+    ] {
+        let (callback, counts) = producer(kind);
+        assert_eq!(
+            callback.inner().supports_constant_folding(),
+            kind != Kind::ImmutableNoFold
+        );
+        assert_eq!(
+            callback.signature().volatility == datafusion_expr::Volatility::Volatile,
+            kind == Kind::VolatileFold
+        );
+        assert_eq!(callback.as_async().is_some(), kind == Kind::AsyncFold);
+        let values = LogicalPlanBuilder::values(vec![vec![lit(1_i32)]])?.build()?;
+        let key = Expr::Column(values.schema().columns()[0].clone()).alias("k");
+        let values = LogicalPlanBuilder::from(values)
+            .project(vec![key])?
+            .build()?;
+        let column = values.schema().columns()[0].clone();
+        let input = LogicalPlan::Projection(datafusion_expr::logical_plan::Projection::try_new(
+            vec![callback.call(vec![Expr::Column(column)]).alias("produced")],
+            Arc::new(values),
+        )?);
+        let input = LogicalPlan::SubqueryAlias(
+            datafusion_expr::logical_plan::SubqueryAlias::try_new(Arc::new(input), "q")?,
+        );
+        assert_eq!(
+            literal_regexp_input_permitted(&input)?,
+            kind == Kind::ImmutableFold
+        );
+        assert_eq!(
+            counts.calls.load(Ordering::SeqCst),
+            0,
+            "predicate invoked {kind:?}"
+        );
+    }
+
+    for ansi_mode in [true, false] {
+        let session = SessionContext::new_with_state(
+            SessionStateBuilder::new()
+                .with_default_features()
+                .with_analyzer_rule(Arc::new(PrepareSparkExpressions))
+                .with_query_planner(Arc::new(SparkQueryPlanner))
+                .build(),
+        );
+        let (callback, counts) = producer(Kind::ImmutableFold);
+        session.register_udf(callback);
+        let sql = "SELECT regexp_extract('a','(a)',1) AS r, produced FROM \
+            (SELECT literal_counted_producer(k) AS produced FROM VALUES(1) AS t(k)) AS q";
+        let mut config = PlanConfig::default();
+        config.ansi_mode = ansi_mode;
+        let ast = sail_sql_analyzer::parser::parse_one_statement(sql)?;
+        let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
+        let named = PlanResolver::new(&session, Arc::new(config))
+            .resolve_named_plan(spec)
+            .await?;
+        assert_eq!(
+            counts.calls.load(Ordering::SeqCst),
+            0,
+            "resolve consumed the producer"
+        );
+        let resolved = format!("{:?}", named.plan.schema());
+        let mut options = ConfigOptions::default();
+        options
+            .extensions
+            .insert(SparkSqlExpressionSemantics::default());
+        options
+            .extensions
+            .insert(SparkInterpretedEvaluation::default());
+        let mut props = ExecutionProps::new();
+        props.config_options = Some(Arc::new(options.clone()));
+        let prepare = Prepare {
+            props,
+            has_groups: false,
+            has_null_sensitive_comparison: false,
+            spark_array_index_errors: true,
+        };
+        counts.phase.store(1, Ordering::SeqCst);
+        let prepared = prepare.cast_reachability(
+            preserve_local_string_arguments(named.plan)?,
+            &options,
+            false,
+        )?;
+        assert_eq!(
+            counts.calls.load(Ordering::SeqCst),
+            1,
+            "input conversion must run once"
+        );
+        assert!(
+            !prepared.exists(|node| {
+                let mut original = false;
+                node.apply_expressions(|expr| {
+                    original |= expr.exists(|expr| {
+                        Ok(matches!(expr,Expr::ScalarFunction(function)
+                    if function.func.name() == "literal_counted_producer"))
+                    })?;
+                    Ok(TreeNodeRecursion::Continue)
+                })?;
+                Ok(original)
+            })?,
+            "retained plan still contains the original producer"
+        );
+        let retained_plan = format!("{prepared:?}");
+        let physical = spark_test_frame(&session, prepared)
+            .create_physical_plan()
+            .await?;
+        assert_eq!(
+            counts.calls.load(Ordering::SeqCst),
+            1,
+            "later planning replayed the producer"
+        );
+        counts.phase.store(2, Ordering::SeqCst);
+        let batches = datafusion::physical_plan::collect(physical, session.task_ctx()).await?;
+        assert_eq!(
+            counts.calls.load(Ordering::SeqCst),
+            1,
+            "collection replayed the producer"
+        );
+        assert_eq!(
+            batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
+            1
+        );
+        assert_eq!(batches[0].num_columns(), 2);
+        assert_eq!(
+            ScalarValue::try_from_array(batches[0].column(0).as_ref(), 0)?,
+            ScalarValue::Utf8(Some("a".into()))
+        );
+        assert_eq!(
+            ScalarValue::try_from_array(batches[0].column(1).as_ref(), 0)?,
+            ScalarValue::Int32(Some(1))
+        );
+        eprintln!(
+            "c06 literal producer retention: {}",
+            serde_json::json!({
+            "sql":sql,"ansi":ansi_mode,"resolved_schema":resolved,"retained_plan":retained_plan,
+            "counts":counts.snapshot(),"spark_oracle_credit":false})
+        );
+    }
+    Ok(())
 }
 
 #[test]
@@ -2379,6 +2653,78 @@ fn known_empty(plan: &LogicalPlan) -> bool {
 }
 
 impl Prepare {
+    // Fold closed replacement calls before an outer LIMIT can discard local VALUES rows.
+    fn prepare_local_regexp_replacements(
+        &self,
+        mut node: LogicalPlan,
+        options: &ConfigOptions,
+    ) -> Result<Transformed<LogicalPlan>> {
+        let names = datafusion_expr::expr_rewriter::NamePreserver::new(&node);
+        let LogicalPlan::Projection(project) = &mut node else {
+            return Ok(Transformed::no(node));
+        };
+        let eligible = |expr: &Expr| -> Result<bool> {
+            Ok(is_locally_evaluable(expr, false)?
+                && permits_constant_preparation(expr)?
+                && !expr.exists(|expr| {
+                    Ok(matches!(expr, Expr::ScalarFunction(function)
+                        if function.func.as_async().is_some()))
+                })?
+                && expr.exists(|expr| {
+                    Ok(matches!(expr, Expr::ScalarFunction(function)
+                        if function.func.inner().downcast_ref::<SparkRegexpReplace>()
+                            .is_some_and(SparkRegexpReplace::prepares_literal_errors)))
+                })?)
+        };
+        if !project
+            .input
+            .exists(|plan| Ok(matches!(plan, LogicalPlan::Values(_))))?
+            || !literal_regexp_input_permitted(&project.input)?
+            || !project.expr.iter().try_fold(false, |found, expr| {
+                Ok::<_, datafusion_common::DataFusionError>(found || eligible(expr)?)
+            })?
+        {
+            return Ok(Transformed::no(node));
+        }
+        // Native type admission precedes NULL folding or empty-input pruning.
+        for expr in &project.expr {
+            if eligible(expr)? {
+                let _ = create_physical_expr(expr, project.input.schema(), &self.props)?;
+            }
+        }
+        let input = self
+            .simplify_local_input_expressions(Arc::unwrap_or_clone(Arc::clone(&project.input)))?;
+        project.input = Arc::new(input.data);
+        if known_empty(&project.input) {
+            return Ok(Transformed::yes(LogicalPlan::EmptyRelation(
+                datafusion_expr::logical_plan::EmptyRelation {
+                    produce_one_row: false,
+                    schema: Arc::clone(&project.schema),
+                },
+            )));
+        }
+        let info = datafusion_expr::simplify::SimplifyContext::builder()
+            .with_schema(Arc::clone(project.input.schema()))
+            .with_query_execution_start_time(self.props.query_execution_start_time)
+            .with_config_options(Arc::new(options.clone()))
+            .build();
+        let simplifier = ExprSimplifier::new(info).with_local_input_errors();
+        let mut changed = input.transformed;
+        for expr in &mut project.expr {
+            if eligible(expr)? {
+                let name = names.save(expr);
+                let (prepared, _) =
+                    simplifier.simplify_with_cycle_count_transformed(expr.clone())?;
+                changed |= prepared.transformed;
+                *expr = name.restore(prepared.data);
+            }
+        }
+        Ok(Transformed::new_transformed(
+            node.recompute_schema()?,
+            changed,
+        ))
+    }
+
     // Cache arguments after input checks, before current-expression previews can replay producers.
     fn prepare_array_errors_in_string_calls(
         &self,
@@ -2963,12 +3309,26 @@ impl Prepare {
         // evaluate their projection; nonempty ones preserve live CAST failures.
         let plan = plan
             .transform_up(|mut node| {
+                let replacement = if is_spark_query {
+                    self.prepare_local_regexp_replacements(node, options)?
+                } else {
+                    Transformed::no(node)
+                };
+                node = replacement.data;
                 let mut input_batch = None;
                 let mut casts = false;
                 let mut evaluable = true;
                 let mut retain_input = false;
                 let mut simplified_input = false;
+                let mut literal_groups = false;
                 if let LogicalPlan::Projection(project) = &mut node {
+                    if is_spark_query {
+                        literal_groups = project.expr.iter().try_fold(false, |found, expr| {
+                            Ok::<_, datafusion_common::DataFusionError>(
+                                found || local_literal_regexp_extract(expr)?,
+                            )
+                        })? && literal_regexp_input_permitted(&project.input)?;
+                    }
                     for expr in &project.expr {
                         casts |= early_cast(expr, project.input.schema(), is_spark_query)?;
                         evaluable &= is_locally_evaluable(expr, true)?;
@@ -2977,15 +3337,16 @@ impl Prepare {
                         && self.spark_array_index_errors
                         && early_local_relation(&project.input)?
                         && input_permits_array_index_preparation(&project.input)?
-                        && project.expr.iter().try_fold(false, |found, expr| {
-                            Ok::<_, datafusion_common::DataFusionError>(
-                                found
-                                    || expr.exists(|expr| {
-                                        Ok(local_string_argument_bodies(expr)?.is_some()
-                                            && array_index_error_candidate(expr)?)
-                                    })?,
-                            )
-                        })?;
+                        && (literal_groups
+                            || project.expr.iter().try_fold(false, |found, expr| {
+                                Ok::<_, datafusion_common::DataFusionError>(
+                                    found
+                                        || expr.exists(|expr| {
+                                            Ok(local_string_argument_bodies(expr)?.is_some()
+                                                && array_index_error_candidate(expr)?)
+                                        })?,
+                                )
+                            })?);
                     if retain_input {
                         let prepared = self.simplify_local_input_expressions(
                             Arc::unwrap_or_clone(Arc::clone(&project.input)),
@@ -3081,7 +3442,10 @@ impl Prepare {
                                 continue;
                             };
                             let empty = known_empty(&project.input);
-                            if !empty && !extract.requires_local_index_check() {
+                            let literal_group = literal_groups
+                                && retained
+                                && local_literal_regexp_extract(expression)?;
+                            if !empty && !extract.requires_local_index_check() && !literal_group {
                                 continue;
                             }
                             let Some([source, pattern, index]) =
@@ -3089,6 +3453,41 @@ impl Prepare {
                             else {
                                 continue;
                             };
+                            if literal_group {
+                                // Input conversion is already retained as inert VALUES. Evaluate only
+                                // the admitted index through its existing shared conversion kernel.
+                                let value = match self.eval_constant(index)? {
+                                    ColumnarValue::Scalar(value) => value,
+                                    ColumnarValue::Array(array) if array.len() == 1 => {
+                                        ScalarValue::try_from_array(array.as_ref(), 0)?
+                                    }
+                                    _ => return datafusion_common::internal_err!(
+                                        "closed regexp index returned a result other than one row"
+                                    ),
+                                };
+                                let info = datafusion_expr::simplify::SimplifyContext::builder()
+                                    .with_schema(Arc::clone(project.input.schema()))
+                                    .with_config_options(Arc::new(options.clone()))
+                                    .build();
+                                // The existing marker-gated simplifier checks matched groups and
+                                // leaves parse/capability failures, no-match and success alone.
+                                let _ = datafusion_expr::ScalarUDFImpl::simplify(
+                                    extract,
+                                    vec![
+                                        lit(crate::function::common::literal_value_without_evaluation(source)
+                                            .ok_or_else(|| datafusion_common::internal_datafusion_err!(
+                                                "closed regexp source is not a literal"
+                                            ))?),
+                                        lit(crate::function::common::literal_value_without_evaluation(pattern)
+                                            .ok_or_else(|| datafusion_common::internal_datafusion_err!(
+                                                "closed regexp pattern is not a literal"
+                                            ))?),
+                                        lit(value),
+                                    ],
+                                    &info,
+                                )?;
+                                continue;
+                            }
                             // Keep earlier local input work and NULL selection before index conversion.
                             let index = datafusion_expr::when(
                                 source.clone().is_null().or(pattern.clone().is_null()),
@@ -3149,7 +3548,7 @@ impl Prepare {
                 }
                 Ok(Transformed::new_transformed(
                     node,
-                    prepared.transformed || retained || simplified_input,
+                    replacement.transformed || prepared.transformed || retained || simplified_input,
                 ))
             })?
             .data;

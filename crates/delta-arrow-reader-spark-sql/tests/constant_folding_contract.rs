@@ -15,6 +15,8 @@ use datafusion::optimizer::AnalyzerRule;
 use datafusion::optimizer::simplify_expressions::ExprSimplifier;
 use sail_function::scalar::array::spark_array::SparkArray;
 use sail_function::scalar::collection::spark_concat::SparkConcat;
+use sail_function::scalar::datetime::spark_date::SparkDate;
+use sail_function::scalar::datetime::spark_timestamp::SparkTimestamp;
 use sail_function::scalar::spark_cast_string_to_integer::{
     SparkCastStringToInteger, StringIntegerCastMode,
 };
@@ -70,6 +72,77 @@ fn nested_parents(child: Expr) -> [Expr; 2] {
         ScalarUDF::from(SparkArray::new()).call(vec![child.clone()]),
         ScalarUDF::from(StructFunction::new(vec!["x".into()])).call(vec![child]),
     ]
+}
+
+#[test]
+fn temporal_folding_preserves_parser_values_errors_and_aliases() -> Result<()> {
+    let mut parsers = vec![
+        (
+            ScalarUDF::from(SparkDate::new(false)),
+            "2021-02-29",
+            "2020-01-02",
+        ),
+        (
+            ScalarUDF::from(SparkDate::new(true)),
+            "2021-02-29",
+            "2020-01-02",
+        ),
+    ];
+    for timezone in [None, Some("UTC".into()), Some("America/New_York".into())] {
+        for ansi in [true, false] {
+            for is_try in [true, false] {
+                parsers.push((
+                    ScalarUDF::from(SparkTimestamp::try_new(timezone.clone(), ansi, is_try)?),
+                    "2021-02-29 12:34:56",
+                    "2020-01-02 03:04:05",
+                ));
+            }
+        }
+    }
+    for (parser, invalid, valid) in parsers {
+        let result_type = parser.inner().return_type(&[DataType::Utf8])?;
+        for value in [
+            ScalarValue::Utf8(Some(invalid.into())),
+            ScalarValue::Utf8(Some(valid.into())),
+            ScalarValue::Utf8(None),
+        ] {
+            let expected = parser.invoke_with_args(ScalarFunctionArgs {
+                args: vec![ColumnarValue::Scalar(value.clone())],
+                arg_fields: vec![Arc::new(Field::new(
+                    "input",
+                    DataType::Utf8,
+                    value.is_null(),
+                ))],
+                number_rows: 1,
+                return_field: Arc::new(Field::new("parsed", result_type.clone(), true)),
+                config_options: Arc::new(options(true)),
+            });
+            for function in [
+                parser.clone(),
+                parser.clone().with_aliases(["temporal_parser_alias"]),
+            ] {
+                let folded = simplify(function.call(vec![lit(value.clone())]), true);
+                match &expected {
+                    Ok(ColumnarValue::Scalar(expected)) => {
+                        assert_eq!(folded?, lit(expected.clone()));
+                    }
+                    Ok(ColumnarValue::Array(_)) => {
+                        return datafusion::common::internal_err!(
+                            "temporal parser returned an array for a scalar input"
+                        );
+                    }
+                    Err(expected) => {
+                        assert!(folded.is_err());
+                        assert_eq!(
+                            folded.err().map(|error| error.find_root().to_string()),
+                            Some(expected.find_root().to_string())
+                        );
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 #[test]

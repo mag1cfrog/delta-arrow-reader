@@ -1,0 +1,145 @@
+{
+  "settings": {
+    "spark.sql.session.timeZone": "UTC",
+    "spark.sql.adaptive.enabled": "false",
+    "spark.sql.shuffle.partitions": "1",
+    "spark.sql.caseSensitive": "false",
+    "spark.sql.parser.escapedStringLiterals": "false",
+    "spark.sql.variable.substitute": "false"
+  },
+  "providers": [],
+  "cases": [
+    {
+      "id": "pattern_dead_case",
+      "sql": "SELECT CASE WHEN false THEN regexp_replace('a','[','$9') ELSE 'ok' END AS r",
+      "ansi": true,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      },
+      "suite": "pattern",
+      "reason": "Dead conditional must retain the measured branch policy."
+    },
+    {
+      "id": "pattern_dead_case",
+      "sql": "SELECT CASE WHEN false THEN regexp_replace('a','[','$9') ELSE 'ok' END AS r",
+      "ansi": false,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      },
+      "suite": "pattern",
+      "reason": "Dead conditional must retain the measured branch policy."
+    },
+    {
+      "id": "pattern_where_false",
+      "sql": "SELECT regexp_replace('a','[','$9') AS r WHERE false",
+      "ansi": true,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      },
+      "suite": "pattern",
+      "reason": "Filter elimination can hide or move a constant failure."
+    },
+    {
+      "id": "pattern_where_false",
+      "sql": "SELECT regexp_replace('a','[','$9') AS r WHERE false",
+      "ansi": false,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      },
+      "suite": "pattern",
+      "reason": "Filter elimination can hide or move a constant failure."
+    },
+    {
+      "id": "pattern_outer_limit_zero",
+      "sql": "SELECT regexp_replace('a','[','$9') AS r LIMIT 0",
+      "ansi": true,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      },
+      "suite": "pattern",
+      "reason": "Bare LIMIT0 preparation boundary."
+    },
+    {
+      "id": "pattern_outer_limit_zero",
+      "sql": "SELECT regexp_replace('a','[','$9') AS r LIMIT 0",
+      "ansi": false,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      },
+      "suite": "pattern",
+      "reason": "Bare LIMIT0 preparation boundary."
+    },
+    {
+      "id": "pattern_values_outer_limit_zero",
+      "sql": "SELECT regexp_replace('a','[','$9') AS r FROM VALUES(1) AS t(k) LIMIT 0",
+      "ansi": true,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      },
+      "suite": "pattern",
+      "reason": "Local VALUES LIMIT0 boundary."
+    },
+    {
+      "id": "pattern_values_outer_limit_zero",
+      "sql": "SELECT regexp_replace('a','[','$9') AS r FROM VALUES(1) AS t(k) LIMIT 0",
+      "ansi": false,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      },
+      "suite": "pattern",
+      "reason": "Local VALUES LIMIT0 boundary."
+    },
+    {
+      "id": "pattern_concat_null_first",
+      "sql": "SELECT concat(NULL,regexp_replace('a','[','$9')) AS r",
+      "ansi": true,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      },
+      "suite": "pattern",
+      "reason": "NULL-first CONCAT preparation priority."
+    },
+    {
+      "id": "pattern_concat_null_first",
+      "sql": "SELECT concat(NULL,regexp_replace('a','[','$9')) AS r",
+      "ansi": false,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      },
+      "suite": "pattern",
+      "reason": "NULL-first CONCAT preparation priority."
+    },
+    {
+      "id": "pattern_concat_null_last",
+      "sql": "SELECT concat(regexp_replace('a','[','$9'),NULL) AS r",
+      "ansi": true,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      },
+      "suite": "pattern",
+      "reason": "NULL-last CONCAT preparation priority."
+    },
+    {
+      "id": "pattern_concat_null_last",
+      "sql": "SELECT concat(regexp_replace('a','[','$9'),NULL) AS r",
+      "ansi": false,
+      "timezone": "UTC",
+      "settings": {
+        "spark.sql.variable.substitute": "false"
+      },
+      "suite": "pattern",
+      "reason": "NULL-last CONCAT preparation priority."
+    }
+  ]
+}

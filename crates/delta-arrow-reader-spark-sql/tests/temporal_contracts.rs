@@ -265,24 +265,17 @@ fn differing_parts(expectation: &Value, observation: &Value) -> Vec<&'static str
 /// issue. A record can have several.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum RetainedDifference {
-    /// #937: a constant conversion DAR rejects fails while collecting rows instead of during
-    /// optimization.
-    LateConstantConversionErrors,
     /// #943: typed TIMESTAMP literals roll second 60 over to the next minute.
     RolledOverLeapSecond,
     /// #1003: CAST(DATE AS TIMESTAMP_NTZ) is required at analysis, where Spark declares it
     /// nullable.
     RequiredDateNtzCast,
-    /// #1010: an invalid datetime pattern fails with DAR's message while collecting rows,
-    /// and `#`, `{` and `}` are formatted as literal text.
+    /// #1010: invalid datetime patterns use DAR's message, and `#`, `{` and `}` are
+    /// formatted as literal text.
     DarPatternErrors,
     /// #1011: DATE and TIMESTAMP strings with years beyond the date library's range behave
     /// like the invalid string 'bad'.
     OutOfRangeStrings,
-    /// #1012: a UTC-annotated TIMESTAMP column is evaluated in UTC, not the session zone.
-    UtcAnnotatedColumns,
-    /// #1013: a TIMESTAMP to TIMESTAMP_NTZ cast keeps the UTC wall-clock time.
-    UtcWallClockNtzCast,
     /// #1014: DATE_FORMAT zone names and `O` offsets differ, and DATE and TIMESTAMP_NTZ
     /// inputs show UTC zone tokens.
     ZoneTokenText,
@@ -389,6 +382,7 @@ const ZONE_LETTERS: &[char] = &['z', 'V', 'O', 'X', 'x', 'Z'];
 const HOUR_LETTERS: &[char] = &['H', 'h', 'K', 'k'];
 
 /// #1014: the zone names and `O` offsets DAR prints for a value Spark formats in `timezone`.
+/// DAR prints the Los Angeles local mean time offset without its seconds.
 fn dar_zone_text(value: &Value, timezone: &str) -> TestResult<Value> {
     let Some(text) = value.as_str() else {
         return Ok(value.clone());
@@ -405,7 +399,8 @@ fn dar_zone_text(value: &Value, timezone: &str) -> TestResult<Value> {
             ] {
                 text = text.replace(name, LOS_ANGELES);
             }
-            text.replace("GMT-8", "GMT-0800")
+            text.replace("GMT-7:52:58", "GMT-0752")
+                .replace("GMT-8", "GMT-0800")
                 .replace("GMT-7", "GMT-0700")
         }
         other => return Err(format!("unexpected time zone {other}").into()),
@@ -440,9 +435,9 @@ fn row_pattern<'a>(
         .ok_or_else(|| "missing registered pattern".into())
 }
 
-/// #1012 and #1014: DAR formats the UTC-annotated TIMESTAMP column and every DATE and
-/// TIMESTAMP_NTZ input as UTC values, so in Los Angeles they print the Spark UTC session's
-/// text; TIMESTAMP literals follow the session zone. Zone names then use DAR's text.
+/// #1014: DAR formats every DATE and TIMESTAMP_NTZ input as a UTC value, so in Los Angeles
+/// they print the Spark UTC session's text; TIMESTAMP literals and columns follow the session
+/// zone. Zone names then use DAR's text.
 fn rewrite_formatted_zones(
     current: &mut Value,
     case: &Value,
@@ -466,9 +461,7 @@ fn rewrite_formatted_zones(
         for (index, kind) in kinds.iter().enumerate() {
             let value = match (*kind, timezone) {
                 ("key" | "null", _) => continue,
-                ("timestamp_column" | "date" | "timestamp_ntz", LOS_ANGELES) => {
-                    dar_zone_text(&utc_row[index], UTC)?
-                }
+                ("date" | "timestamp_ntz", LOS_ANGELES) => dar_zone_text(&utc_row[index], UTC)?,
                 ("date" | "timestamp_literal" | "timestamp_column" | "timestamp_ntz", _) => {
                     dar_zone_text(&row[index], timezone)?
                 }
@@ -478,9 +471,6 @@ fn rewrite_formatted_zones(
                 continue;
             }
             match (*kind, timezone) {
-                ("timestamp_column", LOS_ANGELES) => {
-                    retained.insert(RetainedDifference::UtcAnnotatedColumns);
-                }
                 ("date" | "timestamp_ntz", LOS_ANGELES) => {
                     let pattern = row_pattern(case, row, references)?;
                     let zone_letter = has_pattern_letter(pattern, ZONE_LETTERS);
@@ -609,16 +599,6 @@ fn current_expectation(
             .as_str()
             .unwrap_or_default()
             .to_owned();
-        if literal
-            && current["spark_error_phase"] == "optimized"
-            && matches!(
-                condition.as_str(),
-                "CAST_INVALID_INPUT" | "CANNOT_PARSE_TIMESTAMP"
-            )
-        {
-            current["spark_error_phase"] = json!("collect");
-            retained.insert(RetainedDifference::LateConstantConversionErrors);
-        }
         if condition.starts_with("INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_")
             || condition.starts_with("INVALID_DATETIME_PATTERN.")
         {
@@ -633,7 +613,17 @@ fn current_expectation(
             } else {
                 current["expected"] = json!({"status": "error",
                     "dar_message": "invalid datetime pattern: "});
-                current["spark_error_phase"] = json!("collect");
+                current["spark_error_phase"] = if literal
+                    && ansi
+                    && section == "formatted"
+                    && matches!(
+                        operator,
+                        "to_date" | "to_timestamp" | "to_timestamp_ntz" | "to_timestamp_ltz"
+                    ) {
+                    case["spark_error_phase"].clone()
+                } else {
+                    json!("collect")
+                };
             }
             retained.insert(RetainedDifference::DarPatternErrors);
         }
@@ -672,30 +662,6 @@ fn current_expectation(
             }
             fields[0]["nullable"] = json!(false);
             retained.insert(RetainedDifference::RequiredDateNtzCast);
-        }
-    }
-    if section == "convert" && timezone == LOS_ANGELES && current["expected"]["status"] == "ok" {
-        let source = match operator {
-            // The UTC wall-clock time in microseconds is the instant's UNIX_MICROS.
-            "timestamp_to_ntz" => Some((
-                text(case, "id")?.replacen("timestamp_to_ntz", "unix_micros", 1),
-                LOS_ANGELES,
-                RetainedDifference::UtcWallClockNtzCast,
-            )),
-            // A UTC-annotated column is evaluated as in a UTC session.
-            "timestamp_hour" | "timestamp_to_string" | "timestamp_to_date" if !literal => Some((
-                text(case, "id")?.to_owned(),
-                UTC,
-                RetainedDifference::UtcAnnotatedColumns,
-            )),
-            _ => None,
-        };
-        if let Some((id, zone, difference)) = source {
-            let rows = &references.sibling(case, &id, zone)?["expected"]["rows"];
-            if current["expected"]["rows"] != *rows {
-                current["expected"]["rows"] = rows.clone();
-                retained.insert(difference);
-            }
         }
     }
     if section == "formatted"
@@ -788,13 +754,10 @@ async fn temporal_contracts_match_spark() -> TestResult {
     assert_eq!(
         retained,
         [
-            (RetainedDifference::LateConstantConversionErrors, 242),
             (RetainedDifference::RolledOverLeapSecond, 12),
             (RetainedDifference::RequiredDateNtzCast, 24),
             (RetainedDifference::DarPatternErrors, 324),
             (RetainedDifference::OutOfRangeStrings, 212),
-            (RetainedDifference::UtcAnnotatedColumns, 108),
-            (RetainedDifference::UtcWallClockNtzCast, 14),
             (RetainedDifference::ZoneTokenText, 96),
             (RetainedDifference::SkippedLocalTimeAsWritten, 24),
             (RetainedDifference::IgnoredParsedOffset, 4),

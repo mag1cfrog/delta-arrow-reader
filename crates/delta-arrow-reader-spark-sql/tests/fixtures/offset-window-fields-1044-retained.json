@@ -1,0 +1,3868 @@
+{
+  "issue": 1044,
+  "source_request_sha256": "42c2f1e601bd081d8ff23db96815e3faffc67283829b353d1a44a009f307d9a8",
+  "reference_fixture_sha256": "6df72875e6881e4bbf582c7d759d8ecfc0c6dac26f5b7e980260b6c8a74c8f39",
+  "reference_fixture_version": "canonical Boolean v3",
+  "expected_source_records": 94,
+  "expected_native_contexts": 188,
+  "expected_raw_strict_contexts": 120,
+  "expected_retained_native_contexts": 68,
+  "classification": "These are exact inherited native gap profiles, not Spark matches or accepted support policies.",
+  "profiles": {
+    "lag_offset_scalar_defaults": {
+      "public_schema": null,
+      "before_collect": null,
+      "physical_schema": null,
+      "rows": null,
+      "rows_raw": null,
+      "native_phase": "resolve",
+      "error": "External error: invalid argument: [WINDOW_OFFSET_FRAME_MISMATCH] lag frame must match its offset expression",
+      "public_matches": true,
+      "before_matches": true,
+      "physical_matches": true,
+      "rows_match": true,
+      "ordered_rows_match": true,
+      "error_matches": false,
+      "matches": false,
+      "optimized_matches": false,
+      "optimized_schema": null,
+      "optimized_observation": null,
+      "optimized_error": "External error: invalid argument: [WINDOW_OFFSET_FRAME_MISMATCH] lag frame must match its offset expression"
+    },
+    "lag_offset_scalar_signed_ignore": {
+      "public_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "total-order",
+              "source": "id"
+            }
+          },
+          {
+            "name": "zero_required_null",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_required_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_nullable_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_nullable_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_required",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "negative_nullable",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_required_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_nullable_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "before_collect": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "total-order",
+              "source": "id"
+            }
+          },
+          {
+            "name": "zero_required_null",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_required_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_nullable_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_nullable_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_required",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "negative_nullable",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_required_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_nullable_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "physical_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "total-order",
+              "source": "id"
+            }
+          },
+          {
+            "name": "zero_required_null",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_required_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_nullable_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_nullable_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_required",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "negative_nullable",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_required_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_nullable_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "10",
+          "10",
+          "-99",
+          null,
+          "30",
+          "20",
+          "30",
+          "20"
+        ],
+        [
+          "1",
+          "20",
+          "20",
+          "10",
+          "10",
+          "40",
+          "30",
+          "40",
+          "30"
+        ],
+        [
+          "2",
+          "30",
+          "30",
+          "-99",
+          null,
+          "50",
+          "30",
+          "50",
+          "30"
+        ],
+        [
+          "3",
+          "40",
+          "40",
+          "20",
+          "20",
+          "60",
+          "40",
+          "60",
+          "40"
+        ],
+        [
+          "4",
+          "50",
+          "50",
+          "-99",
+          null,
+          "70",
+          "40",
+          "70",
+          "40"
+        ],
+        [
+          "5",
+          "60",
+          "60",
+          "30",
+          "30",
+          "80",
+          "-99",
+          "80",
+          null
+        ],
+        [
+          "6",
+          "70",
+          "70",
+          "40",
+          "40",
+          "-99",
+          "-99",
+          null,
+          null
+        ],
+        [
+          "7",
+          "80",
+          "80",
+          "-99",
+          null,
+          "-99",
+          "-99",
+          null,
+          null
+        ]
+      ],
+      "rows_raw": [
+        [
+          "0",
+          "10",
+          "10",
+          "-99",
+          null,
+          "30",
+          "20",
+          "30",
+          "20"
+        ],
+        [
+          "1",
+          "20",
+          "20",
+          "10",
+          "10",
+          "40",
+          "30",
+          "40",
+          "30"
+        ],
+        [
+          "2",
+          "30",
+          "30",
+          "-99",
+          null,
+          "50",
+          "30",
+          "50",
+          "30"
+        ],
+        [
+          "3",
+          "40",
+          "40",
+          "20",
+          "20",
+          "60",
+          "40",
+          "60",
+          "40"
+        ],
+        [
+          "4",
+          "50",
+          "50",
+          "-99",
+          null,
+          "70",
+          "40",
+          "70",
+          "40"
+        ],
+        [
+          "5",
+          "60",
+          "60",
+          "30",
+          "30",
+          "80",
+          "-99",
+          "80",
+          null
+        ],
+        [
+          "6",
+          "70",
+          "70",
+          "40",
+          "40",
+          "-99",
+          "-99",
+          null,
+          null
+        ],
+        [
+          "7",
+          "80",
+          "80",
+          "-99",
+          null,
+          "-99",
+          "-99",
+          null,
+          null
+        ]
+      ],
+      "native_phase": "encode",
+      "error": null,
+      "public_matches": true,
+      "before_matches": true,
+      "physical_matches": true,
+      "rows_match": false,
+      "ordered_rows_match": false,
+      "error_matches": true,
+      "matches": false,
+      "optimized_matches": true,
+      "optimized_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "id",
+              "role": "total-order"
+            }
+          },
+          {
+            "name": "zero_required_null",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_required_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_nullable_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_nullable_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_required",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "negative_nullable",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_required_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_nullable_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "optimized_observation": {
+        "raw_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "#13",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {
+                "source": "id",
+                "role": "total-order"
+              }
+            },
+            {
+              "name": "#14",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#15",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#16",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#17",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#18",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "#19",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#20",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#21",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "id",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {
+                "source": "id",
+                "role": "total-order"
+              }
+            },
+            {
+              "name": "zero_required_null",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "zero_required_omitted",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "zero_nullable_required",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "zero_nullable_omitted",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "negative_required",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "negative_nullable",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "negative_required_omitted",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "negative_nullable_omitted",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "names_match": true
+      },
+      "optimized_error": null
+    },
+    "lag_null_offset_scalar_signed_ignore": {
+      "public_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "total-order",
+              "source": "id"
+            }
+          },
+          {
+            "name": "zero_required_null",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_required_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_nullable_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_nullable_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_required",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "negative_nullable",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_required_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_nullable_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "before_collect": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "id",
+              "role": "total-order"
+            }
+          },
+          {
+            "name": "zero_required_null",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_required_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_nullable_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_nullable_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_required",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "negative_nullable",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_required_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_nullable_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "physical_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "id",
+              "role": "total-order"
+            }
+          },
+          {
+            "name": "zero_required_null",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_required_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_nullable_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_nullable_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_required",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "negative_nullable",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_required_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_nullable_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "10",
+          "10",
+          "-99",
+          null,
+          "30",
+          "-99",
+          "30",
+          null
+        ],
+        [
+          "1",
+          "20",
+          "20",
+          "-99",
+          null,
+          "-99",
+          "-99",
+          null,
+          null
+        ],
+        [
+          "2",
+          "30",
+          "30",
+          "-99",
+          null,
+          "-99",
+          "-99",
+          null,
+          null
+        ]
+      ],
+      "rows_raw": [
+        [
+          "0",
+          "10",
+          "10",
+          "-99",
+          null,
+          "30",
+          "-99",
+          "30",
+          null
+        ],
+        [
+          "1",
+          "20",
+          "20",
+          "-99",
+          null,
+          "-99",
+          "-99",
+          null,
+          null
+        ],
+        [
+          "2",
+          "30",
+          "30",
+          "-99",
+          null,
+          "-99",
+          "-99",
+          null,
+          null
+        ]
+      ],
+      "native_phase": "encode",
+      "error": null,
+      "public_matches": true,
+      "before_matches": true,
+      "physical_matches": true,
+      "rows_match": false,
+      "ordered_rows_match": false,
+      "error_matches": true,
+      "matches": false,
+      "optimized_matches": true,
+      "optimized_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "total-order",
+              "source": "id"
+            }
+          },
+          {
+            "name": "zero_required_null",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_required_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_nullable_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_nullable_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_required",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "negative_nullable",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_required_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_nullable_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "optimized_observation": {
+        "raw_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "#13",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {
+                "role": "total-order",
+                "source": "id"
+              }
+            },
+            {
+              "name": "#14",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#15",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#16",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#17",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#18",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "#19",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#20",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#21",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "id",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {
+                "role": "total-order",
+                "source": "id"
+              }
+            },
+            {
+              "name": "zero_required_null",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "zero_required_omitted",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "zero_nullable_required",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "zero_nullable_omitted",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "negative_required",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "negative_nullable",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "negative_required_omitted",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "negative_nullable_omitted",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "names_match": true
+      },
+      "optimized_error": null
+    },
+    "lead_offset_scalar_signed_ignore": {
+      "public_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "total-order",
+              "source": "id"
+            }
+          },
+          {
+            "name": "zero_required_null",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_required_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_nullable_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_nullable_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_required",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "negative_nullable",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_required_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_nullable_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "before_collect": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "total-order",
+              "source": "id"
+            }
+          },
+          {
+            "name": "zero_required_null",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_required_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_nullable_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_nullable_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_required",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "negative_nullable",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_required_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_nullable_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "physical_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "total-order",
+              "source": "id"
+            }
+          },
+          {
+            "name": "zero_required_null",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_required_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_nullable_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_nullable_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_required",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "negative_nullable",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_required_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_nullable_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "10",
+          "10",
+          "-99",
+          null,
+          "-99",
+          "-99",
+          null,
+          null
+        ],
+        [
+          "1",
+          "20",
+          "20",
+          "10",
+          "10",
+          "-99",
+          "-99",
+          null,
+          null
+        ],
+        [
+          "2",
+          "30",
+          "30",
+          "-99",
+          null,
+          "10",
+          "-99",
+          "10",
+          null
+        ],
+        [
+          "3",
+          "40",
+          "40",
+          "20",
+          "20",
+          "20",
+          "-99",
+          "20",
+          null
+        ],
+        [
+          "4",
+          "50",
+          "50",
+          "-99",
+          null,
+          "30",
+          "10",
+          "30",
+          "10"
+        ],
+        [
+          "5",
+          "60",
+          "60",
+          "30",
+          "30",
+          "40",
+          "10",
+          "40",
+          "10"
+        ],
+        [
+          "6",
+          "70",
+          "70",
+          "40",
+          "40",
+          "50",
+          "20",
+          "50",
+          "20"
+        ],
+        [
+          "7",
+          "80",
+          "80",
+          "-99",
+          null,
+          "60",
+          "30",
+          "60",
+          "30"
+        ]
+      ],
+      "rows_raw": [
+        [
+          "0",
+          "10",
+          "10",
+          "-99",
+          null,
+          "-99",
+          "-99",
+          null,
+          null
+        ],
+        [
+          "1",
+          "20",
+          "20",
+          "10",
+          "10",
+          "-99",
+          "-99",
+          null,
+          null
+        ],
+        [
+          "2",
+          "30",
+          "30",
+          "-99",
+          null,
+          "10",
+          "-99",
+          "10",
+          null
+        ],
+        [
+          "3",
+          "40",
+          "40",
+          "20",
+          "20",
+          "20",
+          "-99",
+          "20",
+          null
+        ],
+        [
+          "4",
+          "50",
+          "50",
+          "-99",
+          null,
+          "30",
+          "10",
+          "30",
+          "10"
+        ],
+        [
+          "5",
+          "60",
+          "60",
+          "30",
+          "30",
+          "40",
+          "10",
+          "40",
+          "10"
+        ],
+        [
+          "6",
+          "70",
+          "70",
+          "40",
+          "40",
+          "50",
+          "20",
+          "50",
+          "20"
+        ],
+        [
+          "7",
+          "80",
+          "80",
+          "-99",
+          null,
+          "60",
+          "30",
+          "60",
+          "30"
+        ]
+      ],
+      "native_phase": "encode",
+      "error": null,
+      "public_matches": true,
+      "before_matches": true,
+      "physical_matches": true,
+      "rows_match": false,
+      "ordered_rows_match": false,
+      "error_matches": true,
+      "matches": false,
+      "optimized_matches": true,
+      "optimized_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "id",
+              "role": "total-order"
+            }
+          },
+          {
+            "name": "zero_required_null",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_required_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_nullable_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_nullable_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_required",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "negative_nullable",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_required_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_nullable_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "optimized_observation": {
+        "raw_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "#13",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {
+                "source": "id",
+                "role": "total-order"
+              }
+            },
+            {
+              "name": "#14",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#15",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#16",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#17",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#18",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "#19",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#20",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#21",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "id",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {
+                "source": "id",
+                "role": "total-order"
+              }
+            },
+            {
+              "name": "zero_required_null",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "zero_required_omitted",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "zero_nullable_required",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "zero_nullable_omitted",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "negative_required",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "negative_nullable",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "negative_required_omitted",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "negative_nullable_omitted",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "names_match": true
+      },
+      "optimized_error": null
+    },
+    "lead_null_offset_scalar_signed_ignore": {
+      "public_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "id",
+              "role": "total-order"
+            }
+          },
+          {
+            "name": "zero_required_null",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_required_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_nullable_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_nullable_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_required",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "negative_nullable",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_required_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_nullable_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "before_collect": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "id",
+              "role": "total-order"
+            }
+          },
+          {
+            "name": "zero_required_null",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_required_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_nullable_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_nullable_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_required",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "negative_nullable",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_required_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_nullable_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "physical_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "id",
+              "role": "total-order"
+            }
+          },
+          {
+            "name": "zero_required_null",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_required_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_nullable_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_nullable_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_required",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "negative_nullable",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_required_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_nullable_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "10",
+          "10",
+          "-99",
+          null,
+          "-99",
+          "-99",
+          null,
+          null
+        ],
+        [
+          "1",
+          "20",
+          "20",
+          "-99",
+          null,
+          "-99",
+          "-99",
+          null,
+          null
+        ],
+        [
+          "2",
+          "30",
+          "30",
+          "-99",
+          null,
+          "10",
+          "-99",
+          "10",
+          null
+        ]
+      ],
+      "rows_raw": [
+        [
+          "0",
+          "10",
+          "10",
+          "-99",
+          null,
+          "-99",
+          "-99",
+          null,
+          null
+        ],
+        [
+          "1",
+          "20",
+          "20",
+          "-99",
+          null,
+          "-99",
+          "-99",
+          null,
+          null
+        ],
+        [
+          "2",
+          "30",
+          "30",
+          "-99",
+          null,
+          "10",
+          "-99",
+          "10",
+          null
+        ]
+      ],
+      "native_phase": "encode",
+      "error": null,
+      "public_matches": true,
+      "before_matches": true,
+      "physical_matches": true,
+      "rows_match": false,
+      "ordered_rows_match": false,
+      "error_matches": true,
+      "matches": false,
+      "optimized_matches": true,
+      "optimized_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "id",
+              "role": "total-order"
+            }
+          },
+          {
+            "name": "zero_required_null",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_required_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_nullable_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_nullable_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_required",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "negative_nullable",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_required_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "negative_nullable_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "optimized_observation": {
+        "raw_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "#13",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {
+                "source": "id",
+                "role": "total-order"
+              }
+            },
+            {
+              "name": "#14",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#15",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#16",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#17",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#18",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "#19",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#20",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#21",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "id",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {
+                "source": "id",
+                "role": "total-order"
+              }
+            },
+            {
+              "name": "zero_required_null",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "zero_required_omitted",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "zero_nullable_required",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "zero_nullable_omitted",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "negative_required",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "negative_nullable",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "negative_required_omitted",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "negative_nullable_omitted",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "names_match": true
+      },
+      "optimized_error": null
+    },
+    "lead_nonfoldable_offset": {
+      "public_schema": null,
+      "before_collect": null,
+      "physical_schema": null,
+      "rows": null,
+      "rows_raw": null,
+      "native_phase": "resolve",
+      "error": "External error: invalid argument: [WINDOW_OFFSET_FRAME_MISMATCH] lead frame must match its offset expression",
+      "public_matches": true,
+      "before_matches": true,
+      "physical_matches": true,
+      "rows_match": true,
+      "ordered_rows_match": true,
+      "error_matches": false,
+      "matches": false,
+      "optimized_matches": false,
+      "optimized_schema": null,
+      "optimized_observation": null,
+      "optimized_error": "External error: invalid argument: [WINDOW_OFFSET_FRAME_MISMATCH] lead frame must match its offset expression"
+    },
+    "lag_column_default_controls": {
+      "public_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "total-order",
+              "source": "id"
+            }
+          },
+          {
+            "name": "required_column_default",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "nullable_column_default",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "nullable_both",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_nullable_default",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "column_case_default",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "before_collect": null,
+      "physical_schema": null,
+      "rows": null,
+      "rows_raw": null,
+      "native_phase": "create_physical_plan",
+      "error": "This feature is not implemented: There is only support Literal types for field at idx: 2 in Window Function",
+      "public_matches": true,
+      "before_matches": false,
+      "physical_matches": false,
+      "rows_match": false,
+      "ordered_rows_match": false,
+      "error_matches": false,
+      "matches": false,
+      "optimized_matches": true,
+      "optimized_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "id",
+              "role": "total-order"
+            }
+          },
+          {
+            "name": "required_column_default",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "nullable_column_default",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "nullable_both",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "zero_nullable_default",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "column_case_default",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "optimized_observation": {
+        "raw_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "#10",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {
+                "source": "id",
+                "role": "total-order"
+              }
+            },
+            {
+              "name": "#11",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "#12",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#13",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#14",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#15",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "id",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {
+                "source": "id",
+                "role": "total-order"
+              }
+            },
+            {
+              "name": "required_column_default",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "nullable_column_default",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "nullable_both",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "zero_nullable_default",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "column_case_default",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "names_match": true
+      },
+      "optimized_error": null
+    },
+    "lag_offset_scalar_literal_null_payloads": {
+      "public_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "id",
+              "role": "total-order"
+            }
+          },
+          {
+            "name": "typed_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "typed_null",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "typed_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "untyped_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "untyped_null",
+            "type": "void",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "untyped_omitted",
+            "type": "void",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "before_collect": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "total-order",
+              "source": "id"
+            }
+          },
+          {
+            "name": "typed_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "typed_null",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "typed_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "untyped_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "untyped_null",
+            "type": "void",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "untyped_omitted",
+            "type": "void",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "physical_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "total-order",
+              "source": "id"
+            }
+          },
+          {
+            "name": "typed_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "typed_null",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "typed_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "untyped_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "untyped_null",
+            "type": "void",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "untyped_omitted",
+            "type": "void",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "-99",
+          null,
+          null,
+          "-99",
+          null,
+          null
+        ],
+        [
+          "1",
+          "-99",
+          null,
+          null,
+          "-99",
+          null,
+          null
+        ],
+        [
+          "2",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "3",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "4",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "5",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "6",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "7",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      ],
+      "rows_raw": [
+        [
+          "0",
+          "-99",
+          null,
+          null,
+          "-99",
+          null,
+          null
+        ],
+        [
+          "1",
+          "-99",
+          null,
+          null,
+          "-99",
+          null,
+          null
+        ],
+        [
+          "2",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "3",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "4",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "5",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "6",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "7",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      ],
+      "native_phase": "encode",
+      "error": null,
+      "public_matches": true,
+      "before_matches": true,
+      "physical_matches": true,
+      "rows_match": true,
+      "ordered_rows_match": true,
+      "error_matches": false,
+      "matches": false,
+      "optimized_matches": false,
+      "optimized_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "id",
+              "role": "total-order"
+            }
+          },
+          {
+            "name": "typed_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "typed_null",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "typed_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "untyped_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "untyped_null",
+            "type": "void",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "untyped_omitted",
+            "type": "void",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "optimized_observation": {
+        "raw_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "#11",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {
+                "source": "id",
+                "role": "total-order"
+              }
+            },
+            {
+              "name": "#12",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#13",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#14",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#15",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#16",
+              "type": "void",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#17",
+              "type": "void",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "id",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {
+                "source": "id",
+                "role": "total-order"
+              }
+            },
+            {
+              "name": "typed_required",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "typed_null",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "typed_omitted",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "untyped_required",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "untyped_null",
+              "type": "void",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "untyped_omitted",
+              "type": "void",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "names_match": true
+      },
+      "optimized_error": null
+    },
+    "lag_empty_offset_scalar_literal_null_payloads": {
+      "public_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "id",
+              "role": "total-order"
+            }
+          },
+          {
+            "name": "typed_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "typed_null",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "typed_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "untyped_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "untyped_null",
+            "type": "void",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "untyped_omitted",
+            "type": "void",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "before_collect": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "id",
+              "role": "total-order"
+            }
+          },
+          {
+            "name": "typed_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "typed_null",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "typed_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "untyped_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "untyped_null",
+            "type": "void",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "untyped_omitted",
+            "type": "void",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "physical_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "id",
+              "role": "total-order"
+            }
+          },
+          {
+            "name": "typed_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "typed_null",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "typed_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "untyped_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "untyped_null",
+            "type": "void",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "untyped_omitted",
+            "type": "void",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [],
+      "rows_raw": [],
+      "native_phase": "encode",
+      "error": null,
+      "public_matches": true,
+      "before_matches": true,
+      "physical_matches": true,
+      "rows_match": true,
+      "ordered_rows_match": true,
+      "error_matches": false,
+      "matches": false,
+      "optimized_matches": false,
+      "optimized_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "id",
+              "role": "total-order"
+            }
+          },
+          {
+            "name": "typed_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "typed_null",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "typed_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "untyped_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "untyped_null",
+            "type": "void",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "untyped_omitted",
+            "type": "void",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "optimized_observation": {
+        "raw_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "#11",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {
+                "source": "id",
+                "role": "total-order"
+              }
+            },
+            {
+              "name": "#12",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#13",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#14",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#15",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#16",
+              "type": "void",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#17",
+              "type": "void",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "id",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {
+                "source": "id",
+                "role": "total-order"
+              }
+            },
+            {
+              "name": "typed_required",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "typed_null",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "typed_omitted",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "untyped_required",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "untyped_null",
+              "type": "void",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "untyped_omitted",
+              "type": "void",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "names_match": true
+      },
+      "optimized_error": null
+    },
+    "lead_offset_scalar_literal_null_payloads": {
+      "public_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "id",
+              "role": "total-order"
+            }
+          },
+          {
+            "name": "typed_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "typed_null",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "typed_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "untyped_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "untyped_null",
+            "type": "void",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "untyped_omitted",
+            "type": "void",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "before_collect": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "total-order",
+              "source": "id"
+            }
+          },
+          {
+            "name": "typed_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "typed_null",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "typed_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "untyped_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "untyped_null",
+            "type": "void",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "untyped_omitted",
+            "type": "void",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "physical_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "total-order",
+              "source": "id"
+            }
+          },
+          {
+            "name": "typed_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "typed_null",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "typed_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "untyped_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "untyped_null",
+            "type": "void",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "untyped_omitted",
+            "type": "void",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "1",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "2",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "3",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "4",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "5",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "6",
+          "-99",
+          null,
+          null,
+          "-99",
+          null,
+          null
+        ],
+        [
+          "7",
+          "-99",
+          null,
+          null,
+          "-99",
+          null,
+          null
+        ]
+      ],
+      "rows_raw": [
+        [
+          "0",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "1",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "2",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "3",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "4",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "5",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "6",
+          "-99",
+          null,
+          null,
+          "-99",
+          null,
+          null
+        ],
+        [
+          "7",
+          "-99",
+          null,
+          null,
+          "-99",
+          null,
+          null
+        ]
+      ],
+      "native_phase": "encode",
+      "error": null,
+      "public_matches": true,
+      "before_matches": true,
+      "physical_matches": true,
+      "rows_match": true,
+      "ordered_rows_match": true,
+      "error_matches": false,
+      "matches": false,
+      "optimized_matches": false,
+      "optimized_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "total-order",
+              "source": "id"
+            }
+          },
+          {
+            "name": "typed_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "typed_null",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "typed_omitted",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "untyped_required",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "untyped_null",
+            "type": "void",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "untyped_omitted",
+            "type": "void",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "optimized_observation": {
+        "raw_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "#11",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {
+                "role": "total-order",
+                "source": "id"
+              }
+            },
+            {
+              "name": "#12",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#13",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#14",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#15",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#16",
+              "type": "void",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "#17",
+              "type": "void",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "id",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {
+                "role": "total-order",
+                "source": "id"
+              }
+            },
+            {
+              "name": "typed_required",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "typed_null",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "typed_omitted",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "untyped_required",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "untyped_null",
+              "type": "void",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "untyped_omitted",
+              "type": "void",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "names_match": true
+      },
+      "optimized_error": null
+    }
+  },
+  "controls": [
+    {
+      "corpus": "offset-window-fields-1044-supplement",
+      "id": "lag_offset_scalar_defaults",
+      "ansi": true,
+      "sql": "SELECT id,LAG(r,2,-99) OVER (ORDER BY id) AS required_literal,LAG(r,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS required_null,LAG(r,2) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LAG(v,2,-99) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LAG(v,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS nullable_null,LAG(v,2) RESPECT NULLS OVER (ORDER BY id) AS nullable_omitted,LAG(r,2,-99) IGNORE NULLS OVER (ORDER BY id) AS required_ignore,LAG(v,2,-99) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore,LAG(r,2,-99) OVER (ORDER BY id ROWS BETWEEN 2 PRECEDING AND 2 PRECEDING) AS required_exact_frame FROM offset_scalar ORDER BY id",
+      "kind": "diagnostic",
+      "owner_issue": 1048,
+      "profile": "lag_offset_scalar_defaults"
+    },
+    {
+      "corpus": "offset-window-fields-1044-supplement",
+      "id": "lag_offset_scalar_defaults",
+      "ansi": false,
+      "sql": "SELECT id,LAG(r,2,-99) OVER (ORDER BY id) AS required_literal,LAG(r,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS required_null,LAG(r,2) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LAG(v,2,-99) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LAG(v,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS nullable_null,LAG(v,2) RESPECT NULLS OVER (ORDER BY id) AS nullable_omitted,LAG(r,2,-99) IGNORE NULLS OVER (ORDER BY id) AS required_ignore,LAG(v,2,-99) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore,LAG(r,2,-99) OVER (ORDER BY id ROWS BETWEEN 2 PRECEDING AND 2 PRECEDING) AS required_exact_frame FROM offset_scalar ORDER BY id",
+      "kind": "diagnostic",
+      "owner_issue": 1048,
+      "profile": "lag_offset_scalar_defaults"
+    },
+    {
+      "corpus": "offset-window-fields-1044-supplement",
+      "id": "lag_empty_offset_scalar_defaults",
+      "ansi": true,
+      "sql": "SELECT id,LAG(r,2,-99) OVER (ORDER BY id) AS required_literal,LAG(r,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS required_null,LAG(r,2) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LAG(v,2,-99) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LAG(v,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS nullable_null,LAG(v,2) RESPECT NULLS OVER (ORDER BY id) AS nullable_omitted,LAG(r,2,-99) IGNORE NULLS OVER (ORDER BY id) AS required_ignore,LAG(v,2,-99) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore,LAG(r,2,-99) OVER (ORDER BY id ROWS BETWEEN 2 PRECEDING AND 2 PRECEDING) AS required_exact_frame FROM empty_offset_scalar ORDER BY id",
+      "kind": "diagnostic",
+      "owner_issue": 1048,
+      "profile": "lag_offset_scalar_defaults"
+    },
+    {
+      "corpus": "offset-window-fields-1044-supplement",
+      "id": "lag_empty_offset_scalar_defaults",
+      "ansi": false,
+      "sql": "SELECT id,LAG(r,2,-99) OVER (ORDER BY id) AS required_literal,LAG(r,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS required_null,LAG(r,2) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LAG(v,2,-99) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LAG(v,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS nullable_null,LAG(v,2) RESPECT NULLS OVER (ORDER BY id) AS nullable_omitted,LAG(r,2,-99) IGNORE NULLS OVER (ORDER BY id) AS required_ignore,LAG(v,2,-99) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore,LAG(r,2,-99) OVER (ORDER BY id ROWS BETWEEN 2 PRECEDING AND 2 PRECEDING) AS required_exact_frame FROM empty_offset_scalar ORDER BY id",
+      "kind": "diagnostic",
+      "owner_issue": 1048,
+      "profile": "lag_offset_scalar_defaults"
+    },
+    {
+      "corpus": "offset-window-fields-1044-supplement",
+      "id": "lag_null_offset_scalar_defaults",
+      "ansi": true,
+      "sql": "SELECT id,LAG(r,2,-99) OVER (ORDER BY id) AS required_literal,LAG(r,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS required_null,LAG(r,2) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LAG(v,2,-99) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LAG(v,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS nullable_null,LAG(v,2) RESPECT NULLS OVER (ORDER BY id) AS nullable_omitted,LAG(r,2,-99) IGNORE NULLS OVER (ORDER BY id) AS required_ignore,LAG(v,2,-99) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore,LAG(r,2,-99) OVER (ORDER BY id ROWS BETWEEN 2 PRECEDING AND 2 PRECEDING) AS required_exact_frame FROM null_offset_scalar ORDER BY id",
+      "kind": "diagnostic",
+      "owner_issue": 1048,
+      "profile": "lag_offset_scalar_defaults"
+    },
+    {
+      "corpus": "offset-window-fields-1044-supplement",
+      "id": "lag_null_offset_scalar_defaults",
+      "ansi": false,
+      "sql": "SELECT id,LAG(r,2,-99) OVER (ORDER BY id) AS required_literal,LAG(r,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS required_null,LAG(r,2) RESPECT NULLS OVER (ORDER BY id) AS required_omitted,LAG(v,2,-99) RESPECT NULLS OVER (ORDER BY id) AS nullable_required,LAG(v,2,CAST(NULL AS INT)) RESPECT NULLS OVER (ORDER BY id) AS nullable_null,LAG(v,2) RESPECT NULLS OVER (ORDER BY id) AS nullable_omitted,LAG(r,2,-99) IGNORE NULLS OVER (ORDER BY id) AS required_ignore,LAG(v,2,-99) IGNORE NULLS OVER (ORDER BY id) AS nullable_ignore,LAG(r,2,-99) OVER (ORDER BY id ROWS BETWEEN 2 PRECEDING AND 2 PRECEDING) AS required_exact_frame FROM null_offset_scalar ORDER BY id",
+      "kind": "diagnostic",
+      "owner_issue": 1048,
+      "profile": "lag_offset_scalar_defaults"
+    },
+    {
+      "corpus": "offset-window-fields-1044-supplement",
+      "id": "lag_offset_scalar_signed_ignore",
+      "ansi": true,
+      "sql": "SELECT id,LAG(r,0,CAST(NULL AS INT)) IGNORE NULLS OVER (ORDER BY id) AS zero_required_null,LAG(r,0) IGNORE NULLS OVER (ORDER BY id) AS zero_required_omitted,LAG(v,0,-99) IGNORE NULLS OVER (ORDER BY id) AS zero_nullable_required,LAG(v,0) IGNORE NULLS OVER (ORDER BY id) AS zero_nullable_omitted,LAG(r,-2,-99) IGNORE NULLS OVER (ORDER BY id) AS negative_required,LAG(v,-2,-99) IGNORE NULLS OVER (ORDER BY id) AS negative_nullable,LAG(r,-2) IGNORE NULLS OVER (ORDER BY id) AS negative_required_omitted,LAG(v,-2) IGNORE NULLS OVER (ORDER BY id) AS negative_nullable_omitted FROM offset_scalar ORDER BY id",
+      "kind": "rows",
+      "owner_issue": 1117,
+      "profile": "lag_offset_scalar_signed_ignore"
+    },
+    {
+      "corpus": "offset-window-fields-1044-supplement",
+      "id": "lag_offset_scalar_signed_ignore",
+      "ansi": false,
+      "sql": "SELECT id,LAG(r,0,CAST(NULL AS INT)) IGNORE NULLS OVER (ORDER BY id) AS zero_required_null,LAG(r,0) IGNORE NULLS OVER (ORDER BY id) AS zero_required_omitted,LAG(v,0,-99) IGNORE NULLS OVER (ORDER BY id) AS zero_nullable_required,LAG(v,0) IGNORE NULLS OVER (ORDER BY id) AS zero_nullable_omitted,LAG(r,-2,-99) IGNORE NULLS OVER (ORDER BY id) AS negative_required,LAG(v,-2,-99) IGNORE NULLS OVER (ORDER BY id) AS negative_nullable,LAG(r,-2) IGNORE NULLS OVER (ORDER BY id) AS negative_required_omitted,LAG(v,-2) IGNORE NULLS OVER (ORDER BY id) AS negative_nullable_omitted FROM offset_scalar ORDER BY id",
+      "kind": "rows",
+      "owner_issue": 1117,
+      "profile": "lag_offset_scalar_signed_ignore"
+    },
+    {
+      "corpus": "offset-window-fields-1044-supplement",
+      "id": "lag_null_offset_scalar_signed_ignore",
+      "ansi": true,
+      "sql": "SELECT id,LAG(r,0,CAST(NULL AS INT)) IGNORE NULLS OVER (ORDER BY id) AS zero_required_null,LAG(r,0) IGNORE NULLS OVER (ORDER BY id) AS zero_required_omitted,LAG(v,0,-99) IGNORE NULLS OVER (ORDER BY id) AS zero_nullable_required,LAG(v,0) IGNORE NULLS OVER (ORDER BY id) AS zero_nullable_omitted,LAG(r,-2,-99) IGNORE NULLS OVER (ORDER BY id) AS negative_required,LAG(v,-2,-99) IGNORE NULLS OVER (ORDER BY id) AS negative_nullable,LAG(r,-2) IGNORE NULLS OVER (ORDER BY id) AS negative_required_omitted,LAG(v,-2) IGNORE NULLS OVER (ORDER BY id) AS negative_nullable_omitted FROM null_offset_scalar ORDER BY id",
+      "kind": "rows",
+      "owner_issue": 1117,
+      "profile": "lag_null_offset_scalar_signed_ignore"
+    },
+    {
+      "corpus": "offset-window-fields-1044-supplement",
+      "id": "lag_null_offset_scalar_signed_ignore",
+      "ansi": false,
+      "sql": "SELECT id,LAG(r,0,CAST(NULL AS INT)) IGNORE NULLS OVER (ORDER BY id) AS zero_required_null,LAG(r,0) IGNORE NULLS OVER (ORDER BY id) AS zero_required_omitted,LAG(v,0,-99) IGNORE NULLS OVER (ORDER BY id) AS zero_nullable_required,LAG(v,0) IGNORE NULLS OVER (ORDER BY id) AS zero_nullable_omitted,LAG(r,-2,-99) IGNORE NULLS OVER (ORDER BY id) AS negative_required,LAG(v,-2,-99) IGNORE NULLS OVER (ORDER BY id) AS negative_nullable,LAG(r,-2) IGNORE NULLS OVER (ORDER BY id) AS negative_required_omitted,LAG(v,-2) IGNORE NULLS OVER (ORDER BY id) AS negative_nullable_omitted FROM null_offset_scalar ORDER BY id",
+      "kind": "rows",
+      "owner_issue": 1117,
+      "profile": "lag_null_offset_scalar_signed_ignore"
+    },
+    {
+      "corpus": "offset-window-fields-1044-supplement",
+      "id": "lag_nonfoldable_offset",
+      "ansi": true,
+      "sql": "SELECT id,LAG(r,id,-99) OVER (ORDER BY id) AS result FROM offset_scalar ORDER BY id",
+      "kind": "diagnostic",
+      "owner_issue": 1120,
+      "profile": "lag_offset_scalar_defaults"
+    },
+    {
+      "corpus": "offset-window-fields-1044-supplement",
+      "id": "lag_nonfoldable_offset",
+      "ansi": false,
+      "sql": "SELECT id,LAG(r,id,-99) OVER (ORDER BY id) AS result FROM offset_scalar ORDER BY id",
+      "kind": "diagnostic",
+      "owner_issue": 1120,
+      "profile": "lag_offset_scalar_defaults"
+    },
+    {
+      "corpus": "offset-window-fields-1044-supplement",
+      "id": "lag_mismatched_rows",
+      "ansi": true,
+      "sql": "SELECT id,LAG(r,2,-99) OVER (ORDER BY id ROWS BETWEEN 1 PRECEDING AND 1 PRECEDING) AS result FROM offset_scalar ORDER BY id",
+      "kind": "diagnostic",
+      "owner_issue": 1048,
+      "profile": "lag_offset_scalar_defaults"
+    },
+    {
+      "corpus": "offset-window-fields-1044-supplement",
+      "id": "lag_mismatched_rows",
+      "ansi": false,
+      "sql": "SELECT id,LAG(r,2,-99) OVER (ORDER BY id ROWS BETWEEN 1 PRECEDING AND 1 PRECEDING) AS result FROM offset_scalar ORDER BY id",
+      "kind": "diagnostic",
+      "owner_issue": 1048,
+      "profile": "lag_offset_scalar_defaults"
+    },
+    {
+      "corpus": "offset-window-fields-1044-supplement",
+      "id": "lead_offset_scalar_signed_ignore",
+      "ansi": true,
+      "sql": "SELECT id,LEAD(r,0,CAST(NULL AS INT)) IGNORE NULLS OVER (ORDER BY id) AS zero_required_null,LEAD(r,0) IGNORE NULLS OVER (ORDER BY id) AS zero_required_omitted,LEAD(v,0,-99) IGNORE NULLS OVER (ORDER BY id) AS zero_nullable_required,LEAD(v,0) IGNORE NULLS OVER (ORDER BY id) AS zero_nullable_omitted,LEAD(r,-2,-99) IGNORE NULLS OVER (ORDER BY id) AS negative_required,LEAD(v,-2,-99) IGNORE NULLS OVER (ORDER BY id) AS negative_nullable,LEAD(r,-2) IGNORE NULLS OVER (ORDER BY id) AS negative_required_omitted,LEAD(v,-2) IGNORE NULLS OVER (ORDER BY id) AS negative_nullable_omitted FROM offset_scalar ORDER BY id",
+      "kind": "rows",
+      "owner_issue": 1117,
+      "profile": "lead_offset_scalar_signed_ignore"
+    },
+    {
+      "corpus": "offset-window-fields-1044-supplement",
+      "id": "lead_offset_scalar_signed_ignore",
+      "ansi": false,
+      "sql": "SELECT id,LEAD(r,0,CAST(NULL AS INT)) IGNORE NULLS OVER (ORDER BY id) AS zero_required_null,LEAD(r,0) IGNORE NULLS OVER (ORDER BY id) AS zero_required_omitted,LEAD(v,0,-99) IGNORE NULLS OVER (ORDER BY id) AS zero_nullable_required,LEAD(v,0) IGNORE NULLS OVER (ORDER BY id) AS zero_nullable_omitted,LEAD(r,-2,-99) IGNORE NULLS OVER (ORDER BY id) AS negative_required,LEAD(v,-2,-99) IGNORE NULLS OVER (ORDER BY id) AS negative_nullable,LEAD(r,-2) IGNORE NULLS OVER (ORDER BY id) AS negative_required_omitted,LEAD(v,-2) IGNORE NULLS OVER (ORDER BY id) AS negative_nullable_omitted FROM offset_scalar ORDER BY id",
+      "kind": "rows",
+      "owner_issue": 1117,
+      "profile": "lead_offset_scalar_signed_ignore"
+    },
+    {
+      "corpus": "offset-window-fields-1044-supplement",
+      "id": "lead_null_offset_scalar_signed_ignore",
+      "ansi": true,
+      "sql": "SELECT id,LEAD(r,0,CAST(NULL AS INT)) IGNORE NULLS OVER (ORDER BY id) AS zero_required_null,LEAD(r,0) IGNORE NULLS OVER (ORDER BY id) AS zero_required_omitted,LEAD(v,0,-99) IGNORE NULLS OVER (ORDER BY id) AS zero_nullable_required,LEAD(v,0) IGNORE NULLS OVER (ORDER BY id) AS zero_nullable_omitted,LEAD(r,-2,-99) IGNORE NULLS OVER (ORDER BY id) AS negative_required,LEAD(v,-2,-99) IGNORE NULLS OVER (ORDER BY id) AS negative_nullable,LEAD(r,-2) IGNORE NULLS OVER (ORDER BY id) AS negative_required_omitted,LEAD(v,-2) IGNORE NULLS OVER (ORDER BY id) AS negative_nullable_omitted FROM null_offset_scalar ORDER BY id",
+      "kind": "rows",
+      "owner_issue": 1117,
+      "profile": "lead_null_offset_scalar_signed_ignore"
+    },
+    {
+      "corpus": "offset-window-fields-1044-supplement",
+      "id": "lead_null_offset_scalar_signed_ignore",
+      "ansi": false,
+      "sql": "SELECT id,LEAD(r,0,CAST(NULL AS INT)) IGNORE NULLS OVER (ORDER BY id) AS zero_required_null,LEAD(r,0) IGNORE NULLS OVER (ORDER BY id) AS zero_required_omitted,LEAD(v,0,-99) IGNORE NULLS OVER (ORDER BY id) AS zero_nullable_required,LEAD(v,0) IGNORE NULLS OVER (ORDER BY id) AS zero_nullable_omitted,LEAD(r,-2,-99) IGNORE NULLS OVER (ORDER BY id) AS negative_required,LEAD(v,-2,-99) IGNORE NULLS OVER (ORDER BY id) AS negative_nullable,LEAD(r,-2) IGNORE NULLS OVER (ORDER BY id) AS negative_required_omitted,LEAD(v,-2) IGNORE NULLS OVER (ORDER BY id) AS negative_nullable_omitted FROM null_offset_scalar ORDER BY id",
+      "kind": "rows",
+      "owner_issue": 1117,
+      "profile": "lead_null_offset_scalar_signed_ignore"
+    },
+    {
+      "corpus": "offset-window-fields-1044-supplement",
+      "id": "lead_nonfoldable_offset",
+      "ansi": true,
+      "sql": "SELECT id,LEAD(r,id,-99) OVER (ORDER BY id) AS result FROM offset_scalar ORDER BY id",
+      "kind": "diagnostic",
+      "owner_issue": 1120,
+      "profile": "lead_nonfoldable_offset"
+    },
+    {
+      "corpus": "offset-window-fields-1044-supplement",
+      "id": "lead_nonfoldable_offset",
+      "ansi": false,
+      "sql": "SELECT id,LEAD(r,id,-99) OVER (ORDER BY id) AS result FROM offset_scalar ORDER BY id",
+      "kind": "diagnostic",
+      "owner_issue": 1120,
+      "profile": "lead_nonfoldable_offset"
+    },
+    {
+      "corpus": "offset-window-fields-1044-supplement",
+      "id": "lead_mismatched_rows",
+      "ansi": true,
+      "sql": "SELECT id,LEAD(r,2,-99) OVER (ORDER BY id ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING) AS result FROM offset_scalar ORDER BY id",
+      "kind": "diagnostic",
+      "owner_issue": 1048,
+      "profile": "lead_nonfoldable_offset"
+    },
+    {
+      "corpus": "offset-window-fields-1044-supplement",
+      "id": "lead_mismatched_rows",
+      "ansi": false,
+      "sql": "SELECT id,LEAD(r,2,-99) OVER (ORDER BY id ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING) AS result FROM offset_scalar ORDER BY id",
+      "kind": "diagnostic",
+      "owner_issue": 1048,
+      "profile": "lead_nonfoldable_offset"
+    },
+    {
+      "corpus": "offset-window-fields-1044-supplement",
+      "id": "lag_column_default_controls",
+      "ansi": true,
+      "sql": "SELECT id,LAG(r,2,d) RESPECT NULLS OVER (ORDER BY id) AS required_column_default,LAG(r,2,v) RESPECT NULLS OVER (ORDER BY id) AS nullable_column_default,LAG(v,2,v) RESPECT NULLS OVER (ORDER BY id) AS nullable_both,LAG(r,0,v) RESPECT NULLS OVER (ORDER BY id) AS zero_nullable_default,LAG(r,2,CASE WHEN false THEN CAST(NULL AS INT) ELSE d END) OVER (ORDER BY id) AS column_case_default FROM offset_scalar ORDER BY id",
+      "kind": "default_error",
+      "owner_issue": 1118,
+      "profile": "lag_column_default_controls"
+    },
+    {
+      "corpus": "offset-window-fields-1044-supplement",
+      "id": "lag_column_default_controls",
+      "ansi": false,
+      "sql": "SELECT id,LAG(r,2,d) RESPECT NULLS OVER (ORDER BY id) AS required_column_default,LAG(r,2,v) RESPECT NULLS OVER (ORDER BY id) AS nullable_column_default,LAG(v,2,v) RESPECT NULLS OVER (ORDER BY id) AS nullable_both,LAG(r,0,v) RESPECT NULLS OVER (ORDER BY id) AS zero_nullable_default,LAG(r,2,CASE WHEN false THEN CAST(NULL AS INT) ELSE d END) OVER (ORDER BY id) AS column_case_default FROM offset_scalar ORDER BY id",
+      "kind": "default_error",
+      "owner_issue": 1118,
+      "profile": "lag_column_default_controls"
+    },
+    {
+      "corpus": "offset-window-fields-1044-supplement",
+      "id": "lead_column_default_controls",
+      "ansi": true,
+      "sql": "SELECT id,LEAD(r,2,d) RESPECT NULLS OVER (ORDER BY id) AS required_column_default,LEAD(r,2,v) RESPECT NULLS OVER (ORDER BY id) AS nullable_column_default,LEAD(v,2,v) RESPECT NULLS OVER (ORDER BY id) AS nullable_both,LEAD(r,0,v) RESPECT NULLS OVER (ORDER BY id) AS zero_nullable_default,LEAD(r,2,CASE WHEN false THEN CAST(NULL AS INT) ELSE d END) OVER (ORDER BY id) AS column_case_default FROM offset_scalar ORDER BY id",
+      "kind": "default_error",
+      "owner_issue": 1118,
+      "profile": "lag_column_default_controls"
+    },
+    {
+      "corpus": "offset-window-fields-1044-supplement",
+      "id": "lead_column_default_controls",
+      "ansi": false,
+      "sql": "SELECT id,LEAD(r,2,d) RESPECT NULLS OVER (ORDER BY id) AS required_column_default,LEAD(r,2,v) RESPECT NULLS OVER (ORDER BY id) AS nullable_column_default,LEAD(v,2,v) RESPECT NULLS OVER (ORDER BY id) AS nullable_both,LEAD(r,0,v) RESPECT NULLS OVER (ORDER BY id) AS zero_nullable_default,LEAD(r,2,CASE WHEN false THEN CAST(NULL AS INT) ELSE d END) OVER (ORDER BY id) AS column_case_default FROM offset_scalar ORDER BY id",
+      "kind": "default_error",
+      "owner_issue": 1118,
+      "profile": "lag_column_default_controls"
+    },
+    {
+      "corpus": "offset-window-fields-1044-supplement",
+      "id": "lag_offset_scalar_literal_null_payloads",
+      "ansi": true,
+      "sql": "SELECT id,LAG(CAST(NULL AS INT),2,-99) OVER (ORDER BY id) AS typed_required,LAG(CAST(NULL AS INT),2,CAST(NULL AS INT)) OVER (ORDER BY id) AS typed_null,LAG(CAST(NULL AS INT),2) OVER (ORDER BY id) AS typed_omitted,LAG(NULL,2,-99) OVER (ORDER BY id) AS untyped_required,LAG(NULL,2,NULL) OVER (ORDER BY id) AS untyped_null,LAG(NULL,2) OVER (ORDER BY id) AS untyped_omitted FROM offset_scalar ORDER BY id",
+      "kind": "untyped_null",
+      "owner_issue": 1119,
+      "profile": "lag_offset_scalar_literal_null_payloads"
+    },
+    {
+      "corpus": "offset-window-fields-1044-supplement",
+      "id": "lag_offset_scalar_literal_null_payloads",
+      "ansi": false,
+      "sql": "SELECT id,LAG(CAST(NULL AS INT),2,-99) OVER (ORDER BY id) AS typed_required,LAG(CAST(NULL AS INT),2,CAST(NULL AS INT)) OVER (ORDER BY id) AS typed_null,LAG(CAST(NULL AS INT),2) OVER (ORDER BY id) AS typed_omitted,LAG(NULL,2,-99) OVER (ORDER BY id) AS untyped_required,LAG(NULL,2,NULL) OVER (ORDER BY id) AS untyped_null,LAG(NULL,2) OVER (ORDER BY id) AS untyped_omitted FROM offset_scalar ORDER BY id",
+      "kind": "untyped_null",
+      "owner_issue": 1119,
+      "profile": "lag_offset_scalar_literal_null_payloads"
+    },
+    {
+      "corpus": "offset-window-fields-1044-supplement",
+      "id": "lag_empty_offset_scalar_literal_null_payloads",
+      "ansi": true,
+      "sql": "SELECT id,LAG(CAST(NULL AS INT),2,-99) OVER (ORDER BY id) AS typed_required,LAG(CAST(NULL AS INT),2,CAST(NULL AS INT)) OVER (ORDER BY id) AS typed_null,LAG(CAST(NULL AS INT),2) OVER (ORDER BY id) AS typed_omitted,LAG(NULL,2,-99) OVER (ORDER BY id) AS untyped_required,LAG(NULL,2,NULL) OVER (ORDER BY id) AS untyped_null,LAG(NULL,2) OVER (ORDER BY id) AS untyped_omitted FROM empty_offset_scalar ORDER BY id",
+      "kind": "untyped_null",
+      "owner_issue": 1119,
+      "profile": "lag_empty_offset_scalar_literal_null_payloads"
+    },
+    {
+      "corpus": "offset-window-fields-1044-supplement",
+      "id": "lag_empty_offset_scalar_literal_null_payloads",
+      "ansi": false,
+      "sql": "SELECT id,LAG(CAST(NULL AS INT),2,-99) OVER (ORDER BY id) AS typed_required,LAG(CAST(NULL AS INT),2,CAST(NULL AS INT)) OVER (ORDER BY id) AS typed_null,LAG(CAST(NULL AS INT),2) OVER (ORDER BY id) AS typed_omitted,LAG(NULL,2,-99) OVER (ORDER BY id) AS untyped_required,LAG(NULL,2,NULL) OVER (ORDER BY id) AS untyped_null,LAG(NULL,2) OVER (ORDER BY id) AS untyped_omitted FROM empty_offset_scalar ORDER BY id",
+      "kind": "untyped_null",
+      "owner_issue": 1119,
+      "profile": "lag_empty_offset_scalar_literal_null_payloads"
+    },
+    {
+      "corpus": "offset-window-fields-1044-supplement",
+      "id": "lead_offset_scalar_literal_null_payloads",
+      "ansi": true,
+      "sql": "SELECT id,LEAD(CAST(NULL AS INT),2,-99) OVER (ORDER BY id) AS typed_required,LEAD(CAST(NULL AS INT),2,CAST(NULL AS INT)) OVER (ORDER BY id) AS typed_null,LEAD(CAST(NULL AS INT),2) OVER (ORDER BY id) AS typed_omitted,LEAD(NULL,2,-99) OVER (ORDER BY id) AS untyped_required,LEAD(NULL,2,NULL) OVER (ORDER BY id) AS untyped_null,LEAD(NULL,2) OVER (ORDER BY id) AS untyped_omitted FROM offset_scalar ORDER BY id",
+      "kind": "untyped_null",
+      "owner_issue": 1119,
+      "profile": "lead_offset_scalar_literal_null_payloads"
+    },
+    {
+      "corpus": "offset-window-fields-1044-supplement",
+      "id": "lead_offset_scalar_literal_null_payloads",
+      "ansi": false,
+      "sql": "SELECT id,LEAD(CAST(NULL AS INT),2,-99) OVER (ORDER BY id) AS typed_required,LEAD(CAST(NULL AS INT),2,CAST(NULL AS INT)) OVER (ORDER BY id) AS typed_null,LEAD(CAST(NULL AS INT),2) OVER (ORDER BY id) AS typed_omitted,LEAD(NULL,2,-99) OVER (ORDER BY id) AS untyped_required,LEAD(NULL,2,NULL) OVER (ORDER BY id) AS untyped_null,LEAD(NULL,2) OVER (ORDER BY id) AS untyped_omitted FROM offset_scalar ORDER BY id",
+      "kind": "untyped_null",
+      "owner_issue": 1119,
+      "profile": "lead_offset_scalar_literal_null_payloads"
+    },
+    {
+      "corpus": "offset-window-fields-1044-supplement",
+      "id": "lead_empty_offset_scalar_literal_null_payloads",
+      "ansi": true,
+      "sql": "SELECT id,LEAD(CAST(NULL AS INT),2,-99) OVER (ORDER BY id) AS typed_required,LEAD(CAST(NULL AS INT),2,CAST(NULL AS INT)) OVER (ORDER BY id) AS typed_null,LEAD(CAST(NULL AS INT),2) OVER (ORDER BY id) AS typed_omitted,LEAD(NULL,2,-99) OVER (ORDER BY id) AS untyped_required,LEAD(NULL,2,NULL) OVER (ORDER BY id) AS untyped_null,LEAD(NULL,2) OVER (ORDER BY id) AS untyped_omitted FROM empty_offset_scalar ORDER BY id",
+      "kind": "untyped_null",
+      "owner_issue": 1119,
+      "profile": "lag_empty_offset_scalar_literal_null_payloads"
+    },
+    {
+      "corpus": "offset-window-fields-1044-supplement",
+      "id": "lead_empty_offset_scalar_literal_null_payloads",
+      "ansi": false,
+      "sql": "SELECT id,LEAD(CAST(NULL AS INT),2,-99) OVER (ORDER BY id) AS typed_required,LEAD(CAST(NULL AS INT),2,CAST(NULL AS INT)) OVER (ORDER BY id) AS typed_null,LEAD(CAST(NULL AS INT),2) OVER (ORDER BY id) AS typed_omitted,LEAD(NULL,2,-99) OVER (ORDER BY id) AS untyped_required,LEAD(NULL,2,NULL) OVER (ORDER BY id) AS untyped_null,LEAD(NULL,2) OVER (ORDER BY id) AS untyped_omitted FROM empty_offset_scalar ORDER BY id",
+      "kind": "untyped_null",
+      "owner_issue": 1119,
+      "profile": "lag_empty_offset_scalar_literal_null_payloads"
+    }
+  ],
+  "profile_provenance": {
+    "native_observations_file": "new1044-canonical-candidate-supplement-observation-raw-v1.json",
+    "native_observations_sha256": "1c3cc7aac61af953a8d6a90a54b7c53d8c59d2ba07b88faa0ee92d6e4c226b2f",
+    "canonical_candidate_head": "a23c23e6764a2a048ff77063eb5ac272f49d1396",
+    "canonical_candidate_tree": "273ed7fd4b40d27b1ca53b60ca11a52aa28871e4",
+    "evidence_runtime_base": "5b82dec9131c3fc85b7e57e27429175ffd253a66",
+    "before_head": "67db338393a6007a401d3dbb92698d344884e97b",
+    "owner_receipt": "new1044-new-gap-issues-created-v1.json",
+    "owner_receipt_sha256": "db85b20077c452a9fdab960b0fff811dcb84a1ceee43ffe0cd3970fffe042852",
+    "all_four_ansi_batch_actual_objects_per_id_identical": true,
+    "independent_fields_authority": "Available corresponding complete Spark Fields are checked before profile matching; native snapshots specify only exact retained native behavior, not the repaired Field contract.",
+    "source_masking_limit": "The eight packed literal-NULL source errors do not establish independent typed-only NULL values. Issue1119 owns separate source proof."
+  }
+}

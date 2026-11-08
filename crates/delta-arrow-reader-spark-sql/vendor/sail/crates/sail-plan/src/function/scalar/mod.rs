@@ -6,6 +6,7 @@ pub(crate) use string::{
     lower_runtime_regexp_extract, lower_runtime_substring, preserve_local_case_conversion,
     simplify_projected_case_conversions,
 };
+pub(crate) use unpivot::{UnpivotFieldDeclaration, apply_unpivot_runtime_nullability};
 
 use crate::function::common::ScalarFunction;
 
@@ -27,6 +28,7 @@ mod misc;
 mod predicate;
 mod string;
 mod r#struct;
+mod unpivot;
 mod url;
 mod variant;
 mod vector;

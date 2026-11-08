@@ -1,0 +1,255 @@
+{
+  "version": 1,
+  "issue": 1086,
+  "purpose": "Separate source-only limited-output signed-integer RANGE diagnostics. Matching window and outer ordering permits sort reuse; actual Spark capture determines source validity, frame errors, pruning, and consumed rows.",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "expected_record_count": 8,
+  "sql_source_count": 4,
+  "frozen_primary_request": {
+    "path": "new1086-oracle-requests-v1.json",
+    "sha256": "e4d0fc47801a667224180372684a1f6c0533b80d0a9ac054b20f8f1e230480ec",
+    "policy": "Unchanged; this diagnostic is a separate request."
+  },
+  "ownership_policy": "Labels identify diagnostics; every record retains the unchanged five-stage capture, availability, actual error chain, effective settings, raw rows, and multiset protocol.",
+  "corpora": [
+    {
+      "corpus": "finite-range-1086-limited-output-diagnostics",
+      "source": {
+        "kind": "independent issue1086 limited-output source-only SQL inventory"
+      },
+      "metadata": {
+        "spark_version": "4.2.0",
+        "timezone": "UTC",
+        "inputs": []
+      },
+      "cases": [
+        {
+          "corpus": "finite-range-1086-limited-output-diagnostics",
+          "id": "limited_a_null_intmax",
+          "ansi": true,
+          "sql": "SELECT id,k,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) AS n FROM VALUES (0,CAST(NULL AS INT)),(1,CAST(2147483647 AS INT)) AS t(id,k) ORDER BY k ASC NULLS FIRST LIMIT 1",
+          "ordered": true,
+          "ownership": "finite_signed_integer_diagnostic",
+          "coverage": {
+            "family": "limited_output",
+            "key_type": "INT",
+            "global_window": true,
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS INT)"
+              ],
+              [
+                1,
+                "CAST(2147483647 AS INT)"
+              ]
+            ],
+            "window_order": "k ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING",
+            "outer_order": "k ASC NULLS FIRST",
+            "limit": 1,
+            "discriminator": "NULL leading row and an unconsumed maximum key"
+          }
+        },
+        {
+          "corpus": "finite-range-1086-limited-output-diagnostics",
+          "id": "limited_a_null_intmax",
+          "ansi": false,
+          "sql": "SELECT id,k,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) AS n FROM VALUES (0,CAST(NULL AS INT)),(1,CAST(2147483647 AS INT)) AS t(id,k) ORDER BY k ASC NULLS FIRST LIMIT 1",
+          "ordered": true,
+          "ownership": "finite_signed_integer_diagnostic",
+          "coverage": {
+            "family": "limited_output",
+            "key_type": "INT",
+            "global_window": true,
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS INT)"
+              ],
+              [
+                1,
+                "CAST(2147483647 AS INT)"
+              ]
+            ],
+            "window_order": "k ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING",
+            "outer_order": "k ASC NULLS FIRST",
+            "limit": 1,
+            "discriminator": "NULL leading row and an unconsumed maximum key"
+          }
+        },
+        {
+          "corpus": "finite-range-1086-limited-output-diagnostics",
+          "id": "limited_b_zero_intmax",
+          "ansi": true,
+          "sql": "SELECT id,k,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) AS n FROM VALUES (0,CAST(0 AS INT)),(1,CAST(2147483647 AS INT)) AS t(id,k) ORDER BY k ASC NULLS FIRST LIMIT 1",
+          "ordered": true,
+          "ownership": "finite_signed_integer_diagnostic",
+          "coverage": {
+            "family": "limited_output",
+            "key_type": "INT",
+            "global_window": true,
+            "inline_values": [
+              [
+                0,
+                "CAST(0 AS INT)"
+              ],
+              [
+                1,
+                "CAST(2147483647 AS INT)"
+              ]
+            ],
+            "window_order": "k ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING",
+            "outer_order": "k ASC NULLS FIRST",
+            "limit": 1,
+            "discriminator": "Zero leading row and an unconsumed maximum key"
+          }
+        },
+        {
+          "corpus": "finite-range-1086-limited-output-diagnostics",
+          "id": "limited_b_zero_intmax",
+          "ansi": false,
+          "sql": "SELECT id,k,COUNT(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) AS n FROM VALUES (0,CAST(0 AS INT)),(1,CAST(2147483647 AS INT)) AS t(id,k) ORDER BY k ASC NULLS FIRST LIMIT 1",
+          "ordered": true,
+          "ownership": "finite_signed_integer_diagnostic",
+          "coverage": {
+            "family": "limited_output",
+            "key_type": "INT",
+            "global_window": true,
+            "inline_values": [
+              [
+                0,
+                "CAST(0 AS INT)"
+              ],
+              [
+                1,
+                "CAST(2147483647 AS INT)"
+              ]
+            ],
+            "window_order": "k ASC NULLS FIRST",
+            "frame": "RANGE BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING",
+            "outer_order": "k ASC NULLS FIRST",
+            "limit": 1,
+            "discriminator": "Zero leading row and an unconsumed maximum key"
+          }
+        },
+        {
+          "corpus": "finite-range-1086-limited-output-diagnostics",
+          "id": "limited_c_null_intmin_desc",
+          "ansi": true,
+          "sql": "SELECT id,k,COUNT(*) OVER (ORDER BY k DESC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CAST(-2147483648 AS INT) FOLLOWING) AS n FROM VALUES (0,CAST(NULL AS INT)),(1,CAST(-2147483648 AS INT)) AS t(id,k) ORDER BY k DESC NULLS FIRST LIMIT 1",
+          "ordered": true,
+          "ownership": "finite_signed_integer_diagnostic",
+          "coverage": {
+            "family": "limited_output",
+            "key_type": "INT",
+            "global_window": true,
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS INT)"
+              ],
+              [
+                1,
+                "CAST(-2147483648 AS INT)"
+              ]
+            ],
+            "window_order": "k DESC NULLS FIRST",
+            "frame": "RANGE BETWEEN UNBOUNDED PRECEDING AND CAST(-2147483648 AS INT) FOLLOWING",
+            "outer_order": "k DESC NULLS FIRST",
+            "limit": 1,
+            "discriminator": "NULL leading row and a descending minimum endpoint"
+          }
+        },
+        {
+          "corpus": "finite-range-1086-limited-output-diagnostics",
+          "id": "limited_c_null_intmin_desc",
+          "ansi": false,
+          "sql": "SELECT id,k,COUNT(*) OVER (ORDER BY k DESC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CAST(-2147483648 AS INT) FOLLOWING) AS n FROM VALUES (0,CAST(NULL AS INT)),(1,CAST(-2147483648 AS INT)) AS t(id,k) ORDER BY k DESC NULLS FIRST LIMIT 1",
+          "ordered": true,
+          "ownership": "finite_signed_integer_diagnostic",
+          "coverage": {
+            "family": "limited_output",
+            "key_type": "INT",
+            "global_window": true,
+            "inline_values": [
+              [
+                0,
+                "CAST(NULL AS INT)"
+              ],
+              [
+                1,
+                "CAST(-2147483648 AS INT)"
+              ]
+            ],
+            "window_order": "k DESC NULLS FIRST",
+            "frame": "RANGE BETWEEN UNBOUNDED PRECEDING AND CAST(-2147483648 AS INT) FOLLOWING",
+            "outer_order": "k DESC NULLS FIRST",
+            "limit": 1,
+            "discriminator": "NULL leading row and a descending minimum endpoint"
+          }
+        },
+        {
+          "corpus": "finite-range-1086-limited-output-diagnostics",
+          "id": "limited_d_upper_min_preceding_limit_zero",
+          "ansi": true,
+          "sql": "SELECT id,k,COUNT(*) OVER (ORDER BY k DESC RANGE BETWEEN CURRENT ROW AND CAST(-2147483648 AS INT) PRECEDING) AS n FROM VALUES (0,CAST(0 AS INT)),(1,CAST(1 AS INT)) AS t(id,k) ORDER BY k DESC LIMIT 0",
+          "ordered": true,
+          "ownership": "finite_signed_integer_diagnostic",
+          "coverage": {
+            "family": "limited_output",
+            "key_type": "INT",
+            "global_window": true,
+            "inline_values": [
+              [
+                0,
+                "CAST(0 AS INT)"
+              ],
+              [
+                1,
+                "CAST(1 AS INT)"
+              ]
+            ],
+            "window_order": "k DESC",
+            "frame": "RANGE BETWEEN CURRENT ROW AND CAST(-2147483648 AS INT) PRECEDING",
+            "outer_order": "k DESC",
+            "limit": 0,
+            "discriminator": "Optimizer endpoint evaluation versus zero-output pruning"
+          }
+        },
+        {
+          "corpus": "finite-range-1086-limited-output-diagnostics",
+          "id": "limited_d_upper_min_preceding_limit_zero",
+          "ansi": false,
+          "sql": "SELECT id,k,COUNT(*) OVER (ORDER BY k DESC RANGE BETWEEN CURRENT ROW AND CAST(-2147483648 AS INT) PRECEDING) AS n FROM VALUES (0,CAST(0 AS INT)),(1,CAST(1 AS INT)) AS t(id,k) ORDER BY k DESC LIMIT 0",
+          "ordered": true,
+          "ownership": "finite_signed_integer_diagnostic",
+          "coverage": {
+            "family": "limited_output",
+            "key_type": "INT",
+            "global_window": true,
+            "inline_values": [
+              [
+                0,
+                "CAST(0 AS INT)"
+              ],
+              [
+                1,
+                "CAST(1 AS INT)"
+              ]
+            ],
+            "window_order": "k DESC",
+            "frame": "RANGE BETWEEN CURRENT ROW AND CAST(-2147483648 AS INT) PRECEDING",
+            "outer_order": "k DESC",
+            "limit": 0,
+            "discriminator": "Optimizer endpoint evaluation versus zero-output pruning"
+          }
+        }
+      ]
+    }
+  ]
+}
+

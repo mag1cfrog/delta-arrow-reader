@@ -212,6 +212,36 @@ fn encode_value(column: &dyn Array, row: usize) -> TestResult<Value> {
     })
 }
 
+// Read collected batches without planning or evaluating the query again.
+#[allow(
+    dead_code,
+    reason = "Integration tests select individual shared observers."
+)]
+pub(crate) fn capture_batches(batches: &[RecordBatch]) -> TestResult<Value> {
+    let mut rows = Vec::new();
+    let mut observed = Vec::new();
+    for batch in batches {
+        let mut batch_rows = Vec::new();
+        for row in 0..batch.num_rows() {
+            batch_rows.push(
+                batch
+                    .columns()
+                    .iter()
+                    .map(|column| encode_value(column.as_ref(), row))
+                    .collect::<TestResult<Vec<_>>>()?,
+            );
+        }
+        rows.extend(batch_rows.iter().cloned());
+        observed.push(json!({
+            "schema":capture_schema(batch.schema().fields(), None)?,
+            "arrow_schema":format!("{:?}", batch.schema()),
+            "column_types":batch.columns().iter().map(|column| format!("{:?}", column.data_type())).collect::<Vec<_>>(),
+            "num_rows":batch.num_rows(),"rows":batch_rows,
+        }));
+    }
+    Ok(json!({"rows":rows,"batches":observed}))
+}
+
 // Retain fields from each completed planning stage when a later stage fails.
 // Existing callers keep capture_result's Result-based interface below.
 pub(crate) async fn capture_observation(

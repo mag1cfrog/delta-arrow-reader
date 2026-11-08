@@ -7,8 +7,9 @@ use datafusion::arrow::compute::cast;
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
 use datafusion_common::{Result, exec_datafusion_err, exec_err, internal_err};
 use datafusion_expr::function::Hint;
+use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
 use datafusion_expr::{
-    ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
+    ColumnarValue, Expr, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
 };
 use regex::{Captures, Regex};
 
@@ -17,6 +18,7 @@ use crate::functions_utils::{StrMemo, make_scalar_function};
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkRegexpReplace {
     signature: Signature,
+    preparation_errors: bool,
 }
 
 impl Default for SparkRegexpReplace {
@@ -29,7 +31,17 @@ impl SparkRegexpReplace {
     pub fn new() -> Self {
         Self {
             signature: Signature::user_defined(Volatility::Immutable),
+            preparation_errors: false,
         }
+    }
+
+    pub fn with_preparation_errors(mut self) -> Self {
+        self.preparation_errors = true;
+        self
+    }
+
+    pub fn prepares_literal_errors(&self) -> bool {
+        self.preparation_errors
     }
 }
 
@@ -40,6 +52,38 @@ impl ScalarUDFImpl for SparkRegexpReplace {
 
     fn signature(&self) -> &Signature {
         &self.signature
+    }
+
+    fn simplify(&self, args: Vec<Expr>, _info: &SimplifyContext) -> Result<ExprSimplifyResult> {
+        if !self.preparation_errors {
+            return Ok(ExprSimplifyResult::Original(args));
+        }
+        // Native passes simplify and retain operands first. Never invoke an operand here.
+        let Some(values) = args
+            .iter()
+            .map(|arg| match arg {
+                Expr::Literal(value, _) => Some(value.clone()),
+                _ => None,
+            })
+            .collect::<Option<Vec<_>>>()
+        else {
+            return Ok(ExprSimplifyResult::Original(args));
+        };
+        let types = values
+            .iter()
+            .map(|value| value.data_type())
+            .collect::<Vec<_>>();
+        if self
+            .coerce_types(&types)
+            .is_ok_and(|coerced| coerced == types)
+        {
+            let values = values
+                .into_iter()
+                .map(ColumnarValue::Scalar)
+                .collect::<Vec<_>>();
+            let _ = regexp_replace_values(&values)?;
+        }
+        Ok(ExprSimplifyResult::Original(args))
     }
 
     fn return_type(&self, arg_types: &[DataType]) -> Result<DataType> {
@@ -77,16 +121,20 @@ impl ScalarUDFImpl for SparkRegexpReplace {
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
-        make_scalar_function(
-            regexp_replace,
-            vec![
-                Hint::Pad,
-                Hint::AcceptsSingular,
-                Hint::AcceptsSingular,
-                Hint::AcceptsSingular,
-            ],
-        )(&args.args)
+        regexp_replace_values(&args.args)
     }
+}
+
+fn regexp_replace_values(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    make_scalar_function(
+        regexp_replace,
+        vec![
+            Hint::Pad,
+            Hint::AcceptsSingular,
+            Hint::AcceptsSingular,
+            Hint::AcceptsSingular,
+        ],
+    )(args)
 }
 
 fn string_at(array: &ArrayRef, row: usize) -> Result<Option<&str>> {
@@ -351,6 +399,44 @@ fn append_replacement(
 mod tests {
     use super::*;
     use datafusion::arrow::array::{Int32Array, StringArray};
+
+    #[test]
+    fn preparation_policy_has_distinct_native_udf_identity() -> Result<()> {
+        use datafusion_expr::ScalarUDF;
+        use std::hash::{DefaultHasher, Hash, Hasher};
+
+        let native = ScalarUDF::from(SparkRegexpReplace::new());
+        let spark = ScalarUDF::from(SparkRegexpReplace::new().with_preparation_errors());
+        let fingerprint = |function: &ScalarUDF| {
+            let mut hasher = DefaultHasher::new();
+            function.hash(&mut hasher);
+            hasher.finish()
+        };
+        assert_ne!(native, spark);
+        assert_ne!(fingerprint(&native), fingerprint(&spark));
+        assert!(!native.inner().propagates_constant_folding_errors());
+        let alias = spark.with_aliases(["replacement_alias"]);
+        assert!(!alias.inner().propagates_constant_folding_errors());
+        let info = SimplifyContext::builder()
+            .with_schema(Arc::new(datafusion_common::DFSchema::empty()))
+            .build();
+        let args = vec![
+            datafusion_expr::lit("a"),
+            datafusion_expr::lit("(a)"),
+            datafusion_expr::lit("$9"),
+            datafusion_expr::lit(1_i32),
+        ];
+        assert!(matches!(
+            native.simplify(args.clone(), &info)?,
+            ExprSimplifyResult::Original(_)
+        ));
+        let error = match alias.simplify(args, &info) {
+            Err(error) => error.to_string(),
+            Ok(_) => return exec_err!("prepared alias did not check its own literal kernel"),
+        };
+        assert!(error.ends_with("java.lang.IndexOutOfBoundsException: No group 9"));
+        Ok(())
+    }
 
     #[test]
     fn sliced_replacements_skip_null_rows_and_keep_string_storage() -> Result<()> {
