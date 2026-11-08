@@ -99,31 +99,39 @@ impl SparkDecimalCast {
             Err(error) => {
                 // Spark maps non-finite input to NULL even in ANSI mode. Retry
                 // after masking only those values; finite overflow still errors.
-                let filtered = match arg {
-                    ColumnarValue::Scalar(ScalarValue::Float32(v)) => {
-                        ColumnarValue::Scalar(ScalarValue::Float32(v.filter(|v| v.is_finite())))
-                    }
-                    ColumnarValue::Scalar(ScalarValue::Float64(v)) => {
-                        ColumnarValue::Scalar(ScalarValue::Float64(v.filter(|v| v.is_finite())))
-                    }
-                    ColumnarValue::Array(a) if a.data_type() == &DataType::Float32 => {
-                        ColumnarValue::Array(Arc::new(
-                            a.as_primitive::<Float32Type>()
-                                .unary_opt::<_, Float32Type>(|v| v.is_finite().then_some(v)),
-                        ))
-                    }
-                    ColumnarValue::Array(a) if a.data_type() == &DataType::Float64 => {
-                        ColumnarValue::Array(Arc::new(
-                            a.as_primitive::<Float64Type>()
-                                .unary_opt::<_, Float64Type>(|v| v.is_finite().then_some(v)),
-                        ))
-                    }
-                    _ => return Err(error),
+                let Some(filtered) = non_finite_as_null(arg) else {
+                    return Err(error);
                 };
                 filtered.cast_to(&self.target, None)
             }
         }
     }
+}
+
+/// A FLOAT or DOUBLE argument with its NaN and infinite values replaced by NULL, which the cast
+/// to DECIMAL gives for them in every mode; `None` for other types.
+fn non_finite_as_null(arg: &ColumnarValue) -> Option<ColumnarValue> {
+    Some(match arg {
+        ColumnarValue::Scalar(ScalarValue::Float32(v)) => {
+            ColumnarValue::Scalar(ScalarValue::Float32(v.filter(|v| v.is_finite())))
+        }
+        ColumnarValue::Scalar(ScalarValue::Float64(v)) => {
+            ColumnarValue::Scalar(ScalarValue::Float64(v.filter(|v| v.is_finite())))
+        }
+        ColumnarValue::Array(a) if a.data_type() == &DataType::Float32 => {
+            ColumnarValue::Array(Arc::new(
+                a.as_primitive::<Float32Type>()
+                    .unary_opt::<_, Float32Type>(|v| v.is_finite().then_some(v)),
+            ))
+        }
+        ColumnarValue::Array(a) if a.data_type() == &DataType::Float64 => {
+            ColumnarValue::Array(Arc::new(
+                a.as_primitive::<Float64Type>()
+                    .unary_opt::<_, Float64Type>(|v| v.is_finite().then_some(v)),
+            ))
+        }
+        _ => return None,
+    })
 }
 
 impl ScalarUDFImpl for SparkDecimalCast {
@@ -218,14 +226,20 @@ impl ScalarUDFImpl for SparkDecimalCast {
                 .convert(arg)
                 .map(datafusion_expr::EvaluatedRowPrefix::complete);
         }
-        let lenient = Self {
+        let try_cast = Self {
             target: self.target.clone(),
             signature: self.signature.clone(),
             mode: DecimalCastMode::Try,
         };
+        // Both modes give NULL for a NaN or an infinity, so those values need no strict cast.
+        let masked = match self.target {
+            DataType::Decimal128(..) | DataType::Decimal256(..) => non_finite_as_null(arg),
+            _ => None,
+        };
+        let arg = masked.as_ref().unwrap_or(arg);
         crate::scalar::row_errors::strict_cast_rows_until_error(
             arg,
-            lenient.convert(arg)?,
+            try_cast.convert(arg)?,
             args.number_rows,
             |value| self.convert(value),
         )

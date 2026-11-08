@@ -246,10 +246,10 @@ impl ScalarUDFImpl for SparkCastNumericToInteger {
                 .map(datafusion_expr::EvaluatedRowPrefix::complete);
         }
         let [value] = take_function_args(self.name(), args.args.as_slice())?;
-        let lenient = Self::try_new(self.target.clone(), true, true)?.cast_value(value)?;
+        let try_result = Self::try_new(self.target.clone(), true, true)?.cast_value(value)?;
         crate::scalar::row_errors::strict_cast_rows_until_error(
             value,
-            lenient,
+            try_result,
             args.number_rows,
             |value| self.cast_value(value),
         )

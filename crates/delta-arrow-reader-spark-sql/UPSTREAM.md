@@ -660,10 +660,14 @@ malformed STRING seconds fail without Spark's `NUMERIC_VALUE_OUT_OF_RANGE` and
 is reported, whichever argument cast or the arithmetic fails there, as Spark evaluates row by
 row (#1148): MAKE_INTERVAL and MAKE_YM_INTERVAL ask DataFusion's row-ordered evaluation for
 it, and the BIGINT, FLOAT, DOUBLE, DECIMAL and STRING-to-DECIMAL argument casts report their
-first failing row, as the STRING-to-INT cast already did. A shared helper,
-`strict_cast_rows_until_error`, finds that row without running the cast again over the batch:
-the cast's TRY form gives NULL where the strict cast fails, and only those values are cast
-strictly, one at a time in row order, up to the first that fails. MAKE_INTERVAL and
+first failing row, as the STRING-to-INT cast already did. The STRING-to-DECIMAL cast parses in
+row order and stops at the first failing row, which also places the failure of its TRY form on
+an exponent beyond Java's BigInteger. The other casts use Arrow's vectorized casts, and a
+shared helper, `strict_cast_rows_until_error`, finds that row without running the cast again
+over the batch: the cast's TRY form, which must not fail, gives NULL where the strict cast
+fails, and only those values are cast strictly, one at a time in row order, up to the first
+that fails. NaN and infinite FLOAT or DOUBLE values, which the DECIMAL cast maps to NULL in
+every mode, are masked first so that they need no strict cast. MAKE_INTERVAL and
 MAKE_YM_INTERVAL used to report the first failing argument across the batch. Since they
 request row order, a computed projection under them stays a separate projection that produces
 the row prefix, as under SLICE, with the same values; and SLICE, the other requester, now gets
