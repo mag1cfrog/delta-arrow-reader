@@ -3,9 +3,10 @@
 Records analyzed, optimized and executed schemas, typed internal-row values and failing
 stages, with the innermost Java exception of a failure, for MAKE_INTERVAL with literal,
 column and NULL arguments, every argument count, fractional and negative values, values
-that overflow its months, days or microseconds, and TINYINT, SMALLINT, BIGINT, DECIMAL,
-FLOAT, DOUBLE, STRING, BOOLEAN and DATE arguments, and for a TIMESTAMP minus a
-MAKE_INTERVAL.
+that overflow its months or days or exceed Arrow's nanoseconds, TINYINT, SMALLINT, BIGINT,
+DECIMAL, FLOAT, DOUBLE, STRING, BOOLEAN and DATE arguments, NULL arguments before and after
+failing ones, and for MAKE_INTERVAL in a TIMESTAMP subtraction, TRY_ADD, TRY_SUBTRACT and an
+unreached CASE branch.
 Every query runs in both ANSI modes in UTC and America/Los_Angeles. Run from the crate root in
 the reference environment described in README.md; the output path must not exist.
 """
@@ -43,13 +44,14 @@ def double_bits(value):
     return struct.pack(">d", value).hex()
 
 
-# (b BIGINT, f DOUBLE, t STRING, dc DECIMAL(12, 2)) per row; row 1 overflows or is invalid
-# as an INT part, and its DOUBLE is beyond DECIMAL(18, 6) seconds.
+# (b BIGINT, f DOUBLE, t STRING, dc DECIMAL(12, 2), n INT, h INT) per row; in row 1, b, f,
+# t and dc overflow or are invalid as an INT part, f is beyond DECIMAL(18, 6) seconds, n is
+# NULL and h hours are beyond Arrow's nanoseconds.
 OTHER_ROWS = [
-    ("5", double_bits(1.5), "7", "1.25"),
-    ("4294967297", double_bits(1e20), "abc", "3000000000.50"),
-    (None, None, None, None),
-    ("-3", double_bits(-2.5), " -4 ", "-0.50"),
+    ("5", double_bits(1.5), "7", "1.25", "2", "1"),
+    ("4294967297", double_bits(1e20), "abc", "3000000000.50", None, "3000000"),
+    (None, None, None, None, None, None),
+    ("-3", double_bits(-2.5), " -4 ", "-0.50", "-1", "-2"),
 ]
 
 
@@ -76,7 +78,9 @@ INPUTS = [{
         {"name": "b", "type": "long", "nullable": True, "metadata": {}},
         {"name": "f", "type": "double", "nullable": True, "metadata": {}},
         {"name": "t", "type": "string", "nullable": True, "metadata": {}},
-        {"name": "dc", "type": "decimal(12,2)", "nullable": True, "metadata": {}}]},
+        {"name": "dc", "type": "decimal(12,2)", "nullable": True, "metadata": {}},
+        {"name": "n", "type": "integer", "nullable": True, "metadata": {}},
+        {"name": "h", "type": "integer", "nullable": True, "metadata": {}}]},
     "rows": [[str(key)] + list(row) for key, row in enumerate(OTHER_ROWS)]}]
 
 COLUMNS = [
@@ -100,6 +104,26 @@ COLUMNS = [
     ("decimal_days", "make_interval(0, 0, 0, dc)", "others", "k <> 1"),
     ("decimal_days_overflow", "make_interval(0, 0, 0, dc)", "others", "k = 1"),
     ("decimal_seconds", "make_interval(0, 0, 0, 0, 0, 0, dc)", "others", "true"),
+    ("null_then_invalid_string", "make_interval(n, t)", "others", "true"),
+    ("null_then_bigint_overflow", "make_interval(n, 0, 0, 0, b)", "others", "true"),
+    ("null_then_invalid_seconds", "make_interval(n, 0, 0, 0, 0, 0, t)", "others", "true"),
+    ("invalid_string_then_null", "make_interval(t, n)", "others", "k = 1"),
+    ("null_then_constant_invalid_string", "make_interval(n, 'x')", "others", "k = 1"),
+    ("int_hours_beyond_nanoseconds", "make_interval(0, 0, 0, 0, h)", "others", "k = 1"),
+    ("try_add", "try_add(TIMESTAMP '2024-01-01 00:00:00', make_interval(y, mo, w, d, h, mi, s))",
+     "inputs", "true"),
+    ("try_subtract",
+     "try_subtract(TIMESTAMP '2024-01-01 00:00:00', make_interval(y, mo, w, d, h, mi, s))",
+     "inputs", "true"),
+    ("try_add_invalid_string",
+     "try_add(TIMESTAMP '2024-01-01 00:00:00', make_interval(0, 0, 0, t))", "others", "true"),
+    ("try_add_bigint_hours",
+     "try_add(TIMESTAMP '2024-01-01 00:00:00', make_interval(0, 0, 0, 0, b))", "others", "true"),
+    ("try_add_constant_overflow", "try_add(timestamp_seconds(k), make_interval(178956971))",
+     "required", "true"),
+    ("case_overflow_without_rows",
+     "CASE WHEN k >= 0 THEN make_interval(0, 0, 0, d) ELSE make_interval(178956971) END",
+     "required", "k < 0"),
 ]
 
 LITERALS = [
@@ -118,14 +142,14 @@ LITERALS = [
     ("months_overflow", "make_interval(178956970, 8)"),
     ("years_overflow", "make_interval(178956971)"),
     ("days_overflow", "make_interval(0, 0, 306783378, 7)"),
-    ("hours_overflow", "make_interval(0, 0, 0, 0, 2562047789)"),
-    ("seconds_overflow", "make_interval(0, 0, 0, 0, 2562047788, 0, 54.775808)"),
+    ("bigint_hours_beyond_int", "make_interval(0, 0, 0, 0, 2562047789)"),
+    ("bigint_hours_beyond_int_with_seconds", "make_interval(0, 0, 0, 0, 2562047788, 0, 54.775808)"),
     ("timestamp_minus", "TIMESTAMP '2024-01-01 00:00:00' - make_interval(0, 1, 0, 1, 1)"),
     ("timestamp_minus_smallest_months",
      "TIMESTAMP '2024-01-01 00:00:00' - make_interval(-178956970, -8)"),
     ("too_many_arguments", "make_interval(1, 2, 3, 4, 5, 6, 7, 8)"),
     ("smallint_tinyint", "make_interval(1S, 2Y)"),
-    ("bigint_wraps", "make_interval(4294967297L)"),
+    ("bigint_years_beyond_int", "make_interval(4294967297L)"),
     ("decimal_part", "make_interval(2.5)"),
     ("negative_decimal_part", "make_interval(-2.5)"),
     ("decimal_part_overflow", "make_interval(3000000000.5)"),
@@ -149,6 +173,16 @@ LITERALS = [
     ("string_seconds", "make_interval(0, 0, 0, 0, 0, 0, '1.5')"),
     ("invalid_string_seconds", "make_interval(0, 0, 0, 0, 0, 0, 'x')"),
     ("boolean_seconds", "make_interval(0, 0, 0, 0, 0, 0, true)"),
+    ("null_then_invalid_string", "make_interval(NULL, 'x')"),
+    ("typed_null_then_invalid_string", "make_interval(CAST(NULL AS INT), 'x')"),
+    ("invalid_string_then_null", "make_interval('x', NULL)"),
+    ("null_then_bigint_overflow", "make_interval(NULL, 4294967297L)"),
+    ("int_hours_beyond_nanoseconds", "make_interval(0, 0, 0, 0, 3000000)"),
+    ("largest_seconds", "make_interval(0, 0, 0, 0, 0, 0, 999999999999.999999)"),
+    ("try_add_overflow", "try_add(TIMESTAMP '2024-01-01 00:00:00', make_interval(178956971))"),
+    ("try_subtract_overflow",
+     "try_subtract(TIMESTAMP '2024-01-01 00:00:00', make_interval(178956971))"),
+    ("try_add_invalid_string", "try_add(TIMESTAMP '2024-01-01 00:00:00', make_interval('x'))"),
 ]
 
 
