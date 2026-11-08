@@ -35,8 +35,9 @@ by `make_interval(0, 0, 0, d)`:
   STRING beside DATE, DATE beside TIMESTAMP, ARRAY<INT> beside ARRAY<BIGINT> and ARRAY<STRING>,
   STRUCTs whose field widens or is renamed, and NULL beside INT; STRUCTs with renamed interval
   fields or another field count; nested STRUCTs with duplicate, reordered, or renamed and widened
-  field names, also inside a MAP; and NULLIF, GREATEST, a simple CASE, JOIN ON, a single-column IN
-  subquery and an ARRAY of STRUCTs, each beside INT and BIGINT and beside INT and ARRAY.
+  field names, and duplicate names inside a MAP; and NULLIF, GREATEST, a simple CASE, JOIN ON, a
+  single-column IN subquery and an ARRAY of STRUCTs, each beside INT and BIGINT and beside INT and
+  ARRAY.
 
 Spark rejects every ordering and comparison of a calendar interval during analysis with
 `DATATYPE_MISMATCH.INVALID_ORDERING_TYPE`, in both ANSI modes. Beside a value of another shape,
