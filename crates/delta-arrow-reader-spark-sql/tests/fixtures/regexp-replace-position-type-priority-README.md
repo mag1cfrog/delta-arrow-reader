@@ -26,5 +26,6 @@ parity with Spark remains unverified.
 
 The type-priority repair is tracked in
 [#925](https://github.com/mag1cfrog/delta-arrow-reader/issues/925). Existing
-position coercion and callback fixtures remain separate and unchanged, including
-the folding-disabled INT callback boundary under #893.
+position coercion and callback fixtures remain separate and unchanged as captured
+history. The current #893 regression requires folding-disabled INT callbacks to
+reject with `NON_FOLDABLE_INPUT` and zero invocations.

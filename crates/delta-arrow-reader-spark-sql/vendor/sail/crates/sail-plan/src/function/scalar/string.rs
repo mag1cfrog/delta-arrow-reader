@@ -278,10 +278,12 @@ fn regexp_replace_position_gate_checks_nested_async_after_type_admission() -> Pl
             if message == "[DATATYPE_MISMATCH.NON_FOLDABLE_INPUT] regexp_replace position must be a foldable INT expression")
         );
         assert_eq!(volatile_counts.calls.load(Ordering::SeqCst), 0);
-        // Already-INT NoFold behavior is a separate shared contract under #893.
         let (no_fold, no_fold_counts) = producer(Kind::ImmutableNoFold);
-        assert!(resolve(no_fold.call(vec![lit(1_i32)])).is_ok());
-        assert_eq!(no_fold_counts.calls.load(Ordering::SeqCst), 1);
+        assert!(
+            matches!(resolve(no_fold.call(vec![lit(1_i32)])), Err(PlanError::InvalidArgument(message))
+            if message == "[DATATYPE_MISMATCH.NON_FOLDABLE_INPUT] regexp_replace position must be a foldable INT expression")
+        );
+        assert_eq!(no_fold_counts.calls.load(Ordering::SeqCst), 0);
     }
     Ok(())
 }

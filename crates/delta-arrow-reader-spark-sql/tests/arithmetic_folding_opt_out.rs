@@ -11,7 +11,7 @@ use arrow::datatypes::{DataType, Field, FieldRef, Schema};
 use datafusion::common::{Result, ScalarValue, exec_err};
 use datafusion::execution::SessionStateBuilder;
 use datafusion::logical_expr::{
-    ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature,
+    ColumnarValue, Expr, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature,
     Volatility,
 };
 use datafusion::physical_plan::collect;
@@ -25,10 +25,33 @@ mod string_binary;
 
 type TestResult<T = ()> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
+#[derive(Default)]
+struct InvocationCounters {
+    opaque: Arc<AtomicUsize>,
+    permitted: Arc<AtomicUsize>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct InvocationSnapshot {
+    opaque: usize,
+    permitted: usize,
+}
+
+impl InvocationCounters {
+    fn snapshot(&self) -> InvocationSnapshot {
+        InvocationSnapshot {
+            opaque: self.opaque.load(Ordering::SeqCst),
+            permitted: self.permitted.load(Ordering::SeqCst),
+        }
+    }
+}
+
 #[derive(Debug)]
 struct CountedIdentity {
     name: &'static str,
     signature: Signature,
+    folding_permitted: bool,
+    short_circuits: bool,
     error_if_invoked: bool,
     clone_argument_field: bool,
     calls: Arc<AtomicUsize>,
@@ -38,6 +61,8 @@ impl PartialEq for CountedIdentity {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name
             && self.signature == other.signature
+            && self.folding_permitted == other.folding_permitted
+            && self.short_circuits == other.short_circuits
             && self.error_if_invoked == other.error_if_invoked
             && self.clone_argument_field == other.clone_argument_field
     }
@@ -47,6 +72,8 @@ impl Hash for CountedIdentity {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.name.hash(state);
         self.signature.hash(state);
+        self.folding_permitted.hash(state);
+        self.short_circuits.hash(state);
         self.error_if_invoked.hash(state);
         self.clone_argument_field.hash(state);
     }
@@ -60,7 +87,14 @@ impl ScalarUDFImpl for CountedIdentity {
         &self.signature
     }
     fn supports_constant_folding(&self) -> bool {
-        self.name == "allowed_constant"
+        self.folding_permitted
+    }
+    fn short_circuits(&self) -> bool {
+        self.short_circuits
+    }
+    fn conditional_arguments<'a>(&self, _: &'a [Expr]) -> Option<(Vec<&'a Expr>, Vec<&'a Expr>)> {
+        // The SDK defines None as all eager arguments, even when short_circuits is true.
+        None
     }
     fn return_type(&self, arguments: &[DataType]) -> Result<DataType> {
         Ok(arguments[0].clone())
@@ -90,7 +124,7 @@ impl ScalarUDFImpl for CountedIdentity {
     }
 }
 
-fn session(spark: bool, error_if_invoked: bool) -> (SessionContext, [Arc<AtomicUsize>; 2]) {
+fn session(spark: bool, error_if_invoked: bool) -> (SessionContext, InvocationCounters) {
     let builder = SessionStateBuilder::new()
         .with_default_features()
         .with_config(
@@ -103,42 +137,60 @@ fn session(spark: bool, error_if_invoked: bool) -> (SessionContext, [Arc<AtomicU
     } else {
         builder.build()
     });
-    let retained = Arc::new(AtomicUsize::new(0));
-    let allowed = Arc::new(AtomicUsize::new(0));
-    for (name, calls) in [
-        ("retain_constant", Arc::clone(&retained)),
-        ("index_callback", Arc::clone(&retained)),
-        ("mixed_counted_producer", Arc::clone(&retained)),
-        ("allowed_constant", Arc::clone(&allowed)),
+    let counters = InvocationCounters::default();
+    session.register_udf(
+        ScalarUDF::from(CountedIdentity {
+            name: "retain_constant",
+            signature: Signature::exact(vec![DataType::Float64], Volatility::Immutable),
+            folding_permitted: false,
+            short_circuits: false,
+            error_if_invoked,
+            clone_argument_field: false,
+            calls: Arc::clone(&counters.opaque),
+        })
+        .with_aliases(["retained_alias"]),
+    );
+    for probe in [
+        CountedIdentity {
+            name: "index_callback",
+            signature: Signature::any(1, Volatility::Immutable),
+            folding_permitted: false,
+            short_circuits: false,
+            error_if_invoked,
+            clone_argument_field: false,
+            calls: Arc::clone(&counters.opaque),
+        },
+        CountedIdentity {
+            name: "mixed_counted_producer",
+            signature: Signature::exact(vec![DataType::Int32], Volatility::Immutable),
+            folding_permitted: false,
+            short_circuits: false,
+            error_if_invoked,
+            clone_argument_field: true,
+            calls: Arc::clone(&counters.opaque),
+        },
+        CountedIdentity {
+            name: "sdk_none_eager_short",
+            signature: Signature::exact(vec![DataType::Float64], Volatility::Immutable),
+            folding_permitted: false,
+            short_circuits: true,
+            error_if_invoked,
+            clone_argument_field: false,
+            calls: Arc::clone(&counters.opaque),
+        },
+        CountedIdentity {
+            name: "allowed_constant",
+            signature: Signature::exact(vec![DataType::Float64], Volatility::Immutable),
+            folding_permitted: true,
+            short_circuits: false,
+            error_if_invoked: false,
+            clone_argument_field: false,
+            calls: Arc::clone(&counters.permitted),
+        },
     ] {
-        let signature = if name == "index_callback" {
-            Signature::any(1, Volatility::Immutable)
-        } else if name == "mixed_counted_producer" {
-            Signature::exact(vec![DataType::Int32], Volatility::Immutable)
-        } else {
-            Signature::exact(vec![DataType::Float64], Volatility::Immutable)
-        };
-        let function = ScalarUDF::from(CountedIdentity {
-            name,
-            signature,
-            error_if_invoked: error_if_invoked && name != "allowed_constant",
-            clone_argument_field: name == "mixed_counted_producer",
-            calls,
-        });
-        let function = if name == "retain_constant" {
-            function.with_aliases(["retained_alias"])
-        } else {
-            function
-        };
-        session.register_udf(function);
+        session.register_udf(ScalarUDF::from(probe));
     }
-    (session, [retained, allowed])
-}
-
-fn counts(counters: &[Arc<AtomicUsize>; 2]) -> [usize; 2] {
-    counters
-        .each_ref()
-        .map(|counter| counter.load(Ordering::SeqCst))
+    (session, counters)
 }
 
 struct FoldingCase {
@@ -168,16 +220,32 @@ async fn check_case(
             },
         )
         .await?;
-        let after_resolve = counts(&counters);
-        assert_eq!(after_resolve, [0, 0], "resolve: {}", case.sql);
+        let after_resolve = counters.snapshot();
+        assert_eq!(
+            after_resolve,
+            InvocationSnapshot {
+                opaque: 0,
+                permitted: 0
+            },
+            "resolve: {}",
+            case.sql
+        );
         let analyzed = Arc::clone(query.logical_plan.schema().inner());
         let names = query.column_names.clone();
         let physical = query.create_physical_plan(&session).await?;
         (analyzed, names, after_resolve, physical)
     } else {
         let frame = session.sql(&case.sql).await?;
-        let after_resolve = counts(&counters);
-        assert_eq!(after_resolve, [0, 0], "native resolve: {}", case.sql);
+        let after_resolve = counters.snapshot();
+        assert_eq!(
+            after_resolve,
+            InvocationSnapshot {
+                opaque: 0,
+                permitted: 0
+            },
+            "native resolve: {}",
+            case.sql
+        );
         let analyzed = Arc::clone(frame.schema().inner());
         let names = analyzed
             .fields()
@@ -187,18 +255,18 @@ async fn check_case(
         let physical = frame.create_physical_plan().await?;
         (analyzed, names, after_resolve, physical)
     };
-    let after_physical = counts(&counters);
-    assert_eq!(after_physical[0], 0, "prepare: {}", case.sql);
+    let after_physical = counters.snapshot();
+    assert_eq!(after_physical.opaque, 0, "prepare: {}", case.sql);
     if case.permitted_planning_limit == 0 {
         assert_eq!(
-            after_physical[1], 0,
+            after_physical.permitted, 0,
             "unexpected permitted callback: {}",
             case.sql
         );
     } else {
         // This source-bound cost ceiling preserves existing work, not an exact-once UDF guarantee.
         assert!(
-            (1..=case.permitted_planning_limit).contains(&after_physical[1]),
+            (1..=case.permitted_planning_limit).contains(&after_physical.permitted),
             "permitted planning calls increased: {}: {:?}",
             case.sql,
             after_physical
@@ -234,10 +302,13 @@ async fn check_case(
         case.sql
     );
     let result = collect(physical, session.task_ctx()).await;
-    let after_execute = counts(&counters);
+    let after_execute = counters.snapshot();
     assert_eq!(
         after_execute,
-        [case.expected_opt_out_calls, after_physical[1]],
+        InvocationSnapshot {
+            opaque: case.expected_opt_out_calls,
+            permitted: after_physical.permitted,
+        },
         "execute: {}",
         case.sql
     );
@@ -290,8 +361,8 @@ async fn check_case(
         "shared folding permission: {}",
         json!({
             "sql":case.sql,"spark":spark,"ansi":ansi_mode,"ansi_option_applied":spark,
-            "error_if_invoked":error_if_invoked,"after_resolve":after_resolve,
-            "after_physical":after_physical,"after_execute":after_execute,
+            "error_if_invoked":error_if_invoked,"after_resolve":[after_resolve.opaque,after_resolve.permitted],
+            "after_physical":[after_physical.opaque,after_physical.permitted],"after_execute":[after_execute.opaque,after_execute.permitted],
             "count_order":["opt_out","permitted"],
             "permitted_planning_cost_ceiling":case.permitted_planning_limit,
             "analyzed_arrow_schema":format!("{analyzed:?}"),"column_names":names,
@@ -532,6 +603,37 @@ async fn required_children_and_siblings_keep_the_first_error_without_invoking_op
             "Arrow error: Divide by zero error",
         ),
         (
+            "SELECT sdk_none_eager_short(1 DIV 0) AS r",
+            vec![Field::new("r", DataType::Float64, true)],
+            "Arrow error: Divide by zero error",
+        ),
+        (
+            "SELECT retain_constant(v/0) AS r FROM VALUES(1.0) AS t(v)",
+            vec![Field::new("r", DataType::Float64, true)],
+            "Arrow error: Divide by zero error",
+        ),
+        (
+            "SELECT retain_constant(CAST(v AS INT)/1) AS r FROM VALUES('bad') AS t(v)",
+            vec![Field::new("r", DataType::Float64, true)],
+            "Arrow error: Cast error: Cannot cast string 'bad' to value of Int32 type",
+        ),
+        (
+            "SELECT v/0 AS r FROM VALUES(1.0) AS t(v)",
+            vec![Field::new("r", DataType::Decimal128(7, 6), true)],
+            "Arrow error: Divide by zero error",
+        ),
+        (
+            "SELECT CAST(v AS INT)/1 AS r FROM VALUES('bad') AS t(v)",
+            vec![Field::new("r", DataType::Float64, true)],
+            "Arrow error: Cast error: Cannot cast string 'bad' to value of Int32 type",
+        ),
+        (
+            // The full local batch must be checked, including a failure after a valid first row.
+            "SELECT retain_constant(CAST(v AS INT)/1) AS r FROM VALUES('2'),('bad') AS t(v)",
+            vec![Field::new("r", DataType::Float64, true)],
+            "Arrow error: Cast error: Cannot cast string 'bad' to value of Int32 type",
+        ),
+        (
             "SELECT (1 DIV 0)+ARRAY(mixed_counted_producer(7))[0] AS r",
             vec![Field::new("r", DataType::Int64, true)],
             "Arrow error: Divide by zero error",
@@ -555,8 +657,15 @@ async fn required_children_and_siblings_keep_the_first_error_without_invoking_op
         // If an opaque call runs, its sentinel must not replace the required division failure.
         let (session, counters) = session(true, true);
         let query = plan_query(&session, sql, &SparkSqlOptions::default()).await?;
-        let after_resolve = counts(&counters);
-        assert_eq!(after_resolve, [0, 0], "{sql}");
+        let after_resolve = counters.snapshot();
+        assert_eq!(
+            after_resolve,
+            InvocationSnapshot {
+                opaque: 0,
+                permitted: 0
+            },
+            "{sql}"
+        );
         let analyzed = query.logical_plan.schema();
         let public_fields = analyzed
             .fields()
@@ -580,8 +689,15 @@ async fn required_children_and_siblings_keep_the_first_error_without_invoking_op
             Err(error) => error,
             Ok(_) => return Err(format!("required child failure was deferred: {sql}").into()),
         };
-        let after_physical = counts(&counters);
-        assert_eq!(after_physical, [0, 0], "{sql}: {error}");
+        let after_physical = counters.snapshot();
+        assert_eq!(
+            after_physical,
+            InvocationSnapshot {
+                opaque: 0,
+                permitted: 0
+            },
+            "{sql}: {error}"
+        );
         assert_eq!(error.find_root().to_string(), expected_root);
         if expected_root.contains("Cast error") {
             assert!(
@@ -593,7 +709,7 @@ async fn required_children_and_siblings_keep_the_first_error_without_invoking_op
             "shared folding required error: {}",
             json!({
                 "sql":sql,"ansi":true,"spark_oracle_credit":false,
-                "after_resolve":after_resolve,"after_physical":after_physical,
+                "after_resolve":[after_resolve.opaque,after_resolve.permitted],"after_physical":[after_physical.opaque,after_physical.permitted],
                 "analyzed_arrow_schema":format!("{:?}", analyzed.as_arrow()),
                 "column_names":query.column_names,"error_stage":"physical",
                 "error":error.to_string(),"root_error":error.find_root().to_string(),
@@ -736,6 +852,126 @@ async fn array_index_parent_inference_does_not_invoke_opaque_int_producers() -> 
                     error_if_invoked,
                 )
                 .await?;
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn sdk_none_argument_partition_preserves_eager_children_and_opaque_calls() -> TestResult {
+    for ansi in [true, false] {
+        for error_if_invoked in [false, true] {
+            for function in ["sdk_none_eager_short", "retain_constant"] {
+                check_case(
+                    scalar_case(
+                        format!("SELECT {function}(1 DIV 1) AS r"),
+                        DataType::Float64,
+                        vec![vec![ScalarValue::Float64(Some(1.0))]],
+                        1,
+                        0,
+                    ),
+                    true,
+                    ansi,
+                    error_if_invoked,
+                )
+                .await?;
+                if !ansi {
+                    check_case(
+                        scalar_case(
+                            format!("SELECT {function}(1 DIV 0) AS r"),
+                            DataType::Float64,
+                            vec![vec![ScalarValue::Float64(None)]],
+                            1,
+                            0,
+                        ),
+                        true,
+                        ansi,
+                        error_if_invoked,
+                    )
+                    .await?;
+                }
+            }
+            for (sql, rows, expected_calls, physical_nullable) in [
+                (
+                    "SELECT sdk_none_eager_short(CAST(NULL AS DOUBLE)) AS r",
+                    vec![vec![ScalarValue::Float64(None)]],
+                    1,
+                    true,
+                ),
+                (
+                    "SELECT CASE WHEN false THEN sdk_none_eager_short(1 DIV 0) ELSE CAST(7 AS DOUBLE) END AS r",
+                    vec![vec![ScalarValue::Float64(Some(7.0))]],
+                    0,
+                    false,
+                ),
+                (
+                    "SELECT sdk_none_eager_short(1 DIV 1) AS r LIMIT 0",
+                    vec![],
+                    0,
+                    true,
+                ),
+            ] {
+                let mut case = scalar_case(sql.into(), DataType::Float64, rows, expected_calls, 0);
+                case.physical_fields[0] = case.physical_fields[0]
+                    .clone()
+                    .with_nullable(physical_nullable);
+                check_case(case, true, ansi, error_if_invoked).await?;
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn local_rows_preserve_opaque_execution_and_legacy_child_nulls() -> TestResult {
+    for ansi in [true, false] {
+        for error_if_invoked in [false, true] {
+            for (sql, expected_value) in [
+                (
+                    "SELECT retain_constant(v/1) AS r FROM VALUES(1.0) AS t(v)",
+                    1.0,
+                ),
+                (
+                    "SELECT retain_constant(CAST(v AS INT)/1) AS r FROM VALUES('2') AS t(v)",
+                    2.0,
+                ),
+            ] {
+                for spark in [true, false] {
+                    check_case(
+                        scalar_case(
+                            sql.into(),
+                            DataType::Float64,
+                            vec![vec![ScalarValue::Float64(Some(expected_value))]],
+                            1,
+                            0,
+                        ),
+                        spark,
+                        ansi,
+                        error_if_invoked,
+                    )
+                    .await?;
+                }
+            }
+            if !ansi {
+                for sql in [
+                    "SELECT retain_constant(v/0) AS r FROM VALUES(1.0) AS t(v)",
+                    "SELECT retain_constant(CAST(v AS INT)/1) AS r FROM VALUES('bad') AS t(v)",
+                ] {
+                    check_case(
+                        scalar_case(
+                            sql.into(),
+                            DataType::Float64,
+                            vec![vec![ScalarValue::Float64(None)]],
+                            1,
+                            0,
+                        ),
+                        true,
+                        ansi,
+                        error_if_invoked,
+                    )
+                    .await?;
+                }
             }
         }
     }

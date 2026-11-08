@@ -1050,7 +1050,7 @@ impl PrepareSparkExpressions {
                         if !null_discarded(&expr) {
                             return Ok(Transformed::no(expr));
                         }
-                        prepare.check_expr(&expr, false)?;
+                        prepare.check_expr(&expr, false, None)?;
                         let data_type = expr.get_type(&schema)?;
                         if null_round(&expr) {
                             let mut subqueries = Vec::new();
@@ -2133,7 +2133,7 @@ fn substring_precheck_keeps_computed_null_source_constants_reachable() -> Result
         vec![prepared.clone(), lit(ScalarValue::Utf8(None))],
     ] {
         let expression = prepare.precheck_expression(concat.call(args), &schema, false)?;
-        let error = prepare.check_expr(&expression, true).unwrap_err();
+        let error = prepare.check_expr(&expression, true, None).unwrap_err();
         assert!(
             matches!(error.find_root(), DataFusionError::ArrowError(cause, _)
             if matches!(cause.as_ref(), ArrowError::DivideByZero))
@@ -2153,7 +2153,7 @@ fn substring_precheck_keeps_computed_null_source_constants_reachable() -> Result
     ]);
     let literal_null = prepare.precheck_expression(literal_null, &schema, false)?;
     assert!(matches!(&literal_null, Expr::Literal(value, _) if value.is_null()));
-    prepare.check_expr(&literal_null, true)?;
+    prepare.check_expr(&literal_null, true, None)?;
 
     let constant_source = datafusion_expr::expr_fn::when(lit(true), lit(ScalarValue::Utf8(None)))
         .otherwise(lit("abc"))?;
@@ -2166,7 +2166,7 @@ fn substring_precheck_keeps_computed_null_source_constants_reachable() -> Result
         .map_err(|error| DataFusionError::External(Box::new(error)))?
         .data;
     let constant = prepare.precheck_expression(constant, &schema, false)?;
-    prepare.check_expr(&constant, true)?;
+    prepare.check_expr(&constant, true, None)?;
 
     let local = lower_runtime_substring(marker, false)
         .map_err(|error| DataFusionError::External(Box::new(error)))?
@@ -3626,7 +3626,7 @@ impl Prepare {
                             .with_config_options(Arc::new(options.clone()))
                             .build();
                         let prepared = ExprSimplifier::new(info).simplify(expr.clone())?;
-                        self.check_expr(&prepared, true)?;
+                        self.check_expr(&prepared, true, None)?;
                     }
                     Ok(TreeNodeRecursion::Continue)
                 })?;
@@ -3718,7 +3718,7 @@ impl Prepare {
                 // Fold literal SLICE results before following conditional parameter errors.
                 let checked = simplifier
                     .simplify(expr.clone())
-                    .and_then(|prepared| self.check_expr(&prepared, true));
+                    .and_then(|prepared| self.check_expr(&prepared, true, None));
                 // Other failures retain their existing preparation or execution stage.
                 if let Err(error) = checked
                     && SparkArraySlice::is_parameter_error(&error)
@@ -3850,6 +3850,78 @@ impl Prepare {
         Ok(())
     }
 
+    fn check_local_expression_errors(
+        &self,
+        expr: &Expr,
+        schema: &DFSchemaRef,
+        batch: &RecordBatch,
+    ) -> Result<()> {
+        let error = match create_physical_expr(expr, schema, &self.props)?.evaluate(batch) {
+            Ok(_) => return Ok(()),
+            Err(error) => error,
+        };
+        // Match Spark's strict string-to-integer trimming
+        // only for this discarded local evaluation. The
+        // runtime expression and its physical plan stay intact.
+        let expr = expr.clone().transform_up(|expr| {
+            let expr = if let Expr::Cast(mut cast) = expr {
+                if cast.field.data_type().is_signed_integer()
+                    && cast.expr.get_type(schema)?.is_string()
+                {
+                    let trim: String = (0..=b' ')
+                        .chain(std::iter::once(0x7f))
+                        .map(char::from)
+                        .collect();
+                    cast.expr = Box::new(expr_fn::btrim(vec![*cast.expr, lit(trim)]));
+                    return Ok(Transformed::yes(Expr::Cast(cast)));
+                }
+                Expr::Cast(cast)
+            } else {
+                expr
+            };
+            let input = match &expr {
+                Expr::Cast(cast) if cast.field.data_type() == &DataType::Int64 => {
+                    Some(cast.expr.as_ref())
+                }
+                Expr::ScalarFunction(f)
+                    if f.func
+                        .inner()
+                        .downcast_ref::<SparkCastNumericToInteger>()
+                        .is_some_and(|cast| {
+                            !cast.is_try() && cast.target_type() == &DataType::Int64
+                        }) =>
+                {
+                    match f.args.as_slice() {
+                        [input] => Some(input),
+                        _ => None,
+                    }
+                }
+                _ => None,
+            };
+            // Spark rounds floating Long.MaxValue to 2^63,
+            // then saturates that endpoint in this local check.
+            if let Some(input) = input {
+                let upper = match input.get_type(schema)? {
+                    DataType::Float32 => Some(ScalarValue::Float32(Some(i64::MAX as f32))),
+                    DataType::Float64 => Some(ScalarValue::Float64(Some(i64::MAX as f64))),
+                    _ => None,
+                };
+                if let Some(upper) = upper {
+                    let expr =
+                        datafusion_expr::expr_fn::when(input.clone().eq(lit(upper)), lit(i64::MAX))
+                            .otherwise(expr)?;
+                    return Ok(Transformed::yes(expr));
+                }
+            }
+            Ok(Transformed::no(expr))
+        })?;
+        if !expr.transformed {
+            return Err(error);
+        }
+        create_physical_expr(&expr.data, schema, &self.props)?.evaluate(batch)?;
+        Ok(())
+    }
+
     // True requests a second constant check after pruning; it is not an error verdict.
     fn check_preparation_error_expressions(
         &self,
@@ -3894,9 +3966,6 @@ impl Prepare {
                 } else {
                     None
                 };
-                // Empty local conversion consumes the expression without invoking it.
-                let batch =
-                    batch.filter(|batch| batch.num_rows() == 0 || constant_preparation_permitted);
                 match batch {
                     Some(batch)
                         if check_local_inputs
@@ -3904,84 +3973,18 @@ impl Prepare {
                             && is_locally_evaluable(expr, true)? =>
                     {
                         let expr = self.precheck_expression(expr.clone(), &schema, true)?;
-                        let error = match create_physical_expr(&expr, &schema, &self.props)?
-                            .evaluate(&batch)
+                        if !constant_preparation_permitted {
+                            // Opaque array-only candidates were excluded above; arithmetic children
+                            // retain the admitted rows without invoking their opaque ancestors.
+                            self.check_expr(&expr, true, Some((&schema, &batch)))?;
+                        } else if arithmetic {
+                            self.check_local_expression_errors(&expr, &schema, &batch)?;
+                        } else if let Err(error) =
+                            create_physical_expr(&expr, &schema, &self.props)?.evaluate(&batch)
+                            && SparkArrayIndexError::is(&error)
                         {
-                            Ok(_) => return Ok(TreeNodeRecursion::Continue),
-                            Err(error) => error,
-                        };
-                        if !arithmetic {
-                            if SparkArrayIndexError::is(&error) {
-                                return Err(error);
-                            }
-                            return Ok(TreeNodeRecursion::Continue);
-                        }
-                        // Match Spark's strict string-to-integer trimming
-                        // only for this discarded local evaluation. The
-                        // runtime expression and its physical plan stay intact.
-                        let expr = expr.clone().transform_up(|expr| {
-                            let expr = if let Expr::Cast(mut cast) = expr {
-                                if cast.field.data_type().is_signed_integer()
-                                    && cast.expr.get_type(&schema)?.is_string()
-                                {
-                                    let trim: String = (0..=b' ')
-                                        .chain(std::iter::once(0x7f))
-                                        .map(char::from)
-                                        .collect();
-                                    cast.expr =
-                                        Box::new(expr_fn::btrim(vec![*cast.expr, lit(trim)]));
-                                    return Ok(Transformed::yes(Expr::Cast(cast)));
-                                }
-                                Expr::Cast(cast)
-                            } else {
-                                expr
-                            };
-                            let input = match &expr {
-                                Expr::Cast(cast) if cast.field.data_type() == &DataType::Int64 => {
-                                    Some(cast.expr.as_ref())
-                                }
-                                Expr::ScalarFunction(f)
-                                    if f.func
-                                        .inner()
-                                        .downcast_ref::<SparkCastNumericToInteger>()
-                                        .is_some_and(|cast| {
-                                            !cast.is_try() && cast.target_type() == &DataType::Int64
-                                        }) =>
-                                {
-                                    match f.args.as_slice() {
-                                        [input] => Some(input),
-                                        _ => None,
-                                    }
-                                }
-                                _ => None,
-                            };
-                            // Spark rounds floating Long.MaxValue to 2^63,
-                            // then saturates that endpoint in this local check.
-                            if let Some(input) = input {
-                                let upper = match input.get_type(&schema)? {
-                                    DataType::Float32 => {
-                                        Some(ScalarValue::Float32(Some(i64::MAX as f32)))
-                                    }
-                                    DataType::Float64 => {
-                                        Some(ScalarValue::Float64(Some(i64::MAX as f64)))
-                                    }
-                                    _ => None,
-                                };
-                                if let Some(upper) = upper {
-                                    let expr = datafusion_expr::expr_fn::when(
-                                        input.clone().eq(lit(upper)),
-                                        lit(i64::MAX),
-                                    )
-                                    .otherwise(expr)?;
-                                    return Ok(Transformed::yes(expr));
-                                }
-                            }
-                            Ok(Transformed::no(expr))
-                        })?;
-                        if !expr.transformed {
                             return Err(error);
                         }
-                        create_physical_expr(&expr.data, &schema, &self.props)?.evaluate(&batch)?;
                     }
                     None => {
                         let expr = if !arithmetic
@@ -3996,7 +3999,7 @@ impl Prepare {
                             expr.clone()
                         };
                         let expr = self.precheck_expression(expr, &schema, false)?;
-                        let checked = match self.check_expr(&expr, true) {
+                        let checked = match self.check_expr(&expr, true, None) {
                             Err(error) if arithmetic || SparkArrayIndexError::is(&error) => {
                                 Err(error)
                             }
@@ -4018,11 +4021,17 @@ impl Prepare {
         .map(|_| needs_pruning)
     }
 
-    fn check_expr(&self, expr: &Expr, constants: bool) -> Result<()> {
+    // Local rows are admitted only for arithmetic descendants; other callers check closed constants.
+    fn check_expr(
+        &self,
+        expr: &Expr,
+        check_values: bool,
+        local_input: Option<(&DFSchemaRef, &RecordBatch)>,
+    ) -> Result<()> {
         let expr = without_metadata_annotations(expr);
         if let Expr::ScalarSubquery(subquery) = expr {
             if let Some(expressions) = one_row_exprs(&subquery.subquery)? {
-                return self.check_expr(&expressions[0], constants);
+                return self.check_expr(&expressions[0], check_values, None);
             }
             return self.check_subquery(&subquery.subquery);
         }
@@ -4031,13 +4040,13 @@ impl Prepare {
         if null_discarded(expr) {
             return expr
                 .apply_children(|child| {
-                    self.check_expr(child, false)?;
+                    self.check_expr(child, false, local_input)?;
                     Ok(TreeNodeRecursion::Continue)
                 })
                 .map(|_| ());
         }
         // SLICE opts out of generic evaluation but still validates reached literal parameters.
-        if constants
+        if check_values
             && let Expr::ScalarFunction(function) = expr
             && function.func.inner().is::<SparkArraySlice>()
             && let [
@@ -4050,8 +4059,15 @@ impl Prepare {
             let _ = create_physical_expr(expr, &DFSchema::empty(), &self.props)?;
             SparkArraySlice::validate_parameters(*start, *length)?;
         }
-        if constants && is_locally_evaluable(expr, false)? && permits_constant_preparation(expr)? {
-            self.eval_constant(expr)?;
+        if check_values
+            && is_locally_evaluable(expr, local_input.is_some())?
+            && permits_constant_preparation(expr)?
+        {
+            if let Some((schema, batch)) = local_input {
+                self.check_local_expression_errors(expr, schema, batch)?;
+            } else {
+                self.eval_constant(expr)?;
+            }
             return Ok(());
         }
         // An opaque parent still checks eager arguments; only conditional arguments defer errors.
@@ -4068,19 +4084,19 @@ impl Prepare {
                     function.func.conditional_arguments(&function.args)
                 {
                     for argument in eager_arguments {
-                        self.check_expr(argument, constants)?;
+                        self.check_expr(argument, check_values, local_input)?;
                     }
                     for argument in conditional_arguments {
-                        self.check_expr(argument, false)?;
+                        self.check_expr(argument, false, local_input)?;
                     }
                     return Ok(());
                 }
-                true
+                false
             }
             _ => matches!(expr, Expr::Case(_)) || local_string_argument_bodies(expr)?.is_some(),
         };
         expr.apply_children(|child| {
-            self.check_expr(child, constants && !conditional)?;
+            self.check_expr(child, check_values && !conditional, local_input)?;
             Ok(TreeNodeRecursion::Continue)
         })
         .map(|_| ())
@@ -4096,7 +4112,7 @@ impl Prepare {
                 return Ok(TreeNodeRecursion::Jump);
             }
             node.apply_expressions(|expr| {
-                self.check_expr(expr, true)?;
+                self.check_expr(expr, true, None)?;
                 Ok(TreeNodeRecursion::Continue)
             })?;
             Ok(TreeNodeRecursion::Continue)

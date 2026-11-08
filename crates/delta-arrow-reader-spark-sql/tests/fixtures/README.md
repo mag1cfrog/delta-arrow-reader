@@ -2668,9 +2668,11 @@ async observations. Four equal the frozen be21 records; two `bigint_wrap_zero`
 errors add the exact inline group condition. The original
 `regexp-extract-index-async-native.json` and its be21 header remain unchanged.
 Whole-actual equality remains exact, with no error-prefix normalization. NoFold
-controls cover bounded local previews; the separate 24-context scalar-parent
-replay keeps the CAST-only and scalar-parent #893 gap visible. ARRAY declarations
-under #1000 and public names under #1042/#778 retain their separate acceptance
+controls cover bounded local previews. The separate 24-context scalar-parent
+replay preserves the historical CAST-only and scalar-parent #893 violations.
+Current shared-preparation regressions require zero planning invocations on
+those NoFold routes, including scalar parents and CAST-only producers. ARRAY
+declarations under #1000 and public names under #1042/#778 retain their separate acceptance
 work. These controls do not establish complete string/binary compatibility.
 
 Seed metadata erratum: the CSE, local-frontier and foldable-NULL files retain
@@ -3665,9 +3667,10 @@ counted volatile operands check that live computed inputs run once per row.
 reachability, UDF folding opt-outs and volatility. The guard inspects STRING/BINARY
 operands without evaluating them. An explicitly folding-disabled descendant keeps
 that whole CONCAT on its existing native NULL path, including independent constants
-in the same extension context. Full Spark error parity for arbitrary folding-disabled
-native extensions depends on #893. Volatility remains a separate contract. Children
-of retained calls keep their native folding permission.
+in the same extension context. The shared #893 preparation regressions require
+zero planning invocations of folding-disabled native extensions while eligible
+children keep their native folding permission. These custom callback controls
+carry no Apache Spark UDF oracle credit. Volatility remains a separate contract.
 
 The complete supplemental baseline retains 16 Spark references and 96 native
 observations outside this focused fixture. Its two column-before-NULL references

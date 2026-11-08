@@ -799,8 +799,7 @@ async fn concat_preparation_respects_folding_opt_out_and_reachability() -> TestR
         }
     }
 
-    // Standalone Spark prechecks already invoke the opt-out UDF for division.
-    // Keep that existing behavior outside the CONCAT repair.
+    // Shared preparation now defers this opaque division call until execution.
     session.register_udf(ScalarUDF::from(FoldingPermission {
         allowed: false,
         fail: false,
@@ -818,9 +817,9 @@ async fn concat_preparation_respects_folding_opt_out_and_reachability() -> TestR
         .await?;
         assert_eq!(counters(), [0; 4]);
         let physical = query.create_physical_plan(&session).await?;
-        assert_eq!(counters(), [1, 1, 0, 0]);
+        assert_eq!(counters(), [0; 4]);
         let batches = datafusion::physical_plan::collect(physical, session.task_ctx()).await?;
-        assert_eq!(counters(), [2, 2, 0, 0]);
+        assert_eq!(counters(), [1, 1, 0, 0]);
         assert_eq!(
             batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
             1
