@@ -2,7 +2,8 @@
 //! Spark's TIMESTAMP subtraction, as `SubtractTimestamps` gives it: the DAY TO SECOND
 //! interval between the two local date-times in their time zone, which differs from the
 //! elapsed time Arrow gives across a DST change or a change of local mean time. Against a
-//! TIMESTAMP_NTZ, Spark first converts the TIMESTAMP to its local date-time.
+//! TIMESTAMP_NTZ, Spark first converts the TIMESTAMP to its local date-time. TRY_SUBTRACT
+//! gives NULL where the subtraction overflows.
 
 use std::sync::Arc;
 
@@ -18,6 +19,8 @@ use crate::scalar::datetime::local_time::TimestampZone;
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkSubtractTimestamps {
+    /// TRY_SUBTRACT: NULL where the subtraction overflows.
+    null_on_overflow: bool,
     signature: Signature,
 }
 
@@ -28,25 +31,28 @@ impl Default for SparkSubtractTimestamps {
 }
 
 impl SparkSubtractTimestamps {
+    /// The `-` operator.
     pub fn new() -> Self {
+        Self::with_overflow(false)
+    }
+
+    /// TRY_SUBTRACT.
+    pub fn returning_null_on_overflow() -> Self {
+        Self::with_overflow(true)
+    }
+
+    fn with_overflow(null_on_overflow: bool) -> Self {
         Self {
+            null_on_overflow,
             signature: Signature::any(2, Volatility::Immutable),
         }
     }
 
-    /// Whether the kernel subtracts values of these types: TIMESTAMP values, one of which may
-    /// be a TIMESTAMP_NTZ.
+    /// Whether the kernel subtracts values of these types: TIMESTAMP or TIMESTAMP_NTZ values.
     pub fn accepts(end: &DataType, start: &DataType) -> bool {
-        let timestamp = |data_type: &DataType| {
-            matches!(data_type, DataType::Timestamp(TimeUnit::Microsecond, _))
-        };
-        let zoned = |data_type: &DataType| {
-            matches!(
-                data_type,
-                DataType::Timestamp(TimeUnit::Microsecond, Some(_))
-            )
-        };
-        timestamp(end) && timestamp(start) && (zoned(end) || zoned(start))
+        [end, start]
+            .iter()
+            .all(|data_type| matches!(data_type, DataType::Timestamp(TimeUnit::Microsecond, _)))
     }
 }
 
@@ -69,7 +75,11 @@ impl Operand {
 
 impl ScalarUDFImpl for SparkSubtractTimestamps {
     fn name(&self) -> &str {
-        "spark_subtract_timestamps"
+        if self.null_on_overflow {
+            "spark_try_subtract_timestamps"
+        } else {
+            "spark_subtract_timestamps"
+        }
     }
 
     fn signature(&self) -> &Signature {
@@ -94,13 +104,13 @@ impl ScalarUDFImpl for SparkSubtractTimestamps {
         Ok(Arc::new(Field::new(
             self.name(),
             self.return_type(&types)?,
-            args.arg_fields.iter().any(|field| field.is_nullable()),
+            self.null_on_overflow || args.arg_fields.iter().any(|field| field.is_nullable()),
         )))
     }
 
     // Spark folds a constant subtraction during optimization, raising its overflow error.
     fn propagates_constant_folding_errors(&self) -> bool {
-        true
+        !self.null_on_overflow
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
@@ -141,6 +151,7 @@ impl ScalarUDFImpl for SparkSubtractTimestamps {
                             Ok(Some(difference))
                         }
                         // Java's exact arithmetic message.
+                        _ if self.null_on_overflow => Ok(None),
                         _ => exec_err!("long overflow"),
                     }
                 }
