@@ -477,6 +477,16 @@ Native DataFusion SQL keeps each column's own annotation. The
 [session-zone column references](tests/fixtures/session-zone-columns/README.md) cover
 these functions in UTC and Los Angeles over UTC, named-zone and fixed-offset annotations.
 
+DATE_TRUNC to MINUTE truncates the local date-time in the session zone, like Java's
+`ZonedDateTime.truncatedTo`: a repeated local minute keeps the instant's offset, and a skipped
+one moves forward by the skipped interval, so its result can follow a later instant's and no
+order is claimed. DataFusion truncated the UTC minute, which is seconds off where the offset
+has seconds, such as Los Angeles local mean time (-07:52:58) before 1883. Zones parse as in
+Arrow, except that `EST`, `MST` and `HST` are Java's fixed offsets (#1029), and instants
+beyond Chrono's years take offsets from a nearer 400-year cycle. Coarser units still use
+DataFusion's local truncation, within the nanosecond range (#1087). The
+[local truncation references](tests/fixtures/local-truncation/README.md) record the checks.
+
 WEEKDAY numbers Monday 0 through Sunday 6, where it returned -1 for Sunday. WEEKDAY and
 DAYOFWEEK cast a TIMESTAMP_NTZ or NULL argument to DATE like Spark, and convert a STRING with
 Spark's STRING-to-DATE rules. Spaces, short months and days and years outside Arrow's
