@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use arrow_schema::extension::{EXTENSION_TYPE_METADATA_KEY, EXTENSION_TYPE_NAME_KEY};
 use datafusion::arrow::compute::{can_cast_types, cast as arrow_cast};
-use datafusion::arrow::datatypes::{DataType, Field, FieldRef, TimeUnit};
+use datafusion::arrow::datatypes::{DataType, Field, FieldRef, IntervalUnit, TimeUnit};
 use datafusion::logical_expr::expr::NullTreatment;
 use datafusion::prelude::SessionContext;
 use datafusion_common::metadata::FieldMetadata;
@@ -25,6 +25,7 @@ use sail_function::sketch::{DEFAULT_HLL_LG_CONFIG_K, DEFAULT_THETA_LG_NOM_ENTRIE
 
 use crate::config::PlanConfig;
 use crate::error::{IntoPlanResult, PlanError, PlanResult};
+use crate::formatter::SparkPlanFormatter;
 use crate::function::comparison::{
     nanosecond_comparison_cast, string_comparison_cast, string_comparison_type,
     temporal_comparison_type,
@@ -675,6 +676,34 @@ fn integer_needs_double(value: &expr::Expr, data_type: &DataType) -> bool {
     double.is_some_and(|v| f64::from(v as f32) != v)
 }
 
+/// Spark's `TypeUtils.checkForOrderingExpr`: a calendar interval, also inside an ARRAY or
+/// STRUCT, cannot be ordered or compared, so `operation` fails during analysis.
+pub(crate) fn check_orderable(data_type: &DataType, operation: &str) -> PlanResult<()> {
+    fn has_calendar_interval(data_type: &DataType) -> bool {
+        match data_type {
+            DataType::Interval(IntervalUnit::MonthDayNano) => true,
+            DataType::List(field)
+            | DataType::LargeList(field)
+            | DataType::FixedSizeList(field, _)
+            | DataType::ListView(field)
+            | DataType::LargeListView(field) => has_calendar_interval(field.data_type()),
+            DataType::Struct(fields) => fields
+                .iter()
+                .any(|field| has_calendar_interval(field.data_type())),
+            _ => false,
+        }
+    }
+    if !has_calendar_interval(data_type) {
+        return Ok(());
+    }
+    let type_name = SparkPlanFormatter
+        .data_type_to_cast_error_string(data_type)
+        .unwrap_or_else(|_| "INTERVAL".to_owned());
+    Err(PlanError::analysis(format!(
+        "[DATATYPE_MISMATCH.INVALID_ORDERING_TYPE] The `{operation}` does not support ordering on type \"{type_name}\". SQLSTATE: 42K09"
+    )))
+}
+
 pub(crate) fn spark_in_list(
     value: expr::Expr,
     list: Vec<expr::Expr>,
@@ -682,6 +711,7 @@ pub(crate) fn spark_in_list(
     schema: &DFSchemaRef,
     ansi_mode: bool,
 ) -> PlanResult<expr::Expr> {
+    check_orderable(&value.get_type(schema)?, "in")?;
     let mut input = expr::InList::new(Box::new(value), list, negated);
     let (mut decimal, mut floating, mut double, mut single, mut integer) =
         (false, false, false, false, false);
@@ -801,6 +831,17 @@ pub(crate) fn spark_binary_expr(
     ) {
         let mut left_type = left.get_type(schema)?;
         let mut right_type = right.get_type(schema)?;
+        // Spark's `<>` is the negation of `=`, which it names.
+        let comparison = match op {
+            Operator::Eq | Operator::NotEq => "=",
+            Operator::Lt => "<",
+            Operator::LtEq => "<=",
+            Operator::Gt => ">",
+            Operator::GtEq => ">=",
+            _ => "<=>",
+        };
+        check_orderable(&left_type, comparison)?;
+        check_orderable(&right_type, comparison)?;
         if let Some(conversion) =
             nanosecond_comparison_cast(&left_type, &right_type, &config.session_timezone)
         {

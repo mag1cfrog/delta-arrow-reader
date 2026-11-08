@@ -289,6 +289,20 @@ SECOND keep the count. Interval leaves of nested ARRAY, STRUCT and MAP casts
 still keep their count (#995). Numeric and string casts to intervals and native
 DataFusion SQL are unchanged.
 
+### Calendar interval ordering
+
+Spark cannot order or compare calendar intervals and rejects them during analysis with
+`DATATYPE_MISMATCH.INVALID_ORDERING_TYPE`. A shared check, `check_orderable`, does the same for
+a calendar interval, also inside an ARRAY or STRUCT, as a sort key of ORDER BY, SORT BY or a
+window ORDER BY, and as an operand of `=`, `<>`, `<`, `<=`, `>`, `>=`, `<=>`, BETWEEN, IN, NOT
+IN, GREATEST and LEAST. DAR sorted and compared them. The query sort resolver now tries child
+plans without the check and applies it once the sort node is built, so the type error is not
+taken for an unresolved key. GROUP BY and DISTINCT, which Spark allows, DAY TO SECOND and YEAR
+TO MONTH intervals, and native DataFusion SQL are unchanged. Ordering aggregates and array
+functions still accept calendar intervals (#1160). The
+[calendar interval ordering references](tests/fixtures/calendar-interval-ordering/README.md)
+record the checks.
+
 ## Licenses and maintenance
 
 The Sail selection retains its Apache-2.0 LICENSE. The pinned Sail revision has no
