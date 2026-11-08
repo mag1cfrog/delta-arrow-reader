@@ -198,8 +198,6 @@ fn matches_expected_error(expectation: &Value, observation: &Value) -> bool {
 /// Differences outside TIMESTAMPDIFF's unit counting, each owned by an issue.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum RetainedDifference {
-    /// #1051: `timestamp_diff` resolves as an alias where Spark has no such routine.
-    TimestampDiffAlias,
     /// #1052: the zone table lists no Los Angeles transitions after 2099, so one elapsed hour
     /// across the 2100 spring transition counts as one local hour instead of two.
     DstAfter2099,
@@ -223,9 +221,7 @@ fn time_unit_micros(id: &str) -> Option<i64> {
 
 fn retained_difference(case: &Value) -> Option<RetainedDifference> {
     let id = case["id"].as_str()?;
-    if id == "timestamp_diff_name" {
-        Some(RetainedDifference::TimestampDiffAlias)
-    } else if id.ends_with("_far_future_gap")
+    if id.ends_with("_far_future_gap")
         && case["timezone"] == "America/Los_Angeles"
         && time_unit_micros(id).is_some()
     {
@@ -239,18 +235,6 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
 fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResult<Value> {
     let mut current = case.clone();
     match difference {
-        RetainedDifference::TimestampDiffAlias => {
-            if case["expected"]["condition"] != "UNRESOLVED_ROUTINE"
-                || case["spark_error_phase"] != "sql"
-            {
-                return Err(format!("expected Spark's unresolved routine: {case}").into());
-            }
-            current["expected"] = json!({"status": "ok", "rows": [["0"]]});
-            current
-                .as_object_mut()
-                .ok_or("expected a record")?
-                .remove("spark_error_phase");
-        }
         RetainedDifference::DstAfter2099 => {
             let unit = time_unit_micros(case["id"].as_str().ok_or("missing id")?)
                 .ok_or("expected a time-based unit")?;
@@ -362,10 +346,7 @@ async fn timestamp_diff_matches_spark() -> TestResult {
     assert_eq!(dictionary_cases, 20);
     assert_eq!(
         retained,
-        BTreeMap::from([
-            (RetainedDifference::TimestampDiffAlias, 4),
-            (RetainedDifference::DstAfter2099, 10),
-        ])
+        BTreeMap::from([(RetainedDifference::DstAfter2099, 10),])
     );
     let mut differences = Vec::new();
     for batch_size in [1, 32] {

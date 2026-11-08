@@ -51,8 +51,6 @@ condition.
 
 Existing differences keep their Spark expectation in the fixture. The test replaces only
 the retained part with the current DAR result and checks each count:
-- #1051: 4 `timestamp_diff` calls return 0 where Spark has no such routine and fails with
-  `UNRESOLVED_ROUTINE`.
 - #1052: 10 time-based differences across the 2100 Los Angeles spring transition count
   one local hour instead of two, because the zone table lists no transitions after 2099.
 
