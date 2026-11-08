@@ -525,6 +525,11 @@ inside TRY (#1133). The
 [TRY timestamp references](tests/fixtures/try-timestamp-intervals/README.md) record the
 checks.
 
+`SparkTryAdd` and `SparkTrySubtract` also take two DAY TO SECOND intervals, which Spark adds
+and subtracts exactly with a nullable result that is NULL on overflow; they failed during
+planning. The
+[TRY interval references](tests/fixtures/try-day-time-intervals/README.md) record the checks.
+
 A DATE and a TIMESTAMP_NTZ, in either order, subtract with `-` and TRY_SUBTRACT like Spark:
 the DATE is read at its midnight and the result is the DAY TO SECOND interval between the
 wall-clock times. The DATE kernel gives the midnight as a TIMESTAMP in UTC and declares it
