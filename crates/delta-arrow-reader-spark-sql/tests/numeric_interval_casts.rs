@@ -214,14 +214,21 @@ fn optimize(session: &SessionContext, plan: &LogicalPlan) -> TestResult<LogicalP
     Ok(state.optimize(plan)?)
 }
 
-/// The texts DAR's error must contain for a recorded Spark failure: the condition alone for an
-/// analysis failure, whose message quotes Spark's plan, or Spark's whole message, without the
-/// query context on its later lines, for a cast's own failure.
+/// The texts DAR's error must contain for a recorded Spark failure: Spark's whole first line,
+/// without its query context, for a cast's own failure and for its rejection of a FLOAT or
+/// DOUBLE source; or the condition alone for another analysis failure, whose message quotes
+/// Spark's plan.
 fn expected_error_texts(case: &Value) -> Option<Vec<String>> {
     let expected = &case["expected"];
     let message = expected["java_message"].as_str()?.lines().next()?;
     let condition = expected["condition"].as_str()?;
     if case["spark_error_phase"] == "sql" {
+        let floating_source =
+            message.contains("cannot cast \"DOUBLE\"") || message.contains("cannot cast \"FLOAT\"");
+        if condition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION" && floating_source {
+            let (text, _) = message.split_once("; line ")?;
+            return Some(vec![text.to_owned()]);
+        }
         return Some(vec![format!("[{condition}]")]);
     }
     message

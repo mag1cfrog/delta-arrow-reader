@@ -77,10 +77,11 @@ impl SparkNumberToInterval {
         if self.unit_length != 1 {
             value = value.checked_mul(i256::from_i128(self.unit_length.into()))?;
             let digits = decimal_digits(value);
-            // Scala rounds the 34 digits HALF_EVEN. A tie can only keep an even last digit or
-            // raise an odd one, so it never moves the value across the half that the HALF_UP
-            // rounding below tests, and a tie in the integer digits needs more than 34 of them,
-            // which overflow either way. The tie rule therefore never changes a stored count.
+            // Scala rounds the 34 digits HALF_EVEN, which differs from HALF_UP only on a tie
+            // whose last kept digit is even. A kept value just below the half that the HALF_UP
+            // rounding below tests ends in an odd 9 unless it keeps a single fraction digit,
+            // which takes 33 integer digits, and a tie at the units digit takes 34. Both
+            // overflow either way, so the tie rule never changes a stored count.
             if digits > PRODUCT_DIGITS {
                 let dropped = digits - PRODUCT_DIGITS;
                 value = divide_rounding(value, dropped, Rounding::HalfEven)?;

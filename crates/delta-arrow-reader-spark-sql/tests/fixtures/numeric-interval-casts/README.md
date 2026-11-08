@@ -46,12 +46,15 @@ Each record keeps the analyzed, optimized and executed schemas and values read f
 internal rows, collected through the Dataset API. `ConvertToLocalRelation` is excluded.
 
 `numeric_interval_casts.rs` compares names, type families, nullability, metadata and typed rows
-at batch sizes 1 and 32. A failure must occur at Spark's stage. An analysis failure must have
-Spark's condition, and any other failure the first line of Spark's message, without its query
-context. One difference is retained, at DAR's exact current result:
-- #995: numbers nested in ARRAY, STRUCT and MAP casts to intervals keep Arrow's cast, which reads
+at batch sizes 1 and 32. A failure must occur at Spark's stage with the first line of Spark's
+message, without its query context. The exception is an analysis failure other than a FLOAT or
+DOUBLE source's rejection, which must have Spark's condition: its message quotes Spark's plan,
+and DAR prints a rejected BOOLEAN in lower case.
+
+One difference is retained, at DAR's exact current result:
+- #995: integers nested in ARRAY, STRUCT and MAP casts to intervals keep Arrow's cast, which reads
   them as months or microseconds: `CAST(ARRAY(1, -2) AS ARRAY<INTERVAL YEAR>)[0]` is 1 month
-  where Spark gives 12 (12 records).
+  where Spark gives 12 (12 records). Arrow's cast rejects a nested DECIMAL during analysis.
 
 Recapture from the crate root:
 

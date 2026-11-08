@@ -305,8 +305,8 @@ or TRY_CAST. FLOAT and DOUBLE sources fail during analysis with Spark's
 `DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION` message. Year-month targets used to read every number
 as months and rejected BIGINT, DECIMAL, TINYINT and SMALLINT sources. Day-time targets wrapped on
 overflow, truncated DECIMAL fractions and accepted FLOAT and DOUBLE. Numbers nested in ARRAY,
-STRUCT and MAP casts to intervals still use Arrow's cast, which reads them as months or
-microseconds (#995). NULL sources and native DataFusion SQL are unchanged. The
+STRUCT and MAP casts to intervals still use Arrow's cast, which reads an integer as months or
+microseconds and rejects a DECIMAL (#995). NULL sources and native DataFusion SQL are unchanged. The
 [numeric interval cast references](tests/fixtures/numeric-interval-casts/README.md) record the
 checks.
 
