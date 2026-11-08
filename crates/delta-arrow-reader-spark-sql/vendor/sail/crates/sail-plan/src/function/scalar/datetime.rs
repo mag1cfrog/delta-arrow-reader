@@ -663,6 +663,23 @@ fn make_date(year: Expr, month: Expr, day: Expr) -> Expr {
     }
 }
 
+/// Whether Spark casts an argument of this type to DATE implicitly, as DATEDIFF's do: a DATE, a
+/// TIMESTAMP or TIMESTAMP_NTZ, a STRING, also dictionary-encoded as a Delta partition column, or
+/// an untyped NULL.
+fn casts_implicitly_to_date(data_type: &DataType) -> bool {
+    match data_type {
+        DataType::Null
+        | DataType::Date32
+        | DataType::Date64
+        | DataType::Timestamp(_, _)
+        | DataType::Utf8
+        | DataType::LargeUtf8
+        | DataType::Utf8View => true,
+        DataType::Dictionary(_, value) => casts_implicitly_to_date(value),
+        _ => false,
+    }
+}
+
 /// Spark's `DateDiff`: the INT number of days from `start` to `end`, computed as a Java `int`
 /// subtraction, which wraps at the DATE limits. TIMESTAMP arguments are cast to DATE. The
 /// three-argument form is TIMESTAMPDIFF instead.
@@ -763,9 +780,19 @@ fn timestamp_diff_with_name(input: ScalarFunctionInput, function_name: &str) -> 
 fn datediff_with_name(input: ScalarFunctionInput, function_name: &str) -> PlanResult<Expr> {
     match input.arguments.len() {
         2 => {
+            let schema = input.function_context.schema;
             let [end, start] = <[Expr; 2]>::try_from(input.arguments).map_err(|_| {
                 PlanError::invalid(format!("{function_name} requires 2 or 3 arguments"))
             })?;
+            for (ordinal, argument) in [("first", &end), ("second", &start)] {
+                let data_type = argument.get_type(schema)?;
+                if !casts_implicitly_to_date(&data_type) {
+                    return Err(PlanError::invalid(format!(
+                        "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] The {ordinal} parameter of \
+                         `{function_name}` requires the \"DATE\" type, got {data_type}"
+                    )));
+                }
+            }
             Ok(date_diff_days(end, start))
         }
         3 => timestamp_diff_with_name(input, function_name),
