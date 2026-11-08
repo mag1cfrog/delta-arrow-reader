@@ -19,6 +19,13 @@ use delta_arrow_reader_spark_sql::{SparkSqlOptions, plan_query};
 use sail_common_datafusion::rename::physical_plan::rename_physical_plan;
 use serde_json::{Value, json};
 
+#[allow(
+    clippy::duplicate_mod,
+    reason = "Independently importable integration helpers share this source in mixed targets."
+)]
+#[path = "c06_receipts.rs"]
+pub(crate) mod c06_receipts;
+
 pub(crate) type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 fn decode_hex(value: &str) -> TestResult<Vec<u8>> {
@@ -36,6 +43,44 @@ pub(crate) fn register_inputs(
     metadata: &Value,
     representation: usize,
     batch_size: usize,
+) -> TestResult {
+    register_inputs_impl(session, metadata, representation, batch_size, None)
+}
+
+#[allow(dead_code, reason = "Only C06 callers request additive receipts.")]
+pub(crate) async fn register_inputs_with_receipts(
+    session: &SessionContext,
+    metadata: &Value,
+    representation: usize,
+    batch_size: usize,
+) -> TestResult<Value> {
+    let mut registrations = Vec::new();
+    if let Err(error) = register_inputs_impl(
+        session,
+        metadata,
+        representation,
+        batch_size,
+        Some(&mut registrations),
+    ) {
+        c06_receipts::emit(
+            "provider_setup_failure",
+            json!({"representation":representation,
+            "batch_size":batch_size,"target_partitions":session.state().config().target_partitions(),
+            "input_metadata":metadata}),
+            json!({"registrations":registrations,
+                "error":c06_receipts::failure(error.as_ref(),"input_registration")}),
+        );
+        return Err(error);
+    }
+    c06_receipts::provider_readbacks(session, registrations, encode_value).await
+}
+
+fn register_inputs_impl(
+    session: &SessionContext,
+    metadata: &Value,
+    representation: usize,
+    batch_size: usize,
+    mut receipts: Option<&mut Vec<Value>>,
 ) -> TestResult {
     let inputs = metadata
         .get("registered_inputs")
@@ -131,6 +176,13 @@ pub(crate) fn register_inputs(
             partitions[chunk % 2]
                 .push(batch.slice(offset, batch_size.min(batch.num_rows() - offset)));
         }
+        if let Some(receipts) = receipts.as_deref_mut() {
+            let mut receipt =
+                c06_receipts::registration(input, &batch, &batch, &partitions, encode_value)?;
+            receipt["registration"]["slice"] =
+                json!({"offset":0,"length":batch.num_rows(),"storage_rows":batch.num_rows()});
+            receipts.push(receipt);
+        }
         session.register_table(
             input["name"].as_str().ok_or("missing table name")?,
             Arc::new(MemTable::try_new(schema, partitions)?),
@@ -167,7 +219,7 @@ pub(crate) fn capture_schema(fields: &[Arc<Field>], names: Option<&[String]>) ->
         .collect::<TestResult<Vec<_>>>()?}))
 }
 
-fn encode_value(column: &dyn Array, row: usize) -> TestResult<Value> {
+pub(crate) fn encode_value(column: &dyn Array, row: usize) -> TestResult<Value> {
     if column
         .logical_nulls()
         .as_ref()
@@ -258,6 +310,26 @@ pub(crate) async fn capture_observation_with_state(
     case: &Value,
     state: Option<SessionState>,
 ) -> TestResult<Value> {
+    capture_observation_impl(session, case, state, None).await
+}
+
+#[allow(dead_code, reason = "Only C06 callers request additive receipts.")]
+pub(crate) async fn capture_observation_with_receipt(
+    session: &SessionContext,
+    case: &Value,
+) -> TestResult<(Value, Value)> {
+    let mut receipt = c06_receipts::new("public_physical_collect");
+    let actual = capture_observation_impl(session, case, None, Some(&mut receipt)).await?;
+    c06_receipts::finish(&mut receipt);
+    Ok((actual, receipt))
+}
+
+async fn capture_observation_impl(
+    session: &SessionContext,
+    case: &Value,
+    state: Option<SessionState>,
+    mut receipt: Option<&mut Value>,
+) -> TestResult<Value> {
     let settings = case
         .get("settings")
         .cloned()
@@ -284,6 +356,9 @@ pub(crate) async fn capture_observation_with_state(
     {
         Ok(query) => query,
         Err(error) => {
+            if let Some(receipt) = receipt.as_deref_mut() {
+                receipt["error"] = c06_receipts::failure(&error, "resolve");
+            }
             return Ok(json!({
                 "error":format!("resolve: {error}"),
                 "error_stage":"resolve",
@@ -294,6 +369,11 @@ pub(crate) async fn capture_observation_with_state(
             }));
         }
     };
+    if let Some(receipt) = receipt.as_deref_mut() {
+        receipt["public_names"] = json!(query.column_names);
+        receipt["analyzed"] = c06_receipts::schema(query.logical_plan.schema().as_arrow());
+        receipt["analyzed_plan"] = json!(format!("{:?}", query.logical_plan));
+    }
     let analyzed_schema = capture_schema(
         query.logical_plan.schema().fields(),
         Some(&query.column_names),
@@ -320,24 +400,39 @@ pub(crate) async fn capture_observation_with_state(
     let physical = match physical {
         Ok(physical) => physical,
         Err(error) => {
+            if let Some(receipt) = receipt.as_deref_mut() {
+                receipt["error"] = c06_receipts::failure(&error, "physical");
+            }
             observation["error"] = json!(format!("physical: {error}"));
             observation["error_stage"] = json!("physical");
             return Ok(observation);
         }
     };
     let schema = physical.schema();
+    if let Some(receipt) = receipt.as_deref_mut() {
+        receipt["before_collect"] = c06_receipts::schema(schema.as_ref());
+        receipt["physical"] = c06_receipts::schema(schema.as_ref());
+        receipt["physical_plan"] = json!(format!("{physical:?}"));
+    }
     observation["physical_schema"] = capture_schema(schema.fields(), None)?;
     observation["physical_arrow_schema"] = json!(format!("{schema:?}"));
-    let batches = match collect(physical, session.task_ctx()).await {
+    let collected = collect(Arc::clone(&physical), session.task_ctx()).await;
+    if let Some(receipt) = receipt.as_deref_mut() {
+        receipt["physical"] = c06_receipts::schema(physical.schema().as_ref());
+    }
+    let batches = match collected {
         Ok(batches) => batches,
         Err(error) => {
+            if let Some(receipt) = receipt.as_deref_mut() {
+                receipt["error"] = c06_receipts::failure(&error, "execute");
+            }
             observation["error"] = json!(format!("execute: {error}"));
             observation["error_stage"] = json!("execute");
             return Ok(observation);
         }
     };
     let mut rows = Vec::new();
-    for batch in batches {
+    for batch in &batches {
         assert_eq!(batch.schema(), schema);
         for row in 0..batch.num_rows() {
             let mut values = Vec::new();
@@ -351,6 +446,25 @@ pub(crate) async fn capture_observation_with_state(
             }
             rows.push(values);
         }
+    }
+    if let Some(receipt) = receipt {
+        let mut output = capture_batches(&batches)?;
+        let typed = c06_receipts::batches(&batches, encode_value)?;
+        for (batch, actual) in output["batches"]
+            .as_array_mut()
+            .ok_or("missing output batches")?
+            .iter_mut()
+            .zip(
+                typed["batches"]
+                    .as_array()
+                    .ok_or("missing typed output batches")?,
+            )
+        {
+            batch["storage_schema"] = actual["schema"].clone();
+            batch["columns"] = actual["columns"].clone();
+        }
+        output["order"] = json!("raw_collection_order");
+        receipt["output"] = output;
     }
     observation["rows"] = json!(rows);
     Ok(observation)

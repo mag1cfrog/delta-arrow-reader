@@ -16,6 +16,9 @@ use delta_arrow_reader_spark_sql::{SparkSqlOptions, plan_query};
 use sail_plan::expression_errors::SparkSqlExpressionSemantics;
 use serde_json::{Value, json};
 
+#[path = "c06_receipts.rs"]
+pub(crate) mod c06_receipts;
+
 pub(crate) type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
 
 #[allow(
@@ -447,6 +450,17 @@ pub(crate) async fn capture_spark_optimized_observation(
     session: &SessionContext,
     case: &Value,
 ) -> TestResult<Value> {
+    capture_spark_optimized_observation_impl(session, case, None).await
+}
+
+async fn capture_spark_optimized_observation_impl(
+    session: &SessionContext,
+    case: &Value,
+    mut receipt: Option<&mut Value>,
+) -> TestResult<Value> {
+    if let Some(receipt) = receipt.as_deref_mut() {
+        receipt["phase"] = json!("resolve");
+    }
     let query = plan_query(
         session,
         case["sql"].as_str().ok_or("missing SQL")?,
@@ -457,11 +471,21 @@ pub(crate) async fn capture_spark_optimized_observation(
         },
     )
     .await?;
+    if let Some(receipt) = receipt.as_deref_mut() {
+        receipt["public_names"] = json!(query.column_names);
+        receipt["analyzed"] = c06_receipts::schema(query.logical_plan.schema().as_arrow());
+        receipt["analyzed_plan"] = json!(format!("{:?}", query.logical_plan));
+        receipt["phase"] = json!("optimize");
+    }
     let mut state = session.state();
     let extensions = &mut state.config_mut().options_mut().extensions;
     extensions.insert(SparkSqlExpressionSemantics::default());
     extensions.insert(PreserveAggregateStatisticsSchema::default());
     let optimized = state.optimize(&query.logical_plan)?;
+    if let Some(receipt) = receipt {
+        receipt["optimized"] = c06_receipts::schema(optimized.schema().as_arrow());
+        receipt["optimized_plan"] = json!(format!("{optimized:?}"));
+    }
     let raw_schema = capture_schema(optimized.schema().fields(), None)?;
     let names_match = query.column_names.len() == query.logical_plan.schema().fields().len()
         && optimized.schema().fields().len() == query.logical_plan.schema().fields().len()
@@ -488,6 +512,35 @@ pub(crate) async fn compare_exact_spark_query_stages_with_optimized(
 ) -> TestResult<Value> {
     let mut comparison = compare_exact_spark_query_stages(session, case).await?;
     let optimized = capture_spark_optimized_observation(session, case).await;
+    add_optimized_comparison(&mut comparison, case, &optimized);
+    Ok(comparison)
+}
+
+#[allow(dead_code, reason = "Only C06 callers request additive receipts.")]
+pub(crate) async fn compare_exact_spark_query_stages_with_optimized_and_receipt(
+    session: &SessionContext,
+    case: &Value,
+) -> TestResult<(Value, Value)> {
+    let mut primary = c06_receipts::new("public_physical_collect");
+    let mut comparison =
+        compare_exact_spark_query_stages_impl(session, case, Some(&mut primary)).await?;
+    c06_receipts::finish(&mut primary);
+    let mut separate = c06_receipts::new("separately_replanned_optimized");
+    let optimized =
+        capture_spark_optimized_observation_impl(session, case, Some(&mut separate)).await;
+    if let Err(error) = &optimized {
+        let phase = separate["phase"].as_str().unwrap_or("resolve").to_owned();
+        separate["error"] = c06_receipts::failure(error.as_ref(), &phase);
+    }
+    c06_receipts::finish(&mut separate);
+    add_optimized_comparison(&mut comparison, case, &optimized);
+    Ok((
+        comparison,
+        json!({"primary":primary,"separately_replanned_optimized":separate}),
+    ))
+}
+
+fn add_optimized_comparison(comparison: &mut Value, case: &Value, optimized: &TestResult<Value>) {
     comparison["optimized_matches"] = json!(match &optimized {
         Ok(observation) =>
             observation["names_match"] == true
@@ -507,7 +560,6 @@ pub(crate) async fn compare_exact_spark_query_stages_with_optimized(
         .unwrap_or(Value::Null);
     comparison["optimized_observation"] = optimized.as_ref().ok().cloned().unwrap_or(Value::Null);
     comparison["optimized_error"] = json!(optimized.as_ref().err().map(ToString::to_string));
-    Ok(comparison)
 }
 
 /// Require the unchanged reference and complete inherited DAR observation.
@@ -537,6 +589,14 @@ pub(crate) async fn compare_exact_spark_query_stages(
     session: &SessionContext,
     case: &Value,
 ) -> TestResult<Value> {
+    compare_exact_spark_query_stages_impl(session, case, None).await
+}
+
+async fn compare_exact_spark_query_stages_impl(
+    session: &SessionContext,
+    case: &Value,
+    mut receipt: Option<&mut Value>,
+) -> TestResult<Value> {
     let mut phase = "resolve";
     let mut public = None;
     let mut before = None;
@@ -553,6 +613,11 @@ pub(crate) async fn compare_exact_spark_query_stages(
             },
         )
         .await?;
+        if let Some(receipt) = receipt.as_deref_mut() {
+            receipt["public_names"] = json!(query.column_names);
+            receipt["analyzed"] = c06_receipts::schema(query.logical_plan.schema().as_arrow());
+            receipt["analyzed_plan"] = json!(format!("{:?}", query.logical_plan));
+        }
         phase = "public_schema";
         if query.column_names.len() != query.logical_plan.schema().fields().len() {
             return Err("public field count differs from output names".into());
@@ -565,16 +630,23 @@ pub(crate) async fn compare_exact_spark_query_stages(
         let physical = query.create_physical_plan(session).await?;
         phase = "physical_schema";
         before = Some(capture_schema(physical.schema().fields(), None)?);
+        if let Some(receipt) = receipt.as_deref_mut() {
+            receipt["before_collect"] = c06_receipts::schema(physical.schema().as_ref());
+            receipt["physical_plan"] = json!(format!("{physical:?}"));
+        }
         let batches = collect(physical.clone(), session.task_ctx()).await;
         phase = "executed_schema";
         let schema = physical.schema();
         executed = Some(capture_schema(schema.fields(), None)?);
+        if let Some(receipt) = receipt.as_deref_mut() {
+            receipt["physical"] = c06_receipts::schema(schema.as_ref());
+        }
         phase = "collect";
         let batches = batches?;
         phase = "encode";
         let mut rows = Vec::new();
-        for batch in batches {
-            validate_batch(schema.as_ref(), &batch)?;
+        for batch in &batches {
+            validate_batch(schema.as_ref(), batch)?;
             for row in 0..batch.num_rows() {
                 rows.push(
                     batch
@@ -585,11 +657,17 @@ pub(crate) async fn compare_exact_spark_query_stages(
                 );
             }
         }
+        if let Some(receipt) = receipt.as_deref_mut() {
+            receipt["output"] = c06_receipts::batches(&batches, encode_value)?;
+        }
         rows_raw = Some(rows.clone());
         rows.sort_by_key(|row| json!(row).to_string());
         Ok(rows)
     }
     .await;
+    if let (Some(receipt), Err(error)) = (receipt, &actual) {
+        receipt["error"] = c06_receipts::failure(error.as_ref(), phase);
+    }
     let recorded_stage = |stage: &str, alias: &str| -> TestResult<Option<&Value>> {
         let nested = case["schema_stages"].get(stage);
         let flat = case.get(alias);

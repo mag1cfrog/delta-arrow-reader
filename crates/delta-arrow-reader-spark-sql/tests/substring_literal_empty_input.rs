@@ -11,6 +11,16 @@ use datafusion::physical_plan::collect;
 use datafusion::prelude::{SessionConfig, SessionContext};
 use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
 
+use serde_json::json;
+
+#[allow(
+    dead_code,
+    reason = "This target selects the C06 receipt and value encoders."
+)]
+#[path = "support/string_binary.rs"]
+mod string_binary;
+use string_binary::c06_receipts;
+
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
 #[tokio::test]
@@ -55,8 +65,35 @@ async fn literal_substring_limit_zero_keeps_empty_rows_and_required_false_filter
             )?;
             session.register_table(
                 "floating_integer_empty",
-                Arc::new(MemTable::try_new(schema, vec![vec![batch], vec![]])?),
+                Arc::new(MemTable::try_new(
+                    schema,
+                    vec![vec![batch.clone()], vec![]],
+                )?),
             )?;
+            let registrations = vec![c06_receipts::registration(
+                &json!({"name":"floating_integer_empty"}),
+                &batch,
+                &batch,
+                &[vec![batch.clone()], vec![]],
+                string_binary::encode_value,
+            )?];
+            let providers = c06_receipts::provider_readbacks(
+                &session,
+                registrations,
+                string_binary::encode_value,
+            )
+            .await?;
+            for provider in providers
+                .as_array()
+                .ok_or("missing empty provider receipts")?
+            {
+                c06_receipts::emit(
+                    "provider",
+                    json!({"family":"literal_empty","fixture":"native_empty_boundary",
+                    "ansi":ansi_mode,"representation":null,"batch_size":batch_size,"target_partitions":2}),
+                    provider.clone(),
+                );
+            }
             for (suffix, requires_error) in [
                 ("FROM (SELECT 1 AS k LIMIT 0) t", false),
                 ("LIMIT 0", false),
@@ -82,9 +119,14 @@ async fn literal_substring_limit_zero_keeps_empty_rows_and_required_false_filter
                 assert_eq!(fields[0].data_type(), &DataType::Utf8);
                 assert!(fields[0].is_nullable());
                 assert!(fields[0].metadata().is_empty());
+                let mut receipt = c06_receipts::new("public_physical_collect");
+                receipt["public_names"] = json!(query.column_names);
+                receipt["analyzed"] = c06_receipts::schema(query.logical_plan.schema().as_arrow());
                 let physical = query.create_physical_plan(&session).await;
                 if ansi_mode && requires_error {
-                    let error = physical.unwrap_err().to_string();
+                    let error = physical.unwrap_err();
+                    receipt["error"] = c06_receipts::failure(&error, "physical");
+                    let error = error.to_string();
                     assert_eq!(
                         error.matches("[CAST_OVERFLOW]").count(),
                         1,
@@ -104,13 +146,25 @@ async fn literal_substring_limit_zero_keeps_empty_rows_and_required_false_filter
                     if !requires_error || ansi_mode {
                         assert!(physical.schema().field(0).is_nullable());
                     }
+                    receipt["before_collect"] = c06_receipts::schema(physical.schema().as_ref());
+                    receipt["physical"] = c06_receipts::schema(physical.schema().as_ref());
+                    receipt["physical_plan"] = json!(format!("{physical:?}"));
                     let batches = collect(physical, session.task_ctx()).await?;
+                    receipt["output"] =
+                        c06_receipts::batches(&batches, string_binary::encode_value)?;
                     assert_eq!(
                         batches.iter().map(RecordBatch::num_rows).sum::<usize>(),
                         0,
                         "{sql}"
                     );
                 }
+                c06_receipts::finish(&mut receipt);
+                c06_receipts::emit(
+                    "native",
+                    json!({"control":"literal_empty","sql":sql,"suffix":suffix,
+                    "ansi":ansi_mode,"representation":null,"batch_size":batch_size,"target_partitions":2}),
+                    receipt,
+                );
             }
         }
     }
