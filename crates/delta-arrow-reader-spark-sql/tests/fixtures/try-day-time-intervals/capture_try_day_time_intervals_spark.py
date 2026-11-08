@@ -2,14 +2,15 @@
 
 Records analyzed, optimized and executed schemas, typed internal-row values and failing
 stages, with the innermost Java exception of a failure, for TRY_ADD and TRY_SUBTRACT of
-DAY TO SECOND intervals of several qualifiers, with YEAR TO MONTH pairs for comparison. Inputs
-are a registered table of DAY TO SECOND intervals, including the smallest and largest, and
-NULLs, and literals. Spark adds them exactly and returns NULL on overflow. Every query runs in
-both ANSI modes in UTC and America/Los_Angeles. Run from the crate root in the reference
-environment described in README.md; the output path must not exist.
+DAY TO SECOND intervals of every qualifier pair, with YEAR TO MONTH pairs for comparison and
+Spark's default column names. Inputs are a registered table of DAY TO SECOND intervals,
+including the smallest and largest, and NULLs, and literals, including each qualifier's
+largest value beside a small one. Spark adds them exactly and returns NULL on overflow. Every
+query runs in both ANSI modes in UTC and America/Los_Angeles. Run from the crate root in the
+reference environment described in README.md; the output path must not exist.
 """
 import argparse
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 import hashlib
 import json
 import os
@@ -78,24 +79,64 @@ LITERALS = [
 ]
 
 
+# One literal of every DAY TO SECOND qualifier.
+QUALIFIERS = [
+    ("day", "INTERVAL '1' DAY"),
+    ("day_to_hour", "INTERVAL '1 02' DAY TO HOUR"),
+    ("day_to_minute", "INTERVAL '1 02:03' DAY TO MINUTE"),
+    ("day_to_second", "INTERVAL '1 02:03:04.000005' DAY TO SECOND"),
+    ("hour", "INTERVAL '2' HOUR"),
+    ("hour_to_minute", "INTERVAL '2:03' HOUR TO MINUTE"),
+    ("hour_to_second", "INTERVAL '2:03:04.000005' HOUR TO SECOND"),
+    ("minute", "INTERVAL '3' MINUTE"),
+    ("minute_to_second", "INTERVAL '3:04.000005' MINUTE TO SECOND"),
+    ("second", "INTERVAL '4.000005' SECOND"),
+]
+
+# The largest value of a qualifier beside a small one that overflows it.
+QUALIFIER_OVERFLOWS = [
+    ("largest_days_plus_hours", "try_add(INTERVAL '106751991' DAY, INTERVAL '5' HOUR)"),
+    ("largest_hours_plus_minute", "try_add(INTERVAL '2562047788' HOUR, INTERVAL '1' MINUTE)"),
+    ("largest_minutes_plus_second",
+     "try_add(INTERVAL '153722867280' MINUTE, INTERVAL '55' SECOND)"),
+    ("smallest_days_minus_hours", "try_subtract(INTERVAL '-106751991' DAY, INTERVAL '5' HOUR)"),
+    ("smallest_hours_minus_minute",
+     "try_subtract(INTERVAL '-2562047788' HOUR, INTERVAL '1' MINUTE)"),
+]
+
+
 def definitions():
+    """The record names and queries, in capture order."""
     for name, expression in COLUMNS:
         yield f"column_{name}", f"SELECT k, {expression} AS r FROM inputs"
     for name, expression in LITERALS:
         yield f"literal_{name}", f"SELECT {expression} AS r"
+    for function in ["try_add", "try_subtract"]:
+        # Every ordered qualifier pair, as one column each.
+        pairs = ", ".join(f"{function}({left}, {right}) AS {left_name}__{right_name}"
+                          for left_name, left in QUALIFIERS
+                          for right_name, right in QUALIFIERS)
+        yield f"literal_{function}_qualifier_pairs", f"SELECT {pairs}"
+        # A column beside every qualifier, in both orders.
+        columns = ", ".join(f"{function}(a, {literal}) AS a__{name}, "
+                            f"{function}({literal}, a) AS {name}__a"
+                            for name, literal in QUALIFIERS)
+        yield f"column_{function}_qualifiers", f"SELECT k, {columns} FROM inputs"
+    for name, expression in QUALIFIER_OVERFLOWS:
+        yield f"literal_{name}", f"SELECT {expression} AS r"
+    # Spark's default column names.
+    yield ("literal_unaliased_try_add",
+           "SELECT try_add(INTERVAL '1' DAY, INTERVAL '2' HOUR), "
+           "try_subtract(INTERVAL '1 02:03' DAY TO MINUTE, INTERVAL '4.000005' SECOND)")
+    yield "column_unaliased_try_add", "SELECT k, try_add(a, b), try_subtract(b, a) FROM inputs"
+    yield "literal_try_add_nulls", "SELECT try_add(NULL, NULL) AS r"
+    yield "literal_try_subtract_nulls", "SELECT try_subtract(NULL, NULL) AS r"
 
 
 def python_value(value, kind):
     if value is None:
         return None
-    if kind in ("integer", "long"):
-        return int(value)
-    if kind == "timestamp":
-        return datetime(1970, 1, 1, tzinfo=timezone.utc) + timedelta(microseconds=int(value))
-    if kind == "timestamp_ntz":
-        return datetime(1970, 1, 1) + timedelta(microseconds=int(value))
-    if kind == "interval month":
-        # Registered as INT months and cast in SQL; PySpark has no YEAR TO MONTH values.
+    if kind == "integer":
         return int(value)
     if kind == "interval day to second":
         return timedelta(microseconds=int(value))
