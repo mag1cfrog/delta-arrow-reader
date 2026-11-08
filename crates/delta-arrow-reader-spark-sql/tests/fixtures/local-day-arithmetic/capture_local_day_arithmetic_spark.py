@@ -214,6 +214,10 @@ EDGE_CASES = [
     ("min_timestampadd_day", 1, "timestampadd(DAY, 1, ts)"),
     ("max_minus_epoch", 0, "ts - TIMESTAMP '1970-01-01 00:00:00'"),
     ("min_minus_epoch", 1, "ts - TIMESTAMP '1970-01-01 00:00:00'"),
+    # Against a TIMESTAMP_NTZ, the largest instant's local date-time east of UTC is beyond
+    # BIGINT, though the difference is not.
+    ("max_minus_timestamp_ntz", 0, "ts - TIMESTAMP_NTZ '2024-01-01 00:00:00'"),
+    ("timestamp_ntz_minus_max", 0, "TIMESTAMP_NTZ '2024-01-01 00:00:00' - ts"),
 ]
 
 
