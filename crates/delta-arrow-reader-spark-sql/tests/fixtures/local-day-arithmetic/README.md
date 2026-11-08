@@ -1,6 +1,6 @@
 # TIMESTAMP day arithmetic in session time zones
 
-`local-day-arithmetic-spark.jsonl` records 768 observations from Spark 4.2.0, revision
+`local-day-arithmetic-spark.jsonl` records 780 observations from Spark 4.2.0, revision
 `32f7299601108917fb01920a54e084595b7b3bf8`, Java 17.0.20.1 and Python 3.12.14 (#1093).
 The header stores the build properties, capture script hash, settings and the registered
 `instants`, `local_times` and `edges` tables. Each failure keeps Spark's error condition and
@@ -19,7 +19,7 @@ DAY TO SECOND interval `d`, some NULL. In Los Angeles the values are:
 2024-11-03 01:30, which it repeats, 2024-01-01 00:00 and NULL. `edges` holds the largest and
 smallest BIGINT microseconds, read with `timestamp_micros`.
 
-128 queries run in both ANSI modes in UTC, America/Los_Angeles and +05:30:
+130 queries run in both ANSI modes in UTC, America/Los_Angeles and +05:30:
 - over the column, TIMESTAMP plus and minus DAY, DAY TO SECOND, HOUR, MINUTE, SECOND,
   YEAR TO MONTH and calendar intervals, literal and column intervals, interval plus
   TIMESTAMP, TIMESTAMPADD and DATEADD in every unit with literal and column quantities,
@@ -29,7 +29,8 @@ smallest BIGINT microseconds, read with `timestamp_micros`.
 - 42 literal queries: NULL operands, TIMESTAMP_NTZ, STRING and DATE operands, TIMESTAMP_NTZ
   values in the skipped hour, negations of the smallest intervals, exact, overflowing and
   INT-wrapping BIGINT quantities, and DOUBLE, DECIMAL, STRING, BOOLEAN and NULL quantities;
-- 13 queries over `edges`, ten of which overflow.
+- 15 queries over `edges`, twelve of which overflow in at least one zone, including
+  TIMESTAMP_NTZ subtraction where the largest instant's local date-time is beyond BIGINT.
 
 Each record keeps the analyzed, optimized and executed schemas and values read from Spark's
 internal rows. `ConvertToLocalRelation` is excluded.
