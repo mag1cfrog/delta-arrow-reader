@@ -21,13 +21,14 @@ are malformed, are NULL, or give hours beyond Arrow's nanoseconds, and a NULL ro
   TRY_DIVIDE with overflows, invalid STRING and BIGINT parts, a constant overflow and hours
   beyond Arrow's nanoseconds, TRY_ADD of two numbers over an overflowing MAKE_INTERVAL, and
   an unreached CASE branch with a constant overflow;
-- literals with every argument count from none to eight, negative and fractional values,
-  NULL arguments before and after malformed or overflowing ones, month and day overflows,
-  BIGINT years and hours beyond INT, hours and seconds beyond Arrow's nanoseconds, a
-  TIMESTAMP minus MAKE_INTERVAL, TRY_ADD, TRY_SUBTRACT, TRY_MULTIPLY and TRY_DIVIDE of
-  overflowing and malformed arguments and of hours beyond Arrow's nanoseconds, TINYINT, SMALLINT, BIGINT, DECIMAL, DOUBLE, NaN, STRING, empty and malformed
-  STRING, BOOLEAN and DATE parts, and INT, BIGINT, DOUBLE, half-microsecond DOUBLE, NaN,
-  FLOAT, rounded DECIMAL, wide DECIMAL, STRING, malformed STRING and BOOLEAN seconds.
+- literals with every argument count from none to eight, negative and fractional values, NULL
+  arguments before and after malformed or overflowing ones, month and day overflows, BIGINT
+  years and hours beyond INT, hours and seconds beyond Arrow's nanoseconds, a TIMESTAMP minus
+  MAKE_INTERVAL, TRY_ADD, TRY_SUBTRACT, TRY_MULTIPLY and TRY_DIVIDE of overflowing and
+  malformed arguments and of hours beyond Arrow's nanoseconds, TINYINT, SMALLINT, BIGINT,
+  DECIMAL, DOUBLE, NaN, STRING, empty and malformed STRING, BOOLEAN and DATE parts, and INT,
+  BIGINT, DOUBLE, half-microsecond DOUBLE, NaN, FLOAT, rounded DECIMAL, wide DECIMAL, STRING,
+  malformed STRING and BOOLEAN seconds.
 
 Spark casts each part to INT and the seconds to DECIMAL(18, 6) with its casts for the ANSI
 mode, evaluates the arguments in order up to the first NULL, adds them with Java's exact

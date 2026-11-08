@@ -219,9 +219,10 @@ fn uncast_make_interval_argument(argument: Expr) -> Expr {
 }
 
 /// Spark evaluates TRY_ADD, TRY_SUBTRACT, TRY_MULTIPLY and TRY_DIVIDE over a non-numeric
-/// operand inside `TryEval`, which turns any failure into NULL. This re-plans each MAKE_INTERVAL
-/// in an operand that fails on error, and the casts of its arguments, to give NULL instead. Spark still fails
-/// while optimizing a constant MAKE_INTERVAL beside a non-constant operand, outside TRY (#1133).
+/// operand inside `TryEval`, which turns any failure into NULL. This re-plans each
+/// MAKE_INTERVAL in an operand that fails on error, and the casts of its arguments, to give
+/// NULL instead. Spark still fails while optimizing a constant MAKE_INTERVAL beside a
+/// non-constant operand, outside TRY (#1133).
 pub(crate) fn replan_make_interval_for_try(
     operand: Expr,
     schema: &DFSchemaRef,

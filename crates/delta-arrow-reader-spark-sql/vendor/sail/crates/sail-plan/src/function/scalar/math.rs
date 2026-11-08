@@ -474,7 +474,7 @@ fn try_eval_operands(operands: Vec<Expr>, schema: &DFSchemaRef) -> PlanResult<Ve
 
 /// Spark's TRY_DIVIDE and TRY_MULTIPLY: `function` over operands that Spark evaluates inside
 /// `TryEval` unless both are numbers.
-fn try_operands<T>(function: T) -> ScalarFunction
+fn udf_with_try_eval_operands<T>(function: T) -> ScalarFunction
 where
     T: ScalarUDFImpl + Send + Sync + 'static,
 {
@@ -2847,8 +2847,11 @@ pub(super) fn list_built_in_math_functions() -> Vec<(&'static str, ScalarFunctio
         ("tan", F::unary(double(expr_fn::tan))),
         ("tanh", F::unary(double(expr_fn::tanh))),
         ("try_add", F::custom(try_add)),
-        ("try_divide", try_operands(SparkTryDiv::new())),
-        ("try_multiply", try_operands(SparkTryMult::new())),
+        ("try_divide", udf_with_try_eval_operands(SparkTryDiv::new())),
+        (
+            "try_multiply",
+            udf_with_try_eval_operands(SparkTryMult::new()),
+        ),
         ("try_mod", F::udf(SparkTryMod::new())),
         ("try_subtract", F::custom(try_subtract)),
         ("unhex", F::udf(SparkUnHex::new())),

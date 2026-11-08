@@ -582,25 +582,25 @@ following Spark's `MakeInterval`. Missing trailing arguments are 0, and more tha
 with `WRONG_NUM_ARGS`. The planner casts each part to INT and the seconds to DECIMAL(18, 6)
 with the casts CAST uses for the session's ANSI mode, so a BIGINT, DECIMAL, DOUBLE or STRING
 argument wraps, rounds, fails or gives NULL as Spark's cast does, and BOOLEAN and DATE
-arguments are rejected. As in Spark, the arguments are evaluated in order up to the first
-NULL, so a NULL skips the later arguments' casts for its row, and a NULL literal gives NULL
-before any constant folds. The function adds years, months, weeks, days, hours, minutes and
-seconds with Java's exact arithmetic. An overflow fails with `ARITHMETIC_OVERFLOW` under ANSI,
-while optimizing for a constant through [constant folding errors](#constant-folding-errors),
-and gives NULL otherwise. Under ANSI the result is nullable only for a nullable argument, so
-a TIMESTAMP minus MAKE_INTERVAL of NOT NULL values is NOT NULL, as in Spark. Inside TRY_ADD,
+arguments are rejected. As in Spark, the arguments are evaluated in order up to the first NULL,
+so a NULL skips the later arguments' casts for its row, and a NULL literal gives NULL before
+any constant folds. The function adds years, months, weeks, days, hours, minutes and seconds
+with Java's exact arithmetic. An overflow fails with `ARITHMETIC_OVERFLOW` under ANSI, while
+optimizing for a constant through [constant folding errors](#constant-folding-errors), and
+gives NULL otherwise. Under ANSI the result is nullable only for a nullable argument, so a
+TIMESTAMP minus MAKE_INTERVAL of NOT NULL values is NOT NULL, as in Spark. Inside TRY_ADD,
 TRY_SUBTRACT, TRY_MULTIPLY and TRY_DIVIDE with a non-numeric operand, MAKE_INTERVAL and its
 argument casts give NULL where they fail, as Spark's `TryEval` does; over two numbers Spark
-uses its TRY mode, and a failing MAKE_INTERVAL inside them still fails; Spark still fails while optimizing a constant MAKE_INTERVAL beside a
-non-constant operand, outside TRY, where DAR returns NULL (#1133). `datafusion-spark`'s
-function returned NULL on overflow in both modes, was always nullable, and cast its
-arguments with Arrow. Spark's BIGINT microseconds reach further than Arrow's nanoseconds, so
-a larger result fails, while optimizing a constant under ANSI outside TRY and while
-collecting rows otherwise (#1145). Seconds beyond DECIMAL(18, 6) and malformed STRING seconds fail without
-Spark's `NUMERIC_VALUE_OUT_OF_RANGE` and `CAST_INVALID_INPUT` conditions (#1124). With
-several failing rows, an earlier argument's failure in a later row can be reported first
-(#1148). The [MAKE_INTERVAL references](tests/fixtures/make-interval/README.md) record the
-checks.
+uses its TRY mode, so a failing MAKE_INTERVAL inside them still fails. Spark also fails while
+optimizing a constant MAKE_INTERVAL beside a non-constant operand, outside TRY, where DAR
+returns NULL (#1133). `datafusion-spark`'s function returned NULL on overflow in both modes,
+was always nullable, and cast its arguments with Arrow. Spark's BIGINT microseconds reach
+further than Arrow's nanoseconds, so a larger result fails, while optimizing a constant under
+ANSI outside TRY and while collecting rows otherwise (#1145). Seconds beyond DECIMAL(18, 6) and
+malformed STRING seconds fail without Spark's `NUMERIC_VALUE_OUT_OF_RANGE` and
+`CAST_INVALID_INPUT` conditions (#1124). With several failing rows, an earlier argument's
+failure in a later row can be reported first (#1148). The [MAKE_INTERVAL
+references](tests/fixtures/make-interval/README.md) record the checks.
 
 WEEKDAY numbers Monday 0 through Sunday 6, where it returned -1 for Sunday. WEEKDAY and
 DAYOFWEEK cast a TIMESTAMP_NTZ or NULL argument to DATE like Spark, and convert a STRING with
