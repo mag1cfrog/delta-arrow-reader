@@ -77,6 +77,10 @@ impl SparkNumberToInterval {
         if self.unit_length != 1 {
             value = value.checked_mul(i256::from_i128(self.unit_length.into()))?;
             let digits = decimal_digits(value);
+            // Scala rounds the 34 digits HALF_EVEN. A tie can only keep an even last digit or
+            // raise an odd one, so it never moves the value across the half that the HALF_UP
+            // rounding below tests, and a tie in the integer digits needs more than 34 of them,
+            // which overflow either way. The tie rule therefore never changes a stored count.
             if digits > PRODUCT_DIGITS {
                 let dropped = digits - PRODUCT_DIGITS;
                 value = divide_rounding(value, dropped, Rounding::HalfEven)?;
@@ -374,7 +378,9 @@ mod tests {
         // 34 digits as 11.5 and rounds to 12.
         let years = decimal(9_583_333_333_333_333_333_333_333_333_333_333_333, 37)?;
         assert_eq!(
-            year()?.convert(&years)?.as_primitive::<IntervalYearMonthType>(),
+            year()?
+                .convert(&years)?
+                .as_primitive::<IntervalYearMonthType>(),
             &IntervalYearMonthArray::from(vec![Some(12), Some(-12)])
         );
         // A MONTH target is not multiplied, so 2.4999...9 rounds to 2.
@@ -386,7 +392,9 @@ mod tests {
         )?;
         let months = decimal(24_999_999_999_999_999_999_999_999_999_999_999_999, 37)?;
         assert_eq!(
-            month.convert(&months)?.as_primitive::<IntervalYearMonthType>(),
+            month
+                .convert(&months)?
+                .as_primitive::<IntervalYearMonthType>(),
             &IntervalYearMonthArray::from(vec![Some(2), Some(-2)])
         );
         // One day in DECIMAL(38, 30) needs more than 128 bits once multiplied.
@@ -398,7 +406,8 @@ mod tests {
         )?;
         let days = decimal(10_i128.pow(30), 30)?;
         assert_eq!(
-            day.convert(&days)?.as_primitive::<DurationMicrosecondType>(),
+            day.convert(&days)?
+                .as_primitive::<DurationMicrosecondType>(),
             &DurationMicrosecondArray::from(vec![Some(86_400_000_000), Some(-86_400_000_000)])
         );
         Ok(())
