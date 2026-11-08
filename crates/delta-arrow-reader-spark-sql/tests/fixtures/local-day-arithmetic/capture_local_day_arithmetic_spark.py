@@ -1,15 +1,16 @@
 """Capture Spark TIMESTAMP day arithmetic in the session time zone (#1093).
 
 Records analyzed, optimized and executed schemas, typed internal-row values and failing
-stages for TIMESTAMP plus and minus DAY, DAY TO SECOND, HOUR, MINUTE, SECOND, YEAR-MONTH
-and calendar intervals, TIMESTAMPADD and DATEADD in every unit, SEQUENCE with interval
-steps and TIMESTAMP subtraction. Inputs are a registered TIMESTAMP column with BIGINT
-quantities and DAY TO SECOND intervals, literals, and BIGINT microsecond edges. The instants
-sit around the 2024 Los Angeles DST changes (local results in the skipped hour or the
-repeated hour), around Los Angeles leaving local mean time (-07:52:58) on 1883-11-18, in
-1800, before the epoch, in years 1 and 9999, and NULL. Every query runs in both ANSI modes
-in UTC, America/Los_Angeles and +05:30. Run from the crate root in the reference
-environment described in README.md; the output path must not exist.
+stages, with the innermost Java exception of a failure, for TIMESTAMP plus and minus DAY,
+DAY TO SECOND, HOUR, MINUTE, SECOND, YEAR-MONTH and calendar intervals, TIMESTAMPADD and
+DATEADD in every unit, SEQUENCE with interval steps and TIMESTAMP subtraction. Inputs are a
+registered TIMESTAMP column with BIGINT quantities and DAY TO SECOND intervals, a
+TIMESTAMP_NTZ column, literals, and BIGINT microsecond edges. The instants sit around the
+2024 Los Angeles DST changes (local results in the skipped hour or the repeated hour),
+around Los Angeles leaving local mean time (-07:52:58) on 1883-11-18, in 1800, before the
+epoch, in years 1 and 9999, and NULL. Every query runs in both ANSI modes in UTC,
+America/Los_Angeles and +05:30. Run from the crate root in the reference environment
+described in README.md; the output path must not exist.
 """
 import argparse
 from datetime import datetime, timedelta, timezone
@@ -52,6 +53,10 @@ INSTANTS = [
     (None, 1, DAY),
 ]
 
+# TIMESTAMP_NTZ values: a Los Angeles local time that is skipped, one that repeats, a plain
+# one and NULL.
+LOCAL_TIMES = ["2024-03-10 02:30:00", "2024-11-03 01:30:00", "2024-01-01 00:00:00", None]
+
 # BIGINT microseconds beyond the years Spark's literals accept.
 EDGES = [9_223_372_036_854_775_807, -9_223_372_036_854_775_808]
 
@@ -76,6 +81,12 @@ INPUTS = [{
     "rows": [[str(key), None if instant is None else str(micros(instant)), text(quantity),
               text(interval)]
              for key, (instant, quantity, interval) in enumerate(INSTANTS)]}, {
+    "name": "local_times",
+    "schema": {"type": "struct", "fields": [
+        {"name": "k", "type": "integer", "nullable": False, "metadata": {}},
+        {"name": "l", "type": "timestamp_ntz", "nullable": True, "metadata": {}}]},
+    "rows": [[str(key), None if local is None else str(micros(local))]
+             for key, local in enumerate(LOCAL_TIMES)]}, {
     "name": "edges",
     "schema": {"type": "struct", "fields": [
         {"name": "k", "type": "integer", "nullable": False, "metadata": {}},
@@ -147,6 +158,18 @@ LITERALS = [
     ("timestamp_ntz_minus_timestamp",
      "TIMESTAMP_NTZ '2024-03-11 00:00:00' - TIMESTAMP '2024-03-10 03:00:00'"),
     ("null_minus_timestamp", "CAST(NULL AS TIMESTAMP) - TIMESTAMP '2024-01-01 00:00:00'"),
+    # Spark subtracts the TIMESTAMP's local date-time from the skipped TIMESTAMP_NTZ 02:30.
+    ("minus_timestamp_ntz_in_gap",
+     "TIMESTAMP '2024-03-10 04:00:00' - TIMESTAMP_NTZ '2024-03-10 02:30:00'"),
+    ("timestamp_ntz_in_gap_minus_timestamp",
+     "TIMESTAMP_NTZ '2024-03-10 02:30:00' - TIMESTAMP '2024-03-10 01:00:00'"),
+    # Negating the smallest intervals overflows.
+    ("minus_smallest_year_month",
+     "TIMESTAMP '2024-01-01 00:00:00' - INTERVAL '-178956970-8' YEAR TO MONTH"),
+    ("minus_smallest_calendar_months",
+     "TIMESTAMP '2024-01-01 00:00:00' - make_interval(-178956970, -8)"),
+    ("minus_smallest_calendar_days",
+     "TIMESTAMP '2024-01-01 00:00:00' - make_interval(0, 0, 0, -2147483648)"),
     ("timestampadd_day", "timestampadd(DAY, 1, TIMESTAMP '2024-03-09 02:30:00')"),
     ("dateadd_day", "dateadd(DAY, 1, TIMESTAMP '2024-03-09 02:30:00')"),
     ("date_add_day", "date_add(DAY, 1, TIMESTAMP '2024-03-09 02:30:00')"),
@@ -154,6 +177,18 @@ LITERALS = [
     ("timestampadd_exact_microseconds",
      "timestampadd(MICROSECOND, 9007199254740993, TIMESTAMP '1970-01-01 00:00:00')"),
     ("timestampadd_int_overflow", "timestampadd(DAY, 2147483648, TIMESTAMP '2024-01-01 00:00:00')"),
+    # Wrapped to INT, these counts would be 1.
+    ("timestampadd_wrapping_days",
+     "timestampadd(DAY, 4294967297, TIMESTAMP '2024-01-01 00:00:00')"),
+    ("timestampadd_wrapping_months",
+     "timestampadd(MONTH, 4294967297, TIMESTAMP '2024-01-01 00:00:00')"),
+    ("timestampadd_double", "timestampadd(SECOND, 1.9D, TIMESTAMP '2024-03-09 02:30:00')"),
+    ("timestampadd_huge_double",
+     "timestampadd(MICROSECOND, 1e30D, TIMESTAMP '2024-03-09 02:30:00')"),
+    ("timestampadd_huge_decimal",
+     "timestampadd(MICROSECOND, 99999999999999999999.5, TIMESTAMP '2024-03-09 02:30:00')"),
+    ("timestampadd_invalid_string", "timestampadd(DAY, 'x', TIMESTAMP '2024-03-09 02:30:00')"),
+    ("timestampadd_boolean", "timestampadd(DAY, true, TIMESTAMP '2024-03-09 02:30:00')"),
     ("timestampadd_decimal", "timestampadd(SECOND, 1.5, TIMESTAMP '2024-03-09 02:30:00')"),
     ("timestampadd_string_quantity", "timestampadd(DAY, '1', TIMESTAMP '2024-03-09 02:30:00')"),
     ("timestampadd_null_quantity", "timestampadd(DAY, NULL, TIMESTAMP '2024-03-09 02:30:00')"),
@@ -187,6 +222,10 @@ def definitions():
         yield f"column_{name}", f"SELECT k, {expression} AS r FROM instants"
     yield ("column_pairs_minus_timestamp",
            "SELECT a.k AS a, b.k AS b, a.ts - b.ts AS r FROM instants a CROSS JOIN instants b")
+    yield ("column_pairs_minus_timestamp_ntz",
+           "SELECT i.k AS a, w.k AS b, i.ts - w.l AS r FROM instants i CROSS JOIN local_times w")
+    yield ("column_pairs_timestamp_ntz_minus",
+           "SELECT i.k AS a, w.k AS b, w.l - i.ts AS r FROM instants i CROSS JOIN local_times w")
     for name, expression in LITERALS:
         yield f"literal_{name}", f"SELECT {expression} AS r"
     for name, key, expression in EDGE_CASES:
@@ -205,6 +244,8 @@ def python_value(value, kind):
         return int(value)
     if kind == "timestamp":
         return datetime(1970, 1, 1, tzinfo=timezone.utc) + timedelta(microseconds=int(value))
+    if kind == "timestamp_ntz":
+        return datetime(1970, 1, 1) + timedelta(microseconds=int(value))
     if kind == "interval day to second":
         return timedelta(microseconds=int(value))
     raise AssertionError(kind)
@@ -229,21 +270,23 @@ def encode_value(row, index, data_type, types):
 
 
 def error_details(error, Py4JError):
-    """Return the outermost error condition and the innermost Java exception class."""
+    """Return the outermost error condition and the innermost Java exception class and
+    message."""
     condition = getattr(error, "getCondition", lambda: None)()
     cause = getattr(error, "java_exception", None)
     if cause is None:
         cause = getattr(error, "_origin", None)
-    exception = None
+    exception = message = None
     while cause is not None:
         try:
             exception = cause.getClass().getName()
+            message = cause.getMessage()
             if condition is None:
                 condition = cause.getCondition()
         except Py4JError:
             pass
         cause = cause.getCause()
-    return condition, exception
+    return condition, exception, message
 
 
 def capture(spark, sql, types, Py4JError):
@@ -265,9 +308,10 @@ def capture(spark, sql, types, Py4JError):
         rows.sort(key=lambda row: json.dumps(row, separators=(",", ":")))
         record["expected"] = {"status": "ok", "rows": rows}
     except Exception as error:
-        condition, exception = error_details(error, Py4JError)
+        condition, exception, java_message = error_details(error, Py4JError)
         record["expected"] = {"status": "error", "condition": condition,
-                              "exception": exception, "message": str(error).splitlines()[0]}
+                              "exception": exception, "java_message": java_message,
+                              "message": str(error).splitlines()[0]}
         record["spark_error_phase"] = phase
     return record
 
