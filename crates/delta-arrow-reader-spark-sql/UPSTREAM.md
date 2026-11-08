@@ -516,14 +516,25 @@ TIMESTAMP_NTZ moves in UTC, and TRY_SUBTRACT negates even a calendar interval ex
 Spark evaluates it under ANSI inside TRY. An untyped NULL beside a TIMESTAMP is a NULL
 interval for TRY_ADD and a NULL TIMESTAMP for TRY_SUBTRACT. TRY_SUBTRACT of a TIMESTAMP and
 a TIMESTAMP, TIMESTAMP_NTZ or DATE, or of two TIMESTAMP_NTZ values, subtracts like `-` and
-gives NULL on overflow; two DATE values or a DATE and a TIMESTAMP_NTZ still fail (#987,
-#1135). `SparkTryAdd` and `SparkTrySubtract` used elapsed time, returned TIMESTAMP_NTZ, and
+gives NULL on overflow; two DATE values still fail (#987). `SparkTryAdd` and
+`SparkTrySubtract` used elapsed time, returned TIMESTAMP_NTZ, and
 rejected YEAR TO MONTH and calendar intervals, interval-first arguments, untyped NULLs and
 TIMESTAMP differences; they still serve other operands. Spark folds the negation of a
 constant interval beside a column while optimizing, outside TRY; DAR negates it per row
 inside TRY (#1133). The
 [TRY timestamp references](tests/fixtures/try-timestamp-intervals/README.md) record the
 checks.
+
+A DATE and a TIMESTAMP_NTZ, in either order, subtract with `-` and TRY_SUBTRACT like Spark:
+the DATE is read at its midnight and the result is the DAY TO SECOND interval between the
+wall-clock times. The DATE kernel gives the midnight as a TIMESTAMP in UTC and declares it
+nullable, as Spark declares its cast, so a folded DATE literal beside a NOT NULL value is
+not. DataFusion returned a nanosecond duration, and TRY_SUBTRACT failed. A midnight beyond
+BIGINT microseconds fails with `long overflow`, which TRY_SUBTRACT turns into NULL. Spark
+also folds the cast of a constant DATE while optimizing, outside TRY, beside a non-constant
+operand outside a conditional branch, and fails there; DAR returns NULL (#1133). The
+[DATE and TIMESTAMP_NTZ subtraction references](tests/fixtures/date-ntz-subtraction/README.md)
+record the checks.
 
 WEEKDAY numbers Monday 0 through Sunday 6, where it returned -1 for Sunday. WEEKDAY and
 DAYOFWEEK cast a TIMESTAMP_NTZ or NULL argument to DATE like Spark, and convert a STRING with

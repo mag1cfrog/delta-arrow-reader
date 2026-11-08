@@ -2,6 +2,8 @@
 //! Spark's conversion from DATE to TIMESTAMP in the session time zone: the start of each day, as
 //! Java's `LocalDate.atStartOfDay(zone)` gives it. When a DST change skips midnight, the day
 //! starts at the end of the skipped interval; when it repeats midnight, at the earlier instant.
+//! In UTC it also gives Spark's DATE to TIMESTAMP_NTZ cast, the midnight wall-clock time, which
+//! `with_nullable_result` declares nullable as Spark does.
 
 use std::str::FromStr;
 use std::sync::Arc;
@@ -29,8 +31,11 @@ const UNIX_EPOCH_FROM_CE: i64 = 719_163;
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkDateToTimestamp {
     session_timezone: Arc<str>,
-    /// TRY_CAST returns NULL for a start of day beyond the BIGINT range.
+    /// NULL for a start of day beyond the BIGINT range, as under TRY_CAST or inside TRY.
     null_on_overflow: bool,
+    /// Spark declares its cast of a DATE to TIMESTAMP_NTZ nullable, unlike the cast to
+    /// TIMESTAMP.
+    nullable_result: bool,
     signature: Signature,
 }
 
@@ -39,7 +44,16 @@ impl SparkDateToTimestamp {
         Self {
             session_timezone,
             null_on_overflow,
+            nullable_result: false,
             signature: Signature::any(1, Volatility::Immutable),
+        }
+    }
+
+    /// The same conversion, declared nullable whatever its argument declares.
+    pub fn with_nullable_result(self) -> Self {
+        Self {
+            nullable_result: true,
+            ..self
         }
     }
 
@@ -192,7 +206,7 @@ impl ScalarUDFImpl for SparkDateToTimestamp {
         Ok(Arc::new(Field::new(
             self.name(),
             self.return_type(&[field.data_type().clone()])?,
-            field.is_nullable(),
+            self.nullable_result || field.is_nullable(),
         )))
     }
 
