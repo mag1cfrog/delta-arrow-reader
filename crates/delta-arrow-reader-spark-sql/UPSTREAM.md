@@ -530,6 +530,13 @@ qualifiers, which Spark adds and subtracts exactly with a nullable result that i
 overflow; they failed during planning. Two untyped NULLs give a NULL DOUBLE, as in Spark. The
 [TRY interval references](tests/fixtures/try-day-time-intervals/README.md) record the checks.
 
+`+` and `-` of two DAY TO SECOND or two YEAR TO MONTH intervals use `SparkIntervalArithmetic`,
+which adds the stored counts exactly and fails with Spark's
+`INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION`, during optimization for a constant through
+[constant folding errors](#constant-folding-errors). Arrow's arithmetic failed only while
+collecting rows, with its own overflow error. The
+[interval overflow references](tests/fixtures/interval-overflow/README.md) record the checks.
+
 A DATE and a TIMESTAMP_NTZ, in either order, subtract with `-` and TRY_SUBTRACT like Spark:
 the DATE is read at its midnight and the result is the DAY TO SECOND interval between the
 wall-clock times. The DATE kernel gives the midnight as a TIMESTAMP in UTC and declares it
@@ -1236,7 +1243,8 @@ folding, during optimization. A scalar UDF can return `true` from
 literal CASTs already do. A call inside a short-circuiting expression other than AND and
 OR, such as CASE or COALESCE, still defers its error, and so does an expression over a lambda
 variable, which has no value to fold. `AliasedScalarUDFImpl` forwards the choice. TIMESTAMPDIFF, TIMESTAMPADD, TIMESTAMP
-interval arithmetic and subtraction, and the TIMESTAMP to TIMESTAMP_NTZ conversion opt in.
+interval arithmetic and subtraction, interval `+` and `-`, and the TIMESTAMP to TIMESTAMP_NTZ
+conversion opt in.
 
 Strict DATE and TIMESTAMP parser calls, including TIMESTAMP_NTZ mode, also use
 this hook. Their existing reachability check runs before folding, preserving
