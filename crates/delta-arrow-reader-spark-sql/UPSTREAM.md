@@ -841,9 +841,14 @@ DAYOFYEAR fails for each evaluated row.
 TIMESTAMPDIFF opts in to [constant folding errors](#constant-folding-errors), so its unit,
 overflow and STRING conversion errors keep Spark's optimization stage.
 
-The harness pins two remaining differences, each with an owner:
-- `timestamp_diff` still resolves as an alias (#1051);
-- the zone table applies no DST after 2099 (#1052).
+Spark has no TIMESTAMP_DIFF or TIMESTAMP_ADD routine, so both names fail with
+`UNRESOLVED_ROUTINE` while resolving, before their arguments, naming the function as
+written, unless a host registers one; they were aliases of TIMESTAMPDIFF and TIMESTAMPADD.
+The [routine name references](tests/fixtures/timestamp-routine-names/README.md) record the
+checks (#1051).
+
+The TIMESTAMPDIFF harness pins one remaining difference, with its owner: the zone table
+applies no DST after 2099 (#1052).
 
 Two more have owners but no pinned records:
 - backquoted, parenthesized and two-argument unit spellings fail differently or not at

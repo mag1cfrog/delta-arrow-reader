@@ -71,6 +71,15 @@ impl PlanResolver<'_> {
                 "[UNRESOLVED_ROUTINE] Cannot resolve routine `{function_name}` on search path [`system`.`builtin`, `system`.`session`, `{catalog_name}`.`{schema_name}`]. SQLSTATE: 42883"
             )));
         }
+        // Spark has no TIMESTAMP_DIFF or TIMESTAMP_ADD routine, and resolves the routine before
+        // its arguments, whatever the unit; a host registration may add one.
+        if matches!(
+            canonical_function_name.as_str(),
+            "timestamp_diff" | "timestamp_add"
+        ) && self.ctx.udf(&canonical_function_name).is_err()
+        {
+            return Err(unresolved_timestamp_diff_routine(&function_name, self.ctx));
+        }
         // For functions that accept a date-part keyword as the first argument
         // (e.g., DATEDIFF(DAY, start, end)), convert the unresolved attribute
         // to a string literal before resolution.
@@ -445,15 +454,8 @@ impl PlanResolver<'_> {
         function_name: &str,
         mut arguments: Vec<spec::Expr>,
     ) -> PlanResult<Vec<spec::Expr>> {
-        const DATE_PART_FUNCTIONS: &[&str] =
-            &["date_add", "dateadd", "timestampadd", "timestamp_add"];
-        const DIFF_FUNCTIONS: &[&str] = &[
-            "datediff",
-            "date_diff",
-            "timestampdiff",
-            "timestamp_diff",
-            "timediff",
-        ];
+        const DATE_PART_FUNCTIONS: &[&str] = &["date_add", "dateadd", "timestampadd"];
+        const DIFF_FUNCTIONS: &[&str] = &["datediff", "date_diff", "timestampdiff", "timediff"];
         let function_name = function_name.trim().to_lowercase();
         if DIFF_FUNCTIONS.contains(&function_name.as_str()) && arguments.len() == 3 {
             return self.resolve_timestamp_diff_unit(&function_name, arguments);
