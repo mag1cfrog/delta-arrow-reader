@@ -56,9 +56,6 @@ enum RetainedDifference {
     /// #952: DATE plus an HOUR or DAY TO HOUR interval stays a DATE, the DATE plus the
     /// interval's whole days, where Spark gives a TIMESTAMP.
     DateHourArithmetic,
-    /// #1131: MAKE_INTERVAL is nullable where Spark declares it NOT NULL under ANSI, so a
-    /// TIMESTAMP minus it is too. These records fail during optimization, after analysis.
-    NullableMakeInterval,
 }
 
 /// Records that add a quarter to the `instants` column.
@@ -70,11 +67,6 @@ const QUARTER_RECORDS: [&str; 3] = [
 /// DATE '2024-03-10' plus INTERVAL '1' HOUR and DATE '2024-03-09' plus INTERVAL '1 02' DAY
 /// TO HOUR.
 const DATE_HOUR_RECORDS: [&str; 2] = ["literal_date_plus_hour", "literal_date_plus_day_to_hour"];
-/// TIMESTAMP minus MAKE_INTERVAL records, whose negation overflows.
-const MAKE_INTERVAL_RECORDS: [&str; 2] = [
-    "literal_minus_smallest_calendar_months",
-    "literal_minus_smallest_calendar_days",
-];
 /// 2024-03-10, the DATE DAR gives for both DATE plus hour records.
 const MARCH_10_2024: &str = "19792";
 const MICROS_PER_HOUR: i64 = 3_600_000_000;
@@ -85,8 +77,6 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
         Some(RetainedDifference::RecurringDstAfter2099)
     } else if DATE_HOUR_RECORDS.contains(&id) {
         Some(RetainedDifference::DateHourArithmetic)
-    } else if MAKE_INTERVAL_RECORDS.contains(&id) && case["ansi"] == true {
-        Some(RetainedDifference::NullableMakeInterval)
     } else {
         None
     }
@@ -95,12 +85,8 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
 /// Replace only the retained part of Spark's expectation with DAR's current result.
 fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResult<Value> {
     let mut current = case.clone();
-    let expected_status = match difference {
-        RetainedDifference::NullableMakeInterval => "error",
-        _ => "ok",
-    };
-    if case["expected"]["status"] != expected_status {
-        return Err(format!("expected a Spark {expected_status}: {case}").into());
+    if case["expected"]["status"] != "ok" {
+        return Err(format!("expected a Spark result: {case}").into());
     }
     match difference {
         RetainedDifference::RecurringDstAfter2099 => {
@@ -128,19 +114,6 @@ fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResu
                 field["type"] = json!("date");
             }
             current["expected"]["rows"] = json!([[MARCH_10_2024]]);
-        }
-        RetainedDifference::NullableMakeInterval => {
-            let stages = current["schema_stages"]
-                .as_object_mut()
-                .ok_or("missing schema stages")?;
-            if stages.len() != 1 || !stages.contains_key("analyzed") {
-                return Err(format!("expected only an analyzed schema: {case}").into());
-            }
-            let field = &mut stages["analyzed"]["fields"][0];
-            if field["nullable"] != false {
-                return Err(format!("expected Spark's required TIMESTAMP: {case}").into());
-            }
-            field["nullable"] = json!(true);
         }
     }
     Ok(current)
@@ -418,7 +391,6 @@ async fn timestamp_days_add_in_local_time_like_spark() -> TestResult {
         BTreeMap::from([
             (RetainedDifference::RecurringDstAfter2099, 6),
             (RetainedDifference::DateHourArithmetic, 12),
-            (RetainedDifference::NullableMakeInterval, 6),
         ])
     );
     let mut differences = Vec::new();

@@ -38,14 +38,12 @@ internal rows. `ConvertToLocalRelation` is excluded.
 `local_day_arithmetic.rs` compares names, type families, nullability, metadata and typed
 rows at batch sizes 1 and 32 in each record's session zone. A TIMESTAMP result must be
 annotated with the session zone. A failure must occur at Spark's stage with its error
-condition, or with the Java message of an `ArithmeticException`. Three differences are
+condition, or with the Java message of an `ArithmeticException`. Two differences are
 retained, each at DAR's exact current result:
 - #1052: in Los Angeles, 9999-12-31 plus a quarter is 10000-03-31, which Java reads in PDT
   and the date library, whose rules end in 2099, in PST, an hour later (6 records);
 - #952: DATE plus an HOUR or DAY TO HOUR interval stays a DATE of the DATE plus the
-  interval's whole days, where Spark gives a TIMESTAMP (12 records);
-- #1131: under ANSI, a TIMESTAMP minus MAKE_INTERVAL is nullable where Spark declares it NOT
-  NULL, because MAKE_INTERVAL always is (6 records).
+  interval's whole days, where Spark gives a TIMESTAMP (12 records).
 
 Recapture from the crate root:
 
