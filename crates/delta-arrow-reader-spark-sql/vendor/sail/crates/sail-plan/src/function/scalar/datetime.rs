@@ -277,6 +277,9 @@ pub(crate) fn replan_make_interval_for_try(
         .data)
 }
 
+/// Spark's MAKE_YM_INTERVAL: BIGINT and STRING arguments, also dictionary-encoded ones, are
+/// cast to INT with Spark's casts for the session's ANSI mode. A STRING cast is nullable, as
+/// Spark's is, so the result is nullable for a STRING argument.
 fn make_ym_interval(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let mut arguments = input.arguments;
     let function = ScalarUDF::from(SparkMakeYmInterval::new());
@@ -291,21 +294,36 @@ fn make_ym_interval(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let known_null = arguments.iter().any(|argument| {
         literal_value_without_evaluation(argument).is_some_and(|value| value.is_null())
     });
-    let mut bigint_argument = false;
+    let ansi_mode = input.function_context.plan_config.ansi_mode;
     for (argument, data_type) in arguments.iter_mut().zip(argument_types) {
+        // Spark has no dictionary encoding; Delta uses one for STRING partition columns.
+        let data_type = match data_type {
+            DataType::Dictionary(_, value_type) => {
+                *argument = cast(argument.clone(), (*value_type).clone());
+                *value_type
+            }
+            data_type => data_type,
+        };
         if data_type == DataType::Int64 {
-            bigint_argument = true;
             *argument = ScalarUDF::from(SparkCastNumericToInteger::try_new(
                 DataType::Int32,
-                input.function_context.plan_config.ansi_mode,
+                ansi_mode,
                 false,
             )?)
             .call(vec![argument.clone()]);
+        } else if data_type.is_string() {
+            *argument = SparkCastStringToInteger::try_new(
+                DataType::Int32,
+                MakeIntervalCastMode::of_session(ansi_mode).string_integer_cast_mode(),
+            )?
+            .into_expr(argument.clone());
         }
     }
     let interval = function.call(arguments);
-    if bigint_argument && known_null {
-        // Keep the original call available for type admission before NULL pruning.
+    if known_null {
+        // Spark's NullPropagation gives NULL for a NULL argument, also one behind casts, before
+        // constants fold, so a failing cast of the other argument is discarded. Keep the original
+        // call available for type admission before NULL pruning.
         return Ok(when(lit(true), lit(ScalarValue::IntervalYearMonth(None))).otherwise(interval)?);
     }
     Ok(interval)
