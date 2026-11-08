@@ -671,9 +671,9 @@ fail while collecting rows, and its message stopped after the first sentence. Re
 - Under ANSI, a constant call with a malformed STRING beside a NULL that a constant expression
   computes, such as `NULL + 1` or an explicit cast of a NULL STRING to INT, fails while
   optimizing, where Spark gives NULL (#1157).
-- Under ANSI, Spark's DECIMAL-to-INT cast rounds a value near an integer up to it, as through a
-  DOUBLE, where DAR truncates exactly: `make_ym_interval(0.99999999999999999)` is 12 months in
-  Spark and 0 in DAR (#1168).
+- Under ANSI, Spark's DECIMAL-to-INT cast moves a value just short of the next integer away from
+  zero to that integer, as through a DOUBLE, where DAR truncates exactly:
+  `make_ym_interval(0.99999999999999999)` is 12 months in Spark and 0 in DAR (#1168).
 - TRY_ADD, TRY_SUBTRACT, TRY_MULTIPLY and TRY_DIVIDE over an overflowing MAKE_YM_INTERVAL, or
   under ANSI over a failing argument cast, fail where Spark gives NULL (#1151).
 - Under ANSI, with failing years and months in different rows of one batch, the years' failure

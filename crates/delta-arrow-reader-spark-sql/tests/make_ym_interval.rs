@@ -63,8 +63,8 @@ enum RetainedDifference {
     /// cast fails with it, while optimizing for a constant and while collecting rows otherwise,
     /// where Spark's `TryEval` gives NULL.
     TryArithmetic,
-    /// #1168: under ANSI, Spark's DECIMAL-to-INT cast rounds a value near an integer up to it,
-    /// as through a DOUBLE, where DAR truncates exactly.
+    /// #1168: under ANSI, Spark's DECIMAL-to-INT cast moves a value just short of the next integer
+    /// away from zero to that integer, as through a DOUBLE, where DAR truncates exactly.
     DecimalCastUnderAnsi,
     /// #1157: under ANSI, a constant call with a malformed STRING beside a NULL that a constant
     /// expression computes, `NULL + 1` or an explicit STRING-to-INT cast of NULL, fails while
@@ -96,32 +96,45 @@ const TRY_ARITHMETIC_RECORDS: [(&str, &str); 6] = [
 
 /// Records of the #1151 class under ANSI only, where an argument cast fails, and the stage at
 /// which DAR fails.
-const TRY_CAST_RECORDS: [(&str, &str); 2] = [
+const TRY_OVER_FAILING_CAST_RECORDS: [(&str, &str); 2] = [
     ("column_numbers_try_add_double_beyond_int", "collect"),
     ("literal_try_add_double_beyond_int", "optimized"),
 ];
 
 /// DAR's error for the #1151 records whose DOUBLE argument is beyond INT.
-const TRY_CAST_MESSAGE: &str = "[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value 10000000000.0 to type \
+const TRY_OVER_FAILING_CAST_MESSAGE: &str = "[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value 10000000000.0 to type \
      Int32";
 
-/// Records of the #1168 class under ANSI, with Spark's result and DAR's rows. Spark fails while
-/// optimizing where its cast rounds a value beyond its limit.
-const DECIMAL_CAST_RECORDS: [(&str, &str, &str); 4] = [
-    ("literal_wide_decimal_near_one", r#"[["12"]]"#, r#"[["0"]]"#),
+/// Spark's result for a record of the #1168 class.
+#[derive(Clone, Copy)]
+enum SparkDecimalCastResult {
+    /// The rows, as recorded JSON.
+    Rows(&'static str),
+    /// The condition with which Spark fails while optimizing, where its moved value is beyond a
+    /// limit.
+    FoldedFailure(&'static str),
+}
+
+/// Records of the #1168 class under ANSI, with Spark's result and DAR's rows.
+const DECIMAL_CAST_RECORDS: [(&str, SparkDecimalCastResult, &str); 4] = [
+    (
+        "literal_wide_decimal_near_one",
+        SparkDecimalCastResult::Rows(r#"[["12"]]"#),
+        r#"[["0"]]"#,
+    ),
     (
         "column_wide_decimals",
-        r#"[["0","1"],["1","-1"],["2","3"]]"#,
+        SparkDecimalCastResult::Rows(r#"[["0","1"],["1","-1"],["2","3"]]"#),
         r#"[["0","0"],["1","0"],["2","2"]]"#,
     ),
     (
         "literal_decimal_near_int_limit",
-        "CAST_OVERFLOW",
+        SparkDecimalCastResult::FoldedFailure("CAST_OVERFLOW"),
         r#"[["2147483647"]]"#,
     ),
     (
         "literal_decimal_near_years_limit",
-        "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION",
+        SparkDecimalCastResult::FoldedFailure("INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION"),
         r#"[["2147483640"]]"#,
     ),
 ];
@@ -152,7 +165,10 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
     } else if TRY_ARITHMETIC_RECORDS
         .iter()
         .any(|(record, _)| *record == id)
-        || (TRY_CAST_RECORDS.iter().any(|(record, _)| *record == id) && case["ansi"] == true)
+        || (TRY_OVER_FAILING_CAST_RECORDS
+            .iter()
+            .any(|(record, _)| *record == id)
+            && case["ansi"] == true)
     {
         Some(RetainedDifference::TryArithmetic)
     } else if DECIMAL_CAST_RECORDS
@@ -244,9 +260,11 @@ fn current_expectation(
                 .iter()
                 .find_map(|(record, phase)| (*record == id).then_some((*phase, OVERFLOW_MESSAGE)))
                 .or_else(|| {
-                    TRY_CAST_RECORDS.iter().find_map(|(record, phase)| {
-                        (*record == id).then_some((*phase, TRY_CAST_MESSAGE))
-                    })
+                    TRY_OVER_FAILING_CAST_RECORDS
+                        .iter()
+                        .find_map(|(record, phase)| {
+                            (*record == id).then_some((*phase, TRY_OVER_FAILING_CAST_MESSAGE))
+                        })
                 })
                 .ok_or("missing DAR phase")?;
             let stages = current["schema_stages"]
@@ -264,22 +282,25 @@ fn current_expectation(
                 .iter()
                 .find_map(|(record, spark, rows)| (*record == id).then_some((*spark, *rows)))
                 .ok_or("missing DAR rows")?;
-            if case["expected"]["status"] == "ok" {
-                if case["expected"]["rows"] != serde_json::from_str::<Value>(spark)? {
-                    return Err(format!("expected Spark's rounded rows: {case}").into());
+            match spark {
+                SparkDecimalCastResult::Rows(rows) => {
+                    if case["expected"]["rows"] != serde_json::from_str::<Value>(rows)? {
+                        return Err(format!("expected Spark's moved rows: {case}").into());
+                    }
                 }
-            } else {
-                if case["expected"]["condition"] != spark
-                    || case["spark_error_phase"] != "optimized"
-                {
-                    return Err(format!("expected Spark's folded failure: {case}").into());
+                SparkDecimalCastResult::FoldedFailure(condition) => {
+                    if case["expected"]["condition"] != condition
+                        || case["spark_error_phase"] != "optimized"
+                    {
+                        return Err(format!("expected Spark's folded failure: {case}").into());
+                    }
+                    // DAR folds the constant, so its optimized and executed field is NOT NULL.
+                    let mut folded = case["schema_stages"]["analyzed"].clone();
+                    folded["fields"][0]["nullable"] = json!(false);
+                    current["schema_stages"]["optimized"] = folded.clone();
+                    current["schema_stages"]["executed"] = folded;
+                    current["spark_error_phase"] = Value::Null;
                 }
-                // DAR folds the constant, so its optimized and executed field is NOT NULL.
-                let mut folded = case["schema_stages"]["analyzed"].clone();
-                folded["fields"][0]["nullable"] = json!(false);
-                current["schema_stages"]["optimized"] = folded.clone();
-                current["schema_stages"]["executed"] = folded;
-                current["spark_error_phase"] = Value::Null;
             }
             current["expected"] =
                 json!({"status": "ok", "rows": serde_json::from_str::<Value>(dar_rows)?});

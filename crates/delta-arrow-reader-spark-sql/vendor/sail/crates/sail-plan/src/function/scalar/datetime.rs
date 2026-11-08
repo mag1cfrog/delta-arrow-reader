@@ -168,8 +168,8 @@ fn plan_make_interval(
 }
 
 /// Spark's implicit cast of a MAKE_INTERVAL or MAKE_YM_INTERVAL part to INT.
-/// `cast_string_function_int` in
-/// `string.rs` applies the same rule to string function arguments, without a TRY mode.
+/// `cast_string_function_int` in `string.rs` applies the same rule to string function
+/// arguments, without a TRY mode.
 fn cast_make_interval_part(
     part: Expr,
     schema: &DFSchemaRef,

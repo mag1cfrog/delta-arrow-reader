@@ -8,8 +8,8 @@ tables:
   STRING `t`, nullable in `nullable` and NOT NULL in the others;
 - `numbers` and `numbers_required`: INT keys `k`, DECIMAL(12, 2) `dc`, DOUBLE `f` and FLOAT `fl`,
   nullable in `numbers` and NOT NULL in `numbers_required`;
-- `wide_decimals`: INT keys `k` and NOT NULL DECIMAL(38, 17) `w` values a DOUBLE would round to
-  the next integer.
+- `wide_decimals`: INT keys `k` and NOT NULL DECIMAL(38, 17) `w` values just short of the next
+  integer away from zero, which a DOUBLE would round to it.
 
 Each failure keeps Spark's error condition and the class and message of its innermost Java
 exception. Two captures were byte-identical.
@@ -47,8 +47,8 @@ constant. Other argument types fail during analysis with
 `DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE`.
 
 The casts are Spark's CAST rules:
-- DECIMAL, FLOAT and DOUBLE truncate toward zero, except that under ANSI a DECIMAL near an
-  integer rounds up to it, as through a DOUBLE.
+- DECIMAL, FLOAT and DOUBLE truncate toward zero, except that under ANSI a DECIMAL just short of
+  the next integer away from zero moves to it, as through a DOUBLE.
 - Under ANSI a value beyond INT, NaN or an infinity fails with `CAST_OVERFLOW`. Otherwise a
   DECIMAL wraps, a FLOAT or DOUBLE saturates and NaN gives 0.
 - The STRING, DECIMAL, FLOAT and DOUBLE casts are nullable during analysis in both modes.
@@ -86,8 +86,8 @@ Six differences are retained, each at DAR's exact current result:
   with `CAST_OVERFLOW`, while optimizing a constant and while collecting rows otherwise, where
   Spark gives NULL (28 records);
 - #1168: under ANSI, the DECIMALs near 1, near the INT limit and near the years limit, and the
-  wide DECIMAL column, are truncated exactly, where Spark rounds them up; Spark's rounded value
-  beyond a limit fails while optimizing (8 records);
+  wide DECIMAL column, are truncated exactly, where Spark moves them to the next integer away
+  from zero; where that integer is beyond a limit, Spark fails while optimizing (8 records);
 - #1157: under ANSI, a constant call with a malformed STRING beside `NULL + 1` or an explicit
   cast of a NULL STRING to INT fails while optimizing, where Spark gives NULL (4 records);
 - #1148: under ANSI at batch size 32, a malformed year in row 3 is reported before row 0's
