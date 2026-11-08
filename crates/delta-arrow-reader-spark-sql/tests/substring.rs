@@ -5,10 +5,15 @@ use datafusion::prelude::{SessionConfig, SessionContext};
 use delta_arrow_reader_spark_sql::configure_spark_sql;
 use serde_json::{Value, json};
 
-#[allow(dead_code, reason = "This target selects the additive C06 observation APIs.")]
+#[allow(
+    dead_code,
+    reason = "This target selects the additive C06 observation APIs."
+)]
 #[path = "support/string_binary.rs"]
 mod string_binary;
-use string_binary::{TestResult, c06_receipts, capture_observation_with_receipt, register_inputs_with_receipts};
+use string_binary::{
+    TestResult, c06_receipts, capture_observation_with_receipt, register_inputs_with_receipts,
+};
 
 #[allow(
     dead_code,
@@ -300,10 +305,20 @@ async fn substring_retains_complete_spark_comparisons() -> TestResult {
                     )
                     .build(),
                 );
-                let providers = register_inputs_with_receipts(&session, &records[0], representation, batch_size).await?;
+                let providers = register_inputs_with_receipts(
+                    &session,
+                    &records[0],
+                    representation,
+                    batch_size,
+                )
+                .await?;
                 for provider in providers.as_array().ok_or("missing provider receipts")? {
-                    c06_receipts::emit("provider", json!({"family":"arguments","fixture":fixture,
-                        "representation":representation,"batch_size":batch_size,"target_partitions":2}),provider.clone());
+                    c06_receipts::emit(
+                        "provider",
+                        json!({"family":"arguments","fixture":fixture,
+                        "representation":representation,"batch_size":batch_size,"target_partitions":2}),
+                        provider.clone(),
+                    );
                 }
                 for case in &records[1..] {
                     assert!(keys.insert((
@@ -322,16 +337,26 @@ async fn substring_retains_complete_spark_comparisons() -> TestResult {
                         Ok(Ok(actual)) => actual,
                         Ok(Err(error)) => {
                             capture_failures += 1;
-                            (json!({"capture_error":error.to_string()}), c06_receipts::failure(error.as_ref(), "capture"))
+                            (
+                                json!({"capture_error":error.to_string()}),
+                                c06_receipts::failure(error.as_ref(), "capture"),
+                            )
                         }
                         Err(error) => {
                             capture_failures += 1;
-                            (json!({"capture_task_error":error.to_string()}), c06_receipts::failure(&error, "capture_task"))
+                            (
+                                json!({"capture_task_error":error.to_string()}),
+                                c06_receipts::failure(&error, "capture_task"),
+                            )
                         }
                     };
-                    c06_receipts::emit("query", json!({"family":"arguments","run_label":run_label,"fixture":fixture,
+                    c06_receipts::emit(
+                        "query",
+                        json!({"family":"arguments","run_label":run_label,"fixture":fixture,
                         "id":case["id"],"ansi":case["ansi"],"sql":case["sql"],"representation":representation,
-                        "batch_size":batch_size,"target_partitions":2}),receipt);
+                        "batch_size":batch_size,"target_partitions":2}),
+                        receipt,
+                    );
                     let matches = substring::matches_reference(case, &actual);
                     let meaningful = substring::matches_meaningful_contract(case, &actual);
                     strict_differences += usize::from(!matches);
@@ -420,10 +445,16 @@ async fn substring_retains_all_cross_row_error_observations() -> TestResult {
                 .build(),
             );
             // Preserve the original two provider partitions and their batch assignment.
-            let providers = register_inputs_with_receipts(&session, &records[0], representation, batch_size).await?;
+            let providers =
+                register_inputs_with_receipts(&session, &records[0], representation, batch_size)
+                    .await?;
             for provider in providers.as_array().ok_or("missing provider receipts")? {
-                c06_receipts::emit("provider", json!({"family":"first_error","fixture":"substring-first-error-spark.jsonl",
-                    "representation":representation,"batch_size":batch_size,"target_partitions":2}),provider.clone());
+                c06_receipts::emit(
+                    "provider",
+                    json!({"family":"first_error","fixture":"substring-first-error-spark.jsonl",
+                    "representation":representation,"batch_size":batch_size,"target_partitions":2}),
+                    provider.clone(),
+                );
             }
             for case in &records[1..] {
                 assert!(keys.insert((
@@ -442,16 +473,26 @@ async fn substring_retains_all_cross_row_error_observations() -> TestResult {
                     Ok(Ok(actual)) => actual,
                     Ok(Err(error)) => {
                         capture_failures += 1;
-                        (json!({"capture_error":error.to_string()}), c06_receipts::failure(error.as_ref(), "capture"))
+                        (
+                            json!({"capture_error":error.to_string()}),
+                            c06_receipts::failure(error.as_ref(), "capture"),
+                        )
                     }
                     Err(error) => {
                         capture_failures += 1;
-                        (json!({"capture_task_error":error.to_string()}), c06_receipts::failure(&error, "capture_task"))
+                        (
+                            json!({"capture_task_error":error.to_string()}),
+                            c06_receipts::failure(&error, "capture_task"),
+                        )
                     }
                 };
-                c06_receipts::emit("query", json!({"family":"first_error","fixture":"substring-first-error-spark.jsonl",
+                c06_receipts::emit(
+                    "query",
+                    json!({"family":"first_error","fixture":"substring-first-error-spark.jsonl",
                     "id":case["id"],"ansi":case["ansi"],"sql":case["sql"],"representation":representation,
-                    "batch_size":batch_size,"target_partitions":2}),receipt);
+                    "batch_size":batch_size,"target_partitions":2}),
+                    receipt,
+                );
                 let matches = substring::matches_reference(case, &actual);
                 strict_differences += usize::from(!matches);
                 compared += 1;
@@ -491,31 +532,49 @@ async fn substring_preserves_native_sql_and_fixed_binary_inputs() -> TestResult 
     use arrow::record_batch::RecordBatch;
     use std::sync::Arc;
 
-    async fn native(session: &SessionContext, sql: &str, control: &str) -> TestResult<Vec<RecordBatch>> {
-        let frame=session.sql(sql).await?;
-        let mut receipt=c06_receipts::new("native_dataframe_physical_collect");
-        receipt["analyzed"]=c06_receipts::schema(frame.schema().as_arrow());
-        receipt["public_names"]=json!(frame.schema().fields().iter().map(|field|field.name()).collect::<Vec<_>>());
-        let physical=frame.create_physical_plan().await?;
-        receipt["before_collect"]=c06_receipts::schema(physical.schema().as_ref());
-        receipt["physical"]=c06_receipts::schema(physical.schema().as_ref());
-        receipt["physical_plan"]=json!(format!("{physical:?}"));
-        let batches=datafusion::physical_plan::collect(physical,session.task_ctx()).await?;
-        receipt["output"]=c06_receipts::batches(&batches,string_binary::encode_value)?;
+    async fn native(
+        session: &SessionContext,
+        sql: &str,
+        control: &str,
+    ) -> TestResult<Vec<RecordBatch>> {
+        let frame = session.sql(sql).await?;
+        let mut receipt = c06_receipts::new("native_dataframe_physical_collect");
+        receipt["analyzed"] = c06_receipts::schema(frame.schema().as_arrow());
+        receipt["public_names"] = json!(
+            frame
+                .schema()
+                .fields()
+                .iter()
+                .map(|field| field.name())
+                .collect::<Vec<_>>()
+        );
+        let physical = frame.create_physical_plan().await?;
+        receipt["before_collect"] = c06_receipts::schema(physical.schema().as_ref());
+        receipt["physical"] = c06_receipts::schema(physical.schema().as_ref());
+        receipt["physical_plan"] = json!(format!("{physical:?}"));
+        let batches = datafusion::physical_plan::collect(physical, session.task_ctx()).await?;
+        receipt["output"] = c06_receipts::batches(&batches, string_binary::encode_value)?;
         c06_receipts::finish(&mut receipt);
-        c06_receipts::emit("native",json!({"control":control,"sql":sql,
-            "batch_size":session.state().config().batch_size(),"target_partitions":session.state().config().target_partitions()}),receipt);
+        c06_receipts::emit(
+            "native",
+            json!({"control":control,"sql":sql,
+            "batch_size":session.state().config().batch_size(),"target_partitions":session.state().config().target_partitions()}),
+            receipt,
+        );
         Ok(batches)
     }
 
     let native_sql =
         "SELECT substr('abcdef',-10,6) AS a,substr('abcdef',0,2) AS b,concat('a',NULL) AS c";
     let plain = SessionContext::new();
-    let expected = native(&plain,native_sql,"plain_before").await?;
+    let expected = native(&plain, native_sql, "plain_before").await?;
     let session = SessionContext::new_with_state(
         configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
     );
-    assert_eq!(native(&session,native_sql,"configured_before").await?, expected);
+    assert_eq!(
+        native(&session, native_sql, "configured_before").await?,
+        expected
+    );
     let values = FixedSizeBinaryArray::try_from_sparse_iter_with_size(
         [
             Some([0u8, 0xff, 0x61]),
@@ -541,21 +600,40 @@ async fn substring_preserves_native_sql_and_fixed_binary_inputs() -> TestResult 
     let sliced = batch.slice(1, 3);
     assert_eq!(sliced.column(1).null_count(), 1);
     session.register_batch("fixed_binary", sliced.clone())?;
-    let empty=sliced.slice(0,0);
+    let empty = sliced.slice(0, 0);
     session.register_batch("fixed_empty", empty.clone())?;
-    let mut fixed_receipt=c06_receipts::registration(
-        &json!({"name":"fixed_binary"}),&batch,&sliced,&[vec![sliced.clone()]],string_binary::encode_value,
+    let mut fixed_receipt = c06_receipts::registration(
+        &json!({"name":"fixed_binary"}),
+        &batch,
+        &sliced,
+        &[vec![sliced.clone()]],
+        string_binary::encode_value,
     )?;
-    fixed_receipt["registration"]["slice"]=json!({"offset":1,"length":3,"storage_rows":batch.num_rows()});
-    let mut empty_receipt=c06_receipts::registration(
-        &json!({"name":"fixed_empty"}),&batch,&empty,&[vec![empty.clone()]],string_binary::encode_value,
+    fixed_receipt["registration"]["slice"] =
+        json!({"offset":1,"length":3,"storage_rows":batch.num_rows()});
+    let mut empty_receipt = c06_receipts::registration(
+        &json!({"name":"fixed_empty"}),
+        &batch,
+        &empty,
+        &[vec![empty.clone()]],
+        string_binary::encode_value,
     )?;
-    empty_receipt["registration"]["slice"]=json!({"offset":1,"length":0,"storage_rows":batch.num_rows()});
-    let registrations=vec![fixed_receipt,empty_receipt];
-    let providers=c06_receipts::provider_readbacks(&session,registrations,string_binary::encode_value).await?;
-    for provider in providers.as_array().ok_or("missing fixed provider receipts")? {
-        c06_receipts::emit("provider",json!({"family":"fixed_binary","fixture":"native_fixed_binary",
-            "batch_size":session.state().config().batch_size(),"target_partitions":session.state().config().target_partitions()}),provider.clone());
+    empty_receipt["registration"]["slice"] =
+        json!({"offset":1,"length":0,"storage_rows":batch.num_rows()});
+    let registrations = vec![fixed_receipt, empty_receipt];
+    let providers =
+        c06_receipts::provider_readbacks(&session, registrations, string_binary::encode_value)
+            .await?;
+    for provider in providers
+        .as_array()
+        .ok_or("missing fixed provider receipts")?
+    {
+        c06_receipts::emit(
+            "provider",
+            json!({"family":"fixed_binary","fixture":"native_fixed_binary",
+            "batch_size":session.state().config().batch_size(),"target_partitions":session.state().config().target_partitions()}),
+            provider.clone(),
+        );
     }
     for ansi in [true, false] {
         let (result, receipt) = capture_observation_with_receipt(
@@ -563,10 +641,14 @@ async fn substring_preserves_native_sql_and_fixed_binary_inputs() -> TestResult 
             &json!({"sql":"SELECT substring(b,2,2) AS r FROM fixed_binary ORDER BY k","ansi":ansi}),
         )
         .await?;
-        c06_receipts::emit("native",json!({"control":"fixed_binary","ansi":ansi,
+        c06_receipts::emit(
+            "native",
+            json!({"control":"fixed_binary","ansi":ansi,
             "sql":"SELECT substring(b,2,2) AS r FROM fixed_binary ORDER BY k",
-            "batch_size":session.state().config().batch_size(),"target_partitions":session.state().config().target_partitions()}),receipt);
-        assert!(result.get("error").is_none(),"{result}");
+            "batch_size":session.state().config().batch_size(),"target_partitions":session.state().config().target_partitions()}),
+            receipt,
+        );
+        assert!(result.get("error").is_none(), "{result}");
         // The independent nul_ff_a_middle reference observes these same byte boundaries.
         assert_eq!(result["rows"], json!([["ff61"], [null], ["ff61"]]));
         let expected_schema = json!({"type":"struct","fields":[{"name":"r","type":"binary","nullable":true,"metadata":{}}]});
@@ -577,14 +659,21 @@ async fn substring_preserves_native_sql_and_fixed_binary_inputs() -> TestResult 
             &json!({"sql":"SELECT substring(b,2,2) AS r FROM fixed_empty","ansi":ansi}),
         )
         .await?;
-        c06_receipts::emit("native",json!({"control":"fixed_empty","ansi":ansi,
+        c06_receipts::emit(
+            "native",
+            json!({"control":"fixed_empty","ansi":ansi,
             "sql":"SELECT substring(b,2,2) AS r FROM fixed_empty",
-            "batch_size":session.state().config().batch_size(),"target_partitions":session.state().config().target_partitions()}),receipt);
-        assert!(empty.get("error").is_none(),"{empty}");
+            "batch_size":session.state().config().batch_size(),"target_partitions":session.state().config().target_partitions()}),
+            receipt,
+        );
+        assert!(empty.get("error").is_none(), "{empty}");
         assert_eq!(empty["rows"], json!([]));
         assert_eq!(empty["analyzed_schema"], expected_schema);
         assert_eq!(empty["physical_schema"], expected_schema);
     }
-    assert_eq!(native(&session,native_sql,"configured_after").await?, expected);
+    assert_eq!(
+        native(&session, native_sql, "configured_after").await?,
+        expected
+    );
     Ok(())
 }

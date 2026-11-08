@@ -13,7 +13,9 @@ use serde_json::{Value, json};
 )]
 #[path = "support/string_binary.rs"]
 mod string_binary;
-use string_binary::{TestResult, c06_receipts, capture_observation, register_inputs, register_inputs_with_receipts};
+use string_binary::{
+    TestResult, c06_receipts, capture_observation, register_inputs, register_inputs_with_receipts,
+};
 
 #[allow(
     dead_code,
@@ -272,26 +274,40 @@ async fn capture_case_with_receipt(
     }
     let task_session = session.clone();
     let task_case = case.clone();
-    match tokio::spawn(async move { string_binary::capture_observation_with_receipt(&task_session, &task_case).await }).await {
+    match tokio::spawn(async move {
+        string_binary::capture_observation_with_receipt(&task_session, &task_case).await
+    })
+    .await
+    {
         Ok(Ok((actual, receipt))) => (actual, false, receipt),
-        Ok(Err(error)) => (json!({"capture_error":error.to_string()}), true, c06_receipts::failure(error.as_ref(), "capture")),
-        Err(error) => (json!({"capture_task_error":error.to_string()}), true, c06_receipts::failure(&error, "capture_task")),
+        Ok(Err(error)) => (
+            json!({"capture_error":error.to_string()}),
+            true,
+            c06_receipts::failure(error.as_ref(), "capture"),
+        ),
+        Err(error) => (
+            json!({"capture_task_error":error.to_string()}),
+            true,
+            c06_receipts::failure(&error, "capture_task"),
+        ),
     }
 }
 
 #[tokio::test]
 async fn input_registration_failure_retains_error_detail_without_planning() -> TestResult {
     let error = std::io::Error::other("input registration failed");
-    let (actual, failed, receipt) = capture_case_with_receipt(
-        &session(1), &json!({}), Some(&error),
-    ).await;
+    let (actual, failed, receipt) =
+        capture_case_with_receipt(&session(1), &json!({}), Some(&error)).await;
     assert!(failed);
-    assert_eq!(actual,json!({"capture_error":error.to_string(),"capture_stage":"input_registration"}));
-    assert_eq!(receipt["error"]["display"],error.to_string());
-    assert_eq!(receipt["error"]["debug"],format!("{error:?}"));
-    assert_eq!(receipt["error"]["chain"][0]["display"],error.to_string());
-    assert_eq!(receipt["availability"]["analyzed"],"null");
-    assert_eq!(receipt["availability"]["error"],"available");
+    assert_eq!(
+        actual,
+        json!({"capture_error":error.to_string(),"capture_stage":"input_registration"})
+    );
+    assert_eq!(receipt["error"]["display"], error.to_string());
+    assert_eq!(receipt["error"]["debug"], format!("{error:?}"));
+    assert_eq!(receipt["error"]["chain"][0]["display"], error.to_string());
+    assert_eq!(receipt["availability"]["analyzed"], "null");
+    assert_eq!(receipt["availability"]["error"], "available");
     Ok(())
 }
 
@@ -349,11 +365,21 @@ async fn substring_descendants_retain_all_660_comparisons() -> TestResult {
         for representation in 0..3 {
             for batch_size in [1, 32] {
                 let session = session(batch_size);
-                let registration = register_inputs_with_receipts(&session, &records[0], representation, batch_size).await;
+                let registration = register_inputs_with_receipts(
+                    &session,
+                    &records[0],
+                    representation,
+                    batch_size,
+                )
+                .await;
                 if let Ok(providers) = &registration {
                     for provider in providers.as_array().ok_or("missing provider receipts")? {
-                        c06_receipts::emit("provider",json!({"family":"descendants","matrix":matrix,"fixture":name,
-                            "representation":representation,"batch_size":batch_size,"target_partitions":2}),provider.clone());
+                        c06_receipts::emit(
+                            "provider",
+                            json!({"family":"descendants","matrix":matrix,"fixture":name,
+                            "representation":representation,"batch_size":batch_size,"target_partitions":2}),
+                            provider.clone(),
+                        );
                     }
                 }
                 let registration_error = registration.err();
@@ -365,10 +391,15 @@ async fn substring_descendants_retain_all_660_comparisons() -> TestResult {
                             .push(json!({"context":context,"failure":"duplicate native context"}));
                     }
                     let (actual, capture_failure, receipt) =
-                        capture_case_with_receipt(&session, case, registration_error.as_deref()).await;
-                    c06_receipts::emit("query",json!({"family":"descendants","matrix":matrix,"fixture":name,
+                        capture_case_with_receipt(&session, case, registration_error.as_deref())
+                            .await;
+                    c06_receipts::emit(
+                        "query",
+                        json!({"family":"descendants","matrix":matrix,"fixture":name,
                         "context":context,"id":case["id"],"ansi":case["ansi"],"sql":case["sql"],
-                        "representation":representation,"batch_size":batch_size,"target_partitions":2}),receipt);
+                        "representation":representation,"batch_size":batch_size,"target_partitions":2}),
+                        receipt,
+                    );
                     let comparison: TestResult<(bool, bool, bool)> = (|| {
                         Ok((
                             matches_meaningful_contract(case, &actual)?,
@@ -963,11 +994,16 @@ async fn run_positive_matrix(cse: bool) -> TestResult {
                 "native_optimizer_options":format!("{:?}", state.config_options().optimizer),
                 "native_logical_cse_rule_present":default_cse})
             );
-            let registration = register_inputs_with_receipts(&session, metadata, representation, batch_size).await;
+            let registration =
+                register_inputs_with_receipts(&session, metadata, representation, batch_size).await;
             if let Ok(providers) = &registration {
                 for provider in providers.as_array().ok_or("missing provider receipts")? {
-                    c06_receipts::emit("provider",json!({"family":"positive_matrix","matrix":matrix,"fixture":name,
-                        "representation":representation,"batch_size":batch_size,"target_partitions":2}),provider.clone());
+                    c06_receipts::emit(
+                        "provider",
+                        json!({"family":"positive_matrix","matrix":matrix,"fixture":name,
+                        "representation":representation,"batch_size":batch_size,"target_partitions":2}),
+                        provider.clone(),
+                    );
                 }
             }
             let registration_error = registration.err();
@@ -980,9 +1016,13 @@ async fn run_positive_matrix(cse: bool) -> TestResult {
                 }
                 let (actual, capture_failure, receipt) =
                     capture_case_with_receipt(&session, case, registration_error.as_deref()).await;
-                c06_receipts::emit("query",json!({"family":"positive_matrix","matrix":matrix,"fixture":name,
+                c06_receipts::emit(
+                    "query",
+                    json!({"family":"positive_matrix","matrix":matrix,"fixture":name,
                     "context":context,"id":case["id"],"ansi":case["ansi"],"sql":case["sql"],
-                    "representation":representation,"batch_size":batch_size,"target_partitions":2}),receipt);
+                    "representation":representation,"batch_size":batch_size,"target_partitions":2}),
+                    receipt,
+                );
                 let mut observation = json!({"context":context,"id":case["id"],"ansi":case["ansi"],"sql":case["sql"],
                     "representation":representation,"batch_size":batch_size,"expected":case["expected"],
                     "actual":actual,"capture_failure":capture_failure,"native_logical_cse_rule_present":default_cse});

@@ -454,7 +454,9 @@ pub(crate) async fn capture_spark_optimized_observation(
 }
 
 async fn capture_spark_optimized_observation_impl(
-    session: &SessionContext, case: &Value, mut receipt: Option<&mut Value>,
+    session: &SessionContext,
+    case: &Value,
+    mut receipt: Option<&mut Value>,
 ) -> TestResult<Value> {
     if let Some(receipt) = receipt.as_deref_mut() {
         receipt["phase"] = json!("resolve");
@@ -472,7 +474,7 @@ async fn capture_spark_optimized_observation_impl(
     if let Some(receipt) = receipt.as_deref_mut() {
         receipt["public_names"] = json!(query.column_names);
         receipt["analyzed"] = c06_receipts::schema(query.logical_plan.schema().as_arrow());
-        receipt["analyzed_plan"] = json!(format!("{:?}",query.logical_plan));
+        receipt["analyzed_plan"] = json!(format!("{:?}", query.logical_plan));
         receipt["phase"] = json!("optimize");
     }
     let mut state = session.state();
@@ -516,25 +518,29 @@ pub(crate) async fn compare_exact_spark_query_stages_with_optimized(
 
 #[allow(dead_code, reason = "Only C06 callers request additive receipts.")]
 pub(crate) async fn compare_exact_spark_query_stages_with_optimized_and_receipt(
-    session: &SessionContext, case: &Value,
+    session: &SessionContext,
+    case: &Value,
 ) -> TestResult<(Value, Value)> {
     let mut primary = c06_receipts::new("public_physical_collect");
-    let mut comparison = compare_exact_spark_query_stages_impl(session, case, Some(&mut primary)).await?;
+    let mut comparison =
+        compare_exact_spark_query_stages_impl(session, case, Some(&mut primary)).await?;
     c06_receipts::finish(&mut primary);
     let mut separate = c06_receipts::new("separately_replanned_optimized");
-    let optimized = capture_spark_optimized_observation_impl(session, case, Some(&mut separate)).await;
+    let optimized =
+        capture_spark_optimized_observation_impl(session, case, Some(&mut separate)).await;
     if let Err(error) = &optimized {
         let phase = separate["phase"].as_str().unwrap_or("resolve").to_owned();
         separate["error"] = c06_receipts::failure(error.as_ref(), &phase);
     }
     c06_receipts::finish(&mut separate);
     add_optimized_comparison(&mut comparison, case, &optimized);
-    Ok((comparison, json!({"primary":primary,"separately_replanned_optimized":separate})))
+    Ok((
+        comparison,
+        json!({"primary":primary,"separately_replanned_optimized":separate}),
+    ))
 }
 
-fn add_optimized_comparison(
-    comparison: &mut Value, case: &Value, optimized: &TestResult<Value>,
-) {
+fn add_optimized_comparison(comparison: &mut Value, case: &Value, optimized: &TestResult<Value>) {
     comparison["optimized_matches"] = json!(match &optimized {
         Ok(observation) =>
             observation["names_match"] == true
@@ -587,7 +593,9 @@ pub(crate) async fn compare_exact_spark_query_stages(
 }
 
 async fn compare_exact_spark_query_stages_impl(
-    session: &SessionContext, case: &Value, mut receipt: Option<&mut Value>,
+    session: &SessionContext,
+    case: &Value,
+    mut receipt: Option<&mut Value>,
 ) -> TestResult<Value> {
     let mut phase = "resolve";
     let mut public = None;
@@ -608,7 +616,7 @@ async fn compare_exact_spark_query_stages_impl(
         if let Some(receipt) = receipt.as_deref_mut() {
             receipt["public_names"] = json!(query.column_names);
             receipt["analyzed"] = c06_receipts::schema(query.logical_plan.schema().as_arrow());
-            receipt["analyzed_plan"] = json!(format!("{:?}",query.logical_plan));
+            receipt["analyzed_plan"] = json!(format!("{:?}", query.logical_plan));
         }
         phase = "public_schema";
         if query.column_names.len() != query.logical_plan.schema().fields().len() {

@@ -1689,9 +1689,11 @@ fn substring_preserves_coerced_null_length_without_invoking_operands() -> PlanRe
     use crate::function::common::FunctionContextInput;
     use substring_literal_producer::{Kind, producer};
 
-    let actual_field = |field: &Field| serde_json::json!({
+    let actual_field = |field: &Field| {
+        serde_json::json!({
         "name":field.name(),"type":format!("{:?}",field.data_type()),
-        "nullable":field.is_nullable(),"metadata":field.metadata(),"raw_field":format!("{field:?}")});
+        "nullable":field.is_nullable(),"metadata":field.metadata(),"raw_field":format!("{field:?}")})
+    };
     let session = SessionContext::new();
     let schema = Arc::new(DFSchema::try_from(Schema::new(vec![
         Field::new("s", DataType::Utf8, true),
@@ -1717,12 +1719,14 @@ fn substring_preserves_coerced_null_length_without_invoking_operands() -> PlanRe
         }),
     )
     .call(vec![lit(2_i64)]);
-    let position_factory=match &position {
+    let position_factory = match &position {
         expr::Expr::ScalarFunction(function) => serde_json::json!({
             "signature":format!("{:?}",function.func.signature()),
             "volatility":format!("{:?}",function.func.signature().volatility),
             "supports_constant_folding":function.func.inner().supports_constant_folding()}),
-        _ => serde_json::json!({"status":"unavailable","reason":"No ScalarUDF factory is exposed by this expression."}),
+        _ => {
+            serde_json::json!({"status":"unavailable","reason":"No ScalarUDF factory is exposed by this expression."})
+        }
     };
     let info = SimplifyContext::builder()
         .with_schema(Arc::clone(&schema))
@@ -1753,7 +1757,7 @@ fn substring_preserves_coerced_null_length_without_invoking_operands() -> PlanRe
         ] {
             for (source, is_async) in [(col("s"), false), (asynchronous.call(vec![col("s")]), true)]
             {
-                let before_resolve=serde_json::json!({"position_calls":calls.load(Ordering::SeqCst),"async":async_counts.snapshot()});
+                let before_resolve = serde_json::json!({"position_calls":calls.load(Ordering::SeqCst),"async":async_counts.snapshot()});
                 let expression = resolve(
                     source,
                     if is_async {
@@ -1763,8 +1767,8 @@ fn substring_preserves_coerced_null_length_without_invoking_operands() -> PlanRe
                     },
                     length.clone(),
                 )?;
-                let after_resolve=serde_json::json!({"position_calls":calls.load(Ordering::SeqCst),"async":async_counts.snapshot()});
-                let resolved_expression=format!("{expression:?}");
+                let after_resolve = serde_json::json!({"position_calls":calls.load(Ordering::SeqCst),"async":async_counts.snapshot()});
+                let resolved_expression = format!("{expression:?}");
                 let expr::Expr::ScalarFunction(function) = &expression else {
                     return Err(PlanError::internal("expected logical substring"));
                 };
@@ -1783,42 +1787,54 @@ fn substring_preserves_coerced_null_length_without_invoking_operands() -> PlanRe
                 assert!(declared.is_nullable());
                 assert!(declared.metadata().is_empty());
                 let simplified = ExprSimplifier::new(info.clone()).simplify(expression)?;
-                let after_simplify=serde_json::json!({"position_calls":calls.load(Ordering::SeqCst),"async":async_counts.snapshot()});
+                let after_simplify = serde_json::json!({"position_calls":calls.load(Ordering::SeqCst),"async":async_counts.snapshot()});
                 let physical = create_physical_expr(&simplified, &schema, &ExecutionProps::new())?;
                 let field = physical.return_field(schema.inner())?;
                 assert_eq!(field.data_type(), declared.data_type());
                 assert_eq!(field.is_nullable(), declared.is_nullable());
                 assert_eq!(field.metadata(), declared.metadata());
-                let after_physical=serde_json::json!({"position_calls":calls.load(Ordering::SeqCst),"async":async_counts.snapshot()});
+                let after_physical = serde_json::json!({"position_calls":calls.load(Ordering::SeqCst),"async":async_counts.snapshot()});
                 let values = physical.evaluate(&batch)?.to_array(batch.num_rows())?;
-                let rows=(0..values.len()).map(|row| {
-                    Ok(if values.is_null(row) { serde_json::Value::Null } else {
-                        serde_json::json!(datafusion::arrow::util::display::array_value_to_string(values.as_ref(),row)?)
+                let rows = (0..values.len())
+                    .map(|row| {
+                        Ok(if values.is_null(row) {
+                            serde_json::Value::Null
+                        } else {
+                            serde_json::json!(
+                                datafusion::arrow::util::display::array_value_to_string(
+                                    values.as_ref(),
+                                    row
+                                )?
+                            )
+                        })
                     })
-                }).collect::<Result<Vec<_>,datafusion::arrow::error::ArrowError>>()?;
-                eprintln!("c06 receipt private_null: {}",serde_json::json!({
-                    "control":"coerced_null_length","ansi":ansi_mode,"source_async":is_async,
-                    "length_expression":format!("{length:?}"),"resolved_expression":resolved_expression,
-                    "lowered_expression":format!("{:?}",lowered.data),"lowered_transformed":lowered.transformed,
-                    "simplified_expression":format!("{simplified:?}"),"physical_expression":format!("{physical:?}"),
-                    "input_schema":format!("{schema:?}"),"input_fields":schema.fields().iter().map(|field|actual_field(field)).collect::<Vec<_>>(),
-                    "input_batch":format!("{batch:?}"),"declared_field":actual_field(&declared),"physical_field":actual_field(&field),
-                    "output_array":{"type":format!("{:?}",values.data_type()),"length":values.len(),
-                        "null_count":values.null_count(),"rows":rows,"raw_array":format!("{values:?}")},
-                    "output_batches":null,
-                    "output_batches_unavailable_reason":"The existing PhysicalExpr path returns an Array, not RecordBatches.",
-                    "callback_argument_fields":{"status":"unavailable","reason":"The existing direct test retains argument expressions, not callback Fields."},
-                    "callback_return_field":{"status":"unavailable","reason":"The callback factory declares types without a return Field."},
-                    "position_factory":position_factory,
-                    "position_events":{"status":"unavailable","reason":"The existing position recorder exposes only its invocation count."},
-                    "availability":{"declared_field":"available","physical_field":"available","output_array":"available","output_batches":"null","error":"absent"},
-                    "async_factory":{"signature":format!("{:?}",asynchronous.signature()),
-                        "volatility":format!("{:?}",asynchronous.signature().volatility),
-                        "supports_constant_folding":asynchronous.inner().supports_constant_folding(),
-                        "outer_sync_entry_attempts":{"status":"unobservable","reason":"Native AsyncScalarUDF wrapper exposes no synchronous-entry counter."}},
-                    "callbacks":{"before_resolve":before_resolve,"after_resolve":after_resolve,"after_simplify":after_simplify,
-                        "after_physical":after_physical,"after_evaluate":{"position_calls":calls.load(Ordering::SeqCst),"async":async_counts.snapshot()}}
-                }));
+                    .collect::<Result<Vec<_>, datafusion::arrow::error::ArrowError>>()?;
+                eprintln!(
+                    "c06 receipt private_null: {}",
+                    serde_json::json!({
+                        "control":"coerced_null_length","ansi":ansi_mode,"source_async":is_async,
+                        "length_expression":format!("{length:?}"),"resolved_expression":resolved_expression,
+                        "lowered_expression":format!("{:?}",lowered.data),"lowered_transformed":lowered.transformed,
+                        "simplified_expression":format!("{simplified:?}"),"physical_expression":format!("{physical:?}"),
+                        "input_schema":format!("{schema:?}"),"input_fields":schema.fields().iter().map(|field|actual_field(field)).collect::<Vec<_>>(),
+                        "input_batch":format!("{batch:?}"),"declared_field":actual_field(&declared),"physical_field":actual_field(&field),
+                        "output_array":{"type":format!("{:?}",values.data_type()),"length":values.len(),
+                            "null_count":values.null_count(),"rows":rows,"raw_array":format!("{values:?}")},
+                        "output_batches":null,
+                        "output_batches_unavailable_reason":"The existing PhysicalExpr path returns an Array, not RecordBatches.",
+                        "callback_argument_fields":{"status":"unavailable","reason":"The existing direct test retains argument expressions, not callback Fields."},
+                        "callback_return_field":{"status":"unavailable","reason":"The callback factory declares types without a return Field."},
+                        "position_factory":position_factory,
+                        "position_events":{"status":"unavailable","reason":"The existing position recorder exposes only its invocation count."},
+                        "availability":{"declared_field":"available","physical_field":"available","output_array":"available","output_batches":"null","error":"absent"},
+                        "async_factory":{"signature":format!("{:?}",asynchronous.signature()),
+                            "volatility":format!("{:?}",asynchronous.signature().volatility),
+                            "supports_constant_folding":asynchronous.inner().supports_constant_folding(),
+                            "outer_sync_entry_attempts":{"status":"unobservable","reason":"Native AsyncScalarUDF wrapper exposes no synchronous-entry counter."}},
+                        "callbacks":{"before_resolve":before_resolve,"after_resolve":after_resolve,"after_simplify":after_simplify,
+                            "after_physical":after_physical,"after_evaluate":{"position_calls":calls.load(Ordering::SeqCst),"async":async_counts.snapshot()}}
+                    })
+                );
                 assert_eq!(values.data_type(), &DataType::Utf8);
                 assert_eq!(values.len(), 2);
                 assert_eq!(values.null_count(), 2);
@@ -1912,16 +1928,19 @@ fn substring_logical_visibility_and_runtime_lowering_do_not_invoke_operands()
         &lowered.data,
         true
     )?);
-    eprintln!("c06 receipt structural: {}",serde_json::json!({
-        "control":"logical_to_runtime_lowering","arguments":format!("{args:?}"),
-        "lowered_expression":format!("{:?}",lowered.data),"lowered_transformed":lowered.transformed,
-        "closed_argument_bodies":format!("{bodies:?}"),"position_calls":calls.load(Ordering::SeqCst),
-        "position_factory":{"signature":format!("{:?}",permitted.signature()),
-            "volatility":format!("{:?}",permitted.signature().volatility),
-            "supports_constant_folding":permitted.inner().supports_constant_folding()},
-        "result_field":{"status":"unavailable","reason":"This structural path does not request an output Field."},
-        "output":{"status":"unavailable","reason":"This structural path does not evaluate the expression."}
-    }));
+    eprintln!(
+        "c06 receipt structural: {}",
+        serde_json::json!({
+            "control":"logical_to_runtime_lowering","arguments":format!("{args:?}"),
+            "lowered_expression":format!("{:?}",lowered.data),"lowered_transformed":lowered.transformed,
+            "closed_argument_bodies":format!("{bodies:?}"),"position_calls":calls.load(Ordering::SeqCst),
+            "position_factory":{"signature":format!("{:?}",permitted.signature()),
+                "volatility":format!("{:?}",permitted.signature().volatility),
+                "supports_constant_folding":permitted.inner().supports_constant_folding()},
+            "result_field":{"status":"unavailable","reason":"This structural path does not request an output Field."},
+            "output":{"status":"unavailable","reason":"This structural path does not evaluate the expression."}
+        })
+    );
     assert_eq!(calls.load(Ordering::SeqCst), 0);
 
     for (source_type, text) in [(DataType::Float32, "NaN"), (DataType::Float64, "Infinity")] {
@@ -2074,16 +2093,21 @@ fn substring_logical_visibility_and_runtime_lowering_do_not_invoke_operands()
             };
             assert!(matches!(&value, Expr::Literal(value, _) if value.is_null()));
             let (_, field) = value.to_field(info.schema().as_ref())?;
-            let actual_field = |field: &Field| serde_json::json!({
+            let actual_field = |field: &Field| {
+                serde_json::json!({
                 "name":field.name(),"type":format!("{:?}",field.data_type()),
-                "nullable":field.is_nullable(),"metadata":field.metadata(),"raw_field":format!("{field:?}")});
-            eprintln!("c06 receipt structural: {}",serde_json::json!({
-                "control":"known_null_field","source_type":format!("{source_type:?}"),"source_nullable":source_nullable,
-                "source_field":actual_field(&source_field),"argument_fields":fields.iter().map(|field|actual_field(field)).collect::<Vec<_>>(),
-                "native_field":actual_field(&native_field),"simplified_expression":format!("{value:?}"),
-                "simplified_field":actual_field(&field),"position_calls":calls.load(Ordering::SeqCst),
-                "output_batches":{"status":"unavailable","reason":"This structural path simplifies a literal without collecting a query."}
-            }));
+                "nullable":field.is_nullable(),"metadata":field.metadata(),"raw_field":format!("{field:?}")})
+            };
+            eprintln!(
+                "c06 receipt structural: {}",
+                serde_json::json!({
+                    "control":"known_null_field","source_type":format!("{source_type:?}"),"source_nullable":source_nullable,
+                    "source_field":actual_field(&source_field),"argument_fields":fields.iter().map(|field|actual_field(field)).collect::<Vec<_>>(),
+                    "native_field":actual_field(&native_field),"simplified_expression":format!("{value:?}"),
+                    "simplified_field":actual_field(&field),"position_calls":calls.load(Ordering::SeqCst),
+                    "output_batches":{"status":"unavailable","reason":"This structural path simplifies a literal without collecting a query."}
+                })
+            );
             assert_eq!(field.data_type(), native_field.data_type());
             assert_eq!(field.is_nullable(), native_field.is_nullable());
             assert_eq!(field.metadata(), native_field.metadata());

@@ -45,21 +45,37 @@ pub(crate) fn register_inputs(
 
 #[allow(dead_code, reason = "Only C06 callers request additive receipts.")]
 pub(crate) async fn register_inputs_with_receipts(
-    session: &SessionContext, metadata: &Value, representation: usize, batch_size: usize,
+    session: &SessionContext,
+    metadata: &Value,
+    representation: usize,
+    batch_size: usize,
 ) -> TestResult<Value> {
     let mut registrations = Vec::new();
-    if let Err(error) = register_inputs_impl(session, metadata, representation, batch_size, Some(&mut registrations)) {
-        c06_receipts::emit("provider_setup_failure",json!({"representation":representation,
+    if let Err(error) = register_inputs_impl(
+        session,
+        metadata,
+        representation,
+        batch_size,
+        Some(&mut registrations),
+    ) {
+        c06_receipts::emit(
+            "provider_setup_failure",
+            json!({"representation":representation,
             "batch_size":batch_size,"target_partitions":session.state().config().target_partitions(),
-            "input_metadata":metadata}),json!({"registrations":registrations,
-                "error":c06_receipts::failure(error.as_ref(),"input_registration")}));
+            "input_metadata":metadata}),
+            json!({"registrations":registrations,
+                "error":c06_receipts::failure(error.as_ref(),"input_registration")}),
+        );
         return Err(error);
     }
     c06_receipts::provider_readbacks(session, registrations, encode_value).await
 }
 
 fn register_inputs_impl(
-    session: &SessionContext, metadata: &Value, representation: usize, batch_size: usize,
+    session: &SessionContext,
+    metadata: &Value,
+    representation: usize,
+    batch_size: usize,
     mut receipts: Option<&mut Vec<Value>>,
 ) -> TestResult {
     let inputs = metadata
@@ -157,8 +173,10 @@ fn register_inputs_impl(
                 .push(batch.slice(offset, batch_size.min(batch.num_rows() - offset)));
         }
         if let Some(receipts) = receipts.as_deref_mut() {
-            let mut receipt=c06_receipts::registration(input, &batch, &batch, &partitions, encode_value)?;
-            receipt["registration"]["slice"]=json!({"offset":0,"length":batch.num_rows(),"storage_rows":batch.num_rows()});
+            let mut receipt =
+                c06_receipts::registration(input, &batch, &batch, &partitions, encode_value)?;
+            receipt["registration"]["slice"] =
+                json!({"offset":0,"length":batch.num_rows(),"storage_rows":batch.num_rows()});
             receipts.push(receipt);
         }
         session.register_table(
@@ -293,7 +311,8 @@ pub(crate) async fn capture_observation_with_state(
 
 #[allow(dead_code, reason = "Only C06 callers request additive receipts.")]
 pub(crate) async fn capture_observation_with_receipt(
-    session: &SessionContext, case: &Value,
+    session: &SessionContext,
+    case: &Value,
 ) -> TestResult<(Value, Value)> {
     let mut receipt = c06_receipts::new("public_physical_collect");
     let actual = capture_observation_impl(session, case, None, Some(&mut receipt)).await?;
@@ -302,7 +321,9 @@ pub(crate) async fn capture_observation_with_receipt(
 }
 
 async fn capture_observation_impl(
-    session: &SessionContext, case: &Value, state: Option<SessionState>,
+    session: &SessionContext,
+    case: &Value,
+    state: Option<SessionState>,
     mut receipt: Option<&mut Value>,
 ) -> TestResult<Value> {
     let settings = case
@@ -425,8 +446,16 @@ async fn capture_observation_impl(
     if let Some(receipt) = receipt.as_deref_mut() {
         let mut output = capture_batches(&batches)?;
         let typed = c06_receipts::batches(&batches, encode_value)?;
-        for (batch, actual) in output["batches"].as_array_mut().ok_or("missing output batches")?
-            .iter_mut().zip(typed["batches"].as_array().ok_or("missing typed output batches")?) {
+        for (batch, actual) in output["batches"]
+            .as_array_mut()
+            .ok_or("missing output batches")?
+            .iter_mut()
+            .zip(
+                typed["batches"]
+                    .as_array()
+                    .ok_or("missing typed output batches")?,
+            )
+        {
             batch["storage_schema"] = actual["schema"].clone();
             batch["columns"] = actual["columns"].clone();
         }

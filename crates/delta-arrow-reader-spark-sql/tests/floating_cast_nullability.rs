@@ -270,18 +270,31 @@ async fn floating_integer_cast_fields_match_recorded_stages() -> TestResult {
             )
             .build(),
         );
-        let providers = spark_inputs::register_recorded_inputs_with_slices_and_receipts(&session, header, batch_size).await?;
+        let providers = spark_inputs::register_recorded_inputs_with_slices_and_receipts(
+            &session, header, batch_size,
+        )
+        .await?;
         for provider in providers.as_array().ok_or("missing provider receipts")? {
-            spark_results::c06_receipts::emit("provider",json!({"family":"declaration","fixture":"numeric-cast-nullability/spark.jsonl",
-                "representation":null,"batch_size":batch_size,"target_partitions":2}),provider.clone());
+            spark_results::c06_receipts::emit(
+                "provider",
+                json!({"family":"declaration","fixture":"numeric-cast-nullability/spark.jsonl",
+                "representation":null,"batch_size":batch_size,"target_partitions":2}),
+                provider.clone(),
+            );
         }
         for case in &records[1..] {
             let (actual, receipt) =
-                spark_results::compare_exact_spark_query_stages_with_optimized_and_receipt(&session, case)
-                    .await?;
-            spark_results::c06_receipts::emit("query",json!({"family":"declaration","fixture":"numeric-cast-nullability/spark.jsonl",
+                spark_results::compare_exact_spark_query_stages_with_optimized_and_receipt(
+                    &session, case,
+                )
+                .await?;
+            spark_results::c06_receipts::emit(
+                "query",
+                json!({"family":"declaration","fixture":"numeric-cast-nullability/spark.jsonl",
                 "id":case["id"],"ansi":case["ansi"],"sql":case["sql"],"representation":null,
-                "batch_size":batch_size,"target_partitions":2}),receipt);
+                "batch_size":batch_size,"target_partitions":2}),
+                receipt,
+            );
             // The shared observer reports optimized Fields separately from its base match.
             let matches = actual["matches"] == true && actual["optimized_matches"] == true;
             let retained_name_contract =
@@ -359,18 +372,33 @@ async fn floating_integer_cast_null_inspection_matches_recorded_contracts() -> T
             )
             .build(),
         );
-        let providers = spark_inputs::register_recorded_inputs_with_slices_and_receipts(&session, &records[0], batch_size).await?;
+        let providers = spark_inputs::register_recorded_inputs_with_slices_and_receipts(
+            &session,
+            &records[0],
+            batch_size,
+        )
+        .await?;
         for provider in providers.as_array().ok_or("missing provider receipts")? {
-            spark_results::c06_receipts::emit("provider",json!({"family":"null_inspection","fixture":"numeric-cast-nullability/null-inspection-spark.jsonl",
-                "representation":null,"batch_size":batch_size,"target_partitions":2}),provider.clone());
+            spark_results::c06_receipts::emit(
+                "provider",
+                json!({"family":"null_inspection","fixture":"numeric-cast-nullability/null-inspection-spark.jsonl",
+                "representation":null,"batch_size":batch_size,"target_partitions":2}),
+                provider.clone(),
+            );
         }
         for case in &records[1..] {
             let (actual, receipt) =
-                spark_results::compare_exact_spark_query_stages_with_optimized_and_receipt(&session, case)
-                    .await?;
-            spark_results::c06_receipts::emit("query",json!({"family":"null_inspection","fixture":"numeric-cast-nullability/null-inspection-spark.jsonl",
+                spark_results::compare_exact_spark_query_stages_with_optimized_and_receipt(
+                    &session, case,
+                )
+                .await?;
+            spark_results::c06_receipts::emit(
+                "query",
+                json!({"family":"null_inspection","fixture":"numeric-cast-nullability/null-inspection-spark.jsonl",
                 "id":case["id"],"ansi":case["ansi"],"sql":case["sql"],"representation":null,
-                "batch_size":batch_size,"target_partitions":2}),receipt);
+                "batch_size":batch_size,"target_partitions":2}),
+                receipt,
+            );
             let strict = actual["matches"] == true && actual["optimized_matches"] == true;
             if case["expected"].get("rows").is_some() {
                 assert!(
@@ -1381,14 +1409,20 @@ async fn literal_substring_float_overflows_fail_during_preparation() -> TestResu
                 },
             )
             .await?;
-            let mut resolved_receipt=spark_results::c06_receipts::new("separate_resolve_debug_only");
-            resolved_receipt["public_names"]=json!(query.column_names);
-            resolved_receipt["analyzed"]=spark_results::c06_receipts::schema(query.logical_plan.schema().as_arrow());
-            resolved_receipt["analyzed_plan"]=json!(format!("{:?}",query.logical_plan));
+            let mut resolved_receipt =
+                spark_results::c06_receipts::new("separate_resolve_debug_only");
+            resolved_receipt["public_names"] = json!(query.column_names);
+            resolved_receipt["analyzed"] =
+                spark_results::c06_receipts::schema(query.logical_plan.schema().as_arrow());
+            resolved_receipt["analyzed_plan"] = json!(format!("{:?}", query.logical_plan));
             spark_results::c06_receipts::finish(&mut resolved_receipt);
-            spark_results::c06_receipts::emit("query",json!({"family":"literal_resolve_debug","fixture":"floating-integer-values/spark.jsonl",
+            spark_results::c06_receipts::emit(
+                "query",
+                json!({"family":"literal_resolve_debug","fixture":"floating-integer-values/spark.jsonl",
                 "id":case["id"],"ansi":case["ansi"],"sql":case["sql"],"representation":null,
-                "batch_size":batch_size,"target_partitions":2}),resolved_receipt);
+                "batch_size":batch_size,"target_partitions":2}),
+                resolved_receipt,
+            );
             eprintln!(
                 "LITERAL_SUBSTRING_RESOLVED_DEBUG {}",
                 json!({
@@ -1398,11 +1432,17 @@ async fn literal_substring_float_overflows_fail_during_preparation() -> TestResu
                 })
             );
             let (actual, receipt) =
-                spark_results::compare_exact_spark_query_stages_with_optimized_and_receipt(&session, case)
-                    .await?;
-            spark_results::c06_receipts::emit("query",json!({"family":"literal_preparation","fixture":"floating-integer-values/spark.jsonl",
+                spark_results::compare_exact_spark_query_stages_with_optimized_and_receipt(
+                    &session, case,
+                )
+                .await?;
+            spark_results::c06_receipts::emit(
+                "query",
+                json!({"family":"literal_preparation","fixture":"floating-integer-values/spark.jsonl",
                 "id":case["id"],"ansi":case["ansi"],"sql":case["sql"],"representation":null,
-                "batch_size":batch_size,"target_partitions":2}),receipt);
+                "batch_size":batch_size,"target_partitions":2}),
+                receipt,
+            );
             eprintln!(
                 "LITERAL_SUBSTRING_PREPARATION_RESULT {}",
                 json!({
@@ -1649,18 +1689,31 @@ async fn floating_integer_casts_match_recorded_stages() -> TestResult {
             )
             .build(),
         );
-        let providers = spark_inputs::register_recorded_inputs_with_slices_and_receipts(&session, header, batch_size).await?;
+        let providers = spark_inputs::register_recorded_inputs_with_slices_and_receipts(
+            &session, header, batch_size,
+        )
+        .await?;
         for provider in providers.as_array().ok_or("missing provider receipts")? {
-            spark_results::c06_receipts::emit("provider",json!({"family":"floating","fixture":"floating-integer-values/spark.jsonl",
-                "representation":null,"batch_size":batch_size,"target_partitions":2}),provider.clone());
+            spark_results::c06_receipts::emit(
+                "provider",
+                json!({"family":"floating","fixture":"floating-integer-values/spark.jsonl",
+                "representation":null,"batch_size":batch_size,"target_partitions":2}),
+                provider.clone(),
+            );
         }
         for case in &records[1..] {
             let (actual, receipt) =
-                spark_results::compare_exact_spark_query_stages_with_optimized_and_receipt(&session, case)
-                    .await?;
-            spark_results::c06_receipts::emit("query",json!({"family":"floating","fixture":"floating-integer-values/spark.jsonl",
+                spark_results::compare_exact_spark_query_stages_with_optimized_and_receipt(
+                    &session, case,
+                )
+                .await?;
+            spark_results::c06_receipts::emit(
+                "query",
+                json!({"family":"floating","fixture":"floating-integer-values/spark.jsonl",
                 "id":case["id"],"ansi":case["ansi"],"sql":case["sql"],"representation":null,
-                "batch_size":batch_size,"target_partitions":2}),receipt);
+                "batch_size":batch_size,"target_partitions":2}),
+                receipt,
+            );
             let matches = actual["matches"] == true && actual["optimized_matches"] == true;
             let scoped_matches =
                 floating_integer_scoped_contract_matches(case, &actual, batch_size, &facets)?;
