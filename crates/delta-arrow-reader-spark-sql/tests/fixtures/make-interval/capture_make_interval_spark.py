@@ -84,8 +84,10 @@ INPUTS = [{
         {"name": "h", "type": "integer", "nullable": True, "metadata": {}}]},
     "rows": [[str(key)] + list(row) for key, row in enumerate(OTHER_ROWS)]}, {
     # #1148: failures in different arguments and rows. Row 0 has years whose months overflow
-    # and BIGINT beyond INT; row 2 malformed STRING `t` and seconds `s`; row 4 BIGINT and
-    # DECIMAL beyond INT; row 6 malformed `t` and DECIMAL beyond INT. Odd rows succeed. A
+    # and BIGINT beyond INT; row 2 malformed STRING `t`, seconds `s` and seconds `e`; row 4
+    # BIGINT and DECIMAL beyond INT; row 6 malformed `t`, DECIMAL beyond INT and seconds `e`
+    # whose exponent is beyond Java's BigInteger, which fails even outside ANSI. Odd rows
+    # succeed. A
     # failing row is even, so at batch size 1 the failing rows are in the same input
     # partition, read in order, as the harness deals batches to two partitions in turn.
     "name": "ordered",
@@ -95,15 +97,16 @@ INPUTS = [{
         {"name": "t", "type": "string", "nullable": False, "metadata": {}},
         {"name": "b", "type": "long", "nullable": False, "metadata": {}},
         {"name": "s", "type": "string", "nullable": False, "metadata": {}},
-        {"name": "dc", "type": "decimal(12,2)", "nullable": False, "metadata": {}}]},
-    "rows": [["0", "178956971", "1", "4294967297", "1", "1.00"],
-             ["1", "0", "1", "1", "1", "1.00"],
-             ["2", "0", "abc", "1", "x", "1.00"],
-             ["3", "0", "1", "1", "1", "1.00"],
-             ["4", "0", "1", "4294967298", "1", "3000000000.50"],
-             ["5", "0", "1", "1", "1", "1.00"],
-             ["6", "0", "def", "1", "1", "4000000000.50"],
-             ["7", "0", "1", "1", "1", "1.00"]]}]
+        {"name": "dc", "type": "decimal(12,2)", "nullable": False, "metadata": {}},
+        {"name": "e", "type": "string", "nullable": False, "metadata": {}}]},
+    "rows": [["0", "178956971", "1", "4294967297", "1", "1.00", "1"],
+             ["1", "0", "1", "1", "1", "1.00", "1"],
+             ["2", "0", "abc", "1", "x", "1.00", "y"],
+             ["3", "0", "1", "1", "1", "1.00", "1"],
+             ["4", "0", "1", "4294967298", "1", "3000000000.50", "1"],
+             ["5", "0", "1", "1", "1", "1.00", "1"],
+             ["6", "0", "def", "1", "1", "4000000000.50", "1e-600000000"],
+             ["7", "0", "1", "1", "1", "1.00", "1"]]}]
 
 COLUMNS = [
     ("all_arguments", "make_interval(y, mo, w, d, h, mi, s)", "inputs", "k <> 3"),
@@ -170,6 +173,11 @@ COLUMNS = [
     ("ordered_second_call_fails_first",
      "make_interval(0, 0, 0, k * 536870912) AS a, make_interval(0, 0, 0, 0, t)", "ordered",
      "k <= 4"),
+    # The STRING-to-DECIMAL cast fails on the exponent in its TRY form too, in a later row.
+    ("ordered_seconds_fail_before_seconds_exponent", "make_interval(0, 0, 0, 0, 0, 0, e)",
+     "ordered", "true"),
+    ("ordered_arithmetic_fails_before_seconds_exponent", "make_interval(y, 0, 0, 0, 0, 0, e)",
+     "ordered", "k <> 2"),
     ("ordered_no_failure", "make_interval(t, 0, 0, 0, b, 0, s)", "ordered", "k = 7"),
     ("case_overflow_without_rows",
      "CASE WHEN k >= 0 THEN make_interval(0, 0, 0, d) ELSE make_interval(178956971) END",

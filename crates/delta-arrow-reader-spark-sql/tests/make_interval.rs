@@ -41,7 +41,7 @@ fn make_interval_references() -> TestResult<Vec<Value>> {
             |build| build.contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
         )
     );
-    assert_eq!(records.len() - 1, 412);
+    assert_eq!(records.len() - 1, 420);
     Ok(records)
 }
 
@@ -75,7 +75,7 @@ const COMPUTED_ARGUMENT_ROW_RECORDS: [&str; 2] = [
 ];
 
 /// DAR's current error for each record of the #1124 Decimal cast class.
-const DECIMAL_CAST_RECORDS: [(&str, &str); 6] = [
+const DECIMAL_CAST_RECORDS: [(&str, &str); 7] = [
     (
         "literal_large_seconds",
         "9223372036854.775807 is too large to store in a Decimal128 of precision 18",
@@ -100,6 +100,11 @@ const DECIMAL_CAST_RECORDS: [(&str, &str); 6] = [
     (
         "column_ordered_seconds_fail_before_years",
         "Cannot cast Some(\"x\") to DECIMAL(18,6)",
+    ),
+    // Row 2's malformed seconds fail before row 6's exponent beyond BigInteger.
+    (
+        "column_ordered_seconds_fail_before_seconds_exponent",
+        "Cannot cast Some(\"y\") to DECIMAL(18,6)",
     ),
 ];
 
@@ -583,7 +588,7 @@ async fn make_interval_matches_spark() -> TestResult {
         BTreeMap::from([
             (RetainedDifference::NanosecondRange, 24),
             (RetainedDifference::ConstantOutsideTry, 4),
-            (RetainedDifference::DecimalCastCondition, 12),
+            (RetainedDifference::DecimalCastCondition, 14),
             (RetainedDifference::ComputedArgumentRow, 4),
         ])
     );
