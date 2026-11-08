@@ -41,7 +41,7 @@ fn make_interval_references() -> TestResult<Vec<Value>> {
             |build| build.contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
         )
     );
-    assert_eq!(records.len() - 1, 372);
+    assert_eq!(records.len() - 1, 392);
     Ok(records)
 }
 
@@ -64,7 +64,7 @@ enum RetainedDifference {
 }
 
 /// DAR's current error for each record of the #1124 Decimal cast class.
-const DECIMAL_CAST_RECORDS: [(&str, &str); 5] = [
+const DECIMAL_CAST_RECORDS: [(&str, &str); 6] = [
     (
         "literal_large_seconds",
         "9223372036854.775807 is too large to store in a Decimal128 of precision 18",
@@ -83,6 +83,11 @@ const DECIMAL_CAST_RECORDS: [(&str, &str); 5] = [
     ),
     (
         "literal_invalid_string_seconds",
+        "Cannot cast Some(\"x\") to DECIMAL(18,6)",
+    ),
+    // Row 4's malformed seconds fail before row 6's DECIMAL years, as in Spark (#1148).
+    (
+        "column_ordered_decimal_years_then_string_seconds",
         "Cannot cast Some(\"x\") to DECIMAL(18,6)",
     ),
 ];
@@ -549,7 +554,7 @@ async fn make_interval_matches_spark() -> TestResult {
         BTreeMap::from([
             (RetainedDifference::NanosecondRange, 24),
             (RetainedDifference::ConstantOutsideTry, 4),
-            (RetainedDifference::DecimalCastCondition, 10),
+            (RetainedDifference::DecimalCastCondition, 12),
         ])
     );
     let mut differences = Vec::new();

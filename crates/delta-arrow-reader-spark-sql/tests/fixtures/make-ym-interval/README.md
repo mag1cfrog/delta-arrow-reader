@@ -1,6 +1,6 @@
 # MAKE_YM_INTERVAL values, errors and nullability
 
-`make-ym-interval-spark.jsonl` records 452 observations from Spark 4.2.0, revision
+`make-ym-interval-spark.jsonl` records 456 observations from Spark 4.2.0, revision
 `32f7299601108917fb01920a54e084595b7b3bf8`, Java 17.0.20.1 and Python 3.12.14 (#1159, #1165).
 The header stores the build properties, capture script hash, settings and the registered
 tables:
@@ -9,21 +9,24 @@ tables:
 - `numbers` and `numbers_required`: INT keys `k`, DECIMAL(12, 2) `dc`, DOUBLE `f` and FLOAT `fl`,
   nullable in `numbers` and NOT NULL in `numbers_required`;
 - `wide_decimals`: INT keys `k` and NOT NULL DECIMAL(38, 17) `w` values just short of the next
-  integer away from zero, which a DOUBLE would round to it.
+  integer away from zero, which a DOUBLE would round to it;
+- `row_order`: INT keys `k`, INT years `y` and STRING months `t`, NOT NULL, whose months overflow
+  in row 0 and are malformed in row 2 (#1148).
 
 Each failure keeps Spark's error condition and the class and message of its innermost Java
 exception. Two captures were byte-identical.
 
-113 queries run in both ANSI modes in UTC and America/Los_Angeles:
-- over the tables, years and months, years alone and months alone over nullable and NOT NULL
-  columns and an empty table; rows at the YEAR TO MONTH limits and one month past them; BIGINT
-  arguments that fit, wrap past INT or overflow the interval; STRING months that fit, carry
-  spaces, are malformed, empty or beyond INT; TINYINT and SMALLINT arguments; NULL and typed
-  NULL literals beside a column, also beside a STRING column, and `NULL + 1` and `nullif(1, 1)`
-  beside a STRING column; a NULL year beside an overflowing literal month, a malformed STRING
-  month or a BIGINT month beyond INT, and those failing years beside a NULL month; a malformed
-  month in one row and a malformed year in a later one; INT() of a STRING column; and a
-  comparison, a negation, IS NULL and TRY_ADD over the result;
+114 queries run in both ANSI modes in UTC and America/Los_Angeles:
+- over the tables, years and months, years alone and months alone over nullable and NOT NULL columns
+  and an empty table; rows at the YEAR TO MONTH limits and one month past them; BIGINT arguments
+  that fit, wrap past INT or overflow the interval; STRING months that fit, carry spaces, are
+  malformed, empty or beyond INT; TINYINT and SMALLINT arguments; NULL and typed NULL literals
+  beside a column, also beside a STRING column, and `NULL + 1` and `nullif(1, 1)` beside a STRING
+  column; a NULL year beside an overflowing literal month, a malformed STRING month or a BIGINT
+  month beyond INT, and those failing years beside a NULL month; a malformed month in row 0 and a
+  malformed year in row 2, and over `row_order` an overflow in row 0 and a malformed month in row 2
+  (#1148); INT() of a STRING column; and a comparison, a negation, IS NULL and TRY_ADD over the
+  result;
 - over the number tables, DECIMAL, DOUBLE and FLOAT arguments with fractions, signs and NULL,
   values beyond INT, DECIMAL years that overflow the interval, NaN and both infinities, a NULL
   DECIMAL year beside a DOUBLE month beyond INT and the reverse, NOT NULL arguments, a
@@ -74,7 +77,7 @@ columns. A failure must occur at Spark's stage:
   FLOAT as Rust prints an f64 or f32; the rest of its message differs (#1147);
 - any other failure must have the first line of Spark's message, without its query context.
 
-Six differences are retained, each at DAR's exact current result:
+Five differences are retained, each at DAR's exact current result:
 - #749: an unaliased call is named with the arguments as written, where Spark adds the
   defaulted months (4 records, each at all three stages);
 - #1166: MAKE_YM_INTERVAL of INT() over NOT NULL STRING values is NOT NULL, where Spark's is
@@ -89,9 +92,7 @@ Six differences are retained, each at DAR's exact current result:
   wide DECIMAL column, are truncated exactly, where Spark moves them to the next integer away
   from zero; where that integer is beyond a limit, Spark fails while optimizing (8 records);
 - #1157: under ANSI, a constant call with a malformed STRING beside `NULL + 1` or an explicit
-  cast of a NULL STRING to INT fails while optimizing, where Spark gives NULL (4 records);
-- #1148: under ANSI at batch size 32, a malformed year in row 3 is reported before row 0's
-  malformed month, which Spark and DAR at batch size 1 report (2 records).
+  cast of a NULL STRING to INT fails while optimizing, where Spark gives NULL (4 records).
 
 Recapture from the crate root:
 

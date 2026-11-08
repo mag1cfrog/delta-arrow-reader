@@ -234,6 +234,16 @@ impl ScalarUDFImpl for SparkCastNumericToInteger {
         Ok(ExprSimplifyResult::Original(args))
     }
 
+    // A parent that keeps Spark's row order of errors needs this cast's first failing row.
+    fn invoke_rows_until_error(
+        &self,
+        args: ScalarFunctionArgs,
+    ) -> Result<datafusion_expr::EvaluatedRowPrefix> {
+        crate::scalar::row_errors::invoke_rows_until_first_failing_row(args, |args| {
+            self.invoke_with_args(args)
+        })
+    }
+
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
         let [value] = take_function_args(self.name(), args.args.as_slice())?;
         self.cast_value(value)

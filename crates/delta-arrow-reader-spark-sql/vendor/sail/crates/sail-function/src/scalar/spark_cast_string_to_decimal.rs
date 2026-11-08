@@ -111,6 +111,16 @@ impl ScalarUDFImpl for SparkCastStringToDecimal {
         )))
     }
 
+    // A parent that keeps Spark's row order of errors needs this cast's first failing row.
+    fn invoke_rows_until_error(
+        &self,
+        args: ScalarFunctionArgs,
+    ) -> Result<datafusion_expr::EvaluatedRowPrefix> {
+        crate::scalar::row_errors::invoke_rows_until_first_failing_row(args, |args| {
+            self.invoke_with_args(args)
+        })
+    }
+
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
         let udf = Self::new(self.precision, self.scale, self.safe);
         make_scalar_function(move |a| udf.invoke_array(a), vec![])(&args.args)

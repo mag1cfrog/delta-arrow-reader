@@ -1,26 +1,32 @@
 # MAKE_INTERVAL values, errors and nullability
 
-`make-interval-spark.jsonl` records 372 observations from Spark 4.2.0, revision
-`32f7299601108917fb01920a54e084595b7b3bf8`, Java 17.0.20.1 and Python 3.12.14 (#1131).
+`make-interval-spark.jsonl` records 392 observations from Spark 4.2.0, revision
+`32f7299601108917fb01920a54e084595b7b3bf8`, Java 17.0.20.1 and Python 3.12.14 (#1131, #1148).
 The header stores the build properties, capture script hash, settings and the registered
-`inputs`, `required` and `others` tables. Each failure keeps Spark's error condition and the
-class and message of its innermost Java exception. Two captures were byte-identical.
+`inputs`, `required`, `others` and `ordered` tables. Each failure keeps Spark's error condition
+and the class and message of its innermost Java exception. Two captures were byte-identical.
 
 `inputs` holds INT years, months, weeks, days, hours and minutes and DECIMAL(18, 6) seconds:
 positive and negative values, a NULL year, NULL seconds, and years and months whose month
 count overflows. `required` holds NOT NULL INT values. `others` holds BIGINT, DOUBLE, STRING,
 DECIMAL(12, 2) and INT values that fit, one row whose values overflow INT or DECIMAL(18, 6),
-are malformed, are NULL, or give hours beyond Arrow's nanoseconds, and a NULL row.
+are malformed, are NULL, or give hours beyond Arrow's nanoseconds, and a NULL row. `ordered`
+holds NOT NULL rows that fail in different arguments: BIGINT hours beyond INT and years whose
+months overflow in row 0, malformed STRING years in row 2, malformed STRING seconds in row 4
+and DECIMAL years beyond INT in row 6, with succeeding odd rows. Every failing row is even, so
+at batch size 1 the failing rows are in the same input partition.
 
-93 queries run in both ANSI modes in UTC and America/Los_Angeles:
+98 queries run in both ANSI modes in UTC and America/Los_Angeles:
 - over the tables, every argument, days alone, the overflowing row, NOT NULL arguments, a
   TIMESTAMP minus MAKE_INTERVAL of a NOT NULL column, BIGINT, DOUBLE, STRING and DECIMAL
   columns as parts and as seconds with rows that fit and rows that fail, a NULL argument
   before and after a failing one, a NULL argument beside a failing constant, hours beyond
   Arrow's nanoseconds, MAKE_INTERVAL inside TRY_ADD, TRY_SUBTRACT, TRY_MULTIPLY and
   TRY_DIVIDE with overflows, invalid STRING and BIGINT parts, a constant overflow and hours
-  beyond Arrow's nanoseconds, TRY_ADD of two numbers over an overflowing MAKE_INTERVAL, and
-  an unreached CASE branch with a constant overflow;
+  beyond Arrow's nanoseconds, TRY_ADD of two numbers over an overflowing MAKE_INTERVAL, an
+  unreached CASE branch with a constant overflow, and over `ordered`, failures in different
+  arguments and rows, a later argument failing in an earlier row, and the arithmetic
+  overflowing in an earlier row than an argument cast;
 - literals with every argument count from none to eight, negative and fractional values, NULL
   arguments before and after malformed or overflowing ones, month and day overflows, BIGINT
   years and hours beyond INT, hours and seconds beyond Arrow's nanoseconds, a TIMESTAMP minus
@@ -54,8 +60,8 @@ retained, each at DAR's exact current result:
   otherwise (24 records);
 - #1124: under ANSI, DECIMAL, BIGINT and DOUBLE seconds beyond DECIMAL(18, 6) fail with
   Arrow's precision error instead of `NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION`, and
-  malformed STRING seconds with a plain cast error instead of `CAST_INVALID_INPUT`
-  (10 records);
+  malformed STRING seconds with a plain cast error instead of `CAST_INVALID_INPUT`, also in
+  the first failing row of `ordered` (12 records);
 - #1133: under ANSI, TRY_ADD or TRY_SUBTRACT of a column and a constant overflowing
   MAKE_INTERVAL returns NULL, where Spark folds the constant outside TRY and fails while
   optimizing (4 records).

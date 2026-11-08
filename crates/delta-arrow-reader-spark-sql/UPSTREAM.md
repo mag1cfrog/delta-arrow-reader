@@ -656,8 +656,13 @@ was always nullable, and cast its arguments with Arrow. Spark's BIGINT microseco
 further than Arrow's nanoseconds, so a larger result fails, while optimizing a constant under
 ANSI outside TRY and while collecting rows otherwise (#1145). Seconds beyond DECIMAL(18, 6) and
 malformed STRING seconds fail without Spark's `NUMERIC_VALUE_OUT_OF_RANGE` and
-`CAST_INVALID_INPUT` conditions (#1124). With several failing rows, an earlier argument's
-failure in a later row can be reported first (#1148). The [MAKE_INTERVAL
+`CAST_INVALID_INPUT` conditions (#1124). With several failing rows, the first row's error
+is reported, whichever argument cast or the arithmetic fails there, as Spark evaluates row by
+row (#1148): MAKE_INTERVAL and MAKE_YM_INTERVAL ask DataFusion's row-ordered evaluation for
+it, and they and the BIGINT, DOUBLE, DECIMAL and STRING-to-DECIMAL argument casts report their
+first failing row. A shared helper, `invoke_rows_until_first_failing_row`, finds that row by
+evaluating single rows, only after the batch has failed. It used to report the first failing
+argument across the batch. The [MAKE_INTERVAL
 references](tests/fixtures/make-interval/README.md) record the checks.
 
 TRY_MAKE_INTERVAL, which was not registered, plans the same function with one to seven
@@ -701,8 +706,6 @@ fail while collecting rows, and its message stopped after the first sentence. Re
   `make_ym_interval(0.99999999999999999)` is 12 months in Spark and 0 in DAR (#1168).
 - TRY_ADD, TRY_SUBTRACT, TRY_MULTIPLY and TRY_DIVIDE over an overflowing MAKE_YM_INTERVAL, or
   under ANSI over a failing argument cast, fail where Spark gives NULL (#1151).
-- Under ANSI, with failing years and months in different rows of one batch, the years' failure
-  can be reported first (#1148).
 - Unaliased names keep the arguments as written where Spark adds the defaulted months (#749).
 
 The [MAKE_YM_INTERVAL references](tests/fixtures/make-ym-interval/README.md) record the checks.
