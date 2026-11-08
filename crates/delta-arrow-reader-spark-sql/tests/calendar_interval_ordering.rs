@@ -59,7 +59,7 @@ enum RetainedDifference {
     /// #1161: PIVOT also groups by the aggregate's argument column, so it returns a row per
     /// value with that column, where Spark returns one row.
     PivotImplicitGrouping,
-    /// #1162: GREATEST over a NOT NULL DAY TO SECOND interval and NULL is nullable, where Spark
+    /// #1090: GREATEST over a NOT NULL DAY TO SECOND interval and NULL is nullable, where Spark
     /// declares it NOT NULL.
     GreatestNullability,
 }

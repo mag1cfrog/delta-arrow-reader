@@ -296,21 +296,22 @@ checks in `function/common.rs` do the same for a calendar interval, also inside 
 STRUCT. As a sort key of ORDER BY, SORT BY, a window ORDER BY or WITHIN GROUP, and as an
 operand of `=`, `<>`, `<`, `<=`, `>`, `>=`, `<=>`, IS [NOT] DISTINCT FROM, EQUAL_NULL, NULLIF,
 a simple CASE, BETWEEN, IN, NOT IN, IN subqueries, JOIN ON, USING and NATURAL JOIN, GREATEST
-and LEAST, it fails with `DATATYPE_MISMATCH.INVALID_ORDERING_TYPE`. As in Spark, the type checks
-come first: where a non-NULL type of another kind sits in the place of a calendar interval, a
-binary comparison or NULLIF fails with `DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES`, IN, GREATEST
-and LEAST with `DATATYPE_MISMATCH.DATA_DIFF_TYPES`, and an IN subquery with
-`DATATYPE_MISMATCH.IN_SUBQUERY_DATA_TYPE_MISMATCH`; NULL elements and empty ARRAYs match.
-GREATEST and LEAST also check their argument count first and now reject a single argument
-with `WRONG_NUM_ARGS`, as Spark does for any type. A PIVOT over a calendar interval fails with
-`INCOMPARABLE_PIVOT_COLUMN`, and a window PARTITION BY with `EXPRESSION_TYPE_IS_NOT_ORDERABLE`
-after the window's ORDER BY is checked. DAR sorted, compared, pivoted and partitioned them. The
-query sort resolver tries child plans without the check and applies it once the sort node is
-built, so the type error is not taken for an unresolved key. GROUP BY, ROLLUP and DISTINCT,
-which Spark allows, DAY TO SECOND and YEAR TO MONTH intervals, and native DataFusion SQL are
-unchanged. Ordering aggregates and array functions still accept calendar intervals (#1160). The
-[calendar interval ordering references](tests/fixtures/calendar-interval-ordering/README.md)
-record the checks.
+and LEAST, it fails with `DATATYPE_MISMATCH.INVALID_ORDERING_TYPE`. As in Spark, the type
+checks come first: where a non-NULL type of another kind sits in the place of a calendar
+interval, a binary comparison or NULLIF fails with `DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES`,
+IN, GREATEST and LEAST with `DATATYPE_MISMATCH.DATA_DIFF_TYPES`, and an IN subquery with
+`DATATYPE_MISMATCH.IN_SUBQUERY_DATA_TYPE_MISMATCH`; NULL elements and empty ARRAYs match. Other
+positions are not compared, so an incompatible field beside a calendar interval still gets the
+ordering error (#1163). GREATEST and LEAST also check their argument count first and now reject
+a single argument with `WRONG_NUM_ARGS`, as Spark does for any type. A PIVOT over a calendar
+interval fails with `INCOMPARABLE_PIVOT_COLUMN`, and a window PARTITION BY with
+`EXPRESSION_TYPE_IS_NOT_ORDERABLE` after the window's ORDER BY is checked. DAR sorted,
+compared, pivoted and partitioned them. The query sort resolver tries child plans without the
+check and applies it once the sort node is built, so the type error is not taken for an
+unresolved key. GROUP BY, ROLLUP and DISTINCT, which Spark allows, DAY TO SECOND and YEAR TO
+MONTH intervals, and native DataFusion SQL are unchanged. Ordering aggregates and array
+functions still accept calendar intervals (#1160). The [calendar interval ordering
+references](tests/fixtures/calendar-interval-ordering/README.md) record the checks.
 
 ## Licenses and maintenance
 

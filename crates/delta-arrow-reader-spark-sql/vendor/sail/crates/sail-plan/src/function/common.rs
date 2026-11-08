@@ -723,9 +723,11 @@ fn spark_error_type_name(data_type: &DataType) -> String {
     }
 }
 
-/// Whether Spark's type checks accept `other` beside `interval`, which holds a calendar
-/// interval: a NULL matches anything, types without calendar intervals are left to the usual
-/// coercion, and ARRAY and STRUCT shapes must match where a calendar interval sits.
+/// Whether `other` has the shape of `interval`, which holds a calendar interval, where a
+/// calendar interval sits: a NULL matches anything, and ARRAY and STRUCT shapes must match
+/// there. Positions without a calendar interval on either side are not compared, so an
+/// incompatible field beside one still gets the ordering error where Spark reports its type
+/// mismatch (#1163).
 fn matches_calendar_interval_shape(interval: &DataType, other: &DataType) -> bool {
     if *interval == DataType::Null || *other == DataType::Null {
         return true;

@@ -53,7 +53,7 @@ must have Spark's condition. Four differences are retained, each at DAR's exact 
   (4 records);
 - #1161: PIVOT also groups by the aggregate's argument column, so the PIVOT controls return a
   row per value (6 records);
-- #1162: `greatest(make_dt_interval(d), NULL)` is nullable where Spark declares it NOT NULL
+- #1090: `greatest(make_dt_interval(d), NULL)` is nullable where Spark declares it NOT NULL
   (4 records).
 
 Recapture from the crate root:
