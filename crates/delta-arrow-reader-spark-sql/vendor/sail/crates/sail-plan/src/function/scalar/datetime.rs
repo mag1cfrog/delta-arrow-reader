@@ -165,7 +165,8 @@ fn plan_make_interval(
     Ok(ScalarUDF::from(SparkMakeInterval::new(fail_on_error)).call(cast_arguments))
 }
 
-/// Spark's implicit cast of a MAKE_INTERVAL part to INT. `cast_string_function_int` in
+/// Spark's implicit cast of a MAKE_INTERVAL or MAKE_YM_INTERVAL part to INT.
+/// `cast_string_function_int` in
 /// `string.rs` applies the same rule to string function arguments, without a TRY mode.
 fn cast_make_interval_part(
     part: Expr,
@@ -277,9 +278,10 @@ pub(crate) fn replan_make_interval_for_try(
         .data)
 }
 
-/// Spark's MAKE_YM_INTERVAL: BIGINT and STRING arguments, also dictionary-encoded ones, are
-/// cast to INT with Spark's casts for the session's ANSI mode. A STRING cast is nullable, as
-/// Spark's is, so the result is nullable for a STRING argument.
+/// Spark's MAKE_YM_INTERVAL: BIGINT, DECIMAL, FLOAT, DOUBLE and STRING arguments, also
+/// dictionary-encoded ones, are cast to INT with the casts MAKE_INTERVAL uses for the session's
+/// ANSI mode. Spark's DECIMAL, FLOAT, DOUBLE and STRING casts to INT are nullable, so the result
+/// is nullable for such an argument.
 fn make_ym_interval(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let mut arguments = input.arguments;
     let function = ScalarUDF::from(SparkMakeYmInterval::new());
@@ -294,7 +296,7 @@ fn make_ym_interval(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let known_null = arguments.iter().any(|argument| {
         literal_value_without_evaluation(argument).is_some_and(|value| value.is_null())
     });
-    let ansi_mode = input.function_context.plan_config.ansi_mode;
+    let mode = MakeIntervalCastMode::of_session(input.function_context.plan_config.ansi_mode);
     for (argument, data_type) in arguments.iter_mut().zip(argument_types) {
         // Spark has no dictionary encoding; Delta uses one for STRING partition columns.
         let data_type = match data_type {
@@ -304,19 +306,17 @@ fn make_ym_interval(input: ScalarFunctionInput) -> PlanResult<Expr> {
             }
             data_type => data_type,
         };
-        if data_type == DataType::Int64 {
-            *argument = ScalarUDF::from(SparkCastNumericToInteger::try_new(
-                DataType::Int32,
-                ansi_mode,
-                false,
-            )?)
-            .call(vec![argument.clone()]);
-        } else if data_type.is_string() {
-            *argument = SparkCastStringToInteger::try_new(
-                DataType::Int32,
-                MakeIntervalCastMode::of_session(ansi_mode).string_integer_cast_mode(),
-            )?
-            .into_expr(argument.clone());
+        if matches!(
+            data_type,
+            DataType::Int64
+                | DataType::Float32
+                | DataType::Float64
+                | DataType::Decimal128(..)
+                | DataType::Decimal256(..)
+        ) || data_type.is_string()
+        {
+            *argument =
+                cast_make_interval_part(argument.clone(), input.function_context.schema, mode)?;
         }
     }
     let interval = function.call(arguments);

@@ -204,9 +204,20 @@ const RECORDED_OVERFLOW_ERROR: &str = "Arrow error: Compute error: \
     [INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION] Integer overflow while operating with \
     intervals.";
 
-/// The recorded native control with MAKE_YM_INTERVAL's overflow message as it is now: since
-/// #1159 it is Spark's whole message, without the query context on its later lines.
-fn control_with_current_overflow_message(case: &Value, control: &Value) -> Value {
+/// MAKE_YM_INTERVAL's admission message in the recorded native control, before #1165.
+const RECORDED_ADMISSION_MESSAGE: &str =
+    "The arguments of Spark `make_ym_interval` must be integer or string or null";
+
+/// MAKE_YM_INTERVAL's admission message since #1165, which admits every number and names
+/// Spark's condition.
+const ADMISSION_MESSAGE: &str = "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] The arguments of \
+    Spark `make_ym_interval` must be numbers, strings or NULL";
+
+/// The recorded native control with MAKE_YM_INTERVAL's messages as they are now. Since #1159 the
+/// overflow is Spark's whole message, without the query context on its later lines, and since
+/// #1165 the admission message is `ADMISSION_MESSAGE`. Each is replaced only where the control
+/// holds the recorded message.
+fn control_with_current_messages(case: &Value, control: &Value) -> Value {
     let mut observation = control["observation"].clone();
     if case["expected"]["condition"] == "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION"
         && observation["error"] == RECORDED_OVERFLOW_ERROR
@@ -215,6 +226,38 @@ fn control_with_current_overflow_message(case: &Value, control: &Value) -> Value
             .and_then(|message| message.lines().next())
     {
         observation["error"] = json!(format!("Arrow error: Compute error: {message}"));
+    }
+    if case["expected"]["condition"] == "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE" {
+        for key in ["error", "optimized_error"] {
+            if let Some(error) = observation[key].as_str()
+                && error.matches(RECORDED_ADMISSION_MESSAGE).count() == 1
+            {
+                observation[key] =
+                    json!(error.replace(RECORDED_ADMISSION_MESSAGE, ADMISSION_MESSAGE));
+            }
+        }
+        // Derive the flags from the new error as the shared observer does: it names Spark's
+        // condition, while resolving the query like Spark's analysis.
+        let error_matches = observation["native_phase"] == "resolve"
+            && observation["error"]
+                .as_str()
+                .is_some_and(|error| error.contains("[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE]"));
+        let matches = error_matches
+            && [
+                "public_matches",
+                "before_matches",
+                "physical_matches",
+                "rows_match",
+                "ordered_rows_match",
+            ]
+            .iter()
+            .all(|key| observation[*key] == true);
+        let optimized_matches = error_matches
+            && case["schema_stages"].get("optimized").is_none()
+            && observation["optimized_error"] == observation["error"];
+        observation["error_matches"] = json!(error_matches);
+        observation["matches"] = json!(matches);
+        observation["optimized_matches"] = json!(optimized_matches);
     }
     observation
 }
@@ -237,7 +280,7 @@ fn conversion_contract_matches(case: &Value, observation: &Value, control: &Valu
     );
     if !low_bits {
         return full_spark_matches(case, observation)
-            || observation == &control_with_current_overflow_message(case, control);
+            || observation == &control_with_current_messages(case, control);
     }
     let stages = [
         ("analyzed", "public_schema"),
@@ -295,9 +338,7 @@ fn admission_contract_matches(case: &Value, observation: &Value) -> bool {
             parameters["paramIndex"] == "second"
                 && parameters["inputType"] == "\"ARRAY<INT>\""
                 && parameters["requiredType"] == "\"INT\""
-                && error.contains(
-                    "The arguments of Spark `make_ym_interval` must be integer or string or null",
-                )
+                && error.contains(ADMISSION_MESSAGE)
         }
         Some("WRONG_NUM_ARGS.WITHOUT_SUGGESTION") => {
             parameters["functionName"] == "`make_ym_interval`"
@@ -391,14 +432,21 @@ fn argument_boundary_gate_rejects_changed_causes_fields_and_null_priority() -> T
         .iter()
         .find(|control| control["id"] == "ym_arguments_incompatible_type_with_overflow")
         .ok_or("missing admission control")?;
+    let current = control_with_current_messages(&inherited["reference"], inherited);
+    assert_ne!(current, inherited["observation"]);
     assert!(conversion_contract_matches(
+        &inherited["reference"],
+        &current,
+        inherited
+    ));
+    assert!(!conversion_contract_matches(
         &inherited["reference"],
         &inherited["observation"],
         inherited
     ));
-    let mut changed = inherited["observation"].clone();
+    let mut changed = current.clone();
     changed["error"] = json!(
-        inherited["observation"]["error"]
+        current["error"]
             .as_str()
             .ok_or("missing original type error")?
             .replace("Int64, List", "Int32, List")
@@ -416,13 +464,14 @@ fn argument_boundary_gate_rejects_changed_causes_fields_and_null_priority() -> T
                 control["reference"]["expected"]["condition"] == case["expected"]["condition"]
             })
             .ok_or("missing original admission")?;
-        assert!(admission_contract_matches(&case, &original["observation"]));
-        let mut overflow = original["observation"].clone();
+        let current = control_with_current_messages(&original["reference"], original);
+        assert!(admission_contract_matches(&case, &current));
+        let mut overflow = current.clone();
         overflow["error"] =
             json!("Arrow error: Cast error: Can't cast value 4294967296 to type Int32");
         overflow["optimized_error"] = overflow["error"].clone();
         assert!(!admission_contract_matches(&case, &overflow));
-        let mut late = original["observation"].clone();
+        let mut late = current.clone();
         late["native_phase"] = json!("collect");
         assert!(!admission_contract_matches(&case, &late));
     }

@@ -648,22 +648,24 @@ defaults (#749). The [TRY_MAKE_INTERVAL references](tests/fixtures/try-make-inte
 record the checks.
 
 MAKE_YM_INTERVAL follows Spark's `MakeYMInterval`. Its result is nullable only for a nullable
-argument, where it was always nullable. So comparisons and negation over MAKE_YM_INTERVAL of
-NOT NULL INT or BIGINT values are NOT NULL; CAST to STRING (#982) and GREATEST (#1090) are still
-nullable. A STRING argument, also a dictionary-encoded one such as a Delta STRING partition
-column, uses Spark's STRING-to-INT cast for the session's ANSI mode. It trims spaces, fails with
-`CAST_INVALID_INPUT` under ANSI or gives NULL, and is nullable in both modes, as Spark's cast is.
-It used Arrow's cast, which failed on spaces, malformed values and values beyond INT in both
-modes without Spark's condition. As in Spark, a NULL literal argument or a cast of one gives NULL
-before either argument is evaluated, and so does a constant NULL beside a column once it folds,
-while a NULL from NULLIF or IF beside a failing constant does not. A NULL year skips the months'
-cast for its row. An overflow fails
-with Spark's whole `INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION` message in both modes, while
-optimizing for a constant through [constant folding errors](#constant-folding-errors). It used
-to fail while collecting rows, and its message stopped after the first sentence. Retained:
-- DECIMAL and DOUBLE arguments, which Spark casts to INT, and BOOLEAN arguments, which Spark
-  rejects with `DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE`, fail while planning without Spark's
-  condition (#1165).
+argument, where it was always nullable. So comparisons and negation over MAKE_YM_INTERVAL of NOT
+NULL INT or BIGINT values are NOT NULL; CAST to STRING (#982) and GREATEST (#1090) are still
+nullable. A STRING argument, also a dictionary-encoded one such as a Delta STRING partition column,
+uses Spark's STRING-to-INT cast for the session's ANSI mode. It trims spaces, fails with
+`CAST_INVALID_INPUT` under ANSI or gives NULL, and is nullable in both modes, as Spark's cast is. It
+used Arrow's cast, which failed on spaces, malformed values and values beyond INT in both modes
+without Spark's condition. DECIMAL, FLOAT and DOUBLE arguments use the casts MAKE_INTERVAL uses, so
+they truncate toward zero, and are nullable during analysis as Spark's casts are. Under ANSI a value
+beyond INT, NaN or an infinity fails with `CAST_OVERFLOW`. Otherwise a DECIMAL wraps, a FLOAT or
+DOUBLE saturates and NaN gives 0. These arguments used to be rejected while planning. Other argument
+types, such as BOOLEAN, DATE, TIMESTAMP, BINARY, ARRAY and intervals, fail while planning with
+Spark's `DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE`; the message used to lack the condition. As in
+Spark, a NULL literal argument or a cast of one gives NULL before either argument is evaluated, and
+so does a constant NULL beside a column once it folds, while a NULL from NULLIF or IF beside a
+failing constant does not. A NULL year skips the months' cast for its row. An overflow fails with
+Spark's whole `INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION` message in both modes, while
+optimizing for a constant through [constant folding errors](#constant-folding-errors). It used to
+fail while collecting rows, and its message stopped after the first sentence. Retained:
 - INT() and the other integer functions over a STRING use Arrow's cast, declared NOT NULL for a
   NOT NULL STRING, so MAKE_YM_INTERVAL over them is NOT NULL where Spark's is nullable (#1166).
 - Under ANSI, a constant call with a malformed STRING beside a NULL that a constant expression

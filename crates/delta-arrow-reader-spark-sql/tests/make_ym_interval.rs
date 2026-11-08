@@ -41,7 +41,7 @@ fn make_ym_interval_references() -> TestResult<Vec<Value>> {
             |build| build.contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
         )
     );
-    assert_eq!(records.len() - 1, 320);
+    assert_eq!(records.len() - 1, 420);
     Ok(records)
 }
 
@@ -49,10 +49,6 @@ fn make_ym_interval_references() -> TestResult<Vec<Value>> {
 /// by an issue.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum RetainedDifference {
-    /// #1165: Spark casts a DECIMAL or DOUBLE argument to INT and rejects a BOOLEAN with
-    /// `DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE`. DAR rejects all three while planning, without
-    /// Spark's condition.
-    ArgumentAdmission,
     /// #749: Spark names an unaliased call with its arguments and the defaulted months; DAR
     /// keeps the arguments as written.
     GeneratedName,
@@ -75,13 +71,6 @@ enum RetainedDifference {
     /// size 1 DAR reports Spark's value.
     ArgumentErrorRowOrder,
 }
-
-/// DAR's argument types in its planning error for each record of the #1165 class.
-const ADMISSION_RECORDS: [(&str, &str); 3] = [
-    ("literal_decimal", "Decimal128(2, 1)"),
-    ("literal_double", "Float64"),
-    ("literal_boolean", "Boolean"),
-];
 
 /// DAR's current name for each unaliased record of the #749 class.
 const GENERATED_NAME_RECORDS: [(&str, &str); 1] = [("name_year", "make_ym_interval(1)")];
@@ -117,9 +106,7 @@ const OVERFLOW_MESSAGE: &str = "[INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION
 
 fn retained_difference(case: &Value) -> Option<RetainedDifference> {
     let id = case["id"].as_str()?;
-    if ADMISSION_RECORDS.iter().any(|(record, _)| *record == id) {
-        Some(RetainedDifference::ArgumentAdmission)
-    } else if GENERATED_NAME_RECORDS
+    if GENERATED_NAME_RECORDS
         .iter()
         .any(|(record, _)| *record == id)
     {
@@ -151,27 +138,6 @@ fn current_expectation(
     let mut current = case.clone();
     let id = case["id"].as_str().ok_or("missing record id")?;
     match difference {
-        RetainedDifference::ArgumentAdmission => {
-            let rejected = case["expected"]["condition"]
-                == "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE"
-                && case["spark_error_phase"] == "sql";
-            let cast = case["expected"]["rows"] == json!([["12"]]);
-            if !(rejected || cast) {
-                return Err(format!("expected Spark's cast or type mismatch: {case}").into());
-            }
-            let types = ADMISSION_RECORDS
-                .iter()
-                .find_map(|(record, types)| (*record == id).then_some(*types))
-                .ok_or("missing DAR argument types")?;
-            current["schema_stages"] = json!({});
-            current["expected"] = json!({"status": "error", "dar_message": format!(
-                "Function 'spark_make_ym_interval' user-defined coercion failed with: Error \
-                 during planning: The arguments of Spark `make_ym_interval` must be integer or \
-                 string or null. No function matches the given name and argument types \
-                 'spark_make_ym_interval({types})'"
-            )});
-            current["spark_error_phase"] = json!("sql");
-        }
         RetainedDifference::GeneratedName => {
             let name = GENERATED_NAME_RECORDS
                 .iter()
@@ -435,8 +401,22 @@ fn dar_cast_failure_text(condition: &str, message: &str) -> Option<String> {
         }
         "CAST_OVERFLOW" => {
             let (_, rest) = message.split_once("The value ")?;
-            let (value, _) = rest.split_once("L of the type \"BIGINT\"")?;
-            Some(format!("Can't cast value {value} to type Int32"))
+            let (value, source) = rest.split_once(" of the type \"")?;
+            if source.starts_with("BIGINT\"") {
+                let value = value.strip_suffix('L')?;
+                Some(format!("Can't cast value {value} to type Int32"))
+            } else if source.starts_with("DECIMAL(") {
+                // DAR names the DECIMAL's integer part.
+                let (integer, _) = value.strip_suffix("BD")?.split_once('.')?;
+                Some(format!("value of {integer} is out of range Int32"))
+            } else if source.starts_with("DOUBLE\"") || source.starts_with("FLOAT\"") {
+                // Java prints 1.0E10 and Infinity where Rust prints 10000000000.0 and inf.
+                let value = value.strip_suffix('D').unwrap_or(value);
+                let value: f64 = value.parse().ok()?;
+                Some(format!("Can't cast value {value:?} to type Int32"))
+            } else {
+                None
+            }
         }
         _ => None,
     }
@@ -573,7 +553,6 @@ async fn make_ym_interval_matches_spark() -> TestResult {
     assert_eq!(
         retained,
         BTreeMap::from([
-            (RetainedDifference::ArgumentAdmission, 12),
             (RetainedDifference::GeneratedName, 4),
             (RetainedDifference::IntFunctionCast, 8),
             (RetainedDifference::TryArithmetic, 24),
