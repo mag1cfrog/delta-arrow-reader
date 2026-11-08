@@ -286,8 +286,29 @@ keeps only the target's units, as in Spark. When the target ends in YEAR, DAY,
 HOUR or MINUTE, a third local function truncates the stored month or microsecond
 count toward zero to whole units of that field; targets ending in MONTH or
 SECOND keep the count. Interval leaves of nested ARRAY, STRUCT and MAP casts
-still keep their count (#995). Numeric and string casts to intervals and native
-DataFusion SQL are unchanged.
+still keep their count (#995). String casts to intervals and native DataFusion
+SQL are unchanged; numeric casts follow below.
+
+### Numeric interval casts
+
+CAST and TRY_CAST of a TINYINT, SMALLINT, INT, BIGINT or DECIMAL to a year-month or day-time
+qualifier use a local function, `SparkNumberToInterval`, as Spark reads the number as a count of
+the qualifier's end field: `CAST(-7 AS INTERVAL YEAR)` is -84 months. Like Spark, which multiplies
+a DECIMAL with Scala's DECIMAL128 context, the function keeps 34 significant digits of a DECIMAL
+product, rounded HALF_EVEN, and then rounds HALF_UP to a whole month or microsecond; it computes
+the product in 256 bits, so DECIMAL(38, s) values do not overflow on the way. A MONTH target is
+not multiplied, so its DECIMAL rounds HALF_UP once. A result beyond INT months or BIGINT
+microseconds fails with Spark's `CAST_OVERFLOW` message in both ANSI modes, while optimizing for
+a constant, and TRY_CAST gives NULL. The message names a BIGINT that fits INT as an INT for a
+year-month target, as Spark narrows it first. The result is nullable only for a nullable number
+or TRY_CAST. FLOAT and DOUBLE sources fail during analysis with Spark's
+`DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION` message. Year-month targets used to read every number
+as months and rejected BIGINT, DECIMAL, TINYINT and SMALLINT sources. Day-time targets wrapped on
+overflow, truncated DECIMAL fractions and accepted FLOAT and DOUBLE. Numbers nested in ARRAY,
+STRUCT and MAP casts to intervals still use Arrow's cast, which reads an integer as months or
+microseconds and rejects a DECIMAL (#995). NULL sources and native DataFusion SQL are unchanged. The
+[numeric interval cast references](tests/fixtures/numeric-interval-casts/README.md) record the
+checks.
 
 ### Calendar interval ordering
 
