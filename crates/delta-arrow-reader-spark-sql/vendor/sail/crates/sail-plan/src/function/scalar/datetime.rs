@@ -38,6 +38,7 @@ use sail_function::scalar::datetime::spark_time::SparkTime;
 use sail_function::scalar::datetime::spark_time_diff::SparkTimeDiff;
 use sail_function::scalar::datetime::spark_time_trunc::SparkTimeTrunc;
 use sail_function::scalar::datetime::spark_timestamp::SparkTimestamp;
+use sail_function::scalar::datetime::spark_timestamp_add::SparkTimestampAdd;
 use sail_function::scalar::datetime::spark_timestamp_diff::SparkTimestampDiff;
 use sail_function::scalar::datetime::spark_unix_timestamp::SparkUnixTimestamp;
 use sail_function::scalar::datetime::spark_window_buckets::SparkWindowBuckets;
@@ -45,6 +46,10 @@ use sail_function::scalar::datetime::spark_year::SparkYear;
 use sail_function::scalar::datetime::timestamp_now::TimestampNow;
 use sail_function::scalar::explode::{Explode, ExplodeKind};
 use sail_function::scalar::spark_cast_numeric_to_integer::SparkCastNumericToInteger;
+use sail_function::scalar::spark_cast_string_to_integer::{
+    SparkCastStringToInteger, StringIntegerCastMode,
+};
+use sail_function::scalar::spark_decimal_cast::{DecimalCastMode, SparkDecimalCast};
 use sail_sql_analyzer::literal::interval::IntervalValue;
 use sail_sql_analyzer::parser::parse_interval;
 
@@ -304,72 +309,14 @@ fn date_offset_by_days(
     Ok(ScalarUDF::from(SparkDateDayArithmetic::new(op)).call(vec![date, days]))
 }
 
-fn timestampadd_interval(function_name: &str, unit: &str, quantity: Expr) -> PlanResult<Expr> {
-    let zero_i32 = || lit(0_i32);
-    let zero_f64 = || lit(0_f64);
-    let quantity_i32 = || cast(quantity.clone(), DataType::Int32);
-    let quantity_f64 = || cast(quantity.clone(), DataType::Float64);
-    let make_interval = |args: Vec<Expr>| ScalarUDF::from(SparkMakeInterval::new()).call(args);
-    let make_dt_interval = |args: Vec<Expr>| ScalarUDF::from(SparkMakeDtInterval::new()).call(args);
-
-    let normalized = unit.trim().to_uppercase();
-    match normalized.as_str() {
-        "YEAR" => Ok(make_interval(vec![quantity_i32()])),
-        "QUARTER" => Ok(make_interval(vec![
-            zero_i32(),
-            cast(quantity.clone() * lit(3_i32), DataType::Int32),
-        ])),
-        "MONTH" => Ok(make_interval(vec![zero_i32(), quantity_i32()])),
-        "WEEK" => Ok(make_dt_interval(vec![
-            cast(quantity.clone() * lit(7_i32), DataType::Int32),
-            zero_i32(),
-            zero_i32(),
-            zero_f64(),
-        ])),
-        "DAY" | "DAYOFYEAR" => Ok(make_dt_interval(vec![
-            quantity_i32(),
-            zero_i32(),
-            zero_i32(),
-            zero_f64(),
-        ])),
-        "HOUR" => Ok(make_dt_interval(vec![
-            zero_i32(),
-            quantity_i32(),
-            zero_i32(),
-            zero_f64(),
-        ])),
-        "MINUTE" => Ok(make_dt_interval(vec![
-            zero_i32(),
-            zero_i32(),
-            quantity_i32(),
-            zero_f64(),
-        ])),
-        "SECOND" => Ok(make_dt_interval(vec![
-            zero_i32(),
-            zero_i32(),
-            zero_i32(),
-            quantity_f64(),
-        ])),
-        "MILLISECOND" => Ok(make_dt_interval(vec![
-            zero_i32(),
-            zero_i32(),
-            zero_i32(),
-            quantity_f64() / lit(1_000_f64),
-        ])),
-        "MICROSECOND" => Ok(make_dt_interval(vec![
-            zero_i32(),
-            zero_i32(),
-            zero_i32(),
-            quantity_f64() / lit(1_000_000_f64),
-        ])),
-        _ => Err(PlanError::invalid(format!(
-            "{function_name} does not support interval unit type '{unit}'"
-        ))),
-    }
-}
-
+/// Spark's TIMESTAMPADD: `quantity` and `timestamp` take Spark's implicit casts to BIGINT and
+/// TIMESTAMP, which keeps a TIMESTAMP_NTZ.
 fn timestampadd_with_name(input: ScalarFunctionInput, function_name: &str) -> PlanResult<Expr> {
-    let (unit, quantity, timestamp) = input.arguments.three()?;
+    let ScalarFunctionInput {
+        arguments,
+        function_context,
+    } = input;
+    let (unit, quantity, timestamp) = arguments.three()?;
     let unit = match &unit {
         Expr::Literal(ScalarValue::Utf8(Some(s)), _)
         | Expr::Literal(ScalarValue::LargeUtf8(Some(s)), _) => s.clone(),
@@ -380,14 +327,78 @@ fn timestampadd_with_name(input: ScalarFunctionInput, function_name: &str) -> Pl
             )));
         }
     };
-    let interval = timestampadd_interval(function_name, &unit, quantity)?;
-    Ok(cast(
-        timestamp,
-        DataType::Timestamp(
-            TimeUnit::Microsecond,
-            Some(input.function_context.plan_config.session_timezone.clone()),
+    let schema = function_context.schema;
+    let config = function_context.plan_config;
+    let timezone = &config.session_timezone;
+    // Spark's casts from a string or fractional quantity, or from a string TIMESTAMP, are
+    // nullable.
+    let (quantity, cast_quantity_nullable) = match quantity.get_type(schema)? {
+        data_type if data_type.is_integer() || data_type == DataType::Null => {
+            (cast(quantity, DataType::Int64), false)
+        }
+        data_type if data_type.is_string() => {
+            let mode = if config.ansi_mode {
+                StringIntegerCastMode::Ansi
+            } else {
+                StringIntegerCastMode::Legacy
+            };
+            let cast = SparkCastStringToInteger::try_new(DataType::Int64, mode)?;
+            (ScalarUDF::from(cast).call(vec![quantity]), true)
+        }
+        DataType::Float32 | DataType::Float64 => {
+            let cast =
+                SparkCastNumericToInteger::try_new(DataType::Int64, config.ansi_mode, false)?;
+            (ScalarUDF::from(cast).call(vec![quantity]), true)
+        }
+        DataType::Decimal128(..) | DataType::Decimal256(..) => {
+            let mode = if config.ansi_mode {
+                DecimalCastMode::Ansi
+            } else {
+                DecimalCastMode::Legacy
+            };
+            let cast = SparkDecimalCast::to_integer(DataType::Int64, mode)?;
+            (ScalarUDF::from(cast).call(vec![quantity]), true)
+        }
+        other => {
+            return Err(PlanError::invalid(format!(
+                "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] {function_name} requires a BIGINT quantity, got {other}"
+            )));
+        }
+    };
+    let (timestamp, cast_timestamp_nullable) = match timestamp.get_type(schema)? {
+        DataType::Timestamp(TimeUnit::Microsecond, _) => (timestamp, false),
+        DataType::Timestamp(_, zone) => (
+            cast(timestamp, DataType::Timestamp(TimeUnit::Microsecond, zone)),
+            false,
         ),
-    ) + interval)
+        source @ (DataType::Date32 | DataType::Date64) => (
+            cast_local_timestamp_expr_to_ltz(timestamp, &source, timezone),
+            false,
+        ),
+        data_type if data_type.is_string() => (
+            ScalarUDF::from(SparkTimestamp::try_new(
+                Some(Arc::clone(timezone)),
+                config.ansi_mode,
+                false,
+            )?)
+            .call(vec![timestamp]),
+            true,
+        ),
+        DataType::Null => (
+            cast(
+                timestamp,
+                DataType::Timestamp(TimeUnit::Microsecond, Some(Arc::clone(timezone))),
+            ),
+            false,
+        ),
+        other => {
+            return Err(PlanError::invalid(format!(
+                "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] {function_name} requires a TIMESTAMP, got {other}"
+            )));
+        }
+    };
+    let add = SparkTimestampAdd::try_new(&unit, cast_quantity_nullable || cast_timestamp_nullable)?;
+    Ok(ScalarUDF::from(add).call(vec![quantity, timestamp]))
 }
 
 fn timestampadd(input: ScalarFunctionInput) -> PlanResult<Expr> {

@@ -279,10 +279,6 @@ enum RetainedDifference {
     /// #1029: in a session zone Spark accepts but Arrow cannot parse, such as `PST`, a
     /// column keeps its own zone, so DAR evaluates it as a session in that zone would.
     UnparsedSessionZone,
-    /// #1093: DAR adds and subtracts days and subtracts TIMESTAMP values as elapsed time
-    /// where Spark uses local date-times, so results differ across Los Angeles DST changes
-    /// and local mean time.
-    ElapsedDayArithmetic,
     /// #1094: TO_JSON prints TIMESTAMP fractions in microseconds where Spark prints
     /// milliseconds, and the Los Angeles local mean time offset without its seconds.
     JsonTimestampText,
@@ -290,19 +286,6 @@ enum RetainedDifference {
 
 /// Session zones Spark accepts that Arrow cannot parse.
 const UNPARSED_ZONES: [&str; 3] = ["Z", "PST", "GMT+08:00"];
-
-/// Los Angeles records whose day arithmetic DAR computes as elapsed time.
-const ELAPSED_DAY_ARITHMETIC: [&str; 5] = [
-    "plus_interval_day",
-    "minus_interval_day",
-    "timestampadd_day",
-    "sequence_hours",
-    "minus_timestamp",
-];
-
-const MICROS_PER_DAY: i64 = 86_400_000_000;
-/// TIMESTAMP '2024-01-01 00:00:00' in Los Angeles, the subtrahend of `minus_timestamp`.
-const LOS_ANGELES_2024: i64 = 1_704_096_000_000_000;
 
 /// Records that fail on the nanosecond range, and the message each fails with.
 const NANOSECOND_RANGE_FAILURES: [(&str, &str); 12] = [
@@ -325,8 +308,6 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
     let timezone = case["timezone"].as_str()?;
     if UNPARSED_ZONES.contains(&timezone) {
         Some(RetainedDifference::UnparsedSessionZone)
-    } else if ELAPSED_DAY_ARITHMETIC.contains(&id) && timezone == "America/Los_Angeles" {
-        Some(RetainedDifference::ElapsedDayArithmetic)
     } else if id == "to_json" {
         Some(RetainedDifference::JsonTimestampText)
     } else if NANOSECOND_RANGE_FAILURES
@@ -404,32 +385,6 @@ fn current_expectation(
                 })
                 .ok_or("missing record in the annotation's zone")?;
             current["expected"] = own_zone["expected"].clone();
-        }
-        RetainedDifference::ElapsedDayArithmetic => {
-            let id = case["id"].as_str().ok_or("missing id")?;
-            let instants = registered_instants(metadata)?;
-            let rows = current["expected"]["rows"]
-                .as_array_mut()
-                .ok_or("missing rows")?;
-            let mut changed = 0;
-            for (row, instant) in row_instants(rows, &instants)? {
-                let elapsed = match id {
-                    "plus_interval_day" | "timestampadd_day" => instant + MICROS_PER_DAY,
-                    "minus_interval_day" => instant - MICROS_PER_DAY,
-                    "minus_timestamp" => instant - LOS_ANGELES_2024,
-                    // One value per elapsed hour from the start to 24 hours later.
-                    "sequence_hours" => 25,
-                    other => return Err(format!("unexpected record {other}").into()),
-                };
-                let elapsed = json!(elapsed.to_string());
-                if row[1] != elapsed {
-                    row[1] = elapsed;
-                    changed += 1;
-                }
-            }
-            if changed == 0 {
-                return Err(format!("expected a local-time difference in {id}").into());
-            }
         }
         RetainedDifference::JsonTimestampText => {
             let instants = registered_instants(metadata)?;
@@ -656,7 +611,6 @@ async fn timestamp_columns_follow_the_session_zone_like_spark() -> TestResult {
             (RetainedDifference::NanosecondRange, 48),
             (RetainedDifference::NullableGreatest, 4),
             (RetainedDifference::UnparsedSessionZone, 12),
-            (RetainedDifference::ElapsedDayArithmetic, 10),
             (RetainedDifference::JsonTimestampText, 4),
         ])
     );
