@@ -21,8 +21,8 @@ across the Los Angeles spring and fall changes.
 Spark's grammar spells the difference and the addition only as TIMESTAMPDIFF, DATEDIFF,
 DATE_DIFF, TIMEDIFF, TIMESTAMPADD, DATEADD and DATE_ADD, and its registry has neither name, so
 an expression call fails with `UNRESOLVED_ROUTINE` during analysis, naming the function as
-written, whatever its arguments and before an unresolved column beside it; a qualified name
-keeps its qualifier. As a LATERAL VIEW generator, Spark resolves the arguments first: an
+written, whatever its arguments and before an unresolved column beside it; a two-part name
+such as `builtin.timestamp_add` keeps its qualifier. As a LATERAL VIEW generator, Spark resolves the arguments first: an
 unresolved `DAY` fails with `UNRESOLVED_COLUMN`, and the routine with `ROUTINE_NOT_FOUND`.
 
 Each record keeps the analyzed, optimized and executed schemas and values read from Spark's
@@ -34,7 +34,7 @@ while resolving with Spark's whole message before its query position, with DAR's
 catalog, `datafusion`.`public`, in place of Spark's `spark_catalog`.`default`. A second test
 registers host functions named `timestamp_diff` and `timestamp_add`, which must resolve as
 registered, under their own names, both ANSI modes, at batch sizes 1 and 32. One difference
-is retained, at DAR's exact current error:
+is retained, pinned to text that DAR's current error must contain:
 - #1185: window calls, ORDER BY, SORT BY, LATERAL VIEW generators, a qualified name and a call
   beside an unresolved column fail with another error, as for other unknown routines
   (32 records).

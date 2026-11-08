@@ -869,10 +869,10 @@ Two more have owners but no pinned records:
 
 The [TIMESTAMPDIFF references](tests/fixtures/timestamp-diff/README.md) record the checks.
 
-Spark has no TIMESTAMP_DIFF or TIMESTAMP_ADD routine, so an expression call of either name
-fails with `UNRESOLVED_ROUTINE` while resolving, before its arguments, named or not, naming
-the function as written, unless a host registers a function by that name, which then resolves
-as registered. They were aliases of TIMESTAMPDIFF and TIMESTAMPADD. Window calls, sort keys,
+Spark has no TIMESTAMP_DIFF or TIMESTAMP_ADD routine. An expression call of either name fails
+with `UNRESOLVED_ROUTINE` while resolving, before its arguments, named or not, and names the
+function as written. A host may register a function by either name, which then resolves as
+registered. Both names were aliases of TIMESTAMPDIFF and TIMESTAMPADD. Window calls, sort keys,
 LATERAL VIEW generators, qualified names and calls beside an unresolved column or table still
 fail otherwise, as other unknown routines do (#1185). The
 [routine name references](tests/fixtures/timestamp-routine-names/README.md) record the checks
