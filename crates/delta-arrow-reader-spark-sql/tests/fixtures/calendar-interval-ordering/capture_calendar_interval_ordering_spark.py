@@ -226,7 +226,8 @@ FIELD_PAIRS = [
     ("int_bigint", "1", "1L"),
     ("int_double", "1", "1.5D"),
     ("int_decimal", "1", "1.5"),
-    ("int_string", "1", "'1'"),
+    # Spark cannot parse a bare STRING literal right after SELECT inside IN (...).
+    ("int_string", "1", "CAST('1' AS STRING)"),
     ("int_boolean", "1", "true"),
     ("int_array", "1", "array(1)"),
     ("int_date", "1", "DATE '2024-01-01'"),
@@ -253,7 +254,35 @@ for pair, left, right in FIELD_PAIRS:
          f"SELECT k, named_struct('a', {left}, 'b', d) = named_struct('a', {right}, 'b', d) AS r "
          "FROM required"),
     ]
+# The other check sites, for a compatible and an incompatible pair.
+for pair, left, right in [("int_bigint", "1", "1L"), ("int_array", "1", "array(1)")]:
+    left_struct = f"named_struct('a', {left}, 'i', {CALENDAR})"
+    right_struct = f"named_struct('a', {right}, 'i', {CALENDAR})"
+    QUERIES += [
+        (f"field_{pair}_nullif",
+         f"SELECT k, nullif({left_struct}, {right_struct}) AS r FROM required"),
+        (f"field_{pair}_greatest",
+         f"SELECT k, greatest({left_struct}, {right_struct}) AS r FROM required"),
+        (f"field_{pair}_simple_case",
+         f"SELECT k, CASE {left_struct} WHEN {right_struct} THEN 1 ELSE 0 END AS r "
+         "FROM required"),
+        (f"field_{pair}_join",
+         f"SELECT a.k FROM required a JOIN required b ON "
+         f"named_struct('a', {left}, 'i', make_interval(0, 0, 0, a.d)) = "
+         f"named_struct('a', {right}, 'i', make_interval(0, 0, 0, b.d))"),
+        (f"field_{pair}_single_in_subquery",
+         f"SELECT k FROM required WHERE {left_struct} IN "
+         f"(SELECT named_struct('a', {right}, 'i', make_interval(0, 0, 0, 1)))"),
+        (f"field_{pair}_array_of_struct",
+         f"SELECT k, array({left_struct}) = array({right_struct}) AS r FROM required"),
+    ]
 QUERIES += [
+    ("field_duplicate_names_struct_equal",
+     f"SELECT k, named_struct('a', named_struct('x', 1, 'x', true), 'i', {CALENDAR}) = "
+     f"named_struct('a', named_struct('x', 1L, 'x', false), 'i', {CALENDAR}) AS r FROM required"),
+    ("field_reordered_names_struct_equal",
+     f"SELECT k, named_struct('x', 1, 'y', true, 'i', {CALENDAR}) = "
+     f"named_struct('y', IF(k > 5, NULL, 2), 'x', false, 'i', {CALENDAR}) AS r FROM required"),
     ("field_interval_names_struct_equal",
      f"SELECT k, named_struct('i', {CALENDAR}) = named_struct('j', {CALENDAR}) AS r "
      "FROM required"),
