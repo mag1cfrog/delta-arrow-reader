@@ -40,6 +40,9 @@ pub struct SparkTimestampAdd {
     /// Spark's implicit casts of a string or fractional quantity, or of a string TIMESTAMP,
     /// can return NULL, so the result is nullable whatever the arguments declare.
     force_nullable: bool,
+    /// The session time zone in which Spark's DATETIME_OVERFLOW message renders a
+    /// TIMESTAMP_NTZ's microseconds, as if they were an instant.
+    ntz_message_zone: Option<Arc<str>>,
     signature: Signature,
 }
 
@@ -63,8 +66,15 @@ impl SparkTimestampAdd {
             unit,
             unit_name,
             force_nullable,
+            ntz_message_zone: None,
             signature: Signature::any(2, Volatility::Immutable),
         })
+    }
+
+    /// Render a TIMESTAMP_NTZ in `zone` in overflow messages, as Spark does in the session zone.
+    pub fn with_ntz_message_zone(mut self, zone: Arc<str>) -> Self {
+        self.ntz_message_zone = Some(zone);
+        self
     }
 
     /// `micros` plus `quantity` units in `zone`, or `None` where Spark overflows an INT unit
@@ -134,6 +144,13 @@ impl ScalarUDFImpl for SparkTimestampAdd {
         let Some(parsed) = TimestampZone::parse(zone.as_deref().unwrap_or("UTC")) else {
             return exec_err!("invalid time zone {zone:?}");
         };
+        // A TIMESTAMP_NTZ moves in UTC, but Spark's message reads its microseconds as an
+        // instant in the session zone.
+        let ntz_message_zone = match (&zone, &self.ntz_message_zone) {
+            (None, Some(session)) => TimestampZone::parse(session),
+            _ => None,
+        };
+        let message_zone = ntz_message_zone.as_ref().unwrap_or(&parsed);
         let scalar = matches!(
             (quantities, timestamps),
             (ColumnarValue::Scalar(_), ColumnarValue::Scalar(_))
@@ -154,7 +171,7 @@ impl ScalarUDFImpl for SparkTimestampAdd {
                             "[DATETIME_OVERFLOW] Datetime operation overflow: add {quantity}L {} \
                              to TIMESTAMP '{}'. SQLSTATE: 22008",
                             self.unit_name,
-                            local_text(micros, &parsed)
+                            local_text(micros, message_zone)
                         ),
                     }
                 }

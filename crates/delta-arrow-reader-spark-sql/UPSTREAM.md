@@ -545,6 +545,12 @@ DataFusion SQL are unchanged. The
 [local day arithmetic references](tests/fixtures/local-day-arithmetic/README.md) record the
 checks.
 
+TIMESTAMPADD's `DATETIME_OVERFLOW` message names the full BIGINT quantity, the unit and the
+timestamp like Spark's. Spark reads a TIMESTAMP_NTZ's microseconds there as an instant in the
+session zone, so the message now does too, where it printed the wall-clock time. The
+[TIMESTAMPADD quantity references](tests/fixtures/timestampadd-quantity/README.md) check
+full-width quantities in every unit, as columns and constants (#981).
+
 TRY_ADD and TRY_SUBTRACT of a TIMESTAMP or TIMESTAMP_NTZ and a DAY TO SECOND, YEAR TO MONTH
 or calendar interval, in either order for TRY_ADD, use the same local arithmetic and give a
 nullable result that is NULL where `+` or `-` fails, as Spark's `TryEval` does. A

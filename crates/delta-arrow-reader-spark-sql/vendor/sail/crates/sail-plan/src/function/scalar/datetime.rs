@@ -610,7 +610,8 @@ fn timestampadd_with_name(input: ScalarFunctionInput, function_name: &str) -> Pl
             )));
         }
     };
-    let add = SparkTimestampAdd::try_new(&unit, cast_quantity_nullable || cast_timestamp_nullable)?;
+    let add = SparkTimestampAdd::try_new(&unit, cast_quantity_nullable || cast_timestamp_nullable)?
+        .with_ntz_message_zone(Arc::clone(timezone));
     Ok(ScalarUDF::from(add).call(vec![quantity, timestamp]))
 }
 
