@@ -21,8 +21,6 @@ use crate::scalar::datetime::local_time::TimestampZone;
 pub struct SparkSubtractTimestamps {
     /// TRY_SUBTRACT: NULL where the subtraction overflows.
     null_on_error: bool,
-    /// Spark's cast of a DATE to TIMESTAMP_NTZ is nullable, so a difference with one is too.
-    nullable_result: bool,
     signature: Signature,
 }
 
@@ -43,18 +41,9 @@ impl SparkSubtractTimestamps {
         Self::with_null_on_error(true)
     }
 
-    /// The same subtraction, declared nullable whatever its arguments declare.
-    pub fn with_nullable_result(self) -> Self {
-        Self {
-            nullable_result: true,
-            ..self
-        }
-    }
-
     fn with_null_on_error(null_on_error: bool) -> Self {
         Self {
             null_on_error,
-            nullable_result: false,
             signature: Signature::any(2, Volatility::Immutable),
         }
     }
@@ -115,9 +104,7 @@ impl ScalarUDFImpl for SparkSubtractTimestamps {
         Ok(Arc::new(Field::new(
             self.name(),
             self.return_type(&types)?,
-            self.null_on_error
-                || self.nullable_result
-                || args.arg_fields.iter().any(|field| field.is_nullable()),
+            self.null_on_error || args.arg_fields.iter().any(|field| field.is_nullable()),
         )))
     }
 

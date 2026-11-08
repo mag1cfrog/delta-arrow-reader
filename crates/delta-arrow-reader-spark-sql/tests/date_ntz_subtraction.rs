@@ -40,8 +40,55 @@ fn subtraction_references() -> TestResult<Vec<Value>> {
             |build| build.contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
         )
     );
-    assert_eq!(records.len() - 1, 80);
+    assert_eq!(records.len() - 1, 132);
     Ok(records)
+}
+
+/// #1133: Spark folds the cast of a constant overflowing DATE while optimizing, outside TRY,
+/// when the other operand is a column, also through a projection, a CTE or a scalar subquery,
+/// and fails with `long overflow`. DAR casts it inside the TRY and returns NULL.
+const CONSTANT_DATE_RECORDS: [&str; 4] = [
+    "column_try_far_date",
+    "column_projected_try_far_date",
+    "column_cte_try_far_date",
+    "column_scalar_subquery_try_far_date",
+];
+
+/// DAR's current result for a #1133 record: a NULL interval for every `inputs` row, with the
+/// analyzed field through every stage.
+fn constant_date_expectation(case: &Value, metadata: &Value) -> TestResult<Value> {
+    let mut current = case.clone();
+    if case["expected"]["java_message"] != "long overflow"
+        || case["spark_error_phase"] != "optimized"
+    {
+        return Err(format!("expected Spark's optimization overflow: {case}").into());
+    }
+    let input = metadata["inputs"]
+        .as_array()
+        .ok_or("missing inputs")?
+        .iter()
+        .find(|input| input["name"] == "inputs")
+        .ok_or("missing inputs table")?;
+    let mut rows = input["rows"]
+        .as_array()
+        .ok_or("missing rows")?
+        .iter()
+        .map(|row| json!([row[0], null]))
+        .collect::<Vec<_>>();
+    rows.sort_by_key(|row| row.to_string());
+    current["expected"] = json!({"status": "ok", "rows": rows});
+    current
+        .as_object_mut()
+        .ok_or("expected a record")?
+        .remove("spark_error_phase");
+    let analyzed = current["schema_stages"]["analyzed"].clone();
+    let result = &analyzed["fields"][1];
+    if result["type"] != "interval day to second" || result["nullable"] != true {
+        return Err(format!("expected a nullable DAY TO SECOND interval: {case}").into());
+    }
+    current["schema_stages"]["optimized"] = analyzed.clone();
+    current["schema_stages"]["executed"] = analyzed;
+    Ok(current)
 }
 
 /// The Arrow type family DAR uses for a recorded Spark type.
@@ -305,19 +352,36 @@ fn register_inputs(session: &SessionContext, metadata: &Value, batch_size: usize
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn dates_and_timestamp_ntz_values_subtract_like_spark() -> TestResult {
     let records = subtraction_references()?;
+    let retained = records[1..]
+        .iter()
+        .filter(|case| {
+            case["id"]
+                .as_str()
+                .is_some_and(|id| CONSTANT_DATE_RECORDS.contains(&id))
+        })
+        .count();
+    assert_eq!(retained, 16);
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
         let session = session_context(batch_size);
         register_inputs(&session, &records[0], batch_size)?;
         for case in &records[1..] {
+            let retained = case["id"]
+                .as_str()
+                .is_some_and(|id| CONSTANT_DATE_RECORDS.contains(&id));
+            let expectation = if retained {
+                constant_date_expectation(case, &records[0])?
+            } else {
+                case.clone()
+            };
             let observation = observe(&session, case).await;
-            let differing = differing_parts(case, &observation)?;
+            let differing = differing_parts(&expectation, &observation)?;
             if !differing.is_empty() {
                 differences.push(json!({
                     "id": case["id"], "timezone": case["timezone"], "ansi": case["ansi"],
                     "batch": batch_size, "differing": differing,
-                    "expected": case["expected"],
-                    "schema_stages": case["schema_stages"],
+                    "expected": expectation["expected"],
+                    "schema_stages": expectation["schema_stages"],
                     "observed": observation,
                 }));
             }
