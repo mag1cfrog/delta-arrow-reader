@@ -3,9 +3,10 @@
 Records analyzed, optimized and executed schemas, typed internal-row values and failing
 stages, with the innermost Java exception of a failure, for `-` and TRY_SUBTRACT of a DATE
 and a TIMESTAMP_NTZ in both orders. Spark casts the DATE to TIMESTAMP_NTZ at its midnight and
-returns the DAY TO SECOND interval between the wall-clock times. Inputs are a registered table
-of TIMESTAMP_NTZ and DATE values and literals, including NULLs, years 1 and 9999, a time a
-Los Angeles DST change skips, and DATE values whose midnight is beyond BIGINT microseconds.
+returns the DAY TO SECOND interval between the wall-clock times. Inputs are registered tables
+of nullable and NOT NULL TIMESTAMP_NTZ and DATE values and literals, including NULLs, years 1
+and 9999, a time a Los Angeles DST change skips, and DATE values whose midnight is beyond
+BIGINT microseconds, as literals, columns, projections, subqueries and conditional branches.
 Every query runs in both ANSI modes in UTC and America/Los_Angeles. Run from the crate root in
 the reference environment described in README.md; the output path must not exist.
 """
@@ -34,6 +35,12 @@ ROWS = [
 ]
 
 
+# NOT NULL TIMESTAMP_NTZ values.
+REQUIRED = ["2024-03-10 02:30:00", "9999-12-31 23:59:59.999999", "0001-01-01 00:00:00"]
+
+FAR_DATE = "date_from_unix_date(2147483647)"
+
+
 def micros(text):
     value = datetime.fromisoformat(text).replace(tzinfo=timezone.utc)
     delta = value - datetime(1970, 1, 1, tzinfo=timezone.utc)
@@ -52,7 +59,12 @@ INPUTS = [{
         {"name": "d", "type": "date", "nullable": True, "metadata": {}}]},
     "rows": [[str(key), None if local is None else str(micros(local)),
               None if day is None else str(days(day))]
-             for key, (local, day) in enumerate(ROWS)]}]
+             for key, (local, day) in enumerate(ROWS)]}, {
+    "name": "required",
+    "schema": {"type": "struct", "fields": [
+        {"name": "k", "type": "integer", "nullable": False, "metadata": {}},
+        {"name": "l", "type": "timestamp_ntz", "nullable": False, "metadata": {}}]},
+    "rows": [[str(key), str(micros(local))] for key, local in enumerate(REQUIRED)]}]
 
 COLUMNS = [
     ("timestamp_ntz_minus_date", "l - d"),
@@ -88,10 +100,38 @@ def definitions():
         yield f"column_{name}", f"SELECT k, {expression} AS r FROM inputs"
     for name, expression in LITERALS:
         yield f"literal_{name}", f"SELECT {expression} AS r"
-    yield ("column_far_date",
-           "SELECT k, l - date_from_unix_date(2147483647) AS r FROM inputs WHERE k = 0")
-    yield ("column_try_far_date",
-           "SELECT k, try_subtract(l, date_from_unix_date(2147483647)) AS r FROM inputs")
+    yield "column_far_date", f"SELECT k, l - {FAR_DATE} AS r FROM inputs WHERE k = 0"
+    yield "column_try_far_date", f"SELECT k, try_subtract(l, {FAR_DATE}) AS r FROM inputs"
+    # A NOT NULL TIMESTAMP_NTZ beside a DATE literal: nullable when analyzed, not once folded.
+    for name, expression in [("timestamp_ntz_minus_date_literal", "l - DATE '2024-03-10'"),
+                             ("try_timestamp_ntz_minus_date_literal",
+                              "try_subtract(l, DATE '2024-03-10')"),
+                             ("date_literal_minus_timestamp_ntz", "DATE '2024-03-11' - l")]:
+        yield f"required_{name}", f"SELECT k, {expression} AS r FROM required"
+    # TRY_SUBTRACT with a constant overflowing DATE in conditional branches.
+    for name, expression in [
+            ("case_try_far_date", f"CASE WHEN k >= 0 THEN try_subtract(l, {FAR_DATE}) END"),
+            ("case_true_try_far_date", f"CASE WHEN true THEN try_subtract(l, {FAR_DATE}) END"),
+            ("coalesce_try_far_date", f"coalesce(try_subtract(l, {FAR_DATE}), l - d)"),
+            ("if_try_far_date", f"if(k >= 0, try_subtract(l, {FAR_DATE}), NULL)")]:
+        yield f"column_{name}", f"SELECT k, {expression} AS r FROM inputs"
+    # Overflowing DATE values from a column.
+    yield ("column_far_date_column",
+           "SELECT k, l - date_from_unix_date(2147483647 - k) AS r FROM inputs")
+    yield ("column_try_far_date_column",
+           "SELECT k, try_subtract(l, date_from_unix_date(2147483647 - k)) AS r FROM inputs")
+    # Constants behind a projection, a CTE or a subquery.
+    yield ("column_projected_try_far_date",
+           "SELECT k, try_subtract(l, fd) AS r "
+           f"FROM (SELECT k, l, {FAR_DATE} AS fd FROM inputs)")
+    yield ("column_cte_try_far_date",
+           f"WITH c AS (SELECT k, l, {FAR_DATE} AS fd FROM inputs) "
+           "SELECT k, try_subtract(l, fd) AS r FROM c")
+    yield ("column_scalar_subquery_try_far_date",
+           f"SELECT k, try_subtract(l, (SELECT {FAR_DATE})) AS r FROM inputs")
+    yield ("literal_subquery_timestamp_ntz_try_far_date",
+           f"SELECT try_subtract(n, {FAR_DATE}) AS r "
+           "FROM (SELECT TIMESTAMP_NTZ '2024-01-01 00:00:00' AS n)")
 
 
 def python_value(value, kind):
