@@ -138,11 +138,13 @@ impl ScalarUDFImpl for SparkMakeYmInterval {
                 arg_types.len(),
             ));
         }
+        // Spark casts any number or STRING to INT and rejects other types.
         for arg_type in arg_types {
             let native: NativeType = arg_type.into();
-            if !(native.is_integer() || matches!(native, NativeType::String | NativeType::Null)) {
+            if !(native.is_numeric() || matches!(native, NativeType::String | NativeType::Null)) {
                 return plan_err!(
-                    "The arguments of Spark `make_ym_interval` must be integer or string or null"
+                    "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] The arguments of Spark \
+                     `make_ym_interval` must be numbers, strings or NULL"
                 );
             }
         }
