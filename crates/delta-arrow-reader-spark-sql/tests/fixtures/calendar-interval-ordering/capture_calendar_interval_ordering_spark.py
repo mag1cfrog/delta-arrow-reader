@@ -281,8 +281,16 @@ QUERIES += [
      f"SELECT k, named_struct('a', named_struct('x', 1, 'x', true), 'i', {CALENDAR}) = "
      f"named_struct('a', named_struct('x', 1L, 'x', false), 'i', {CALENDAR}) AS r FROM required"),
     ("field_reordered_names_struct_equal",
-     f"SELECT k, named_struct('x', 1, 'y', true, 'i', {CALENDAR}) = "
-     f"named_struct('y', IF(k > 5, NULL, 2), 'x', false, 'i', {CALENDAR}) AS r FROM required"),
+     f"SELECT k, named_struct('a', named_struct('x', 1, 'y', true), 'i', {CALENDAR}) = "
+     f"named_struct('a', named_struct('y', IF(k > 5, NULL, 2), 'x', false), 'i', {CALENDAR}) "
+     "AS r FROM required"),
+    ("field_map_duplicate_names_struct_equal",
+     f"SELECT k, named_struct('a', map('k', named_struct('x', 1, 'x', true)), 'i', {CALENDAR}) = "
+     f"named_struct('a', map('k', named_struct('x', 1L, 'x', false)), 'i', {CALENDAR}) AS r "
+     "FROM required"),
+    ("field_renamed_widened_struct_equal",
+     f"SELECT k, named_struct('a', named_struct('x', 1), 'i', {CALENDAR}) = "
+     f"named_struct('a', named_struct('y', 1L), 'i', {CALENDAR}) AS r FROM required"),
     ("field_interval_names_struct_equal",
      f"SELECT k, named_struct('i', {CALENDAR}) = named_struct('j', {CALENDAR}) AS r "
      "FROM required"),
