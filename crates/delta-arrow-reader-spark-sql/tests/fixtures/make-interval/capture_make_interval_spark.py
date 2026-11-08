@@ -5,8 +5,8 @@ stages, with the innermost Java exception of a failure, for MAKE_INTERVAL with l
 column and NULL arguments, every argument count, fractional and negative values, values
 that overflow its months or days or exceed Arrow's nanoseconds, TINYINT, SMALLINT, BIGINT,
 DECIMAL, FLOAT, DOUBLE, STRING, BOOLEAN and DATE arguments, NULL arguments before and after
-failing ones, and for MAKE_INTERVAL in a TIMESTAMP subtraction, TRY_ADD, TRY_SUBTRACT and an
-unreached CASE branch.
+failing ones, and for MAKE_INTERVAL in a TIMESTAMP subtraction, TRY_ADD, TRY_SUBTRACT,
+TRY_MULTIPLY, TRY_DIVIDE and an unreached CASE branch.
 Every query runs in both ANSI modes in UTC and America/Los_Angeles. Run from the crate root in
 the reference environment described in README.md; the output path must not exist.
 """
@@ -121,6 +121,15 @@ COLUMNS = [
      "try_add(TIMESTAMP '2024-01-01 00:00:00', make_interval(0, 0, 0, 0, b))", "others", "true"),
     ("try_add_constant_overflow", "try_add(timestamp_seconds(k), make_interval(178956971))",
      "required", "true"),
+    ("try_subtract_constant_overflow",
+     "try_subtract(timestamp_seconds(k), make_interval(178956971))", "required", "true"),
+    ("try_multiply", "try_multiply(make_interval(y, mo, 0, d), 2)", "inputs", "true"),
+    ("try_divide", "try_divide(make_interval(y, mo, 0, d), 2)", "inputs", "true"),
+    # Spark evaluates TRY arithmetic over two numbers in its TRY mode, without `TryEval`.
+    ("try_add_numeric_operands", "try_add(k, size(array(make_interval(y, mo, w, d, h, mi, s))))",
+     "inputs", "k = 3"),
+    ("try_add_hours_beyond_nanoseconds",
+     "try_add(TIMESTAMP '2024-01-01 00:00:00', make_interval(0, 0, 0, 0, h))", "others", "k = 1"),
     ("case_overflow_without_rows",
      "CASE WHEN k >= 0 THEN make_interval(0, 0, 0, d) ELSE make_interval(178956971) END",
      "required", "k < 0"),
@@ -183,6 +192,10 @@ LITERALS = [
     ("try_subtract_overflow",
      "try_subtract(TIMESTAMP '2024-01-01 00:00:00', make_interval(178956971))"),
     ("try_add_invalid_string", "try_add(TIMESTAMP '2024-01-01 00:00:00', make_interval('x'))"),
+    ("try_multiply_overflow", "try_multiply(make_interval(178956971), 2)"),
+    ("try_divide_overflow", "try_divide(make_interval(178956971), 2)"),
+    ("try_add_hours_beyond_nanoseconds",
+     "try_add(TIMESTAMP '2024-01-01 00:00:00', make_interval(0, 0, 0, 0, 3000000))"),
 ]
 
 
