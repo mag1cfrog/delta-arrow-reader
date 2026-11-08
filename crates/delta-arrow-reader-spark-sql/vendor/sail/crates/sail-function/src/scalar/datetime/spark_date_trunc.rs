@@ -1,11 +1,7 @@
-use std::str::FromStr;
 use std::sync::Arc;
 
-use chrono::{
-    DateTime, FixedOffset, LocalResult, NaiveDateTime, Offset, TimeDelta, TimeZone, Timelike,
-};
+use chrono::{DateTime, LocalResult, Offset, TimeDelta, TimeZone, Timelike};
 use chrono_tz::{GapInfo, Tz};
-use datafusion::arrow::array::timezone::Tz as ArrowTz;
 use datafusion::arrow::array::types::TimestampMicrosecondType;
 use datafusion::arrow::array::{AsArray, TimestampMicrosecondArray};
 use datafusion::arrow::datatypes::{DataType, FieldRef, TimeUnit};
@@ -16,7 +12,7 @@ use datafusion_expr::{
 };
 use datafusion_functions::datetime::date_trunc::DateTruncFunc;
 
-use crate::scalar::datetime::local_time::local_micros;
+use crate::scalar::datetime::local_time::{TimestampZone, ZoneKind, local_micros};
 
 const MICROS_PER_MINUTE: i128 = 60_000_000;
 
@@ -123,43 +119,6 @@ fn truncate_to_local_minutes(timestamps: &ColumnarValue, zone: &Arc<str>) -> Res
             Ok(ColumnarValue::Array(Arc::new(truncated)))
         }
         other => internal_err!("date_trunc expected a TIMESTAMP, got {}", other.data_type()),
-    }
-}
-
-/// The zone a TIMESTAMP's type names, as Spark reads it.
-struct TimestampZone {
-    /// The zone as Arrow reads it, for instants beyond the date library's years.
-    arrow: ArrowTz,
-    kind: ZoneKind,
-}
-
-enum ZoneKind {
-    /// A region whose offset changes, with or without DST.
-    Region(Tz),
-    Fixed(FixedOffset),
-}
-
-impl TimestampZone {
-    /// The zone `zone` names, accepting exactly what Arrow accepts. Java maps the legacy IDs
-    /// `EST`, `MST` and `HST` to fixed offsets, where the date library names regions with
-    /// local mean time (#1029).
-    fn parse(zone: &str) -> Option<Self> {
-        let zone = match zone {
-            "EST" => "-05:00",
-            "MST" => "-07:00",
-            "HST" => "-10:00",
-            other => other,
-        };
-        let arrow = ArrowTz::from_str(zone).ok()?;
-        let kind = match Tz::from_str(zone) {
-            Ok(region) => ZoneKind::Region(region),
-            Err(_) => ZoneKind::Fixed(
-                arrow
-                    .offset_from_utc_datetime(&NaiveDateTime::default())
-                    .fix(),
-            ),
-        };
-        Some(Self { arrow, kind })
     }
 }
 

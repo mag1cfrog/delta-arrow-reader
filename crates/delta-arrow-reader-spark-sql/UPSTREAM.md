@@ -487,6 +487,25 @@ beyond Chrono's years take offsets from a nearer 400-year cycle. Coarser units s
 DataFusion's local truncation, within the nanosecond range (#1087). The
 [local truncation references](tests/fixtures/local-truncation/README.md) record the checks.
 
+TIMESTAMP plus or minus a DAY TO SECOND, YEAR TO MONTH or calendar interval, TIMESTAMPADD,
+DATEADD and three-argument DATE_ADD, and TIMESTAMP subtraction work on local date-times in
+the TIMESTAMP's zone, like Java's `ZonedDateTime` in Spark's `TimestampAddInterval`,
+`TimestampAddYMInterval`, `timestampAdd` and `SubtractTimestamps`. Months and whole days
+move the local date-time: a repeated local time keeps the offset it had, and a skipped one
+moves forward by the skipped interval. The rest of a DAY TO SECOND interval, and
+TIMESTAMPADD units up to HOUR, move the instant. Arrow added elapsed time, and failed where
+months reached a skipped or repeated local time. Subtraction gives the difference of the
+two local date-times, reading a DATE or TIMESTAMP_NTZ operand in the session zone first,
+where DataFusion returned a nanosecond duration. TIMESTAMPADD adds a BIGINT quantity
+exactly, keeps a TIMESTAMP_NTZ in UTC, reads a DATE or STRING in the session zone, and fails
+with `DATETIME_OVERFLOW` where Spark does. Other results beyond BIGINT fail with Java's
+`long overflow`. STRING plus a DAY TO SECOND interval and SEQUENCE end points use the same
+arithmetic. Local date-times beyond Chrono's years take offsets from a nearer 400-year cycle
+(without DST after 2099, #1052). TIMESTAMP_NTZ intervals, DATE arithmetic (#952) and native
+DataFusion SQL are unchanged. The
+[local day arithmetic references](tests/fixtures/local-day-arithmetic/README.md) record the
+checks.
+
 WEEKDAY numbers Monday 0 through Sunday 6, where it returned -1 for Sunday. WEEKDAY and
 DAYOFWEEK cast a TIMESTAMP_NTZ or NULL argument to DATE like Spark, and convert a STRING with
 Spark's STRING-to-DATE rules. Spaces, short months and days and years outside Arrow's
@@ -1165,7 +1184,8 @@ folding, during optimization. A scalar UDF can return `true` from
 `propagates_constant_folding_errors` (default `false`) to fail during optimization, as
 literal CASTs already do. A call inside a short-circuiting expression other than AND and
 OR, such as CASE or COALESCE, still defers its error, and so does an expression over a lambda
-variable, which has no value to fold. `AliasedScalarUDFImpl` forwards the choice. TIMESTAMPDIFF and the TIMESTAMP to TIMESTAMP_NTZ conversion opt in.
+variable, which has no value to fold. `AliasedScalarUDFImpl` forwards the choice. TIMESTAMPDIFF, TIMESTAMPADD, TIMESTAMP
+interval arithmetic and subtraction, and the TIMESTAMP to TIMESTAMP_NTZ conversion opt in.
 
 Strict DATE and TIMESTAMP parser calls, including TIMESTAMP_NTZ mode, also use
 this hook. Their existing reachability check runs before folding, preserving
