@@ -657,7 +657,7 @@ impl PhysicalExpr for ScalarFunctionExpr {
     fn evaluate_selected_rows_until_error(
         &self,
         batch: &RecordBatch,
-        selection: &arrow::array::BooleanArray,
+        selection: &BooleanArray,
     ) -> Result<EvaluatedRowPrefix> {
         datafusion_physical_expr_common::physical_expr::evaluate_selected_rows_until_error(
             self, batch, selection,

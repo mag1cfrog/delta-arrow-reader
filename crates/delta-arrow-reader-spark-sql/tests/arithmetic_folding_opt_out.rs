@@ -146,33 +146,41 @@ impl ScalarUDFImpl for CountedIdentity {
     }
 }
 
-// A value-only higher-order identity is valid under the SDK's Any(1) signature.
+// Value-only higher-order identities exercise NoFold and signature-Volatile target permissions.
 #[derive(Debug)]
-struct NoFoldHigherOrderIdentity {
+struct HigherOrderIdentity {
+    volatile: bool,
     error_if_invoked: bool,
     calls: Arc<AtomicUsize>,
 }
 
-impl PartialEq for NoFoldHigherOrderIdentity {
+impl PartialEq for HigherOrderIdentity {
     fn eq(&self, other: &Self) -> bool {
-        self.error_if_invoked == other.error_if_invoked
+        self.volatile == other.volatile && self.error_if_invoked == other.error_if_invoked
     }
 }
-impl Eq for NoFoldHigherOrderIdentity {}
-impl Hash for NoFoldHigherOrderIdentity {
+impl Eq for HigherOrderIdentity {}
+impl Hash for HigherOrderIdentity {
     fn hash<H: Hasher>(&self, state: &mut H) {
+        self.volatile.hash(state);
         self.error_if_invoked.hash(state);
     }
 }
 
-impl HigherOrderUDFImpl for NoFoldHigherOrderIdentity {
+impl HigherOrderUDFImpl for HigherOrderIdentity {
     fn name(&self) -> &str {
-        "higher_no_fold_identity"
+        if self.volatile {
+            "higher_volatile_identity"
+        } else {
+            "higher_no_fold_identity"
+        }
     }
     fn signature(&self) -> &HigherOrderSignature {
-        static SIGNATURE: LazyLock<HigherOrderSignature> =
+        static IMMUTABLE: LazyLock<HigherOrderSignature> =
             LazyLock::new(|| HigherOrderSignature::any(1, Volatility::Immutable));
-        &SIGNATURE
+        static VOLATILE: LazyLock<HigherOrderSignature> =
+            LazyLock::new(|| HigherOrderSignature::any(1, Volatility::Volatile));
+        if self.volatile { &VOLATILE } else { &IMMUTABLE }
     }
     fn lambda_parameters(
         &self,
@@ -182,7 +190,8 @@ impl HigherOrderUDFImpl for NoFoldHigherOrderIdentity {
         Ok(LambdaParametersProgress::Complete(vec![]))
     }
     fn supports_constant_folding(&self) -> bool {
-        false
+        // Exercise the signature veto independently from the NoFold flag.
+        self.volatile
     }
     fn return_field_from_args(&self, arguments: HigherOrderReturnFieldArgs) -> Result<FieldRef> {
         match arguments.arg_fields {
@@ -204,6 +213,7 @@ impl HigherOrderUDFImpl for NoFoldHigherOrderIdentity {
 
 #[derive(Debug)]
 struct ScalarToHigherOrderRewriter {
+    name: &'static str,
     target: Arc<HigherOrderUDF>,
     error_if_invoked: bool,
     calls: Arc<AtomicUsize>,
@@ -211,12 +221,15 @@ struct ScalarToHigherOrderRewriter {
 
 impl PartialEq for ScalarToHigherOrderRewriter {
     fn eq(&self, other: &Self) -> bool {
-        self.target == other.target && self.error_if_invoked == other.error_if_invoked
+        self.name == other.name
+            && self.target == other.target
+            && self.error_if_invoked == other.error_if_invoked
     }
 }
 impl Eq for ScalarToHigherOrderRewriter {}
 impl Hash for ScalarToHigherOrderRewriter {
     fn hash<H: Hasher>(&self, state: &mut H) {
+        self.name.hash(state);
         self.target.hash(state);
         self.error_if_invoked.hash(state);
     }
@@ -224,7 +237,7 @@ impl Hash for ScalarToHigherOrderRewriter {
 
 impl ScalarUDFImpl for ScalarToHigherOrderRewriter {
     fn name(&self) -> &str {
-        "rewrite_to_higher_no_fold"
+        self.name
     }
     fn signature(&self) -> &Signature {
         static SIGNATURE: LazyLock<Signature> =
@@ -257,6 +270,136 @@ impl ScalarUDFImpl for ScalarToHigherOrderRewriter {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum NullPolicy {
+    NullIfFirstArgumentNull,
+    FirstNonNullArgument,
+}
+
+#[derive(Debug)]
+struct NullSelectionScalarFunction {
+    policy: NullPolicy,
+    argument_count: usize,
+    error_if_invoked: bool,
+    calls: Arc<AtomicUsize>,
+}
+impl PartialEq for NullSelectionScalarFunction {
+    fn eq(&self, other: &Self) -> bool {
+        self.policy == other.policy
+            && self.argument_count == other.argument_count
+            && self.error_if_invoked == other.error_if_invoked
+    }
+}
+impl Eq for NullSelectionScalarFunction {}
+impl Hash for NullSelectionScalarFunction {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.policy.hash(state);
+        self.argument_count.hash(state);
+        self.error_if_invoked.hash(state);
+    }
+}
+impl ScalarUDFImpl for NullSelectionScalarFunction {
+    fn name(&self) -> &str {
+        match (self.policy, self.argument_count) {
+            (NullPolicy::NullIfFirstArgumentNull, 2) => "opaque_null_first",
+            (NullPolicy::NullIfFirstArgumentNull, 3) => "opaque_null_first_three_arguments",
+            (NullPolicy::FirstNonNullArgument, 2) => "opaque_first_non_null",
+            (NullPolicy::FirstNonNullArgument, 3) => "opaque_first_non_null_three_arguments",
+            _ => unreachable!("fixture uses only two or three arguments"),
+        }
+    }
+    fn signature(&self) -> &Signature {
+        static TWO: LazyLock<Signature> =
+            LazyLock::new(|| Signature::exact(vec![DataType::Float64; 2], Volatility::Immutable));
+        static THREE: LazyLock<Signature> =
+            LazyLock::new(|| Signature::exact(vec![DataType::Float64; 3], Volatility::Immutable));
+        match self.argument_count {
+            2 => &TWO,
+            3 => &THREE,
+            _ => unreachable!("fixture uses only two or three arguments"),
+        }
+    }
+    fn return_type(&self, _: &[DataType]) -> Result<DataType> {
+        Ok(DataType::Float64)
+    }
+    fn supports_constant_folding(&self) -> bool {
+        false
+    }
+    fn short_circuits(&self) -> bool {
+        true
+    }
+    fn conditional_arguments<'a>(
+        &self,
+        args: &'a [Expr],
+    ) -> Option<(Vec<&'a Expr>, Vec<&'a Expr>)> {
+        Some((vec![&args[0]], args[1..].iter().collect()))
+    }
+    fn short_circuits_on_null_first_arg(&self) -> bool {
+        self.policy == NullPolicy::NullIfFirstArgumentNull
+    }
+    fn returns_first_non_null_argument(&self) -> bool {
+        self.policy == NullPolicy::FirstNonNullArgument
+    }
+    fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        if self.error_if_invoked {
+            return exec_err!("folding_opt_out_invoked");
+        }
+        // Native first-non-NULL selection bypasses the owner kernel.
+        Ok(args.args[0].clone())
+    }
+}
+
+// Multiplication is NULL-propagating for both arguments, including skipped argument values.
+#[derive(Debug)]
+struct NullPropagatingProduct {
+    calls: Arc<AtomicUsize>,
+}
+impl PartialEq for NullPropagatingProduct {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+impl Eq for NullPropagatingProduct {}
+impl Hash for NullPropagatingProduct {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        "null_propagating_product".hash(state);
+    }
+}
+impl ScalarUDFImpl for NullPropagatingProduct {
+    fn name(&self) -> &str {
+        "null_propagating_product"
+    }
+    fn signature(&self) -> &Signature {
+        static SIGNATURE: LazyLock<Signature> =
+            LazyLock::new(|| Signature::exact(vec![DataType::Float64; 2], Volatility::Immutable));
+        &SIGNATURE
+    }
+    fn return_type(&self, _: &[DataType]) -> Result<DataType> {
+        Ok(DataType::Float64)
+    }
+    fn supports_constant_folding(&self) -> bool {
+        false
+    }
+    fn short_circuits(&self) -> bool {
+        true
+    }
+    fn short_circuits_on_any_null_argument(&self) -> bool {
+        true
+    }
+    fn conditional_arguments<'a>(&self, _: &'a [Expr]) -> Option<(Vec<&'a Expr>, Vec<&'a Expr>)> {
+        None
+    }
+    fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        let arrays = ColumnarValue::values_to_arrays(&args.args)?;
+        Ok(ColumnarValue::Array(arrow::compute::kernels::numeric::mul(
+            &arrays[0].as_ref(),
+            &arrays[1].as_ref(),
+        )?))
+    }
+}
+
 fn session(spark: bool, error_if_invoked: bool) -> (SessionContext, InvocationCounters) {
     let builder = SessionStateBuilder::new()
         .with_default_features()
@@ -271,15 +414,43 @@ fn session(spark: bool, error_if_invoked: bool) -> (SessionContext, InvocationCo
         builder.build()
     });
     let counters = InvocationCounters::default();
-    // The named counter roles are opaque=NoFold higher-order target, permitted=scalar rewriter.
-    let higher_order_target = Arc::new(HigherOrderUDF::new_from_impl(NoFoldHigherOrderIdentity {
+    // The named counters track runtime-only targets and the permitted scalar rewriter.
+    let higher_order_target = Arc::new(HigherOrderUDF::new_from_impl(HigherOrderIdentity {
+        volatile: false,
         error_if_invoked,
         calls: Arc::clone(&counters.opaque),
     }));
     session.register_udf(ScalarUDF::from(ScalarToHigherOrderRewriter {
+        name: "rewrite_to_higher_no_fold",
         target: higher_order_target,
         error_if_invoked,
         calls: Arc::clone(&counters.permitted),
+    }));
+    session.register_udf(ScalarUDF::from(ScalarToHigherOrderRewriter {
+        name: "rewrite_to_volatile_higher",
+        target: Arc::new(HigherOrderUDF::new_from_impl(HigherOrderIdentity {
+            volatile: true,
+            error_if_invoked,
+            calls: Arc::clone(&counters.opaque),
+        })),
+        error_if_invoked,
+        calls: Arc::clone(&counters.permitted),
+    }));
+    for (policy, argument_count) in [
+        (NullPolicy::NullIfFirstArgumentNull, 2),
+        (NullPolicy::NullIfFirstArgumentNull, 3),
+        (NullPolicy::FirstNonNullArgument, 2),
+        (NullPolicy::FirstNonNullArgument, 3),
+    ] {
+        session.register_udf(ScalarUDF::from(NullSelectionScalarFunction {
+            policy,
+            argument_count,
+            error_if_invoked,
+            calls: Arc::clone(&counters.opaque),
+        }));
+    }
+    session.register_udf(ScalarUDF::from(NullPropagatingProduct {
+        calls: Arc::clone(&counters.opaque),
     }));
     let retained_identity = Arc::new(
         ScalarUDF::from(CountedIdentity {
@@ -773,6 +944,69 @@ async fn required_children_and_siblings_keep_the_first_error_without_invoking_op
         Field::new("required", DataType::Int64, true),
     ];
     for (sql, expected_fields, expected_root) in [
+        (
+            "SELECT null_propagating_product(a,1/d) AS r FROM VALUES(CAST(NULL AS DOUBLE),0),(CAST(7 AS DOUBLE),0) AS t(a,d)",
+            vec![Field::new("r", DataType::Float64, true)],
+            "Arrow error: Divide by zero error",
+        ),
+        (
+            "SELECT opaque_null_first(a,1/d) AS r FROM VALUES(CAST(NULL AS DOUBLE),0),(CAST(7 AS DOUBLE),0) AS t(a,d)",
+            vec![Field::new("r", DataType::Float64, true)],
+            "Arrow error: Divide by zero error",
+        ),
+        (
+            "SELECT opaque_first_non_null(a,1/d) AS r FROM VALUES(CAST(7 AS DOUBLE),0),(CAST(NULL AS DOUBLE),0) AS t(a,d)",
+            vec![Field::new("r", DataType::Float64, true)],
+            "Arrow error: Divide by zero error",
+        ),
+        (
+            "SELECT opaque_null_first(a,index_callback(1/d)) AS r FROM VALUES(CAST(NULL AS DOUBLE),0),(CAST(7 AS DOUBLE),0) AS t(a,d)",
+            vec![Field::new("r", DataType::Float64, true)],
+            "Arrow error: Divide by zero error",
+        ),
+        (
+            "SELECT opaque_first_non_null(a,index_callback(1/d)) AS r FROM VALUES(CAST(7 AS DOUBLE),0),(CAST(NULL AS DOUBLE),0) AS t(a,d)",
+            vec![Field::new("r", DataType::Float64, true)],
+            "Arrow error: Divide by zero error",
+        ),
+        (
+            "SELECT opaque_null_first_three_arguments(a,index_callback(v),1/d) AS r FROM VALUES(CAST(NULL AS DOUBLE),CAST(NULL AS DOUBLE),0),(CAST(7 AS DOUBLE),CAST(NULL AS DOUBLE),0) AS t(a,v,d)",
+            vec![Field::new("r", DataType::Float64, true)],
+            "Arrow error: Divide by zero error",
+        ),
+        (
+            "SELECT opaque_null_first(CAST(7 AS DOUBLE),1/0) AS r FROM (SELECT COUNT(*) AS c FROM VALUES(1) AS t(k)) AS q",
+            vec![Field::new("r", DataType::Float64, true)],
+            "Arrow error: Divide by zero error",
+        ),
+        (
+            "SELECT opaque_first_non_null(CAST(NULL AS DOUBLE),1/0) AS r FROM (SELECT COUNT(*) AS c FROM VALUES(1) AS t(k)) AS q",
+            vec![Field::new("r", DataType::Float64, true)],
+            "Arrow error: Divide by zero error",
+        ),
+        (
+            "SELECT SLICE(a, 1 DIV d, CAST(index_callback(n) AS BIGINT)) AS r FROM VALUES(CAST(NULL AS ARRAY<INT>),0,1),(ARRAY(7),0,1) AS t(a,d,n)",
+            vec![Field::new(
+                "r",
+                DataType::List(Arc::new(Field::new_list_field(DataType::Int32, true))),
+                true,
+            )],
+            "Arrow error: Divide by zero error",
+        ),
+        (
+            "SELECT SLICE(a, 1 DIV d, CAST(index_callback(1 DIV n) AS BIGINT)) AS r FROM VALUES(CAST(NULL AS ARRAY<INT>),0,0),(ARRAY(7),1,0) AS t(a,d,n)",
+            vec![Field::new(
+                "r",
+                DataType::List(Arc::new(Field::new_list_field(DataType::Int32, true))),
+                true,
+            )],
+            "Arrow error: Divide by zero error",
+        ),
+        (
+            "SELECT CASE WHEN rewrite_to_higher_no_fold(v/0)>0 THEN CAST(7 AS DOUBLE) ELSE CAST(8 AS DOUBLE) END AS r FROM VALUES(CAST(1 AS DOUBLE)) AS t(v)",
+            vec![Field::new("r", DataType::Float64, false)],
+            "Arrow error: Divide by zero error",
+        ),
         (
             "SELECT CASE WHEN (1 DIV d)=1 THEN CAST(7 AS DOUBLE) WHEN retain_constant(v)>0 THEN CAST(8 AS DOUBLE) ELSE CAST(9 AS DOUBLE) END AS r FROM VALUES(0,CAST(1 AS DOUBLE)) AS t(d,v)",
             vec![Field::new("r", DataType::Float64, false)],
@@ -1347,20 +1581,23 @@ async fn scalar_rewrite_to_higher_order_preserves_target_folding_permission() ->
         for spark in [true, false] {
             for error_if_invoked in [false, true] {
                 for (argument, spark_analyzed_nullable) in [("v/1", true), ("v", false)] {
-                    let mut case = scalar_case(
-                        format!(
-                            "SELECT rewrite_to_higher_no_fold({argument}) AS r FROM VALUES(CAST(1 AS DOUBLE)) AS t(v)"
-                        ),
-                        DataType::Float64,
-                        vec![vec![ScalarValue::Float64(Some(1.0))]],
-                        1,
-                        0,
-                    );
-                    case.analyzed_fields[0] = case.analyzed_fields[0]
-                        .clone()
-                        .with_nullable(!spark || spark_analyzed_nullable);
-                    case.physical_fields[0] = case.physical_fields[0].clone().with_nullable(!spark);
-                    check_case(case, spark, ansi, error_if_invoked).await?;
+                    for function in ["rewrite_to_higher_no_fold", "rewrite_to_volatile_higher"] {
+                        let mut case = scalar_case(
+                            format!(
+                                "SELECT {function}({argument}) AS r FROM VALUES(CAST(1 AS DOUBLE)) AS t(v)"
+                            ),
+                            DataType::Float64,
+                            vec![vec![ScalarValue::Float64(Some(1.0))]],
+                            1,
+                            0,
+                        );
+                        case.analyzed_fields[0] = case.analyzed_fields[0]
+                            .clone()
+                            .with_nullable(!spark || spark_analyzed_nullable);
+                        case.physical_fields[0] =
+                            case.physical_fields[0].clone().with_nullable(!spark);
+                        check_case(case, spark, ansi, error_if_invoked).await?;
+                    }
                 }
             }
         }
@@ -1511,6 +1748,224 @@ async fn case_reachability_preserves_required_errors_and_opaque_execution() -> T
                     }
                 );
             }
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn higher_order_case_fields_do_not_evaluate_opaque_predicates() -> TestResult {
+    for ansi in [true, false] {
+        for spark in [true, false] {
+            for error_if_invoked in [false, true] {
+                check_case(
+                    scalar_case(
+                        "SELECT CASE WHEN rewrite_to_higher_no_fold(CAST(1 AS DOUBLE))>0 THEN CAST(NULL AS DOUBLE) ELSE CAST(7 AS DOUBLE) END AS r".into(),
+                        DataType::Float64,
+                        vec![vec![ScalarValue::Float64(None)]],
+                        1,
+                        0,
+                    ),
+                    spark,
+                    ansi,
+                    error_if_invoked,
+                )
+                .await?;
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn any_null_masks_survive_later_opaque_arguments() -> TestResult {
+    let list_type = DataType::List(Arc::new(Field::new_list_field(DataType::Int32, true)));
+    let null = ScalarValue::try_new_null(&list_type)?;
+    let seven = ScalarValue::List(ScalarValue::new_list(
+        &[ScalarValue::Int32(Some(7))],
+        &DataType::Int32,
+        true,
+    ));
+    for ansi in [true, false] {
+        for error_if_invoked in [false, true] {
+            for (sql, rows, calls) in [
+                (
+                    "SELECT SLICE(a, 1 DIV d, CAST(index_callback(n) AS BIGINT)) AS r FROM VALUES(CAST(NULL AS ARRAY<INT>),0,1) AS t(a,d,n)",
+                    vec![vec![null.clone()]],
+                    0,
+                ),
+                (
+                    "SELECT SLICE(a, 1 DIV d, CAST(index_callback(n) AS BIGINT)) AS r FROM VALUES(CAST(NULL AS ARRAY<INT>),0,1),(ARRAY(7),1,1) AS t(a,d,n)",
+                    vec![vec![null.clone()], vec![seven.clone()]],
+                    1,
+                ),
+                (
+                    "SELECT SLICE(a, 1 DIV d, CAST(index_callback(1 DIV n) AS BIGINT)) AS r FROM VALUES(CAST(NULL AS ARRAY<INT>),0,0),(ARRAY(7),1,1) AS t(a,d,n)",
+                    vec![vec![null.clone()], vec![seven.clone()]],
+                    1,
+                ),
+                (
+                    "SELECT SLICE(a, CAST(index_callback(s) AS BIGINT), 1 DIV d) AS r FROM VALUES(CAST(NULL AS ARRAY<INT>),1,0),(ARRAY(7),CAST(NULL AS INT),0) AS t(a,s,d)",
+                    vec![vec![null.clone()], vec![null.clone()]],
+                    1,
+                ),
+            ] {
+                check_case(
+                    scalar_case(sql.into(), list_type.clone(), rows, calls, 0),
+                    true,
+                    ansi,
+                    error_if_invoked,
+                )
+                .await?;
+            }
+            if !ansi {
+                for (sql, calls) in [
+                    (
+                        "SELECT SLICE(a, 1 DIV d, CAST(index_callback(n) AS BIGINT)) AS r FROM VALUES(CAST(NULL AS ARRAY<INT>),0,1),(ARRAY(7),0,1) AS t(a,d,n)",
+                        0,
+                    ),
+                    (
+                        "SELECT SLICE(a, 1 DIV d, CAST(index_callback(1 DIV n) AS BIGINT)) AS r FROM VALUES(CAST(NULL AS ARRAY<INT>),0,0),(ARRAY(7),1,0) AS t(a,d,n)",
+                        1,
+                    ),
+                ] {
+                    check_case(
+                        scalar_case(
+                            sql.into(),
+                            list_type.clone(),
+                            vec![vec![null.clone()], vec![null.clone()]],
+                            calls,
+                            0,
+                        ),
+                        true,
+                        ansi,
+                        error_if_invoked,
+                    )
+                    .await?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn null_choice_metadata_keeps_selected_rows_and_opaque_execution() -> TestResult {
+    let value = |v| vec![ScalarValue::Float64(v)];
+    for ansi in [true, false] {
+        for spark in [true, false] {
+            for error_if_invoked in [false, true] {
+                for (sql, rows, calls) in [
+                    (
+                        "SELECT opaque_null_first(a,1/d) AS r FROM VALUES(CAST(NULL AS DOUBLE),0),(CAST(7 AS DOUBLE),1) AS t(a,d)",
+                        vec![value(None), value(Some(7.0))],
+                        1,
+                    ),
+                    (
+                        "SELECT opaque_first_non_null(a,1/d) AS r FROM VALUES(CAST(7 AS DOUBLE),0),(CAST(NULL AS DOUBLE),1) AS t(a,d)",
+                        vec![value(Some(7.0)), value(Some(1.0))],
+                        0,
+                    ),
+                    (
+                        "SELECT opaque_null_first(a,1/d) AS r FROM VALUES(CAST(NULL AS DOUBLE),0),(CAST(NULL AS DOUBLE),0) AS t(a,d)",
+                        vec![value(None), value(None)],
+                        0,
+                    ),
+                    (
+                        "SELECT opaque_first_non_null(a,1/d) AS r FROM VALUES(CAST(7 AS DOUBLE),0),(CAST(8 AS DOUBLE),0) AS t(a,d)",
+                        vec![value(Some(7.0)), value(Some(8.0))],
+                        0,
+                    ),
+                    (
+                        "SELECT opaque_null_first_three_arguments(a,index_callback(v),1/d) AS r FROM VALUES(CAST(NULL AS DOUBLE),CAST(NULL AS DOUBLE),0),(CAST(NULL AS DOUBLE),CAST(NULL AS DOUBLE),0) AS t(a,v,d)",
+                        vec![value(None), value(None)],
+                        0,
+                    ),
+                    (
+                        "SELECT opaque_null_first_three_arguments(a,index_callback(v),1/d) AS r FROM VALUES(CAST(NULL AS DOUBLE),CAST(NULL AS DOUBLE),0),(CAST(7 AS DOUBLE),CAST(NULL AS DOUBLE),1) AS t(a,v,d)",
+                        vec![value(None), value(Some(7.0))],
+                        if error_if_invoked { 1 } else { 2 },
+                    ),
+                    (
+                        "SELECT opaque_first_non_null_three_arguments(a,index_callback(v),1/d) AS r FROM VALUES(CAST(NULL AS DOUBLE),CAST(1 AS DOUBLE),0) AS t(a,v,d)",
+                        vec![value(Some(1.0))],
+                        1,
+                    ),
+                ] {
+                    check_case(
+                        scalar_case(sql.into(), DataType::Float64, rows, calls, 0),
+                        spark,
+                        ansi,
+                        error_if_invoked,
+                    )
+                    .await?;
+                }
+                if !ansi && spark {
+                    for (sql, rows, calls) in [
+                        (
+                            "SELECT opaque_null_first(a,1/d) AS r FROM VALUES(CAST(NULL AS DOUBLE),0),(CAST(7 AS DOUBLE),0) AS t(a,d)",
+                            vec![value(None), value(Some(7.0))],
+                            1,
+                        ),
+                        (
+                            "SELECT opaque_first_non_null(a,1/d) AS r FROM VALUES(CAST(7 AS DOUBLE),0),(CAST(NULL AS DOUBLE),0) AS t(a,d)",
+                            vec![value(Some(7.0)), value(None)],
+                            0,
+                        ),
+                        (
+                            "SELECT opaque_null_first_three_arguments(a,index_callback(v),1/d) AS r FROM VALUES(CAST(NULL AS DOUBLE),CAST(NULL AS DOUBLE),0),(CAST(7 AS DOUBLE),CAST(NULL AS DOUBLE),0) AS t(a,v,d)",
+                            vec![value(None), value(Some(7.0))],
+                            if error_if_invoked { 1 } else { 2 },
+                        ),
+                    ] {
+                        check_case(
+                            scalar_case(sql.into(), DataType::Float64, rows, calls, 0),
+                            spark,
+                            ansi,
+                            error_if_invoked,
+                        )
+                        .await?;
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn any_null_row_masks_ignore_logical_short_circuit_declaration() -> TestResult {
+    for ansi in [true, false] {
+        for (sql, rows) in [
+            (
+                "SELECT null_propagating_product(a,1/d) AS r FROM VALUES(CAST(NULL AS DOUBLE),0),(CAST(NULL AS DOUBLE),0) AS t(a,d)",
+                vec![
+                    vec![ScalarValue::Float64(None)],
+                    vec![ScalarValue::Float64(None)],
+                ],
+            ),
+            (
+                "SELECT null_propagating_product(a,1/d) AS r FROM VALUES(CAST(NULL AS DOUBLE),0),(CAST(7 AS DOUBLE),1) AS t(a,d)",
+                vec![
+                    vec![ScalarValue::Float64(None)],
+                    vec![ScalarValue::Float64(Some(7.0))],
+                ],
+            ),
+        ] {
+            check_case(
+                scalar_case(sql.into(), DataType::Float64, rows, 1, 0),
+                true,
+                ansi,
+                false,
+            )
+            .await?;
+        }
+        if !ansi {
+            check_case(
+                scalar_case("SELECT null_propagating_product(a,1/d) AS r FROM VALUES(CAST(NULL AS DOUBLE),0),(CAST(7 AS DOUBLE),0) AS t(a,d)".into(), DataType::Float64,
+                    vec![vec![ScalarValue::Float64(None)], vec![ScalarValue::Float64(None)]], 1, 0),
+                true, ansi, false,
+            ).await?;
         }
     }
     Ok(())
