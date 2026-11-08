@@ -654,8 +654,9 @@ nullable. A STRING argument, also a dictionary-encoded one such as a Delta STRIN
 column, uses Spark's STRING-to-INT cast for the session's ANSI mode. It trims spaces, fails with
 `CAST_INVALID_INPUT` under ANSI or gives NULL, and is nullable in both modes, as Spark's cast is.
 It used Arrow's cast, which failed on spaces, malformed values and values beyond INT in both
-modes without Spark's condition. As in Spark, a NULL literal argument gives NULL before either
-argument is evaluated, and a NULL year skips the months' cast for its row. An overflow fails
+modes without Spark's condition. As in Spark, a NULL argument, as a literal, a cast of one or a
+NULL that optimization computes beside a column, gives NULL before either argument is evaluated,
+and a NULL year skips the months' cast for its row. An overflow fails
 with Spark's whole `INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION` message in both modes, while
 optimizing for a constant through [constant folding errors](#constant-folding-errors). It used
 to fail while collecting rows, and its message stopped after the first sentence. Retained:
@@ -664,7 +665,11 @@ to fail while collecting rows, and its message stopped after the first sentence.
   condition (#1165).
 - INT() and the other integer functions over a STRING use Arrow's cast, declared NOT NULL for a
   NOT NULL STRING, so MAKE_YM_INTERVAL over them is NOT NULL where Spark's is nullable (#1166).
-- TRY_ADD over an overflowing MAKE_YM_INTERVAL fails, where Spark gives NULL (#1151).
+- Under ANSI, a constant call with a malformed STRING beside a NULL that a constant expression
+  computes, such as `NULL + 1` or an explicit cast of a NULL STRING to INT, fails while
+  optimizing, where Spark gives NULL (#1157).
+- TRY_ADD, TRY_SUBTRACT, TRY_MULTIPLY and TRY_DIVIDE over an overflowing MAKE_YM_INTERVAL fail,
+  where Spark gives NULL (#1151).
 - Under ANSI, with failing years and months in different rows of one batch, the years' failure
   can be reported first (#1148).
 - Unaliased names keep the arguments as written where Spark adds the defaulted months (#749).

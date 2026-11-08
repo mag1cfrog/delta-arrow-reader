@@ -295,7 +295,6 @@ fn make_ym_interval(input: ScalarFunctionInput) -> PlanResult<Expr> {
         literal_value_without_evaluation(argument).is_some_and(|value| value.is_null())
     });
     let ansi_mode = input.function_context.plan_config.ansi_mode;
-    let mut bigint_argument = false;
     for (argument, data_type) in arguments.iter_mut().zip(argument_types) {
         // Spark has no dictionary encoding; Delta uses one for STRING partition columns.
         let data_type = match data_type {
@@ -306,7 +305,6 @@ fn make_ym_interval(input: ScalarFunctionInput) -> PlanResult<Expr> {
             data_type => data_type,
         };
         if data_type == DataType::Int64 {
-            bigint_argument = true;
             *argument = ScalarUDF::from(SparkCastNumericToInteger::try_new(
                 DataType::Int32,
                 ansi_mode,
@@ -322,8 +320,10 @@ fn make_ym_interval(input: ScalarFunctionInput) -> PlanResult<Expr> {
         }
     }
     let interval = function.call(arguments);
-    if bigint_argument && known_null {
-        // Keep the original call available for type admission before NULL pruning.
+    if known_null {
+        // Spark's NullPropagation gives NULL for a NULL argument, also one behind casts, before
+        // constants fold, so a failing cast of the other argument is discarded. Keep the original
+        // call available for type admission before NULL pruning.
         return Ok(when(lit(true), lit(ScalarValue::IntervalYearMonth(None))).otherwise(interval)?);
     }
     Ok(interval)

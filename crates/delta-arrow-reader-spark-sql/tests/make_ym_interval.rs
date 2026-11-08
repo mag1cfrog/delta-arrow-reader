@@ -41,7 +41,7 @@ fn make_ym_interval_references() -> TestResult<Vec<Value>> {
             |build| build.contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
         )
     );
-    assert_eq!(records.len() - 1, 276);
+    assert_eq!(records.len() - 1, 308);
     Ok(records)
 }
 
@@ -62,10 +62,14 @@ enum RetainedDifference {
     /// Over a dictionary-encoded column, Arrow's cast converts every dictionary value, so a
     /// malformed value fails even in rows the filter removed.
     IntFunctionCast,
-    /// #1151: TRY_ADD over an overflowing MAKE_YM_INTERVAL fails with its overflow, while
-    /// optimizing for a constant and while collecting rows otherwise, where Spark's `TryEval`
-    /// gives NULL.
+    /// #1151: TRY_ADD, TRY_SUBTRACT, TRY_MULTIPLY and TRY_DIVIDE over an overflowing
+    /// MAKE_YM_INTERVAL fail with its overflow, while optimizing for a constant and while
+    /// collecting rows otherwise, where Spark's `TryEval` gives NULL.
     TryArithmetic,
+    /// #1157: under ANSI, a constant call with a malformed STRING beside a NULL that a constant
+    /// expression computes, `NULL + 1` or an explicit STRING-to-INT cast of NULL, fails while
+    /// optimizing, where Spark's NullPropagation gives NULL.
+    ComputedNullBesideFailingConstant,
     /// #1148: under ANSI at batch size 32, DAR casts every row's years before the months, so a
     /// later row's malformed year is reported before an earlier row's malformed month. At batch
     /// size 1 DAR reports Spark's value.
@@ -88,9 +92,19 @@ const INT_FUNCTION_RECORD: &str = "column_required_int_function";
 const INT_FUNCTION_IS_NULL_RECORD: &str = "column_required_int_function_is_null";
 
 /// Records of the #1151 class and the stage at which DAR fails.
-const TRY_ARITHMETIC_RECORDS: [(&str, &str); 2] = [
+const TRY_ARITHMETIC_RECORDS: [(&str, &str); 6] = [
     ("column_required_try_add_overflow", "collect"),
     ("literal_try_add_overflow", "optimized"),
+    ("literal_try_subtract_overflow", "optimized"),
+    ("literal_try_multiply_overflow", "optimized"),
+    ("literal_try_divide_overflow", "optimized"),
+    ("literal_try_add_date_overflow", "optimized"),
+];
+
+/// The #1157 records under ANSI.
+const COMPUTED_NULL_RECORDS: [&str; 2] = [
+    "literal_string_malformed_computed_null_month",
+    "literal_string_malformed_cast_null_month",
 ];
 
 /// The #1148 record under ANSI: row 0 has a malformed month and row 3 a malformed year.
@@ -119,6 +133,8 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
         Some(RetainedDifference::TryArithmetic)
     } else if id == ROW_ORDER_RECORD && case["ansi"] == true {
         Some(RetainedDifference::ArgumentErrorRowOrder)
+    } else if COMPUTED_NULL_RECORDS.contains(&id) && case["ansi"] == true {
+        Some(RetainedDifference::ComputedNullBesideFailingConstant)
     } else {
         None
     }
@@ -229,6 +245,20 @@ fn current_expectation(
             current["expected"] = json!({"status": "error", "dar_message": OVERFLOW_MESSAGE});
             current["spark_error_phase"] = json!(phase);
         }
+        RetainedDifference::ComputedNullBesideFailingConstant => {
+            if case["expected"]["rows"] != json!([[null]]) {
+                return Err(format!("expected Spark's NULL: {case}").into());
+            }
+            let stages = current["schema_stages"]
+                .as_object_mut()
+                .ok_or("missing schema stages")?;
+            stages.remove("optimized");
+            stages.remove("executed");
+            current["expected"] = json!({"status": "error", "dar_message":
+                "[CAST_INVALID_INPUT]\ncaused by\nArrow error: Cast error: Cannot cast string \
+                 'x' to value of Int32 type"});
+            current["spark_error_phase"] = json!("optimized");
+        }
         RetainedDifference::ArgumentErrorRowOrder => {
             if !case["expected"]["java_message"]
                 .as_str()
@@ -255,6 +285,7 @@ fn spark_family(spark_type: &Value) -> TestResult<Value> {
         "long" => "int64",
         "string" => "string",
         "boolean" => "boolean",
+        "date" => "date32",
         "interval year to month" => "interval year to month",
         other => return Err(format!("unexpected Spark type {other}").into()),
     }))
@@ -266,6 +297,7 @@ fn dar_family(data_type: &DataType) -> Value {
         DataType::Int64 => "int64".to_owned(),
         DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => "string".to_owned(),
         DataType::Boolean => "boolean".to_owned(),
+        DataType::Date32 => "date32".to_owned(),
         DataType::Interval(IntervalUnit::YearMonth) => "interval year to month".to_owned(),
         other => format!("unexpected {other}"),
     })
@@ -389,10 +421,10 @@ fn optimize(session: &SessionContext, plan: &LogicalPlan) -> TestResult<LogicalP
     Ok(state.optimize(plan)?)
 }
 
-/// The failing value of an INT argument cast as DAR's cast error names it, from Spark's
+/// The text with which DAR's error for an INT argument cast names the failing value in Spark's
 /// message. The shared casts give Spark's condition over the cast's own cause, not Spark's text
 /// (#1147).
-fn cast_failure_value(condition: &str, message: &str) -> Option<String> {
+fn dar_cast_failure_text(condition: &str, message: &str) -> Option<String> {
     match condition {
         "CAST_INVALID_INPUT" => {
             let (_, rest) = message.split_once("The value '")?;
@@ -424,8 +456,8 @@ fn expected_error_texts(case: &Value) -> Option<Vec<String>> {
     if case["spark_error_phase"] == "sql" {
         return Some(vec![format!("[{condition}]")]);
     }
-    if let Some(value) = cast_failure_value(condition, message) {
-        return Some(vec![format!("[{condition}]"), value]);
+    if let Some(text) = dar_cast_failure_text(condition, message) {
+        return Some(vec![format!("[{condition}]"), text]);
     }
     message
         .starts_with(&format!("[{condition}]"))
@@ -544,8 +576,9 @@ async fn make_ym_interval_matches_spark() -> TestResult {
             (RetainedDifference::ArgumentAdmission, 12),
             (RetainedDifference::GeneratedName, 4),
             (RetainedDifference::IntFunctionCast, 8),
-            (RetainedDifference::TryArithmetic, 8),
+            (RetainedDifference::TryArithmetic, 24),
             (RetainedDifference::ArgumentErrorRowOrder, 2),
+            (RetainedDifference::ComputedNullBesideFailingConstant, 4),
         ])
     );
     let mut differences = Vec::new();
