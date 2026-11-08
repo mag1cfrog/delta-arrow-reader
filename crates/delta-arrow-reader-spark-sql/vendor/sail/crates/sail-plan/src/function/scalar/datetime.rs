@@ -9,8 +9,8 @@ use datafusion::arrow::datatypes::{
 use datafusion::functions::expr_fn;
 use datafusion::optimizer::simplify_expressions::ExprSimplifier;
 use datafusion::prelude::SessionContext;
-use datafusion_common::tree_node::TreeNode;
-use datafusion_common::{DFSchemaRef, ScalarValue};
+use datafusion_common::tree_node::{Transformed, TreeNode};
+use datafusion_common::{DFSchemaRef, DataFusionError, ScalarValue};
 use datafusion_expr::expr::{self, Expr};
 use datafusion_expr::simplify::SimplifyContextBuilder;
 use datafusion_expr::{
@@ -29,7 +29,9 @@ use sail_function::scalar::datetime::spark_date_format::SparkDateFormat;
 use sail_function::scalar::datetime::spark_date_part::SparkDatePart;
 use sail_function::scalar::datetime::spark_date_trunc::SparkDateTrunc;
 use sail_function::scalar::datetime::spark_last_day::SparkLastDay;
-use sail_function::scalar::datetime::spark_make_interval::{SECONDS_TYPE, SparkMakeInterval};
+use sail_function::scalar::datetime::spark_make_interval::{
+    MAKE_INTERVAL_SECONDS_TYPE, SparkMakeInterval,
+};
 use sail_function::scalar::datetime::spark_make_time::SparkMakeTime;
 use sail_function::scalar::datetime::spark_make_timestamp_ntz::SparkMakeTimestampNtz;
 use sail_function::scalar::datetime::spark_make_ym_interval::SparkMakeYmInterval;
@@ -65,6 +67,33 @@ use crate::function::temporal_coercion::{
     cast_local_timestamp_expr_to_ltz, ltz_expr_to_local_timestamp,
 };
 
+/// How MAKE_INTERVAL and the casts of its arguments treat a failure: as Spark does outside
+/// ANSI, under ANSI, and under ANSI inside `TryEval`, which turns every failure into NULL.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MakeIntervalFailure {
+    Legacy,
+    Ansi,
+    Try,
+}
+
+impl MakeIntervalFailure {
+    fn decimal_cast(self) -> DecimalCastMode {
+        match self {
+            Self::Legacy => DecimalCastMode::Legacy,
+            Self::Ansi => DecimalCastMode::Ansi,
+            Self::Try => DecimalCastMode::Try,
+        }
+    }
+
+    fn string_integer_cast(self) -> StringIntegerCastMode {
+        match self {
+            Self::Legacy => StringIntegerCastMode::Legacy,
+            Self::Ansi => StringIntegerCastMode::Ansi,
+            Self::Try => StringIntegerCastMode::Try,
+        }
+    }
+}
+
 /// Spark's MAKE_INTERVAL: missing arguments are 0, the first six are cast to INT and the
 /// seconds to DECIMAL(18, 6) with Spark's casts for the session's ANSI mode.
 fn make_interval(input: ScalarFunctionInput) -> PlanResult<Expr> {
@@ -78,51 +107,62 @@ fn make_interval(input: ScalarFunctionInput) -> PlanResult<Expr> {
             arguments.len()
         )));
     }
-    let schema = function_context.schema;
-    let ansi_mode = function_context.plan_config.ansi_mode;
+    let failure = if function_context.plan_config.ansi_mode {
+        MakeIntervalFailure::Ansi
+    } else {
+        MakeIntervalFailure::Legacy
+    };
+    plan_make_interval(arguments, function_context.schema, failure)
+}
+
+fn plan_make_interval(
+    arguments: Vec<Expr>,
+    schema: &DFSchemaRef,
+    failure: MakeIntervalFailure,
+) -> PlanResult<Expr> {
     let mut arguments = arguments.into_iter();
     let mut cast_arguments = Vec::with_capacity(7);
     for _ in 0..6 {
-        let argument = match arguments.next() {
-            Some(argument) => spark_cast_to_int(argument, schema, ansi_mode)?,
+        let part = match arguments.next() {
+            Some(part) => cast_make_interval_part(part, schema, failure)?,
             None => lit(0_i32),
         };
-        cast_arguments.push(argument);
+        cast_arguments.push(part);
     }
     let seconds = match arguments.next() {
-        Some(seconds) => spark_cast_to_seconds(seconds, schema, ansi_mode)?,
+        Some(seconds) => cast_make_interval_seconds(seconds, schema, failure)?,
         None => lit(ScalarValue::Decimal128(Some(0), 18, 6)),
     };
     cast_arguments.push(seconds);
-    Ok(ScalarUDF::from(SparkMakeInterval::new(ansi_mode)).call(cast_arguments))
+    let fail_on_error = failure == MakeIntervalFailure::Ansi;
+    Ok(ScalarUDF::from(SparkMakeInterval::new(fail_on_error)).call(cast_arguments))
 }
 
-/// Spark's implicit cast of a MAKE_INTERVAL part to INT.
-fn spark_cast_to_int(argument: Expr, schema: &DFSchemaRef, ansi_mode: bool) -> PlanResult<Expr> {
-    Ok(match argument.get_type(schema)? {
-        DataType::Int32 => argument,
-        DataType::Int8 | DataType::Int16 | DataType::Null => cast(argument, DataType::Int32),
-        DataType::Int64 | DataType::Float32 | DataType::Float64 => ScalarUDF::from(
-            SparkCastNumericToInteger::try_new(DataType::Int32, ansi_mode, false)?,
-        )
-        .call(vec![argument]),
-        DataType::Decimal128(..) | DataType::Decimal256(..) => {
-            let mode = if ansi_mode {
-                DecimalCastMode::Ansi
-            } else {
-                DecimalCastMode::Legacy
-            };
-            ScalarUDF::from(SparkDecimalCast::to_integer(DataType::Int32, mode)?)
-                .call(vec![argument])
+/// Spark's implicit cast of a MAKE_INTERVAL part to INT. `cast_string_function_int` in
+/// `string.rs` applies the same rule to string function arguments, without a TRY mode.
+fn cast_make_interval_part(
+    part: Expr,
+    schema: &DFSchemaRef,
+    failure: MakeIntervalFailure,
+) -> PlanResult<Expr> {
+    Ok(match part.get_type(schema)? {
+        DataType::Int32 => part,
+        DataType::Int8 | DataType::Int16 | DataType::Null => cast(part, DataType::Int32),
+        DataType::Int64 | DataType::Float32 | DataType::Float64 => {
+            ScalarUDF::from(SparkCastNumericToInteger::try_new(
+                DataType::Int32,
+                failure == MakeIntervalFailure::Ansi,
+                failure == MakeIntervalFailure::Try,
+            )?)
+            .call(vec![part])
         }
+        DataType::Decimal128(..) | DataType::Decimal256(..) => ScalarUDF::from(
+            SparkDecimalCast::to_integer(DataType::Int32, failure.decimal_cast())?,
+        )
+        .call(vec![part]),
         data_type if data_type.is_string() => {
-            let mode = if ansi_mode {
-                StringIntegerCastMode::Ansi
-            } else {
-                StringIntegerCastMode::Legacy
-            };
-            ScalarUDF::from(SparkCastStringToInteger::try_new(DataType::Int32, mode)?)
-                .call(vec![argument])
+            SparkCastStringToInteger::try_new(DataType::Int32, failure.string_integer_cast())?
+                .into_expr(part)
         }
         other => {
             return Err(PlanError::invalid(format!(
@@ -133,32 +173,77 @@ fn spark_cast_to_int(argument: Expr, schema: &DFSchemaRef, ansi_mode: bool) -> P
 }
 
 /// Spark's implicit cast of MAKE_INTERVAL seconds to DECIMAL(18, 6), with the casts CAST uses.
-fn spark_cast_to_seconds(seconds: Expr, schema: &DFSchemaRef, ansi_mode: bool) -> PlanResult<Expr> {
-    let DataType::Decimal128(precision, scale) = SECONDS_TYPE else {
+fn cast_make_interval_seconds(
+    seconds: Expr,
+    schema: &DFSchemaRef,
+    failure: MakeIntervalFailure,
+) -> PlanResult<Expr> {
+    let DataType::Decimal128(precision, scale) = MAKE_INTERVAL_SECONDS_TYPE else {
         unreachable!("MAKE_INTERVAL seconds are a DECIMAL");
     };
     Ok(match seconds.get_type(schema)? {
         DataType::Decimal128(18, 6) => seconds,
-        DataType::Null => cast(seconds, SECONDS_TYPE),
-        data_type if data_type.is_string() => {
-            ScalarUDF::new_from_impl(SparkCastStringToDecimal::new(precision, scale, !ansi_mode))
-                .call(vec![seconds])
-        }
-        data_type if data_type.is_numeric() => {
-            let mode = if ansi_mode {
-                DecimalCastMode::Ansi
-            } else {
-                DecimalCastMode::Legacy
-            };
-            ScalarUDF::from(SparkDecimalCast::to_decimal(precision, scale, mode))
-                .call(vec![seconds])
-        }
+        DataType::Null => cast(seconds, MAKE_INTERVAL_SECONDS_TYPE),
+        data_type if data_type.is_string() => ScalarUDF::new_from_impl(
+            SparkCastStringToDecimal::new(precision, scale, failure != MakeIntervalFailure::Ansi),
+        )
+        .call(vec![seconds]),
+        data_type if data_type.is_numeric() => ScalarUDF::from(SparkDecimalCast::to_decimal(
+            precision,
+            scale,
+            failure.decimal_cast(),
+        ))
+        .call(vec![seconds]),
         other => {
             return Err(PlanError::invalid(format!(
                 "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] make_interval requires DECIMAL seconds, got {other}"
             )));
         }
     })
+}
+
+/// The value a MAKE_INTERVAL argument cast converts, or the argument itself.
+fn uncast_make_interval_argument(argument: Expr) -> Expr {
+    match argument {
+        Expr::ScalarFunction(expr::ScalarFunction { func, mut args })
+            if args.len() == 1
+                && (func.inner().is::<SparkCastNumericToInteger>()
+                    || func.inner().is::<SparkDecimalCast>()
+                    || func.inner().is::<SparkCastStringToInteger>()
+                    || func.inner().is::<SparkCastStringToDecimal>()) =>
+        {
+            args.remove(0)
+        }
+        argument => argument,
+    }
+}
+
+/// Spark's TRY_ADD and TRY_SUBTRACT evaluate their operands inside `TryEval`, which turns any
+/// failure into NULL. This re-plans each MAKE_INTERVAL in an operand that fails on error, and
+/// the casts of its arguments, to give NULL instead. Spark still fails while optimizing a
+/// constant MAKE_INTERVAL beside a non-constant operand, outside TRY (#1133).
+pub(crate) fn make_interval_within_try(operand: Expr, schema: &DFSchemaRef) -> PlanResult<Expr> {
+    Ok(operand
+        .transform_up(|expr| match expr {
+            Expr::ScalarFunction(call)
+                if call
+                    .func
+                    .inner()
+                    .downcast_ref::<SparkMakeInterval>()
+                    .is_some_and(SparkMakeInterval::fails_on_error) =>
+            {
+                let arguments = call
+                    .args
+                    .into_iter()
+                    .map(uncast_make_interval_argument)
+                    .collect();
+                plan_make_interval(arguments, schema, MakeIntervalFailure::Try)
+                    .map(Transformed::yes)
+                    .map_err(|error| DataFusionError::External(Box::new(error)))
+            }
+            expr => Ok(Transformed::no(expr)),
+        })?
+        .data)
 }
 
 fn make_ym_interval(input: ScalarFunctionInput) -> PlanResult<Expr> {

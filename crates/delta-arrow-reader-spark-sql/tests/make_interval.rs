@@ -41,17 +41,22 @@ fn make_interval_references() -> TestResult<Vec<Value>> {
             |build| build.contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
         )
     );
-    assert_eq!(records.len() - 1, 256);
+    assert_eq!(records.len() - 1, 340);
     Ok(records)
 }
 
 /// Differences outside MAKE_INTERVAL's own arithmetic, each owned by an issue.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum RetainedDifference {
-    /// #1145: outside ANSI, Spark wraps a BIGINT hour count to INT and returns about
-    /// -6.2e18 microseconds, beyond the BIGINT nanoseconds of Arrow's calendar intervals. DAR
-    /// fails while collecting rows with an error naming the issue.
-    CalendarRange,
+    /// #1145: Spark returns microseconds beyond the BIGINT nanoseconds of Arrow's calendar
+    /// intervals, from INT hours or DECIMAL seconds, or outside ANSI from a BIGINT hour count
+    /// that wraps to an INT. DAR fails, while optimizing a constant under ANSI and while
+    /// collecting rows otherwise.
+    NanosecondRange,
+    /// #1133: inside TRY_ADD beside a non-constant operand, Spark folds a constant
+    /// MAKE_INTERVAL outside TRY and fails while optimizing under ANSI. DAR returns NULL, as
+    /// TRY does for the same MAKE_INTERVAL over columns.
+    ConstantOutsideTry,
     /// #1124: under ANSI, the cast of seconds beyond DECIMAL(18, 6) fails at Spark's stage with
     /// Arrow's precision error, without Spark's `NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION`,
     /// and the cast of a malformed STRING without Spark's `CAST_INVALID_INPUT`.
@@ -88,13 +93,27 @@ fn decimal_cast_message(id: &str) -> Option<&'static str> {
         .find_map(|(record, message)| (*record == id).then_some(*message))
 }
 
-/// Records whose wrapped hour count is beyond Arrow's nanoseconds outside ANSI.
-const CALENDAR_RANGE_RECORDS: [&str; 2] = ["literal_hours_overflow", "literal_seconds_overflow"];
+/// Records whose microseconds are beyond Arrow's nanoseconds in both ANSI modes.
+const NANOSECOND_RANGE_RECORDS: [&str; 3] = [
+    "literal_int_hours_beyond_nanoseconds",
+    "literal_largest_seconds",
+    "column_int_hours_beyond_nanoseconds",
+];
+
+/// Records whose BIGINT hour count wraps beyond Arrow's nanoseconds outside ANSI.
+const WRAPPED_NANOSECOND_RANGE_RECORDS: [&str; 2] = [
+    "literal_bigint_hours_beyond_int",
+    "literal_bigint_hours_beyond_int_with_seconds",
+];
 
 fn retained_difference(case: &Value) -> Option<RetainedDifference> {
     let id = case["id"].as_str()?;
-    if CALENDAR_RANGE_RECORDS.contains(&id) && case["ansi"] == false {
-        Some(RetainedDifference::CalendarRange)
+    if NANOSECOND_RANGE_RECORDS.contains(&id)
+        || (WRAPPED_NANOSECOND_RANGE_RECORDS.contains(&id) && case["ansi"] == false)
+    {
+        Some(RetainedDifference::NanosecondRange)
+    } else if id == "column_try_add_constant_overflow" && case["ansi"] == true {
+        Some(RetainedDifference::ConstantOutsideTry)
     } else if decimal_cast_message(id).is_some() && case["ansi"] == true {
         Some(RetainedDifference::DecimalCastCondition)
     } else {
@@ -106,23 +125,54 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
 fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResult<Value> {
     let mut current = case.clone();
     match difference {
-        RetainedDifference::CalendarRange => {
-            if case["expected"]["status"] != "ok" {
-                return Err(format!("expected a Spark result: {case}").into());
+        RetainedDifference::NanosecondRange => {
+            // Spark's single row ends with the interval [months, days, microseconds].
+            let micros = case["expected"]["rows"]
+                .as_array()
+                .filter(|rows| rows.len() == 1)
+                .and_then(|rows| rows[0].as_array()?.last()?.get(2)?.as_str())
+                .ok_or_else(|| format!("expected one Spark interval: {case}"))?;
+            let constant_under_ansi = case["ansi"] == true
+                && case["id"]
+                    .as_str()
+                    .is_some_and(|id| id.starts_with("literal_"));
+            let stages = current["schema_stages"]
+                .as_object_mut()
+                .ok_or("missing schema stages")?;
+            let analyzed = stages.get("analyzed").cloned().ok_or("missing analyzed")?;
+            if constant_under_ansi {
+                stages.remove("optimized");
+            } else {
+                // DAR does not fold the failing value, so its optimized fields keep the
+                // analyzed nullability.
+                stages.insert("optimized".to_owned(), analyzed);
+            }
+            stages.remove("executed");
+            current["expected"] = json!({"status": "error", "dar_message": format!(
+                "MAKE_INTERVAL microseconds {micros} are beyond the calendar interval range of \
+                 Arrow's nanoseconds"
+            )});
+            current["spark_error_phase"] = json!(if constant_under_ansi {
+                "optimized"
+            } else {
+                "collect"
+            });
+        }
+        RetainedDifference::ConstantOutsideTry => {
+            if case["expected"]["condition"] != "ARITHMETIC_OVERFLOW"
+                || case["spark_error_phase"] != "optimized"
+            {
+                return Err(format!("expected Spark's folded overflow: {case}").into());
             }
             let stages = current["schema_stages"]
                 .as_object_mut()
                 .ok_or("missing schema stages")?;
             let analyzed = stages.get("analyzed").cloned().ok_or("missing analyzed")?;
-            if analyzed["fields"][0]["nullable"] != true {
-                return Err(format!("expected Spark's nullable interval: {case}").into());
-            }
-            // DAR does not fold the constant outside ANSI, so its optimized field keeps the
-            // analyzed nullability, and it fails while collecting rows.
-            stages.insert("optimized".to_owned(), analyzed);
-            stages.remove("executed");
-            current["expected"] = json!({"status": "error", "dar_message": "(#1145)"});
-            current["spark_error_phase"] = json!("collect");
+            stages.insert("optimized".to_owned(), analyzed.clone());
+            stages.insert("executed".to_owned(), analyzed);
+            // Each row of `required` gives NULL.
+            current["expected"] = json!({"status": "ok", "rows": [["0", null], ["1", null]]});
+            current["spark_error_phase"] = Value::Null;
         }
         RetainedDifference::DecimalCastCondition => {
             let condition = case["expected"]["condition"].as_str();
@@ -332,8 +382,9 @@ fn optimize(session: &SessionContext, plan: &LogicalPlan) -> TestResult<LogicalP
     Ok(state.optimize(plan)?)
 }
 
-/// Conditions raised by the shared casts of MAKE_INTERVAL's arguments, whose messages belong
-/// to those casts (#813, #1124).
+/// Conditions raised by the shared casts of MAKE_INTERVAL's arguments. Their messages give
+/// Spark's condition over the cast's own cause, not Spark's text: #1147 owns the INT casts and
+/// #1124 the DECIMAL casts.
 const CAST_CONDITIONS: [&str; 3] = [
     "CAST_INVALID_INPUT",
     "CAST_OVERFLOW",
@@ -445,7 +496,8 @@ async fn make_interval_matches_spark() -> TestResult {
     assert_eq!(
         retained,
         BTreeMap::from([
-            (RetainedDifference::CalendarRange, 4),
+            (RetainedDifference::NanosecondRange, 16),
+            (RetainedDifference::ConstantOutsideTry, 2),
             (RetainedDifference::DecimalCastCondition, 10),
         ])
     );
@@ -481,5 +533,38 @@ async fn make_interval_matches_spark() -> TestResult {
             .collect::<Vec<_>>()
             .join("\n")
     );
+    Ok(())
+}
+
+/// An unreached CASE branch with a constant overflow does not fail over an empty batch, as
+/// Spark returns no rows for `column_case_overflow_without_rows`.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn unreached_overflow_skips_empty_batches() -> TestResult {
+    let records = make_interval_references()?;
+    let required = records[0]["inputs"]
+        .as_array()
+        .ok_or("missing inputs")?
+        .iter()
+        .find(|input| input["name"] == "required")
+        .ok_or("missing required table")?;
+    let empty = decode_recorded_batch(required)?.slice(0, 0);
+    let cases = records[1..]
+        .iter()
+        .filter(|case| case["id"] == "column_case_overflow_without_rows")
+        .collect::<Vec<_>>();
+    assert_eq!(cases.len(), 4);
+    for case in cases {
+        let session = session_context(32);
+        session.register_table(
+            "required",
+            Arc::new(MemTable::try_new(
+                empty.schema(),
+                vec![vec![empty.clone()]],
+            )?),
+        )?;
+        let observation = observe(&session, case).await;
+        let differing = differing_parts(case, &observation)?;
+        assert!(differing.is_empty(), "{differing:?}: {observation}");
+    }
     Ok(())
 }

@@ -63,6 +63,7 @@ use crate::function::common::{
     FunctionContextInput, ScalarFunction, ScalarFunctionInput, without_metadata_annotations,
 };
 use crate::function::result_coercion::{coerce_to_temporal, is_temporal_type};
+use crate::function::scalar::datetime::make_interval_within_try;
 use crate::function::temporal_coercion::{cast_local_timestamp_expr_to_ltz, common_temporal_type};
 
 // Byte inputs retain Spark's input nullability while sharing native HEX formatting.
@@ -462,6 +463,8 @@ fn try_add(input: ScalarFunctionInput) -> PlanResult<Expr> {
     } = input;
     let (left, right) = two_arguments(arguments, "try_add")?;
     let schema = function_context.schema;
+    let left = make_interval_within_try(left, schema)?;
+    let right = make_interval_within_try(right, schema)?;
     let add = |timestamp, interval| {
         ScalarUDF::from(SparkTimestampAddInterval::try_add()).call(vec![timestamp, interval])
     };
@@ -501,6 +504,8 @@ fn try_subtract(input: ScalarFunctionInput) -> PlanResult<Expr> {
     } = input;
     let (left, right) = two_arguments(arguments, "try_subtract")?;
     let schema = function_context.schema;
+    let left = make_interval_within_try(left, schema)?;
+    let right = make_interval_within_try(right, schema)?;
     let timezone = &function_context.plan_config.session_timezone;
     let ntz = |data_type: &DataType| {
         matches!(data_type, DataType::Timestamp(TimeUnit::Microsecond, None))

@@ -1,9 +1,10 @@
 // Local Spark MAKE_INTERVAL. See the host crate's UPSTREAM.md.
 //! Spark's MAKE_INTERVAL over its INT years, months, weeks, days, hours and minutes and its
-//! DECIMAL(18, 6) seconds: `IntervalUtils.makeInterval`'s exact arithmetic. An overflow fails
-//! with `ARITHMETIC_OVERFLOW` under ANSI and is NULL otherwise, and the result is nullable only
-//! for a nullable argument under ANSI. `datafusion-spark`'s function returned NULL on overflow
-//! in both modes and was always nullable.
+//! DECIMAL(18, 6) seconds: `IntervalUtils.makeInterval`'s exact arithmetic. With Spark's
+//! `failOnError`, set under ANSI, an overflow fails with `ARITHMETIC_OVERFLOW` and the result is
+//! nullable only for a nullable argument; otherwise an overflow is NULL. A NULL argument skips
+//! the later arguments for its row, as Spark evaluates them in order. `datafusion-spark`'s
+//! function returned NULL on overflow in both modes and was always nullable.
 
 use std::sync::Arc;
 
@@ -11,43 +12,62 @@ use datafusion::arrow::array::types::{Decimal128Type, Int32Type};
 use datafusion::arrow::array::{Array, ArrayRef, AsArray, IntervalMonthDayNanoArray};
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef, IntervalMonthDayNano, IntervalUnit};
 use datafusion_common::{Result, ScalarValue, exec_err, internal_err};
+use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
 use datafusion_expr::{
-    ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
+    ColumnarValue, Expr, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
+    lit,
 };
 
 const MONTHS_PER_YEAR: i32 = 12;
 const DAYS_PER_WEEK: i32 = 7;
 const MICROS_PER_HOUR: i64 = 3_600_000_000;
 const MICROS_PER_MINUTE: i64 = 60_000_000;
-/// The seconds argument's type: whole microseconds.
-pub const SECONDS_TYPE: DataType = DataType::Decimal128(18, 6);
+/// MAKE_INTERVAL's seconds argument: a DECIMAL whose unscaled value counts microseconds.
+pub const MAKE_INTERVAL_SECONDS_TYPE: DataType = DataType::Decimal128(18, 6);
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkMakeInterval {
-    /// Fail on overflow, and declare the result nullable only for a nullable argument.
-    ansi_mode: bool,
+    /// Spark's `failOnError`: fail on overflow, and declare the result nullable only for a
+    /// nullable argument.
+    fail_on_error: bool,
     signature: Signature,
 }
 
 impl SparkMakeInterval {
-    pub fn new(ansi_mode: bool) -> Self {
+    pub fn new(fail_on_error: bool) -> Self {
         Self {
-            ansi_mode,
+            fail_on_error,
             signature: Signature::any(7, Volatility::Immutable),
         }
     }
+
+    pub fn fails_on_error(&self) -> bool {
+        self.fail_on_error
+    }
 }
 
-/// `IntervalUtils.makeInterval`: the months, days and microseconds, or `None` where Java's
-/// exact arithmetic overflows.
-fn make_interval(parts: [i32; 6], micros: i64) -> Option<(i32, i32, i64)> {
-    let [years, months, weeks, days, hours, minutes] = parts;
-    let months = months.checked_add(years.checked_mul(MONTHS_PER_YEAR)?)?;
-    let days = days.checked_add(weeks.checked_mul(DAYS_PER_WEEK)?)?;
-    let micros = micros
-        .checked_add(i64::from(hours).checked_mul(MICROS_PER_HOUR)?)?
-        .checked_add(i64::from(minutes).checked_mul(MICROS_PER_MINUTE)?)?;
-    Some((months, days, micros))
+/// A calendar interval's parts, with microseconds that may exceed Arrow's nanoseconds.
+#[derive(Debug, PartialEq, Eq)]
+struct IntervalParts {
+    months: i32,
+    days: i32,
+    micros: i64,
+}
+
+/// `IntervalUtils.makeInterval`: the interval's parts, or `None` where Java's exact arithmetic
+/// overflows. INT hours and minutes and DECIMAL(18, 6) seconds stay within BIGINT
+/// microseconds, so only months and days can overflow; the microseconds are checked anyway.
+fn interval_parts(
+    [years, months, weeks, days, hours, minutes]: [i32; 6],
+    second_micros: i64,
+) -> Option<IntervalParts> {
+    Some(IntervalParts {
+        months: months.checked_add(years.checked_mul(MONTHS_PER_YEAR)?)?,
+        days: days.checked_add(weeks.checked_mul(DAYS_PER_WEEK)?)?,
+        micros: second_micros
+            .checked_add(i64::from(hours).checked_mul(MICROS_PER_HOUR)?)?
+            .checked_add(i64::from(minutes).checked_mul(MICROS_PER_MINUTE)?)?,
+    })
 }
 
 impl ScalarUDFImpl for SparkMakeInterval {
@@ -64,7 +84,7 @@ impl ScalarUDFImpl for SparkMakeInterval {
             [parts @ .., seconds]
                 if parts.len() == 6
                     && parts.iter().all(|part| *part == DataType::Int32)
-                    && *seconds == SECONDS_TYPE =>
+                    && *seconds == MAKE_INTERVAL_SECONDS_TYPE =>
             {
                 Ok(DataType::Interval(IntervalUnit::MonthDayNano))
             }
@@ -85,13 +105,34 @@ impl ScalarUDFImpl for SparkMakeInterval {
         Ok(Arc::new(Field::new(
             self.name(),
             self.return_type(&types)?,
-            !self.ansi_mode || args.arg_fields.iter().any(|field| field.is_nullable()),
+            !self.fail_on_error || args.arg_fields.iter().any(|field| field.is_nullable()),
         )))
     }
 
     // Spark folds a constant MAKE_INTERVAL during optimization, raising its overflow error.
     fn propagates_constant_folding_errors(&self) -> bool {
-        self.ansi_mode
+        self.fail_on_error
+    }
+
+    // Spark evaluates the arguments in order and returns NULL at the first NULL, so a NULL
+    // argument skips the later arguments' casts for its row. Constant arguments still fold,
+    // and fail, on their own.
+    fn short_circuits_on_any_null_argument(&self) -> bool {
+        true
+    }
+
+    // Spark propagates a NULL argument before folding constants, so a NULL literal discards
+    // errors in the other arguments.
+    fn simplify(&self, args: Vec<Expr>, _info: &SimplifyContext) -> Result<ExprSimplifyResult> {
+        if args
+            .iter()
+            .any(|arg| matches!(arg, Expr::Literal(value, _) if value.is_null()))
+        {
+            return Ok(ExprSimplifyResult::Simplified(lit(
+                ScalarValue::IntervalMonthDayNano(None),
+            )));
+        }
+        Ok(ExprSimplifyResult::Original(args))
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
@@ -102,7 +143,7 @@ impl ScalarUDFImpl for SparkMakeInterval {
             .args
             .iter()
             .all(|arg| matches!(arg, ColumnarValue::Scalar(_)));
-        // Constant arguments give one value, even for a batch without rows.
+        // Constant arguments give one value, as DataFusion's scalar functions do.
         let rows = if scalar { 1 } else { args.number_rows };
         let arrays = args
             .args
@@ -121,17 +162,21 @@ impl ScalarUDFImpl for SparkMakeInterval {
                 }
                 let values = [0, 1, 2, 3, 4, 5].map(|index| parts[index].value(row));
                 // DECIMAL(18, 6) holds whole microseconds in a BIGINT.
-                let micros = i64::try_from(seconds.value(row)).ok();
-                match micros.and_then(|micros| make_interval(values, micros)) {
-                    Some((months, days, micros)) => match micros.checked_mul(1_000) {
+                let second_micros = i64::try_from(seconds.value(row)).ok();
+                match second_micros.and_then(|micros| interval_parts(values, micros)) {
+                    Some(IntervalParts {
+                        months,
+                        days,
+                        micros,
+                    }) => match micros.checked_mul(1_000) {
                         Some(nanos) => Ok(Some(IntervalMonthDayNano::new(months, days, nanos))),
                         // Spark's BIGINT microseconds reach further than Arrow's nanoseconds.
                         None => exec_err!(
                             "MAKE_INTERVAL microseconds {micros} are beyond the calendar \
-                             interval range of Arrow's nanoseconds (#1145)"
+                             interval range of Arrow's nanoseconds"
                         ),
                     },
-                    None if self.ansi_mode => exec_err!(
+                    None if self.fail_on_error => exec_err!(
                         "[ARITHMETIC_OVERFLOW] overflow. If necessary set \
                          \"spark.sql.ansi.enabled\" to \"false\" to bypass this error. \
                          SQLSTATE: 22003"
@@ -157,15 +202,23 @@ mod tests {
     #[test]
     fn intervals_add_exactly_and_overflow_at_java_limits() {
         assert_eq!(
-            make_interval([1, 2, 3, 4, 5, 6], 7_000_008),
-            Some((14, 25, 18_367_000_008))
+            interval_parts([1, 2, 3, 4, 5, 6], 7_000_008),
+            Some(IntervalParts {
+                months: 14,
+                days: 25,
+                micros: 18_367_000_008
+            })
         );
-        assert_eq!(make_interval([178_956_970, 8, 0, 0, 0, 0], 0), None);
-        assert_eq!(make_interval([0, 0, 306_783_378, 7, 0, 0], 0), None);
+        assert_eq!(interval_parts([178_956_970, 8, 0, 0, 0, 0], 0), None);
+        assert_eq!(interval_parts([0, 0, 306_783_378, 7, 0, 0], 0), None);
         assert_eq!(
-            make_interval([0, 0, 0, 0, i32::MAX, 0], 0),
-            Some((0, 0, 7_730_941_129_200_000_000))
+            interval_parts([0, 0, 0, 0, i32::MAX, 0], 0),
+            Some(IntervalParts {
+                months: 0,
+                days: 0,
+                micros: 7_730_941_129_200_000_000
+            })
         );
-        assert_eq!(make_interval([0, 0, 0, 0, i32::MAX, 0], i64::MAX), None);
+        assert_eq!(interval_parts([0, 0, 0, 0, i32::MAX, 0], i64::MAX), None);
     }
 }
