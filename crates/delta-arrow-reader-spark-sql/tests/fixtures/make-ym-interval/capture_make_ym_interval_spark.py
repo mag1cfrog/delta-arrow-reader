@@ -1,17 +1,17 @@
 """Capture Spark MAKE_YM_INTERVAL values, errors and nullability (#1159, #1165).
 
-Records analyzed, optimized and executed schemas, typed internal-row values and failing
-stages, with the innermost Java exception of a failure, for MAKE_YM_INTERVAL with literal,
+Records analyzed, optimized and executed schemas, typed internal-row values and failing stages,
+with the innermost Java exception of a failure, for MAKE_YM_INTERVAL with literal,
 nullable-column, NOT NULL-column, empty-input and NULL arguments, none, one and two arguments,
 signs, the YEAR TO MONTH limits and one month past them, INT, TINYINT, SMALLINT, BIGINT,
-DECIMAL, DOUBLE and FLOAT arguments with fractions, signs, values beyond INT, NaN and
-infinities, BOOLEAN, DATE, TIMESTAMP, BINARY, ARRAY and interval arguments, STRING, malformed
-and empty STRING arguments, a NULL beside an overflowing argument or a failing argument cast in
-either order, STRING arguments beside a NULL literal, a cast NULL, a computed NULL, NULLIF or
-IF, failing STRING arguments in row order, INT() of a STRING, unaliased generated names, and
-for comparisons, negation, IS NULL and TRY arithmetic over its result. Every query runs in both
-ANSI modes in UTC and America/Los_Angeles. Run from the crate root in the reference environment
-described in README.md; the output path must not exist.
+DECIMAL, DOUBLE and FLOAT arguments with fractions, signs, values beyond INT or near an integer,
+NaN and infinities, BOOLEAN, DATE, TIMESTAMP, BINARY, ARRAY and interval arguments, STRING,
+malformed and empty STRING arguments, a NULL beside an overflowing argument or a failing
+argument cast in either order, STRING arguments beside a NULL literal, a cast NULL, a computed
+NULL, NULLIF or IF, failing STRING arguments in row order, INT() of a STRING, unaliased
+generated names, and for comparisons, negation, IS NULL and TRY arithmetic over its result.
+Every query runs in both ANSI modes in UTC and America/Los_Angeles. Run from the crate root in
+the reference environment described in README.md; the output path must not exist.
 """
 import argparse
 from decimal import Decimal
@@ -113,6 +113,9 @@ REQUIRED_NUMBERS = [
     ("-2.50", -2.5, -0.5),
 ]
 
+# DECIMAL(38, 17) values a DOUBLE would round to the next integer.
+WIDE_DECIMALS = ["0.99999999999999999", "-0.99999999999999999", "2.99999999999999999"]
+
 
 INPUTS = [
     {"name": "nullable", "schema": {"type": "struct", "fields": fields(True)},
@@ -123,7 +126,11 @@ INPUTS = [
     {"name": "numbers", "schema": {"type": "struct", "fields": number_fields(True)},
      "rows": number_rows(NULLABLE_NUMBERS)},
     {"name": "numbers_required", "schema": {"type": "struct", "fields": number_fields(False)},
-     "rows": number_rows(REQUIRED_NUMBERS)}]
+     "rows": number_rows(REQUIRED_NUMBERS)},
+    {"name": "wide_decimals", "schema": {"type": "struct", "fields": [
+        {"name": "k", "type": "integer", "nullable": False, "metadata": {}},
+        {"name": "w", "type": "decimal(38,17)", "nullable": False, "metadata": {}}]},
+     "rows": [[str(key), value] for key, value in enumerate(WIDE_DECIMALS)]}]
 
 COLUMNS = [
     ("nullable_both", "make_ym_interval(y, mo)", "nullable", "k <> 4"),
@@ -190,6 +197,9 @@ COLUMNS = [
     ("numbers_required_float", "make_ym_interval(fl)", "numbers_required", "true"),
     ("numbers_required_comparison", "make_ym_interval(dc) = INTERVAL '1' YEAR",
      "numbers_required", "true"),
+    ("wide_decimals", "make_ym_interval(0, w)", "wide_decimals", "true"),
+    ("numbers_try_add_double_beyond_int", "try_add(make_ym_interval(0, f), INTERVAL '1' MONTH)",
+     "numbers", "k = 6"),
 ]
 
 LITERALS = [
@@ -227,6 +237,12 @@ LITERALS = [
     ("decimal_beyond_int", "make_ym_interval(2147483648.5)"),
     ("double_beyond_int", "make_ym_interval(0, 1e10D)"),
     ("double_nan", "make_ym_interval(0, CAST('NaN' AS DOUBLE))"),
+    ("wide_decimal_near_one", "make_ym_interval(0.99999999999999999)"),
+    ("decimal_near_int_limit", "make_ym_interval(0, 2147483647.9999999)"),
+    ("decimal_near_years_limit", "make_ym_interval(178956970.9999999999)"),
+    ("whole_decimal_beyond_int", "make_ym_interval(0, CAST(4294967298 AS DECIMAL(10, 0)))"),
+    ("float_two_pow_31", "make_ym_interval(0, CAST(2147483648 AS FLOAT))"),
+    ("try_add_double_beyond_int", "try_add(make_ym_interval(0, 1e10D), INTERVAL '1' MONTH)"),
     ("boolean", "make_ym_interval(true)"),
     ("date", "make_ym_interval(DATE '2024-01-01')"),
     ("timestamp", "make_ym_interval(1, TIMESTAMP '2024-01-01 00:00:00')"),
