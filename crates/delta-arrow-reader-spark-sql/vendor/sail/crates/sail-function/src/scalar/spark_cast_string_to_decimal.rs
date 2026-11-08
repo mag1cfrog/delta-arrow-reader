@@ -5,7 +5,7 @@ use arrow::array::{ArrayRef, Decimal128Array, new_null_array};
 use arrow::datatypes::{DataType, Field, FieldRef, is_validate_decimal_precision};
 use bigdecimal::{BigDecimal, RoundingMode, ToPrimitive, Zero};
 use datafusion_common::cast::{as_large_string_array, as_string_array, as_string_view_array};
-use datafusion_common::{Result, ScalarValue, exec_err};
+use datafusion_common::{DataFusionError, Result, ScalarValue, exec_datafusion_err, exec_err};
 use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
 use datafusion_expr::{
     ColumnarValue, Expr, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
@@ -35,36 +35,64 @@ impl SparkCastStringToDecimal {
         }
     }
 
-    fn convert<'a>(&self, values: impl Iterator<Item = Option<&'a str>>) -> Result<ArrayRef> {
+    /// The cast of `values` in row order up to the first failing value: the values before it,
+    /// and that value's row and error. Even the TRY form fails on an exponent beyond Java's
+    /// BigInteger, as Spark's does.
+    fn convert_until_error<'a>(
+        &self,
+        values: impl Iterator<Item = Option<&'a str>>,
+    ) -> Result<(ArrayRef, Option<(usize, DataFusionError)>)> {
         let mut output = Decimal128Array::builder(values.size_hint().0)
             .with_precision_and_scale(self.precision, self.scale)?;
-        for value in values {
+        for (row, value) in values.enumerate() {
             let result = value
                 .map(|s| parse_decimal(s, self.precision, self.scale))
-                .transpose()?
-                .flatten();
-            if value.is_some() && result.is_none() && !self.safe {
-                return exec_err!(
+                .transpose()
+                .map(Option::flatten);
+            let error = match result {
+                Ok(None) if value.is_some() && !self.safe => exec_datafusion_err!(
                     "Cannot cast {value:?} to DECIMAL({},{})",
                     self.precision,
                     self.scale
-                );
-            }
-            output.append_option(result);
+                ),
+                Ok(result) => {
+                    output.append_option(result);
+                    continue;
+                }
+                Err(error) => error,
+            };
+            return Ok((Arc::new(output.finish()), Some((row, error))));
         }
-        Ok(Arc::new(output.finish()))
+        Ok((Arc::new(output.finish()), None))
+    }
+
+    fn convert_array_until_error(
+        &self,
+        array: &ArrayRef,
+    ) -> Result<(ArrayRef, Option<(usize, DataFusionError)>)> {
+        match array.data_type() {
+            DataType::Null => Ok((new_null_array(&self.return_type(&[])?, array.len()), None)),
+            DataType::Utf8 => self.convert_until_error(as_string_array(array)?.iter()),
+            DataType::LargeUtf8 => self.convert_until_error(as_large_string_array(array)?.iter()),
+            DataType::Utf8View => self.convert_until_error(as_string_view_array(array)?.iter()),
+            other => exec_err!("string-to-Decimal CAST does not accept {other}"),
+        }
+    }
+
+    fn convert<'a>(&self, values: impl Iterator<Item = Option<&'a str>>) -> Result<ArrayRef> {
+        match self.convert_until_error(values)? {
+            (values, None) => Ok(values),
+            (_, Some((_, error))) => Err(error),
+        }
     }
 
     fn invoke_array(&self, args: &[ArrayRef]) -> Result<ArrayRef> {
         let [array] = args else {
             return exec_err!("string-to-Decimal CAST expects one argument");
         };
-        match array.data_type() {
-            DataType::Null => Ok(new_null_array(&self.return_type(&[])?, array.len())),
-            DataType::Utf8 => self.convert(as_string_array(array)?.iter()),
-            DataType::LargeUtf8 => self.convert(as_large_string_array(array)?.iter()),
-            DataType::Utf8View => self.convert(as_string_view_array(array)?.iter()),
-            other => exec_err!("string-to-Decimal CAST does not accept {other}"),
+        match self.convert_array_until_error(array)? {
+            (values, None) => Ok(values),
+            (_, Some((_, error))) => Err(error),
         }
     }
 }
@@ -109,6 +137,34 @@ impl ScalarUDFImpl for SparkCastStringToDecimal {
             self.return_type(&[])?,
             true,
         )))
+    }
+
+    // A parent that keeps Spark's row order of errors needs this cast's first failing row and
+    // the values before it, which the parse gives in one pass. The TRY form fails only on an
+    // exponent beyond BigInteger, and reports that row too.
+    fn invoke_rows_until_error(
+        &self,
+        args: ScalarFunctionArgs,
+    ) -> Result<datafusion_expr::EvaluatedRowPrefix> {
+        let [value] = args.args.as_slice() else {
+            return self
+                .invoke_with_args(args)
+                .map(datafusion_expr::EvaluatedRowPrefix::complete);
+        };
+        let scalar = matches!(value, ColumnarValue::Scalar(_));
+        let array = value.to_array(if scalar { 1 } else { args.number_rows })?;
+        Ok(match self.convert_array_until_error(&array)? {
+            (values, Some((row_index, error))) => datafusion_expr::EvaluatedRowPrefix {
+                values: ColumnarValue::Array(values),
+                failure: Some(datafusion_expr::RowEvaluationFailure { row_index, error }),
+            },
+            (values, None) if scalar => datafusion_expr::EvaluatedRowPrefix::complete(
+                ColumnarValue::Scalar(ScalarValue::try_from_array(&values, 0)?),
+            ),
+            (values, None) => {
+                datafusion_expr::EvaluatedRowPrefix::complete(ColumnarValue::Array(values))
+            }
+        })
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
@@ -223,6 +279,37 @@ mod tests {
     use datafusion_common::ScalarValue;
 
     use super::*;
+
+    #[test]
+    fn the_first_failing_row_ends_the_parse() -> Result<()> {
+        let strict = SparkCastStringToDecimal::new(18, 6, false);
+        let lenient = SparkCastStringToDecimal::new(18, 6, true);
+        let malformed_first = [Some("1"), Some("x"), Some("1e-600000000")];
+        let exponent_first = [Some("1"), Some("1e-600000000"), Some("x")];
+        let (values, failure) = strict.convert_until_error(malformed_first.iter().copied())?;
+        let (row, error) = failure.expect("a failure");
+        assert_eq!((values.len(), row), (1, 1));
+        assert!(
+            error
+                .to_string()
+                .contains("Cannot cast Some(\"x\") to DECIMAL(18,6)")
+        );
+        for cast in [&strict, &lenient] {
+            let (values, failure) = cast.convert_until_error(exponent_first.iter().copied())?;
+            let (row, error) = failure.expect("a failure");
+            assert_eq!((values.len(), row), (1, 1));
+            assert!(
+                error
+                    .to_string()
+                    .contains("BigInteger would overflow supported range")
+            );
+        }
+        let (values, failure) =
+            lenient.convert_until_error(malformed_first[..2].iter().copied())?;
+        assert!(failure.is_none());
+        assert_eq!((values.len(), values.null_count()), (2, 1));
+        Ok(())
+    }
 
     #[test]
     fn decimal_string_values_arrays_and_scalar() -> Result<()> {

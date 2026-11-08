@@ -41,7 +41,7 @@ fn make_ym_interval_references() -> TestResult<Vec<Value>> {
             |build| build.contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
         )
     );
-    assert_eq!(records.len() - 1, 452);
+    assert_eq!(records.len() - 1, 460);
     Ok(records)
 }
 
@@ -70,10 +70,6 @@ enum RetainedDifference {
     /// expression computes, `NULL + 1` or an explicit STRING-to-INT cast of NULL, fails while
     /// optimizing, where Spark's NullPropagation gives NULL.
     ComputedNullBesideFailingConstant,
-    /// #1148: under ANSI at batch size 32, DAR casts every row's years before the months, so a
-    /// later row's malformed year is reported before an earlier row's malformed month. At batch
-    /// size 1 DAR reports Spark's value.
-    ArgumentErrorRowOrder,
 }
 
 /// DAR's current name for each unaliased record of the #749 class.
@@ -145,9 +141,6 @@ const COMPUTED_NULL_RECORDS: [&str; 2] = [
     "literal_string_malformed_cast_null_month",
 ];
 
-/// The #1148 record under ANSI: row 0 has a malformed month and row 3 a malformed year.
-const ROW_ORDER_RECORD: &str = "column_required_string_failures_in_row_order";
-
 /// Spark's MAKE_YM_INTERVAL overflow message, which DAR repeats.
 const OVERFLOW_MESSAGE: &str = "[INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION] Integer \
     overflow while operating with intervals. Try devising appropriate values for the interval \
@@ -177,8 +170,6 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
         && case["ansi"] == true
     {
         Some(RetainedDifference::DecimalCastUnderAnsi)
-    } else if id == ROW_ORDER_RECORD && case["ansi"] == true {
-        Some(RetainedDifference::ArgumentErrorRowOrder)
     } else if COMPUTED_NULL_RECORDS.contains(&id) && case["ansi"] == true {
         Some(RetainedDifference::ComputedNullBesideFailingConstant)
     } else {
@@ -186,12 +177,11 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
     }
 }
 
-/// Replace only the retained part of Spark's expectation with DAR's current result at
-/// `batch_size`, over dictionary-encoded STRING columns if `dictionary`.
+/// Replace only the retained part of Spark's expectation with DAR's current result, over
+/// dictionary-encoded STRING columns if `dictionary`.
 fn current_expectation(
     case: &Value,
     difference: RetainedDifference,
-    batch_size: usize,
     dictionary: bool,
 ) -> TestResult<Value> {
     let mut current = case.clone();
@@ -318,20 +308,6 @@ fn current_expectation(
                 "[CAST_INVALID_INPUT]\ncaused by\nArrow error: Cast error: Cannot cast string \
                  'x' to value of Int32 type"});
             current["spark_error_phase"] = json!("optimized");
-        }
-        RetainedDifference::ArgumentErrorRowOrder => {
-            if !case["expected"]["java_message"]
-                .as_str()
-                .is_some_and(|message| message.starts_with("[CAST_INVALID_INPUT] The value 'bad'"))
-            {
-                return Err(format!("expected Spark's malformed month: {case}").into());
-            }
-            if batch_size != 1 {
-                current["expected"]["dar_message"] = json!(
-                    "[CAST_INVALID_INPUT]\ncaused by\nArrow error: Cast error: Cannot cast \
-                     string 'x' to value of Int32 type"
-                );
-            }
         }
     }
     Ok(current)
@@ -655,7 +631,6 @@ async fn make_ym_interval_matches_spark() -> TestResult {
             (RetainedDifference::IntFunctionCast, 8),
             (RetainedDifference::TryArithmetic, 28),
             (RetainedDifference::DecimalCastUnderAnsi, 8),
-            (RetainedDifference::ArgumentErrorRowOrder, 2),
             (RetainedDifference::ComputedNullBesideFailingConstant, 4),
         ])
     );
@@ -666,7 +641,7 @@ async fn make_ym_interval_matches_spark() -> TestResult {
         register_inputs(&session, &records[0], batch_size, dictionary)?;
         for case in &records[1..] {
             let expectation = match retained_difference(case) {
-                Some(difference) => current_expectation(case, difference, batch_size, dictionary)?,
+                Some(difference) => current_expectation(case, difference, dictionary)?,
                 None => case.clone(),
             };
             let observation = observe(&session, case).await;
