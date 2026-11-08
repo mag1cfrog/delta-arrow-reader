@@ -577,6 +577,23 @@ operand outside a conditional branch, and fails there; DAR returns NULL (#1133).
 [DATE and TIMESTAMP_NTZ subtraction references](tests/fixtures/date-ntz-subtraction/README.md)
 record the checks.
 
+MAKE_INTERVAL uses a local function, `SparkMakeInterval`, in place of `datafusion-spark`'s,
+following Spark's `MakeInterval`. Missing trailing arguments are 0, and more than seven fail
+with `WRONG_NUM_ARGS`. The planner casts each part to INT and the seconds to DECIMAL(18, 6)
+with the casts CAST uses for the session's ANSI mode, so a BIGINT, DECIMAL, DOUBLE or STRING
+argument wraps, rounds, fails or gives NULL as Spark's cast does, and BOOLEAN and DATE
+arguments are rejected. The function adds years, months, weeks, days, hours, minutes and
+seconds with Java's exact arithmetic. An overflow fails with `ARITHMETIC_OVERFLOW` under ANSI,
+while optimizing for a constant through [constant folding errors](#constant-folding-errors),
+and gives NULL otherwise. Under ANSI the result is nullable only for a nullable argument, so
+a TIMESTAMP minus MAKE_INTERVAL of NOT NULL values is NOT NULL, as in Spark.
+`datafusion-spark`'s function returned NULL on overflow in both modes, was always nullable,
+and cast its arguments with Arrow. Spark's BIGINT microseconds reach further than Arrow's
+nanoseconds, so a larger result fails while collecting rows (#1145). Seconds beyond
+DECIMAL(18, 6) and malformed STRING seconds fail without Spark's `NUMERIC_VALUE_OUT_OF_RANGE`
+and `CAST_INVALID_INPUT` conditions (#1124). The
+[MAKE_INTERVAL references](tests/fixtures/make-interval/README.md) record the checks.
+
 WEEKDAY numbers Monday 0 through Sunday 6, where it returned -1 for Sunday. WEEKDAY and
 DAYOFWEEK cast a TIMESTAMP_NTZ or NULL argument to DATE like Spark, and convert a STRING with
 Spark's STRING-to-DATE rules. Spaces, short months and days and years outside Arrow's
@@ -1272,8 +1289,8 @@ folding, during optimization. A scalar UDF can return `true` from
 literal CASTs already do. A call inside a short-circuiting expression other than AND and
 OR, such as CASE or COALESCE, still defers its error, and so does an expression over a lambda
 variable, which has no value to fold. `AliasedScalarUDFImpl` forwards the choice. TIMESTAMPDIFF, TIMESTAMPADD, TIMESTAMP
-interval arithmetic and subtraction, interval `+` and `-`, and the TIMESTAMP to TIMESTAMP_NTZ
-conversion opt in.
+interval arithmetic and subtraction, interval `+` and `-`, MAKE_INTERVAL under ANSI, and the
+TIMESTAMP to TIMESTAMP_NTZ conversion opt in.
 
 Strict DATE and TIMESTAMP parser calls, including TIMESTAMP_NTZ mode, also use
 this hook. Their existing reachability check runs before folding, preserving

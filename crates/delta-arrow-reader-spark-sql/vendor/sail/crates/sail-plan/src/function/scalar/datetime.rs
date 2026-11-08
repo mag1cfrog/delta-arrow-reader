@@ -18,7 +18,6 @@ use datafusion_expr::{
 };
 use datafusion_functions::core::expr_ext::FieldAccessor;
 use datafusion_spark::function::datetime::make_dt_interval::SparkMakeDtInterval;
-use datafusion_spark::function::datetime::make_interval::SparkMakeInterval;
 use sail_common::utils::datetime::time_unit_to_multiplier;
 use sail_common_datafusion::literal::LiteralEvaluator;
 use sail_common_datafusion::utils::items::ItemTaker;
@@ -30,6 +29,7 @@ use sail_function::scalar::datetime::spark_date_format::SparkDateFormat;
 use sail_function::scalar::datetime::spark_date_part::SparkDatePart;
 use sail_function::scalar::datetime::spark_date_trunc::SparkDateTrunc;
 use sail_function::scalar::datetime::spark_last_day::SparkLastDay;
+use sail_function::scalar::datetime::spark_make_interval::{SECONDS_TYPE, SparkMakeInterval};
 use sail_function::scalar::datetime::spark_make_time::SparkMakeTime;
 use sail_function::scalar::datetime::spark_make_timestamp_ntz::SparkMakeTimestampNtz;
 use sail_function::scalar::datetime::spark_make_ym_interval::SparkMakeYmInterval;
@@ -46,6 +46,7 @@ use sail_function::scalar::datetime::spark_year::SparkYear;
 use sail_function::scalar::datetime::timestamp_now::TimestampNow;
 use sail_function::scalar::explode::{Explode, ExplodeKind};
 use sail_function::scalar::spark_cast_numeric_to_integer::SparkCastNumericToInteger;
+use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
 use sail_function::scalar::spark_cast_string_to_integer::{
     SparkCastStringToInteger, StringIntegerCastMode,
 };
@@ -63,6 +64,102 @@ use crate::function::common::{literal_value_without_evaluation, without_metadata
 use crate::function::temporal_coercion::{
     cast_local_timestamp_expr_to_ltz, ltz_expr_to_local_timestamp,
 };
+
+/// Spark's MAKE_INTERVAL: missing arguments are 0, the first six are cast to INT and the
+/// seconds to DECIMAL(18, 6) with Spark's casts for the session's ANSI mode.
+fn make_interval(input: ScalarFunctionInput) -> PlanResult<Expr> {
+    let ScalarFunctionInput {
+        arguments,
+        function_context,
+    } = input;
+    if arguments.len() > 7 {
+        return Err(PlanError::invalid(format!(
+            "[WRONG_NUM_ARGS.WITHOUT_SUGGESTION] The `make_interval` requires [0, 1, 2, 3, 4, 5, 6, 7] parameters but the actual number is {}.",
+            arguments.len()
+        )));
+    }
+    let schema = function_context.schema;
+    let ansi_mode = function_context.plan_config.ansi_mode;
+    let mut arguments = arguments.into_iter();
+    let mut cast_arguments = Vec::with_capacity(7);
+    for _ in 0..6 {
+        let argument = match arguments.next() {
+            Some(argument) => spark_cast_to_int(argument, schema, ansi_mode)?,
+            None => lit(0_i32),
+        };
+        cast_arguments.push(argument);
+    }
+    let seconds = match arguments.next() {
+        Some(seconds) => spark_cast_to_seconds(seconds, schema, ansi_mode)?,
+        None => lit(ScalarValue::Decimal128(Some(0), 18, 6)),
+    };
+    cast_arguments.push(seconds);
+    Ok(ScalarUDF::from(SparkMakeInterval::new(ansi_mode)).call(cast_arguments))
+}
+
+/// Spark's implicit cast of a MAKE_INTERVAL part to INT.
+fn spark_cast_to_int(argument: Expr, schema: &DFSchemaRef, ansi_mode: bool) -> PlanResult<Expr> {
+    Ok(match argument.get_type(schema)? {
+        DataType::Int32 => argument,
+        DataType::Int8 | DataType::Int16 | DataType::Null => cast(argument, DataType::Int32),
+        DataType::Int64 | DataType::Float32 | DataType::Float64 => ScalarUDF::from(
+            SparkCastNumericToInteger::try_new(DataType::Int32, ansi_mode, false)?,
+        )
+        .call(vec![argument]),
+        DataType::Decimal128(..) | DataType::Decimal256(..) => {
+            let mode = if ansi_mode {
+                DecimalCastMode::Ansi
+            } else {
+                DecimalCastMode::Legacy
+            };
+            ScalarUDF::from(SparkDecimalCast::to_integer(DataType::Int32, mode)?)
+                .call(vec![argument])
+        }
+        data_type if data_type.is_string() => {
+            let mode = if ansi_mode {
+                StringIntegerCastMode::Ansi
+            } else {
+                StringIntegerCastMode::Legacy
+            };
+            ScalarUDF::from(SparkCastStringToInteger::try_new(DataType::Int32, mode)?)
+                .call(vec![argument])
+        }
+        other => {
+            return Err(PlanError::invalid(format!(
+                "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] make_interval requires INT parts, got {other}"
+            )));
+        }
+    })
+}
+
+/// Spark's implicit cast of MAKE_INTERVAL seconds to DECIMAL(18, 6), with the casts CAST uses.
+fn spark_cast_to_seconds(seconds: Expr, schema: &DFSchemaRef, ansi_mode: bool) -> PlanResult<Expr> {
+    let DataType::Decimal128(precision, scale) = SECONDS_TYPE else {
+        unreachable!("MAKE_INTERVAL seconds are a DECIMAL");
+    };
+    Ok(match seconds.get_type(schema)? {
+        DataType::Decimal128(18, 6) => seconds,
+        DataType::Null => cast(seconds, SECONDS_TYPE),
+        data_type if data_type.is_string() => {
+            ScalarUDF::new_from_impl(SparkCastStringToDecimal::new(precision, scale, !ansi_mode))
+                .call(vec![seconds])
+        }
+        data_type if data_type.is_numeric() => {
+            let mode = if ansi_mode {
+                DecimalCastMode::Ansi
+            } else {
+                DecimalCastMode::Legacy
+            };
+            ScalarUDF::from(SparkDecimalCast::to_decimal(precision, scale, mode))
+                .call(vec![seconds])
+        }
+        other => {
+            return Err(PlanError::invalid(format!(
+                "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] make_interval requires DECIMAL seconds, got {other}"
+            )));
+        }
+    })
+}
 
 fn make_ym_interval(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let mut arguments = input.arguments;
@@ -1521,7 +1618,7 @@ pub(super) fn list_built_in_datetime_functions() -> Vec<(&'static str, ScalarFun
         ),
         ("make_date", F::ternary(make_date)),
         ("make_dt_interval", F::udf(SparkMakeDtInterval::new())),
-        ("make_interval", F::udf(SparkMakeInterval::new())),
+        ("make_interval", F::custom(make_interval)),
         ("make_time", F::udf(SparkMakeTime::new())),
         (
             "make_timestamp",
