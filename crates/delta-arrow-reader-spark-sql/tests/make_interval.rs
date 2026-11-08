@@ -41,7 +41,7 @@ fn make_interval_references() -> TestResult<Vec<Value>> {
             |build| build.contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
         )
     );
-    assert_eq!(records.len() - 1, 400);
+    assert_eq!(records.len() - 1, 412);
     Ok(records)
 }
 
@@ -61,7 +61,18 @@ enum RetainedDifference {
     /// Arrow's precision error, without Spark's `NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION`,
     /// and the cast of a malformed STRING without Spark's `CAST_INVALID_INPUT`.
     DecimalCastCondition,
+    /// #1180: under ANSI at batch size 32, checked arithmetic overflowing in row 4 fails before
+    /// row 2's malformed STRING hours, as an argument of the same MAKE_INTERVAL or of an earlier
+    /// one in the projection. Spark reports row 2's `CAST_INVALID_INPUT`; at batch size 1, so
+    /// does DAR.
+    ComputedArgumentRow,
 }
+
+/// Records of the #1180 class under ANSI.
+const COMPUTED_ARGUMENT_ROW_RECORDS: [&str; 2] = [
+    "column_ordered_hours_fail_before_computed_days",
+    "column_ordered_second_call_fails_first",
+];
 
 /// DAR's current error for each record of the #1124 Decimal cast class.
 const DECIMAL_CAST_RECORDS: [(&str, &str); 6] = [
@@ -85,9 +96,9 @@ const DECIMAL_CAST_RECORDS: [(&str, &str); 6] = [
         "literal_invalid_string_seconds",
         "Cannot cast Some(\"x\") to DECIMAL(18,6)",
     ),
-    // Row 4's malformed seconds fail before row 6's DECIMAL years, as in Spark (#1148).
+    // Row 2's malformed seconds fail before row 4's DECIMAL years, as in Spark (#1148).
     (
-        "column_ordered_decimal_years_then_string_seconds",
+        "column_ordered_seconds_fail_before_years",
         "Cannot cast Some(\"x\") to DECIMAL(18,6)",
     ),
 ];
@@ -176,13 +187,19 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
         Some(RetainedDifference::ConstantOutsideTry)
     } else if decimal_cast_message(id).is_some() && case["ansi"] == true {
         Some(RetainedDifference::DecimalCastCondition)
+    } else if COMPUTED_ARGUMENT_ROW_RECORDS.contains(&id) && case["ansi"] == true {
+        Some(RetainedDifference::ComputedArgumentRow)
     } else {
         None
     }
 }
 
 /// Replace only the retained part of Spark's expectation with DAR's current result.
-fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResult<Value> {
+fn current_expectation(
+    case: &Value,
+    difference: RetainedDifference,
+    batch_size: usize,
+) -> TestResult<Value> {
     let mut current = case.clone();
     match difference {
         RetainedDifference::NanosecondRange => {
@@ -241,6 +258,18 @@ fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResu
             let id = case["id"].as_str().ok_or("missing record id")?;
             let message = decimal_cast_message(id).ok_or("missing DAR message")?;
             current["expected"] = json!({"status": "error", "dar_message": message});
+        }
+        RetainedDifference::ComputedArgumentRow => {
+            if case["expected"]["condition"] != "CAST_INVALID_INPUT"
+                || case["spark_error_phase"] != "collect"
+            {
+                return Err(format!("expected Spark's row 2 cast failure: {case}").into());
+            }
+            if batch_size > 1 {
+                current["expected"] = json!({"status": "error", "dar_message":
+                    "[ARITHMETIC_OVERFLOW] spark_checked_multiply: Arithmetic overflow: \
+                     Overflow happened on: 4 * 536870912"});
+            }
         }
     }
     Ok(current)
@@ -555,6 +584,7 @@ async fn make_interval_matches_spark() -> TestResult {
             (RetainedDifference::NanosecondRange, 24),
             (RetainedDifference::ConstantOutsideTry, 4),
             (RetainedDifference::DecimalCastCondition, 12),
+            (RetainedDifference::ComputedArgumentRow, 4),
         ])
     );
     let mut differences = Vec::new();
@@ -563,7 +593,7 @@ async fn make_interval_matches_spark() -> TestResult {
         register_inputs(&session, &records[0], batch_size)?;
         for case in &records[1..] {
             let expectation = match retained_difference(case) {
-                Some(difference) => current_expectation(case, difference)?,
+                Some(difference) => current_expectation(case, difference, batch_size)?,
                 None => case.clone(),
             };
             let observation = observe(&session, case).await;

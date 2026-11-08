@@ -1,7 +1,8 @@
 # MAKE_YM_INTERVAL values, errors and nullability
 
-`make-ym-interval-spark.jsonl` records 456 observations from Spark 4.2.0, revision
-`32f7299601108917fb01920a54e084595b7b3bf8`, Java 17.0.20.1 and Python 3.12.14 (#1159, #1165).
+`make-ym-interval-spark.jsonl` records 460 observations from Spark 4.2.0, revision
+`32f7299601108917fb01920a54e084595b7b3bf8`, Java 17.0.20.1 and Python 3.12.14 (#1159, #1165,
+#1148).
 The header stores the build properties, capture script hash, settings and the registered
 tables:
 - `nullable`, `required` and `empty`: INT keys `k`, INT years `y` and months `mo`, BIGINT `b` and
@@ -10,23 +11,25 @@ tables:
   nullable in `numbers` and NOT NULL in `numbers_required`;
 - `wide_decimals`: INT keys `k` and NOT NULL DECIMAL(38, 17) `w` values just short of the next
   integer away from zero, which a DOUBLE would round to it;
-- `row_order`: INT keys `k`, INT years `y` and STRING months `t`, NOT NULL, whose months overflow
-  in row 0 and are malformed in row 2 (#1148).
+- `ordered`: INT keys `k`, INT years `y`, STRING months `t` and BIGINT `b`, NOT NULL. The
+  months overflow in row 0 and are malformed in row 2, and `b` is beyond INT in rows 0 and 2 with
+  different values (#1148). Every failing row is even, so at batch size 1 the failing rows are in
+  the same input partition, which is read in order.
 
 Each failure keeps Spark's error condition and the class and message of its innermost Java
 exception. Two captures were byte-identical.
 
-114 queries run in both ANSI modes in UTC and America/Los_Angeles:
-- over the tables, years and months, years alone and months alone over nullable and NOT NULL columns
-  and an empty table; rows at the YEAR TO MONTH limits and one month past them; BIGINT arguments
-  that fit, wrap past INT or overflow the interval; STRING months that fit, carry spaces, are
-  malformed, empty or beyond INT; TINYINT and SMALLINT arguments; NULL and typed NULL literals
-  beside a column, also beside a STRING column, and `NULL + 1` and `nullif(1, 1)` beside a STRING
-  column; a NULL year beside an overflowing literal month, a malformed STRING month or a BIGINT
-  month beyond INT, and those failing years beside a NULL month; a malformed month in row 0 and a
-  malformed year in row 2, and over `row_order` an overflow in row 0 and a malformed month in row 2
-  (#1148); INT() of a STRING column; and a comparison, a negation, IS NULL and TRY_ADD over the
-  result;
+115 queries run in both ANSI modes in UTC and America/Los_Angeles:
+- over the tables, years and months, years alone and months alone over nullable and NOT NULL
+  columns and an empty table; rows at the YEAR TO MONTH limits and one month past them; BIGINT
+  arguments that fit, wrap past INT or overflow the interval; STRING months that fit, carry
+  spaces, are malformed, empty or beyond INT; TINYINT and SMALLINT arguments; NULL and typed
+  NULL literals beside a column, also beside a STRING column, and `NULL + 1` and `nullif(1, 1)`
+  beside a STRING column; a NULL year beside an overflowing literal month, a malformed STRING
+  month or a BIGINT month beyond INT, and those failing years beside a NULL month; a malformed
+  month in row 0 and a malformed year in row 2, and over `ordered` an overflow in row 0 before
+  a malformed month in row 2, and BIGINT months beyond INT in rows 0 and 2 (#1148); INT() of a
+  STRING column; and a comparison, a negation, IS NULL and TRY_ADD over the result;
 - over the number tables, DECIMAL, DOUBLE and FLOAT arguments with fractions, signs and NULL,
   values beyond INT, DECIMAL years that overflow the interval, NaN and both infinities, a NULL
   DECIMAL year beside a DOUBLE month beyond INT and the reverse, NOT NULL arguments, a

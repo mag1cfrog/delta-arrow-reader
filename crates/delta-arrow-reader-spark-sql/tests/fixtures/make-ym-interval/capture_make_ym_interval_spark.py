@@ -134,7 +134,7 @@ INPUTS = [
     # #1148: row 0's months overflow, and row 2's STRING months are malformed; BIGINT `b` is
     # beyond INT in rows 0 and 2 with different values. A failing row is even, so at batch
     # size 1 the failing rows are in the same input partition.
-    {"name": "row_order", "schema": {"type": "struct", "fields": [
+    {"name": "ordered", "schema": {"type": "struct", "fields": [
         {"name": "k", "type": "integer", "nullable": False, "metadata": {}},
         {"name": "y", "type": "integer", "nullable": False, "metadata": {}},
         {"name": "t", "type": "string", "nullable": False, "metadata": {}},
@@ -190,8 +190,8 @@ COLUMNS = [
     ("required_comparison", "make_ym_interval(y) = INTERVAL '1' YEAR", "required", "k <> 3"),
     ("required_negation", "-make_ym_interval(y, mo)", "required", "k IN (0, 1, 2)"),
     ("required_is_null", "make_ym_interval(y, mo) IS NULL", "required", "k <> 3"),
-    ("row_order_overflow_then_string", "make_ym_interval(y, t)", "row_order", "true"),
-    ("row_order_bigint_months_twice", "make_ym_interval(0, b)", "row_order", "true"),
+    ("ordered_arithmetic_fails_before_months", "make_ym_interval(y, t)", "ordered", "true"),
+    ("ordered_months_fail_twice", "make_ym_interval(0, b)", "ordered", "true"),
     ("required_try_add_overflow", "try_add(make_ym_interval(y, mo), INTERVAL '1' MONTH)",
      "required", "k = 3"),
     ("empty_both", "make_ym_interval(y, mo)", "empty", "true"),

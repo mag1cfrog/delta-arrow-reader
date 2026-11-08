@@ -153,15 +153,23 @@ COLUMNS = [
     ("try_add_hours_beyond_nanoseconds",
      "try_add(TIMESTAMP '2024-01-01 00:00:00', make_interval(0, 0, 0, 0, h))", "others", "k = 1"),
     # #1148: the first failing row's error wins, whichever argument or the arithmetic fails.
-    ("ordered_string_years_then_bigint_hours", "make_interval(t, 0, 0, 0, b)", "ordered",
+    # Each name says which part fails in the earlier row.
+    ("ordered_hours_fail_before_years", "make_interval(t, 0, 0, 0, b)", "ordered", "true"),
+    ("ordered_years_fail_before_months", "make_interval(b, t)", "ordered", "true"),
+    ("ordered_seconds_fail_before_years", "make_interval(dc, 0, 0, 0, 0, 0, s)", "ordered",
      "true"),
-    ("ordered_bigint_years_then_string_months", "make_interval(b, t)", "ordered", "true"),
-    ("ordered_decimal_years_then_string_seconds", "make_interval(dc, 0, 0, 0, 0, 0, s)",
-     "ordered", "true"),
-    # The earlier argument's first failure comes after the later argument's.
-    ("ordered_bigint_years_after_string_months", "make_interval(b, t)", "ordered", "k >= 1"),
-    ("ordered_decimal_years_after_string_months", "make_interval(dc, t)", "ordered", "true"),
-    ("ordered_overflow_then_string_months", "make_interval(y, t)", "ordered", "true"),
+    ("ordered_months_fail_before_bigint_years", "make_interval(b, t)", "ordered", "k >= 1"),
+    ("ordered_months_fail_before_decimal_years", "make_interval(dc, t)", "ordered", "true"),
+    ("ordered_arithmetic_fails_before_months", "make_interval(y, t)", "ordered", "true"),
+    ("ordered_arithmetic_fails_before_seconds", "make_interval(y, 0, 0, 0, 0, 0, s)", "ordered",
+     "true"),
+    # A computed argument, and a second call in the same row (#1180).
+    # The days fit in rows 0 to 3, and only their INT product overflows, in row 4.
+    ("ordered_hours_fail_before_computed_days", "make_interval(0, 0, 0, k * 536870912, t)",
+     "ordered", "k <= 4"),
+    ("ordered_second_call_fails_first",
+     "make_interval(0, 0, 0, k * 536870912) AS a, make_interval(0, 0, 0, 0, t)", "ordered",
+     "k <= 4"),
     ("ordered_no_failure", "make_interval(t, 0, 0, 0, b, 0, s)", "ordered", "k = 7"),
     ("case_overflow_without_rows",
      "CASE WHEN k >= 0 THEN make_interval(0, 0, 0, d) ELSE make_interval(178956971) END",
