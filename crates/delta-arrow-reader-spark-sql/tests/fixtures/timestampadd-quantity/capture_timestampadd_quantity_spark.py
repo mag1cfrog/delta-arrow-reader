@@ -3,16 +3,17 @@
 Records analyzed, optimized and executed schemas, typed internal-row values and failing
 stages, with the innermost Java exception of a failure, for TIMESTAMPADD in every unit over
 BIGINT quantities at the signed INT and BIGINT boundaries and beyond INT where a wrap would
-fit, as columns and literals, with NULL quantities and timestamps, an empty input,
-TIMESTAMP_NTZ and DATE timestamps, the DATEADD and DATE_ADD names, and explicit INT casts of
-the quantity. Every query runs in both ANSI modes in UTC and America/Los_Angeles, with the
-JVM default time zone set to the session time zone: Spark renders a row's DATETIME_OVERFLOW
-timestamp in the JVM default zone, and a constant's in the session zone. Run from the crate
-root in the reference environment described in README.md; the output path must not exist.
+fit, as columns and literals, in winter and summer, with NULL quantities and timestamps, a
+NULL quantity beside a malformed STRING timestamp, an empty input, TIMESTAMP_NTZ and DATE
+timestamps, units written in lower and mixed case, the DATEADD and DATE_ADD names, and
+explicit INT casts of the quantity. Every query runs in both ANSI modes in UTC and
+America/Los_Angeles. Rows are collected through the Dataset API, which runs with the
+session's settings, before their typed values are read from the executed plan. Run from the
+crate root in the reference environment described in README.md; the output path must not
+exist.
 """
 import argparse
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
 import hashlib
 import json
 import os
@@ -27,15 +28,21 @@ ZONES = ["UTC", "America/Los_Angeles"]
 UNITS = ["MICROSECOND", "MILLISECOND", "SECOND", "MINUTE", "HOUR", "DAY", "WEEK", "MONTH",
          "QUARTER", "YEAR"]
 
-# 2024-01-01 00:00:00 as UTC-epoch microseconds, and as a TIMESTAMP_NTZ wall-clock time.
+# 2024-01-01 and 2024-07-01 00:00:00 as UTC-epoch microseconds, and as TIMESTAMP_NTZ
+# wall-clock times.
 START = "1704067200000000"
+SUMMER = "1719792000000000"
+VALID = "2024-01-01 00:00:00"
 
-# (q BIGINT, ts TIMESTAMP, ntz TIMESTAMP_NTZ) per row: INT and BIGINT boundaries, counts
-# beyond INT that wrap to 0 or 1, a NULL quantity and a NULL timestamp.
+# (q BIGINT, ts TIMESTAMP, ntz TIMESTAMP_NTZ, s STRING) per row: INT and BIGINT boundaries,
+# counts beyond INT that wrap to 0 or 1, a NULL quantity beside a malformed STRING timestamp,
+# NULL timestamps, and a summer row.
 QUANTITIES = ["1", "-1", "2147483647", "2147483648", "-2147483649", "4294967296", "4294967297",
-              "9223372036854775807", "-9223372036854775808", None]
-ROWS = [[str(key), q, START, START] for key, q in enumerate(QUANTITIES)] + [
-    [str(len(QUANTITIES)), "1", None, None]]
+              "9223372036854775807", "-9223372036854775808"]
+ROWS = [[str(key), q, START, START, VALID] for key, q in enumerate(QUANTITIES)] + [
+    ["9", None, START, START, "not a timestamp"],
+    ["10", "1", None, None, None],
+    ["11", "4294967297", SUMMER, SUMMER, VALID]]
 
 
 def text(value):
@@ -46,7 +53,8 @@ SCHEMA = {"type": "struct", "fields": [
     {"name": "k", "type": "integer", "nullable": False, "metadata": {}},
     {"name": "q", "type": "long", "nullable": True, "metadata": {}},
     {"name": "ts", "type": "timestamp", "nullable": True, "metadata": {}},
-    {"name": "ntz", "type": "timestamp_ntz", "nullable": True, "metadata": {}}]}
+    {"name": "ntz", "type": "timestamp_ntz", "nullable": True, "metadata": {}},
+    {"name": "s", "type": "string", "nullable": True, "metadata": {}}]}
 
 INPUTS = [{"name": "quantities", "schema": SCHEMA, "rows": ROWS},
           {"name": "empty", "schema": SCHEMA, "rows": []}]
@@ -83,6 +91,24 @@ OTHERS = [
      "SELECT dateadd(MONTH, 4294967297L, TIMESTAMP '2024-01-01 00:00:00') AS r"),
     ("literal_date_add_wrapping_months",
      "SELECT date_add(MONTH, 4294967297L, TIMESTAMP '2024-01-01 00:00:00') AS r"),
+    ("column_ntz_summer_wrapping_days",
+     "SELECT k, timestampadd(DAY, q, ntz) AS r FROM quantities WHERE k = 11"),
+    ("literal_lowercase_day",
+     "SELECT timestampadd(day, 4294967297L, TIMESTAMP '2024-01-01 00:00:00') AS r"),
+    ("literal_mixed_case_month",
+     "SELECT timestampadd(Month, 4294967297L, TIMESTAMP '2024-01-01 00:00:00') AS r"),
+    ("column_lowercase_week",
+     "SELECT k, timestampadd(week, q, ts) AS r FROM quantities WHERE k = 7"),
+    ("literal_dateadd_lowercase_quarter",
+     "SELECT dateadd(quarter, 9223372036854775807L, TIMESTAMP '2024-01-01 00:00:00') AS r"),
+    ("column_null_quantity_invalid_string",
+     "SELECT k, timestampadd(DAY, q, s) AS r FROM quantities WHERE k = 9"),
+    ("column_string_timestamp",
+     "SELECT k, timestampadd(DAY, q, s) AS r FROM quantities WHERE k = 6"),
+    ("literal_null_quantity_invalid_string",
+     "SELECT timestampadd(DAY, CAST(NULL AS BIGINT), 'not a timestamp') AS r"),
+    ("literal_invalid_quantity_null_timestamp",
+     "SELECT timestampadd(DAY, 'x', CAST(NULL AS TIMESTAMP)) AS r"),
 ]
 
 
@@ -107,41 +133,21 @@ def python_value(value, kind):
         return datetime(1970, 1, 1, tzinfo=timezone.utc) + timedelta(microseconds=int(value))
     if kind == "timestamp_ntz":
         return datetime(1970, 1, 1) + timedelta(microseconds=int(value))
-    if kind == "double":
-        return struct.unpack(">d", bytes.fromhex(value))[0]
     if kind == "string":
         return value
-    if kind.startswith("decimal"):
-        return Decimal(value)
-    if kind == "interval month":
-        # Registered as INT months and cast in SQL; PySpark has no YEAR TO MONTH values.
-        return int(value)
-    if kind == "interval day to second":
-        return timedelta(microseconds=int(value))
     raise AssertionError(kind)
 
 
 def encode_value(row, index, data_type, types):
-    """Encode one internal-row or array value by its Spark type, without string casts."""
+    """Encode one internal-row value by its Spark type, without string casts."""
     if row.isNullAt(index):
         return None
-    if isinstance(data_type, (types.IntegerType, types.DateType, types.YearMonthIntervalType)):
+    if isinstance(data_type, types.IntegerType):
         return str(row.getInt(index))
-    if isinstance(data_type, (types.LongType, types.TimestampType, types.TimestampNTZType,
-                              types.DayTimeIntervalType)):
+    if isinstance(data_type, (types.LongType, types.TimestampType, types.TimestampNTZType)):
         return str(row.getLong(index))
     if isinstance(data_type, types.StringType):
         return row.getUTF8String(index).toString()
-    if isinstance(data_type, types.CalendarIntervalType):
-        from py4j.java_gateway import get_field
-        interval = row.getInterval(index)
-        return [str(get_field(interval, field)) for field in ("months", "days", "microseconds")]
-    if isinstance(data_type, types.DecimalType):
-        return row.getDecimal(index, data_type.precision, data_type.scale).toString()
-    if isinstance(data_type, types.ArrayType):
-        array = row.getArray(index)
-        return [encode_value(array, item, data_type.elementType, types)
-                for item in range(array.numElements())]
     raise AssertionError(f"unexpected result type {data_type}")
 
 
@@ -175,6 +181,9 @@ def capture(spark, sql, types, Py4JError):
         phase = "optimized"
         record["schema_stages"]["optimized"] = json.loads(execution.optimizedPlan().schema().json())
         phase = "collect"
+        # The Dataset API runs the query with the session's settings, so a failing row's
+        # message renders its timestamp in the session zone; executeCollect alone does not.
+        frame._jdf.collectAsList()
         executed = execution.executedPlan()
         internal_rows = executed.executeCollect()
         record["schema_stages"]["executed"] = json.loads(executed.schema().json())
@@ -219,15 +228,9 @@ def main():
         for recorded in INPUTS:
             fields = recorded["schema"]["fields"]
             kinds = [field["type"] for field in fields]
-            months = [field["name"] for field in fields if field["type"] == "interval month"]
-            schema = types.StructType.fromJson({"type": "struct", "fields": [
-                dict(field, type="integer") if field["name"] in months else field
-                for field in fields]})
+            schema = types.StructType.fromJson(recorded["schema"])
             spark.createDataFrame([[python_value(value, kind) for value, kind in zip(row, kinds)]
                                    for row in recorded["rows"]], schema) \
-                .selectExpr(*[f"CAST({field['name']} AS INTERVAL MONTH) AS {field['name']}"
-                              if field["name"] in months else field["name"]
-                              for field in fields]) \
                 .createOrReplaceTempView(recorded["name"])
             # The registered values must be exactly the recorded encodings.
             frame = spark.table(recorded["name"])
@@ -240,22 +243,19 @@ def main():
             "java_version": spark.sparkContext._jvm.System.getProperty("java.version"),
             "python_version": sys.version.split()[0],
             "capture_script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-            "value_encoding": ("INT and BIGINT as text; STRING as text; TIMESTAMP UTC-epoch "
-                               "and TIMESTAMP_NTZ wall-clock microseconds as text"),
+            "value_encoding": ("INT, BIGINT and STRING as text; TIMESTAMP UTC-epoch and "
+                               "TIMESTAMP_NTZ wall-clock microseconds as text"),
             "settings": {
                 "spark.sql.timestampType": spark.conf.get("spark.sql.timestampType"),
                 "spark.sql.optimizer.excludedRules":
-                    spark.conf.get("spark.sql.optimizer.excludedRules"),
-                "jvm_default_time_zone": "each record's session time zone"},
+                    spark.conf.get("spark.sql.optimizer.excludedRules")},
             "inputs": INPUTS,
         }
         records = [header]
         cases = list(definitions())
         assert len({name for name, _ in cases}) == len(cases)
-        jvm = spark.sparkContext._jvm
         for zone in ZONES:
             spark.conf.set("spark.sql.session.timeZone", zone)
-            jvm.java.util.TimeZone.setDefault(jvm.java.util.TimeZone.getTimeZone(zone))
             for ansi in [True, False]:
                 spark.conf.set("spark.sql.ansi.enabled", str(ansi).lower())
                 for name, sql in cases:
