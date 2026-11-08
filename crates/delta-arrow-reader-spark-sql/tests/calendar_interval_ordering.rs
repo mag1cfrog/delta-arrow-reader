@@ -53,9 +53,6 @@ enum RetainedDifference {
     /// #1160: aggregates and array functions that order their values accept calendar
     /// intervals, where Spark rejects them during analysis. DAR's fields and rows are pinned.
     OrderingConsumer,
-    /// #1159: MAKE_YM_INTERVAL of a NOT NULL argument is nullable, so a comparison over it is
-    /// too, where Spark declares the result NOT NULL.
-    MakeYmIntervalNullability,
     /// #1161: PIVOT also groups by the aggregate's argument column, so it returns a row per
     /// value with that column, where Spark returns one row.
     PivotImplicitGrouping,
@@ -134,8 +131,6 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
     let id = case["id"].as_str()?;
     if ordering_consumer_rows(id).is_some() {
         Some(RetainedDifference::OrderingConsumer)
-    } else if id == "year_month_equal" {
-        Some(RetainedDifference::MakeYmIntervalNullability)
     } else if pivot_grouping_result(case).is_some() {
         Some(RetainedDifference::PivotImplicitGrouping)
     } else if id == "greatest_day_time_null_control" {
@@ -173,15 +168,6 @@ fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResu
                 let field = &mut current["schema_stages"][stage]["fields"][1];
                 if field["type"] != "interval day to second" || field["nullable"] != false {
                     return Err(format!("expected Spark's NOT NULL interval: {case}").into());
-                }
-                field["nullable"] = json!(true);
-            }
-        }
-        RetainedDifference::MakeYmIntervalNullability => {
-            for stage in ["analyzed", "optimized", "executed"] {
-                let field = &mut current["schema_stages"][stage]["fields"][1];
-                if field["type"] != "boolean" || field["nullable"] != false {
-                    return Err(format!("expected Spark's NOT NULL BOOLEAN: {case}").into());
                 }
                 field["nullable"] = json!(true);
             }
@@ -486,7 +472,6 @@ async fn calendar_interval_ordering_matches_spark() -> TestResult {
         retained,
         BTreeMap::from([
             (RetainedDifference::OrderingConsumer, 24),
-            (RetainedDifference::MakeYmIntervalNullability, 4),
             (RetainedDifference::PivotImplicitGrouping, 6),
             (RetainedDifference::GreatestNullability, 4),
         ])

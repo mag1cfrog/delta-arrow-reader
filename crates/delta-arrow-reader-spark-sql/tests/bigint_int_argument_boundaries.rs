@@ -199,6 +199,20 @@ fn full_spark_matches(case: &Value, observation: &Value) -> bool {
         && exact_error_message_matches(case, observation)
 }
 
+/// The recorded native control with MAKE_YM_INTERVAL's overflow message as it is now: since
+/// #1159 it is Spark's whole message, without the query context on its later lines.
+fn current_control_observation(case: &Value, control: &Value) -> Value {
+    let mut observation = control["observation"].clone();
+    if case["expected"]["condition"] == "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION"
+        && let Some(message) = case["spark_error_details"]["message"]
+            .as_str()
+            .and_then(|message| message.lines().next())
+    {
+        observation["error"] = json!(format!("Arrow error: Compute error: {message}"));
+    }
+    observation
+}
+
 fn conversion_contract_matches(case: &Value, observation: &Value, control: &Value) -> bool {
     if control["reference"] != *case {
         return false;
@@ -216,7 +230,8 @@ fn conversion_contract_matches(case: &Value, observation: &Value, control: &Valu
         )
     );
     if !low_bits {
-        return full_spark_matches(case, observation) || observation == &control["observation"];
+        return full_spark_matches(case, observation)
+            || observation == &current_control_observation(case, control);
     }
     let stages = [
         ("analyzed", "public_schema"),

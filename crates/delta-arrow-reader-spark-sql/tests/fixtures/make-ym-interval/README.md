@@ -1,0 +1,52 @@
+# MAKE_YM_INTERVAL values, errors and nullability
+
+`make-ym-interval-spark.jsonl` records 232 observations from Spark 4.2.0, revision
+`32f7299601108917fb01920a54e084595b7b3bf8`, Java 17.0.20.1 and Python 3.12.14 (#1159).
+The header stores the build properties, capture script hash, settings and the registered
+`nullable`, `required` and `empty` tables of INT keys `k`, INT years `y` and months `mo`, BIGINT
+`b` and STRING `t`, nullable in `nullable` and NOT NULL in the others. Each failure keeps
+Spark's error condition and the class and message of its innermost Java exception. Two captures
+were byte-identical.
+
+58 queries run in both ANSI modes in UTC and America/Los_Angeles:
+- over the tables, years and months, years alone and months alone over nullable and NOT NULL
+  columns and an empty table; rows at the YEAR TO MONTH limits and one month past them; BIGINT
+  arguments that fit, wrap past INT or overflow the interval; STRING months that fit, carry spaces,
+  are malformed, empty or beyond INT; TINYINT and SMALLINT arguments; NULL and typed NULL
+  literals beside a column; a NULL year beside an overflowing literal month, a malformed STRING
+  month or a BIGINT month beyond INT, and those failing years beside a NULL month; and a
+  comparison, a negation and IS NULL over the result;
+- literals with none, one and two arguments, negative values, both limits and one month past
+  them, overflowing years, NULL arguments, an overflowing year beside a NULL month, STRING,
+  malformed and empty STRING, BIGINT, BIGINT beyond INT, TINYINT and SMALLINT, DECIMAL, DOUBLE
+  and BOOLEAN arguments, and a comparison;
+- unaliased calls, whose generated names Spark builds from the arguments and the defaulted
+  months.
+
+Spark's MAKE_YM_INTERVAL casts its arguments to INT and computes `years * 12 + months` with
+Java's exact arithmetic, failing with `INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION` in
+both ANSI modes, while optimizing for a constant. It evaluates the years first and returns NULL
+for a NULL year without evaluating the months. The result is nullable only for a nullable
+argument; a STRING, DECIMAL or DOUBLE argument's cast is nullable during analysis in both modes.
+
+Each record keeps the analyzed, optimized and executed schemas and values read from Spark's
+internal rows, collected through the Dataset API. `ConvertToLocalRelation` is excluded.
+
+`make_ym_interval.rs` compares names, type families, nullability, metadata and typed rows at
+batch sizes 1 and 32. A failure must occur at Spark's stage. An analysis failure or an argument
+cast failure must have Spark's condition; the INT cast messages differ (#1147). Any other
+failure must have the first line of Spark's message, without its query context. Two
+differences are retained, each at DAR's exact current result:
+- #1165: DECIMAL and DOUBLE arguments, which Spark casts to INT, and a BOOLEAN argument, which
+  Spark rejects with `DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE`, fail while planning with
+  DAR's admission error (12 records);
+- #749: an unaliased call is named with the arguments as written, where Spark adds the
+  defaulted months (4 records, each at all three stages).
+
+Recapture from the crate root:
+
+```sh
+JAVA_HOME=<JDK 17 or 21> SPARK_LOCAL_IP=127.0.0.1 python \
+    tests/fixtures/make-ym-interval/capture_make_ym_interval_spark.py \
+    "$(mktemp -d)/make-ym-interval-spark.jsonl"
+```

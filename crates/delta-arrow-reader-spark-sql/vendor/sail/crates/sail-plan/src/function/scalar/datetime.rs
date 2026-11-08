@@ -277,6 +277,9 @@ pub(crate) fn replan_make_interval_for_try(
         .data)
 }
 
+/// Spark's MAKE_YM_INTERVAL: BIGINT and STRING arguments are cast to INT with Spark's casts
+/// for the session's ANSI mode. A STRING cast is nullable, as Spark's is, so the result is
+/// nullable for a STRING argument.
 fn make_ym_interval(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let mut arguments = input.arguments;
     let function = ScalarUDF::from(SparkMakeYmInterval::new());
@@ -291,16 +294,23 @@ fn make_ym_interval(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let known_null = arguments.iter().any(|argument| {
         literal_value_without_evaluation(argument).is_some_and(|value| value.is_null())
     });
+    let ansi_mode = input.function_context.plan_config.ansi_mode;
     let mut bigint_argument = false;
     for (argument, data_type) in arguments.iter_mut().zip(argument_types) {
         if data_type == DataType::Int64 {
             bigint_argument = true;
             *argument = ScalarUDF::from(SparkCastNumericToInteger::try_new(
                 DataType::Int32,
-                input.function_context.plan_config.ansi_mode,
+                ansi_mode,
                 false,
             )?)
             .call(vec![argument.clone()]);
+        } else if data_type.is_string() {
+            *argument = SparkCastStringToInteger::try_new(
+                DataType::Int32,
+                MakeIntervalCastMode::of_session(ansi_mode).string_integer_cast_mode(),
+            )?
+            .into_expr(argument.clone());
         }
     }
     let interval = function.call(arguments);

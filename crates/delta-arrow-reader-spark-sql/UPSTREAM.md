@@ -647,6 +647,22 @@ seconds beyond DECIMAL(18, 6) and malformed STRING seconds fail without Spark's 
 defaults (#749). The [TRY_MAKE_INTERVAL references](tests/fixtures/try-make-interval/README.md)
 record the checks.
 
+MAKE_YM_INTERVAL follows Spark's `MakeYMInterval`. Its result is nullable only for a nullable
+argument, where it was always nullable, so expressions over MAKE_YM_INTERVAL of NOT NULL INT or
+BIGINT values are NOT NULL. A STRING argument uses Spark's STRING-to-INT cast for the session's
+ANSI mode: it trims spaces, fails with `CAST_INVALID_INPUT` under ANSI or gives NULL, and is
+nullable in both modes, as Spark's cast is. It used Arrow's cast, which failed on spaces,
+malformed values and values beyond INT in both modes without Spark's condition. A NULL year
+skips the months' cast for its row, as Spark evaluates the years first. An overflow fails with
+Spark's whole `INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION` message in both modes, while
+optimizing for a constant through [constant folding errors](#constant-folding-errors); it used to
+fail while collecting rows, and its message stopped after the first sentence. DECIMAL and DOUBLE
+arguments, which Spark casts to INT, and BOOLEAN arguments, which Spark rejects with
+`DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE`, still fail while planning without Spark's condition
+(#1165). Unaliased names keep the arguments as written where Spark adds the defaulted months
+(#749). The [MAKE_YM_INTERVAL references](tests/fixtures/make-ym-interval/README.md) record the
+checks.
+
 WEEKDAY numbers Monday 0 through Sunday 6, where it returned -1 for Sunday. WEEKDAY and
 DAYOFWEEK cast a TIMESTAMP_NTZ or NULL argument to DATE like Spark, and convert a STRING with
 Spark's STRING-to-DATE rules. Spaces, short months and days and years outside Arrow's
