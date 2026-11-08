@@ -1,26 +1,38 @@
 # MAKE_INTERVAL values, errors and nullability
 
-`make-interval-spark.jsonl` records 372 observations from Spark 4.2.0, revision
-`32f7299601108917fb01920a54e084595b7b3bf8`, Java 17.0.20.1 and Python 3.12.14 (#1131).
+`make-interval-spark.jsonl` records 420 observations from Spark 4.2.0, revision
+`32f7299601108917fb01920a54e084595b7b3bf8`, Java 17.0.20.1 and Python 3.12.14 (#1131, #1148).
 The header stores the build properties, capture script hash, settings and the registered
-`inputs`, `required` and `others` tables. Each failure keeps Spark's error condition and the
-class and message of its innermost Java exception. Two captures were byte-identical.
+`inputs`, `required`, `others` and `ordered` tables. Each failure keeps Spark's error condition
+and the class and message of its innermost Java exception. Two captures were byte-identical.
 
 `inputs` holds INT years, months, weeks, days, hours and minutes and DECIMAL(18, 6) seconds:
 positive and negative values, a NULL year, NULL seconds, and years and months whose month
 count overflows. `required` holds NOT NULL INT values. `others` holds BIGINT, DOUBLE, STRING,
 DECIMAL(12, 2) and INT values that fit, one row whose values overflow INT or DECIMAL(18, 6),
-are malformed, are NULL, or give hours beyond Arrow's nanoseconds, and a NULL row.
+are malformed, are NULL, or give hours beyond Arrow's nanoseconds, and a NULL row. `ordered`
+holds NOT NULL INT `y`, STRING `t`, `s` and `e`, BIGINT `b` and DECIMAL(12, 2) `dc` that fail in
+different rows: years whose months overflow and BIGINT beyond INT in row 0, malformed `t`, `s`
+and `e` in row 2, BIGINT and DECIMAL beyond INT in row 4, and malformed `t`, DECIMAL beyond INT
+and `e` with an exponent beyond Java's BigInteger in row 6, with different failing values in
+each row and succeeding odd rows. Every failing row
+is even, so at batch size 1 the failing rows are in the same input partition, which is read in
+order.
 
-93 queries run in both ANSI modes in UTC and America/Los_Angeles:
+105 queries run in both ANSI modes in UTC and America/Los_Angeles:
 - over the tables, every argument, days alone, the overflowing row, NOT NULL arguments, a
   TIMESTAMP minus MAKE_INTERVAL of a NOT NULL column, BIGINT, DOUBLE, STRING and DECIMAL
   columns as parts and as seconds with rows that fit and rows that fail, a NULL argument
   before and after a failing one, a NULL argument beside a failing constant, hours beyond
   Arrow's nanoseconds, MAKE_INTERVAL inside TRY_ADD, TRY_SUBTRACT, TRY_MULTIPLY and
   TRY_DIVIDE with overflows, invalid STRING and BIGINT parts, a constant overflow and hours
-  beyond Arrow's nanoseconds, TRY_ADD of two numbers over an overflowing MAKE_INTERVAL, and
-  an unreached CASE branch with a constant overflow;
+  beyond Arrow's nanoseconds, TRY_ADD of two numbers over an overflowing MAKE_INTERVAL, an
+  unreached CASE branch with a constant overflow, and over `ordered`, failures in different
+  arguments and rows, a later argument failing in an earlier row, an earlier argument failing
+  in a later row, the arithmetic overflowing in an earlier row than an argument cast, a
+  malformed STRING failing before a computed day count overflows INT, the same failure in a
+  second MAKE_INTERVAL of the projection, malformed STRING seconds and the arithmetic failing
+  before STRING seconds whose exponent fails even the TRY cast, and a row with no failure;
 - literals with every argument count from none to eight, negative and fractional values, NULL
   arguments before and after malformed or overflowing ones, month and day overflows, BIGINT
   years and hours beyond INT, hours and seconds beyond Arrow's nanoseconds, a TIMESTAMP minus
@@ -46,7 +58,7 @@ batch sizes 1 and 32. A failure must occur at Spark's stage. MAKE_INTERVAL's own
 must have Spark's whole message. Analysis failures need only the condition, because Spark's
 message quotes its plan. Failures of the argument casts need only the condition, because the
 shared casts report it over their own cause (#1147 for INT casts, #1124 for DECIMAL casts).
-A second test runs the unreached CASE branch over an empty batch. Three differences are
+A second test runs the unreached CASE branch over an empty batch. Four differences are
 retained, each at DAR's exact current result:
 - #1145: a result whose microseconds exceed Arrow's nanoseconds, from INT hours, large
   seconds, or outside ANSI a BIGINT hour count that wraps to an INT, fails with DAR's range
@@ -54,11 +66,15 @@ retained, each at DAR's exact current result:
   otherwise (24 records);
 - #1124: under ANSI, DECIMAL, BIGINT and DOUBLE seconds beyond DECIMAL(18, 6) fail with
   Arrow's precision error instead of `NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION`, and
-  malformed STRING seconds with a plain cast error instead of `CAST_INVALID_INPUT`
-  (10 records);
+  malformed STRING seconds with a plain cast error instead of `CAST_INVALID_INPUT`, also in
+  the first failing row of `ordered` (14 records);
 - #1133: under ANSI, TRY_ADD or TRY_SUBTRACT of a column and a constant overflowing
   MAKE_INTERVAL returns NULL, where Spark folds the constant outside TRY and fails while
-  optimizing (4 records).
+  optimizing (4 records);
+- #1180: under ANSI at batch size 32, a day count computed by checked arithmetic that overflows
+  in row 4 fails before row 2's malformed STRING hours, as an argument of the same MAKE_INTERVAL
+  or of an earlier one in the projection, where Spark reports row 2's `CAST_INVALID_INPUT`. At
+  batch size 1 DAR matches Spark (4 records).
 
 Recapture from the crate root:
 

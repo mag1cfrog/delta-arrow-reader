@@ -132,6 +132,14 @@ impl ScalarUDFImpl for SparkMakeInterval {
         Ok(ExprSimplifyResult::Original(args))
     }
 
+    // Spark evaluates the arguments and the arithmetic row by row, so with several failing rows
+    // it reports the first row's error, whichever argument or the arithmetic fails there. Each
+    // argument then stops at its first failing row; this function runs over the rows before the
+    // earliest one and fails, if at all, in an earlier row.
+    fn requires_row_ordered_errors(&self) -> bool {
+        true
+    }
+
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
         if args.args.len() != 7 {
             return internal_err!("{} requires seven arguments", self.name());

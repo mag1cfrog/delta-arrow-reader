@@ -656,9 +656,25 @@ was always nullable, and cast its arguments with Arrow. Spark's BIGINT microseco
 further than Arrow's nanoseconds, so a larger result fails, while optimizing a constant under
 ANSI outside TRY and while collecting rows otherwise (#1145). Seconds beyond DECIMAL(18, 6) and
 malformed STRING seconds fail without Spark's `NUMERIC_VALUE_OUT_OF_RANGE` and
-`CAST_INVALID_INPUT` conditions (#1124). With several failing rows, an earlier argument's
-failure in a later row can be reported first (#1148). The [MAKE_INTERVAL
-references](tests/fixtures/make-interval/README.md) record the checks.
+`CAST_INVALID_INPUT` conditions (#1124). With several failing rows, the first row's error
+is reported, whichever argument cast or the arithmetic fails there, as Spark evaluates row by
+row (#1148): MAKE_INTERVAL and MAKE_YM_INTERVAL ask DataFusion's row-ordered evaluation for
+it, and the BIGINT, FLOAT, DOUBLE, DECIMAL and STRING-to-DECIMAL argument casts report their
+first failing row, as the STRING-to-INT cast already did. The STRING-to-DECIMAL cast parses in
+row order and stops at the first failing row, which also places the failure of its TRY form on
+an exponent beyond Java's BigInteger. The other casts use Arrow's vectorized casts, and a
+shared helper, `strict_cast_rows_until_error`, finds that row without running the cast again
+over the batch: the cast's TRY form, which must not fail, gives NULL where the strict cast
+fails, and only those values are cast strictly, one at a time in row order, up to the first
+that fails. NaN and infinite FLOAT or DOUBLE values, which the DECIMAL cast maps to NULL in
+every mode, are masked first so that they need no strict cast. MAKE_INTERVAL and
+MAKE_YM_INTERVAL used to report the first failing argument across the batch. Since they
+request row order, a computed projection under them stays a separate projection that produces
+the row prefix, as under SLICE, with the same values; and SLICE, the other requester, now gets
+Spark's first failing row from these casts too. An argument computed by checked arithmetic, or
+an earlier expression of the projection, can still fail on a later row first at batch sizes
+above 1 (#1180). The [MAKE_INTERVAL references](tests/fixtures/make-interval/README.md) record
+the checks.
 
 TRY_MAKE_INTERVAL, which was not registered, plans the same function with one to seven
 arguments and Spark's `failOnError = false`: an overflow gives NULL and the result is nullable
@@ -701,8 +717,6 @@ fail while collecting rows, and its message stopped after the first sentence. Re
   `make_ym_interval(0.99999999999999999)` is 12 months in Spark and 0 in DAR (#1168).
 - TRY_ADD, TRY_SUBTRACT, TRY_MULTIPLY and TRY_DIVIDE over an overflowing MAKE_YM_INTERVAL, or
   under ANSI over a failing argument cast, fail where Spark gives NULL (#1151).
-- Under ANSI, with failing years and months in different rows of one batch, the years' failure
-  can be reported first (#1148).
 - Unaliased names keep the arguments as written where Spark adds the defaulted months (#749).
 
 The [MAKE_YM_INTERVAL references](tests/fixtures/make-ym-interval/README.md) record the checks.

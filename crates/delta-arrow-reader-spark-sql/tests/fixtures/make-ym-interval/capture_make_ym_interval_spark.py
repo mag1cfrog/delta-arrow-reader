@@ -130,7 +130,17 @@ INPUTS = [
     {"name": "wide_decimals", "schema": {"type": "struct", "fields": [
         {"name": "k", "type": "integer", "nullable": False, "metadata": {}},
         {"name": "w", "type": "decimal(38,17)", "nullable": False, "metadata": {}}]},
-     "rows": [[str(key), value] for key, value in enumerate(WIDE_DECIMALS)]}]
+     "rows": [[str(key), value] for key, value in enumerate(WIDE_DECIMALS)]},
+    # #1148: row 0's months overflow, and row 2's STRING months are malformed; BIGINT `b` is
+    # beyond INT in rows 0 and 2 with different values. A failing row is even, so at batch
+    # size 1 the failing rows are in the same input partition.
+    {"name": "ordered", "schema": {"type": "struct", "fields": [
+        {"name": "k", "type": "integer", "nullable": False, "metadata": {}},
+        {"name": "y", "type": "integer", "nullable": False, "metadata": {}},
+        {"name": "t", "type": "string", "nullable": False, "metadata": {}},
+        {"name": "b", "type": "long", "nullable": False, "metadata": {}}]},
+     "rows": [["0", "178956971", "1", "4294967297"], ["1", "0", "1", "1"],
+              ["2", "0", "x", "4294967298"]]}]
 
 COLUMNS = [
     ("nullable_both", "make_ym_interval(y, mo)", "nullable", "k <> 4"),
@@ -167,8 +177,10 @@ COLUMNS = [
     ("required_string_computed_null_month", "make_ym_interval(t, NULL + 1)", "required", "true"),
     ("required_string_nullif_month", "make_ym_interval(t, nullif(1, 1))", "required", "true"),
     ("nullable_null_year_string", "make_ym_interval(NULL, t)", "nullable", "true"),
+    # Row 0's months and row 2's years are malformed, both even rows (#1148).
     ("required_string_failures_in_row_order",
-     "make_ym_interval(t, CASE WHEN k = 0 THEN 'bad' ELSE '1' END)", "required", "true"),
+     "make_ym_interval(CASE WHEN k = 2 THEN 'x' ELSE '1' END, "
+     "CASE WHEN k = 0 THEN 'bad' ELSE '1' END)", "required", "true"),
     ("required_int_function", "make_ym_interval(int(t))", "required", "k IN (0, 1)"),
     ("required_int_function_is_null", "make_ym_interval(int(t)) IS NULL", "required", "k = 3"),
     ("required_small_types", "make_ym_interval(CAST(k AS TINYINT), CAST(mo AS SMALLINT))",
@@ -178,6 +190,8 @@ COLUMNS = [
     ("required_comparison", "make_ym_interval(y) = INTERVAL '1' YEAR", "required", "k <> 3"),
     ("required_negation", "-make_ym_interval(y, mo)", "required", "k IN (0, 1, 2)"),
     ("required_is_null", "make_ym_interval(y, mo) IS NULL", "required", "k <> 3"),
+    ("ordered_arithmetic_fails_before_months", "make_ym_interval(y, t)", "ordered", "true"),
+    ("ordered_months_fail_twice", "make_ym_interval(0, b)", "ordered", "true"),
     ("required_try_add_overflow", "try_add(make_ym_interval(y, mo), INTERVAL '1' MONTH)",
      "required", "k = 3"),
     ("empty_both", "make_ym_interval(y, mo)", "empty", "true"),

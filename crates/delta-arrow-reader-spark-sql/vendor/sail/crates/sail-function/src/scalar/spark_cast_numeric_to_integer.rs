@@ -234,6 +234,27 @@ impl ScalarUDFImpl for SparkCastNumericToInteger {
         Ok(ExprSimplifyResult::Original(args))
     }
 
+    // A parent that keeps Spark's row order of errors needs this cast's first failing row,
+    // which only ANSI can have.
+    fn invoke_rows_until_error(
+        &self,
+        args: ScalarFunctionArgs,
+    ) -> Result<datafusion_expr::EvaluatedRowPrefix> {
+        if self.mode != CastMode::Ansi {
+            return self
+                .invoke_with_args(args)
+                .map(datafusion_expr::EvaluatedRowPrefix::complete);
+        }
+        let [value] = take_function_args(self.name(), args.args.as_slice())?;
+        let try_result = Self::try_new(self.target.clone(), true, true)?.cast_value(value)?;
+        crate::scalar::row_errors::strict_cast_rows_until_error(
+            value,
+            try_result,
+            args.number_rows,
+            |value| self.cast_value(value),
+        )
+    }
+
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
         let [value] = take_function_args(self.name(), args.args.as_slice())?;
         self.cast_value(value)
