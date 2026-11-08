@@ -83,11 +83,11 @@ INPUTS = [{
         {"name": "n", "type": "integer", "nullable": True, "metadata": {}},
         {"name": "h", "type": "integer", "nullable": True, "metadata": {}}]},
     "rows": [[str(key)] + list(row) for key, row in enumerate(OTHER_ROWS)]}, {
-    # #1148: failures in different arguments and rows. Row 0 has BIGINT hours beyond INT and
-    # years whose months overflow, row 2 malformed STRING years, row 4 malformed STRING seconds
-    # and row 6 DECIMAL years beyond INT; odd rows succeed. A failing row is even, so at batch
-    # size 1 the failing rows are in the same input partition, read in order, as the harness
-    # deals batches to two partitions in turn.
+    # #1148: failures in different arguments and rows. Row 0 has years whose months overflow
+    # and BIGINT beyond INT; row 2 malformed STRING `t` and seconds `s`; row 4 BIGINT and
+    # DECIMAL beyond INT; row 6 malformed `t` and DECIMAL beyond INT. Odd rows succeed. A
+    # failing row is even, so at batch size 1 the failing rows are in the same input
+    # partition, read in order, as the harness deals batches to two partitions in turn.
     "name": "ordered",
     "schema": {"type": "struct", "fields": [
         {"name": "k", "type": "integer", "nullable": False, "metadata": {}},
@@ -98,11 +98,11 @@ INPUTS = [{
         {"name": "dc", "type": "decimal(12,2)", "nullable": False, "metadata": {}}]},
     "rows": [["0", "178956971", "1", "4294967297", "1", "1.00"],
              ["1", "0", "1", "1", "1", "1.00"],
-             ["2", "0", "abc", "1", "1", "1.00"],
+             ["2", "0", "abc", "1", "x", "1.00"],
              ["3", "0", "1", "1", "1", "1.00"],
-             ["4", "0", "1", "1", "x", "1.00"],
+             ["4", "0", "1", "4294967298", "1", "3000000000.50"],
              ["5", "0", "1", "1", "1", "1.00"],
-             ["6", "0", "1", "1", "1", "3000000000.50"],
+             ["6", "0", "def", "1", "1", "4000000000.50"],
              ["7", "0", "1", "1", "1", "1.00"]]}]
 
 COLUMNS = [
@@ -158,6 +158,9 @@ COLUMNS = [
     ("ordered_bigint_years_then_string_months", "make_interval(b, t)", "ordered", "true"),
     ("ordered_decimal_years_then_string_seconds", "make_interval(dc, 0, 0, 0, 0, 0, s)",
      "ordered", "true"),
+    # The earlier argument's first failure comes after the later argument's.
+    ("ordered_bigint_years_after_string_months", "make_interval(b, t)", "ordered", "k >= 1"),
+    ("ordered_decimal_years_after_string_months", "make_interval(dc, t)", "ordered", "true"),
     ("ordered_overflow_then_string_months", "make_interval(y, t)", "ordered", "true"),
     ("ordered_no_failure", "make_interval(t, 0, 0, 0, b, 0, s)", "ordered", "k = 7"),
     ("case_overflow_without_rows",
