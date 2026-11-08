@@ -63,12 +63,7 @@ each count:
   session in that zone.
 - #1087: 48 DATE_TRUNC, TRUNC, MONTHS_BETWEEN and WEEKOFYEAR records fail while collecting
   rows, because 0001-01-02 and 9999-12-31 lie outside Arrow's nanosecond range.
-- #1088: 4 WEEKDAY records return -1 for each Sunday instead of 6.
-- #1089: 2 DATE_TRUNC to MINUTE records in Los Angeles truncate the UTC minute for the
-  three instants in local mean time, 2 seconds after Spark's local minute.
 - #1090: 4 records of HOUR over GREATEST are nullable where Spark declares them required.
-- #1093: 10 Los Angeles records add and subtract days, count a SEQUENCE and subtract a
-  TIMESTAMP as elapsed time, where Spark uses local date-times.
 - #1094: 4 TO_JSON records print microseconds where Spark prints milliseconds, and the
   local mean time offset without its seconds.
 

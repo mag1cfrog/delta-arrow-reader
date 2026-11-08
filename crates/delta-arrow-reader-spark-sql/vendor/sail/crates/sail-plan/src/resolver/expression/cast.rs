@@ -2,7 +2,9 @@
 use std::ops::{Div, Mul};
 use std::sync::Arc;
 
+use arrow::compute::can_cast_types;
 use arrow::datatypes::{DataType, Field, Fields, IntervalUnit, TimeUnit};
+use datafusion::physical_expr::expressions::can_cast_types as can_cast_native_types;
 use datafusion_common::{DFSchemaRef, ScalarValue};
 use datafusion_expr::{ExprSchemable, ScalarUDF, cast, expr, lit, try_cast};
 use sail_common::spec;
@@ -34,7 +36,9 @@ use crate::error::{PlanError, PlanResult};
 use crate::formatter::SparkPlanFormatter;
 use crate::function::common::drop_inherited_column_metadata;
 use crate::function::is_spark_compatible_arrow_fixed_offset;
-use crate::function::temporal_coercion::cast_local_timestamp_expr_to_ltz;
+use crate::function::temporal_coercion::{
+    cast_date_expr_to_ltz, cast_local_timestamp_expr_to_ltz, ltz_expr_to_local_timestamp,
+};
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
 use crate::resolver::state::PlanResolverState;
@@ -133,7 +137,6 @@ impl PlanResolver<'_> {
         let named = self.resolve_named_expression(expr, schema, state).await?;
         let expr_field = named.expr.to_field(schema)?.1;
         let expr_type = expr_field.data_type().clone();
-        let expr_is_variant = is_variant_storage_field(expr_field.as_ref());
         let named_input = named_source
             && matches!(
                 &named.expr,
@@ -166,6 +169,50 @@ impl PlanResolver<'_> {
                 named_input,
             ));
         }
+        if expr_type.is_numeric()
+            && matches!(cast_to_type, DataType::Duration(_))
+            && let Some(field) = day_time_interval_field
+        {
+            let expr = cast(
+                expr.mul(lit(day_time_field_to_microseconds(field))),
+                cast_to_type,
+            );
+            return Ok((
+                NamedExpr::new(name, drop_inherited_column_metadata(expr)),
+                named_input,
+            ));
+        }
+        let expr = self.cast_resolved_expression(expr, cast_to_type, is_try, schema)?;
+        Ok((
+            NamedExpr::new(name, drop_inherited_column_metadata(expr)),
+            named_input,
+        ))
+    }
+
+    pub(super) fn cast_resolved_expression(
+        &self,
+        expr: expr::Expr,
+        cast_to_type: DataType,
+        is_try: bool,
+        schema: &DFSchemaRef,
+    ) -> PlanResult<expr::Expr> {
+        let expr_field = expr.to_field(schema)?.1;
+        let expr_type = expr_field.data_type().clone();
+        let expr_is_variant = is_variant_storage_field(expr_field.as_ref());
+        // Spark reads each instant's local date-time in the session time zone; Arrow's cast
+        // keeps its UTC date-time.
+        if cast_to_type == DataType::Timestamp(TimeUnit::Microsecond, None)
+            && let DataType::Timestamp(unit, Some(zone)) = &expr_type
+            && let Some(local) = ltz_expr_to_local_timestamp(
+                expr.clone(),
+                *unit,
+                zone,
+                &self.config.session_timezone,
+                is_try,
+            )
+        {
+            return Ok(local);
+        }
         let override_string_cast = matches!(
             expr_type,
             DataType::Float32
@@ -185,13 +232,21 @@ impl PlanResolver<'_> {
                 | DataType::Struct(_)
                 | DataType::Map(_, _)
         );
-        let expr = match (expr_type, cast_to_type.clone(), is_try) {
+        // Spark kernels keep their existing coercion and error phases.
+        let mut delegated_cast_types = None;
+        let expr = match (expr_type.clone(), cast_to_type.clone(), is_try) {
             (DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View, DataType::Boolean, _) => {
                 ScalarUDF::new_from_impl(SparkCastStringToBoolean::new(
                     is_try || !self.config.ansi_mode,
                 ))
                 .call(vec![expr])
             }
+            // Spark starts a DATE at the first instant of its day in the session zone.
+            (
+                DataType::Date32 | DataType::Date64,
+                DataType::Timestamp(TimeUnit::Microsecond, Some(timezone)),
+                is_try,
+            ) => cast_date_expr_to_ltz(expr, &timezone, is_try),
             (
                 DataType::Timestamp(_, None),
                 DataType::Timestamp(TimeUnit::Microsecond, Some(timezone)),
@@ -204,7 +259,11 @@ impl PlanResolver<'_> {
                         cast(expr, cast_to_type)
                     }
                 } else {
-                    cast_local_timestamp_expr_to_ltz(expr, &timezone)
+                    cast_local_timestamp_expr_to_ltz(
+                        expr,
+                        &DataType::Timestamp(TimeUnit::Microsecond, None),
+                        &timezone,
+                    )
                 }
             }
             (_, DataType::Utf8, _) if expr_is_variant => cast(
@@ -273,10 +332,7 @@ impl PlanResolver<'_> {
             (from, DataType::Timestamp(time_unit, _) | DataType::Duration(time_unit), _)
                 if from.is_numeric() =>
             {
-                let multiplier = match (day_time_interval_field, &cast_to_type) {
-                    (Some(field), DataType::Duration(_)) => day_time_field_to_microseconds(field),
-                    _ => time_unit_to_multiplier(&time_unit),
-                };
+                let multiplier = time_unit_to_multiplier(&time_unit);
                 cast(expr.mul(lit(multiplier)), cast_to_type)
             }
             (DataType::Timestamp(time_unit, _) | DataType::Duration(time_unit), to, _)
@@ -347,10 +403,13 @@ impl PlanResolver<'_> {
                         .call(vec![expr]);
                 if renamed_target == to {
                     renamed
-                } else if is_try {
-                    try_cast(renamed, to)
                 } else {
-                    cast(renamed, to)
+                    delegated_cast_types = Some((renamed_target, to.clone(), is_try));
+                    if is_try {
+                        try_cast(renamed, to)
+                    } else {
+                        cast(renamed, to)
+                    }
                 }
             }
             (
@@ -387,13 +446,36 @@ impl PlanResolver<'_> {
                 )?)
                 .call(vec![expr])
             }
-            (_, to, true) => try_cast(expr, to),
-            (_, to, _) => cast(expr, to),
+            (from, to, is_try) => {
+                delegated_cast_types = Some((from, to.clone(), is_try));
+                if is_try {
+                    try_cast(expr, to)
+                } else {
+                    cast(expr, to)
+                }
+            }
         };
-        Ok((
-            NamedExpr::new(name, drop_inherited_column_metadata(expr)),
-            named_input,
-        ))
+        if let Some((source_type, target_type, is_try)) = delegated_cast_types {
+            let supported = source_type == target_type
+                || if is_try {
+                    can_cast_types(&source_type, &target_type)
+                } else {
+                    can_cast_native_types(&source_type, &target_type)
+                };
+            if !supported {
+                let source = SparkPlanFormatter.data_type_to_cast_error_string(&expr_type)?;
+                let target = SparkPlanFormatter.data_type_to_cast_error_string(&target_type)?;
+                let representation_reason = if source == target {
+                    " The native cast does not support these Arrow representations."
+                } else {
+                    ""
+                };
+                return Err(PlanError::analysis(format!(
+                    "[DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION] cannot cast \"{source}\" to \"{target}\".{representation_reason} SQLSTATE: 42K09"
+                )));
+            }
+        }
+        Ok(expr)
     }
 }
 

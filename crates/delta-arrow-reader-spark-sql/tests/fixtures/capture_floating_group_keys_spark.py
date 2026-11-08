@@ -8,6 +8,7 @@ import math
 import os
 import struct
 import sys
+from datetime import timezone
 from pathlib import Path
 
 from py4j.protocol import Py4JError
@@ -17,6 +18,17 @@ from pyspark.sql import SparkSession, types
 def encode(value, data_type, *, input_value=False):
     if value is None:
         return None
+    if isinstance(data_type, types.BinaryType):
+        return bytes(value).hex()
+    if isinstance(data_type, types.BooleanType) and not input_value:
+        return str(value).lower()
+    if isinstance(data_type, types.TimestampType) and not input_value:
+        # PySpark's TimestampType returns local naive datetimes.
+        timestamp = value.astimezone(timezone.utc).replace(tzinfo=None)
+        precision = "microseconds" if timestamp.microsecond % 1000 else "milliseconds"
+        if not timestamp.microsecond:
+            precision = "seconds"
+        return timestamp.isoformat(timespec=precision) + "Z"
     if isinstance(data_type, (types.FloatType, types.DoubleType)):
         if math.isnan(value) and not input_value:
             return "nan"

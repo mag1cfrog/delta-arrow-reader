@@ -1,0 +1,4387 @@
+{
+  "issue": 1123,
+  "source_request_sha256": "156bb4ba1c0cf99477960b62173a48301f83102aad9400d7c5e35a6a110f17db",
+  "source_capture_sha256": "5aef5b40dc2ad055c77b2f05bf643a959b075eacb217e19933aa2b7be7ecd3fe",
+  "before_observation_sha256": "9872cd691e23296fdebf068a6438dcd27d54d0d0f44a8edc5f0bf68e8cfe5e1d",
+  "candidate_observation_sha256": "f6880cb4b8310115fa36417cd5f9bcc12666640b89a40018061c87fcfa0c1e05",
+  "candidate_head": "4d438004c80364f654dee86054ba619f05fcd487",
+  "strict_contexts": 72,
+  "retained_contexts": 16,
+  "source_field_contexts": 84,
+  "controls": [
+    {
+      "corpus": "temporal-folding-dependency-1044",
+      "id": "direct_timestamp",
+      "ansi": true,
+      "owner_issues": [
+        1057
+      ],
+      "reference": {
+        "corpus": "temporal-folding-dependency-1044",
+        "id": "direct_timestamp",
+        "sql": "SELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value",
+        "ansi": true,
+        "timezone": "UTC",
+        "ordered": true,
+        "ownership": "strict_temporal_constant_folding",
+        "coverage": {
+          "family": "strict_constant_cast",
+          "origin": "author_source_controls",
+          "outcome": "UNKNOWN"
+        },
+        "schema_stages": {
+          "public": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "cast_value",
+                "type": "timestamp",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "cast_value",
+                "type": "timestamp",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "spark_plans": {
+          "analyzed": "Project [cast(2021-02-29 12:34:56 as timestamp) AS cast_value#29]\n+- OneRowRelation\n"
+        },
+        "schema_stage_availability": {
+          "public": {
+            "available": true
+          },
+          "analyzed": {
+            "available": true
+          },
+          "optimized": {
+            "available": false,
+            "reason": "actual stage accessor failed",
+            "error": {
+              "phase": "optimized_schema_after_failure",
+              "condition": "CAST_INVALID_INPUT",
+              "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+              "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "parameters": {
+                "expression": "'2021-02-29 12:34:56'",
+                "sourceType": "\"STRING\"",
+                "targetType": "\"TIMESTAMP\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              },
+              "sql_state": "22018",
+              "java_causes": [
+                {
+                  "class": "org.apache.spark.SparkDateTimeException",
+                  "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+                  "condition": "CAST_INVALID_INPUT",
+                  "parameters": {
+                    "expression": "'2021-02-29 12:34:56'",
+                    "sourceType": "\"STRING\"",
+                    "targetType": "\"TIMESTAMP\"",
+                    "ansiConfig": "\"spark.sql.ansi.enabled\""
+                  },
+                  "sql_state": "22018"
+                }
+              ],
+              "cause_chain_complete": true
+            }
+          },
+          "executed_before_collect": {
+            "available": false,
+            "reason": "actual stage accessor failed",
+            "error": {
+              "phase": "executed_before_collect_schema_after_failure",
+              "condition": "CAST_INVALID_INPUT",
+              "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+              "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "parameters": {
+                "expression": "'2021-02-29 12:34:56'",
+                "sourceType": "\"STRING\"",
+                "targetType": "\"TIMESTAMP\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              },
+              "sql_state": "22018",
+              "java_causes": [
+                {
+                  "class": "org.apache.spark.SparkDateTimeException",
+                  "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+                  "condition": "CAST_INVALID_INPUT",
+                  "parameters": {
+                    "expression": "'2021-02-29 12:34:56'",
+                    "sourceType": "\"STRING\"",
+                    "targetType": "\"TIMESTAMP\"",
+                    "ansiConfig": "\"spark.sql.ansi.enabled\""
+                  },
+                  "sql_state": "22018"
+                }
+              ],
+              "cause_chain_complete": true
+            }
+          },
+          "executed": {
+            "available": false,
+            "reason": "collect was not attempted; no after-collect stage exists"
+          }
+        },
+        "status": "error",
+        "spark_error_phase": "optimized_schema",
+        "spark_error": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+        "spark_error_details": {
+          "phase": "optimized_schema",
+          "condition": "CAST_INVALID_INPUT",
+          "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+          "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+          "parameters": {
+            "expression": "'2021-02-29 12:34:56'",
+            "sourceType": "\"STRING\"",
+            "targetType": "\"TIMESTAMP\"",
+            "ansiConfig": "\"spark.sql.ansi.enabled\""
+          },
+          "sql_state": "22018",
+          "java_causes": [
+            {
+              "class": "org.apache.spark.SparkDateTimeException",
+              "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "condition": "CAST_INVALID_INPUT",
+              "parameters": {
+                "expression": "'2021-02-29 12:34:56'",
+                "sourceType": "\"STRING\"",
+                "targetType": "\"TIMESTAMP\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              },
+              "sql_state": "22018"
+            }
+          ],
+          "cause_chain_complete": true
+        },
+        "expected": {
+          "condition": "CAST_INVALID_INPUT"
+        },
+        "effective_settings": {
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.adaptive.enabled": "true",
+          "spark.sql.ansi.enabled": "true",
+          "spark.sql.caseSensitive": "false",
+          "spark.sql.optimizer.excludedRules": null,
+          "spark.sql.parser.escapedStringLiterals": "false",
+          "spark.sql.variable.substitute": "true"
+        }
+      },
+      "baseline_observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "physical_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "collect",
+        "error": "Execution error: invalid argument: DateValue { year: 2021, month: 2, day: 29 }",
+        "public_matches": true,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "optimized_observation": {
+          "raw_schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "#0",
+                "type": "timestamp",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "cast_value",
+                "type": "timestamp",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "names_match": true
+        },
+        "optimized_error": null
+      },
+      "diagnostic_baseline_reference": {
+        "corpus": "temporal-folding-dependency-1044",
+        "id": "direct_timestamp",
+        "sql": "SELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value",
+        "ansi": true,
+        "timezone": "UTC",
+        "ordered": true,
+        "ownership": "strict_temporal_constant_folding",
+        "coverage": {
+          "family": "strict_constant_cast",
+          "origin": "author_source_controls",
+          "outcome": "UNKNOWN"
+        },
+        "schema_stages": {
+          "public": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "cast_value",
+                "type": "timestamp",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "cast_value",
+                "type": "timestamp",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "spark_plans": {
+          "analyzed": "Project [cast(2021-02-29 12:34:56 as timestamp) AS cast_value#29]\n+- OneRowRelation\n"
+        },
+        "schema_stage_availability": {
+          "public": {
+            "available": true
+          },
+          "analyzed": {
+            "available": true
+          },
+          "optimized": {
+            "available": false,
+            "reason": "actual stage accessor failed",
+            "error": {
+              "phase": "optimized_schema_after_failure",
+              "condition": "CAST_INVALID_INPUT",
+              "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+              "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "parameters": {
+                "expression": "'2021-02-29 12:34:56'",
+                "sourceType": "\"STRING\"",
+                "targetType": "\"TIMESTAMP\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              },
+              "sql_state": "22018",
+              "java_causes": [
+                {
+                  "class": "org.apache.spark.SparkDateTimeException",
+                  "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+                  "condition": "CAST_INVALID_INPUT",
+                  "parameters": {
+                    "expression": "'2021-02-29 12:34:56'",
+                    "sourceType": "\"STRING\"",
+                    "targetType": "\"TIMESTAMP\"",
+                    "ansiConfig": "\"spark.sql.ansi.enabled\""
+                  },
+                  "sql_state": "22018"
+                }
+              ],
+              "cause_chain_complete": true
+            }
+          },
+          "executed_before_collect": {
+            "available": false,
+            "reason": "actual stage accessor failed",
+            "error": {
+              "phase": "executed_before_collect_schema_after_failure",
+              "condition": "CAST_INVALID_INPUT",
+              "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+              "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "parameters": {
+                "expression": "'2021-02-29 12:34:56'",
+                "sourceType": "\"STRING\"",
+                "targetType": "\"TIMESTAMP\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              },
+              "sql_state": "22018",
+              "java_causes": [
+                {
+                  "class": "org.apache.spark.SparkDateTimeException",
+                  "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+                  "condition": "CAST_INVALID_INPUT",
+                  "parameters": {
+                    "expression": "'2021-02-29 12:34:56'",
+                    "sourceType": "\"STRING\"",
+                    "targetType": "\"TIMESTAMP\"",
+                    "ansiConfig": "\"spark.sql.ansi.enabled\""
+                  },
+                  "sql_state": "22018"
+                }
+              ],
+              "cause_chain_complete": true
+            }
+          },
+          "executed": {
+            "available": false,
+            "reason": "collect was not attempted; no after-collect stage exists"
+          }
+        },
+        "status": "error",
+        "spark_error_phase": "optimized_schema",
+        "spark_error": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+        "spark_error_details": {
+          "phase": "optimized_schema",
+          "condition": "CAST_INVALID_INPUT",
+          "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+          "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+          "parameters": {
+            "expression": "'2021-02-29 12:34:56'",
+            "sourceType": "\"STRING\"",
+            "targetType": "\"TIMESTAMP\"",
+            "ansiConfig": "\"spark.sql.ansi.enabled\""
+          },
+          "sql_state": "22018",
+          "java_causes": [
+            {
+              "class": "org.apache.spark.SparkDateTimeException",
+              "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "condition": "CAST_INVALID_INPUT",
+              "parameters": {
+                "expression": "'2021-02-29 12:34:56'",
+                "sourceType": "\"STRING\"",
+                "targetType": "\"TIMESTAMP\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              },
+              "sql_state": "22018"
+            }
+          ],
+          "cause_chain_complete": true
+        },
+        "expected": {
+          "condition": "CAST_INVALID_INPUT"
+        },
+        "effective_settings": {
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.adaptive.enabled": "true",
+          "spark.sql.ansi.enabled": "true",
+          "spark.sql.caseSensitive": "false",
+          "spark.sql.optimizer.excludedRules": null,
+          "spark.sql.parser.escapedStringLiterals": "false",
+          "spark.sql.variable.substitute": "true"
+        }
+      },
+      "diagnostic_baseline_observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "physical_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "collect",
+        "error": "Execution error: invalid argument: DateValue { year: 2021, month: 2, day: 29 }",
+        "public_matches": true,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "optimized_observation": {
+          "raw_schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "#0",
+                "type": "timestamp",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "cast_value",
+                "type": "timestamp",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "names_match": true
+        },
+        "optimized_error": null
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": null,
+        "physical_schema": null,
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "create_physical_plan",
+        "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nExecution error: invalid argument: DateValue { year: 2021, month: 2, day: 29 }",
+        "public_matches": true,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": null,
+        "optimized_observation": null,
+        "optimized_error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nExecution error: invalid argument: DateValue { year: 2021, month: 2, day: 29 }",
+        "batch": 1
+      }
+    },
+    {
+      "corpus": "temporal-folding-dependency-1044",
+      "id": "direct_timestamp_ntz",
+      "ansi": true,
+      "owner_issues": [
+        1057
+      ],
+      "reference": {
+        "corpus": "temporal-folding-dependency-1044",
+        "id": "direct_timestamp_ntz",
+        "sql": "SELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ) AS cast_value",
+        "ansi": true,
+        "timezone": "UTC",
+        "ordered": true,
+        "ownership": "strict_temporal_constant_folding",
+        "coverage": {
+          "family": "strict_constant_cast",
+          "origin": "author_source_controls",
+          "outcome": "UNKNOWN"
+        },
+        "schema_stages": {
+          "public": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "cast_value",
+                "type": "timestamp_ntz",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "cast_value",
+                "type": "timestamp_ntz",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "spark_plans": {
+          "analyzed": "Project [cast(2021-02-29 12:34:56 as timestamp_ntz) AS cast_value#31]\n+- OneRowRelation\n"
+        },
+        "schema_stage_availability": {
+          "public": {
+            "available": true
+          },
+          "analyzed": {
+            "available": true
+          },
+          "optimized": {
+            "available": false,
+            "reason": "actual stage accessor failed",
+            "error": {
+              "phase": "optimized_schema_after_failure",
+              "condition": "CAST_INVALID_INPUT",
+              "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+              "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "parameters": {
+                "expression": "'2021-02-29 12:34:56'",
+                "sourceType": "\"STRING\"",
+                "targetType": "\"TIMESTAMP_NTZ\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              },
+              "sql_state": "22018",
+              "java_causes": [
+                {
+                  "class": "org.apache.spark.SparkDateTimeException",
+                  "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+                  "condition": "CAST_INVALID_INPUT",
+                  "parameters": {
+                    "expression": "'2021-02-29 12:34:56'",
+                    "sourceType": "\"STRING\"",
+                    "targetType": "\"TIMESTAMP_NTZ\"",
+                    "ansiConfig": "\"spark.sql.ansi.enabled\""
+                  },
+                  "sql_state": "22018"
+                }
+              ],
+              "cause_chain_complete": true
+            }
+          },
+          "executed_before_collect": {
+            "available": false,
+            "reason": "actual stage accessor failed",
+            "error": {
+              "phase": "executed_before_collect_schema_after_failure",
+              "condition": "CAST_INVALID_INPUT",
+              "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+              "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "parameters": {
+                "expression": "'2021-02-29 12:34:56'",
+                "sourceType": "\"STRING\"",
+                "targetType": "\"TIMESTAMP_NTZ\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              },
+              "sql_state": "22018",
+              "java_causes": [
+                {
+                  "class": "org.apache.spark.SparkDateTimeException",
+                  "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+                  "condition": "CAST_INVALID_INPUT",
+                  "parameters": {
+                    "expression": "'2021-02-29 12:34:56'",
+                    "sourceType": "\"STRING\"",
+                    "targetType": "\"TIMESTAMP_NTZ\"",
+                    "ansiConfig": "\"spark.sql.ansi.enabled\""
+                  },
+                  "sql_state": "22018"
+                }
+              ],
+              "cause_chain_complete": true
+            }
+          },
+          "executed": {
+            "available": false,
+            "reason": "collect was not attempted; no after-collect stage exists"
+          }
+        },
+        "status": "error",
+        "spark_error_phase": "optimized_schema",
+        "spark_error": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+        "spark_error_details": {
+          "phase": "optimized_schema",
+          "condition": "CAST_INVALID_INPUT",
+          "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+          "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+          "parameters": {
+            "expression": "'2021-02-29 12:34:56'",
+            "sourceType": "\"STRING\"",
+            "targetType": "\"TIMESTAMP_NTZ\"",
+            "ansiConfig": "\"spark.sql.ansi.enabled\""
+          },
+          "sql_state": "22018",
+          "java_causes": [
+            {
+              "class": "org.apache.spark.SparkDateTimeException",
+              "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "condition": "CAST_INVALID_INPUT",
+              "parameters": {
+                "expression": "'2021-02-29 12:34:56'",
+                "sourceType": "\"STRING\"",
+                "targetType": "\"TIMESTAMP_NTZ\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              },
+              "sql_state": "22018"
+            }
+          ],
+          "cause_chain_complete": true
+        },
+        "expected": {
+          "condition": "CAST_INVALID_INPUT"
+        },
+        "effective_settings": {
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.adaptive.enabled": "true",
+          "spark.sql.ansi.enabled": "true",
+          "spark.sql.caseSensitive": "false",
+          "spark.sql.optimizer.excludedRules": null,
+          "spark.sql.parser.escapedStringLiterals": "false",
+          "spark.sql.variable.substitute": "true"
+        }
+      },
+      "baseline_observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp_ntz",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp_ntz",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "physical_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp_ntz",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "collect",
+        "error": "Execution error: invalid argument: DateValue { year: 2021, month: 2, day: 29 }",
+        "public_matches": true,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp_ntz",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "optimized_observation": {
+          "raw_schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "#0",
+                "type": "timestamp_ntz",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "cast_value",
+                "type": "timestamp_ntz",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "names_match": true
+        },
+        "optimized_error": null
+      },
+      "diagnostic_baseline_reference": {
+        "corpus": "temporal-folding-dependency-1044",
+        "id": "direct_timestamp_ntz",
+        "sql": "SELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ) AS cast_value",
+        "ansi": true,
+        "timezone": "UTC",
+        "ordered": true,
+        "ownership": "strict_temporal_constant_folding",
+        "coverage": {
+          "family": "strict_constant_cast",
+          "origin": "author_source_controls",
+          "outcome": "UNKNOWN"
+        },
+        "schema_stages": {
+          "public": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "cast_value",
+                "type": "timestamp_ntz",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "cast_value",
+                "type": "timestamp_ntz",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "spark_plans": {
+          "analyzed": "Project [cast(2021-02-29 12:34:56 as timestamp_ntz) AS cast_value#31]\n+- OneRowRelation\n"
+        },
+        "schema_stage_availability": {
+          "public": {
+            "available": true
+          },
+          "analyzed": {
+            "available": true
+          },
+          "optimized": {
+            "available": false,
+            "reason": "actual stage accessor failed",
+            "error": {
+              "phase": "optimized_schema_after_failure",
+              "condition": "CAST_INVALID_INPUT",
+              "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+              "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "parameters": {
+                "expression": "'2021-02-29 12:34:56'",
+                "sourceType": "\"STRING\"",
+                "targetType": "\"TIMESTAMP_NTZ\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              },
+              "sql_state": "22018",
+              "java_causes": [
+                {
+                  "class": "org.apache.spark.SparkDateTimeException",
+                  "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+                  "condition": "CAST_INVALID_INPUT",
+                  "parameters": {
+                    "expression": "'2021-02-29 12:34:56'",
+                    "sourceType": "\"STRING\"",
+                    "targetType": "\"TIMESTAMP_NTZ\"",
+                    "ansiConfig": "\"spark.sql.ansi.enabled\""
+                  },
+                  "sql_state": "22018"
+                }
+              ],
+              "cause_chain_complete": true
+            }
+          },
+          "executed_before_collect": {
+            "available": false,
+            "reason": "actual stage accessor failed",
+            "error": {
+              "phase": "executed_before_collect_schema_after_failure",
+              "condition": "CAST_INVALID_INPUT",
+              "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+              "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "parameters": {
+                "expression": "'2021-02-29 12:34:56'",
+                "sourceType": "\"STRING\"",
+                "targetType": "\"TIMESTAMP_NTZ\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              },
+              "sql_state": "22018",
+              "java_causes": [
+                {
+                  "class": "org.apache.spark.SparkDateTimeException",
+                  "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+                  "condition": "CAST_INVALID_INPUT",
+                  "parameters": {
+                    "expression": "'2021-02-29 12:34:56'",
+                    "sourceType": "\"STRING\"",
+                    "targetType": "\"TIMESTAMP_NTZ\"",
+                    "ansiConfig": "\"spark.sql.ansi.enabled\""
+                  },
+                  "sql_state": "22018"
+                }
+              ],
+              "cause_chain_complete": true
+            }
+          },
+          "executed": {
+            "available": false,
+            "reason": "collect was not attempted; no after-collect stage exists"
+          }
+        },
+        "status": "error",
+        "spark_error_phase": "optimized_schema",
+        "spark_error": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+        "spark_error_details": {
+          "phase": "optimized_schema",
+          "condition": "CAST_INVALID_INPUT",
+          "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+          "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+          "parameters": {
+            "expression": "'2021-02-29 12:34:56'",
+            "sourceType": "\"STRING\"",
+            "targetType": "\"TIMESTAMP_NTZ\"",
+            "ansiConfig": "\"spark.sql.ansi.enabled\""
+          },
+          "sql_state": "22018",
+          "java_causes": [
+            {
+              "class": "org.apache.spark.SparkDateTimeException",
+              "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "condition": "CAST_INVALID_INPUT",
+              "parameters": {
+                "expression": "'2021-02-29 12:34:56'",
+                "sourceType": "\"STRING\"",
+                "targetType": "\"TIMESTAMP_NTZ\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              },
+              "sql_state": "22018"
+            }
+          ],
+          "cause_chain_complete": true
+        },
+        "expected": {
+          "condition": "CAST_INVALID_INPUT"
+        },
+        "effective_settings": {
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.adaptive.enabled": "true",
+          "spark.sql.ansi.enabled": "true",
+          "spark.sql.caseSensitive": "false",
+          "spark.sql.optimizer.excludedRules": null,
+          "spark.sql.parser.escapedStringLiterals": "false",
+          "spark.sql.variable.substitute": "true"
+        }
+      },
+      "diagnostic_baseline_observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp_ntz",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp_ntz",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "physical_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp_ntz",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "collect",
+        "error": "Execution error: invalid argument: DateValue { year: 2021, month: 2, day: 29 }",
+        "public_matches": true,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp_ntz",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "optimized_observation": {
+          "raw_schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "#0",
+                "type": "timestamp_ntz",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "cast_value",
+                "type": "timestamp_ntz",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "names_match": true
+        },
+        "optimized_error": null
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp_ntz",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": null,
+        "physical_schema": null,
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "create_physical_plan",
+        "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nExecution error: invalid argument: DateValue { year: 2021, month: 2, day: 29 }",
+        "public_matches": true,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": null,
+        "optimized_observation": null,
+        "optimized_error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nExecution error: invalid argument: DateValue { year: 2021, month: 2, day: 29 }",
+        "batch": 1
+      }
+    },
+    {
+      "corpus": "temporal-folding-dependency-1044",
+      "id": "formatted_date",
+      "ansi": true,
+      "owner_issues": [
+        1016,
+        1057
+      ],
+      "reference": {
+        "corpus": "temporal-folding-dependency-1044",
+        "id": "formatted_date",
+        "sql": "SELECT TO_DATE('2021-02-29','yyyy-MM-dd') AS cast_value",
+        "ansi": true,
+        "timezone": "UTC",
+        "ordered": true,
+        "ownership": "strict_temporal_constant_folding",
+        "coverage": {
+          "family": "formatted_parser",
+          "origin": "author_source_controls",
+          "outcome": "UNKNOWN"
+        },
+        "schema_stages": {
+          "public": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "cast_value",
+                "type": "date",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "cast_value",
+                "type": "date",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "spark_plans": {
+          "analyzed": "Project [to_date(2021-02-29, Some(yyyy-MM-dd), Some(UTC), true) AS cast_value#59]\n+- OneRowRelation\n"
+        },
+        "schema_stage_availability": {
+          "public": {
+            "available": true
+          },
+          "analyzed": {
+            "available": true
+          },
+          "optimized": {
+            "available": false,
+            "reason": "actual stage accessor failed",
+            "error": {
+              "phase": "optimized_schema_after_failure",
+              "condition": "CANNOT_PARSE_TIMESTAMP",
+              "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+              "message": "[CANNOT_PARSE_TIMESTAMP] Text '2021-02-29' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year. Use `try_to_date` to tolerate invalid input string and return NULL instead. SQLSTATE: 22007",
+              "parameters": {
+                "message": "Text '2021-02-29' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year",
+                "func": "`try_to_date`"
+              },
+              "sql_state": "22007",
+              "java_causes": [
+                {
+                  "class": "org.apache.spark.SparkDateTimeException",
+                  "message": "[CANNOT_PARSE_TIMESTAMP] Text '2021-02-29' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year. Use `try_to_date` to tolerate invalid input string and return NULL instead. SQLSTATE: 22007",
+                  "condition": "CANNOT_PARSE_TIMESTAMP",
+                  "parameters": {
+                    "message": "Text '2021-02-29' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year",
+                    "func": "`try_to_date`"
+                  },
+                  "sql_state": "22007"
+                }
+              ],
+              "cause_chain_complete": true
+            }
+          },
+          "executed_before_collect": {
+            "available": false,
+            "reason": "actual stage accessor failed",
+            "error": {
+              "phase": "executed_before_collect_schema_after_failure",
+              "condition": "CANNOT_PARSE_TIMESTAMP",
+              "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+              "message": "[CANNOT_PARSE_TIMESTAMP] Text '2021-02-29' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year. Use `try_to_date` to tolerate invalid input string and return NULL instead. SQLSTATE: 22007",
+              "parameters": {
+                "message": "Text '2021-02-29' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year",
+                "func": "`try_to_date`"
+              },
+              "sql_state": "22007",
+              "java_causes": [
+                {
+                  "class": "org.apache.spark.SparkDateTimeException",
+                  "message": "[CANNOT_PARSE_TIMESTAMP] Text '2021-02-29' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year. Use `try_to_date` to tolerate invalid input string and return NULL instead. SQLSTATE: 22007",
+                  "condition": "CANNOT_PARSE_TIMESTAMP",
+                  "parameters": {
+                    "message": "Text '2021-02-29' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year",
+                    "func": "`try_to_date`"
+                  },
+                  "sql_state": "22007"
+                }
+              ],
+              "cause_chain_complete": true
+            }
+          },
+          "executed": {
+            "available": false,
+            "reason": "collect was not attempted; no after-collect stage exists"
+          }
+        },
+        "status": "error",
+        "spark_error_phase": "optimized_schema",
+        "spark_error": "[CANNOT_PARSE_TIMESTAMP] Text '2021-02-29' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year. Use `try_to_date` to tolerate invalid input string and return NULL instead. SQLSTATE: 22007",
+        "spark_error_details": {
+          "phase": "optimized_schema",
+          "condition": "CANNOT_PARSE_TIMESTAMP",
+          "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+          "message": "[CANNOT_PARSE_TIMESTAMP] Text '2021-02-29' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year. Use `try_to_date` to tolerate invalid input string and return NULL instead. SQLSTATE: 22007",
+          "parameters": {
+            "message": "Text '2021-02-29' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year",
+            "func": "`try_to_date`"
+          },
+          "sql_state": "22007",
+          "java_causes": [
+            {
+              "class": "org.apache.spark.SparkDateTimeException",
+              "message": "[CANNOT_PARSE_TIMESTAMP] Text '2021-02-29' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year. Use `try_to_date` to tolerate invalid input string and return NULL instead. SQLSTATE: 22007",
+              "condition": "CANNOT_PARSE_TIMESTAMP",
+              "parameters": {
+                "message": "Text '2021-02-29' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year",
+                "func": "`try_to_date`"
+              },
+              "sql_state": "22007"
+            }
+          ],
+          "cause_chain_complete": true
+        },
+        "expected": {
+          "condition": "CANNOT_PARSE_TIMESTAMP"
+        },
+        "effective_settings": {
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.adaptive.enabled": "true",
+          "spark.sql.ansi.enabled": "true",
+          "spark.sql.caseSensitive": "false",
+          "spark.sql.optimizer.excludedRules": null,
+          "spark.sql.parser.escapedStringLiterals": "false",
+          "spark.sql.variable.substitute": "true"
+        }
+      },
+      "baseline_observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "date",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "date",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "physical_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "date",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "collect",
+        "error": "Execution error: invalid parsed date: input is out of range",
+        "public_matches": false,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "date",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "optimized_observation": {
+          "raw_schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "#0",
+                "type": "date",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "cast_value",
+                "type": "date",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "names_match": true
+        },
+        "optimized_error": null
+      },
+      "diagnostic_baseline_reference": {
+        "corpus": "temporal-folding-dependency-1044",
+        "id": "formatted_date",
+        "sql": "SELECT TO_DATE('2021-02-29','yyyy-MM-dd') AS cast_value",
+        "ansi": true,
+        "timezone": "UTC",
+        "ordered": true,
+        "ownership": "strict_temporal_constant_folding",
+        "coverage": {
+          "family": "formatted_parser",
+          "origin": "author_source_controls",
+          "outcome": "UNKNOWN"
+        },
+        "schema_stages": {
+          "public": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "cast_value",
+                "type": "date",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "cast_value",
+                "type": "date",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "spark_plans": {
+          "analyzed": "Project [to_date(2021-02-29, Some(yyyy-MM-dd), Some(UTC), true) AS cast_value#59]\n+- OneRowRelation\n"
+        },
+        "schema_stage_availability": {
+          "public": {
+            "available": true
+          },
+          "analyzed": {
+            "available": true
+          },
+          "optimized": {
+            "available": false,
+            "reason": "actual stage accessor failed",
+            "error": {
+              "phase": "optimized_schema_after_failure",
+              "condition": "CANNOT_PARSE_TIMESTAMP",
+              "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+              "message": "[CANNOT_PARSE_TIMESTAMP] Text '2021-02-29' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year. Use `try_to_date` to tolerate invalid input string and return NULL instead. SQLSTATE: 22007",
+              "parameters": {
+                "message": "Text '2021-02-29' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year",
+                "func": "`try_to_date`"
+              },
+              "sql_state": "22007",
+              "java_causes": [
+                {
+                  "class": "org.apache.spark.SparkDateTimeException",
+                  "message": "[CANNOT_PARSE_TIMESTAMP] Text '2021-02-29' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year. Use `try_to_date` to tolerate invalid input string and return NULL instead. SQLSTATE: 22007",
+                  "condition": "CANNOT_PARSE_TIMESTAMP",
+                  "parameters": {
+                    "message": "Text '2021-02-29' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year",
+                    "func": "`try_to_date`"
+                  },
+                  "sql_state": "22007"
+                }
+              ],
+              "cause_chain_complete": true
+            }
+          },
+          "executed_before_collect": {
+            "available": false,
+            "reason": "actual stage accessor failed",
+            "error": {
+              "phase": "executed_before_collect_schema_after_failure",
+              "condition": "CANNOT_PARSE_TIMESTAMP",
+              "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+              "message": "[CANNOT_PARSE_TIMESTAMP] Text '2021-02-29' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year. Use `try_to_date` to tolerate invalid input string and return NULL instead. SQLSTATE: 22007",
+              "parameters": {
+                "message": "Text '2021-02-29' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year",
+                "func": "`try_to_date`"
+              },
+              "sql_state": "22007",
+              "java_causes": [
+                {
+                  "class": "org.apache.spark.SparkDateTimeException",
+                  "message": "[CANNOT_PARSE_TIMESTAMP] Text '2021-02-29' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year. Use `try_to_date` to tolerate invalid input string and return NULL instead. SQLSTATE: 22007",
+                  "condition": "CANNOT_PARSE_TIMESTAMP",
+                  "parameters": {
+                    "message": "Text '2021-02-29' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year",
+                    "func": "`try_to_date`"
+                  },
+                  "sql_state": "22007"
+                }
+              ],
+              "cause_chain_complete": true
+            }
+          },
+          "executed": {
+            "available": false,
+            "reason": "collect was not attempted; no after-collect stage exists"
+          }
+        },
+        "status": "error",
+        "spark_error_phase": "optimized_schema",
+        "spark_error": "[CANNOT_PARSE_TIMESTAMP] Text '2021-02-29' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year. Use `try_to_date` to tolerate invalid input string and return NULL instead. SQLSTATE: 22007",
+        "spark_error_details": {
+          "phase": "optimized_schema",
+          "condition": "CANNOT_PARSE_TIMESTAMP",
+          "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+          "message": "[CANNOT_PARSE_TIMESTAMP] Text '2021-02-29' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year. Use `try_to_date` to tolerate invalid input string and return NULL instead. SQLSTATE: 22007",
+          "parameters": {
+            "message": "Text '2021-02-29' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year",
+            "func": "`try_to_date`"
+          },
+          "sql_state": "22007",
+          "java_causes": [
+            {
+              "class": "org.apache.spark.SparkDateTimeException",
+              "message": "[CANNOT_PARSE_TIMESTAMP] Text '2021-02-29' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year. Use `try_to_date` to tolerate invalid input string and return NULL instead. SQLSTATE: 22007",
+              "condition": "CANNOT_PARSE_TIMESTAMP",
+              "parameters": {
+                "message": "Text '2021-02-29' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year",
+                "func": "`try_to_date`"
+              },
+              "sql_state": "22007"
+            }
+          ],
+          "cause_chain_complete": true
+        },
+        "expected": {
+          "condition": "CANNOT_PARSE_TIMESTAMP"
+        },
+        "effective_settings": {
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.adaptive.enabled": "true",
+          "spark.sql.ansi.enabled": "true",
+          "spark.sql.caseSensitive": "false",
+          "spark.sql.optimizer.excludedRules": null,
+          "spark.sql.parser.escapedStringLiterals": "false",
+          "spark.sql.variable.substitute": "true"
+        }
+      },
+      "diagnostic_baseline_observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "date",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "date",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "physical_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "date",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "collect",
+        "error": "Execution error: invalid parsed date: input is out of range",
+        "public_matches": false,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "date",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "optimized_observation": {
+          "raw_schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "#0",
+                "type": "date",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "cast_value",
+                "type": "date",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "names_match": true
+        },
+        "optimized_error": null
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "date",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": null,
+        "physical_schema": null,
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "create_physical_plan",
+        "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nExecution error: invalid parsed date: input is out of range",
+        "public_matches": false,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": null,
+        "optimized_observation": null,
+        "optimized_error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nExecution error: invalid parsed date: input is out of range",
+        "batch": 1
+      }
+    },
+    {
+      "corpus": "temporal-folding-dependency-1044",
+      "id": "formatted_timestamp",
+      "ansi": true,
+      "owner_issues": [
+        1016,
+        1057
+      ],
+      "reference": {
+        "corpus": "temporal-folding-dependency-1044",
+        "id": "formatted_timestamp",
+        "sql": "SELECT TO_TIMESTAMP('2021-02-29 12:34:56','yyyy-MM-dd HH:mm:ss') AS cast_value",
+        "ansi": true,
+        "timezone": "UTC",
+        "ordered": true,
+        "ownership": "strict_temporal_constant_folding",
+        "coverage": {
+          "family": "formatted_parser",
+          "origin": "author_source_controls",
+          "outcome": "UNKNOWN"
+        },
+        "schema_stages": {
+          "public": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "cast_value",
+                "type": "timestamp",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "cast_value",
+                "type": "timestamp",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "spark_plans": {
+          "analyzed": "Project [to_timestamp(2021-02-29 12:34:56, Some(yyyy-MM-dd HH:mm:ss), TimestampType, Some(UTC), true) AS cast_value#61]\n+- OneRowRelation\n"
+        },
+        "schema_stage_availability": {
+          "public": {
+            "available": true
+          },
+          "analyzed": {
+            "available": true
+          },
+          "optimized": {
+            "available": false,
+            "reason": "actual stage accessor failed",
+            "error": {
+              "phase": "optimized_schema_after_failure",
+              "condition": "CANNOT_PARSE_TIMESTAMP",
+              "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+              "message": "[CANNOT_PARSE_TIMESTAMP] Text '2021-02-29 12:34:56' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year. Use `try_to_timestamp` to tolerate invalid input string and return NULL instead. SQLSTATE: 22007",
+              "parameters": {
+                "message": "Text '2021-02-29 12:34:56' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year",
+                "func": "`try_to_timestamp`"
+              },
+              "sql_state": "22007",
+              "java_causes": [
+                {
+                  "class": "org.apache.spark.SparkDateTimeException",
+                  "message": "[CANNOT_PARSE_TIMESTAMP] Text '2021-02-29 12:34:56' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year. Use `try_to_timestamp` to tolerate invalid input string and return NULL instead. SQLSTATE: 22007",
+                  "condition": "CANNOT_PARSE_TIMESTAMP",
+                  "parameters": {
+                    "message": "Text '2021-02-29 12:34:56' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year",
+                    "func": "`try_to_timestamp`"
+                  },
+                  "sql_state": "22007"
+                }
+              ],
+              "cause_chain_complete": true
+            }
+          },
+          "executed_before_collect": {
+            "available": false,
+            "reason": "actual stage accessor failed",
+            "error": {
+              "phase": "executed_before_collect_schema_after_failure",
+              "condition": "CANNOT_PARSE_TIMESTAMP",
+              "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+              "message": "[CANNOT_PARSE_TIMESTAMP] Text '2021-02-29 12:34:56' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year. Use `try_to_timestamp` to tolerate invalid input string and return NULL instead. SQLSTATE: 22007",
+              "parameters": {
+                "message": "Text '2021-02-29 12:34:56' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year",
+                "func": "`try_to_timestamp`"
+              },
+              "sql_state": "22007",
+              "java_causes": [
+                {
+                  "class": "org.apache.spark.SparkDateTimeException",
+                  "message": "[CANNOT_PARSE_TIMESTAMP] Text '2021-02-29 12:34:56' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year. Use `try_to_timestamp` to tolerate invalid input string and return NULL instead. SQLSTATE: 22007",
+                  "condition": "CANNOT_PARSE_TIMESTAMP",
+                  "parameters": {
+                    "message": "Text '2021-02-29 12:34:56' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year",
+                    "func": "`try_to_timestamp`"
+                  },
+                  "sql_state": "22007"
+                }
+              ],
+              "cause_chain_complete": true
+            }
+          },
+          "executed": {
+            "available": false,
+            "reason": "collect was not attempted; no after-collect stage exists"
+          }
+        },
+        "status": "error",
+        "spark_error_phase": "optimized_schema",
+        "spark_error": "[CANNOT_PARSE_TIMESTAMP] Text '2021-02-29 12:34:56' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year. Use `try_to_timestamp` to tolerate invalid input string and return NULL instead. SQLSTATE: 22007",
+        "spark_error_details": {
+          "phase": "optimized_schema",
+          "condition": "CANNOT_PARSE_TIMESTAMP",
+          "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+          "message": "[CANNOT_PARSE_TIMESTAMP] Text '2021-02-29 12:34:56' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year. Use `try_to_timestamp` to tolerate invalid input string and return NULL instead. SQLSTATE: 22007",
+          "parameters": {
+            "message": "Text '2021-02-29 12:34:56' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year",
+            "func": "`try_to_timestamp`"
+          },
+          "sql_state": "22007",
+          "java_causes": [
+            {
+              "class": "org.apache.spark.SparkDateTimeException",
+              "message": "[CANNOT_PARSE_TIMESTAMP] Text '2021-02-29 12:34:56' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year. Use `try_to_timestamp` to tolerate invalid input string and return NULL instead. SQLSTATE: 22007",
+              "condition": "CANNOT_PARSE_TIMESTAMP",
+              "parameters": {
+                "message": "Text '2021-02-29 12:34:56' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year",
+                "func": "`try_to_timestamp`"
+              },
+              "sql_state": "22007"
+            }
+          ],
+          "cause_chain_complete": true
+        },
+        "expected": {
+          "condition": "CANNOT_PARSE_TIMESTAMP"
+        },
+        "effective_settings": {
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.adaptive.enabled": "true",
+          "spark.sql.ansi.enabled": "true",
+          "spark.sql.caseSensitive": "false",
+          "spark.sql.optimizer.excludedRules": null,
+          "spark.sql.parser.escapedStringLiterals": "false",
+          "spark.sql.variable.substitute": "true"
+        }
+      },
+      "baseline_observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "physical_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "collect",
+        "error": "Execution error: invalid parsed date: input is out of range",
+        "public_matches": false,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "optimized_observation": {
+          "raw_schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "#0",
+                "type": "timestamp",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "cast_value",
+                "type": "timestamp",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "names_match": true
+        },
+        "optimized_error": null
+      },
+      "diagnostic_baseline_reference": {
+        "corpus": "temporal-folding-dependency-1044",
+        "id": "formatted_timestamp",
+        "sql": "SELECT TO_TIMESTAMP('2021-02-29 12:34:56','yyyy-MM-dd HH:mm:ss') AS cast_value",
+        "ansi": true,
+        "timezone": "UTC",
+        "ordered": true,
+        "ownership": "strict_temporal_constant_folding",
+        "coverage": {
+          "family": "formatted_parser",
+          "origin": "author_source_controls",
+          "outcome": "UNKNOWN"
+        },
+        "schema_stages": {
+          "public": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "cast_value",
+                "type": "timestamp",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "cast_value",
+                "type": "timestamp",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "spark_plans": {
+          "analyzed": "Project [to_timestamp(2021-02-29 12:34:56, Some(yyyy-MM-dd HH:mm:ss), TimestampType, Some(UTC), true) AS cast_value#61]\n+- OneRowRelation\n"
+        },
+        "schema_stage_availability": {
+          "public": {
+            "available": true
+          },
+          "analyzed": {
+            "available": true
+          },
+          "optimized": {
+            "available": false,
+            "reason": "actual stage accessor failed",
+            "error": {
+              "phase": "optimized_schema_after_failure",
+              "condition": "CANNOT_PARSE_TIMESTAMP",
+              "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+              "message": "[CANNOT_PARSE_TIMESTAMP] Text '2021-02-29 12:34:56' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year. Use `try_to_timestamp` to tolerate invalid input string and return NULL instead. SQLSTATE: 22007",
+              "parameters": {
+                "message": "Text '2021-02-29 12:34:56' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year",
+                "func": "`try_to_timestamp`"
+              },
+              "sql_state": "22007",
+              "java_causes": [
+                {
+                  "class": "org.apache.spark.SparkDateTimeException",
+                  "message": "[CANNOT_PARSE_TIMESTAMP] Text '2021-02-29 12:34:56' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year. Use `try_to_timestamp` to tolerate invalid input string and return NULL instead. SQLSTATE: 22007",
+                  "condition": "CANNOT_PARSE_TIMESTAMP",
+                  "parameters": {
+                    "message": "Text '2021-02-29 12:34:56' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year",
+                    "func": "`try_to_timestamp`"
+                  },
+                  "sql_state": "22007"
+                }
+              ],
+              "cause_chain_complete": true
+            }
+          },
+          "executed_before_collect": {
+            "available": false,
+            "reason": "actual stage accessor failed",
+            "error": {
+              "phase": "executed_before_collect_schema_after_failure",
+              "condition": "CANNOT_PARSE_TIMESTAMP",
+              "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+              "message": "[CANNOT_PARSE_TIMESTAMP] Text '2021-02-29 12:34:56' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year. Use `try_to_timestamp` to tolerate invalid input string and return NULL instead. SQLSTATE: 22007",
+              "parameters": {
+                "message": "Text '2021-02-29 12:34:56' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year",
+                "func": "`try_to_timestamp`"
+              },
+              "sql_state": "22007",
+              "java_causes": [
+                {
+                  "class": "org.apache.spark.SparkDateTimeException",
+                  "message": "[CANNOT_PARSE_TIMESTAMP] Text '2021-02-29 12:34:56' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year. Use `try_to_timestamp` to tolerate invalid input string and return NULL instead. SQLSTATE: 22007",
+                  "condition": "CANNOT_PARSE_TIMESTAMP",
+                  "parameters": {
+                    "message": "Text '2021-02-29 12:34:56' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year",
+                    "func": "`try_to_timestamp`"
+                  },
+                  "sql_state": "22007"
+                }
+              ],
+              "cause_chain_complete": true
+            }
+          },
+          "executed": {
+            "available": false,
+            "reason": "collect was not attempted; no after-collect stage exists"
+          }
+        },
+        "status": "error",
+        "spark_error_phase": "optimized_schema",
+        "spark_error": "[CANNOT_PARSE_TIMESTAMP] Text '2021-02-29 12:34:56' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year. Use `try_to_timestamp` to tolerate invalid input string and return NULL instead. SQLSTATE: 22007",
+        "spark_error_details": {
+          "phase": "optimized_schema",
+          "condition": "CANNOT_PARSE_TIMESTAMP",
+          "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+          "message": "[CANNOT_PARSE_TIMESTAMP] Text '2021-02-29 12:34:56' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year. Use `try_to_timestamp` to tolerate invalid input string and return NULL instead. SQLSTATE: 22007",
+          "parameters": {
+            "message": "Text '2021-02-29 12:34:56' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year",
+            "func": "`try_to_timestamp`"
+          },
+          "sql_state": "22007",
+          "java_causes": [
+            {
+              "class": "org.apache.spark.SparkDateTimeException",
+              "message": "[CANNOT_PARSE_TIMESTAMP] Text '2021-02-29 12:34:56' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year. Use `try_to_timestamp` to tolerate invalid input string and return NULL instead. SQLSTATE: 22007",
+              "condition": "CANNOT_PARSE_TIMESTAMP",
+              "parameters": {
+                "message": "Text '2021-02-29 12:34:56' could not be parsed: Invalid date 'February 29' as '2021' is not a leap year",
+                "func": "`try_to_timestamp`"
+              },
+              "sql_state": "22007"
+            }
+          ],
+          "cause_chain_complete": true
+        },
+        "expected": {
+          "condition": "CANNOT_PARSE_TIMESTAMP"
+        },
+        "effective_settings": {
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.adaptive.enabled": "true",
+          "spark.sql.ansi.enabled": "true",
+          "spark.sql.caseSensitive": "false",
+          "spark.sql.optimizer.excludedRules": null,
+          "spark.sql.parser.escapedStringLiterals": "false",
+          "spark.sql.variable.substitute": "true"
+        }
+      },
+      "diagnostic_baseline_observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "physical_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "collect",
+        "error": "Execution error: invalid parsed date: input is out of range",
+        "public_matches": false,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "optimized_observation": {
+          "raw_schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "#0",
+                "type": "timestamp",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "cast_value",
+                "type": "timestamp",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "names_match": true
+        },
+        "optimized_error": null
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": null,
+        "physical_schema": null,
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "create_physical_plan",
+        "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nExecution error: invalid parsed date: input is out of range",
+        "public_matches": false,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": null,
+        "optimized_observation": null,
+        "optimized_error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nExecution error: invalid parsed date: input is out of range",
+        "batch": 1
+      }
+    },
+    {
+      "corpus": "temporal-folding-dependency-1044",
+      "id": "lag_timestamp_explicit_invalid_cast_default",
+      "ansi": true,
+      "owner_issues": [
+        1057
+      ],
+      "reference": {
+        "corpus": "temporal-folding-dependency-1044",
+        "id": "lag_timestamp_explicit_invalid_cast_default",
+        "sql": "SELECT id,LAG(TIMESTAMP '2020-01-02 03:04:05.123456',1,CAST('2021-02-29 12:34:56' AS TIMESTAMP)) OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+        "ansi": true,
+        "timezone": "UTC",
+        "ordered": true,
+        "ownership": "strict_temporal_constant_folding",
+        "coverage": {
+          "family": "explicit_offset_temporal_default",
+          "origin": "1123_supplement",
+          "provider": "offset_scalar",
+          "function": "LAG",
+          "target": "timestamp",
+          "one_potential_fault": "malformed explicit temporal CAST default",
+          "outcome": "UNKNOWN"
+        },
+        "schema_stages": {
+          "public": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {
+                  "role": "total-order",
+                  "source": "id"
+                }
+              },
+              {
+                "name": "shifted",
+                "type": "timestamp",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {
+                  "role": "total-order",
+                  "source": "id"
+                }
+              },
+              {
+                "name": "shifted",
+                "type": "timestamp",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "spark_plans": {
+          "analyzed": "Sort [id#0 ASC NULLS FIRST], true\n+- Project [id#0, shifted#65]\n   +- Project [id#0, shifted#65, shifted#65]\n      +- Window [lag(2020-01-02 03:04:05.123456, -1, cast(2021-02-29 12:34:56 as timestamp)) windowspecdefinition(id#0 ASC NULLS FIRST, specifiedwindowframe(RowFrame, -1, -1)) AS shifted#65], [id#0 ASC NULLS FIRST]\n         +- Project [id#0]\n            +- SubqueryAlias offset_scalar\n               +- View (`offset_scalar`, [id#0, g#1, r#2, v#3, d#4])\n                  +- LogicalRDD [id#0, g#1, r#2, v#3, d#4], false\n"
+        },
+        "schema_stage_availability": {
+          "public": {
+            "available": true
+          },
+          "analyzed": {
+            "available": true
+          },
+          "optimized": {
+            "available": false,
+            "reason": "actual stage accessor failed",
+            "error": {
+              "phase": "optimized_schema_after_failure",
+              "condition": "CAST_INVALID_INPUT",
+              "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+              "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 56) ==\n... '2020-01-02 03:04:05.123456',1,CAST('2021-02-29 12:34:56' AS TIMESTAMP)) OVER (ORDER BY id) AS shifted ...\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "parameters": {
+                "expression": "'2021-02-29 12:34:56'",
+                "sourceType": "\"STRING\"",
+                "targetType": "\"TIMESTAMP\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              },
+              "sql_state": "22018",
+              "java_causes": [
+                {
+                  "class": "org.apache.spark.SparkDateTimeException",
+                  "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 56) ==\n... '2020-01-02 03:04:05.123456',1,CAST('2021-02-29 12:34:56' AS TIMESTAMP)) OVER (ORDER BY id) AS shifted ...\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+                  "condition": "CAST_INVALID_INPUT",
+                  "parameters": {
+                    "expression": "'2021-02-29 12:34:56'",
+                    "sourceType": "\"STRING\"",
+                    "targetType": "\"TIMESTAMP\"",
+                    "ansiConfig": "\"spark.sql.ansi.enabled\""
+                  },
+                  "sql_state": "22018"
+                }
+              ],
+              "cause_chain_complete": true
+            }
+          },
+          "executed_before_collect": {
+            "available": false,
+            "reason": "actual stage accessor failed",
+            "error": {
+              "phase": "executed_before_collect_schema_after_failure",
+              "condition": "CAST_INVALID_INPUT",
+              "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+              "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 56) ==\n... '2020-01-02 03:04:05.123456',1,CAST('2021-02-29 12:34:56' AS TIMESTAMP)) OVER (ORDER BY id) AS shifted ...\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "parameters": {
+                "expression": "'2021-02-29 12:34:56'",
+                "sourceType": "\"STRING\"",
+                "targetType": "\"TIMESTAMP\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              },
+              "sql_state": "22018",
+              "java_causes": [
+                {
+                  "class": "org.apache.spark.SparkDateTimeException",
+                  "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 56) ==\n... '2020-01-02 03:04:05.123456',1,CAST('2021-02-29 12:34:56' AS TIMESTAMP)) OVER (ORDER BY id) AS shifted ...\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+                  "condition": "CAST_INVALID_INPUT",
+                  "parameters": {
+                    "expression": "'2021-02-29 12:34:56'",
+                    "sourceType": "\"STRING\"",
+                    "targetType": "\"TIMESTAMP\"",
+                    "ansiConfig": "\"spark.sql.ansi.enabled\""
+                  },
+                  "sql_state": "22018"
+                }
+              ],
+              "cause_chain_complete": true
+            }
+          },
+          "executed": {
+            "available": false,
+            "reason": "collect was not attempted; no after-collect stage exists"
+          }
+        },
+        "status": "error",
+        "spark_error_phase": "optimized_schema",
+        "spark_error": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 56) ==\n... '2020-01-02 03:04:05.123456',1,CAST('2021-02-29 12:34:56' AS TIMESTAMP)) OVER (ORDER BY id) AS shifted ...\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+        "spark_error_details": {
+          "phase": "optimized_schema",
+          "condition": "CAST_INVALID_INPUT",
+          "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+          "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 56) ==\n... '2020-01-02 03:04:05.123456',1,CAST('2021-02-29 12:34:56' AS TIMESTAMP)) OVER (ORDER BY id) AS shifted ...\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+          "parameters": {
+            "expression": "'2021-02-29 12:34:56'",
+            "sourceType": "\"STRING\"",
+            "targetType": "\"TIMESTAMP\"",
+            "ansiConfig": "\"spark.sql.ansi.enabled\""
+          },
+          "sql_state": "22018",
+          "java_causes": [
+            {
+              "class": "org.apache.spark.SparkDateTimeException",
+              "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 56) ==\n... '2020-01-02 03:04:05.123456',1,CAST('2021-02-29 12:34:56' AS TIMESTAMP)) OVER (ORDER BY id) AS shifted ...\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "condition": "CAST_INVALID_INPUT",
+              "parameters": {
+                "expression": "'2021-02-29 12:34:56'",
+                "sourceType": "\"STRING\"",
+                "targetType": "\"TIMESTAMP\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              },
+              "sql_state": "22018"
+            }
+          ],
+          "cause_chain_complete": true
+        },
+        "expected": {
+          "condition": "CAST_INVALID_INPUT"
+        },
+        "effective_settings": {
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.adaptive.enabled": "true",
+          "spark.sql.ansi.enabled": "true",
+          "spark.sql.caseSensitive": "false",
+          "spark.sql.optimizer.excludedRules": null,
+          "spark.sql.parser.escapedStringLiterals": "false",
+          "spark.sql.variable.substitute": "true"
+        }
+      },
+      "baseline_observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "id",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {
+                "role": "total-order",
+                "source": "id"
+              }
+            },
+            {
+              "name": "shifted",
+              "type": "timestamp",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": null,
+        "physical_schema": null,
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "create_physical_plan",
+        "error": "This feature is not implemented: There is only support Literal types for field at idx: 2 in Window Function",
+        "public_matches": true,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "id",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {
+                "source": "id",
+                "role": "total-order"
+              }
+            },
+            {
+              "name": "shifted",
+              "type": "timestamp",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "optimized_observation": {
+          "raw_schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "#6",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {
+                  "source": "id",
+                  "role": "total-order"
+                }
+              },
+              {
+                "name": "#7",
+                "type": "timestamp",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {
+                  "source": "id",
+                  "role": "total-order"
+                }
+              },
+              {
+                "name": "shifted",
+                "type": "timestamp",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "names_match": true
+        },
+        "optimized_error": null
+      },
+      "diagnostic_baseline_reference": {
+        "corpus": "temporal-folding-dependency-1044",
+        "id": "direct_timestamp",
+        "sql": "SELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value",
+        "ansi": true,
+        "timezone": "UTC",
+        "ordered": true,
+        "ownership": "strict_temporal_constant_folding",
+        "coverage": {
+          "family": "strict_constant_cast",
+          "origin": "author_source_controls",
+          "outcome": "UNKNOWN"
+        },
+        "schema_stages": {
+          "public": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "cast_value",
+                "type": "timestamp",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "cast_value",
+                "type": "timestamp",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "spark_plans": {
+          "analyzed": "Project [cast(2021-02-29 12:34:56 as timestamp) AS cast_value#29]\n+- OneRowRelation\n"
+        },
+        "schema_stage_availability": {
+          "public": {
+            "available": true
+          },
+          "analyzed": {
+            "available": true
+          },
+          "optimized": {
+            "available": false,
+            "reason": "actual stage accessor failed",
+            "error": {
+              "phase": "optimized_schema_after_failure",
+              "condition": "CAST_INVALID_INPUT",
+              "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+              "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "parameters": {
+                "expression": "'2021-02-29 12:34:56'",
+                "sourceType": "\"STRING\"",
+                "targetType": "\"TIMESTAMP\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              },
+              "sql_state": "22018",
+              "java_causes": [
+                {
+                  "class": "org.apache.spark.SparkDateTimeException",
+                  "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+                  "condition": "CAST_INVALID_INPUT",
+                  "parameters": {
+                    "expression": "'2021-02-29 12:34:56'",
+                    "sourceType": "\"STRING\"",
+                    "targetType": "\"TIMESTAMP\"",
+                    "ansiConfig": "\"spark.sql.ansi.enabled\""
+                  },
+                  "sql_state": "22018"
+                }
+              ],
+              "cause_chain_complete": true
+            }
+          },
+          "executed_before_collect": {
+            "available": false,
+            "reason": "actual stage accessor failed",
+            "error": {
+              "phase": "executed_before_collect_schema_after_failure",
+              "condition": "CAST_INVALID_INPUT",
+              "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+              "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "parameters": {
+                "expression": "'2021-02-29 12:34:56'",
+                "sourceType": "\"STRING\"",
+                "targetType": "\"TIMESTAMP\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              },
+              "sql_state": "22018",
+              "java_causes": [
+                {
+                  "class": "org.apache.spark.SparkDateTimeException",
+                  "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+                  "condition": "CAST_INVALID_INPUT",
+                  "parameters": {
+                    "expression": "'2021-02-29 12:34:56'",
+                    "sourceType": "\"STRING\"",
+                    "targetType": "\"TIMESTAMP\"",
+                    "ansiConfig": "\"spark.sql.ansi.enabled\""
+                  },
+                  "sql_state": "22018"
+                }
+              ],
+              "cause_chain_complete": true
+            }
+          },
+          "executed": {
+            "available": false,
+            "reason": "collect was not attempted; no after-collect stage exists"
+          }
+        },
+        "status": "error",
+        "spark_error_phase": "optimized_schema",
+        "spark_error": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+        "spark_error_details": {
+          "phase": "optimized_schema",
+          "condition": "CAST_INVALID_INPUT",
+          "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+          "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+          "parameters": {
+            "expression": "'2021-02-29 12:34:56'",
+            "sourceType": "\"STRING\"",
+            "targetType": "\"TIMESTAMP\"",
+            "ansiConfig": "\"spark.sql.ansi.enabled\""
+          },
+          "sql_state": "22018",
+          "java_causes": [
+            {
+              "class": "org.apache.spark.SparkDateTimeException",
+              "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "condition": "CAST_INVALID_INPUT",
+              "parameters": {
+                "expression": "'2021-02-29 12:34:56'",
+                "sourceType": "\"STRING\"",
+                "targetType": "\"TIMESTAMP\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              },
+              "sql_state": "22018"
+            }
+          ],
+          "cause_chain_complete": true
+        },
+        "expected": {
+          "condition": "CAST_INVALID_INPUT"
+        },
+        "effective_settings": {
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.adaptive.enabled": "true",
+          "spark.sql.ansi.enabled": "true",
+          "spark.sql.caseSensitive": "false",
+          "spark.sql.optimizer.excludedRules": null,
+          "spark.sql.parser.escapedStringLiterals": "false",
+          "spark.sql.variable.substitute": "true"
+        }
+      },
+      "diagnostic_baseline_observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "physical_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "collect",
+        "error": "Execution error: invalid argument: DateValue { year: 2021, month: 2, day: 29 }",
+        "public_matches": true,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "optimized_observation": {
+          "raw_schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "#0",
+                "type": "timestamp",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "cast_value",
+                "type": "timestamp",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "names_match": true
+        },
+        "optimized_error": null
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "id",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {
+                "source": "id",
+                "role": "total-order"
+              }
+            },
+            {
+              "name": "shifted",
+              "type": "timestamp",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": null,
+        "physical_schema": null,
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "create_physical_plan",
+        "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nExecution error: invalid argument: DateValue { year: 2021, month: 2, day: 29 }",
+        "public_matches": true,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": null,
+        "optimized_observation": null,
+        "optimized_error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nExecution error: invalid argument: DateValue { year: 2021, month: 2, day: 29 }",
+        "batch": 1
+      }
+    },
+    {
+      "corpus": "temporal-folding-dependency-1044",
+      "id": "lag_timestamp_ntz_explicit_invalid_cast_default",
+      "ansi": true,
+      "owner_issues": [
+        1057
+      ],
+      "reference": {
+        "corpus": "temporal-folding-dependency-1044",
+        "id": "lag_timestamp_ntz_explicit_invalid_cast_default",
+        "sql": "SELECT id,LAG(CAST('2020-01-02 03:04:05.123456' AS TIMESTAMP_NTZ),1,CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ)) OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+        "ansi": true,
+        "timezone": "UTC",
+        "ordered": true,
+        "ownership": "strict_temporal_constant_folding",
+        "coverage": {
+          "family": "explicit_offset_temporal_default",
+          "origin": "1123_supplement",
+          "provider": "offset_scalar",
+          "function": "LAG",
+          "target": "timestamp_ntz",
+          "one_potential_fault": "malformed explicit temporal CAST default",
+          "outcome": "UNKNOWN"
+        },
+        "schema_stages": {
+          "public": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {
+                  "role": "total-order",
+                  "source": "id"
+                }
+              },
+              {
+                "name": "shifted",
+                "type": "timestamp_ntz",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {
+                  "role": "total-order",
+                  "source": "id"
+                }
+              },
+              {
+                "name": "shifted",
+                "type": "timestamp_ntz",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "spark_plans": {
+          "analyzed": "Sort [id#0 ASC NULLS FIRST], true\n+- Project [id#0, shifted#67]\n   +- Project [id#0, shifted#67, shifted#67]\n      +- Window [lag(cast(2020-01-02 03:04:05.123456 as timestamp_ntz), -1, cast(2021-02-29 12:34:56 as timestamp_ntz)) windowspecdefinition(id#0 ASC NULLS FIRST, specifiedwindowframe(RowFrame, -1, -1)) AS shifted#67], [id#0 ASC NULLS FIRST]\n         +- Project [id#0]\n            +- SubqueryAlias offset_scalar\n               +- View (`offset_scalar`, [id#0, g#1, r#2, v#3, d#4])\n                  +- LogicalRDD [id#0, g#1, r#2, v#3, d#4], false\n"
+        },
+        "schema_stage_availability": {
+          "public": {
+            "available": true
+          },
+          "analyzed": {
+            "available": true
+          },
+          "optimized": {
+            "available": false,
+            "reason": "actual stage accessor failed",
+            "error": {
+              "phase": "optimized_schema_after_failure",
+              "condition": "CAST_INVALID_INPUT",
+              "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+              "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 69) ==\n...:05.123456' AS TIMESTAMP_NTZ),1,CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ)) OVER (ORDER BY id) AS shifted ...\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "parameters": {
+                "expression": "'2021-02-29 12:34:56'",
+                "sourceType": "\"STRING\"",
+                "targetType": "\"TIMESTAMP_NTZ\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              },
+              "sql_state": "22018",
+              "java_causes": [
+                {
+                  "class": "org.apache.spark.SparkDateTimeException",
+                  "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 69) ==\n...:05.123456' AS TIMESTAMP_NTZ),1,CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ)) OVER (ORDER BY id) AS shifted ...\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+                  "condition": "CAST_INVALID_INPUT",
+                  "parameters": {
+                    "expression": "'2021-02-29 12:34:56'",
+                    "sourceType": "\"STRING\"",
+                    "targetType": "\"TIMESTAMP_NTZ\"",
+                    "ansiConfig": "\"spark.sql.ansi.enabled\""
+                  },
+                  "sql_state": "22018"
+                }
+              ],
+              "cause_chain_complete": true
+            }
+          },
+          "executed_before_collect": {
+            "available": false,
+            "reason": "actual stage accessor failed",
+            "error": {
+              "phase": "executed_before_collect_schema_after_failure",
+              "condition": "CAST_INVALID_INPUT",
+              "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+              "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 69) ==\n...:05.123456' AS TIMESTAMP_NTZ),1,CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ)) OVER (ORDER BY id) AS shifted ...\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "parameters": {
+                "expression": "'2021-02-29 12:34:56'",
+                "sourceType": "\"STRING\"",
+                "targetType": "\"TIMESTAMP_NTZ\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              },
+              "sql_state": "22018",
+              "java_causes": [
+                {
+                  "class": "org.apache.spark.SparkDateTimeException",
+                  "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 69) ==\n...:05.123456' AS TIMESTAMP_NTZ),1,CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ)) OVER (ORDER BY id) AS shifted ...\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+                  "condition": "CAST_INVALID_INPUT",
+                  "parameters": {
+                    "expression": "'2021-02-29 12:34:56'",
+                    "sourceType": "\"STRING\"",
+                    "targetType": "\"TIMESTAMP_NTZ\"",
+                    "ansiConfig": "\"spark.sql.ansi.enabled\""
+                  },
+                  "sql_state": "22018"
+                }
+              ],
+              "cause_chain_complete": true
+            }
+          },
+          "executed": {
+            "available": false,
+            "reason": "collect was not attempted; no after-collect stage exists"
+          }
+        },
+        "status": "error",
+        "spark_error_phase": "optimized_schema",
+        "spark_error": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 69) ==\n...:05.123456' AS TIMESTAMP_NTZ),1,CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ)) OVER (ORDER BY id) AS shifted ...\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+        "spark_error_details": {
+          "phase": "optimized_schema",
+          "condition": "CAST_INVALID_INPUT",
+          "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+          "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 69) ==\n...:05.123456' AS TIMESTAMP_NTZ),1,CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ)) OVER (ORDER BY id) AS shifted ...\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+          "parameters": {
+            "expression": "'2021-02-29 12:34:56'",
+            "sourceType": "\"STRING\"",
+            "targetType": "\"TIMESTAMP_NTZ\"",
+            "ansiConfig": "\"spark.sql.ansi.enabled\""
+          },
+          "sql_state": "22018",
+          "java_causes": [
+            {
+              "class": "org.apache.spark.SparkDateTimeException",
+              "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 69) ==\n...:05.123456' AS TIMESTAMP_NTZ),1,CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ)) OVER (ORDER BY id) AS shifted ...\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "condition": "CAST_INVALID_INPUT",
+              "parameters": {
+                "expression": "'2021-02-29 12:34:56'",
+                "sourceType": "\"STRING\"",
+                "targetType": "\"TIMESTAMP_NTZ\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              },
+              "sql_state": "22018"
+            }
+          ],
+          "cause_chain_complete": true
+        },
+        "expected": {
+          "condition": "CAST_INVALID_INPUT"
+        },
+        "effective_settings": {
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.adaptive.enabled": "true",
+          "spark.sql.ansi.enabled": "true",
+          "spark.sql.caseSensitive": "false",
+          "spark.sql.optimizer.excludedRules": null,
+          "spark.sql.parser.escapedStringLiterals": "false",
+          "spark.sql.variable.substitute": "true"
+        }
+      },
+      "baseline_observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "id",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {
+                "role": "total-order",
+                "source": "id"
+              }
+            },
+            {
+              "name": "shifted",
+              "type": "timestamp_ntz",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": null,
+        "physical_schema": null,
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "create_physical_plan",
+        "error": "This feature is not implemented: There is only support Literal types for field at idx: 2 in Window Function",
+        "public_matches": true,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "id",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {
+                "role": "total-order",
+                "source": "id"
+              }
+            },
+            {
+              "name": "shifted",
+              "type": "timestamp_ntz",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "optimized_observation": {
+          "raw_schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "#6",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {
+                  "role": "total-order",
+                  "source": "id"
+                }
+              },
+              {
+                "name": "#7",
+                "type": "timestamp_ntz",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {
+                  "role": "total-order",
+                  "source": "id"
+                }
+              },
+              {
+                "name": "shifted",
+                "type": "timestamp_ntz",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "names_match": true
+        },
+        "optimized_error": null
+      },
+      "diagnostic_baseline_reference": {
+        "corpus": "temporal-folding-dependency-1044",
+        "id": "direct_timestamp_ntz",
+        "sql": "SELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ) AS cast_value",
+        "ansi": true,
+        "timezone": "UTC",
+        "ordered": true,
+        "ownership": "strict_temporal_constant_folding",
+        "coverage": {
+          "family": "strict_constant_cast",
+          "origin": "author_source_controls",
+          "outcome": "UNKNOWN"
+        },
+        "schema_stages": {
+          "public": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "cast_value",
+                "type": "timestamp_ntz",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "cast_value",
+                "type": "timestamp_ntz",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "spark_plans": {
+          "analyzed": "Project [cast(2021-02-29 12:34:56 as timestamp_ntz) AS cast_value#31]\n+- OneRowRelation\n"
+        },
+        "schema_stage_availability": {
+          "public": {
+            "available": true
+          },
+          "analyzed": {
+            "available": true
+          },
+          "optimized": {
+            "available": false,
+            "reason": "actual stage accessor failed",
+            "error": {
+              "phase": "optimized_schema_after_failure",
+              "condition": "CAST_INVALID_INPUT",
+              "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+              "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "parameters": {
+                "expression": "'2021-02-29 12:34:56'",
+                "sourceType": "\"STRING\"",
+                "targetType": "\"TIMESTAMP_NTZ\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              },
+              "sql_state": "22018",
+              "java_causes": [
+                {
+                  "class": "org.apache.spark.SparkDateTimeException",
+                  "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+                  "condition": "CAST_INVALID_INPUT",
+                  "parameters": {
+                    "expression": "'2021-02-29 12:34:56'",
+                    "sourceType": "\"STRING\"",
+                    "targetType": "\"TIMESTAMP_NTZ\"",
+                    "ansiConfig": "\"spark.sql.ansi.enabled\""
+                  },
+                  "sql_state": "22018"
+                }
+              ],
+              "cause_chain_complete": true
+            }
+          },
+          "executed_before_collect": {
+            "available": false,
+            "reason": "actual stage accessor failed",
+            "error": {
+              "phase": "executed_before_collect_schema_after_failure",
+              "condition": "CAST_INVALID_INPUT",
+              "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+              "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "parameters": {
+                "expression": "'2021-02-29 12:34:56'",
+                "sourceType": "\"STRING\"",
+                "targetType": "\"TIMESTAMP_NTZ\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              },
+              "sql_state": "22018",
+              "java_causes": [
+                {
+                  "class": "org.apache.spark.SparkDateTimeException",
+                  "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+                  "condition": "CAST_INVALID_INPUT",
+                  "parameters": {
+                    "expression": "'2021-02-29 12:34:56'",
+                    "sourceType": "\"STRING\"",
+                    "targetType": "\"TIMESTAMP_NTZ\"",
+                    "ansiConfig": "\"spark.sql.ansi.enabled\""
+                  },
+                  "sql_state": "22018"
+                }
+              ],
+              "cause_chain_complete": true
+            }
+          },
+          "executed": {
+            "available": false,
+            "reason": "collect was not attempted; no after-collect stage exists"
+          }
+        },
+        "status": "error",
+        "spark_error_phase": "optimized_schema",
+        "spark_error": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+        "spark_error_details": {
+          "phase": "optimized_schema",
+          "condition": "CAST_INVALID_INPUT",
+          "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+          "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+          "parameters": {
+            "expression": "'2021-02-29 12:34:56'",
+            "sourceType": "\"STRING\"",
+            "targetType": "\"TIMESTAMP_NTZ\"",
+            "ansiConfig": "\"spark.sql.ansi.enabled\""
+          },
+          "sql_state": "22018",
+          "java_causes": [
+            {
+              "class": "org.apache.spark.SparkDateTimeException",
+              "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "condition": "CAST_INVALID_INPUT",
+              "parameters": {
+                "expression": "'2021-02-29 12:34:56'",
+                "sourceType": "\"STRING\"",
+                "targetType": "\"TIMESTAMP_NTZ\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              },
+              "sql_state": "22018"
+            }
+          ],
+          "cause_chain_complete": true
+        },
+        "expected": {
+          "condition": "CAST_INVALID_INPUT"
+        },
+        "effective_settings": {
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.adaptive.enabled": "true",
+          "spark.sql.ansi.enabled": "true",
+          "spark.sql.caseSensitive": "false",
+          "spark.sql.optimizer.excludedRules": null,
+          "spark.sql.parser.escapedStringLiterals": "false",
+          "spark.sql.variable.substitute": "true"
+        }
+      },
+      "diagnostic_baseline_observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp_ntz",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp_ntz",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "physical_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp_ntz",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "collect",
+        "error": "Execution error: invalid argument: DateValue { year: 2021, month: 2, day: 29 }",
+        "public_matches": true,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp_ntz",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "optimized_observation": {
+          "raw_schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "#0",
+                "type": "timestamp_ntz",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "cast_value",
+                "type": "timestamp_ntz",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "names_match": true
+        },
+        "optimized_error": null
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "id",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {
+                "source": "id",
+                "role": "total-order"
+              }
+            },
+            {
+              "name": "shifted",
+              "type": "timestamp_ntz",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": null,
+        "physical_schema": null,
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "create_physical_plan",
+        "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nExecution error: invalid argument: DateValue { year: 2021, month: 2, day: 29 }",
+        "public_matches": true,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": null,
+        "optimized_observation": null,
+        "optimized_error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nExecution error: invalid argument: DateValue { year: 2021, month: 2, day: 29 }",
+        "batch": 1
+      }
+    },
+    {
+      "corpus": "temporal-folding-dependency-1044",
+      "id": "lead_timestamp_explicit_invalid_cast_default",
+      "ansi": true,
+      "owner_issues": [
+        1057
+      ],
+      "reference": {
+        "corpus": "temporal-folding-dependency-1044",
+        "id": "lead_timestamp_explicit_invalid_cast_default",
+        "sql": "SELECT id,LEAD(TIMESTAMP '2020-01-02 03:04:05.123456',1,CAST('2021-02-29 12:34:56' AS TIMESTAMP)) OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+        "ansi": true,
+        "timezone": "UTC",
+        "ordered": true,
+        "ownership": "strict_temporal_constant_folding",
+        "coverage": {
+          "family": "explicit_offset_temporal_default",
+          "origin": "1123_supplement",
+          "provider": "offset_scalar",
+          "function": "LEAD",
+          "target": "timestamp",
+          "one_potential_fault": "malformed explicit temporal CAST default",
+          "outcome": "UNKNOWN"
+        },
+        "schema_stages": {
+          "public": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {
+                  "role": "total-order",
+                  "source": "id"
+                }
+              },
+              {
+                "name": "shifted",
+                "type": "timestamp",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {
+                  "role": "total-order",
+                  "source": "id"
+                }
+              },
+              {
+                "name": "shifted",
+                "type": "timestamp",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "spark_plans": {
+          "analyzed": "Sort [id#0 ASC NULLS FIRST], true\n+- Project [id#0, shifted#71]\n   +- Project [id#0, shifted#71, shifted#71]\n      +- Window [lead(2020-01-02 03:04:05.123456, 1, cast(2021-02-29 12:34:56 as timestamp)) windowspecdefinition(id#0 ASC NULLS FIRST, specifiedwindowframe(RowFrame, 1, 1)) AS shifted#71], [id#0 ASC NULLS FIRST]\n         +- Project [id#0]\n            +- SubqueryAlias offset_scalar\n               +- View (`offset_scalar`, [id#0, g#1, r#2, v#3, d#4])\n                  +- LogicalRDD [id#0, g#1, r#2, v#3, d#4], false\n"
+        },
+        "schema_stage_availability": {
+          "public": {
+            "available": true
+          },
+          "analyzed": {
+            "available": true
+          },
+          "optimized": {
+            "available": false,
+            "reason": "actual stage accessor failed",
+            "error": {
+              "phase": "optimized_schema_after_failure",
+              "condition": "CAST_INVALID_INPUT",
+              "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+              "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 57) ==\n... '2020-01-02 03:04:05.123456',1,CAST('2021-02-29 12:34:56' AS TIMESTAMP)) OVER (ORDER BY id) AS shifted ...\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "parameters": {
+                "expression": "'2021-02-29 12:34:56'",
+                "sourceType": "\"STRING\"",
+                "targetType": "\"TIMESTAMP\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              },
+              "sql_state": "22018",
+              "java_causes": [
+                {
+                  "class": "org.apache.spark.SparkDateTimeException",
+                  "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 57) ==\n... '2020-01-02 03:04:05.123456',1,CAST('2021-02-29 12:34:56' AS TIMESTAMP)) OVER (ORDER BY id) AS shifted ...\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+                  "condition": "CAST_INVALID_INPUT",
+                  "parameters": {
+                    "expression": "'2021-02-29 12:34:56'",
+                    "sourceType": "\"STRING\"",
+                    "targetType": "\"TIMESTAMP\"",
+                    "ansiConfig": "\"spark.sql.ansi.enabled\""
+                  },
+                  "sql_state": "22018"
+                }
+              ],
+              "cause_chain_complete": true
+            }
+          },
+          "executed_before_collect": {
+            "available": false,
+            "reason": "actual stage accessor failed",
+            "error": {
+              "phase": "executed_before_collect_schema_after_failure",
+              "condition": "CAST_INVALID_INPUT",
+              "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+              "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 57) ==\n... '2020-01-02 03:04:05.123456',1,CAST('2021-02-29 12:34:56' AS TIMESTAMP)) OVER (ORDER BY id) AS shifted ...\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "parameters": {
+                "expression": "'2021-02-29 12:34:56'",
+                "sourceType": "\"STRING\"",
+                "targetType": "\"TIMESTAMP\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              },
+              "sql_state": "22018",
+              "java_causes": [
+                {
+                  "class": "org.apache.spark.SparkDateTimeException",
+                  "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 57) ==\n... '2020-01-02 03:04:05.123456',1,CAST('2021-02-29 12:34:56' AS TIMESTAMP)) OVER (ORDER BY id) AS shifted ...\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+                  "condition": "CAST_INVALID_INPUT",
+                  "parameters": {
+                    "expression": "'2021-02-29 12:34:56'",
+                    "sourceType": "\"STRING\"",
+                    "targetType": "\"TIMESTAMP\"",
+                    "ansiConfig": "\"spark.sql.ansi.enabled\""
+                  },
+                  "sql_state": "22018"
+                }
+              ],
+              "cause_chain_complete": true
+            }
+          },
+          "executed": {
+            "available": false,
+            "reason": "collect was not attempted; no after-collect stage exists"
+          }
+        },
+        "status": "error",
+        "spark_error_phase": "optimized_schema",
+        "spark_error": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 57) ==\n... '2020-01-02 03:04:05.123456',1,CAST('2021-02-29 12:34:56' AS TIMESTAMP)) OVER (ORDER BY id) AS shifted ...\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+        "spark_error_details": {
+          "phase": "optimized_schema",
+          "condition": "CAST_INVALID_INPUT",
+          "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+          "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 57) ==\n... '2020-01-02 03:04:05.123456',1,CAST('2021-02-29 12:34:56' AS TIMESTAMP)) OVER (ORDER BY id) AS shifted ...\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+          "parameters": {
+            "expression": "'2021-02-29 12:34:56'",
+            "sourceType": "\"STRING\"",
+            "targetType": "\"TIMESTAMP\"",
+            "ansiConfig": "\"spark.sql.ansi.enabled\""
+          },
+          "sql_state": "22018",
+          "java_causes": [
+            {
+              "class": "org.apache.spark.SparkDateTimeException",
+              "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 57) ==\n... '2020-01-02 03:04:05.123456',1,CAST('2021-02-29 12:34:56' AS TIMESTAMP)) OVER (ORDER BY id) AS shifted ...\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "condition": "CAST_INVALID_INPUT",
+              "parameters": {
+                "expression": "'2021-02-29 12:34:56'",
+                "sourceType": "\"STRING\"",
+                "targetType": "\"TIMESTAMP\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              },
+              "sql_state": "22018"
+            }
+          ],
+          "cause_chain_complete": true
+        },
+        "expected": {
+          "condition": "CAST_INVALID_INPUT"
+        },
+        "effective_settings": {
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.adaptive.enabled": "true",
+          "spark.sql.ansi.enabled": "true",
+          "spark.sql.caseSensitive": "false",
+          "spark.sql.optimizer.excludedRules": null,
+          "spark.sql.parser.escapedStringLiterals": "false",
+          "spark.sql.variable.substitute": "true"
+        }
+      },
+      "baseline_observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "id",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {
+                "source": "id",
+                "role": "total-order"
+              }
+            },
+            {
+              "name": "shifted",
+              "type": "timestamp",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": null,
+        "physical_schema": null,
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "create_physical_plan",
+        "error": "This feature is not implemented: There is only support Literal types for field at idx: 2 in Window Function",
+        "public_matches": true,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "id",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {
+                "role": "total-order",
+                "source": "id"
+              }
+            },
+            {
+              "name": "shifted",
+              "type": "timestamp",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "optimized_observation": {
+          "raw_schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "#6",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {
+                  "role": "total-order",
+                  "source": "id"
+                }
+              },
+              {
+                "name": "#7",
+                "type": "timestamp",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {
+                  "role": "total-order",
+                  "source": "id"
+                }
+              },
+              {
+                "name": "shifted",
+                "type": "timestamp",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "names_match": true
+        },
+        "optimized_error": null
+      },
+      "diagnostic_baseline_reference": {
+        "corpus": "temporal-folding-dependency-1044",
+        "id": "direct_timestamp",
+        "sql": "SELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value",
+        "ansi": true,
+        "timezone": "UTC",
+        "ordered": true,
+        "ownership": "strict_temporal_constant_folding",
+        "coverage": {
+          "family": "strict_constant_cast",
+          "origin": "author_source_controls",
+          "outcome": "UNKNOWN"
+        },
+        "schema_stages": {
+          "public": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "cast_value",
+                "type": "timestamp",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "cast_value",
+                "type": "timestamp",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "spark_plans": {
+          "analyzed": "Project [cast(2021-02-29 12:34:56 as timestamp) AS cast_value#29]\n+- OneRowRelation\n"
+        },
+        "schema_stage_availability": {
+          "public": {
+            "available": true
+          },
+          "analyzed": {
+            "available": true
+          },
+          "optimized": {
+            "available": false,
+            "reason": "actual stage accessor failed",
+            "error": {
+              "phase": "optimized_schema_after_failure",
+              "condition": "CAST_INVALID_INPUT",
+              "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+              "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "parameters": {
+                "expression": "'2021-02-29 12:34:56'",
+                "sourceType": "\"STRING\"",
+                "targetType": "\"TIMESTAMP\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              },
+              "sql_state": "22018",
+              "java_causes": [
+                {
+                  "class": "org.apache.spark.SparkDateTimeException",
+                  "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+                  "condition": "CAST_INVALID_INPUT",
+                  "parameters": {
+                    "expression": "'2021-02-29 12:34:56'",
+                    "sourceType": "\"STRING\"",
+                    "targetType": "\"TIMESTAMP\"",
+                    "ansiConfig": "\"spark.sql.ansi.enabled\""
+                  },
+                  "sql_state": "22018"
+                }
+              ],
+              "cause_chain_complete": true
+            }
+          },
+          "executed_before_collect": {
+            "available": false,
+            "reason": "actual stage accessor failed",
+            "error": {
+              "phase": "executed_before_collect_schema_after_failure",
+              "condition": "CAST_INVALID_INPUT",
+              "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+              "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "parameters": {
+                "expression": "'2021-02-29 12:34:56'",
+                "sourceType": "\"STRING\"",
+                "targetType": "\"TIMESTAMP\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              },
+              "sql_state": "22018",
+              "java_causes": [
+                {
+                  "class": "org.apache.spark.SparkDateTimeException",
+                  "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+                  "condition": "CAST_INVALID_INPUT",
+                  "parameters": {
+                    "expression": "'2021-02-29 12:34:56'",
+                    "sourceType": "\"STRING\"",
+                    "targetType": "\"TIMESTAMP\"",
+                    "ansiConfig": "\"spark.sql.ansi.enabled\""
+                  },
+                  "sql_state": "22018"
+                }
+              ],
+              "cause_chain_complete": true
+            }
+          },
+          "executed": {
+            "available": false,
+            "reason": "collect was not attempted; no after-collect stage exists"
+          }
+        },
+        "status": "error",
+        "spark_error_phase": "optimized_schema",
+        "spark_error": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+        "spark_error_details": {
+          "phase": "optimized_schema",
+          "condition": "CAST_INVALID_INPUT",
+          "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+          "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+          "parameters": {
+            "expression": "'2021-02-29 12:34:56'",
+            "sourceType": "\"STRING\"",
+            "targetType": "\"TIMESTAMP\"",
+            "ansiConfig": "\"spark.sql.ansi.enabled\""
+          },
+          "sql_state": "22018",
+          "java_causes": [
+            {
+              "class": "org.apache.spark.SparkDateTimeException",
+              "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "condition": "CAST_INVALID_INPUT",
+              "parameters": {
+                "expression": "'2021-02-29 12:34:56'",
+                "sourceType": "\"STRING\"",
+                "targetType": "\"TIMESTAMP\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              },
+              "sql_state": "22018"
+            }
+          ],
+          "cause_chain_complete": true
+        },
+        "expected": {
+          "condition": "CAST_INVALID_INPUT"
+        },
+        "effective_settings": {
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.adaptive.enabled": "true",
+          "spark.sql.ansi.enabled": "true",
+          "spark.sql.caseSensitive": "false",
+          "spark.sql.optimizer.excludedRules": null,
+          "spark.sql.parser.escapedStringLiterals": "false",
+          "spark.sql.variable.substitute": "true"
+        }
+      },
+      "diagnostic_baseline_observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "physical_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "collect",
+        "error": "Execution error: invalid argument: DateValue { year: 2021, month: 2, day: 29 }",
+        "public_matches": true,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "optimized_observation": {
+          "raw_schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "#0",
+                "type": "timestamp",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "cast_value",
+                "type": "timestamp",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "names_match": true
+        },
+        "optimized_error": null
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "id",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {
+                "role": "total-order",
+                "source": "id"
+              }
+            },
+            {
+              "name": "shifted",
+              "type": "timestamp",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": null,
+        "physical_schema": null,
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "create_physical_plan",
+        "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nExecution error: invalid argument: DateValue { year: 2021, month: 2, day: 29 }",
+        "public_matches": true,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": null,
+        "optimized_observation": null,
+        "optimized_error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nExecution error: invalid argument: DateValue { year: 2021, month: 2, day: 29 }",
+        "batch": 1
+      }
+    },
+    {
+      "corpus": "temporal-folding-dependency-1044",
+      "id": "lead_timestamp_ntz_explicit_invalid_cast_default",
+      "ansi": true,
+      "owner_issues": [
+        1057
+      ],
+      "reference": {
+        "corpus": "temporal-folding-dependency-1044",
+        "id": "lead_timestamp_ntz_explicit_invalid_cast_default",
+        "sql": "SELECT id,LEAD(CAST('2020-01-02 03:04:05.123456' AS TIMESTAMP_NTZ),1,CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ)) OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+        "ansi": true,
+        "timezone": "UTC",
+        "ordered": true,
+        "ownership": "strict_temporal_constant_folding",
+        "coverage": {
+          "family": "explicit_offset_temporal_default",
+          "origin": "1123_supplement",
+          "provider": "offset_scalar",
+          "function": "LEAD",
+          "target": "timestamp_ntz",
+          "one_potential_fault": "malformed explicit temporal CAST default",
+          "outcome": "UNKNOWN"
+        },
+        "schema_stages": {
+          "public": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {
+                  "role": "total-order",
+                  "source": "id"
+                }
+              },
+              {
+                "name": "shifted",
+                "type": "timestamp_ntz",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {
+                  "role": "total-order",
+                  "source": "id"
+                }
+              },
+              {
+                "name": "shifted",
+                "type": "timestamp_ntz",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "spark_plans": {
+          "analyzed": "Sort [id#0 ASC NULLS FIRST], true\n+- Project [id#0, shifted#73]\n   +- Project [id#0, shifted#73, shifted#73]\n      +- Window [lead(cast(2020-01-02 03:04:05.123456 as timestamp_ntz), 1, cast(2021-02-29 12:34:56 as timestamp_ntz)) windowspecdefinition(id#0 ASC NULLS FIRST, specifiedwindowframe(RowFrame, 1, 1)) AS shifted#73], [id#0 ASC NULLS FIRST]\n         +- Project [id#0]\n            +- SubqueryAlias offset_scalar\n               +- View (`offset_scalar`, [id#0, g#1, r#2, v#3, d#4])\n                  +- LogicalRDD [id#0, g#1, r#2, v#3, d#4], false\n"
+        },
+        "schema_stage_availability": {
+          "public": {
+            "available": true
+          },
+          "analyzed": {
+            "available": true
+          },
+          "optimized": {
+            "available": false,
+            "reason": "actual stage accessor failed",
+            "error": {
+              "phase": "optimized_schema_after_failure",
+              "condition": "CAST_INVALID_INPUT",
+              "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+              "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 70) ==\n...:05.123456' AS TIMESTAMP_NTZ),1,CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ)) OVER (ORDER BY id) AS shifted ...\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "parameters": {
+                "expression": "'2021-02-29 12:34:56'",
+                "sourceType": "\"STRING\"",
+                "targetType": "\"TIMESTAMP_NTZ\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              },
+              "sql_state": "22018",
+              "java_causes": [
+                {
+                  "class": "org.apache.spark.SparkDateTimeException",
+                  "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 70) ==\n...:05.123456' AS TIMESTAMP_NTZ),1,CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ)) OVER (ORDER BY id) AS shifted ...\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+                  "condition": "CAST_INVALID_INPUT",
+                  "parameters": {
+                    "expression": "'2021-02-29 12:34:56'",
+                    "sourceType": "\"STRING\"",
+                    "targetType": "\"TIMESTAMP_NTZ\"",
+                    "ansiConfig": "\"spark.sql.ansi.enabled\""
+                  },
+                  "sql_state": "22018"
+                }
+              ],
+              "cause_chain_complete": true
+            }
+          },
+          "executed_before_collect": {
+            "available": false,
+            "reason": "actual stage accessor failed",
+            "error": {
+              "phase": "executed_before_collect_schema_after_failure",
+              "condition": "CAST_INVALID_INPUT",
+              "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+              "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 70) ==\n...:05.123456' AS TIMESTAMP_NTZ),1,CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ)) OVER (ORDER BY id) AS shifted ...\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "parameters": {
+                "expression": "'2021-02-29 12:34:56'",
+                "sourceType": "\"STRING\"",
+                "targetType": "\"TIMESTAMP_NTZ\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              },
+              "sql_state": "22018",
+              "java_causes": [
+                {
+                  "class": "org.apache.spark.SparkDateTimeException",
+                  "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 70) ==\n...:05.123456' AS TIMESTAMP_NTZ),1,CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ)) OVER (ORDER BY id) AS shifted ...\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+                  "condition": "CAST_INVALID_INPUT",
+                  "parameters": {
+                    "expression": "'2021-02-29 12:34:56'",
+                    "sourceType": "\"STRING\"",
+                    "targetType": "\"TIMESTAMP_NTZ\"",
+                    "ansiConfig": "\"spark.sql.ansi.enabled\""
+                  },
+                  "sql_state": "22018"
+                }
+              ],
+              "cause_chain_complete": true
+            }
+          },
+          "executed": {
+            "available": false,
+            "reason": "collect was not attempted; no after-collect stage exists"
+          }
+        },
+        "status": "error",
+        "spark_error_phase": "optimized_schema",
+        "spark_error": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 70) ==\n...:05.123456' AS TIMESTAMP_NTZ),1,CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ)) OVER (ORDER BY id) AS shifted ...\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+        "spark_error_details": {
+          "phase": "optimized_schema",
+          "condition": "CAST_INVALID_INPUT",
+          "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+          "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 70) ==\n...:05.123456' AS TIMESTAMP_NTZ),1,CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ)) OVER (ORDER BY id) AS shifted ...\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+          "parameters": {
+            "expression": "'2021-02-29 12:34:56'",
+            "sourceType": "\"STRING\"",
+            "targetType": "\"TIMESTAMP_NTZ\"",
+            "ansiConfig": "\"spark.sql.ansi.enabled\""
+          },
+          "sql_state": "22018",
+          "java_causes": [
+            {
+              "class": "org.apache.spark.SparkDateTimeException",
+              "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 70) ==\n...:05.123456' AS TIMESTAMP_NTZ),1,CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ)) OVER (ORDER BY id) AS shifted ...\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "condition": "CAST_INVALID_INPUT",
+              "parameters": {
+                "expression": "'2021-02-29 12:34:56'",
+                "sourceType": "\"STRING\"",
+                "targetType": "\"TIMESTAMP_NTZ\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              },
+              "sql_state": "22018"
+            }
+          ],
+          "cause_chain_complete": true
+        },
+        "expected": {
+          "condition": "CAST_INVALID_INPUT"
+        },
+        "effective_settings": {
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.adaptive.enabled": "true",
+          "spark.sql.ansi.enabled": "true",
+          "spark.sql.caseSensitive": "false",
+          "spark.sql.optimizer.excludedRules": null,
+          "spark.sql.parser.escapedStringLiterals": "false",
+          "spark.sql.variable.substitute": "true"
+        }
+      },
+      "baseline_observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "id",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {
+                "source": "id",
+                "role": "total-order"
+              }
+            },
+            {
+              "name": "shifted",
+              "type": "timestamp_ntz",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": null,
+        "physical_schema": null,
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "create_physical_plan",
+        "error": "This feature is not implemented: There is only support Literal types for field at idx: 2 in Window Function",
+        "public_matches": true,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "id",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {
+                "source": "id",
+                "role": "total-order"
+              }
+            },
+            {
+              "name": "shifted",
+              "type": "timestamp_ntz",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "optimized_observation": {
+          "raw_schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "#6",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {
+                  "source": "id",
+                  "role": "total-order"
+                }
+              },
+              {
+                "name": "#7",
+                "type": "timestamp_ntz",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {
+                  "source": "id",
+                  "role": "total-order"
+                }
+              },
+              {
+                "name": "shifted",
+                "type": "timestamp_ntz",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "names_match": true
+        },
+        "optimized_error": null
+      },
+      "diagnostic_baseline_reference": {
+        "corpus": "temporal-folding-dependency-1044",
+        "id": "direct_timestamp_ntz",
+        "sql": "SELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ) AS cast_value",
+        "ansi": true,
+        "timezone": "UTC",
+        "ordered": true,
+        "ownership": "strict_temporal_constant_folding",
+        "coverage": {
+          "family": "strict_constant_cast",
+          "origin": "author_source_controls",
+          "outcome": "UNKNOWN"
+        },
+        "schema_stages": {
+          "public": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "cast_value",
+                "type": "timestamp_ntz",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "cast_value",
+                "type": "timestamp_ntz",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "spark_plans": {
+          "analyzed": "Project [cast(2021-02-29 12:34:56 as timestamp_ntz) AS cast_value#31]\n+- OneRowRelation\n"
+        },
+        "schema_stage_availability": {
+          "public": {
+            "available": true
+          },
+          "analyzed": {
+            "available": true
+          },
+          "optimized": {
+            "available": false,
+            "reason": "actual stage accessor failed",
+            "error": {
+              "phase": "optimized_schema_after_failure",
+              "condition": "CAST_INVALID_INPUT",
+              "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+              "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "parameters": {
+                "expression": "'2021-02-29 12:34:56'",
+                "sourceType": "\"STRING\"",
+                "targetType": "\"TIMESTAMP_NTZ\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              },
+              "sql_state": "22018",
+              "java_causes": [
+                {
+                  "class": "org.apache.spark.SparkDateTimeException",
+                  "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+                  "condition": "CAST_INVALID_INPUT",
+                  "parameters": {
+                    "expression": "'2021-02-29 12:34:56'",
+                    "sourceType": "\"STRING\"",
+                    "targetType": "\"TIMESTAMP_NTZ\"",
+                    "ansiConfig": "\"spark.sql.ansi.enabled\""
+                  },
+                  "sql_state": "22018"
+                }
+              ],
+              "cause_chain_complete": true
+            }
+          },
+          "executed_before_collect": {
+            "available": false,
+            "reason": "actual stage accessor failed",
+            "error": {
+              "phase": "executed_before_collect_schema_after_failure",
+              "condition": "CAST_INVALID_INPUT",
+              "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+              "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "parameters": {
+                "expression": "'2021-02-29 12:34:56'",
+                "sourceType": "\"STRING\"",
+                "targetType": "\"TIMESTAMP_NTZ\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              },
+              "sql_state": "22018",
+              "java_causes": [
+                {
+                  "class": "org.apache.spark.SparkDateTimeException",
+                  "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+                  "condition": "CAST_INVALID_INPUT",
+                  "parameters": {
+                    "expression": "'2021-02-29 12:34:56'",
+                    "sourceType": "\"STRING\"",
+                    "targetType": "\"TIMESTAMP_NTZ\"",
+                    "ansiConfig": "\"spark.sql.ansi.enabled\""
+                  },
+                  "sql_state": "22018"
+                }
+              ],
+              "cause_chain_complete": true
+            }
+          },
+          "executed": {
+            "available": false,
+            "reason": "collect was not attempted; no after-collect stage exists"
+          }
+        },
+        "status": "error",
+        "spark_error_phase": "optimized_schema",
+        "spark_error": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+        "spark_error_details": {
+          "phase": "optimized_schema",
+          "condition": "CAST_INVALID_INPUT",
+          "python_class": "pyspark.errors.exceptions.captured.DateTimeException",
+          "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+          "parameters": {
+            "expression": "'2021-02-29 12:34:56'",
+            "sourceType": "\"STRING\"",
+            "targetType": "\"TIMESTAMP_NTZ\"",
+            "ansiConfig": "\"spark.sql.ansi.enabled\""
+          },
+          "sql_state": "22018",
+          "java_causes": [
+            {
+              "class": "org.apache.spark.SparkDateTimeException",
+              "message": "[CAST_INVALID_INPUT] The value '2021-02-29 12:34:56' of the type \"STRING\" cannot be cast to \"TIMESTAMP_NTZ\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. SQLSTATE: 22018\n== SQL (line 1, position 8) ==\nSELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ) AS cast_value\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "condition": "CAST_INVALID_INPUT",
+              "parameters": {
+                "expression": "'2021-02-29 12:34:56'",
+                "sourceType": "\"STRING\"",
+                "targetType": "\"TIMESTAMP_NTZ\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              },
+              "sql_state": "22018"
+            }
+          ],
+          "cause_chain_complete": true
+        },
+        "expected": {
+          "condition": "CAST_INVALID_INPUT"
+        },
+        "effective_settings": {
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.adaptive.enabled": "true",
+          "spark.sql.ansi.enabled": "true",
+          "spark.sql.caseSensitive": "false",
+          "spark.sql.optimizer.excludedRules": null,
+          "spark.sql.parser.escapedStringLiterals": "false",
+          "spark.sql.variable.substitute": "true"
+        }
+      },
+      "diagnostic_baseline_observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp_ntz",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp_ntz",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "physical_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp_ntz",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "collect",
+        "error": "Execution error: invalid argument: DateValue { year: 2021, month: 2, day: 29 }",
+        "public_matches": true,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "cast_value",
+              "type": "timestamp_ntz",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "optimized_observation": {
+          "raw_schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "#0",
+                "type": "timestamp_ntz",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "cast_value",
+                "type": "timestamp_ntz",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "names_match": true
+        },
+        "optimized_error": null
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "id",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {
+                "role": "total-order",
+                "source": "id"
+              }
+            },
+            {
+              "name": "shifted",
+              "type": "timestamp_ntz",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": null,
+        "physical_schema": null,
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "create_physical_plan",
+        "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nExecution error: invalid argument: DateValue { year: 2021, month: 2, day: 29 }",
+        "public_matches": true,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": null,
+        "optimized_observation": null,
+        "optimized_error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nExecution error: invalid argument: DateValue { year: 2021, month: 2, day: 29 }",
+        "batch": 1
+      }
+    }
+  ]
+}

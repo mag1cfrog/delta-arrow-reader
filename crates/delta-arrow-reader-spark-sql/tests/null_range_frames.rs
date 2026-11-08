@@ -1,4 +1,4 @@
-//! Compare NULL RANGE results with Spark and retain unsupported NULL ROWS rejections.
+//! Compare NULL RANGE and NULL ROWS admission with Spark, with explicit typed-NULL ROWS rejection.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -7,11 +7,16 @@ use datafusion::prelude::{SessionConfig, SessionContext};
 use delta_arrow_reader_spark_sql::configure_spark_sql;
 use serde_json::{Value, json};
 
+#[path = "support/null_rows.rs"]
+mod null_rows;
 #[path = "support/spark_inputs.rs"]
 mod spark_inputs;
 #[path = "support/spark_results.rs"]
 mod spark_results;
-use spark_results::{TestResult, compare_exact_spark_query_stages_with_optimized};
+use spark_results::{
+    STAGES, TestResult, case_identity, compare_exact_spark_query_stages_with_optimized,
+    native_result_matches_spark_reference, validate_spark_reference_result,
+};
 
 const REQUEST: &str = include_str!("fixtures/null-range-754-cases.json");
 const REFERENCE: &str = include_str!("fixtures/null-range-754-spark.jsonl");
@@ -21,47 +26,12 @@ const BOUNDARY_REQUEST: &str = include_str!("fixtures/null-range-754-boundary-ca
 const BOUNDARY_REFERENCE: &str = include_str!("fixtures/null-range-754-boundary-spark.jsonl");
 const PRIOR_ROWS_REJECTIONS: &str =
     include_str!("fixtures/null-range-754-prior-rows-rejections.json");
-const ROWS_REJECTION_IDS: [&str; 4] = [
+const ORIGINAL_NULL_ROWS_IDS: [&str; 4] = [
     "admission_rows_lower_typed_null",
     "admission_rows_upper_typed_null",
     "admission_rows_lower_bare_null",
     "admission_rows_upper_bare_null",
 ];
-const STAGES: [(&str, &str); 5] = [
-    ("public", "public_schema"),
-    ("analyzed", "public_schema"),
-    ("optimized", "optimized_schema"),
-    ("executed_before_collect", "before_collect"),
-    ("executed", "physical_schema"),
-];
-
-fn case_identity(case: &Value) -> TestResult<(String, String, bool)> {
-    Ok((
-        case["corpus"].as_str().ok_or("missing corpus")?.into(),
-        case["id"].as_str().ok_or("missing ID")?.into(),
-        case["ansi"].as_bool().ok_or("missing ANSI")?,
-    ))
-}
-
-fn multiset(rows: &Value) -> TestResult<Value> {
-    let mut rows = rows.as_array().ok_or("missing rows")?.clone();
-    rows.sort_by_key(Value::to_string);
-    Ok(json!(rows))
-}
-
-fn complete_schema(schema: &Value) -> bool {
-    schema["type"] == "struct"
-        && schema["fields"].as_array().is_some_and(|fields| {
-            !fields.is_empty()
-                && fields.iter().all(|field| {
-                    field["name"].is_string()
-                        && field["type"].is_string()
-                        && field["nullable"].is_boolean()
-                        && field["metadata"].is_object()
-                })
-        })
-}
-
 fn validate_null_range_references(request: &Value, records: &[Value]) -> TestResult {
     if request["issue"] != 754
         || request["expected_record_count"] != 582
@@ -238,92 +208,6 @@ fn validate_null_range_references(request: &Value, records: &[Value]) -> TestRes
     Ok(())
 }
 
-fn validate_spark_reference_result(spark_reference: &Value) -> TestResult {
-    let case = spark_reference;
-    let key = case_identity(case)?;
-    let schemas = case["schema_stages"]
-        .as_object()
-        .ok_or("missing schema stages")?;
-    let availability = case["schema_stage_availability"]
-        .as_object()
-        .ok_or("missing schema availability")?;
-    if availability.len() != STAGES.len()
-        || schemas
-            .keys()
-            .any(|stage| !STAGES.iter().any(|(name, _)| *name == stage.as_str()))
-    {
-        return Err("NULL RANGE schema stage inventory differs".into());
-    }
-    for (stage, _) in STAGES {
-        let state = &case["schema_stage_availability"][stage];
-        match state["available"].as_bool() {
-            Some(true) if complete_schema(&case["schema_stages"][stage]) => {}
-            Some(false)
-                if case["status"] == "error"
-                    && !schemas.contains_key(stage)
-                    && state["reason"]
-                        .as_str()
-                        .is_some_and(|reason| !reason.is_empty()) => {}
-            _ => return Err(format!("incomplete NULL RANGE stage {stage}: {key:?}").into()),
-        }
-    }
-    if case["status"] == "ok" {
-        let width = case["schema_stages"]["public"]["fields"]
-            .as_array()
-            .ok_or("missing public Fields")?
-            .len();
-        if schemas.len() != STAGES.len()
-            || case["expected"]["schema"] != case["schema_stages"]["public"]
-            || case["expected"].get("condition").is_some()
-            || ["rows_raw", "rows_multiset"].iter().any(|field| {
-                !case[*field].as_array().is_some_and(|rows| {
-                    rows.iter().all(|row| {
-                        row.as_array().is_some_and(|row| {
-                            row.len() == width
-                                && row.iter().all(|value| value.is_null() || value.is_string())
-                        })
-                    })
-                })
-            })
-            || multiset(&case["rows_raw"])? != case["rows_multiset"]
-            || case["expected"].get("rows")
-                != Some(if case["ordered"] == true {
-                    &case["rows_raw"]
-                } else {
-                    &case["rows_multiset"]
-                })
-        {
-            return Err(format!("incomplete NULL RANGE success or rows: {key:?}").into());
-        }
-    } else {
-        let details = &case["spark_error_details"];
-        if !case["expected"]["condition"].is_string()
-            || case["expected"].get("rows").is_some()
-            || !case["spark_error_phase"].is_string()
-            || details["condition"] != case["expected"]["condition"]
-            || details["phase"] != case["spark_error_phase"]
-            || !details["message"].is_string()
-            || !details["java_causes"].as_array().is_some_and(|causes| {
-                !causes.is_empty()
-                    && causes.iter().all(|cause| {
-                        cause["class"].is_string()
-                            && cause["message"].is_string()
-                            && cause["parameters"].is_object()
-                            && cause.get("condition").is_some()
-                            && cause.get("sql_state").is_some()
-                    })
-            })
-            || details["cause_chain_complete"] != true
-            || ["parameters", "sql_state", "python_class"]
-                .iter()
-                .any(|field| details.get(*field).is_none())
-        {
-            return Err(format!("incomplete NULL RANGE failure: {key:?}").into());
-        }
-    }
-    Ok(())
-}
-
 fn parse_null_range_fixture() -> TestResult<(Value, Vec<Value>)> {
     let request = serde_json::from_str(REQUEST)?;
     let records = REFERENCE
@@ -334,18 +218,18 @@ fn parse_null_range_fixture() -> TestResult<(Value, Vec<Value>)> {
     Ok((request, records))
 }
 
-fn is_unsupported_rows_case(case: &Value) -> bool {
+fn is_original_null_rows_case(case: &Value) -> bool {
     case["corpus"] == "null-range-754-supplement"
         && case["id"]
             .as_str()
-            .is_some_and(|id| ROWS_REJECTION_IDS.contains(&id))
+            .is_some_and(|id| ORIGINAL_NULL_ROWS_IDS.contains(&id))
 }
 
 fn validate_prior_rows_rejections(records: &[Value], controls: &[Value]) -> TestResult {
     let mut expected = BTreeSet::new();
     for case in records[1..]
         .iter()
-        .filter(|case| is_unsupported_rows_case(case))
+        .filter(|case| is_original_null_rows_case(case))
     {
         for batch in [1_u64, 32] {
             expected.insert((case_identity(case)?, batch));
@@ -401,17 +285,6 @@ fn prior_rows_rejection_matches(
             && control["batch"] == batch
             && control["observation"] == *observation
     })
-}
-
-fn native_result_matches_spark_reference(native_result: &Value, spark_reference: &Value) -> bool {
-    native_result["matches"] == true
-        && native_result["optimized_matches"] == true
-        && STAGES.iter().all(|(stage, observed)| {
-            match spark_reference["schema_stages"].get(*stage) {
-                Some(expected) => native_result.get(*observed) == Some(expected),
-                None => native_result.get(*observed).is_some_and(Value::is_null),
-            }
-        })
 }
 
 fn validate_float_decimal_references(request: &Value, records: &[Value]) -> TestResult {
@@ -811,13 +684,13 @@ async fn dictionary_float_null_ranges_match_the_recorded_logical_values() -> Tes
 }
 
 #[tokio::test]
-async fn null_range_frames_match_spark_and_rows_bounds_reject() -> TestResult {
+async fn null_range_frames_match_spark_with_explicit_typed_rows_difference() -> TestResult {
     let (request, records) = parse_null_range_fixture()?;
     let rows_controls: Vec<Value> = serde_json::from_str(PRIOR_ROWS_REJECTIONS)?;
     validate_prior_rows_rejections(&records, &rows_controls)?;
     let mut completed = BTreeSet::new();
     let mut strict_contexts = 0;
-    let mut unsupported_rows_contexts = 0;
+    let mut typed_rows_contexts = 0;
     let mut differences = Vec::new();
     for corpus in request["corpora"].as_array().ok_or("missing corpora")? {
         for batch in [1, 32] {
@@ -853,15 +726,19 @@ async fn null_range_frames_match_spark_and_rows_bounds_reject() -> TestResult {
                 let matches = native_result_matches_spark_reference(&observation, case);
                 // Validated source identities cannot abort observation collection on a query difference.
                 let unique = completed.insert(identity);
-                let unsupported_rows = is_unsupported_rows_case(case);
-                let matches_prior_rejection = unsupported_rows
+                let rows_case = is_original_null_rows_case(case);
+                let typed_rows =
+                    rows_case && null_rows::unsupported_null_bound_location(case).is_some();
+                let matches_prior_rejection = rows_case
                     && prior_rows_rejection_matches(case, batch, &observation, &rows_controls);
-                let contract_matches = if unsupported_rows {
-                    unsupported_rows_contexts += 1;
-                    !matches && matches_prior_rejection
+                let exact_rows_rejection =
+                    !rows_case || null_rows::matches_contract(case, &observation)?;
+                let contract_matches = if typed_rows {
+                    typed_rows_contexts += 1;
+                    !matches && exact_rows_rejection
                 } else {
                     strict_contexts += 1;
-                    matches
+                    matches && exact_rows_rejection
                 };
                 if !contract_matches || !unique {
                     differences.push(format!(
@@ -871,9 +748,9 @@ async fn null_range_frames_match_spark_and_rows_bounds_reject() -> TestResult {
                 }
                 let record = json!({"issue":754,"corpus":case["corpus"],"id":case["id"],
                     "ansi":case["ansi"],"batch":batch,"target_partitions":2,"provider_partitions":2,
-                    "source_ownership_tag":case["ownership"],"primary":!unsupported_rows,
-                    "remaining_owner":if unsupported_rows { Some(1085) } else { None },
-                    "prior_rejection_matches":if unsupported_rows { Some(matches_prior_rejection) } else { None },
+                    "source_ownership_tag":case["ownership"],"primary":!typed_rows,
+                    "intentional_typed_null_difference":typed_rows,
+                    "prior_rejection_matches":if rows_case { Some(matches_prior_rejection) } else { None },
                     "reference":case,"observation":observation,"spark_matches":matches});
                 eprintln!("NULL_RANGE_OBSERVATION {record}");
             }
@@ -882,15 +759,15 @@ async fn null_range_frames_match_spark_and_rows_bounds_reject() -> TestResult {
     eprintln!(
         "NULL_RANGE_SUMMARY {}",
         json!({"observations":completed.len(),
-        "strict_spark_contexts":strict_contexts,"unsupported_rows_rejections":unsupported_rows_contexts,
+        "strict_spark_contexts":strict_contexts,"intentional_typed_rows_contexts":typed_rows_contexts,
         "differences":differences.len(),"expected_observations":1164})
     );
     assert_eq!(completed.len(), 1164);
-    assert_eq!(strict_contexts, 1148);
-    assert_eq!(unsupported_rows_contexts, 16);
+    assert_eq!(strict_contexts, 1156);
+    assert_eq!(typed_rows_contexts, 8);
     assert!(
         differences.is_empty(),
-        "{} NULL RANGE or required ROWS-rejection differences:\n{}",
+        "{} NULL RANGE or NULL ROWS admission differences:\n{}",
         differences.len(),
         differences.join("\n")
     );
@@ -1273,6 +1150,7 @@ fn find_single_window_frame(
 
 #[tokio::test]
 async fn null_range_producer_arithmetic_survives_analyzer_coercion() -> TestResult {
+    use datafusion::logical_expr::WindowFrameBound;
     use datafusion::logical_expr::window_frame::RangeOffsetArithmetic;
     use datafusion::physical_optimizer::aggregate_statistics::PreserveAggregateStatisticsSchema;
     use delta_arrow_reader_spark_sql::{SparkSqlOptions, plan_query};
@@ -1296,7 +1174,10 @@ async fn null_range_producer_arithmetic_survives_analyzer_coercion() -> TestResu
             ("CAST(k AS FLOAT)", "FLOAT", false, false),
             ("CAST(k AS DOUBLE)", "DOUBLE", false, false),
             ("CAST(k AS DECIMAL(12,2))", "DECIMAL(12,2)", false, false),
-            ("k", "INT", false, false),
+            ("CAST(k AS TINYINT)", "TINYINT", false, true),
+            ("CAST(k AS SMALLINT)", "SMALLINT", false, true),
+            ("k", "INT", false, true),
+            ("CAST(k AS BIGINT)", "BIGINT", false, true),
             ("DATE_ADD(DATE '2020-01-01',k)", "INT", false, false),
         ] {
             let lower = if null_offset { "NULL" } else { "1" };
@@ -1335,6 +1216,56 @@ async fn null_range_producer_arithmetic_survives_analyzer_coercion() -> TestResu
                 expected,
                 "{sql}"
             );
+        }
+        for frame in [
+            "RANGE BETWEEN CAST(0 AS INT) PRECEDING AND CAST(0 AS INT) FOLLOWING",
+            "RANGE BETWEEN 0 PRECEDING AND CURRENT ROW",
+            "RANGE 0 PRECEDING",
+            "RANGE BETWEEN 0 FOLLOWING AND CURRENT ROW",
+            "RANGE BETWEEN CURRENT ROW AND CURRENT ROW",
+            "RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW",
+        ] {
+            let sql = format!(
+                "SELECT COUNT(*) OVER (ORDER BY k {frame}) AS n FROM null_range_no_null_keys"
+            );
+            let query = plan_query(
+                &session,
+                &sql,
+                &SparkSqlOptions {
+                    ansi_mode,
+                    ..SparkSqlOptions::default()
+                },
+            )
+            .await?;
+            let resolved = find_single_window_frame(&query.logical_plan)?;
+            assert_eq!(
+                resolved.range_offset_arithmetic(),
+                RangeOffsetArithmetic::DataFusion,
+                "{sql}"
+            );
+            if !frame.contains("UNBOUNDED") {
+                assert_eq!(resolved.start_bound, WindowFrameBound::CurrentRow, "{sql}");
+                assert_eq!(resolved.end_bound, WindowFrameBound::CurrentRow, "{sql}");
+            }
+            let mut state = session.state();
+            let extensions = &mut state.config_mut().options_mut().extensions;
+            extensions.insert(SparkSqlExpressionSemantics::default());
+            extensions.insert(PreserveAggregateStatisticsSchema::default());
+            let analyzed = state.analyzer().execute_and_check(
+                query.logical_plan,
+                state.config_options(),
+                |_, _| {},
+            )?;
+            let analyzed = find_single_window_frame(&analyzed)?;
+            assert_eq!(
+                analyzed.range_offset_arithmetic(),
+                RangeOffsetArithmetic::DataFusion,
+                "{sql}"
+            );
+            if !frame.contains("UNBOUNDED") {
+                assert_eq!(analyzed.start_bound, WindowFrameBound::CurrentRow, "{sql}");
+                assert_eq!(analyzed.end_bound, WindowFrameBound::CurrentRow, "{sql}");
+            }
         }
     }
     Ok(())

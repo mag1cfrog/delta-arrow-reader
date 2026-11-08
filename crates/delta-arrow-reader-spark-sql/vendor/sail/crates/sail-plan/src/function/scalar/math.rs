@@ -19,8 +19,10 @@ use sail_common_datafusion::literal::LiteralEvaluator;
 use sail_common_datafusion::utils::items::ItemTaker;
 use sail_function::error::generic_exec_err;
 use sail_function::scalar::datetime::negate_duration::NegateDuration;
-use sail_function::scalar::datetime::spark_interval::SparkDayTimeIntervalToCalendarInterval;
+use sail_function::scalar::datetime::spark_date_to_timestamp::SparkDateToTimestamp;
+use sail_function::scalar::datetime::spark_subtract_timestamps::SparkSubtractTimestamps;
 use sail_function::scalar::datetime::spark_timestamp::SparkTimestamp;
+use sail_function::scalar::datetime::spark_timestamp_add_interval::SparkTimestampAddInterval;
 use sail_function::scalar::math::rand_poisson::RandPoisson;
 use sail_function::scalar::math::randn::Randn;
 use sail_function::scalar::math::random::Random;
@@ -34,6 +36,7 @@ use sail_function::scalar::math::spark_decimal_round::SparkDecimalRound;
 use sail_function::scalar::math::spark_div::SparkIntervalDiv;
 use sail_function::scalar::math::spark_float_round::SparkFloatRound;
 use sail_function::scalar::math::spark_integer_round::SparkIntegerRound;
+use sail_function::scalar::math::spark_interval_arithmetic::SparkIntervalArithmetic;
 use sail_function::scalar::math::spark_interval_negate::SparkIntervalNegate;
 use sail_function::scalar::math::spark_interval_scale::SparkIntervalScale;
 use sail_function::scalar::math::spark_negative::SparkNegative;
@@ -57,8 +60,12 @@ pub(crate) use super::integer_divide::SparkIntegerDivide;
 use crate::error::{PlanError, PlanResult};
 use crate::expression_errors::is_locally_evaluable;
 use crate::function::common::{
-    FunctionContextInput, ScalarFunction, ScalarFunctionInput, without_metadata_annotations,
+    FunctionContextInput, ScalarFunction, ScalarFunctionInput, reject_calendar_interval_ordering,
+    without_metadata_annotations,
 };
+use crate::function::result_coercion::{coerce_to_temporal, is_temporal_type};
+use crate::function::scalar::datetime::replan_make_interval_for_try;
+use crate::function::temporal_coercion::{cast_local_timestamp_expr_to_ltz, common_temporal_type};
 
 // Byte inputs retain Spark's input nullability while sharing native HEX formatting.
 #[derive(Debug, Default, PartialEq, Eq, Hash)]
@@ -123,9 +130,7 @@ fn add_day_time_interval_to_string(
         false,
     )?)
     .call(vec![string]);
-    let calendar_interval =
-        ScalarUDF::from(SparkDayTimeIntervalToCalendarInterval::new()).call(vec![interval]);
-    let shifted = timestamp + calendar_interval;
+    let shifted = ScalarUDF::from(SparkTimestampAddInterval::add()).call(vec![timestamp, interval]);
     match string_type {
         DataType::Utf8 => Ok(ScalarUDF::from(SparkToUtf8::new()).call(vec![shifted])),
         DataType::LargeUtf8 => Ok(ScalarUDF::from(SparkToLargeUtf8::new()).call(vec![shifted])),
@@ -280,6 +285,25 @@ fn spark_plus(input: ScalarFunctionInput) -> PlanResult<Expr> {
             right.get_type(function_context.schema),
         );
         Ok(match (left_type, right_type) {
+            // A TIMESTAMP_NTZ keeps DataFusion's arithmetic, which is Spark's UTC arithmetic
+            // within Chrono's years (#1104).
+            (Ok(timestamp), Ok(interval))
+                if is_ltz(&timestamp)
+                    && SparkTimestampAddInterval::accepts(&timestamp, &interval) =>
+            {
+                ScalarUDF::from(SparkTimestampAddInterval::add()).call(vec![left, right])
+            }
+            (Ok(interval), Ok(timestamp))
+                if is_ltz(&timestamp)
+                    && SparkTimestampAddInterval::accepts(&timestamp, &interval) =>
+            {
+                ScalarUDF::from(SparkTimestampAddInterval::add()).call(vec![right, left])
+            }
+            (Ok(left_type), Ok(right_type))
+                if SparkIntervalArithmetic::accepts(&left_type, &right_type) =>
+            {
+                ScalarUDF::from(SparkIntervalArithmetic::add()).call(vec![left, right])
+            }
             (Ok(DataType::Timestamp(..)), Ok(DataType::Null)) => {
                 left + cast(right, DataType::Duration(TimeUnit::Microsecond))
             }
@@ -343,6 +367,243 @@ fn spark_plus(input: ScalarFunctionInput) -> PlanResult<Expr> {
     }
 }
 
+/// Whether `data_type` is a TIMESTAMP with a time zone, as DAR types Spark's TIMESTAMP.
+fn is_ltz(data_type: &DataType) -> bool {
+    matches!(
+        data_type,
+        DataType::Timestamp(TimeUnit::Microsecond, Some(_))
+    )
+}
+
+/// Whether Spark subtracts these types with `SubtractTimestamps` in a time zone: a TIMESTAMP
+/// with a time zone on one side, and one, a DATE or a TIMESTAMP_NTZ on the other. Spark reads
+/// the DATE as a TIMESTAMP in the session time zone, and against the TIMESTAMP_NTZ subtracts
+/// the TIMESTAMP's local date-time.
+fn is_ltz_subtraction(end: &DataType, start: &DataType) -> bool {
+    let local = |data_type: &DataType| {
+        matches!(
+            data_type,
+            DataType::Date32 | DataType::Date64 | DataType::Timestamp(_, None)
+        )
+    };
+    (is_ltz(end) && (is_ltz(start) || local(start))) || (local(end) && is_ltz(start))
+}
+
+/// Whether Spark subtracts these types as a DATE and a TIMESTAMP_NTZ, in either order.
+fn is_date_ntz_subtraction(end: &DataType, start: &DataType) -> bool {
+    let date = |data_type: &DataType| matches!(data_type, DataType::Date32 | DataType::Date64);
+    let ntz = |data_type: &DataType| matches!(data_type, DataType::Timestamp(_, None));
+    (ntz(end) && date(start)) || (date(end) && ntz(start))
+}
+
+/// `end` minus `start`, a DATE and a TIMESTAMP_NTZ in either order, with `-`, or with
+/// TRY_SUBTRACT for `try_mode`. Spark casts the DATE to TIMESTAMP_NTZ at its midnight, a
+/// nullable cast that fails with `long overflow` beyond BIGINT microseconds, which TRY turns into
+/// NULL at run time. The DATE kernel gives that midnight as a TIMESTAMP in UTC, whose local
+/// date-time the subtraction reads, so the session zone does not matter.
+fn subtract_date_and_timestamp_ntz(
+    try_mode: bool,
+    (end, end_type): (Expr, &DataType),
+    (start, start_type): (Expr, &DataType),
+) -> Expr {
+    let subtraction = if try_mode {
+        SparkSubtractTimestamps::try_subtract()
+    } else {
+        SparkSubtractTimestamps::new()
+    };
+    let operand = |argument, data_type: &DataType| match data_type {
+        DataType::Date32 | DataType::Date64 => ScalarUDF::from(
+            SparkDateToTimestamp::new(Arc::from("UTC"), try_mode).with_nullable_result(),
+        )
+        .call(vec![argument]),
+        DataType::Timestamp(TimeUnit::Microsecond, None) => argument,
+        _ => cast(argument, DataType::Timestamp(TimeUnit::Microsecond, None)),
+    };
+    ScalarUDF::from(subtraction).call(vec![operand(end, end_type), operand(start, start_type)])
+}
+
+/// `end` minus `start` with `subtraction`, after Spark's conversion of a DATE operand to a
+/// TIMESTAMP in the session time zone.
+fn subtract_timestamps(
+    subtraction: SparkSubtractTimestamps,
+    (end, end_type): (Expr, &DataType),
+    (start, start_type): (Expr, &DataType),
+    timezone: &Arc<str>,
+) -> Expr {
+    let operand = |argument, data_type: &DataType| match data_type {
+        DataType::Date32 | DataType::Date64 => {
+            cast_local_timestamp_expr_to_ltz(argument, data_type, timezone)
+        }
+        DataType::Timestamp(TimeUnit::Microsecond, _) => argument,
+        _ => cast(argument, DataType::Timestamp(TimeUnit::Microsecond, None)),
+    };
+    ScalarUDF::from(subtraction).call(vec![operand(end, end_type), operand(start, start_type)])
+}
+
+/// The two arguments of `function`, or Spark's error for another count.
+fn two_arguments(arguments: Vec<Expr>, function: &str) -> PlanResult<(Expr, Expr)> {
+    let count = arguments.len();
+    match <[Expr; 2]>::try_from(arguments) {
+        Ok([left, right]) => Ok((left, right)),
+        Err(_) => Err(PlanError::invalid(format!(
+            "[WRONG_NUM_ARGS.WITHOUT_SUGGESTION] The `{function}` requires 2 parameters but the \
+             actual number is {count}. Please, refer to \
+             'https://spark.apache.org/docs/latest/sql-ref-functions.html' for a fix. SQLSTATE: \
+             42605"
+        ))),
+    }
+}
+
+/// Spark evaluates TRY arithmetic over numbers in its TRY mode, which catches only the
+/// arithmetic's own failures, and over other operands inside `TryEval`, which turns any failure
+/// in them into NULL. For the latter, under ANSI, re-plan each MAKE_INTERVAL and
+/// TRY_MAKE_INTERVAL in the operands to give NULL.
+fn try_eval_operands(
+    operands: Vec<Expr>,
+    schema: &DFSchemaRef,
+    ansi_mode: bool,
+) -> PlanResult<Vec<Expr>> {
+    let numeric = operands.iter().all(|operand| {
+        operand
+            .get_type(schema)
+            .is_ok_and(|data_type| data_type.is_numeric())
+    });
+    if numeric {
+        return Ok(operands);
+    }
+    operands
+        .into_iter()
+        .map(|operand| replan_make_interval_for_try(operand, schema, ansi_mode))
+        .collect()
+}
+
+/// Spark's TRY_DIVIDE and TRY_MULTIPLY: `function` over operands that Spark evaluates inside
+/// `TryEval` unless both are numbers.
+fn udf_with_try_eval_operands<T>(function: T) -> ScalarFunction
+where
+    T: ScalarUDFImpl + Send + Sync + 'static,
+{
+    let function = ScalarUDF::from(function);
+    Arc::new(
+        move |ScalarFunctionInput {
+                  arguments,
+                  function_context,
+              }| {
+            Ok(function.call(try_eval_operands(
+                arguments,
+                function_context.schema,
+                function_context.plan_config.ansi_mode,
+            )?))
+        },
+    )
+}
+
+/// Spark's TRY_ADD: a TIMESTAMP or TIMESTAMP_NTZ and an interval or an untyped NULL, in either
+/// order, add like `+` and give NULL where it fails; two untyped NULLs are a NULL DOUBLE. Other
+/// operands keep `SparkTryAdd`.
+fn try_add(input: ScalarFunctionInput) -> PlanResult<Expr> {
+    let ScalarFunctionInput {
+        arguments,
+        function_context,
+    } = input;
+    let (left, right) = two_arguments(arguments, "try_add")?;
+    let schema = function_context.schema;
+    let (left, right) = try_eval_operands(
+        vec![left, right],
+        schema,
+        function_context.plan_config.ansi_mode,
+    )?
+    .two()?;
+    let add = |timestamp, interval| {
+        ScalarUDF::from(SparkTimestampAddInterval::try_add()).call(vec![timestamp, interval])
+    };
+    // Spark reads an untyped NULL beside a TIMESTAMP as a DAY TO SECOND interval.
+    let null_interval = |null| cast(null, DataType::Duration(TimeUnit::Microsecond));
+    Ok(match (left.get_type(schema), right.get_type(schema)) {
+        (Ok(timestamp), Ok(interval))
+            if SparkTimestampAddInterval::accepts(&timestamp, &interval) =>
+        {
+            add(left, right)
+        }
+        (Ok(interval), Ok(timestamp))
+            if SparkTimestampAddInterval::accepts(&timestamp, &interval) =>
+        {
+            add(right, left)
+        }
+        (Ok(DataType::Timestamp(TimeUnit::Microsecond, _)), Ok(DataType::Null)) => {
+            add(left, null_interval(right))
+        }
+        (Ok(DataType::Null), Ok(DataType::Timestamp(TimeUnit::Microsecond, _))) => {
+            add(right, null_interval(left))
+        }
+        // Spark adds two untyped NULLs as DOUBLE values.
+        (Ok(DataType::Null), Ok(DataType::Null)) => lit(ScalarValue::Float64(None)),
+        _ => ScalarUDF::from(SparkTryAdd::new()).call(vec![left, right]),
+    })
+}
+
+/// Spark's TRY_SUBTRACT: an interval from a TIMESTAMP or TIMESTAMP_NTZ; a TIMESTAMP and a
+/// TIMESTAMP, TIMESTAMP_NTZ, DATE or untyped NULL; two TIMESTAMP_NTZ values; and a DATE and a
+/// TIMESTAMP_NTZ subtract like `-` and give NULL where it fails. Other operands, including two
+/// DATE values, keep `SparkTrySubtract`; two untyped NULLs are a NULL DOUBLE.
+fn try_subtract(input: ScalarFunctionInput) -> PlanResult<Expr> {
+    let ScalarFunctionInput {
+        arguments,
+        function_context,
+    } = input;
+    let (left, right) = two_arguments(arguments, "try_subtract")?;
+    let schema = function_context.schema;
+    let (left, right) = try_eval_operands(
+        vec![left, right],
+        schema,
+        function_context.plan_config.ansi_mode,
+    )?
+    .two()?;
+    let timezone = &function_context.plan_config.session_timezone;
+    let ntz = |data_type: &DataType| {
+        matches!(data_type, DataType::Timestamp(TimeUnit::Microsecond, None))
+    };
+    let difference = |end, end_type: &DataType, start, start_type: &DataType| {
+        subtract_timestamps(
+            SparkSubtractTimestamps::try_subtract(),
+            (end, end_type),
+            (start, start_type),
+            timezone,
+        )
+    };
+    Ok(match (left.get_type(schema), right.get_type(schema)) {
+        (Ok(timestamp), Ok(interval))
+            if SparkTimestampAddInterval::accepts(&timestamp, &interval) =>
+        {
+            ScalarUDF::from(SparkTimestampAddInterval::try_subtract()).call(vec![left, right])
+        }
+        (Ok(end_type), Ok(start_type))
+            if is_ltz_subtraction(&end_type, &start_type)
+                || (ntz(&end_type) && ntz(&start_type)) =>
+        {
+            difference(left, &end_type, right, &start_type)
+        }
+        // TRY catches an overflowing DATE cast at run time. Spark also folds a constant DATE
+        // cast while optimizing, outside TRY, where its optimizer sees a constant beside a
+        // non-constant operand; DAR returns NULL there (#1133).
+        (Ok(end_type), Ok(start_type)) if is_date_ntz_subtraction(&end_type, &start_type) => {
+            subtract_date_and_timestamp_ntz(true, (left, &end_type), (right, &start_type))
+        }
+        // Spark reads an untyped NULL beside a TIMESTAMP as a value of its type.
+        (Ok(end_type @ DataType::Timestamp(TimeUnit::Microsecond, _)), Ok(DataType::Null)) => {
+            let start = cast(right, end_type.clone());
+            difference(left, &end_type, start, &end_type)
+        }
+        (Ok(DataType::Null), Ok(start_type @ DataType::Timestamp(TimeUnit::Microsecond, _))) => {
+            let end = cast(left, start_type.clone());
+            difference(end, &start_type, right, &start_type)
+        }
+        // Spark subtracts two untyped NULLs as DOUBLE values.
+        (Ok(DataType::Null), Ok(DataType::Null)) => lit(ScalarValue::Float64(None)),
+        _ => ScalarUDF::from(SparkTrySubtract::new()).call(vec![left, right]),
+    })
+}
+
 /// Arguments:
 ///   - left: A numeric, DATE, TIMESTAMP, or INTERVAL expression.
 ///   - right: The accepted type depends on the type of expr:
@@ -381,6 +642,33 @@ fn spark_minus(input: ScalarFunctionInput) -> PlanResult<Expr> {
             right.get_type(function_context.schema),
         );
         Ok(match (left_type, right_type) {
+            // A TIMESTAMP_NTZ keeps DataFusion's arithmetic, which is Spark's UTC arithmetic
+            // within Chrono's years (#1104).
+            (Ok(timestamp), Ok(interval))
+                if is_ltz(&timestamp)
+                    && SparkTimestampAddInterval::accepts(&timestamp, &interval) =>
+            {
+                ScalarUDF::from(SparkTimestampAddInterval::subtract(
+                    function_context.plan_config.ansi_mode,
+                ))
+                .call(vec![left, right])
+            }
+            (Ok(end_type), Ok(start_type)) if is_ltz_subtraction(&end_type, &start_type) => {
+                subtract_timestamps(
+                    SparkSubtractTimestamps::new(),
+                    (left, &end_type),
+                    (right, &start_type),
+                    &function_context.plan_config.session_timezone,
+                )
+            }
+            (Ok(end_type), Ok(start_type)) if is_date_ntz_subtraction(&end_type, &start_type) => {
+                subtract_date_and_timestamp_ntz(false, (left, &end_type), (right, &start_type))
+            }
+            (Ok(left_type), Ok(right_type))
+                if SparkIntervalArithmetic::accepts(&left_type, &right_type) =>
+            {
+                ScalarUDF::from(SparkIntervalArithmetic::subtract()).call(vec![left, right])
+            }
             (Ok(DataType::Date32), Ok(DataType::Duration(TimeUnit::Microsecond))) => {
                 left - cast(right, DataType::Interval(IntervalUnit::MonthDayNano))
             }
@@ -2473,6 +2761,45 @@ fn spark_rand_with_validated_seed(input: ScalarFunctionInput) -> PlanResult<Expr
     Ok(ScalarUDF::from(random).call(arguments))
 }
 
+/// GREATEST and LEAST. Spark widens arguments that mix DATE, TIMESTAMP and TIMESTAMP_NTZ to
+/// their common temporal type, reading DATE and TIMESTAMP_NTZ in the session time zone like
+/// CAST. Other arguments keep DataFusion's coercion.
+fn extremum_with_temporal_widening(
+    input: ScalarFunctionInput,
+    function_name: &str,
+    extremum: fn(Vec<Expr>) -> Expr,
+) -> PlanResult<Expr> {
+    // Spark checks the argument count before the argument types.
+    if input.arguments.len() < 2 {
+        return Err(PlanError::invalid(format!(
+            "[WRONG_NUM_ARGS.WITHOUT_SUGGESTION] The `{function_name}` requires > 1 parameters but the actual number is {}.",
+            input.arguments.len()
+        )));
+    }
+    let schema = input.function_context.schema;
+    let types = input
+        .arguments
+        .iter()
+        .map(|argument| argument.get_type(schema))
+        .collect::<Result<Vec<_>, _>>()?;
+    reject_calendar_interval_ordering(&types, function_name, "DATATYPE_MISMATCH.DATA_DIFF_TYPES")?;
+    let temporal = types
+        .iter()
+        .all(|data_type| is_temporal_type(data_type) || *data_type == DataType::Null);
+    let mixed = types.windows(2).any(|pair| pair[0] != pair[1]);
+    let target = common_temporal_type(&types, &input.function_context.plan_config.session_timezone);
+    let arguments = match target {
+        Some(target) if temporal && mixed => input
+            .arguments
+            .into_iter()
+            .zip(&types)
+            .map(|(argument, data_type)| coerce_to_temporal(argument, data_type, &target))
+            .collect::<PlanResult<Vec<_>>>()?,
+        _ => input.arguments,
+    };
+    Ok(extremum(arguments))
+}
+
 pub(super) fn list_built_in_math_functions() -> Vec<(&'static str, ScalarFunction)> {
     use crate::function::common::ScalarFunctionBuilder as F;
 
@@ -2510,10 +2837,18 @@ pub(super) fn list_built_in_math_functions() -> Vec<(&'static str, ScalarFunctio
         ("expm1", F::unary(math_fn::expm1)),
         ("factorial", F::unary(expr_fn::factorial)),
         ("floor", F::custom(|arg| ceil_floor(arg, "floor"))),
-        ("greatest", F::var_arg(expr_fn::greatest)),
+        (
+            "greatest",
+            F::custom(|input| {
+                extremum_with_temporal_widening(input, "greatest", expr_fn::greatest)
+            }),
+        ),
         ("hex", F::custom(hex)),
         ("hypot", F::binary(hypot)),
-        ("least", F::var_arg(expr_fn::least)),
+        (
+            "least",
+            F::custom(|input| extremum_with_temporal_widening(input, "least", expr_fn::least)),
+        ),
         ("ln", F::unary(double(ln))),
         ("log", F::binary(double2(log))),
         ("log10", F::unary(double(log10))),
@@ -2541,11 +2876,14 @@ pub(super) fn list_built_in_math_functions() -> Vec<(&'static str, ScalarFunctio
         ("sqrt", F::unary(double(expr_fn::sqrt))),
         ("tan", F::unary(double(expr_fn::tan))),
         ("tanh", F::unary(double(expr_fn::tanh))),
-        ("try_add", F::udf(SparkTryAdd::new())),
-        ("try_divide", F::udf(SparkTryDiv::new())),
-        ("try_multiply", F::udf(SparkTryMult::new())),
+        ("try_add", F::custom(try_add)),
+        ("try_divide", udf_with_try_eval_operands(SparkTryDiv::new())),
+        (
+            "try_multiply",
+            udf_with_try_eval_operands(SparkTryMult::new()),
+        ),
         ("try_mod", F::udf(SparkTryMod::new())),
-        ("try_subtract", F::udf(SparkTrySubtract::new())),
+        ("try_subtract", F::custom(try_subtract)),
         ("unhex", F::udf(SparkUnHex::new())),
         ("uniform", F::udf(SparkUniform::new())),
         ("width_bucket", F::quaternary(math_fn::width_bucket)),

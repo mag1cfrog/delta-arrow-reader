@@ -1,0 +1,1554 @@
+{
+  "version": 1,
+  "issue": 1123,
+  "integration_base": "63cb530bfc0183156ae9a6345abb741ca3451e48",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "python_version": "3.12",
+  "java_specification_version": "21",
+  "outcome_state": "UNKNOWN: all 44 query rows, Fields, statuses, errors and stage availability await root Spark capture.",
+  "sql_source_count": 22,
+  "expected_record_count": 44,
+  "family_record_counts": {
+    "strict_constant_cast": 6,
+    "safe_try_cast": 6,
+    "unreachable_case": 4,
+    "coalesce_guard": 4,
+    "limit_zero_guard": 4,
+    "unused_projection": 4,
+    "formatted_parser": 4,
+    "explicit_offset_temporal_default": 12
+  },
+  "author_controls_source": {
+    "path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/new1044-temporal-fold-dependency-v1/independent-source-controls.json",
+    "sha256": "45324c2cf4c1fb6d4ad0e4053216051d75c0048e538d99e34d89882551da80c9",
+    "sql_definitions": 16,
+    "records": 32,
+    "all_original_fields_retained": true,
+    "SQL_ids_ANSI_timezone_ordering_unchanged": true
+  },
+  "original_provider_source": {
+    "path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/new1044-default-coercion-source-v3/offset-window-default-coercion-1044-cases.json",
+    "sha256": "763eb1f77a35b9701d1f4ba947d62dabd974e21fe0786c424c7708f7899bb8f4",
+    "provider_names": [
+      "offset_scalar",
+      "empty_offset_scalar",
+      "null_offset_scalar",
+      "offset_nested",
+      "empty_offset_nested",
+      "null_offset_nested"
+    ],
+    "schemas_rows_metadata_unchanged": true
+  },
+  "native_batch_sizes": [
+    1,
+    32
+  ],
+  "native_provider_partitions": 2,
+  "native_target_partitions": 2,
+  "spark_master": "local[1]",
+  "spark_provider_partitions_expected": 1,
+  "codec": {
+    "base_encoder_sha256": "273495f1945d74dd8a36719ebc40fc01b35cc93cac85d8993cfdeff865261911",
+    "capture_encoder_sha256": "e8755f789b2ef55e25817bb864a05b99194d513bd49db11e418a80b371100943",
+    "change": "TimestampType output branch only; base Boolean output/input spelling retained",
+    "unmerged_1044_Boolean_fix_included": false
+  },
+  "isolation": {
+    "timezone": "UTC",
+    "one_potential_fault_per_query": true,
+    "temporal_offset_default_queries": 6,
+    "additional_ANSI_records": 12,
+    "new_timezone_decoder_protocol_options": false
+  },
+  "corpora": [
+    {
+      "corpus": "temporal-folding-dependency-1044",
+      "source": {
+        "kind": "independent temporal folding source controls for1123",
+        "issue": "https://github.com/mag1cfrog/delta-arrow-reader/issues/1123",
+        "author_source": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/new1044-temporal-fold-dependency-v1/independent-source-controls.json",
+        "reads_expected_outputs": false
+      },
+      "metadata": {
+        "spark_version": "4.2.0",
+        "timezone": "UTC",
+        "inputs": [
+          {
+            "name": "offset_scalar",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "id",
+                    "role": "total-order"
+                  }
+                },
+                {
+                  "name": "g",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "g",
+                    "role": "partition"
+                  }
+                },
+                {
+                  "name": "r",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "r",
+                    "role": "required-payload"
+                  }
+                },
+                {
+                  "name": "v",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "v",
+                    "role": "nullable-payload"
+                  }
+                },
+                {
+                  "name": "d",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "d",
+                    "role": "required-default"
+                  }
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "0",
+                "10",
+                null,
+                "-101"
+              ],
+              [
+                "1",
+                "0",
+                "20",
+                "10",
+                "-102"
+              ],
+              [
+                "2",
+                "0",
+                "30",
+                null,
+                "-103"
+              ],
+              [
+                "3",
+                "0",
+                "40",
+                "20",
+                "-104"
+              ],
+              [
+                "4",
+                "1",
+                "50",
+                null,
+                "-105"
+              ],
+              [
+                "5",
+                "1",
+                "60",
+                "30",
+                "-106"
+              ],
+              [
+                "6",
+                "1",
+                "70",
+                "40",
+                "-107"
+              ],
+              [
+                "7",
+                "1",
+                "80",
+                null,
+                "-108"
+              ]
+            ]
+          },
+          {
+            "name": "empty_offset_scalar",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "id",
+                    "role": "total-order"
+                  }
+                },
+                {
+                  "name": "g",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "g",
+                    "role": "partition"
+                  }
+                },
+                {
+                  "name": "r",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "r",
+                    "role": "required-payload"
+                  }
+                },
+                {
+                  "name": "v",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "v",
+                    "role": "nullable-payload"
+                  }
+                },
+                {
+                  "name": "d",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "d",
+                    "role": "required-default"
+                  }
+                }
+              ]
+            },
+            "rows": []
+          },
+          {
+            "name": "null_offset_scalar",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "id",
+                    "role": "total-order"
+                  }
+                },
+                {
+                  "name": "g",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "g",
+                    "role": "partition"
+                  }
+                },
+                {
+                  "name": "r",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "r",
+                    "role": "required-payload"
+                  }
+                },
+                {
+                  "name": "v",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "v",
+                    "role": "nullable-payload"
+                  }
+                },
+                {
+                  "name": "d",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "d",
+                    "role": "required-default"
+                  }
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "0",
+                "10",
+                null,
+                "-101"
+              ],
+              [
+                "1",
+                "0",
+                "20",
+                null,
+                "-102"
+              ],
+              [
+                "2",
+                "1",
+                "30",
+                null,
+                "-103"
+              ]
+            ]
+          },
+          {
+            "name": "offset_nested",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "id",
+                    "role": "total-order"
+                  }
+                },
+                {
+                  "name": "g",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "g",
+                    "role": "partition"
+                  }
+                },
+                {
+                  "name": "r",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "value",
+                        "type": "integer",
+                        "nullable": false,
+                        "metadata": {
+                          "unit": "count",
+                          "role": "required-child"
+                        }
+                      },
+                      {
+                        "name": "maybe",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {
+                          "unit": "count",
+                          "role": "nullable-child"
+                        }
+                      },
+                      {
+                        "name": "detail",
+                        "type": {
+                          "type": "struct",
+                          "fields": [
+                            {
+                              "name": "token",
+                              "type": "integer",
+                              "nullable": false,
+                              "metadata": {
+                                "source": "detail.token",
+                                "lineage": "{\"origin\":\"1044-fixture\",\"ordinal\":1}"
+                              }
+                            },
+                            {
+                              "name": "flag",
+                              "type": "boolean",
+                              "nullable": true,
+                              "metadata": {
+                                "source": "detail.flag",
+                                "role": "nullable-grandchild"
+                              }
+                            }
+                          ]
+                        },
+                        "nullable": false,
+                        "metadata": {
+                          "source": "detail",
+                          "role": "required-child-struct"
+                        }
+                      }
+                    ]
+                  },
+                  "nullable": false,
+                  "metadata": {
+                    "source": "r",
+                    "purpose": "required-nested-payload",
+                    "version": "1"
+                  }
+                },
+                {
+                  "name": "v",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "value",
+                        "type": "integer",
+                        "nullable": false,
+                        "metadata": {
+                          "unit": "count",
+                          "role": "required-child"
+                        }
+                      },
+                      {
+                        "name": "maybe",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {
+                          "unit": "count",
+                          "role": "nullable-child"
+                        }
+                      },
+                      {
+                        "name": "detail",
+                        "type": {
+                          "type": "struct",
+                          "fields": [
+                            {
+                              "name": "token",
+                              "type": "integer",
+                              "nullable": false,
+                              "metadata": {
+                                "source": "detail.token",
+                                "lineage": "{\"origin\":\"1044-fixture\",\"ordinal\":1}"
+                              }
+                            },
+                            {
+                              "name": "flag",
+                              "type": "boolean",
+                              "nullable": true,
+                              "metadata": {
+                                "source": "detail.flag",
+                                "role": "nullable-grandchild"
+                              }
+                            }
+                          ]
+                        },
+                        "nullable": false,
+                        "metadata": {
+                          "source": "detail",
+                          "role": "required-child-struct"
+                        }
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {
+                    "source": "v",
+                    "purpose": "nullable-nested-payload",
+                    "version": "1"
+                  }
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "0",
+                [
+                  "10",
+                  null,
+                  [
+                    "100",
+                    null
+                  ]
+                ],
+                null
+              ],
+              [
+                "1",
+                "0",
+                [
+                  "20",
+                  "2",
+                  [
+                    "200",
+                    "True"
+                  ]
+                ],
+                [
+                  "21",
+                  null,
+                  [
+                    "210",
+                    "False"
+                  ]
+                ]
+              ],
+              [
+                "2",
+                "1",
+                [
+                  "30",
+                  null,
+                  [
+                    "300",
+                    "False"
+                  ]
+                ],
+                null
+              ],
+              [
+                "3",
+                "1",
+                [
+                  "40",
+                  "4",
+                  [
+                    "400",
+                    null
+                  ]
+                ],
+                [
+                  "41",
+                  "5",
+                  [
+                    "410",
+                    null
+                  ]
+                ]
+              ]
+            ]
+          },
+          {
+            "name": "empty_offset_nested",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "id",
+                    "role": "total-order"
+                  }
+                },
+                {
+                  "name": "g",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "g",
+                    "role": "partition"
+                  }
+                },
+                {
+                  "name": "r",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "value",
+                        "type": "integer",
+                        "nullable": false,
+                        "metadata": {
+                          "unit": "count",
+                          "role": "required-child"
+                        }
+                      },
+                      {
+                        "name": "maybe",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {
+                          "unit": "count",
+                          "role": "nullable-child"
+                        }
+                      },
+                      {
+                        "name": "detail",
+                        "type": {
+                          "type": "struct",
+                          "fields": [
+                            {
+                              "name": "token",
+                              "type": "integer",
+                              "nullable": false,
+                              "metadata": {
+                                "source": "detail.token",
+                                "lineage": "{\"origin\":\"1044-fixture\",\"ordinal\":1}"
+                              }
+                            },
+                            {
+                              "name": "flag",
+                              "type": "boolean",
+                              "nullable": true,
+                              "metadata": {
+                                "source": "detail.flag",
+                                "role": "nullable-grandchild"
+                              }
+                            }
+                          ]
+                        },
+                        "nullable": false,
+                        "metadata": {
+                          "source": "detail",
+                          "role": "required-child-struct"
+                        }
+                      }
+                    ]
+                  },
+                  "nullable": false,
+                  "metadata": {
+                    "source": "r",
+                    "purpose": "required-nested-payload",
+                    "version": "1"
+                  }
+                },
+                {
+                  "name": "v",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "value",
+                        "type": "integer",
+                        "nullable": false,
+                        "metadata": {
+                          "unit": "count",
+                          "role": "required-child"
+                        }
+                      },
+                      {
+                        "name": "maybe",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {
+                          "unit": "count",
+                          "role": "nullable-child"
+                        }
+                      },
+                      {
+                        "name": "detail",
+                        "type": {
+                          "type": "struct",
+                          "fields": [
+                            {
+                              "name": "token",
+                              "type": "integer",
+                              "nullable": false,
+                              "metadata": {
+                                "source": "detail.token",
+                                "lineage": "{\"origin\":\"1044-fixture\",\"ordinal\":1}"
+                              }
+                            },
+                            {
+                              "name": "flag",
+                              "type": "boolean",
+                              "nullable": true,
+                              "metadata": {
+                                "source": "detail.flag",
+                                "role": "nullable-grandchild"
+                              }
+                            }
+                          ]
+                        },
+                        "nullable": false,
+                        "metadata": {
+                          "source": "detail",
+                          "role": "required-child-struct"
+                        }
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {
+                    "source": "v",
+                    "purpose": "nullable-nested-payload",
+                    "version": "1"
+                  }
+                }
+              ]
+            },
+            "rows": []
+          },
+          {
+            "name": "null_offset_nested",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "id",
+                    "role": "total-order"
+                  }
+                },
+                {
+                  "name": "g",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "g",
+                    "role": "partition"
+                  }
+                },
+                {
+                  "name": "r",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "value",
+                        "type": "integer",
+                        "nullable": false,
+                        "metadata": {
+                          "unit": "count",
+                          "role": "required-child"
+                        }
+                      },
+                      {
+                        "name": "maybe",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {
+                          "unit": "count",
+                          "role": "nullable-child"
+                        }
+                      },
+                      {
+                        "name": "detail",
+                        "type": {
+                          "type": "struct",
+                          "fields": [
+                            {
+                              "name": "token",
+                              "type": "integer",
+                              "nullable": false,
+                              "metadata": {
+                                "source": "detail.token",
+                                "lineage": "{\"origin\":\"1044-fixture\",\"ordinal\":1}"
+                              }
+                            },
+                            {
+                              "name": "flag",
+                              "type": "boolean",
+                              "nullable": true,
+                              "metadata": {
+                                "source": "detail.flag",
+                                "role": "nullable-grandchild"
+                              }
+                            }
+                          ]
+                        },
+                        "nullable": false,
+                        "metadata": {
+                          "source": "detail",
+                          "role": "required-child-struct"
+                        }
+                      }
+                    ]
+                  },
+                  "nullable": false,
+                  "metadata": {
+                    "source": "r",
+                    "purpose": "required-nested-payload",
+                    "version": "1"
+                  }
+                },
+                {
+                  "name": "v",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "value",
+                        "type": "integer",
+                        "nullable": false,
+                        "metadata": {
+                          "unit": "count",
+                          "role": "required-child"
+                        }
+                      },
+                      {
+                        "name": "maybe",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {
+                          "unit": "count",
+                          "role": "nullable-child"
+                        }
+                      },
+                      {
+                        "name": "detail",
+                        "type": {
+                          "type": "struct",
+                          "fields": [
+                            {
+                              "name": "token",
+                              "type": "integer",
+                              "nullable": false,
+                              "metadata": {
+                                "source": "detail.token",
+                                "lineage": "{\"origin\":\"1044-fixture\",\"ordinal\":1}"
+                              }
+                            },
+                            {
+                              "name": "flag",
+                              "type": "boolean",
+                              "nullable": true,
+                              "metadata": {
+                                "source": "detail.flag",
+                                "role": "nullable-grandchild"
+                              }
+                            }
+                          ]
+                        },
+                        "nullable": false,
+                        "metadata": {
+                          "source": "detail",
+                          "role": "required-child-struct"
+                        }
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {
+                    "source": "v",
+                    "purpose": "nullable-nested-payload",
+                    "version": "1"
+                  }
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "0",
+                [
+                  "10",
+                  null,
+                  [
+                    "100",
+                    null
+                  ]
+                ],
+                null
+              ],
+              [
+                "1",
+                "0",
+                [
+                  "20",
+                  "2",
+                  [
+                    "200",
+                    "True"
+                  ]
+                ],
+                null
+              ],
+              [
+                "2",
+                "1",
+                [
+                  "30",
+                  null,
+                  [
+                    "300",
+                    "False"
+                  ]
+                ],
+                null
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "direct_date",
+          "sql": "SELECT CAST('2021-02-29' AS DATE) AS cast_value",
+          "ansi": true,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "strict_constant_cast",
+            "origin": "author_source_controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "direct_date",
+          "sql": "SELECT CAST('2021-02-29' AS DATE) AS cast_value",
+          "ansi": false,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "strict_constant_cast",
+            "origin": "author_source_controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "direct_timestamp",
+          "sql": "SELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value",
+          "ansi": true,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "strict_constant_cast",
+            "origin": "author_source_controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "direct_timestamp",
+          "sql": "SELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value",
+          "ansi": false,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "strict_constant_cast",
+            "origin": "author_source_controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "direct_timestamp_ntz",
+          "sql": "SELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ) AS cast_value",
+          "ansi": true,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "strict_constant_cast",
+            "origin": "author_source_controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "direct_timestamp_ntz",
+          "sql": "SELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ) AS cast_value",
+          "ansi": false,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "strict_constant_cast",
+            "origin": "author_source_controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "try_date",
+          "sql": "SELECT TRY_CAST('2021-02-29' AS DATE) AS cast_value",
+          "ansi": true,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "safe_try_cast",
+            "origin": "author_source_controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "try_date",
+          "sql": "SELECT TRY_CAST('2021-02-29' AS DATE) AS cast_value",
+          "ansi": false,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "safe_try_cast",
+            "origin": "author_source_controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "try_timestamp",
+          "sql": "SELECT TRY_CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value",
+          "ansi": true,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "safe_try_cast",
+            "origin": "author_source_controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "try_timestamp",
+          "sql": "SELECT TRY_CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value",
+          "ansi": false,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "safe_try_cast",
+            "origin": "author_source_controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "try_timestamp_ntz",
+          "sql": "SELECT TRY_CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ) AS cast_value",
+          "ansi": true,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "safe_try_cast",
+            "origin": "author_source_controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "try_timestamp_ntz",
+          "sql": "SELECT TRY_CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ) AS cast_value",
+          "ansi": false,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "safe_try_cast",
+            "origin": "author_source_controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "unreachable_date",
+          "sql": "SELECT CASE WHEN false THEN CAST('2021-02-29' AS DATE) ELSE DATE '2020-01-02' END AS cast_value",
+          "ansi": true,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "unreachable_case",
+            "origin": "author_source_controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "unreachable_date",
+          "sql": "SELECT CASE WHEN false THEN CAST('2021-02-29' AS DATE) ELSE DATE '2020-01-02' END AS cast_value",
+          "ansi": false,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "unreachable_case",
+            "origin": "author_source_controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "unreachable_timestamp",
+          "sql": "SELECT CASE WHEN false THEN CAST('2021-02-29 12:34:56' AS TIMESTAMP) ELSE TIMESTAMP '2020-01-02 03:04:05' END AS cast_value",
+          "ansi": true,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "unreachable_case",
+            "origin": "author_source_controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "unreachable_timestamp",
+          "sql": "SELECT CASE WHEN false THEN CAST('2021-02-29 12:34:56' AS TIMESTAMP) ELSE TIMESTAMP '2020-01-02 03:04:05' END AS cast_value",
+          "ansi": false,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "unreachable_case",
+            "origin": "author_source_controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "coalesce_date",
+          "sql": "SELECT COALESCE(DATE '2020-01-02',CAST('2021-02-29' AS DATE)) AS cast_value",
+          "ansi": true,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "coalesce_guard",
+            "origin": "author_source_controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "coalesce_date",
+          "sql": "SELECT COALESCE(DATE '2020-01-02',CAST('2021-02-29' AS DATE)) AS cast_value",
+          "ansi": false,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "coalesce_guard",
+            "origin": "author_source_controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "coalesce_timestamp",
+          "sql": "SELECT COALESCE(TIMESTAMP '2020-01-02 03:04:05',CAST('2021-02-29 12:34:56' AS TIMESTAMP)) AS cast_value",
+          "ansi": true,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "coalesce_guard",
+            "origin": "author_source_controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "coalesce_timestamp",
+          "sql": "SELECT COALESCE(TIMESTAMP '2020-01-02 03:04:05',CAST('2021-02-29 12:34:56' AS TIMESTAMP)) AS cast_value",
+          "ansi": false,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "coalesce_guard",
+            "origin": "author_source_controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "limit_zero_date",
+          "sql": "SELECT CAST('2021-02-29' AS DATE) AS cast_value LIMIT 0",
+          "ansi": true,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "limit_zero_guard",
+            "origin": "author_source_controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "limit_zero_date",
+          "sql": "SELECT CAST('2021-02-29' AS DATE) AS cast_value LIMIT 0",
+          "ansi": false,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "limit_zero_guard",
+            "origin": "author_source_controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "limit_zero_timestamp",
+          "sql": "SELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value LIMIT 0",
+          "ansi": true,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "limit_zero_guard",
+            "origin": "author_source_controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "limit_zero_timestamp",
+          "sql": "SELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS cast_value LIMIT 0",
+          "ansi": false,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "limit_zero_guard",
+            "origin": "author_source_controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "unused_date",
+          "sql": "SELECT 7 AS kept FROM (SELECT CAST('2021-02-29' AS DATE) AS unused_value) t",
+          "ansi": true,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "unused_projection",
+            "origin": "author_source_controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "unused_date",
+          "sql": "SELECT 7 AS kept FROM (SELECT CAST('2021-02-29' AS DATE) AS unused_value) t",
+          "ansi": false,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "unused_projection",
+            "origin": "author_source_controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "unused_timestamp",
+          "sql": "SELECT 7 AS kept FROM (SELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS unused_value) t",
+          "ansi": true,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "unused_projection",
+            "origin": "author_source_controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "unused_timestamp",
+          "sql": "SELECT 7 AS kept FROM (SELECT CAST('2021-02-29 12:34:56' AS TIMESTAMP) AS unused_value) t",
+          "ansi": false,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "unused_projection",
+            "origin": "author_source_controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "formatted_date",
+          "sql": "SELECT TO_DATE('2021-02-29','yyyy-MM-dd') AS cast_value",
+          "ansi": true,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "formatted_parser",
+            "origin": "author_source_controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "formatted_date",
+          "sql": "SELECT TO_DATE('2021-02-29','yyyy-MM-dd') AS cast_value",
+          "ansi": false,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "formatted_parser",
+            "origin": "author_source_controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "formatted_timestamp",
+          "sql": "SELECT TO_TIMESTAMP('2021-02-29 12:34:56','yyyy-MM-dd HH:mm:ss') AS cast_value",
+          "ansi": true,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "formatted_parser",
+            "origin": "author_source_controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "formatted_timestamp",
+          "sql": "SELECT TO_TIMESTAMP('2021-02-29 12:34:56','yyyy-MM-dd HH:mm:ss') AS cast_value",
+          "ansi": false,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "formatted_parser",
+            "origin": "author_source_controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "lag_date_explicit_invalid_cast_default",
+          "sql": "SELECT id,LAG(DATE '2020-01-02',1,CAST('2021-02-29' AS DATE)) OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ansi": true,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "explicit_offset_temporal_default",
+            "origin": "1123_supplement",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "target": "date",
+            "one_potential_fault": "malformed explicit temporal CAST default",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "lag_date_explicit_invalid_cast_default",
+          "sql": "SELECT id,LAG(DATE '2020-01-02',1,CAST('2021-02-29' AS DATE)) OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ansi": false,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "explicit_offset_temporal_default",
+            "origin": "1123_supplement",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "target": "date",
+            "one_potential_fault": "malformed explicit temporal CAST default",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "lag_timestamp_explicit_invalid_cast_default",
+          "sql": "SELECT id,LAG(TIMESTAMP '2020-01-02 03:04:05.123456',1,CAST('2021-02-29 12:34:56' AS TIMESTAMP)) OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ansi": true,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "explicit_offset_temporal_default",
+            "origin": "1123_supplement",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "target": "timestamp",
+            "one_potential_fault": "malformed explicit temporal CAST default",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "lag_timestamp_explicit_invalid_cast_default",
+          "sql": "SELECT id,LAG(TIMESTAMP '2020-01-02 03:04:05.123456',1,CAST('2021-02-29 12:34:56' AS TIMESTAMP)) OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ansi": false,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "explicit_offset_temporal_default",
+            "origin": "1123_supplement",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "target": "timestamp",
+            "one_potential_fault": "malformed explicit temporal CAST default",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "lag_timestamp_ntz_explicit_invalid_cast_default",
+          "sql": "SELECT id,LAG(CAST('2020-01-02 03:04:05.123456' AS TIMESTAMP_NTZ),1,CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ)) OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ansi": true,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "explicit_offset_temporal_default",
+            "origin": "1123_supplement",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "target": "timestamp_ntz",
+            "one_potential_fault": "malformed explicit temporal CAST default",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "lag_timestamp_ntz_explicit_invalid_cast_default",
+          "sql": "SELECT id,LAG(CAST('2020-01-02 03:04:05.123456' AS TIMESTAMP_NTZ),1,CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ)) OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ansi": false,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "explicit_offset_temporal_default",
+            "origin": "1123_supplement",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "target": "timestamp_ntz",
+            "one_potential_fault": "malformed explicit temporal CAST default",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "lead_date_explicit_invalid_cast_default",
+          "sql": "SELECT id,LEAD(DATE '2020-01-02',1,CAST('2021-02-29' AS DATE)) OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ansi": true,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "explicit_offset_temporal_default",
+            "origin": "1123_supplement",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "target": "date",
+            "one_potential_fault": "malformed explicit temporal CAST default",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "lead_date_explicit_invalid_cast_default",
+          "sql": "SELECT id,LEAD(DATE '2020-01-02',1,CAST('2021-02-29' AS DATE)) OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ansi": false,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "explicit_offset_temporal_default",
+            "origin": "1123_supplement",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "target": "date",
+            "one_potential_fault": "malformed explicit temporal CAST default",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "lead_timestamp_explicit_invalid_cast_default",
+          "sql": "SELECT id,LEAD(TIMESTAMP '2020-01-02 03:04:05.123456',1,CAST('2021-02-29 12:34:56' AS TIMESTAMP)) OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ansi": true,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "explicit_offset_temporal_default",
+            "origin": "1123_supplement",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "target": "timestamp",
+            "one_potential_fault": "malformed explicit temporal CAST default",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "lead_timestamp_explicit_invalid_cast_default",
+          "sql": "SELECT id,LEAD(TIMESTAMP '2020-01-02 03:04:05.123456',1,CAST('2021-02-29 12:34:56' AS TIMESTAMP)) OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ansi": false,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "explicit_offset_temporal_default",
+            "origin": "1123_supplement",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "target": "timestamp",
+            "one_potential_fault": "malformed explicit temporal CAST default",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "lead_timestamp_ntz_explicit_invalid_cast_default",
+          "sql": "SELECT id,LEAD(CAST('2020-01-02 03:04:05.123456' AS TIMESTAMP_NTZ),1,CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ)) OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ansi": true,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "explicit_offset_temporal_default",
+            "origin": "1123_supplement",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "target": "timestamp_ntz",
+            "one_potential_fault": "malformed explicit temporal CAST default",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "temporal-folding-dependency-1044",
+          "id": "lead_timestamp_ntz_explicit_invalid_cast_default",
+          "sql": "SELECT id,LEAD(CAST('2020-01-02 03:04:05.123456' AS TIMESTAMP_NTZ),1,CAST('2021-02-29 12:34:56' AS TIMESTAMP_NTZ)) OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ansi": false,
+          "timezone": "UTC",
+          "ordered": true,
+          "ownership": "strict_temporal_constant_folding",
+          "coverage": {
+            "family": "explicit_offset_temporal_default",
+            "origin": "1123_supplement",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "target": "timestamp_ntz",
+            "one_potential_fault": "malformed explicit temporal CAST default",
+            "outcome": "UNKNOWN"
+          }
+        }
+      ]
+    }
+  ]
+}

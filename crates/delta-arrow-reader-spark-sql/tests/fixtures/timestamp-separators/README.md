@@ -36,17 +36,11 @@ Spark's error class, so an expected error must occur at the same stage with
 that parser message. A DATE cast keeps its existing `[CAST_INVALID_INPUT]`
 message.
 
-Three existing differences outside the separator contract keep their Spark
+Two existing differences outside the separator contract keep their Spark
 expectations in the fixture. The test checks the current DAR result for each:
 
-- #937: 218 constant conversions to DATE, TIMESTAMP or TIMESTAMP_NTZ fail while
-  collecting rows instead of during optimization.
 - #938: 92 ANSI DATE_FORMAT calls return NULL for strings Spark rejects.
 - #939: 8 DATE_FORMAT calls print year -1 as `0002` instead of `-0001`.
-
-At the staging base, 136 of the #937 conversions and 68 of the #938 calls
-returned a wrong value because their separator was accepted. They now fail or
-return NULL; only the stage or ANSI error remains different from Spark.
 
 Recapture from the crate root:
 

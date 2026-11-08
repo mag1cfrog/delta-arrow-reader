@@ -1,0 +1,2716 @@
+{
+  "version": 1,
+  "issue": 1044,
+  "scope": "default-coercion independent source controls",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "accepted_provider_base": "5b82dec9131c3fc85b7e57e27429175ffd253a66",
+  "python_version": "3.12",
+  "java_specification_version": "21",
+  "outcome_state": "UNKNOWN: all 92 v2 rows, Fields, plans, statuses and errors await independent root Spark capture; no prior outcomes are copied.",
+  "sql_source_count": 46,
+  "expected_record_count": 92,
+  "retained_reference_count": 0,
+  "family_record_counts": {
+    "required_integer_valid_string": 8,
+    "required_integer_invalid_string": 4,
+    "typed_integer_null_valid_string": 4,
+    "string_to_double": 12,
+    "string_to_decimal": 12,
+    "string_to_date": 12,
+    "string_to_timestamp_utc": 12,
+    "fractional_double_to_integer": 8,
+    "numeric_to_decimal_boundary": 12,
+    "typed_double_null_valid_string": 4,
+    "untyped_null_valid_string": 4
+  },
+  "native_batch_sizes": [
+    1,
+    32
+  ],
+  "native_provider_partitions": 2,
+  "native_target_partitions": 2,
+  "spark_provider_partitions_expected": 1,
+  "spark_master": "local[1]",
+  "original_provider_source": {
+    "path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/new1044-oracle-source-stage-v3/offset-window-fields-1044-cases.json",
+    "sha256": "42c2f1e601bd081d8ff23db96815e3faffc67283829b353d1a44a009f307d9a8",
+    "corpus": "offset-window-fields-1044-supplement",
+    "provider_names": [
+      "offset_scalar",
+      "empty_offset_scalar",
+      "null_offset_scalar",
+      "offset_nested",
+      "empty_offset_nested",
+      "null_offset_nested"
+    ],
+    "metadata_and_provider_values_unchanged": true
+  },
+  "isolation": {
+    "one_window_expression_per_query": true,
+    "valid_invalid_defaults_separate": true,
+    "typed_null_payload_separate": true,
+    "untyped_null_payloads": 4,
+    "existing94_modified_or_recaptured": false,
+    "typed_and_untyped_null_payloads_in_separate_queries": true
+  },
+  "corpora": [
+    {
+      "corpus": "offset-window-default-coercion-1044",
+      "source": {
+        "kind": "expanded independent default-coercion boundary controls; original 16 retained unchanged",
+        "issue": "https://github.com/mag1cfrog/delta-arrow-reader/issues/1044",
+        "reads_expected_outputs": false
+      },
+      "metadata": {
+        "spark_version": "4.2.0",
+        "timezone": "UTC",
+        "inputs": [
+          {
+            "name": "offset_scalar",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "id",
+                    "role": "total-order"
+                  }
+                },
+                {
+                  "name": "g",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "g",
+                    "role": "partition"
+                  }
+                },
+                {
+                  "name": "r",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "r",
+                    "role": "required-payload"
+                  }
+                },
+                {
+                  "name": "v",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "v",
+                    "role": "nullable-payload"
+                  }
+                },
+                {
+                  "name": "d",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "d",
+                    "role": "required-default"
+                  }
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "0",
+                "10",
+                null,
+                "-101"
+              ],
+              [
+                "1",
+                "0",
+                "20",
+                "10",
+                "-102"
+              ],
+              [
+                "2",
+                "0",
+                "30",
+                null,
+                "-103"
+              ],
+              [
+                "3",
+                "0",
+                "40",
+                "20",
+                "-104"
+              ],
+              [
+                "4",
+                "1",
+                "50",
+                null,
+                "-105"
+              ],
+              [
+                "5",
+                "1",
+                "60",
+                "30",
+                "-106"
+              ],
+              [
+                "6",
+                "1",
+                "70",
+                "40",
+                "-107"
+              ],
+              [
+                "7",
+                "1",
+                "80",
+                null,
+                "-108"
+              ]
+            ]
+          },
+          {
+            "name": "empty_offset_scalar",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "id",
+                    "role": "total-order"
+                  }
+                },
+                {
+                  "name": "g",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "g",
+                    "role": "partition"
+                  }
+                },
+                {
+                  "name": "r",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "r",
+                    "role": "required-payload"
+                  }
+                },
+                {
+                  "name": "v",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "v",
+                    "role": "nullable-payload"
+                  }
+                },
+                {
+                  "name": "d",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "d",
+                    "role": "required-default"
+                  }
+                }
+              ]
+            },
+            "rows": []
+          },
+          {
+            "name": "null_offset_scalar",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "id",
+                    "role": "total-order"
+                  }
+                },
+                {
+                  "name": "g",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "g",
+                    "role": "partition"
+                  }
+                },
+                {
+                  "name": "r",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "r",
+                    "role": "required-payload"
+                  }
+                },
+                {
+                  "name": "v",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "v",
+                    "role": "nullable-payload"
+                  }
+                },
+                {
+                  "name": "d",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "d",
+                    "role": "required-default"
+                  }
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "0",
+                "10",
+                null,
+                "-101"
+              ],
+              [
+                "1",
+                "0",
+                "20",
+                null,
+                "-102"
+              ],
+              [
+                "2",
+                "1",
+                "30",
+                null,
+                "-103"
+              ]
+            ]
+          },
+          {
+            "name": "offset_nested",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "id",
+                    "role": "total-order"
+                  }
+                },
+                {
+                  "name": "g",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "g",
+                    "role": "partition"
+                  }
+                },
+                {
+                  "name": "r",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "value",
+                        "type": "integer",
+                        "nullable": false,
+                        "metadata": {
+                          "unit": "count",
+                          "role": "required-child"
+                        }
+                      },
+                      {
+                        "name": "maybe",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {
+                          "unit": "count",
+                          "role": "nullable-child"
+                        }
+                      },
+                      {
+                        "name": "detail",
+                        "type": {
+                          "type": "struct",
+                          "fields": [
+                            {
+                              "name": "token",
+                              "type": "integer",
+                              "nullable": false,
+                              "metadata": {
+                                "source": "detail.token",
+                                "lineage": "{\"origin\":\"1044-fixture\",\"ordinal\":1}"
+                              }
+                            },
+                            {
+                              "name": "flag",
+                              "type": "boolean",
+                              "nullable": true,
+                              "metadata": {
+                                "source": "detail.flag",
+                                "role": "nullable-grandchild"
+                              }
+                            }
+                          ]
+                        },
+                        "nullable": false,
+                        "metadata": {
+                          "source": "detail",
+                          "role": "required-child-struct"
+                        }
+                      }
+                    ]
+                  },
+                  "nullable": false,
+                  "metadata": {
+                    "source": "r",
+                    "purpose": "required-nested-payload",
+                    "version": "1"
+                  }
+                },
+                {
+                  "name": "v",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "value",
+                        "type": "integer",
+                        "nullable": false,
+                        "metadata": {
+                          "unit": "count",
+                          "role": "required-child"
+                        }
+                      },
+                      {
+                        "name": "maybe",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {
+                          "unit": "count",
+                          "role": "nullable-child"
+                        }
+                      },
+                      {
+                        "name": "detail",
+                        "type": {
+                          "type": "struct",
+                          "fields": [
+                            {
+                              "name": "token",
+                              "type": "integer",
+                              "nullable": false,
+                              "metadata": {
+                                "source": "detail.token",
+                                "lineage": "{\"origin\":\"1044-fixture\",\"ordinal\":1}"
+                              }
+                            },
+                            {
+                              "name": "flag",
+                              "type": "boolean",
+                              "nullable": true,
+                              "metadata": {
+                                "source": "detail.flag",
+                                "role": "nullable-grandchild"
+                              }
+                            }
+                          ]
+                        },
+                        "nullable": false,
+                        "metadata": {
+                          "source": "detail",
+                          "role": "required-child-struct"
+                        }
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {
+                    "source": "v",
+                    "purpose": "nullable-nested-payload",
+                    "version": "1"
+                  }
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "0",
+                [
+                  "10",
+                  null,
+                  [
+                    "100",
+                    null
+                  ]
+                ],
+                null
+              ],
+              [
+                "1",
+                "0",
+                [
+                  "20",
+                  "2",
+                  [
+                    "200",
+                    "True"
+                  ]
+                ],
+                [
+                  "21",
+                  null,
+                  [
+                    "210",
+                    "False"
+                  ]
+                ]
+              ],
+              [
+                "2",
+                "1",
+                [
+                  "30",
+                  null,
+                  [
+                    "300",
+                    "False"
+                  ]
+                ],
+                null
+              ],
+              [
+                "3",
+                "1",
+                [
+                  "40",
+                  "4",
+                  [
+                    "400",
+                    null
+                  ]
+                ],
+                [
+                  "41",
+                  "5",
+                  [
+                    "410",
+                    null
+                  ]
+                ]
+              ]
+            ]
+          },
+          {
+            "name": "empty_offset_nested",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "id",
+                    "role": "total-order"
+                  }
+                },
+                {
+                  "name": "g",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "g",
+                    "role": "partition"
+                  }
+                },
+                {
+                  "name": "r",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "value",
+                        "type": "integer",
+                        "nullable": false,
+                        "metadata": {
+                          "unit": "count",
+                          "role": "required-child"
+                        }
+                      },
+                      {
+                        "name": "maybe",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {
+                          "unit": "count",
+                          "role": "nullable-child"
+                        }
+                      },
+                      {
+                        "name": "detail",
+                        "type": {
+                          "type": "struct",
+                          "fields": [
+                            {
+                              "name": "token",
+                              "type": "integer",
+                              "nullable": false,
+                              "metadata": {
+                                "source": "detail.token",
+                                "lineage": "{\"origin\":\"1044-fixture\",\"ordinal\":1}"
+                              }
+                            },
+                            {
+                              "name": "flag",
+                              "type": "boolean",
+                              "nullable": true,
+                              "metadata": {
+                                "source": "detail.flag",
+                                "role": "nullable-grandchild"
+                              }
+                            }
+                          ]
+                        },
+                        "nullable": false,
+                        "metadata": {
+                          "source": "detail",
+                          "role": "required-child-struct"
+                        }
+                      }
+                    ]
+                  },
+                  "nullable": false,
+                  "metadata": {
+                    "source": "r",
+                    "purpose": "required-nested-payload",
+                    "version": "1"
+                  }
+                },
+                {
+                  "name": "v",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "value",
+                        "type": "integer",
+                        "nullable": false,
+                        "metadata": {
+                          "unit": "count",
+                          "role": "required-child"
+                        }
+                      },
+                      {
+                        "name": "maybe",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {
+                          "unit": "count",
+                          "role": "nullable-child"
+                        }
+                      },
+                      {
+                        "name": "detail",
+                        "type": {
+                          "type": "struct",
+                          "fields": [
+                            {
+                              "name": "token",
+                              "type": "integer",
+                              "nullable": false,
+                              "metadata": {
+                                "source": "detail.token",
+                                "lineage": "{\"origin\":\"1044-fixture\",\"ordinal\":1}"
+                              }
+                            },
+                            {
+                              "name": "flag",
+                              "type": "boolean",
+                              "nullable": true,
+                              "metadata": {
+                                "source": "detail.flag",
+                                "role": "nullable-grandchild"
+                              }
+                            }
+                          ]
+                        },
+                        "nullable": false,
+                        "metadata": {
+                          "source": "detail",
+                          "role": "required-child-struct"
+                        }
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {
+                    "source": "v",
+                    "purpose": "nullable-nested-payload",
+                    "version": "1"
+                  }
+                }
+              ]
+            },
+            "rows": []
+          },
+          {
+            "name": "null_offset_nested",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "id",
+                    "role": "total-order"
+                  }
+                },
+                {
+                  "name": "g",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "g",
+                    "role": "partition"
+                  }
+                },
+                {
+                  "name": "r",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "value",
+                        "type": "integer",
+                        "nullable": false,
+                        "metadata": {
+                          "unit": "count",
+                          "role": "required-child"
+                        }
+                      },
+                      {
+                        "name": "maybe",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {
+                          "unit": "count",
+                          "role": "nullable-child"
+                        }
+                      },
+                      {
+                        "name": "detail",
+                        "type": {
+                          "type": "struct",
+                          "fields": [
+                            {
+                              "name": "token",
+                              "type": "integer",
+                              "nullable": false,
+                              "metadata": {
+                                "source": "detail.token",
+                                "lineage": "{\"origin\":\"1044-fixture\",\"ordinal\":1}"
+                              }
+                            },
+                            {
+                              "name": "flag",
+                              "type": "boolean",
+                              "nullable": true,
+                              "metadata": {
+                                "source": "detail.flag",
+                                "role": "nullable-grandchild"
+                              }
+                            }
+                          ]
+                        },
+                        "nullable": false,
+                        "metadata": {
+                          "source": "detail",
+                          "role": "required-child-struct"
+                        }
+                      }
+                    ]
+                  },
+                  "nullable": false,
+                  "metadata": {
+                    "source": "r",
+                    "purpose": "required-nested-payload",
+                    "version": "1"
+                  }
+                },
+                {
+                  "name": "v",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "value",
+                        "type": "integer",
+                        "nullable": false,
+                        "metadata": {
+                          "unit": "count",
+                          "role": "required-child"
+                        }
+                      },
+                      {
+                        "name": "maybe",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {
+                          "unit": "count",
+                          "role": "nullable-child"
+                        }
+                      },
+                      {
+                        "name": "detail",
+                        "type": {
+                          "type": "struct",
+                          "fields": [
+                            {
+                              "name": "token",
+                              "type": "integer",
+                              "nullable": false,
+                              "metadata": {
+                                "source": "detail.token",
+                                "lineage": "{\"origin\":\"1044-fixture\",\"ordinal\":1}"
+                              }
+                            },
+                            {
+                              "name": "flag",
+                              "type": "boolean",
+                              "nullable": true,
+                              "metadata": {
+                                "source": "detail.flag",
+                                "role": "nullable-grandchild"
+                              }
+                            }
+                          ]
+                        },
+                        "nullable": false,
+                        "metadata": {
+                          "source": "detail",
+                          "role": "required-child-struct"
+                        }
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {
+                    "source": "v",
+                    "purpose": "nullable-nested-payload",
+                    "version": "1"
+                  }
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "0",
+                [
+                  "10",
+                  null,
+                  [
+                    "100",
+                    null
+                  ]
+                ],
+                null
+              ],
+              [
+                "1",
+                "0",
+                [
+                  "20",
+                  "2",
+                  [
+                    "200",
+                    "True"
+                  ]
+                ],
+                null
+              ],
+              [
+                "2",
+                "1",
+                [
+                  "30",
+                  null,
+                  [
+                    "300",
+                    "False"
+                  ]
+                ],
+                null
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_offset_scalar_valid_string_default",
+          "ansi": true,
+          "sql": "SELECT id,LAG(r,1,'99') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "required_integer_valid_string",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "payload_expression": "r",
+            "default_expression": "'99'",
+            "offset": 1,
+            "state": "nonempty",
+            "boundary": "implicit default coercion with complete corresponding-stage Fields",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_offset_scalar_valid_string_default",
+          "ansi": false,
+          "sql": "SELECT id,LAG(r,1,'99') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "required_integer_valid_string",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "payload_expression": "r",
+            "default_expression": "'99'",
+            "offset": 1,
+            "state": "nonempty",
+            "boundary": "implicit default coercion with complete corresponding-stage Fields",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_empty_offset_scalar_valid_string_default",
+          "ansi": true,
+          "sql": "SELECT id,LAG(r,1,'99') OVER (ORDER BY id) AS shifted FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "required_integer_valid_string",
+            "provider": "empty_offset_scalar",
+            "function": "LAG",
+            "payload_expression": "r",
+            "default_expression": "'99'",
+            "offset": 1,
+            "state": "empty",
+            "boundary": "implicit default coercion with complete corresponding-stage Fields",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_empty_offset_scalar_valid_string_default",
+          "ansi": false,
+          "sql": "SELECT id,LAG(r,1,'99') OVER (ORDER BY id) AS shifted FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "required_integer_valid_string",
+            "provider": "empty_offset_scalar",
+            "function": "LAG",
+            "payload_expression": "r",
+            "default_expression": "'99'",
+            "offset": 1,
+            "state": "empty",
+            "boundary": "implicit default coercion with complete corresponding-stage Fields",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_offset_scalar_invalid_string_default",
+          "ansi": true,
+          "sql": "SELECT id,LAG(r,1,'bad') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "required_integer_invalid_string",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "payload_expression": "r",
+            "default_expression": "'bad'",
+            "offset": 1,
+            "state": "nonempty",
+            "boundary": "implicit default coercion with complete corresponding-stage Fields",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_offset_scalar_invalid_string_default",
+          "ansi": false,
+          "sql": "SELECT id,LAG(r,1,'bad') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "required_integer_invalid_string",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "payload_expression": "r",
+            "default_expression": "'bad'",
+            "offset": 1,
+            "state": "nonempty",
+            "boundary": "implicit default coercion with complete corresponding-stage Fields",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_offset_scalar_typed_null_valid_string_default",
+          "ansi": true,
+          "sql": "SELECT id,LAG(CAST(NULL AS INT),1,'99') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "typed_integer_null_valid_string",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "payload_expression": "CAST(NULL AS INT)",
+            "default_expression": "'99'",
+            "offset": 1,
+            "state": "nonempty",
+            "boundary": "implicit default coercion with complete corresponding-stage Fields",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_offset_scalar_typed_null_valid_string_default",
+          "ansi": false,
+          "sql": "SELECT id,LAG(CAST(NULL AS INT),1,'99') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "typed_integer_null_valid_string",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "payload_expression": "CAST(NULL AS INT)",
+            "default_expression": "'99'",
+            "offset": 1,
+            "state": "nonempty",
+            "boundary": "implicit default coercion with complete corresponding-stage Fields",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_offset_scalar_valid_string_default",
+          "ansi": true,
+          "sql": "SELECT id,LEAD(r,1,'99') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "required_integer_valid_string",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "r",
+            "default_expression": "'99'",
+            "offset": 1,
+            "state": "nonempty",
+            "boundary": "implicit default coercion with complete corresponding-stage Fields",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_offset_scalar_valid_string_default",
+          "ansi": false,
+          "sql": "SELECT id,LEAD(r,1,'99') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "required_integer_valid_string",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "r",
+            "default_expression": "'99'",
+            "offset": 1,
+            "state": "nonempty",
+            "boundary": "implicit default coercion with complete corresponding-stage Fields",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_empty_offset_scalar_valid_string_default",
+          "ansi": true,
+          "sql": "SELECT id,LEAD(r,1,'99') OVER (ORDER BY id) AS shifted FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "required_integer_valid_string",
+            "provider": "empty_offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "r",
+            "default_expression": "'99'",
+            "offset": 1,
+            "state": "empty",
+            "boundary": "implicit default coercion with complete corresponding-stage Fields",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_empty_offset_scalar_valid_string_default",
+          "ansi": false,
+          "sql": "SELECT id,LEAD(r,1,'99') OVER (ORDER BY id) AS shifted FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "required_integer_valid_string",
+            "provider": "empty_offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "r",
+            "default_expression": "'99'",
+            "offset": 1,
+            "state": "empty",
+            "boundary": "implicit default coercion with complete corresponding-stage Fields",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_offset_scalar_invalid_string_default",
+          "ansi": true,
+          "sql": "SELECT id,LEAD(r,1,'bad') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "required_integer_invalid_string",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "r",
+            "default_expression": "'bad'",
+            "offset": 1,
+            "state": "nonempty",
+            "boundary": "implicit default coercion with complete corresponding-stage Fields",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_offset_scalar_invalid_string_default",
+          "ansi": false,
+          "sql": "SELECT id,LEAD(r,1,'bad') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "required_integer_invalid_string",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "r",
+            "default_expression": "'bad'",
+            "offset": 1,
+            "state": "nonempty",
+            "boundary": "implicit default coercion with complete corresponding-stage Fields",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_offset_scalar_typed_null_valid_string_default",
+          "ansi": true,
+          "sql": "SELECT id,LEAD(CAST(NULL AS INT),1,'99') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "typed_integer_null_valid_string",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "CAST(NULL AS INT)",
+            "default_expression": "'99'",
+            "offset": 1,
+            "state": "nonempty",
+            "boundary": "implicit default coercion with complete corresponding-stage Fields",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_offset_scalar_typed_null_valid_string_default",
+          "ansi": false,
+          "sql": "SELECT id,LEAD(CAST(NULL AS INT),1,'99') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "typed_integer_null_valid_string",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "CAST(NULL AS INT)",
+            "default_expression": "'99'",
+            "offset": 1,
+            "state": "nonempty",
+            "boundary": "implicit default coercion with complete corresponding-stage Fields",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_double_offset_scalar_valid_string_default",
+          "ansi": true,
+          "sql": "SELECT id,LAG(CAST(r AS DOUBLE),1,'99.5') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_double",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "payload_expression": "CAST(r AS DOUBLE)",
+            "default_expression": "'99.5'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "DOUBLE",
+            "boundary": "valid string default; observe coercion and fold across corresponding stages",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_double_offset_scalar_valid_string_default",
+          "ansi": false,
+          "sql": "SELECT id,LAG(CAST(r AS DOUBLE),1,'99.5') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_double",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "payload_expression": "CAST(r AS DOUBLE)",
+            "default_expression": "'99.5'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "DOUBLE",
+            "boundary": "valid string default; observe coercion and fold across corresponding stages",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_double_empty_offset_scalar_valid_string_default",
+          "ansi": true,
+          "sql": "SELECT id,LAG(CAST(r AS DOUBLE),1,'99.5') OVER (ORDER BY id) AS shifted FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_double",
+            "provider": "empty_offset_scalar",
+            "function": "LAG",
+            "payload_expression": "CAST(r AS DOUBLE)",
+            "default_expression": "'99.5'",
+            "offset": 1,
+            "state": "empty",
+            "target": "DOUBLE",
+            "boundary": "valid string default; observe coercion and fold across corresponding stages",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_double_empty_offset_scalar_valid_string_default",
+          "ansi": false,
+          "sql": "SELECT id,LAG(CAST(r AS DOUBLE),1,'99.5') OVER (ORDER BY id) AS shifted FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_double",
+            "provider": "empty_offset_scalar",
+            "function": "LAG",
+            "payload_expression": "CAST(r AS DOUBLE)",
+            "default_expression": "'99.5'",
+            "offset": 1,
+            "state": "empty",
+            "target": "DOUBLE",
+            "boundary": "valid string default; observe coercion and fold across corresponding stages",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_double_offset_scalar_invalid_string_default",
+          "ansi": true,
+          "sql": "SELECT id,LAG(CAST(r AS DOUBLE),1,'bad') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_double",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "payload_expression": "CAST(r AS DOUBLE)",
+            "default_expression": "'bad'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "DOUBLE",
+            "boundary": "invalid string default isolated from valid controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_double_offset_scalar_invalid_string_default",
+          "ansi": false,
+          "sql": "SELECT id,LAG(CAST(r AS DOUBLE),1,'bad') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_double",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "payload_expression": "CAST(r AS DOUBLE)",
+            "default_expression": "'bad'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "DOUBLE",
+            "boundary": "invalid string default isolated from valid controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_decimal_offset_scalar_valid_string_default",
+          "ansi": true,
+          "sql": "SELECT id,LAG(CAST(r AS DECIMAL(12,2)),1,'99.125') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_decimal",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "payload_expression": "CAST(r AS DECIMAL(12,2))",
+            "default_expression": "'99.125'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "DECIMAL(12,2)",
+            "boundary": "valid string default; observe coercion and fold across corresponding stages",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_decimal_offset_scalar_valid_string_default",
+          "ansi": false,
+          "sql": "SELECT id,LAG(CAST(r AS DECIMAL(12,2)),1,'99.125') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_decimal",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "payload_expression": "CAST(r AS DECIMAL(12,2))",
+            "default_expression": "'99.125'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "DECIMAL(12,2)",
+            "boundary": "valid string default; observe coercion and fold across corresponding stages",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_decimal_empty_offset_scalar_valid_string_default",
+          "ansi": true,
+          "sql": "SELECT id,LAG(CAST(r AS DECIMAL(12,2)),1,'99.125') OVER (ORDER BY id) AS shifted FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_decimal",
+            "provider": "empty_offset_scalar",
+            "function": "LAG",
+            "payload_expression": "CAST(r AS DECIMAL(12,2))",
+            "default_expression": "'99.125'",
+            "offset": 1,
+            "state": "empty",
+            "target": "DECIMAL(12,2)",
+            "boundary": "valid string default; observe coercion and fold across corresponding stages",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_decimal_empty_offset_scalar_valid_string_default",
+          "ansi": false,
+          "sql": "SELECT id,LAG(CAST(r AS DECIMAL(12,2)),1,'99.125') OVER (ORDER BY id) AS shifted FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_decimal",
+            "provider": "empty_offset_scalar",
+            "function": "LAG",
+            "payload_expression": "CAST(r AS DECIMAL(12,2))",
+            "default_expression": "'99.125'",
+            "offset": 1,
+            "state": "empty",
+            "target": "DECIMAL(12,2)",
+            "boundary": "valid string default; observe coercion and fold across corresponding stages",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_decimal_offset_scalar_invalid_string_default",
+          "ansi": true,
+          "sql": "SELECT id,LAG(CAST(r AS DECIMAL(12,2)),1,'bad') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_decimal",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "payload_expression": "CAST(r AS DECIMAL(12,2))",
+            "default_expression": "'bad'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "DECIMAL(12,2)",
+            "boundary": "invalid string default isolated from valid controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_decimal_offset_scalar_invalid_string_default",
+          "ansi": false,
+          "sql": "SELECT id,LAG(CAST(r AS DECIMAL(12,2)),1,'bad') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_decimal",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "payload_expression": "CAST(r AS DECIMAL(12,2))",
+            "default_expression": "'bad'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "DECIMAL(12,2)",
+            "boundary": "invalid string default isolated from valid controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_date_offset_scalar_valid_string_default",
+          "ansi": true,
+          "sql": "SELECT id,LAG(DATE '2020-01-02',1,'2020-02-29') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_date",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "payload_expression": "DATE '2020-01-02'",
+            "default_expression": "'2020-02-29'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "DATE",
+            "boundary": "valid string default; observe coercion and fold across corresponding stages",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_date_offset_scalar_valid_string_default",
+          "ansi": false,
+          "sql": "SELECT id,LAG(DATE '2020-01-02',1,'2020-02-29') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_date",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "payload_expression": "DATE '2020-01-02'",
+            "default_expression": "'2020-02-29'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "DATE",
+            "boundary": "valid string default; observe coercion and fold across corresponding stages",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_date_empty_offset_scalar_valid_string_default",
+          "ansi": true,
+          "sql": "SELECT id,LAG(DATE '2020-01-02',1,'2020-02-29') OVER (ORDER BY id) AS shifted FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_date",
+            "provider": "empty_offset_scalar",
+            "function": "LAG",
+            "payload_expression": "DATE '2020-01-02'",
+            "default_expression": "'2020-02-29'",
+            "offset": 1,
+            "state": "empty",
+            "target": "DATE",
+            "boundary": "valid string default; observe coercion and fold across corresponding stages",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_date_empty_offset_scalar_valid_string_default",
+          "ansi": false,
+          "sql": "SELECT id,LAG(DATE '2020-01-02',1,'2020-02-29') OVER (ORDER BY id) AS shifted FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_date",
+            "provider": "empty_offset_scalar",
+            "function": "LAG",
+            "payload_expression": "DATE '2020-01-02'",
+            "default_expression": "'2020-02-29'",
+            "offset": 1,
+            "state": "empty",
+            "target": "DATE",
+            "boundary": "valid string default; observe coercion and fold across corresponding stages",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_date_offset_scalar_invalid_string_default",
+          "ansi": true,
+          "sql": "SELECT id,LAG(DATE '2020-01-02',1,'2021-02-29') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_date",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "payload_expression": "DATE '2020-01-02'",
+            "default_expression": "'2021-02-29'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "DATE",
+            "boundary": "invalid string default isolated from valid controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_date_offset_scalar_invalid_string_default",
+          "ansi": false,
+          "sql": "SELECT id,LAG(DATE '2020-01-02',1,'2021-02-29') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_date",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "payload_expression": "DATE '2020-01-02'",
+            "default_expression": "'2021-02-29'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "DATE",
+            "boundary": "invalid string default isolated from valid controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_timestamp_utc_offset_scalar_valid_string_default",
+          "ansi": true,
+          "sql": "SELECT id,LAG(TIMESTAMP '2020-01-02 03:04:05.123456',1,'2020-02-29 12:34:56.654321') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_timestamp_utc",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "payload_expression": "TIMESTAMP '2020-01-02 03:04:05.123456'",
+            "default_expression": "'2020-02-29 12:34:56.654321'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "TIMESTAMP UTC",
+            "boundary": "valid string default; observe coercion and fold across corresponding stages",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_timestamp_utc_offset_scalar_valid_string_default",
+          "ansi": false,
+          "sql": "SELECT id,LAG(TIMESTAMP '2020-01-02 03:04:05.123456',1,'2020-02-29 12:34:56.654321') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_timestamp_utc",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "payload_expression": "TIMESTAMP '2020-01-02 03:04:05.123456'",
+            "default_expression": "'2020-02-29 12:34:56.654321'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "TIMESTAMP UTC",
+            "boundary": "valid string default; observe coercion and fold across corresponding stages",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_timestamp_utc_empty_offset_scalar_valid_string_default",
+          "ansi": true,
+          "sql": "SELECT id,LAG(TIMESTAMP '2020-01-02 03:04:05.123456',1,'2020-02-29 12:34:56.654321') OVER (ORDER BY id) AS shifted FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_timestamp_utc",
+            "provider": "empty_offset_scalar",
+            "function": "LAG",
+            "payload_expression": "TIMESTAMP '2020-01-02 03:04:05.123456'",
+            "default_expression": "'2020-02-29 12:34:56.654321'",
+            "offset": 1,
+            "state": "empty",
+            "target": "TIMESTAMP UTC",
+            "boundary": "valid string default; observe coercion and fold across corresponding stages",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_timestamp_utc_empty_offset_scalar_valid_string_default",
+          "ansi": false,
+          "sql": "SELECT id,LAG(TIMESTAMP '2020-01-02 03:04:05.123456',1,'2020-02-29 12:34:56.654321') OVER (ORDER BY id) AS shifted FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_timestamp_utc",
+            "provider": "empty_offset_scalar",
+            "function": "LAG",
+            "payload_expression": "TIMESTAMP '2020-01-02 03:04:05.123456'",
+            "default_expression": "'2020-02-29 12:34:56.654321'",
+            "offset": 1,
+            "state": "empty",
+            "target": "TIMESTAMP UTC",
+            "boundary": "valid string default; observe coercion and fold across corresponding stages",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_timestamp_utc_offset_scalar_invalid_string_default",
+          "ansi": true,
+          "sql": "SELECT id,LAG(TIMESTAMP '2020-01-02 03:04:05.123456',1,'2021-02-29 12:34:56') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_timestamp_utc",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "payload_expression": "TIMESTAMP '2020-01-02 03:04:05.123456'",
+            "default_expression": "'2021-02-29 12:34:56'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "TIMESTAMP UTC",
+            "boundary": "invalid string default isolated from valid controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_timestamp_utc_offset_scalar_invalid_string_default",
+          "ansi": false,
+          "sql": "SELECT id,LAG(TIMESTAMP '2020-01-02 03:04:05.123456',1,'2021-02-29 12:34:56') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_timestamp_utc",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "payload_expression": "TIMESTAMP '2020-01-02 03:04:05.123456'",
+            "default_expression": "'2021-02-29 12:34:56'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "TIMESTAMP UTC",
+            "boundary": "invalid string default isolated from valid controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_integer_offset_scalar_fractional_double_default",
+          "ansi": true,
+          "sql": "SELECT id,LAG(r,1,CAST(-99.75 AS DOUBLE)) OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "fractional_double_to_integer",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "payload_expression": "r",
+            "default_expression": "CAST(-99.75 AS DOUBLE)",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "INTEGER",
+            "boundary": "negative fractional Double default; exact numeric conversion and corresponding Fields",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_integer_offset_scalar_fractional_double_default",
+          "ansi": false,
+          "sql": "SELECT id,LAG(r,1,CAST(-99.75 AS DOUBLE)) OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "fractional_double_to_integer",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "payload_expression": "r",
+            "default_expression": "CAST(-99.75 AS DOUBLE)",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "INTEGER",
+            "boundary": "negative fractional Double default; exact numeric conversion and corresponding Fields",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_decimal_offset_scalar_fitting_numeric_default",
+          "ansi": true,
+          "sql": "SELECT id,LAG(CAST(r AS DECIMAL(12,2)),1,CAST(9999999999 AS BIGINT)) OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "numeric_to_decimal_boundary",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "payload_expression": "CAST(r AS DECIMAL(12,2))",
+            "default_expression": "CAST(9999999999 AS BIGINT)",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "DECIMAL(12,2)",
+            "boundary": "fitting BigInt default at ten-integer-digit boundary",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_decimal_offset_scalar_fitting_numeric_default",
+          "ansi": false,
+          "sql": "SELECT id,LAG(CAST(r AS DECIMAL(12,2)),1,CAST(9999999999 AS BIGINT)) OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "numeric_to_decimal_boundary",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "payload_expression": "CAST(r AS DECIMAL(12,2))",
+            "default_expression": "CAST(9999999999 AS BIGINT)",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "DECIMAL(12,2)",
+            "boundary": "fitting BigInt default at ten-integer-digit boundary",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_integer_empty_offset_scalar_fractional_double_default",
+          "ansi": true,
+          "sql": "SELECT id,LAG(r,1,CAST(-99.75 AS DOUBLE)) OVER (ORDER BY id) AS shifted FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "fractional_double_to_integer",
+            "provider": "empty_offset_scalar",
+            "function": "LAG",
+            "payload_expression": "r",
+            "default_expression": "CAST(-99.75 AS DOUBLE)",
+            "offset": 1,
+            "state": "empty",
+            "target": "INTEGER",
+            "boundary": "negative fractional Double default; exact numeric conversion and corresponding Fields",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_integer_empty_offset_scalar_fractional_double_default",
+          "ansi": false,
+          "sql": "SELECT id,LAG(r,1,CAST(-99.75 AS DOUBLE)) OVER (ORDER BY id) AS shifted FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "fractional_double_to_integer",
+            "provider": "empty_offset_scalar",
+            "function": "LAG",
+            "payload_expression": "r",
+            "default_expression": "CAST(-99.75 AS DOUBLE)",
+            "offset": 1,
+            "state": "empty",
+            "target": "INTEGER",
+            "boundary": "negative fractional Double default; exact numeric conversion and corresponding Fields",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_decimal_empty_offset_scalar_fitting_numeric_default",
+          "ansi": true,
+          "sql": "SELECT id,LAG(CAST(r AS DECIMAL(12,2)),1,CAST(9999999999 AS BIGINT)) OVER (ORDER BY id) AS shifted FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "numeric_to_decimal_boundary",
+            "provider": "empty_offset_scalar",
+            "function": "LAG",
+            "payload_expression": "CAST(r AS DECIMAL(12,2))",
+            "default_expression": "CAST(9999999999 AS BIGINT)",
+            "offset": 1,
+            "state": "empty",
+            "target": "DECIMAL(12,2)",
+            "boundary": "fitting BigInt default at ten-integer-digit boundary",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_decimal_empty_offset_scalar_fitting_numeric_default",
+          "ansi": false,
+          "sql": "SELECT id,LAG(CAST(r AS DECIMAL(12,2)),1,CAST(9999999999 AS BIGINT)) OVER (ORDER BY id) AS shifted FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "numeric_to_decimal_boundary",
+            "provider": "empty_offset_scalar",
+            "function": "LAG",
+            "payload_expression": "CAST(r AS DECIMAL(12,2))",
+            "default_expression": "CAST(9999999999 AS BIGINT)",
+            "offset": 1,
+            "state": "empty",
+            "target": "DECIMAL(12,2)",
+            "boundary": "fitting BigInt default at ten-integer-digit boundary",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_decimal_offset_scalar_overflow_numeric_default",
+          "ansi": true,
+          "sql": "SELECT id,LAG(CAST(r AS DECIMAL(12,2)),1,CAST(10000000000 AS BIGINT)) OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "numeric_to_decimal_boundary",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "payload_expression": "CAST(r AS DECIMAL(12,2))",
+            "default_expression": "CAST(10000000000 AS BIGINT)",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "DECIMAL(12,2)",
+            "boundary": "eleven-integer-digit BigInt default; overflow boundary isolated",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_decimal_offset_scalar_overflow_numeric_default",
+          "ansi": false,
+          "sql": "SELECT id,LAG(CAST(r AS DECIMAL(12,2)),1,CAST(10000000000 AS BIGINT)) OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "numeric_to_decimal_boundary",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "payload_expression": "CAST(r AS DECIMAL(12,2))",
+            "default_expression": "CAST(10000000000 AS BIGINT)",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "DECIMAL(12,2)",
+            "boundary": "eleven-integer-digit BigInt default; overflow boundary isolated",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_offset_scalar_typed_double_null_valid_string_default",
+          "ansi": true,
+          "sql": "SELECT id,LAG(CAST(NULL AS DOUBLE),1,'99.5') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "typed_double_null_valid_string",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "payload_expression": "CAST(NULL AS DOUBLE)",
+            "default_expression": "'99.5'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "typed DOUBLE NULL",
+            "boundary": "typed NULL payload isolated from untyped NULL and invalid defaults",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_offset_scalar_typed_double_null_valid_string_default",
+          "ansi": false,
+          "sql": "SELECT id,LAG(CAST(NULL AS DOUBLE),1,'99.5') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "typed_double_null_valid_string",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "payload_expression": "CAST(NULL AS DOUBLE)",
+            "default_expression": "'99.5'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "typed DOUBLE NULL",
+            "boundary": "typed NULL payload isolated from untyped NULL and invalid defaults",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_offset_scalar_untyped_null_valid_string_default",
+          "ansi": true,
+          "sql": "SELECT id,LAG(NULL,1,'99.5') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "untyped_null_valid_string",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "payload_expression": "NULL",
+            "default_expression": "'99.5'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "UNKNOWN; observe untyped NULL resolution",
+            "boundary": "untyped NULL payload isolated from typed NULL; infer no output type",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lag_offset_scalar_untyped_null_valid_string_default",
+          "ansi": false,
+          "sql": "SELECT id,LAG(NULL,1,'99.5') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "untyped_null_valid_string",
+            "provider": "offset_scalar",
+            "function": "LAG",
+            "payload_expression": "NULL",
+            "default_expression": "'99.5'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "UNKNOWN; observe untyped NULL resolution",
+            "boundary": "untyped NULL payload isolated from typed NULL; infer no output type",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_double_offset_scalar_valid_string_default",
+          "ansi": true,
+          "sql": "SELECT id,LEAD(CAST(r AS DOUBLE),1,'99.5') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_double",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "CAST(r AS DOUBLE)",
+            "default_expression": "'99.5'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "DOUBLE",
+            "boundary": "valid string default; observe coercion and fold across corresponding stages",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_double_offset_scalar_valid_string_default",
+          "ansi": false,
+          "sql": "SELECT id,LEAD(CAST(r AS DOUBLE),1,'99.5') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_double",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "CAST(r AS DOUBLE)",
+            "default_expression": "'99.5'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "DOUBLE",
+            "boundary": "valid string default; observe coercion and fold across corresponding stages",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_double_empty_offset_scalar_valid_string_default",
+          "ansi": true,
+          "sql": "SELECT id,LEAD(CAST(r AS DOUBLE),1,'99.5') OVER (ORDER BY id) AS shifted FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_double",
+            "provider": "empty_offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "CAST(r AS DOUBLE)",
+            "default_expression": "'99.5'",
+            "offset": 1,
+            "state": "empty",
+            "target": "DOUBLE",
+            "boundary": "valid string default; observe coercion and fold across corresponding stages",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_double_empty_offset_scalar_valid_string_default",
+          "ansi": false,
+          "sql": "SELECT id,LEAD(CAST(r AS DOUBLE),1,'99.5') OVER (ORDER BY id) AS shifted FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_double",
+            "provider": "empty_offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "CAST(r AS DOUBLE)",
+            "default_expression": "'99.5'",
+            "offset": 1,
+            "state": "empty",
+            "target": "DOUBLE",
+            "boundary": "valid string default; observe coercion and fold across corresponding stages",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_double_offset_scalar_invalid_string_default",
+          "ansi": true,
+          "sql": "SELECT id,LEAD(CAST(r AS DOUBLE),1,'bad') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_double",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "CAST(r AS DOUBLE)",
+            "default_expression": "'bad'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "DOUBLE",
+            "boundary": "invalid string default isolated from valid controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_double_offset_scalar_invalid_string_default",
+          "ansi": false,
+          "sql": "SELECT id,LEAD(CAST(r AS DOUBLE),1,'bad') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_double",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "CAST(r AS DOUBLE)",
+            "default_expression": "'bad'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "DOUBLE",
+            "boundary": "invalid string default isolated from valid controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_decimal_offset_scalar_valid_string_default",
+          "ansi": true,
+          "sql": "SELECT id,LEAD(CAST(r AS DECIMAL(12,2)),1,'99.125') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_decimal",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "CAST(r AS DECIMAL(12,2))",
+            "default_expression": "'99.125'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "DECIMAL(12,2)",
+            "boundary": "valid string default; observe coercion and fold across corresponding stages",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_decimal_offset_scalar_valid_string_default",
+          "ansi": false,
+          "sql": "SELECT id,LEAD(CAST(r AS DECIMAL(12,2)),1,'99.125') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_decimal",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "CAST(r AS DECIMAL(12,2))",
+            "default_expression": "'99.125'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "DECIMAL(12,2)",
+            "boundary": "valid string default; observe coercion and fold across corresponding stages",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_decimal_empty_offset_scalar_valid_string_default",
+          "ansi": true,
+          "sql": "SELECT id,LEAD(CAST(r AS DECIMAL(12,2)),1,'99.125') OVER (ORDER BY id) AS shifted FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_decimal",
+            "provider": "empty_offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "CAST(r AS DECIMAL(12,2))",
+            "default_expression": "'99.125'",
+            "offset": 1,
+            "state": "empty",
+            "target": "DECIMAL(12,2)",
+            "boundary": "valid string default; observe coercion and fold across corresponding stages",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_decimal_empty_offset_scalar_valid_string_default",
+          "ansi": false,
+          "sql": "SELECT id,LEAD(CAST(r AS DECIMAL(12,2)),1,'99.125') OVER (ORDER BY id) AS shifted FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_decimal",
+            "provider": "empty_offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "CAST(r AS DECIMAL(12,2))",
+            "default_expression": "'99.125'",
+            "offset": 1,
+            "state": "empty",
+            "target": "DECIMAL(12,2)",
+            "boundary": "valid string default; observe coercion and fold across corresponding stages",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_decimal_offset_scalar_invalid_string_default",
+          "ansi": true,
+          "sql": "SELECT id,LEAD(CAST(r AS DECIMAL(12,2)),1,'bad') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_decimal",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "CAST(r AS DECIMAL(12,2))",
+            "default_expression": "'bad'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "DECIMAL(12,2)",
+            "boundary": "invalid string default isolated from valid controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_decimal_offset_scalar_invalid_string_default",
+          "ansi": false,
+          "sql": "SELECT id,LEAD(CAST(r AS DECIMAL(12,2)),1,'bad') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_decimal",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "CAST(r AS DECIMAL(12,2))",
+            "default_expression": "'bad'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "DECIMAL(12,2)",
+            "boundary": "invalid string default isolated from valid controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_date_offset_scalar_valid_string_default",
+          "ansi": true,
+          "sql": "SELECT id,LEAD(DATE '2020-01-02',1,'2020-02-29') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_date",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "DATE '2020-01-02'",
+            "default_expression": "'2020-02-29'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "DATE",
+            "boundary": "valid string default; observe coercion and fold across corresponding stages",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_date_offset_scalar_valid_string_default",
+          "ansi": false,
+          "sql": "SELECT id,LEAD(DATE '2020-01-02',1,'2020-02-29') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_date",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "DATE '2020-01-02'",
+            "default_expression": "'2020-02-29'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "DATE",
+            "boundary": "valid string default; observe coercion and fold across corresponding stages",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_date_empty_offset_scalar_valid_string_default",
+          "ansi": true,
+          "sql": "SELECT id,LEAD(DATE '2020-01-02',1,'2020-02-29') OVER (ORDER BY id) AS shifted FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_date",
+            "provider": "empty_offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "DATE '2020-01-02'",
+            "default_expression": "'2020-02-29'",
+            "offset": 1,
+            "state": "empty",
+            "target": "DATE",
+            "boundary": "valid string default; observe coercion and fold across corresponding stages",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_date_empty_offset_scalar_valid_string_default",
+          "ansi": false,
+          "sql": "SELECT id,LEAD(DATE '2020-01-02',1,'2020-02-29') OVER (ORDER BY id) AS shifted FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_date",
+            "provider": "empty_offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "DATE '2020-01-02'",
+            "default_expression": "'2020-02-29'",
+            "offset": 1,
+            "state": "empty",
+            "target": "DATE",
+            "boundary": "valid string default; observe coercion and fold across corresponding stages",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_date_offset_scalar_invalid_string_default",
+          "ansi": true,
+          "sql": "SELECT id,LEAD(DATE '2020-01-02',1,'2021-02-29') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_date",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "DATE '2020-01-02'",
+            "default_expression": "'2021-02-29'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "DATE",
+            "boundary": "invalid string default isolated from valid controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_date_offset_scalar_invalid_string_default",
+          "ansi": false,
+          "sql": "SELECT id,LEAD(DATE '2020-01-02',1,'2021-02-29') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_date",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "DATE '2020-01-02'",
+            "default_expression": "'2021-02-29'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "DATE",
+            "boundary": "invalid string default isolated from valid controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_timestamp_utc_offset_scalar_valid_string_default",
+          "ansi": true,
+          "sql": "SELECT id,LEAD(TIMESTAMP '2020-01-02 03:04:05.123456',1,'2020-02-29 12:34:56.654321') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_timestamp_utc",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "TIMESTAMP '2020-01-02 03:04:05.123456'",
+            "default_expression": "'2020-02-29 12:34:56.654321'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "TIMESTAMP UTC",
+            "boundary": "valid string default; observe coercion and fold across corresponding stages",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_timestamp_utc_offset_scalar_valid_string_default",
+          "ansi": false,
+          "sql": "SELECT id,LEAD(TIMESTAMP '2020-01-02 03:04:05.123456',1,'2020-02-29 12:34:56.654321') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_timestamp_utc",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "TIMESTAMP '2020-01-02 03:04:05.123456'",
+            "default_expression": "'2020-02-29 12:34:56.654321'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "TIMESTAMP UTC",
+            "boundary": "valid string default; observe coercion and fold across corresponding stages",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_timestamp_utc_empty_offset_scalar_valid_string_default",
+          "ansi": true,
+          "sql": "SELECT id,LEAD(TIMESTAMP '2020-01-02 03:04:05.123456',1,'2020-02-29 12:34:56.654321') OVER (ORDER BY id) AS shifted FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_timestamp_utc",
+            "provider": "empty_offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "TIMESTAMP '2020-01-02 03:04:05.123456'",
+            "default_expression": "'2020-02-29 12:34:56.654321'",
+            "offset": 1,
+            "state": "empty",
+            "target": "TIMESTAMP UTC",
+            "boundary": "valid string default; observe coercion and fold across corresponding stages",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_timestamp_utc_empty_offset_scalar_valid_string_default",
+          "ansi": false,
+          "sql": "SELECT id,LEAD(TIMESTAMP '2020-01-02 03:04:05.123456',1,'2020-02-29 12:34:56.654321') OVER (ORDER BY id) AS shifted FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_timestamp_utc",
+            "provider": "empty_offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "TIMESTAMP '2020-01-02 03:04:05.123456'",
+            "default_expression": "'2020-02-29 12:34:56.654321'",
+            "offset": 1,
+            "state": "empty",
+            "target": "TIMESTAMP UTC",
+            "boundary": "valid string default; observe coercion and fold across corresponding stages",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_timestamp_utc_offset_scalar_invalid_string_default",
+          "ansi": true,
+          "sql": "SELECT id,LEAD(TIMESTAMP '2020-01-02 03:04:05.123456',1,'2021-02-29 12:34:56') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_timestamp_utc",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "TIMESTAMP '2020-01-02 03:04:05.123456'",
+            "default_expression": "'2021-02-29 12:34:56'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "TIMESTAMP UTC",
+            "boundary": "invalid string default isolated from valid controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_timestamp_utc_offset_scalar_invalid_string_default",
+          "ansi": false,
+          "sql": "SELECT id,LEAD(TIMESTAMP '2020-01-02 03:04:05.123456',1,'2021-02-29 12:34:56') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "string_to_timestamp_utc",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "TIMESTAMP '2020-01-02 03:04:05.123456'",
+            "default_expression": "'2021-02-29 12:34:56'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "TIMESTAMP UTC",
+            "boundary": "invalid string default isolated from valid controls",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_integer_offset_scalar_fractional_double_default",
+          "ansi": true,
+          "sql": "SELECT id,LEAD(r,1,CAST(-99.75 AS DOUBLE)) OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "fractional_double_to_integer",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "r",
+            "default_expression": "CAST(-99.75 AS DOUBLE)",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "INTEGER",
+            "boundary": "negative fractional Double default; exact numeric conversion and corresponding Fields",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_integer_offset_scalar_fractional_double_default",
+          "ansi": false,
+          "sql": "SELECT id,LEAD(r,1,CAST(-99.75 AS DOUBLE)) OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "fractional_double_to_integer",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "r",
+            "default_expression": "CAST(-99.75 AS DOUBLE)",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "INTEGER",
+            "boundary": "negative fractional Double default; exact numeric conversion and corresponding Fields",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_decimal_offset_scalar_fitting_numeric_default",
+          "ansi": true,
+          "sql": "SELECT id,LEAD(CAST(r AS DECIMAL(12,2)),1,CAST(9999999999 AS BIGINT)) OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "numeric_to_decimal_boundary",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "CAST(r AS DECIMAL(12,2))",
+            "default_expression": "CAST(9999999999 AS BIGINT)",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "DECIMAL(12,2)",
+            "boundary": "fitting BigInt default at ten-integer-digit boundary",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_decimal_offset_scalar_fitting_numeric_default",
+          "ansi": false,
+          "sql": "SELECT id,LEAD(CAST(r AS DECIMAL(12,2)),1,CAST(9999999999 AS BIGINT)) OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "numeric_to_decimal_boundary",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "CAST(r AS DECIMAL(12,2))",
+            "default_expression": "CAST(9999999999 AS BIGINT)",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "DECIMAL(12,2)",
+            "boundary": "fitting BigInt default at ten-integer-digit boundary",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_integer_empty_offset_scalar_fractional_double_default",
+          "ansi": true,
+          "sql": "SELECT id,LEAD(r,1,CAST(-99.75 AS DOUBLE)) OVER (ORDER BY id) AS shifted FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "fractional_double_to_integer",
+            "provider": "empty_offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "r",
+            "default_expression": "CAST(-99.75 AS DOUBLE)",
+            "offset": 1,
+            "state": "empty",
+            "target": "INTEGER",
+            "boundary": "negative fractional Double default; exact numeric conversion and corresponding Fields",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_integer_empty_offset_scalar_fractional_double_default",
+          "ansi": false,
+          "sql": "SELECT id,LEAD(r,1,CAST(-99.75 AS DOUBLE)) OVER (ORDER BY id) AS shifted FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "fractional_double_to_integer",
+            "provider": "empty_offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "r",
+            "default_expression": "CAST(-99.75 AS DOUBLE)",
+            "offset": 1,
+            "state": "empty",
+            "target": "INTEGER",
+            "boundary": "negative fractional Double default; exact numeric conversion and corresponding Fields",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_decimal_empty_offset_scalar_fitting_numeric_default",
+          "ansi": true,
+          "sql": "SELECT id,LEAD(CAST(r AS DECIMAL(12,2)),1,CAST(9999999999 AS BIGINT)) OVER (ORDER BY id) AS shifted FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "numeric_to_decimal_boundary",
+            "provider": "empty_offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "CAST(r AS DECIMAL(12,2))",
+            "default_expression": "CAST(9999999999 AS BIGINT)",
+            "offset": 1,
+            "state": "empty",
+            "target": "DECIMAL(12,2)",
+            "boundary": "fitting BigInt default at ten-integer-digit boundary",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_decimal_empty_offset_scalar_fitting_numeric_default",
+          "ansi": false,
+          "sql": "SELECT id,LEAD(CAST(r AS DECIMAL(12,2)),1,CAST(9999999999 AS BIGINT)) OVER (ORDER BY id) AS shifted FROM empty_offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "numeric_to_decimal_boundary",
+            "provider": "empty_offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "CAST(r AS DECIMAL(12,2))",
+            "default_expression": "CAST(9999999999 AS BIGINT)",
+            "offset": 1,
+            "state": "empty",
+            "target": "DECIMAL(12,2)",
+            "boundary": "fitting BigInt default at ten-integer-digit boundary",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_decimal_offset_scalar_overflow_numeric_default",
+          "ansi": true,
+          "sql": "SELECT id,LEAD(CAST(r AS DECIMAL(12,2)),1,CAST(10000000000 AS BIGINT)) OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "numeric_to_decimal_boundary",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "CAST(r AS DECIMAL(12,2))",
+            "default_expression": "CAST(10000000000 AS BIGINT)",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "DECIMAL(12,2)",
+            "boundary": "eleven-integer-digit BigInt default; overflow boundary isolated",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_decimal_offset_scalar_overflow_numeric_default",
+          "ansi": false,
+          "sql": "SELECT id,LEAD(CAST(r AS DECIMAL(12,2)),1,CAST(10000000000 AS BIGINT)) OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "numeric_to_decimal_boundary",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "CAST(r AS DECIMAL(12,2))",
+            "default_expression": "CAST(10000000000 AS BIGINT)",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "DECIMAL(12,2)",
+            "boundary": "eleven-integer-digit BigInt default; overflow boundary isolated",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_offset_scalar_typed_double_null_valid_string_default",
+          "ansi": true,
+          "sql": "SELECT id,LEAD(CAST(NULL AS DOUBLE),1,'99.5') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "typed_double_null_valid_string",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "CAST(NULL AS DOUBLE)",
+            "default_expression": "'99.5'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "typed DOUBLE NULL",
+            "boundary": "typed NULL payload isolated from untyped NULL and invalid defaults",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_offset_scalar_typed_double_null_valid_string_default",
+          "ansi": false,
+          "sql": "SELECT id,LEAD(CAST(NULL AS DOUBLE),1,'99.5') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "typed_double_null_valid_string",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "CAST(NULL AS DOUBLE)",
+            "default_expression": "'99.5'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "typed DOUBLE NULL",
+            "boundary": "typed NULL payload isolated from untyped NULL and invalid defaults",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_offset_scalar_untyped_null_valid_string_default",
+          "ansi": true,
+          "sql": "SELECT id,LEAD(NULL,1,'99.5') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "untyped_null_valid_string",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "NULL",
+            "default_expression": "'99.5'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "UNKNOWN; observe untyped NULL resolution",
+            "boundary": "untyped NULL payload isolated from typed NULL; infer no output type",
+            "outcome": "UNKNOWN"
+          }
+        },
+        {
+          "corpus": "offset-window-default-coercion-1044",
+          "id": "lead_offset_scalar_untyped_null_valid_string_default",
+          "ansi": false,
+          "sql": "SELECT id,LEAD(NULL,1,'99.5') OVER (ORDER BY id) AS shifted FROM offset_scalar ORDER BY id",
+          "ordered": true,
+          "ownership": "required_offset_window_fields",
+          "coverage": {
+            "family": "untyped_null_valid_string",
+            "provider": "offset_scalar",
+            "function": "LEAD",
+            "payload_expression": "NULL",
+            "default_expression": "'99.5'",
+            "offset": 1,
+            "state": "nonempty",
+            "target": "UNKNOWN; observe untyped NULL resolution",
+            "boundary": "untyped NULL payload isolated from typed NULL; infer no output type",
+            "outcome": "UNKNOWN"
+          }
+        }
+      ]
+    }
+  ],
+  "source_revision": 2,
+  "prior_controls": {
+    "source_request": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/new1044-default-coercion-source-v1/offset-window-default-coercion-1044-cases.json",
+    "sha256": "a015d4036cb66de28b98064701e2cc156892ab95a58255d44dd06325e9c4dd79",
+    "case_records_copied_unchanged": 16,
+    "sql_definitions_copied_unchanged": 8,
+    "added_case_records": 76,
+    "added_sql_definitions": 38,
+    "prior_capture_outputs_opened": false
+  }
+}

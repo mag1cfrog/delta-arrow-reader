@@ -223,8 +223,7 @@ run time. The expression-error analyzer marks its own evaluation of constants
 and local rows with the `SparkInterpretedEvaluation` configuration extension, so
 the function reports the optimizer's condition there and the run-time condition
 elsewhere. Its result range is typed as the interval, so enclosing sort keys
-keep their ordering properties. Interval addition and subtraction and native
-DataFusion SQL are unchanged. The [interval
+keep their ordering properties. Native DataFusion SQL is unchanged. The [interval
 references](tests/fixtures/interval-qualifiers/README.md) record the checks.
 
 ### Interval negation
@@ -243,6 +242,43 @@ constants, so a failing constant scaling or negation under either check returns
 a value. The expression-error analyzer's NULL-inspection precheck in the
 DataFusion simplifier fork now folds IS NOT NULL as well as IS NULL.
 
+### CAST and TRY_CAST admission
+
+Spark resolution checks casts delegated to DataFusion before returning a query,
+so NULL propagation and branch pruning cannot discard an unsupported type pair.
+Generic conversions and conversions after positional STRUCT field renaming use
+this check. Unsupported pairs report `DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION`,
+SQLSTATE `42K09`, and the original source and target types without including SQL,
+values or Field metadata. Cast-error type strings retain nested NOT NULL and
+Arrow storage constraints that can reject a conversion. Ordinary type/display
+strings retain their existing contract. Spark kernels keep their existing
+coercion and error phases; display names and metadata wrappers stay in place.
+
+Ordinary CAST reuses DataFusion's native conversion predicate, which selects
+name-based nested STRUCT validation or Arrow's type rules. TRY_CAST retains
+Arrow's separate rules. Type-only identity casts keep their existing bypass;
+explicit native target Fields still receive the previous compatibility checks.
+No values are evaluated to decide type admission.
+
+VARIANT uses separate conversion paths. Native capability
+does not establish all Spark ARRAY/STRUCT or mode-specific cast rules; this
+change does not add that broader validation.
+
+### Interval addition and subtraction
+
+`+` and `-` of two DAY TO SECOND or two YEAR TO MONTH intervals use another local
+function, `SparkIntervalArithmetic`. It adds or subtracts the stored counts with Arrow's
+checked kernels and fails with Spark's `INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION`, which
+names `try_add` or `try_subtract`, in both ANSI modes. A constant overflow fails while
+optimizing through [constant folding errors](#constant-folding-errors), unless it sits in a
+CASE branch or COALESCE argument with a non-constant condition, which defers it to the rows
+that reach it while collecting. As in Spark, a NULL
+operand skips the other operand for its row and discards a constant overflow in it. Its
+result range is typed as the interval, so enclosing sort keys keep their ordering. Arrow's
+native operator failed only while collecting rows, with its own overflow error. TRY_ADD,
+TRY_SUBTRACT and native DataFusion SQL are unchanged. The
+[interval overflow references](tests/fixtures/interval-overflow/README.md) record the checks.
+
 ### Interval qualifier casts
 
 A cast from a year-month or day-time interval to a qualifier of the same family
@@ -252,6 +288,30 @@ count toward zero to whole units of that field; targets ending in MONTH or
 SECOND keep the count. Interval leaves of nested ARRAY, STRUCT and MAP casts
 still keep their count (#995). Numeric and string casts to intervals and native
 DataFusion SQL are unchanged.
+
+### Calendar interval ordering
+
+Spark cannot order or compare calendar intervals and rejects them during analysis. Shared
+checks in `function/common.rs` do the same for a calendar interval, also inside an ARRAY or
+STRUCT. As a sort key of ORDER BY, SORT BY, a window ORDER BY or WITHIN GROUP, and as an
+operand of `=`, `<>`, `<`, `<=`, `>`, `>=`, `<=>`, IS [NOT] DISTINCT FROM, EQUAL_NULL, NULLIF,
+a simple CASE, BETWEEN, IN, NOT IN, IN subqueries, JOIN ON, USING and NATURAL JOIN, GREATEST
+and LEAST, it fails with `DATATYPE_MISMATCH.INVALID_ORDERING_TYPE`. As in Spark, the type
+checks come first: where a non-NULL type of another kind sits in the place of a calendar
+interval, a binary comparison or NULLIF fails with `DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES`,
+IN, GREATEST and LEAST with `DATATYPE_MISMATCH.DATA_DIFF_TYPES`, and an IN subquery with
+`DATATYPE_MISMATCH.IN_SUBQUERY_DATA_TYPE_MISMATCH`; NULL elements and empty ARRAYs match. Other
+positions are not compared, so an incompatible field beside a calendar interval still gets the
+ordering error (#1163). GREATEST and LEAST also check their argument count first and now reject
+a single argument with `WRONG_NUM_ARGS`, as Spark does for any type. A PIVOT over a calendar
+interval fails with `INCOMPARABLE_PIVOT_COLUMN`, and a window PARTITION BY with
+`EXPRESSION_TYPE_IS_NOT_ORDERABLE` after the window's ORDER BY is checked. DAR sorted,
+compared, pivoted and partitioned them. The query sort resolver tries child plans without the
+check and applies it once the sort node is built, so the type error is not taken for an
+unresolved key. GROUP BY, ROLLUP and DISTINCT, which Spark allows, DAY TO SECOND and YEAR TO
+MONTH intervals, and native DataFusion SQL are unchanged. Ordering aggregates and array
+functions still accept calendar intervals (#1160). The [calendar interval ordering
+references](tests/fixtures/calendar-interval-ordering/README.md) record the checks.
 
 ## Licenses and maintenance
 
@@ -477,14 +537,213 @@ Native DataFusion SQL keeps each column's own annotation. The
 [session-zone column references](tests/fixtures/session-zone-columns/README.md) cover
 these functions in UTC and Los Angeles over UTC, named-zone and fixed-offset annotations.
 
+DATE_TRUNC to MINUTE truncates the local date-time in the session zone, like Java's
+`ZonedDateTime.truncatedTo`: a repeated local minute keeps the instant's offset, and a skipped
+one moves forward by the skipped interval, so its result can follow a later instant's and no
+order is claimed. DataFusion truncated the UTC minute, which is seconds off where the offset
+has seconds, such as Los Angeles local mean time (-07:52:58) before 1883. Zones parse as in
+Arrow, except that `EST`, `MST` and `HST` are Java's fixed offsets (#1029), and instants
+beyond Chrono's years take offsets from a nearer 400-year cycle. Coarser units still use
+DataFusion's local truncation, within the nanosecond range (#1087). The
+[local truncation references](tests/fixtures/local-truncation/README.md) record the checks.
+
+TIMESTAMP plus or minus a DAY TO SECOND, YEAR TO MONTH or calendar interval, TIMESTAMPADD,
+DATEADD and three-argument DATE_ADD, and TIMESTAMP subtraction work on local date-times in
+the TIMESTAMP's zone, like Java's `ZonedDateTime` in Spark's `TimestampAddInterval`,
+`TimestampAddYMInterval`, `timestampAdd` and `SubtractTimestamps`. Months and whole days
+move the local date-time: a repeated local time keeps the offset it had, and a skipped one
+moves forward by the skipped interval. The rest of a DAY TO SECOND interval, and
+TIMESTAMPADD units up to HOUR, move the instant. Arrow added elapsed time, and failed where
+months reached a skipped or repeated local time. Negating the smallest interval for a
+subtraction fails with Spark's errors. Subtraction gives the difference of the two local
+date-times. A DATE operand is read in the session zone first, where DataFusion returned a
+nanosecond duration; against a TIMESTAMP_NTZ, the TIMESTAMP's local date-time is used, as
+Spark converts it to TIMESTAMP_NTZ. TIMESTAMPADD adds a BIGINT quantity exactly, converts a
+STRING, DOUBLE or DECIMAL quantity with Spark's casts and rejects other types, keeps a
+TIMESTAMP_NTZ in UTC, reads a DATE or STRING in the session zone, and fails with
+`DATETIME_OVERFLOW` where Spark does. Other results beyond BIGINT fail with Java's
+`long overflow`. STRING plus a DAY TO SECOND interval and SEQUENCE end points use the same
+arithmetic. Local date-times beyond Chrono's years take offsets from a nearer 400-year cycle
+(without DST after 2099, #1052). TIMESTAMP_NTZ intervals, DATE arithmetic (#952) and native
+DataFusion SQL are unchanged. The
+[local day arithmetic references](tests/fixtures/local-day-arithmetic/README.md) record the
+checks.
+
+TIMESTAMPADD's `DATETIME_OVERFLOW` message names the full BIGINT quantity, the unit and the
+timestamp like Spark's. It now keeps the unit as written, where it was upper case, and reads a
+TIMESTAMP_NTZ's microseconds as an instant in the session zone, where it printed the
+wall-clock time. As in Spark, a NULL quantity returns NULL without evaluating the timestamp,
+so a malformed STRING timestamp beside it no longer fails, and a NULL literal argument gives
+NULL before constants fold. The
+[TIMESTAMPADD quantity references](tests/fixtures/timestampadd-quantity/README.md) check
+full-width quantities in every unit, as columns and constants (#981).
+
+TRY_ADD and TRY_SUBTRACT of a TIMESTAMP or TIMESTAMP_NTZ and a DAY TO SECOND, YEAR TO MONTH
+or calendar interval, in either order for TRY_ADD, use the same local arithmetic and give a
+nullable result that is NULL where `+` or `-` fails, as Spark's `TryEval` does. A
+TIMESTAMP_NTZ moves in UTC, and TRY_SUBTRACT negates even a calendar interval exactly, as
+Spark evaluates it under ANSI inside TRY. An untyped NULL beside a TIMESTAMP is a NULL
+interval for TRY_ADD and a NULL TIMESTAMP for TRY_SUBTRACT. TRY_SUBTRACT of a TIMESTAMP and
+a TIMESTAMP, TIMESTAMP_NTZ or DATE, or of two TIMESTAMP_NTZ values, subtracts like `-` and
+gives NULL on overflow; two DATE values still fail (#987). `SparkTryAdd` and
+`SparkTrySubtract` used elapsed time, returned TIMESTAMP_NTZ, and
+rejected YEAR TO MONTH and calendar intervals, interval-first arguments, untyped NULLs and
+TIMESTAMP differences; they still serve other operands. Spark folds the negation of a
+constant interval beside a column while optimizing, outside TRY; DAR negates it per row
+inside TRY (#1133). The
+[TRY timestamp references](tests/fixtures/try-timestamp-intervals/README.md) record the
+checks.
+
+`SparkTryAdd` and `SparkTrySubtract` also take two DAY TO SECOND intervals of any
+qualifiers, which Spark adds and subtracts exactly with a nullable result that is NULL on
+overflow; they failed during planning. Two untyped NULLs give a NULL DOUBLE, as in Spark. The
+[TRY interval references](tests/fixtures/try-day-time-intervals/README.md) record the checks.
+
+A DATE and a TIMESTAMP_NTZ, in either order, subtract with `-` and TRY_SUBTRACT like Spark:
+the DATE is read at its midnight and the result is the DAY TO SECOND interval between the
+wall-clock times. The DATE kernel gives the midnight as a TIMESTAMP in UTC and declares it
+nullable, as Spark declares its cast, so a folded DATE literal beside a NOT NULL value is
+not. DataFusion returned a nanosecond duration, and TRY_SUBTRACT failed. A midnight beyond
+BIGINT microseconds fails with `long overflow`, which TRY_SUBTRACT turns into NULL. Spark
+also folds the cast of a constant DATE while optimizing, outside TRY, beside a non-constant
+operand outside a conditional branch, and fails there; DAR returns NULL (#1133). The
+[DATE and TIMESTAMP_NTZ subtraction references](tests/fixtures/date-ntz-subtraction/README.md)
+record the checks.
+
+MAKE_INTERVAL uses a local function, `SparkMakeInterval`, in place of `datafusion-spark`'s,
+following Spark's `MakeInterval`. Missing trailing arguments are 0, and more than seven fail
+with `WRONG_NUM_ARGS`. The planner casts each part to INT and the seconds to DECIMAL(18, 6)
+with the casts CAST uses for the session's ANSI mode, so a BIGINT, DECIMAL, DOUBLE or STRING
+argument wraps, rounds, fails or gives NULL as Spark's cast does, and BOOLEAN and DATE
+arguments are rejected. As in Spark, the arguments are evaluated in order up to the first NULL,
+so a NULL skips the later arguments' casts for its row, and a NULL literal gives NULL before
+any constant folds. The function adds years, months, weeks, days, hours, minutes and seconds
+with Java's exact arithmetic. An overflow fails with `ARITHMETIC_OVERFLOW` under ANSI, while
+optimizing for a constant through [constant folding errors](#constant-folding-errors), and
+gives NULL otherwise. Under ANSI the result is nullable only for a nullable argument, so a
+TIMESTAMP minus MAKE_INTERVAL of NOT NULL values is NOT NULL, as in Spark. Inside TRY_ADD,
+TRY_SUBTRACT, TRY_MULTIPLY and TRY_DIVIDE with a non-numeric operand, MAKE_INTERVAL and its
+argument casts give NULL where they fail, as Spark's `TryEval` does; over two numbers Spark
+uses its TRY mode, so a failing MAKE_INTERVAL inside them still fails. Spark also fails while
+optimizing a constant MAKE_INTERVAL beside a non-constant operand, outside TRY, where DAR
+returns NULL (#1133). `datafusion-spark`'s function returned NULL on overflow in both modes,
+was always nullable, and cast its arguments with Arrow. Spark's BIGINT microseconds reach
+further than Arrow's nanoseconds, so a larger result fails, while optimizing a constant under
+ANSI outside TRY and while collecting rows otherwise (#1145). Seconds beyond DECIMAL(18, 6) and
+malformed STRING seconds fail without Spark's `NUMERIC_VALUE_OUT_OF_RANGE` and
+`CAST_INVALID_INPUT` conditions (#1124). With several failing rows, an earlier argument's
+failure in a later row can be reported first (#1148). The [MAKE_INTERVAL
+references](tests/fixtures/make-interval/README.md) record the checks.
+
+TRY_MAKE_INTERVAL, which was not registered, plans the same function with one to seven
+arguments and Spark's `failOnError = false`: an overflow gives NULL and the result is nullable
+in both ANSI modes. As in Spark, its argument casts still follow the session's ANSI mode, so a
+malformed or overflowing argument fails under ANSI, except inside TRY arithmetic over a
+non-numeric operand, which re-plans it like MAKE_INTERVAL; there Spark still fails while
+optimizing a constant argument cast beside a non-constant operand, outside TRY, where DAR
+returns NULL (#1133). Results beyond Arrow's nanoseconds fail while collecting rows (#1145),
+seconds beyond DECIMAL(18, 6) and malformed STRING seconds fail without Spark's conditions
+(#1124), and unaliased names keep the arguments as written where Spark adds the filled-in
+defaults (#749). The [TRY_MAKE_INTERVAL references](tests/fixtures/try-make-interval/README.md)
+record the checks.
+
+MAKE_YM_INTERVAL follows Spark's `MakeYMInterval`. Its result is nullable only for a nullable
+argument, where it was always nullable. So comparisons and negation over MAKE_YM_INTERVAL of
+NOT NULL INT or BIGINT values are NOT NULL; CAST to STRING (#982) and GREATEST (#1090) are still
+nullable. A STRING argument, also a dictionary-encoded one such as a Delta STRING partition
+column, uses Spark's STRING-to-INT cast for the session's ANSI mode. It trims spaces, fails with
+`CAST_INVALID_INPUT` under ANSI or gives NULL, and is nullable in both modes, as Spark's cast is.
+It used Arrow's cast, which failed on spaces, malformed values and values beyond INT in both
+modes without Spark's condition. As in Spark, a NULL literal argument or a cast of one gives NULL
+before either argument is evaluated, and so does a constant NULL beside a column once it folds,
+while a NULL from NULLIF or IF beside a failing constant does not. A NULL year skips the months'
+cast for its row. An overflow fails
+with Spark's whole `INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION` message in both modes, while
+optimizing for a constant through [constant folding errors](#constant-folding-errors). It used
+to fail while collecting rows, and its message stopped after the first sentence. Retained:
+- DECIMAL and DOUBLE arguments, which Spark casts to INT, and BOOLEAN arguments, which Spark
+  rejects with `DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE`, fail while planning without Spark's
+  condition (#1165).
+- INT() and the other integer functions over a STRING use Arrow's cast, declared NOT NULL for a
+  NOT NULL STRING, so MAKE_YM_INTERVAL over them is NOT NULL where Spark's is nullable (#1166).
+- Under ANSI, a constant call with a malformed STRING beside a NULL that a constant expression
+  computes, such as `NULL + 1` or an explicit cast of a NULL STRING to INT, fails while
+  optimizing, where Spark gives NULL (#1157).
+- TRY_ADD, TRY_SUBTRACT, TRY_MULTIPLY and TRY_DIVIDE over an overflowing MAKE_YM_INTERVAL fail,
+  where Spark gives NULL (#1151).
+- Under ANSI, with failing years and months in different rows of one batch, the years' failure
+  can be reported first (#1148).
+- Unaliased names keep the arguments as written where Spark adds the defaulted months (#749).
+
+The [MAKE_YM_INTERVAL references](tests/fixtures/make-ym-interval/README.md) record the checks.
+
+WEEKDAY numbers Monday 0 through Sunday 6, where it returned -1 for Sunday. WEEKDAY and
+DAYOFWEEK cast a TIMESTAMP_NTZ or NULL argument to DATE like Spark, and convert a STRING with
+Spark's STRING-to-DATE rules. Spaces, short months and days and years outside Arrow's
+nanosecond range now parse. An invalid string fails with `CAST_INVALID_INPUT` under ANSI or
+gives NULL; other temporal functions keep their STRING handling (#942). A NULL literal gives
+NULL, where it failed. Day-of-week fields of EXTRACT and DATE_PART, DAYNAME nullability and
+rejected argument types still differ (#1116). The
+[WEEKDAY references](tests/fixtures/weekday/README.md) record the checks.
+
+TIMESTAMP_SECONDS, TIMESTAMP_MILLIS and TIMESTAMP_MICROS annotate their result with the
+session time zone like any Spark TIMESTAMP, so HOUR, DATE_FORMAT and casts over it read the
+local date-time where they read UTC before; the instants are unchanged. A session zone Arrow
+cannot parse keeps UTC (#1029). Their arguments still convert as before: DOUBLE and DECIMAL
+seconds are truncated to whole seconds, an overflowing argument wraps instead of failing,
+a DOUBLE literal gives a NOT NULL result, and TIMESTAMP_MICROS accepts STRING and DATE
+arguments, which Spark rejects, reading them in UTC as before (#1111). The
+[epoch function references](tests/fixtures/timestamp-from-epoch/README.md) record the
+checks.
+
+CAST and TRY_CAST from TIMESTAMP to TIMESTAMP_NTZ, one-argument TO_TIMESTAMP_NTZ and the
+TIMESTAMP argument of CONVERT_TIMEZONE take each instant's local date-time in the session
+time zone, whatever zone its type names. Arrow's cast kept the UTC date-time. The offsets
+come from `local_time.rs`, which TIMESTAMPDIFF also reads. Beyond Chrono's range it takes
+the offset from a nearer 400-year cycle, so every BIGINT instant converts. Summer instants
+after 2099 still get standard time (#1052). A local date-time beyond BIGINT fails with
+Java's `long overflow`. A constant fails during optimization through
+[constant folding errors](#constant-folding-errors), except inside CONVERT_TIMEZONE, whose
+lazy arguments defer it (#1106). Under TRY_CAST it is NULL. Spark declares the result
+nullable only for a nullable input, so a NOT NULL input fails the query instead, where
+Spark returns -1 (#1106). TO_TIMESTAMP, TRY_TO_TIMESTAMP and TO_TIMESTAMP_LTZ of a
+TIMESTAMP now keep the instant. They used to convert it to local time and back, which
+failed on the reference instants. A session zone Arrow cannot parse keeps the previous
+conversion, and `EST`, `MST` and `HST` parse as regions where Spark uses fixed offsets
+(#1029).
+
+Related cases are still open:
+- casts of arrays, structs and maps convert their TIMESTAMP values with Arrow's cast
+  (#1103);
+- TIMESTAMP_NTZ values beyond Chrono's years are read wrongly (#1104);
+- Spark's optimizer compares a converted value with a TIMESTAMP_NTZ literal by the
+  literal's instant, which DAR does not yet do (#1105);
+- formatted TO_TIMESTAMP and TO_TIMESTAMP_NTZ fail on a TIMESTAMP, and TIMESTAMP() returns
+  TIMESTAMP_NTZ (#1107).
+
+Native DataFusion SQL keeps Arrow's cast. The
+[TIMESTAMP_NTZ conversion references](tests/fixtures/timestamp-ntz-conversion/README.md)
+record the checks.
+
 TO_UTC_TIMESTAMP and FROM_UTC_TIMESTAMP convert TIMESTAMP_NTZ and DATE arguments to
 the session zone with that same builder, so a local time or midnight skipped by a DST
 change moves forward and a repeated one takes its earlier instant, where Arrow's cast
 failed. The [UTC conversion references](tests/fixtures/README.md#utc-timestamp-conversions)
 cover the 2024 Los Angeles transitions and their neighbors and the Havana midnight
-changes. An explicit CAST from DATE still uses Arrow's cast (#1027). In named-zone
-and UTC sessions each row now runs ConvertTz, as an explicit TIMESTAMP_NTZ cast already
-does; fixed-offset sessions keep Arrow's cast. In a local debug-build
+changes. A DATE instead starts at the first instant of its day, as Java's
+`LocalDate.atStartOfDay` gives it: a midnight skipped by a gap that began before it moves
+only to the end of the gap, such as 00:30 for Toronto's 1919-03-31, and days beyond Chrono's
+years take offsets from a nearer 400-year cycle (without DST after 2099, #1052), failing with
+`long overflow` past BIGINT (NULL under TRY_CAST). Legacy IDs such as `PST` name their
+regions, as in CONVERT_TIMEZONE. Explicit CAST and TRY_CAST from DATE to TIMESTAMP, and every caller
+of the shared builder, use this rule in fixed-offset and named zones; GREATEST and LEAST now
+widen mixed DATE, TIMESTAMP and TIMESTAMP_NTZ arguments through it too, where DataFusion's
+coercion to a zone-less nanosecond TIMESTAMP failed for year 1. Their nullability still
+differs (#1090), and IN lists, VALUES, arrays and DATE arguments of timestamp functions
+still read DATE values another way (#1122). The
+[DATE to TIMESTAMP references](tests/fixtures/date-to-timestamp/README.md) record the
+checks. For TIMESTAMP_NTZ, named-zone and UTC sessions run ConvertTz on each row, as an
+explicit TIMESTAMP_NTZ cast already does, and fixed-offset sessions keep Arrow's cast. In a local debug-build
 timing of 1,000,000 TIMESTAMP_NTZ rows, execution took 159 ms instead of 147 ms in a
 Los Angeles session and 136 ms instead of 121 ms in a UTC session, with planning
 unchanged at about 1 ms.
@@ -724,6 +983,22 @@ Bound lambda variables use Spark's `namedlambdavariable()` placeholder in
 generated labels; their executable expressions retain declared parameter names.
 The [field-name references](tests/fixtures/README.md#nested-field-expression-names)
 record remaining STRUCT schema, alias display and metadata differences separately.
+
+### Offset-window result Fields
+
+Spark LAG/LEAD results are required only when the payload and explicit default
+are both required. A nullable payload, nullable default or omitted default keeps
+the result nullable. A Spark field adapter reads the current argument Fields
+at each planning stage, so folding can tighten the optimized declaration. It
+retains the native result type, nested Fields and their metadata; the existing
+window metadata rule still applies. Evaluation, reversal and limits delegate to
+the native function. Scalar defaults of a different type first use the same
+Spark conversion rules as explicit CAST, including ANSI failures and legacy
+NULL results. Uncoerced scalar defaults retain their native field declaration.
+Native DataFusion SQL keeps its existing path.
+
+The [window-name references](tests/fixtures/README.md#offset-window-result-fields)
+compare the original required LAG declarations at every recorded stage.
 
 ### Derived window metadata
 
@@ -1099,8 +1374,29 @@ execution, so a branch that never runs cannot fail the query. Spark instead fail
 folding, during optimization. A scalar UDF can return `true` from
 `propagates_constant_folding_errors` (default `false`) to fail during optimization, as
 literal CASTs already do. A call inside a short-circuiting expression other than AND and
-OR, such as CASE or COALESCE, still defers its error. `AliasedScalarUDFImpl` forwards the
-choice. Only TIMESTAMPDIFF opts in.
+OR, such as CASE or COALESCE, still defers its error, and so does an expression over a lambda
+variable, which has no value to fold. `AliasedScalarUDFImpl` forwards the choice. TIMESTAMPDIFF, TIMESTAMPADD, TIMESTAMP
+interval arithmetic and subtraction, interval `+` and `-`, MAKE_INTERVAL under ANSI, and the
+TIMESTAMP to TIMESTAMP_NTZ conversion opt in.
+
+Strict DATE and TIMESTAMP parser calls, including TIMESTAMP_NTZ mode, also use
+this hook. Their existing reachability check runs before folding, preserving
+unused-projection pruning. Safe and TRY variants keep their existing NULL
+policy. The [temporal parser folding references](tests/fixtures/temporal-parser-folding/README.md)
+record 44 independent Spark UTC observations for direct/formatted calls,
+guarded or unused expressions and explicit LAG/LEAD CAST defaults. They retain
+complete available Fields, values and optimization-time errors; the wider C07
+temporal fixtures retain their original source observations.
+
+Spark REGEXP_REPLACE checks admitted literal arguments in its own simplify callback,
+after native operand simplification, and reports only its own kernel errors. The
+existing conditional simplifier defers these errors in guarded branches. Async operands
+retain native planning and its swallowed synchronous wrapper rejections. Closed,
+permitted replacement calls over local VALUES fold before an outer LIMIT 0 can discard
+them; an already-limited empty input is pruned first. Local folds use the existing query
+start time and retain successful folds in the plan, preserving once-only producer
+evaluation. Kernel NULL/no-match handling, position admission and native regex/UTF16
+capability boundaries retain their existing rules.
 
 ### ARRAY_COMPACT result fields
 
@@ -1154,9 +1450,32 @@ including TABLESAMPLE, while retaining existing join/operator restrictions.
 
 The [source-alias references](tests/fixtures/README.md#pivot-source-and-result-aliases)
 retain the original queries, complete Fields and rows, and exact error phases.
-Repeated projection identity remains under #786; UNPIVOT NULL filtering and
-result nullability remain under #1076. Their exact accepted native contracts
-receive separate regression credit while raw Spark differences stay visible.
+Repeated projection identity remains under #786 with eight active native
+regression allowances. All eight original UNPIVOT contexts now require complete
+Spark agreement. The 16 historical native facet records remain unchanged;
+#1076 entries grant no active allowance.
+
+
+### Single-value UNPIVOT NULL policy
+
+Standalone single-value UNPIVOT applies default/EXCLUDE NULLS to the expanded
+value after ordinary column/type validation. INCLUDE NULLS retains the expanded
+NULL-valued rows. Accepted source/output aliases keep their existing name
+resolution, and the expansion preserves duplicate rows.
+
+Local generated-field declarations keep the label required and derive the
+logical value declaration from the resolved inputs. Generated value arguments
+use common nullability and empty metadata before struct-array construction;
+source id Fields keep their metadata. For exclusion, the existing Spark-only
+runtime lowering makes the final physical value required after filtering.
+Public and optimized value Fields retain their recorded logical declaration.
+Native DataFusion UNNEST and Filter declarations stay unchanged.
+
+The [UNPIVOT references](tests/fixtures/README.md#single-value-unpivot-null-policy)
+cover complete stage Fields, names, metadata, NULL rows, empty/all-NULL inputs,
+required and mixed-nullability values, duplicates and exact validation errors.
+The original source-alias UNPIVOT records now require Spark agreement and grant
+no inherited regression allowance.
 
 ### Projection metadata
 
@@ -1338,7 +1657,11 @@ numeric INT cast builders in the query's ANSI mode. Conversion and positive-rang
 validation precede replacement evaluation. The logical cast remains visible for
 analyzed nullability; ordinary optimization can later refine its field.
 New coercion paths reject custom operands that disable constant folding before
-literal evaluation. The existing INT position path is unchanged.
+literal evaluation. Already-INT synchronous operands keep their existing folding
+behavior. Positions with a native async function in the expression tree fail
+with `NON_FOLDABLE_INPUT` before literal evaluation, including through expression
+aliases and casts. Async source, pattern and replacement arguments keep their
+execution path.
 
 The focused position fixture retains 110 independent Spark references and all
 660 native configurations. BIGINT narrowing and FLOAT/DOUBLE positions use the
@@ -1421,8 +1744,8 @@ lower cursor to input already consumed by the upper cursor. Completion checks
 use the same target arithmetic. Finite wrapping ends require per-row completion
 proofs. Frame-aware builtins defer a row when its unfinished frame reaches the
 end of buffered input. Such ends also invalidate causal output-order inference,
-and either wrapping bound prevents plan reversal. Integer keys and interval bounds
-keep their existing decisions.
+and either wrapping bound prevents plan reversal. Interval bounds keep their
+existing decisions.
 The [DATE RANGE references](tests/fixtures/README.md#numeric-date-range-bounds)
 cover these consumers, error stages and separate-owner controls.
 
@@ -1434,20 +1757,77 @@ DATE Interval/Duration NULL bounds keep their existing temporal representation
 and coercion. The SQL unparser retains an explicit typed NULL expression or
 returns the existing checked type-conversion error.
 
-Sail assigns `RangeOffsetArithmetic::Spark` only to admitted explicit NULL frames
-on signed integer, DATE, FLOAT/DOUBLE or Decimal128 keys. Integer sign negation
-and target addition check overflow in ANSI mode and wrap otherwise; DATE day
-addition wraps in both modes.
-Minimum PRECEDING offsets retain their SQL or optimizer failure phase. Remaining
-checked arithmetic runs only for a consumed bound comparison. Plain finite and
-native frames keep the DataFusion policy, including their existing arithmetic.
+Sail assigns `RangeOffsetArithmetic::Spark` to admitted explicit NULL frames
+on signed integer, DATE, FLOAT/DOUBLE or Decimal128 keys, and to ordinary nonzero
+signed-integer RANGE frames. For signed-integer keys, PRECEDING expressions
+negate at the source width before conversion to the ORDER key type. Signed narrowing wraps in legacy
+mode and raises `CAST_OVERFLOW` in ANSI mode. Minimum PRECEDING negation and
+checked casts retain their SQL or optimizer failure phase. Integer target
+addition checks overflow in ANSI mode and wraps otherwise; DATE day addition
+wraps in both modes. Execution checks run only for a consumed bound comparison.
+Native frames keep the DataFusion policy. So do signed frames containing only
+zero expressions or special boundaries, and DATE, FLOAT/DOUBLE and Decimal128
+frames without an explicit NULL offset.
 FLOAT/DOUBLE targets compare NaNs and signed zeros with Spark's ordering
 equivalence. Decimal128 operands use widened Decimal256 comparison targets without
 changing output Fields; native Decimal256 keys keep the DataFusion policy.
 
-Aggregate and frame-aware builtin windows with explicit NULL targets buffer the
-whole partition, so memory grows with partition size. These frames are non-causal,
+Aggregate and frame-aware builtin windows with explicit NULL targets use
+`WindowAggExec`, which buffers the whole physical execution input partition,
+including all SQL PARTITION BY groups assigned to it. These frames are non-causal,
 disable aggregate-result ordering inference and prevent plan reversal to reuse
 opposite input ordering. The
 [NULL RANGE references](tests/fixtures/README.md#explicit-null-range-bounds)
 record their membership, consumer Fields, failure phases and ordered outer queries.
+
+### NULL ROWS bounds
+
+Sail retains each evaluated ROWS expression's source type until both bounds have
+passed NULL admission. Bare PRECEDING NULL has Spark's unary-minus type DOUBLE;
+bare FOLLOWING NULL has type VOID. The type error identifies the actual lower or
+upper bound. For a frame containing a NULL expression, lower type admission,
+upper type admission and invalid UNBOUNDED sides precede the typed-INT-NULL
+rejection. A non-NULL lower offset still converts before upper resolution, using
+the existing signed and zero normalization. A NULL lower checks its type first;
+an admitted INT NULL lower resolves the upper expression without converting it to
+an integer, so invalid upper STRING bounds report a type error before conversion.
+Value/API sentinels and GROUPS keep their existing behavior.
+
+Typed INT NULL is intentionally rejected during resolution with
+`External error: not supported: NULL ROWS frame lower bound` or the corresponding
+`upper bound` message. Neither native Fields nor rows are available at that
+phase. The pinned Spark capture instead reports an internal collection error on
+nonempty input, and successful empty rows on empty input, with all five Fields
+available in both cases. The [NULL ROWS references](tests/fixtures/README.md#null-rows-bound-admission)
+retain those outcomes and label the earlier native rejection as an intentional
+difference. RANGE planning, native DataFusion frames and execution are unchanged.
+
+### Signed-integer RANGE bounds
+
+For TINYINT, SMALLINT, INT and BIGINT keys, the resolver compares signed expression
+endpoints after key-type conversion. CURRENT ROW and true UNBOUNDED boundaries
+skip that expression comparison; an expression zero remains distinct during
+admission. After validation, signed zero displacements become CURRENT ROW for
+native planning. Their original display names and deferred negation or cast checks
+remain intact. Invalid UNBOUNDED directions, nonfoldable bounds and finite frames
+with multiple ORDER keys retain their admission errors. Deferred checks preserve
+the original ORDER key Field.
+
+Ordinary nonzero signed frames compute the upper cursor first and cap the lower search at
+input already consumed by the upper cursor. Forward cursors and pruning retain
+Spark's behavior when a target wraps. Frames without explicit NULL targets can use
+the existing bounded executor for finite upper endpoints; row-specific completion
+proofs let sparse partitions advance.
+A failed speculative target proof defers completion without creating a comparison
+error. These frames disable causal output-order inference and plan reversal.
+Retention still depends on peer groups, lookahead and open partitions.
+While a row waits for more input, execution can repeat searches over earlier
+batches. Single-row batches and a large unfinished peer group can require
+quadratic comparison work and retain the whole group. This inherited limit is
+tracked in [#1099](https://github.com/mag1cfrog/delta-arrow-reader/issues/1099).
+
+With matching window and outer ordering, the bounded executor can absorb a LIMIT
+and stop evaluating unrequested output rows while retaining frame lookahead.
+LIMIT 0 can prune a deferred upper-bound check before it folds. The
+[signed-integer RANGE references](tests/fixtures/README.md#signed-integer-range-bounds)
+cover source-width conversion, membership, Fields, error phases and limited output.

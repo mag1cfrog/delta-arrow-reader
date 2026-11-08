@@ -1,0 +1,1186 @@
+{
+  "format_version": 1,
+  "product_commit": "704e2e2abfd54630dfcd9f01139b60a6868ea12d",
+  "observer_commit": "26bf59c0ca289c1c2bde93f723d71b5bd7e2ea34",
+  "observer_log_sha256": "c7b09494b8838db651b87b439cf338c70dbaff07e08ba92e2e53f38a1a1c3f4e",
+  "independent_capture_sha256": "59f5e96d241a8542e07d8803fdb940c1dbbbdda1f4fae7cdec260c2c76a96219",
+  "scope": "Four complete inherited observations remain strict Spark differences; each repeated identically in all six layout/batch contexts. No differences are counted as Spark matches.",
+  "cases": [
+    {
+      "id": "valid_nested_rename",
+      "ansi": true,
+      "reference": {
+        "corpus": "cast-admission-1098",
+        "id": "valid_nested_rename",
+        "ansi": true,
+        "sql": "SELECT CAST(named_struct('old',1) AS STRUCT<renamed:BIGINT>) AS r;",
+        "ordered": true,
+        "ownership": "valid_cast_control",
+        "providers": [],
+        "schema_stages": {
+          "public": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": {
+                  "type": "struct",
+                  "fields": [
+                    {
+                      "name": "renamed",
+                      "type": "long",
+                      "nullable": true,
+                      "metadata": {}
+                    }
+                  ]
+                },
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": {
+                  "type": "struct",
+                  "fields": [
+                    {
+                      "name": "renamed",
+                      "type": "long",
+                      "nullable": true,
+                      "metadata": {}
+                    }
+                  ]
+                },
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "optimized": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": {
+                  "type": "struct",
+                  "fields": [
+                    {
+                      "name": "renamed",
+                      "type": "long",
+                      "nullable": true,
+                      "metadata": {}
+                    }
+                  ]
+                },
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "executed_before_collect": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": {
+                  "type": "struct",
+                  "fields": [
+                    {
+                      "name": "renamed",
+                      "type": "long",
+                      "nullable": true,
+                      "metadata": {}
+                    }
+                  ]
+                },
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "executed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": {
+                  "type": "struct",
+                  "fields": [
+                    {
+                      "name": "renamed",
+                      "type": "long",
+                      "nullable": true,
+                      "metadata": {}
+                    }
+                  ]
+                },
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "spark_plans": {
+          "analyzed": "Project [cast(named_struct(old, 1) as struct<renamed:bigint>) AS r#38]\n+- OneRowRelation\n",
+          "optimized": "Project [[1] AS r#38]\n+- OneRowRelation\n",
+          "executed_before_collect": "*(1) Project [[1] AS r#38]\n+- *(1) Scan OneRowRelation[]\n",
+          "executed": "*(1) Project [[1] AS r#38]\n+- *(1) Scan OneRowRelation[]\n"
+        },
+        "schema_stage_availability": {
+          "public": {
+            "available": true
+          },
+          "analyzed": {
+            "available": true
+          },
+          "optimized": {
+            "available": true
+          },
+          "executed_before_collect": {
+            "available": true
+          },
+          "executed": {
+            "available": true
+          }
+        },
+        "status": "ok",
+        "rows_raw": [
+          [
+            [
+              "1"
+            ]
+          ]
+        ],
+        "rows_multiset": [
+          [
+            [
+              "1"
+            ]
+          ]
+        ],
+        "expected": {
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": {
+                  "type": "struct",
+                  "fields": [
+                    {
+                      "name": "renamed",
+                      "type": "long",
+                      "nullable": true,
+                      "metadata": {}
+                    }
+                  ]
+                },
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              [
+                "1"
+              ]
+            ]
+          ]
+        },
+        "provider_readbacks": [],
+        "effective_settings": {
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.adaptive.enabled": "false",
+          "spark.sql.ansi.enabled": "true",
+          "spark.sql.caseSensitive": "false",
+          "spark.sql.optimizer.excludedRules": null,
+          "spark.sql.parser.escapedStringLiterals": "false",
+          "spark.sql.variable.substitute": "true",
+          "spark.default.parallelism": "1",
+          "spark.python.worker.reuse": "false",
+          "spark.python.use.daemon": "false"
+        }
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": {
+                "type": "struct",
+                "fields": [
+                  {
+                    "name": "renamed",
+                    "type": "long",
+                    "nullable": true,
+                    "metadata": {}
+                  }
+                ]
+              },
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": {
+                "type": "struct",
+                "fields": [
+                  {
+                    "name": "renamed",
+                    "type": "long",
+                    "nullable": true,
+                    "metadata": {}
+                  }
+                ]
+              },
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "physical_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": {
+                "type": "struct",
+                "fields": [
+                  {
+                    "name": "renamed",
+                    "type": "long",
+                    "nullable": true,
+                    "metadata": {}
+                  }
+                ]
+              },
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            [
+              "1"
+            ]
+          ]
+        ],
+        "rows_raw": [
+          [
+            [
+              "1"
+            ]
+          ]
+        ],
+        "native_phase": "encode",
+        "error": null,
+        "public_matches": false,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": true,
+        "matches": false,
+        "optimized_matches": true,
+        "optimized_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": {
+                "type": "struct",
+                "fields": [
+                  {
+                    "name": "renamed",
+                    "type": "long",
+                    "nullable": true,
+                    "metadata": {}
+                  }
+                ]
+              },
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "optimized_observation": {
+          "raw_schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "#0",
+                "type": {
+                  "type": "struct",
+                  "fields": [
+                    {
+                      "name": "renamed",
+                      "type": "long",
+                      "nullable": true,
+                      "metadata": {}
+                    }
+                  ]
+                },
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": {
+                  "type": "struct",
+                  "fields": [
+                    {
+                      "name": "renamed",
+                      "type": "long",
+                      "nullable": true,
+                      "metadata": {}
+                    }
+                  ]
+                },
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "names_match": true
+        },
+        "optimized_error": null
+      }
+    },
+    {
+      "id": "valid_nested_rename",
+      "ansi": false,
+      "reference": {
+        "corpus": "cast-admission-1098",
+        "id": "valid_nested_rename",
+        "ansi": false,
+        "sql": "SELECT CAST(named_struct('old',1) AS STRUCT<renamed:BIGINT>) AS r;",
+        "ordered": true,
+        "ownership": "valid_cast_control",
+        "providers": [],
+        "schema_stages": {
+          "public": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": {
+                  "type": "struct",
+                  "fields": [
+                    {
+                      "name": "renamed",
+                      "type": "long",
+                      "nullable": true,
+                      "metadata": {}
+                    }
+                  ]
+                },
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": {
+                  "type": "struct",
+                  "fields": [
+                    {
+                      "name": "renamed",
+                      "type": "long",
+                      "nullable": true,
+                      "metadata": {}
+                    }
+                  ]
+                },
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "optimized": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": {
+                  "type": "struct",
+                  "fields": [
+                    {
+                      "name": "renamed",
+                      "type": "long",
+                      "nullable": true,
+                      "metadata": {}
+                    }
+                  ]
+                },
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "executed_before_collect": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": {
+                  "type": "struct",
+                  "fields": [
+                    {
+                      "name": "renamed",
+                      "type": "long",
+                      "nullable": true,
+                      "metadata": {}
+                    }
+                  ]
+                },
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "executed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": {
+                  "type": "struct",
+                  "fields": [
+                    {
+                      "name": "renamed",
+                      "type": "long",
+                      "nullable": true,
+                      "metadata": {}
+                    }
+                  ]
+                },
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "spark_plans": {
+          "analyzed": "Project [cast(named_struct(old, 1) as struct<renamed:bigint>) AS r#39]\n+- OneRowRelation\n",
+          "optimized": "Project [[1] AS r#39]\n+- OneRowRelation\n",
+          "executed_before_collect": "*(1) Project [[1] AS r#39]\n+- *(1) Scan OneRowRelation[]\n",
+          "executed": "*(1) Project [[1] AS r#39]\n+- *(1) Scan OneRowRelation[]\n"
+        },
+        "schema_stage_availability": {
+          "public": {
+            "available": true
+          },
+          "analyzed": {
+            "available": true
+          },
+          "optimized": {
+            "available": true
+          },
+          "executed_before_collect": {
+            "available": true
+          },
+          "executed": {
+            "available": true
+          }
+        },
+        "status": "ok",
+        "rows_raw": [
+          [
+            [
+              "1"
+            ]
+          ]
+        ],
+        "rows_multiset": [
+          [
+            [
+              "1"
+            ]
+          ]
+        ],
+        "expected": {
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": {
+                  "type": "struct",
+                  "fields": [
+                    {
+                      "name": "renamed",
+                      "type": "long",
+                      "nullable": true,
+                      "metadata": {}
+                    }
+                  ]
+                },
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              [
+                "1"
+              ]
+            ]
+          ]
+        },
+        "provider_readbacks": [],
+        "effective_settings": {
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.adaptive.enabled": "false",
+          "spark.sql.ansi.enabled": "false",
+          "spark.sql.caseSensitive": "false",
+          "spark.sql.optimizer.excludedRules": null,
+          "spark.sql.parser.escapedStringLiterals": "false",
+          "spark.sql.variable.substitute": "true",
+          "spark.default.parallelism": "1",
+          "spark.python.worker.reuse": "false",
+          "spark.python.use.daemon": "false"
+        }
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": {
+                "type": "struct",
+                "fields": [
+                  {
+                    "name": "renamed",
+                    "type": "long",
+                    "nullable": true,
+                    "metadata": {}
+                  }
+                ]
+              },
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": {
+                "type": "struct",
+                "fields": [
+                  {
+                    "name": "renamed",
+                    "type": "long",
+                    "nullable": true,
+                    "metadata": {}
+                  }
+                ]
+              },
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "physical_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": {
+                "type": "struct",
+                "fields": [
+                  {
+                    "name": "renamed",
+                    "type": "long",
+                    "nullable": true,
+                    "metadata": {}
+                  }
+                ]
+              },
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            [
+              "1"
+            ]
+          ]
+        ],
+        "rows_raw": [
+          [
+            [
+              "1"
+            ]
+          ]
+        ],
+        "native_phase": "encode",
+        "error": null,
+        "public_matches": false,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": true,
+        "matches": false,
+        "optimized_matches": true,
+        "optimized_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": {
+                "type": "struct",
+                "fields": [
+                  {
+                    "name": "renamed",
+                    "type": "long",
+                    "nullable": true,
+                    "metadata": {}
+                  }
+                ]
+              },
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "optimized_observation": {
+          "raw_schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "#0",
+                "type": {
+                  "type": "struct",
+                  "fields": [
+                    {
+                      "name": "renamed",
+                      "type": "long",
+                      "nullable": true,
+                      "metadata": {}
+                    }
+                  ]
+                },
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": {
+                  "type": "struct",
+                  "fields": [
+                    {
+                      "name": "renamed",
+                      "type": "long",
+                      "nullable": true,
+                      "metadata": {}
+                    }
+                  ]
+                },
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "names_match": true
+        },
+        "optimized_error": null
+      }
+    },
+    {
+      "id": "numeric_double_timestamp",
+      "ansi": true,
+      "reference": {
+        "corpus": "cast-admission-1098",
+        "id": "numeric_double_timestamp",
+        "ansi": true,
+        "sql": "SELECT CAST(CAST(1.25 AS DOUBLE) AS TIMESTAMP) AS r;",
+        "ordered": true,
+        "ownership": "valid_cast_control",
+        "providers": [],
+        "schema_stages": {
+          "public": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "timestamp",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "timestamp",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "optimized": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "timestamp",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "executed_before_collect": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "timestamp",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "executed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "timestamp",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "spark_plans": {
+          "analyzed": "Project [cast(cast(1.25 as double) as timestamp) AS r#40]\n+- OneRowRelation\n",
+          "optimized": "Project [1970-01-01 00:00:01.25 AS r#40]\n+- OneRowRelation\n",
+          "executed_before_collect": "*(1) Project [1970-01-01 00:00:01.25 AS r#40]\n+- *(1) Scan OneRowRelation[]\n",
+          "executed": "*(1) Project [1970-01-01 00:00:01.25 AS r#40]\n+- *(1) Scan OneRowRelation[]\n"
+        },
+        "schema_stage_availability": {
+          "public": {
+            "available": true
+          },
+          "analyzed": {
+            "available": true
+          },
+          "optimized": {
+            "available": true
+          },
+          "executed_before_collect": {
+            "available": true
+          },
+          "executed": {
+            "available": true
+          }
+        },
+        "status": "ok",
+        "rows_raw": [
+          [
+            "1970-01-01T00:00:01.250Z"
+          ]
+        ],
+        "rows_multiset": [
+          [
+            "1970-01-01T00:00:01.250Z"
+          ]
+        ],
+        "expected": {
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "timestamp",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "1970-01-01T00:00:01.250Z"
+            ]
+          ]
+        },
+        "provider_readbacks": [],
+        "effective_settings": {
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.adaptive.enabled": "false",
+          "spark.sql.ansi.enabled": "true",
+          "spark.sql.caseSensitive": "false",
+          "spark.sql.optimizer.excludedRules": null,
+          "spark.sql.parser.escapedStringLiterals": "false",
+          "spark.sql.variable.substitute": "true",
+          "spark.default.parallelism": "1",
+          "spark.python.worker.reuse": "false",
+          "spark.python.use.daemon": "false"
+        }
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "timestamp",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "timestamp",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "physical_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "timestamp",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            "1970-01-01T00:00:01.250Z"
+          ]
+        ],
+        "rows_raw": [
+          [
+            "1970-01-01T00:00:01.250Z"
+          ]
+        ],
+        "native_phase": "encode",
+        "error": null,
+        "public_matches": false,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": true,
+        "matches": false,
+        "optimized_matches": true,
+        "optimized_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "timestamp",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "optimized_observation": {
+          "raw_schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "#0",
+                "type": "timestamp",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "timestamp",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "names_match": true
+        },
+        "optimized_error": null
+      }
+    },
+    {
+      "id": "numeric_double_timestamp",
+      "ansi": false,
+      "reference": {
+        "corpus": "cast-admission-1098",
+        "id": "numeric_double_timestamp",
+        "ansi": false,
+        "sql": "SELECT CAST(CAST(1.25 AS DOUBLE) AS TIMESTAMP) AS r;",
+        "ordered": true,
+        "ownership": "valid_cast_control",
+        "providers": [],
+        "schema_stages": {
+          "public": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "timestamp",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "timestamp",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "optimized": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "timestamp",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "executed_before_collect": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "timestamp",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "executed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "timestamp",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "spark_plans": {
+          "analyzed": "Project [cast(cast(1.25 as double) as timestamp) AS r#41]\n+- OneRowRelation\n",
+          "optimized": "Project [1970-01-01 00:00:01.25 AS r#41]\n+- OneRowRelation\n",
+          "executed_before_collect": "*(1) Project [1970-01-01 00:00:01.25 AS r#41]\n+- *(1) Scan OneRowRelation[]\n",
+          "executed": "*(1) Project [1970-01-01 00:00:01.25 AS r#41]\n+- *(1) Scan OneRowRelation[]\n"
+        },
+        "schema_stage_availability": {
+          "public": {
+            "available": true
+          },
+          "analyzed": {
+            "available": true
+          },
+          "optimized": {
+            "available": true
+          },
+          "executed_before_collect": {
+            "available": true
+          },
+          "executed": {
+            "available": true
+          }
+        },
+        "status": "ok",
+        "rows_raw": [
+          [
+            "1970-01-01T00:00:01.250Z"
+          ]
+        ],
+        "rows_multiset": [
+          [
+            "1970-01-01T00:00:01.250Z"
+          ]
+        ],
+        "expected": {
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "timestamp",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "1970-01-01T00:00:01.250Z"
+            ]
+          ]
+        },
+        "provider_readbacks": [],
+        "effective_settings": {
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.adaptive.enabled": "false",
+          "spark.sql.ansi.enabled": "false",
+          "spark.sql.caseSensitive": "false",
+          "spark.sql.optimizer.excludedRules": null,
+          "spark.sql.parser.escapedStringLiterals": "false",
+          "spark.sql.variable.substitute": "true",
+          "spark.default.parallelism": "1",
+          "spark.python.worker.reuse": "false",
+          "spark.python.use.daemon": "false"
+        }
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "timestamp",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "timestamp",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "physical_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "timestamp",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            "1970-01-01T00:00:01.250Z"
+          ]
+        ],
+        "rows_raw": [
+          [
+            "1970-01-01T00:00:01.250Z"
+          ]
+        ],
+        "native_phase": "encode",
+        "error": null,
+        "public_matches": false,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": true,
+        "matches": false,
+        "optimized_matches": true,
+        "optimized_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "timestamp",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "optimized_observation": {
+          "raw_schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "#0",
+                "type": "timestamp",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "timestamp",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "names_match": true
+        },
+        "optimized_error": null
+      }
+    }
+  ],
+  "owners": {
+    "valid_nested_rename": 766,
+    "numeric_double_timestamp": 1139
+  }
+}

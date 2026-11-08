@@ -1,12 +1,22 @@
+//! Spark's MAKE_YM_INTERVAL over its INT years and months: `MakeYMInterval`'s exact
+//! arithmetic, which fails on overflow in both ANSI modes. Like Spark's, the result is
+//! nullable only for a nullable argument, a constant overflow fails while optimizing, a NULL
+//! literal argument gives NULL before either argument is evaluated, and a NULL year skips the
+//! months for its row.
+
 use std::sync::Arc;
 
 use datafusion::arrow::array::{ArrayRef, AsArray, IntervalYearMonthArray};
 use datafusion::arrow::compute::try_binary;
-use datafusion::arrow::datatypes::{DataType, Int32Type, IntervalUnit};
+use datafusion::arrow::datatypes::{DataType, Field, FieldRef, Int32Type, IntervalUnit};
 use datafusion::arrow::error::ArrowError;
 use datafusion_common::types::NativeType;
 use datafusion_common::{Result, ScalarValue, plan_err};
-use datafusion_expr::{ColumnarValue, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility};
+use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
+use datafusion_expr::{
+    ColumnarValue, Expr, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
+    lit,
+};
 
 use crate::error::invalid_arg_count_exec_err;
 
@@ -42,6 +52,46 @@ impl ScalarUDFImpl for SparkMakeYmInterval {
 
     fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType> {
         Ok(DataType::Interval(IntervalUnit::YearMonth))
+    }
+
+    // Spark's `MakeYMInterval` is a `BinaryExpression`, nullable only for a nullable argument;
+    // omitted arguments are NOT NULL zeros.
+    fn return_field_from_args(&self, args: ReturnFieldArgs) -> Result<FieldRef> {
+        let types = args
+            .arg_fields
+            .iter()
+            .map(|field| field.data_type().clone())
+            .collect::<Vec<_>>();
+        Ok(Arc::new(Field::new(
+            self.name(),
+            self.return_type(&types)?,
+            args.arg_fields.iter().any(|field| field.is_nullable()),
+        )))
+    }
+
+    // Spark folds a constant MAKE_YM_INTERVAL during optimization, raising its overflow error.
+    fn propagates_constant_folding_errors(&self) -> bool {
+        true
+    }
+
+    // Spark evaluates the years first and returns NULL for a NULL year without evaluating the
+    // months, so a NULL year skips the months' cast for its row.
+    fn short_circuits_on_any_null_argument(&self) -> bool {
+        true
+    }
+
+    // Spark's NullPropagation replaces the call with NULL for a NULL literal argument before
+    // folding constants, so a NULL literal discards failures of the other argument's cast.
+    fn simplify(&self, args: Vec<Expr>, _info: &SimplifyContext) -> Result<ExprSimplifyResult> {
+        if args
+            .iter()
+            .any(|arg| matches!(arg, Expr::Literal(value, _) if value.is_null()))
+        {
+            return Ok(ExprSimplifyResult::Simplified(lit(
+                ScalarValue::IntervalYearMonth(None),
+            )));
+        }
+        Ok(ExprSimplifyResult::Original(args))
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
@@ -100,6 +150,11 @@ impl ScalarUDFImpl for SparkMakeYmInterval {
     }
 }
 
+/// Spark's error for a YEAR TO MONTH interval beyond INT months.
+const INTERVAL_OVERFLOW: &str = "[INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION] Integer \
+    overflow while operating with intervals. Try devising appropriate values for the interval \
+    parameters. SQLSTATE: 22015";
+
 /// Computes `years * 12 + months`, raising Spark's interval overflow error on wrap.
 ///
 /// Matches Spark `MakeYMInterval`, which uses `Math.multiplyExact`/`Math.addExact` and therefore
@@ -108,9 +163,5 @@ fn checked_ym_interval(years: i32, months: i32) -> std::result::Result<i32, Arro
     years
         .checked_mul(MONTHS_PER_YEAR)
         .and_then(|total| total.checked_add(months))
-        .ok_or_else(|| {
-            ArrowError::ComputeError(
-                "[INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION] Integer overflow while operating with intervals.".to_string(),
-            )
-        })
+        .ok_or_else(|| ArrowError::ComputeError(INTERVAL_OVERFLOW.to_string()))
 }

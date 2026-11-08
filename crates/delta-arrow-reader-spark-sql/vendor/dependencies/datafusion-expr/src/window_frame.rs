@@ -123,7 +123,10 @@ impl fmt::Debug for WindowFrame {
         write!(
             f,
             "WindowFrame {{ units: {:?}, start_bound: {:?}, end_bound: {:?}, is_causal: {:?}",
-            self.units, self.start_bound, self.end_bound, self.causal
+            self.units,
+            self.start_bound,
+            self.end_bound,
+            self.is_causal()
         )?;
         if self.range_offset_arithmetic != RangeOffsetArithmetic::DataFusion {
             write!(
@@ -204,12 +207,8 @@ impl WindowFrame {
     /// `2 ROWS PRECEDING AND 3 ROWS FOLLOWING`
     pub fn reverse(&self) -> Self {
         let start_bound = match &self.end_bound {
-            WindowFrameBound::Preceding(value) => {
-                WindowFrameBound::Following(value.clone())
-            }
-            WindowFrameBound::Following(value) => {
-                WindowFrameBound::Preceding(value.clone())
-            }
+            WindowFrameBound::Preceding(value) => WindowFrameBound::Following(value.clone()),
+            WindowFrameBound::Following(value) => WindowFrameBound::Preceding(value.clone()),
             WindowFrameBound::CurrentRow => WindowFrameBound::CurrentRow,
             WindowFrameBound::PrecedingNullOffset(data_type) => {
                 WindowFrameBound::FollowingNullOffset(data_type.clone())
@@ -219,12 +218,8 @@ impl WindowFrame {
             }
         };
         let end_bound = match &self.start_bound {
-            WindowFrameBound::Preceding(value) => {
-                WindowFrameBound::Following(value.clone())
-            }
-            WindowFrameBound::Following(value) => {
-                WindowFrameBound::Preceding(value.clone())
-            }
+            WindowFrameBound::Preceding(value) => WindowFrameBound::Following(value.clone()),
+            WindowFrameBound::Following(value) => WindowFrameBound::Preceding(value.clone()),
             WindowFrameBound::CurrentRow => WindowFrameBound::CurrentRow,
             WindowFrameBound::PrecedingNullOffset(data_type) => {
                 WindowFrameBound::FollowingNullOffset(data_type.clone())
@@ -240,7 +235,7 @@ impl WindowFrame {
 
     /// Get whether window frame is causal
     pub fn is_causal(&self) -> bool {
-        self.causal
+        self.causal && !self.has_nonzero_spark_integer_range_offset()
     }
 
     /// Whether either endpoint is an explicit NULL offset rather than unbounded.
@@ -248,11 +243,36 @@ impl WindowFrame {
         self.start_bound.is_null_offset() || self.end_bound.is_null_offset()
     }
 
+    /// Whether Spark arithmetic applies to a finite nonzero signed RANGE offset.
+    /// These offsets cannot use native causality, reversal or ordering proofs.
+    pub fn has_nonzero_spark_integer_range_offset(&self) -> bool {
+        self.units == WindowFrameUnits::Range
+            && matches!(
+                self.range_offset_arithmetic,
+                RangeOffsetArithmetic::Spark { .. }
+            )
+            && [&self.start_bound, &self.end_bound]
+                .iter()
+                .any(|bound| match bound {
+                    WindowFrameBound::Preceding(value) | WindowFrameBound::Following(value) => {
+                        match value {
+                            ScalarValue::Int8(Some(0))
+                            | ScalarValue::Int16(Some(0))
+                            | ScalarValue::Int32(Some(0))
+                            | ScalarValue::Int64(Some(0)) => false,
+                            ScalarValue::Int8(Some(_))
+                            | ScalarValue::Int16(Some(_))
+                            | ScalarValue::Int32(Some(_))
+                            | ScalarValue::Int64(Some(_)) => true,
+                            _ => false,
+                        }
+                    }
+                    _ => false,
+                })
+    }
+
     /// Select finite RANGE arithmetic after the producer has admitted the frame.
-    pub fn with_range_offset_arithmetic(
-        mut self,
-        arithmetic: RangeOffsetArithmetic,
-    ) -> Self {
+    pub fn with_range_offset_arithmetic(mut self, arithmetic: RangeOffsetArithmetic) -> Self {
         self.range_offset_arithmetic = arithmetic;
         self
     }
@@ -416,23 +436,16 @@ impl WindowFrameBound {
 
 impl WindowFrameBound {
     #[cfg(feature = "sql")]
-    fn try_parse(
-        value: ast::WindowFrameBound,
-        units: &ast::WindowFrameUnits,
-    ) -> Result<Self> {
+    fn try_parse(value: ast::WindowFrameBound, units: &ast::WindowFrameUnits) -> Result<Self> {
         Ok(match value {
             ast::WindowFrameBound::Preceding(Some(v)) => {
                 Self::Preceding(convert_frame_bound_to_scalar_value(*v, units)?)
             }
-            ast::WindowFrameBound::Preceding(None) => {
-                Self::Preceding(ScalarValue::UInt64(None))
-            }
+            ast::WindowFrameBound::Preceding(None) => Self::Preceding(ScalarValue::UInt64(None)),
             ast::WindowFrameBound::Following(Some(v)) => {
                 Self::Following(convert_frame_bound_to_scalar_value(*v, units)?)
             }
-            ast::WindowFrameBound::Following(None) => {
-                Self::Following(ScalarValue::UInt64(None))
-            }
+            ast::WindowFrameBound::Following(None) => Self::Following(ScalarValue::UInt64(None)),
             ast::WindowFrameBound::CurrentRow => Self::CurrentRow,
         })
     }
@@ -602,9 +615,9 @@ mod tests {
 
         let window_frame = ast::WindowFrame {
             units: ast::WindowFrameUnits::Rows,
-            start_bound: ast::WindowFrameBound::Preceding(Some(Box::new(
-                ast::Expr::value(ast::Value::Number("2".to_string(), false)),
-            ))),
+            start_bound: ast::WindowFrameBound::Preceding(Some(Box::new(ast::Expr::value(
+                ast::Value::Number("2".to_string(), false),
+            )))),
             end_bound: Some(ast::WindowFrameBound::Preceding(Some(Box::new(
                 ast::Expr::value(ast::Value::Number("1".to_string(), false)),
             )))),

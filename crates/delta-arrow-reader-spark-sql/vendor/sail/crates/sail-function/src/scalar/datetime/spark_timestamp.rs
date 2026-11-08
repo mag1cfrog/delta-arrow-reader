@@ -200,6 +200,10 @@ impl ScalarUDFImpl for SparkTimestamp {
         &self.signature
     }
 
+    fn propagates_constant_folding_errors(&self) -> bool {
+        !self.safe()
+    }
+
     fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType> {
         Ok(DataType::Timestamp(
             TimeUnit::Microsecond,

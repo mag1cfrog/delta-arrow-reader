@@ -66,6 +66,7 @@ use sail_function::scalar::spark_decimal_cast::{DecimalCastMode, SparkDecimalCas
 use sail_function::scalar::spark_evaluation::SparkInterpretedEvaluation;
 use sail_function::scalar::spark_to_string::{SparkToLargeUtf8, SparkToUtf8, SparkToUtf8View};
 use sail_function::scalar::string::spark_regexp_extract_all::SparkRegexpExtract;
+use sail_function::scalar::string::spark_regexp_replace::SparkRegexpReplace;
 use sail_function::scalar::string::spark_substring::SparkSubstring;
 use sail_function::scalar::struct_function::StructFunction;
 
@@ -696,7 +697,7 @@ impl PrepareSparkExpressions {
         };
         let mut found = false;
         let mut check_preparation_errors = false;
-        let mut check_cast = false;
+        let mut needs_reachability_check = false;
         let mut has_correlated_scalar = false;
         let mut check_groups = false;
         let mut has_null_sensitive_comparison = false;
@@ -725,7 +726,12 @@ impl PrepareSparkExpressions {
                 has_coalesce_declaration_casts |= is_spark_query && expr.exists(|expr| {
                     Ok(has_coalesce_declaration_cast(expr))
                 })?;
-                check_cast |= has_cast(expr)?;
+                // Strict constant UDFs need projection pruning before ordinary folding.
+                needs_reachability_check |= has_cast(expr)?
+                    || (is_spark_query && expr.exists(|expr| {
+                        Ok(matches!(expr, Expr::ScalarFunction(function)
+                            if function.func.inner().propagates_constant_folding_errors()))
+                    })?);
                 has_correlated_scalar |= is_spark_query && expr.exists(|expr| {
                     Ok(matches!(expr, Expr::ScalarSubquery(subquery) if !subquery.outer_ref_columns.is_empty()))
                 })?;
@@ -738,7 +744,7 @@ impl PrepareSparkExpressions {
                 })?;
                 Ok(TreeNodeRecursion::Continue)
             })?;
-            Ok(if found && check_preparation_errors && check_cast && check_groups && has_null_sensitive_comparison && has_constant_struct && has_coalesce_declaration_casts && has_slice_parameters {
+            Ok(if found && check_preparation_errors && needs_reachability_check && check_groups && has_null_sensitive_comparison && has_constant_struct && has_coalesce_declaration_casts && has_slice_parameters {
                 TreeNodeRecursion::Stop
             } else {
                 TreeNodeRecursion::Continue
@@ -746,7 +752,7 @@ impl PrepareSparkExpressions {
         })?;
         if !found
             && !check_preparation_errors
-            && !check_cast
+            && !needs_reachability_check
             && !has_correlated_scalar
             && !check_groups
             && !has_null_sensitive_comparison
@@ -783,7 +789,7 @@ impl PrepareSparkExpressions {
         } else {
             plan
         };
-        let plan = if check_cast || check_preparation_errors {
+        let plan = if needs_reachability_check || check_preparation_errors {
             plan.transform_down_up_with_subqueries(|node| {
                 // Correlated EXISTS drops unused filter subqueries before their preparation.
                 let simplified = if is_spark_query {
@@ -921,7 +927,7 @@ impl PrepareSparkExpressions {
                             }
                             // One-row scalar expressions follow their parent's
                             // reachability before standalone subquery folding.
-                            if check_cast && let Expr::ScalarSubquery(mut subquery) = expr {
+                            if needs_reachability_check && let Expr::ScalarSubquery(mut subquery) = expr {
                                 if let Some(mut expressions) = one_row_exprs(&subquery.subquery)?
                                     && expressions.len() == 1
                                     && is_locally_evaluable(&expressions[0], true)?
@@ -940,7 +946,7 @@ impl PrepareSparkExpressions {
                                 )?);
                                 return Ok(Transformed::yes(Expr::ScalarSubquery(subquery)));
                             }
-                            if check_cast {
+                            if needs_reachability_check {
                                 let restored = restore_inlined_scalar_metadata(expr);
                                 if restored.transformed {
                                     return Ok(restored);
@@ -958,7 +964,7 @@ impl PrepareSparkExpressions {
             plan
         };
         // The same OneRowRelation rewrite must work without an incidental CAST.
-        let plan = if has_correlated_scalar && !check_cast {
+        let plan = if has_correlated_scalar && !needs_reachability_check {
             plan.transform_up_with_subqueries(|node| {
                 let schema = datafusion_expr::utils::merge_schema(&node.inputs());
                 let names = datafusion_expr::expr_rewriter::NamePreserver::new(&node);
@@ -984,8 +990,8 @@ impl PrepareSparkExpressions {
             plan
         };
         if check_preparation_errors {
-            // CAST preparation already checked these scalar plans before pruning.
-            if !check_cast {
+            // Reachability preparation already checked these scalar plans before pruning.
+            if !needs_reachability_check {
                 // Spark prepares subqueries before pruning their outer expressions.
                 // Keep each plan's own local conversion and LIMIT 0 boundary.
                 plan.apply_with_subqueries(|node| {
@@ -1010,7 +1016,7 @@ impl PrepareSparkExpressions {
             prepare.check_preparation_error_plan(&plan, options, false)?;
         }
 
-        let plan = if check_cast {
+        let plan = if needs_reachability_check {
             prepare.cast_reachability(plan, options, false)?
         } else if check_preparation_errors {
             let prepared = prepare.prepare_distinct_limits(plan, 0)?;
@@ -2647,6 +2653,78 @@ fn known_empty(plan: &LogicalPlan) -> bool {
 }
 
 impl Prepare {
+    // Fold closed replacement calls before an outer LIMIT can discard local VALUES rows.
+    fn prepare_local_regexp_replacements(
+        &self,
+        mut node: LogicalPlan,
+        options: &ConfigOptions,
+    ) -> Result<Transformed<LogicalPlan>> {
+        let names = datafusion_expr::expr_rewriter::NamePreserver::new(&node);
+        let LogicalPlan::Projection(project) = &mut node else {
+            return Ok(Transformed::no(node));
+        };
+        let eligible = |expr: &Expr| -> Result<bool> {
+            Ok(is_locally_evaluable(expr, false)?
+                && permits_constant_preparation(expr)?
+                && !expr.exists(|expr| {
+                    Ok(matches!(expr, Expr::ScalarFunction(function)
+                        if function.func.as_async().is_some()))
+                })?
+                && expr.exists(|expr| {
+                    Ok(matches!(expr, Expr::ScalarFunction(function)
+                        if function.func.inner().downcast_ref::<SparkRegexpReplace>()
+                            .is_some_and(SparkRegexpReplace::prepares_literal_errors)))
+                })?)
+        };
+        if !project
+            .input
+            .exists(|plan| Ok(matches!(plan, LogicalPlan::Values(_))))?
+            || !literal_regexp_input_permitted(&project.input)?
+            || !project.expr.iter().try_fold(false, |found, expr| {
+                Ok::<_, datafusion_common::DataFusionError>(found || eligible(expr)?)
+            })?
+        {
+            return Ok(Transformed::no(node));
+        }
+        // Native type admission precedes NULL folding or empty-input pruning.
+        for expr in &project.expr {
+            if eligible(expr)? {
+                let _ = create_physical_expr(expr, project.input.schema(), &self.props)?;
+            }
+        }
+        let input = self
+            .simplify_local_input_expressions(Arc::unwrap_or_clone(Arc::clone(&project.input)))?;
+        project.input = Arc::new(input.data);
+        if known_empty(&project.input) {
+            return Ok(Transformed::yes(LogicalPlan::EmptyRelation(
+                datafusion_expr::logical_plan::EmptyRelation {
+                    produce_one_row: false,
+                    schema: Arc::clone(&project.schema),
+                },
+            )));
+        }
+        let info = datafusion_expr::simplify::SimplifyContext::builder()
+            .with_schema(Arc::clone(project.input.schema()))
+            .with_query_execution_start_time(self.props.query_execution_start_time)
+            .with_config_options(Arc::new(options.clone()))
+            .build();
+        let simplifier = ExprSimplifier::new(info).with_local_input_errors();
+        let mut changed = input.transformed;
+        for expr in &mut project.expr {
+            if eligible(expr)? {
+                let name = names.save(expr);
+                let (prepared, _) =
+                    simplifier.simplify_with_cycle_count_transformed(expr.clone())?;
+                changed |= prepared.transformed;
+                *expr = name.restore(prepared.data);
+            }
+        }
+        Ok(Transformed::new_transformed(
+            node.recompute_schema()?,
+            changed,
+        ))
+    }
+
     // Cache arguments after input checks, before current-expression previews can replay producers.
     fn prepare_array_errors_in_string_calls(
         &self,
@@ -3231,6 +3309,12 @@ impl Prepare {
         // evaluate their projection; nonempty ones preserve live CAST failures.
         let plan = plan
             .transform_up(|mut node| {
+                let replacement = if is_spark_query {
+                    self.prepare_local_regexp_replacements(node, options)?
+                } else {
+                    Transformed::no(node)
+                };
+                node = replacement.data;
                 let mut input_batch = None;
                 let mut casts = false;
                 let mut evaluable = true;
@@ -3464,7 +3548,7 @@ impl Prepare {
                 }
                 Ok(Transformed::new_transformed(
                     node,
-                    prepared.transformed || retained || simplified_input,
+                    replacement.transformed || prepared.transformed || retained || simplified_input,
                 ))
             })?
             .data;

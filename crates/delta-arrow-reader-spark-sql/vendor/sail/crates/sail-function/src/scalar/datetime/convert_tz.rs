@@ -1,5 +1,4 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use chrono::{DateTime, MappedLocalTime, NaiveDateTime, TimeZone, Utc};
@@ -221,42 +220,48 @@ impl ScalarUDFImpl for ConvertTz {
     }
 }
 
+/// The region for a legacy three-letter zone ID, such as `PST`, that the date library does not
+/// know. Java's `ZoneId.SHORT_IDS` maps EST, MST and HST to fixed offsets instead, but the date
+/// library reads those three as regions (#1029).
+pub(crate) fn legacy_time_zone(name: &str) -> Option<&'static str> {
+    Some(match name {
+        "ACT" => "Australia/Darwin",
+        "AET" => "Australia/Sydney",
+        "AGT" => "America/Argentina/Buenos_Aires",
+        "ART" => "Africa/Cairo",
+        "AST" => "America/Anchorage",
+        "BET" => "America/Sao_Paulo",
+        "BST" => "Asia/Dhaka",
+        "CAT" => "Africa/Harare",
+        "CNT" => "America/St_Johns",
+        "CST" => "America/Chicago",
+        "CTT" => "Asia/Shanghai",
+        "EAT" => "Africa/Addis_Ababa",
+        "ECT" => "Europe/Paris",
+        "EST" => "America/New_York",
+        "HST" => "Pacific/Honolulu",
+        "IET" => "America/Indianapolis",
+        "IST" => "Asia/Calcutta",
+        "JST" => "Asia/Tokyo",
+        "MIT" => "Pacific/Apia",
+        "MST" => "America/Denver",
+        "NET" => "Asia/Yerevan",
+        "NST" => "Pacific/Auckland",
+        "PLT" => "Asia/Karachi",
+        "PNT" => "America/Phoenix",
+        "PRT" => "America/Puerto_Rico",
+        "PST" => "America/Los_Angeles",
+        "SST" => "Pacific/Guadalcanal",
+        "VST" => "Asia/Saigon",
+        _ => return None,
+    })
+}
+
 fn convert_tz_inner(
     args: &[ArrayRef],
     classic: bool,
     null_short_circuit: bool,
 ) -> Result<ArrayRef> {
-    let legacy_timezones = HashMap::from([
-        ("ACT", "Australia/Darwin"),
-        ("AET", "Australia/Sydney"),
-        ("AGT", "America/Argentina/Buenos_Aires"),
-        ("ART", "Africa/Cairo"),
-        ("AST", "America/Anchorage"),
-        ("BET", "America/Sao_Paulo"),
-        ("BST", "Asia/Dhaka"),
-        ("CAT", "Africa/Harare"),
-        ("CNT", "America/St_Johns"),
-        ("CST", "America/Chicago"),
-        ("CTT", "Asia/Shanghai"),
-        ("EAT", "Africa/Addis_Ababa"),
-        ("ECT", "Europe/Paris"),
-        ("EST", "America/New_York"),
-        ("HST", "Pacific/Honolulu"),
-        ("IET", "America/Indianapolis"),
-        ("IST", "Asia/Calcutta"),
-        ("JST", "Asia/Tokyo"),
-        ("MIT", "Pacific/Apia"),
-        ("MST", "America/Denver"),
-        ("NET", "Asia/Yerevan"),
-        ("NST", "Pacific/Auckland"),
-        ("PLT", "Asia/Karachi"),
-        ("PNT", "America/Phoenix"),
-        ("PRT", "America/Puerto_Rico"),
-        ("PST", "America/Los_Angeles"),
-        ("SST", "Pacific/Guadalcanal"),
-        ("VST", "Asia/Saigon"),
-    ]);
-
     let parse_tz = |input: Option<&str>| {
         input
             .map(|tz_str_opt| {
@@ -273,7 +278,7 @@ fn convert_tz_inner(
 
                 match tz_str_opt.parse::<Tz>() {
                     Ok(tz) => Ok(Some(tz)),
-                    Err(_) => match legacy_timezones.get(tz_str_opt).cloned() {
+                    Err(_) => match legacy_time_zone(tz_str_opt) {
                         Some(tz_str) => match tz_str.parse::<Tz>() {
                             Ok(tz) => Ok(Some(tz)),
                             Err(_) => tz_err(tz_str),

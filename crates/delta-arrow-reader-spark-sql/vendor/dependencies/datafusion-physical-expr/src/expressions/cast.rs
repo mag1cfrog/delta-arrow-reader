@@ -22,7 +22,7 @@ use std::sync::Arc;
 
 use crate::physical_expr::PhysicalExpr;
 
-use arrow::compute::{CastOptions, can_cast_types};
+use arrow::compute::{CastOptions, can_cast_types as can_cast_arrow_types};
 use arrow::datatypes::{DataType, DataType::*, FieldRef, Schema};
 use arrow::record_batch::RecordBatch;
 use datafusion_common::datatype::DataTypeExt;
@@ -46,14 +46,16 @@ const DEFAULT_SAFE_CAST_OPTIONS: CastOptions<'static> = CastOptions {
     format_options: DEFAULT_FORMAT_OPTIONS,
 };
 
-/// Check if name-based struct casting is allowed by validating field compatibility.
+/// Check native CAST's conversion rules, including name-based nested struct casts.
 ///
-/// This function applies the same validation rules as execution time to ensure
-/// planning-time validation matches runtime validation, enabling fail-fast behavior
-/// instead of deferring errors to execution. Handles structs at any nesting level
-/// (e.g., `List<Struct>`, `Dictionary<_, Struct>`).
-fn can_cast_named_struct_types(source: &DataType, target: &DataType) -> bool {
-    validate_data_type_compatibility("", source, target).is_ok()
+/// The caller handles identity-cast elision before this check. Explicit target
+/// Fields can still require validation when their data types are equal.
+pub fn can_cast_types(source: &DataType, target: &DataType) -> bool {
+    if requires_nested_struct_cast(source, target) {
+        validate_data_type_compatibility("", source, target).is_ok()
+    } else {
+        can_cast_arrow_types(source, target)
+    }
 }
 
 /// CAST expression casts an expression to a specific data type and returns a runtime error on invalid cast
@@ -356,18 +358,7 @@ pub fn cast_with_target_field(
         return Ok(Arc::clone(&expr));
     }
 
-    let can_build_cast = if requires_nested_struct_cast(&expr_type, cast_type) {
-        // Allow casts involving structs (including nested inside Lists, Dictionaries,
-        // etc.) that pass name-based compatibility validation. This validation is
-        // applied at planning time (now) to fail fast, rather than deferring errors
-        // to execution time. The name-based casting logic will be executed at runtime
-        // via ColumnarValue::cast_to.
-        can_cast_named_struct_types(&expr_type, cast_type)
-    } else {
-        can_cast_types(&expr_type, cast_type)
-    };
-
-    if !can_build_cast {
+    if !can_cast_types(&expr_type, cast_type) {
         return not_impl_err!("Unsupported CAST from {expr_type} to {cast_type}");
     }
 

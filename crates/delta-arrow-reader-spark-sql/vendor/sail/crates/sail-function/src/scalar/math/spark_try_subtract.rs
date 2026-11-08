@@ -21,6 +21,12 @@ use crate::scalar::math::utils::try_op::{
     try_op_interval_yearmonth, try_op_timestamp_duration,
 };
 
+/// The operand pairs `SparkTrySubtract` accepts, for its errors.
+const ACCEPTED_TYPES: &str = "Int32 or Int64 numbers; a Date32 minus Int32 days, an \
+    Interval(YearMonth) or an Interval(MonthDayNano); two Interval(YearMonth), \
+    Interval(MonthDayNano) or Duration(Microsecond) values; or a Timestamp(Microsecond) minus a \
+    Duration(Microsecond)";
+
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkTrySubtract {
     signature: Signature,
@@ -86,10 +92,15 @@ impl ScalarUDFImpl for SparkTrySubtract {
                 DataType::Timestamp(Microsecond, _),
                 DataType::Duration(Microsecond),
             ] => DataType::Timestamp(Microsecond, None),
+            // Spark's DAY TO SECOND intervals, exact, NULL on overflow.
+            [
+                DataType::Duration(Microsecond),
+                DataType::Duration(Microsecond),
+            ] => DataType::Duration(Microsecond),
             _ => {
                 return Err(unsupported_data_types_exec_err(
                     "try_subtract",
-                    "Int32, Int64, Date32, Interval(YearMonth), Interval(MonthDayNano), Timestamp(Microsecond), Duration(Microsecond)",
+                    ACCEPTED_TYPES,
                     &arg_types,
                 ));
             }
@@ -178,6 +189,13 @@ impl ScalarUDFImpl for SparkTrySubtract {
 
                 binary_op_scalar_or_array(left, right, result)
             }
+            (DataType::Duration(Microsecond), DataType::Duration(Microsecond)) => {
+                let l = left_arr.as_primitive::<DurationMicrosecondType>();
+                let r = right_arr.as_primitive::<DurationMicrosecondType>();
+                let result = try_binary_op_primitive(l, r, i64::checked_sub);
+
+                binary_op_scalar_or_array(left, right, result)
+            }
             (DataType::Timestamp(Microsecond, tz_l), DataType::Duration(Microsecond)) => {
                 let tz = tz_l.clone();
 
@@ -200,7 +218,7 @@ impl ScalarUDFImpl for SparkTrySubtract {
 
             (l, r) => Err(unsupported_data_types_exec_err(
                 "spark_try_subtract",
-                "Int32, Int64, Date32, Interval(YearMonth), Interval(MonthDayNano), Timestamp(Microsecond, [None | Some(tz)]) - Duration(Microsecond)",
+                ACCEPTED_TYPES,
                 &[l.clone(), r.clone()],
             )),
         }
@@ -239,7 +257,8 @@ impl ScalarUDFImpl for SparkTrySubtract {
             (DataType::Interval(YearMonth), DataType::Interval(YearMonth)) => {
                 Ok(vec![left.clone(), right.clone()])
             }
-            (DataType::Interval(MonthDayNano), DataType::Interval(MonthDayNano)) => {
+            (DataType::Interval(MonthDayNano), DataType::Interval(MonthDayNano))
+            | (DataType::Duration(Microsecond), DataType::Duration(Microsecond)) => {
                 Ok(vec![left.clone(), right.clone()])
             }
             (DataType::Timestamp(Microsecond, _), DataType::Duration(Microsecond)) => Ok(vec![
@@ -250,7 +269,7 @@ impl ScalarUDFImpl for SparkTrySubtract {
 
             _ => Err(unsupported_data_types_exec_err(
                 "spark_try_subtract",
-                "Int32, Int64, Date32 or Interval(YearMonth)",
+                ACCEPTED_TYPES,
                 types,
             )),
         }

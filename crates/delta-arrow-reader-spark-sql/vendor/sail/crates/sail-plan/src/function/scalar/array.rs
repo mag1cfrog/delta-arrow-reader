@@ -1003,7 +1003,7 @@ fn sequence_cast(
         (
             DataType::Date32 | DataType::Date64 | DataType::Timestamp(_, None),
             DataType::Timestamp(TimeUnit::Microsecond, Some(timezone)),
-        ) => cast_local_timestamp_expr_to_ltz(argument, timezone),
+        ) => cast_local_timestamp_expr_to_ltz(argument, source_type, timezone),
         _ => cast(argument, target_type.clone()),
     })
 }

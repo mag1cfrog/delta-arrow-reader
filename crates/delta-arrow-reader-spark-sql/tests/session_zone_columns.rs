@@ -274,20 +274,11 @@ enum RetainedDifference {
     /// #1087: calendar functions fail on 0001-01-02 and 9999-12-31, outside Arrow's
     /// nanosecond range, which fails the whole query.
     NanosecondRange,
-    /// #1088: WEEKDAY returns -1 for Sunday instead of 6.
-    SundayWeekday,
-    /// #1089: DATE_TRUNC to MINUTE truncates the UTC minute under Los Angeles local mean
-    /// time, whose offset has seconds.
-    UtcMinuteTruncation,
     /// #1090: GREATEST is nullable where Spark declares it required.
     NullableGreatest,
     /// #1029: in a session zone Spark accepts but Arrow cannot parse, such as `PST`, a
     /// column keeps its own zone, so DAR evaluates it as a session in that zone would.
     UnparsedSessionZone,
-    /// #1093: DAR adds and subtracts days and subtracts TIMESTAMP values as elapsed time
-    /// where Spark uses local date-times, so results differ across Los Angeles DST changes
-    /// and local mean time.
-    ElapsedDayArithmetic,
     /// #1094: TO_JSON prints TIMESTAMP fractions in microseconds where Spark prints
     /// milliseconds, and the Los Angeles local mean time offset without its seconds.
     JsonTimestampText,
@@ -295,19 +286,6 @@ enum RetainedDifference {
 
 /// Session zones Spark accepts that Arrow cannot parse.
 const UNPARSED_ZONES: [&str; 3] = ["Z", "PST", "GMT+08:00"];
-
-/// Los Angeles records whose day arithmetic DAR computes as elapsed time.
-const ELAPSED_DAY_ARITHMETIC: [&str; 5] = [
-    "plus_interval_day",
-    "minus_interval_day",
-    "timestampadd_day",
-    "sequence_hours",
-    "minus_timestamp",
-];
-
-const MICROS_PER_DAY: i64 = 86_400_000_000;
-/// TIMESTAMP '2024-01-01 00:00:00' in Los Angeles, the subtrahend of `minus_timestamp`.
-const LOS_ANGELES_2024: i64 = 1_704_096_000_000_000;
 
 /// Records that fail on the nanosecond range, and the message each fails with.
 const NANOSECOND_RANGE_FAILURES: [(&str, &str); 12] = [
@@ -325,17 +303,11 @@ const NANOSECOND_RANGE_FAILURES: [(&str, &str); 12] = [
     ("weekofyear", "Arithmetic overflow"),
 ];
 
-/// 1883-11-18 20:00 UTC, when Los Angeles leaves local mean time (-07:52:58).
-const LOCAL_MEAN_TIME_END: i64 = -2_717_640_000_000_000;
-const MICROS_PER_MINUTE: i64 = 60_000_000;
-
 fn retained_difference(case: &Value) -> Option<RetainedDifference> {
     let id = case["id"].as_str()?;
     let timezone = case["timezone"].as_str()?;
     if UNPARSED_ZONES.contains(&timezone) {
         Some(RetainedDifference::UnparsedSessionZone)
-    } else if ELAPSED_DAY_ARITHMETIC.contains(&id) && timezone == "America/Los_Angeles" {
-        Some(RetainedDifference::ElapsedDayArithmetic)
     } else if id == "to_json" {
         Some(RetainedDifference::JsonTimestampText)
     } else if NANOSECOND_RANGE_FAILURES
@@ -343,10 +315,6 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
         .any(|(range_id, _)| *range_id == id)
     {
         Some(RetainedDifference::NanosecondRange)
-    } else if id == "weekday" {
-        Some(RetainedDifference::SundayWeekday)
-    } else if id == "date_trunc_minute" && timezone == "America/Los_Angeles" {
-        Some(RetainedDifference::UtcMinuteTruncation)
     } else if id == "greatest_hour" {
         Some(RetainedDifference::NullableGreatest)
     } else {
@@ -418,32 +386,6 @@ fn current_expectation(
                 .ok_or("missing record in the annotation's zone")?;
             current["expected"] = own_zone["expected"].clone();
         }
-        RetainedDifference::ElapsedDayArithmetic => {
-            let id = case["id"].as_str().ok_or("missing id")?;
-            let instants = registered_instants(metadata)?;
-            let rows = current["expected"]["rows"]
-                .as_array_mut()
-                .ok_or("missing rows")?;
-            let mut changed = 0;
-            for (row, instant) in row_instants(rows, &instants)? {
-                let elapsed = match id {
-                    "plus_interval_day" | "timestampadd_day" => instant + MICROS_PER_DAY,
-                    "minus_interval_day" => instant - MICROS_PER_DAY,
-                    "minus_timestamp" => instant - LOS_ANGELES_2024,
-                    // One value per elapsed hour from the start to 24 hours later.
-                    "sequence_hours" => 25,
-                    other => return Err(format!("unexpected record {other}").into()),
-                };
-                let elapsed = json!(elapsed.to_string());
-                if row[1] != elapsed {
-                    row[1] = elapsed;
-                    changed += 1;
-                }
-            }
-            if changed == 0 {
-                return Err(format!("expected a local-time difference in {id}").into());
-            }
-        }
         RetainedDifference::JsonTimestampText => {
             let instants = registered_instants(metadata)?;
             let rows = current["expected"]["rows"]
@@ -470,45 +412,6 @@ fn current_expectation(
                 .as_object_mut()
                 .ok_or("missing schema stages")?
                 .remove("executed");
-        }
-        RetainedDifference::SundayWeekday => {
-            let rows = current["expected"]["rows"]
-                .as_array_mut()
-                .ok_or("missing rows")?;
-            let sundays = rows.iter().filter(|row| row[1] == "6").count();
-            if sundays == 0 {
-                return Err("expected a Sunday".into());
-            }
-            for row in rows.iter_mut().filter(|row| row[1] == "6") {
-                row[1] = json!("-1");
-            }
-        }
-        RetainedDifference::UtcMinuteTruncation => {
-            let instants = registered_instants(metadata)?;
-            let rows = current["expected"]["rows"]
-                .as_array_mut()
-                .ok_or("missing rows")?;
-            let mut changed = 0;
-            for row in rows.iter_mut() {
-                let instant = instants
-                    .iter()
-                    .find(|(key, _)| *key == row[0])
-                    .ok_or("missing registered row")?
-                    .1;
-                let Some(instant) = instant else { continue };
-                let utc_minute = instant.div_euclid(MICROS_PER_MINUTE) * MICROS_PER_MINUTE;
-                let local_minute = row[1].as_str().ok_or("missing value")?.parse::<i64>()?;
-                if utc_minute != local_minute {
-                    if instant >= LOCAL_MEAN_TIME_END {
-                        return Err(format!("unexpected minute in {row:?}").into());
-                    }
-                    row[1] = json!(utc_minute.to_string());
-                    changed += 1;
-                }
-            }
-            if changed == 0 {
-                return Err("expected a local mean time minute".into());
-            }
         }
         RetainedDifference::NullableGreatest => {
             for stage in ["analyzed", "optimized", "executed"] {
@@ -706,11 +609,8 @@ async fn timestamp_columns_follow_the_session_zone_like_spark() -> TestResult {
         retained,
         BTreeMap::from([
             (RetainedDifference::NanosecondRange, 48),
-            (RetainedDifference::SundayWeekday, 4),
-            (RetainedDifference::UtcMinuteTruncation, 2),
             (RetainedDifference::NullableGreatest, 4),
             (RetainedDifference::UnparsedSessionZone, 12),
-            (RetainedDifference::ElapsedDayArithmetic, 10),
             (RetainedDifference::JsonTimestampText, 4),
         ])
     );

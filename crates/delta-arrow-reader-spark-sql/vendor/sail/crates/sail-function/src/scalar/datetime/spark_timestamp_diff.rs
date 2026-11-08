@@ -5,7 +5,6 @@
 use std::str::FromStr;
 use std::sync::Arc;
 
-use chrono::{DateTime, Offset, TimeZone};
 use datafusion::arrow::array::timezone::Tz;
 use datafusion::arrow::array::types::TimestampMicrosecondType;
 use datafusion::arrow::array::{AsArray, Int64Array};
@@ -15,10 +14,9 @@ use datafusion_expr::{
     ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
 };
 
+use crate::scalar::datetime::local_time::local_micros;
+
 const MICROS_PER_DAY: i128 = 86_400_000_000;
-/// Gregorian dates repeat every 400 years (146,097 days, a whole number of weeks), and so do
-/// fixed offsets and recurring time zone rules.
-const MICROS_PER_400_YEARS: i64 = 146_097 * 86_400_000_000;
 
 /// The units Spark's parser accepts for TIMESTAMPDIFF. DAYOFYEAR parses but fails when a row
 /// is evaluated.
@@ -147,28 +145,6 @@ impl SparkTimestampDiff {
     }
 }
 
-/// The local wall-clock microseconds of an instant in `zone`, beyond the BIGINT range when
-/// the offset moves an extreme instant past it.
-fn local_micros(micros: i64, zone: &Tz) -> i128 {
-    let mut probe = micros;
-    let instant = loop {
-        if let Some(instant) = DateTime::from_timestamp_micros(probe) {
-            break instant;
-        }
-        // Chrono's range ends near year 262143; move by whole calendar cycles toward it.
-        probe = if probe > 0 {
-            probe - MICROS_PER_400_YEARS
-        } else {
-            probe + MICROS_PER_400_YEARS
-        };
-    };
-    let offset = zone
-        .offset_from_utc_datetime(&instant.naive_utc())
-        .fix()
-        .local_minus_utc();
-    i128::from(micros) + i128::from(offset) * 1_000_000
-}
-
 /// Java's `LocalDate` month position: the proleptic month times 32 plus the day of month.
 fn packed_month(epoch_day: i128) -> i128 {
     let (year, month, day) = civil_from_days(epoch_day);
@@ -268,6 +244,7 @@ impl ScalarUDFImpl for SparkTimestampDiff {
 
 #[cfg(test)]
 mod tests {
+    use chrono::DateTime;
     use datafusion_common::exec_datafusion_err;
 
     use super::*;
