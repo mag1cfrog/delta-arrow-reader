@@ -654,9 +654,10 @@ nullable. A STRING argument, also a dictionary-encoded one such as a Delta STRIN
 column, uses Spark's STRING-to-INT cast for the session's ANSI mode. It trims spaces, fails with
 `CAST_INVALID_INPUT` under ANSI or gives NULL, and is nullable in both modes, as Spark's cast is.
 It used Arrow's cast, which failed on spaces, malformed values and values beyond INT in both
-modes without Spark's condition. As in Spark, a NULL argument, as a literal, a cast of one or a
-NULL that optimization computes beside a column, gives NULL before either argument is evaluated,
-and a NULL year skips the months' cast for its row. An overflow fails
+modes without Spark's condition. As in Spark, a NULL literal argument or a cast of one gives NULL
+before either argument is evaluated, and so does a constant NULL beside a column once it folds,
+while a NULL from NULLIF or IF beside a failing constant does not. A NULL year skips the months'
+cast for its row. An overflow fails
 with Spark's whole `INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION` message in both modes, while
 optimizing for a constant through [constant folding errors](#constant-folding-errors). It used
 to fail while collecting rows, and its message stopped after the first sentence. Retained:

@@ -1,6 +1,6 @@
 # MAKE_YM_INTERVAL values, errors and nullability
 
-`make-ym-interval-spark.jsonl` records 308 observations from Spark 4.2.0, revision
+`make-ym-interval-spark.jsonl` records 320 observations from Spark 4.2.0, revision
 `32f7299601108917fb01920a54e084595b7b3bf8`, Java 17.0.20.1 and Python 3.12.14 (#1159).
 The header stores the build properties, capture script hash, settings and the registered
 `nullable`, `required` and `empty` tables of INT keys `k`, INT years `y` and months `mo`, BIGINT
@@ -8,19 +8,19 @@ The header stores the build properties, capture script hash, settings and the re
 Spark's error condition and the class and message of its innermost Java exception. Two captures
 were byte-identical.
 
-77 queries run in both ANSI modes in UTC and America/Los_Angeles:
+80 queries run in both ANSI modes in UTC and America/Los_Angeles:
 - over the tables, years and months, years alone and months alone over nullable and NOT NULL
   columns and an empty table; rows at the YEAR TO MONTH limits and one month past them; BIGINT
   arguments that fit, wrap past INT or overflow the interval; STRING months that fit, carry
   spaces, are malformed, empty or beyond INT; TINYINT and SMALLINT arguments; NULL and typed
-  NULL literals beside a column, also beside a STRING column, and a computed NULL beside a
-  STRING column; a NULL year beside an overflowing
+  NULL literals beside a column, also beside a STRING column, and `NULL + 1` and `nullif(1, 1)`
+  beside a STRING column; a NULL year beside an overflowing
   literal month, a malformed STRING month or a BIGINT month beyond INT, and those failing years
   beside a NULL month; a malformed month in one row and a malformed year in a later one; INT()
   of a STRING column; and a comparison, a negation, IS NULL and TRY_ADD over the result;
 - literals with none, one and two arguments, negative values, both limits and one month past
   them, overflowing years, NULL arguments, an overflowing year beside a NULL, a malformed STRING
-  beside a NULL literal, a cast NULL or a computed NULL, STRING, malformed and empty STRING,
+  beside a NULL literal, a cast NULL, `NULL + 1`, `nullif(1, 1)` or `IF(false, 1, NULL)`, STRING, malformed and empty STRING,
   BIGINT, BIGINT beyond INT, TINYINT and SMALLINT, DECIMAL, DOUBLE and BOOLEAN arguments, a
   comparison, and TRY_ADD, TRY_SUBTRACT, TRY_MULTIPLY, TRY_DIVIDE and TRY_ADD to a DATE over an
   overflow;
@@ -30,8 +30,10 @@ were byte-identical.
 Spark's MAKE_YM_INTERVAL casts its arguments to INT and computes `years * 12 + months` with
 Java's exact arithmetic, failing with `INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION` in
 both ANSI modes, while optimizing for a constant. NullPropagation replaces a call with a NULL
-argument, as a literal, a cast of one or a computed NULL, by NULL before either argument is
-evaluated. Otherwise the years are evaluated
+argument, as a literal, a cast of one or an expression over a NULL literal such as `NULL + 1`,
+by NULL before either argument is evaluated. A NULL from NULLIF or IF is not replaced in a
+constant call, so a malformed constant STRING beside it fails under ANSI; beside a column, it
+folds to NULL first and the call gives NULL. Otherwise the years are evaluated
 first, and a NULL year gives NULL without evaluating the months. The result is nullable only for
 a nullable argument; a STRING, DECIMAL or DOUBLE argument's cast is nullable during analysis in
 both modes. TRY arithmetic's `TryEval` turns an overflow into NULL.
