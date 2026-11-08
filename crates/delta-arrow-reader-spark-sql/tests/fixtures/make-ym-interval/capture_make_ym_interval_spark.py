@@ -1,22 +1,25 @@
-"""Capture Spark MAKE_YM_INTERVAL values, errors and nullability (#1159).
+"""Capture Spark MAKE_YM_INTERVAL values, errors and nullability (#1159, #1165).
 
-Records analyzed, optimized and executed schemas, typed internal-row values and failing
-stages, with the innermost Java exception of a failure, for MAKE_YM_INTERVAL with literal,
+Records analyzed, optimized and executed schemas, typed internal-row values and failing stages,
+with the innermost Java exception of a failure, for MAKE_YM_INTERVAL with literal,
 nullable-column, NOT NULL-column, empty-input and NULL arguments, none, one and two arguments,
 signs, the YEAR TO MONTH limits and one month past them, INT, TINYINT, SMALLINT, BIGINT,
-DECIMAL, DOUBLE, BOOLEAN, STRING, malformed and empty STRING arguments, a NULL beside an
-overflowing argument or a failing argument cast in either order, STRING arguments beside a NULL
-literal, a cast NULL, a computed NULL, NULLIF or IF, failing STRING arguments in row order,
-INT() of a STRING, unaliased generated names, and for comparisons, negation, IS NULL and TRY
-arithmetic over its result. Every query runs in both ANSI modes in UTC and America/Los_Angeles.
-Run from the crate root in the reference environment described in README.md; the output path
-must not exist.
+DECIMAL, DOUBLE and FLOAT arguments with fractions, signs, values beyond INT or near an integer,
+NaN and infinities, BOOLEAN, DATE, TIMESTAMP, BINARY, ARRAY and interval arguments, STRING,
+malformed and empty STRING arguments, a NULL beside an overflowing argument or a failing
+argument cast in either order, STRING arguments beside a NULL literal, a cast NULL, a computed
+NULL, NULLIF or IF, failing STRING arguments in row order, INT() of a STRING, unaliased
+generated names, and for comparisons, negation, IS NULL and TRY arithmetic over its result.
+Every query runs in both ANSI modes in UTC and America/Los_Angeles. Run from the crate root in
+the reference environment described in README.md; the output path must not exist.
 """
 import argparse
+from decimal import Decimal
 import hashlib
 import json
 import os
 from pathlib import Path
+import struct
 import sys
 from zipfile import ZipFile
 
@@ -66,12 +69,68 @@ def rows(values):
     return [[str(key)] + [text(value) for value in row] for key, row in enumerate(values)]
 
 
+def double_bits(value):
+    """A DOUBLE as the hex of its IEEE 754 bits."""
+    return struct.pack(">d", value).hex()
+
+
+def float_bits(value):
+    """A FLOAT as the hex of its IEEE 754 bits."""
+    return struct.pack(">f", value).hex()
+
+
+def number_fields(nullable):
+    return [
+        {"name": "k", "type": "integer", "nullable": False, "metadata": {}},
+        {"name": "dc", "type": "decimal(12,2)", "nullable": nullable, "metadata": {}},
+        {"name": "f", "type": "double", "nullable": nullable, "metadata": {}},
+        {"name": "fl", "type": "float", "nullable": nullable, "metadata": {}}]
+
+
+def number_rows(values):
+    return [[str(key), text(dc), None if f is None else double_bits(f),
+             None if fl is None else float_bits(fl)] for key, (dc, f, fl) in enumerate(values)]
+
+
+INF = float("inf")
+NAN = float("nan")
+
+# (DECIMAL(12, 2) dc, DOUBLE f, FLOAT fl) per row. Row 3 is beyond INT, row 4 holds DECIMAL
+# years that overflow the interval, a NaN and an infinity, and row 6 a NULL DECIMAL beside a
+# DOUBLE beyond INT.
+NULLABLE_NUMBERS = [
+    ("1.50", 1.5, 1.5),
+    ("-1.50", -1.5, -1.5),
+    (None, None, None),
+    ("2147483648.00", 2147483648.0, 3e9),
+    ("178956971.00", NAN, INF),
+    ("0.99", -0.99, 0.5),
+    (None, 1e10, -INF),
+]
+
+REQUIRED_NUMBERS = [
+    ("1.25", 1.75, 2.5),
+    ("-2.50", -2.5, -0.5),
+]
+
+# DECIMAL(38, 17) values a DOUBLE would round to the next integer.
+WIDE_DECIMALS = ["0.99999999999999999", "-0.99999999999999999", "2.99999999999999999"]
+
+
 INPUTS = [
     {"name": "nullable", "schema": {"type": "struct", "fields": fields(True)},
      "rows": rows(NULLABLE_ROWS)},
     {"name": "required", "schema": {"type": "struct", "fields": fields(False)},
      "rows": rows(REQUIRED_ROWS)},
-    {"name": "empty", "schema": {"type": "struct", "fields": fields(False)}, "rows": []}]
+    {"name": "empty", "schema": {"type": "struct", "fields": fields(False)}, "rows": []},
+    {"name": "numbers", "schema": {"type": "struct", "fields": number_fields(True)},
+     "rows": number_rows(NULLABLE_NUMBERS)},
+    {"name": "numbers_required", "schema": {"type": "struct", "fields": number_fields(False)},
+     "rows": number_rows(REQUIRED_NUMBERS)},
+    {"name": "wide_decimals", "schema": {"type": "struct", "fields": [
+        {"name": "k", "type": "integer", "nullable": False, "metadata": {}},
+        {"name": "w", "type": "decimal(38,17)", "nullable": False, "metadata": {}}]},
+     "rows": [[str(key), value] for key, value in enumerate(WIDE_DECIMALS)]}]
 
 COLUMNS = [
     ("nullable_both", "make_ym_interval(y, mo)", "nullable", "k <> 4"),
@@ -122,6 +181,25 @@ COLUMNS = [
     ("required_try_add_overflow", "try_add(make_ym_interval(y, mo), INTERVAL '1' MONTH)",
      "required", "k = 3"),
     ("empty_both", "make_ym_interval(y, mo)", "empty", "true"),
+    ("numbers_decimal", "make_ym_interval(dc)", "numbers", "k IN (0, 1, 2, 5)"),
+    ("numbers_decimal_beyond_int", "make_ym_interval(0, dc)", "numbers", "k = 3"),
+    ("numbers_decimal_years_overflow", "make_ym_interval(dc)", "numbers", "k = 4"),
+    ("numbers_double", "make_ym_interval(0, f)", "numbers", "k IN (0, 1, 2, 5)"),
+    ("numbers_double_beyond_int", "make_ym_interval(0, f)", "numbers", "k = 3"),
+    ("numbers_double_nan", "make_ym_interval(0, f)", "numbers", "k = 4"),
+    ("numbers_float", "make_ym_interval(fl)", "numbers", "k IN (0, 1, 2, 5)"),
+    ("numbers_float_beyond_int", "make_ym_interval(0, fl)", "numbers", "k = 3"),
+    ("numbers_float_infinity", "make_ym_interval(0, fl)", "numbers", "k = 4"),
+    ("numbers_float_negative_infinity", "make_ym_interval(0, fl)", "numbers", "k = 6"),
+    ("numbers_null_year_failing_month", "make_ym_interval(dc, f)", "numbers", "k = 6"),
+    ("numbers_failing_year_null_month", "make_ym_interval(f, dc)", "numbers", "k = 6"),
+    ("numbers_required", "make_ym_interval(dc, f)", "numbers_required", "true"),
+    ("numbers_required_float", "make_ym_interval(fl)", "numbers_required", "true"),
+    ("numbers_required_comparison", "make_ym_interval(dc) = INTERVAL '1' YEAR",
+     "numbers_required", "true"),
+    ("wide_decimals", "make_ym_interval(0, w)", "wide_decimals", "true"),
+    ("numbers_try_add_double_beyond_int", "try_add(make_ym_interval(0, f), INTERVAL '1' MONTH)",
+     "numbers", "k = 6"),
 ]
 
 LITERALS = [
@@ -154,7 +232,23 @@ LITERALS = [
     ("tinyint_smallint", "make_ym_interval(1Y, 2S)"),
     ("decimal", "make_ym_interval(1.5)"),
     ("double", "make_ym_interval(1.5D)"),
+    ("float", "make_ym_interval(CAST(1.5 AS FLOAT))"),
+    ("negative_decimals", "make_ym_interval(-1.99, 2.99)"),
+    ("decimal_beyond_int", "make_ym_interval(2147483648.5)"),
+    ("double_beyond_int", "make_ym_interval(0, 1e10D)"),
+    ("double_nan", "make_ym_interval(0, CAST('NaN' AS DOUBLE))"),
+    ("wide_decimal_near_one", "make_ym_interval(0.99999999999999999)"),
+    ("decimal_near_int_limit", "make_ym_interval(0, 2147483647.9999999)"),
+    ("decimal_near_years_limit", "make_ym_interval(178956970.9999999999)"),
+    ("whole_decimal_beyond_int", "make_ym_interval(0, CAST(4294967298 AS DECIMAL(10, 0)))"),
+    ("float_two_pow_31", "make_ym_interval(0, CAST(2147483648 AS FLOAT))"),
+    ("try_add_double_beyond_int", "try_add(make_ym_interval(0, 1e10D), INTERVAL '1' MONTH)"),
     ("boolean", "make_ym_interval(true)"),
+    ("date", "make_ym_interval(DATE '2024-01-01')"),
+    ("timestamp", "make_ym_interval(1, TIMESTAMP '2024-01-01 00:00:00')"),
+    ("binary", "make_ym_interval(X'01')"),
+    ("array", "make_ym_interval(1, array(1))"),
+    ("interval", "make_ym_interval(INTERVAL '1' YEAR)"),
     ("comparison", "make_ym_interval(1) = INTERVAL '1' YEAR"),
     ("try_add_overflow", "try_add(make_ym_interval(178956970, 8), INTERVAL '1' MONTH)"),
     ("try_subtract_overflow",
@@ -187,6 +281,12 @@ def python_value(value, kind):
         return int(value)
     if kind == "string":
         return value
+    if kind == "double":
+        return struct.unpack(">d", bytes.fromhex(value))[0]
+    if kind == "float":
+        return struct.unpack(">f", bytes.fromhex(value))[0]
+    if kind.startswith("decimal"):
+        return Decimal(value)
     raise AssertionError(kind)
 
 
@@ -202,6 +302,12 @@ def encode_value(row, index, data_type, types):
         return row.getUTF8String(index).toString()
     if isinstance(data_type, types.BooleanType):
         return row.getBoolean(index)
+    if isinstance(data_type, types.DoubleType):
+        return double_bits(row.getDouble(index))
+    if isinstance(data_type, types.FloatType):
+        return float_bits(row.getFloat(index))
+    if isinstance(data_type, types.DecimalType):
+        return row.getDecimal(index, data_type.precision, data_type.scale).toString()
     raise AssertionError(f"unexpected result type {data_type}")
 
 
@@ -296,7 +402,8 @@ def main():
             "java_version": spark.sparkContext._jvm.System.getProperty("java.version"),
             "python_version": sys.version.split()[0],
             "capture_script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-            "value_encoding": ("INT, BIGINT, STRING and YEAR TO MONTH months as text; "
+            "value_encoding": ("INT, BIGINT, DECIMAL, STRING and YEAR TO MONTH months as "
+                               "text; DOUBLE and FLOAT as the hex of their IEEE 754 bits; "
                                "BOOLEAN as a JSON boolean"),
             "settings": {
                 "spark.sql.timestampType": spark.conf.get("spark.sql.timestampType"),
