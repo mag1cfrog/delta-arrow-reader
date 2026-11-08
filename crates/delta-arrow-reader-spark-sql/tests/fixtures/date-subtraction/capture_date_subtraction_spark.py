@@ -4,10 +4,12 @@ Records analyzed, optimized and executed schemas, typed internal-row values and 
 stages, with the innermost Java exception of a failure, for `-` and TRY_SUBTRACT of two DATE
 values and for consumers of the difference: interval scaling, negation, comparison, interval
 addition, DATE addition, casts, CASE, IS NULL and a lambda. Spark gives the DAY interval between
-the dates as microseconds, with exact arithmetic. Inputs are registered tables of nullable and
-NOT NULL DATE values, including NULLs, signs, years 1 and 9999, dates around the epoch and Los
-Angeles DST changes, and INT day numbers whose DATE values reach the limits of the DATE range
-and of BIGINT microseconds. Every query runs in both ANSI modes in UTC and America/Los_Angeles.
+the dates as microseconds, with exact arithmetic. Three consumers are owned elsewhere: a
+comparison with a YEAR TO MONTH interval, CONCAT and TRY_SUM. Inputs are registered tables of
+nullable and NOT NULL DATE values, including NULLs, signs, years 1 and 9999, dates around the
+epoch and Los Angeles DST changes, and INT day numbers whose DATE values reach the limits of the
+DATE range and of BIGINT microseconds. Every query runs in both ANSI modes in UTC and
+America/Los_Angeles.
 Run from the crate root in the reference environment described in README.md; the output path
 must not exist.
 """
@@ -108,8 +110,7 @@ LITERALS = [
     ("divide", "(DATE '2020-01-02' - DATE '2020-01-01') / 7"),
     ("null_start", "DATE '2020-01-02' - CAST(NULL AS DATE)"),
     ("null_end", "CAST(NULL AS DATE) - DATE '2020-01-02'"),
-    # Spark subtracts an untyped NULL from a DATE as a number of days, and an untyped NULL
-    # minus a DATE as two DATE values.
+    # Spark reads an untyped NULL beside a DATE, on either side, as a DATE.
     ("untyped_null_start", "DATE '2020-01-02' - NULL"),
     ("untyped_null_end", "NULL - DATE '2020-01-02'"),
     ("limit_days", f"date_from_unix_date({DAYS_LIMIT}) - DATE '1970-01-01'"),
@@ -136,6 +137,13 @@ def definitions():
         yield f"required_{name}", f"SELECT k, {expression} AS r FROM required"
     # The DAR name of an unaliased difference.
     yield "column_unaliased", "SELECT k, a - b FROM inputs"
+    # Consumers outside #987, owned elsewhere: a YEAR TO MONTH comparison (#1182), an implicit
+    # STRING conversion (#953) and TRY_SUM (#1183). The comparison leaves out the two rows
+    # between years 1 and 9999.
+    yield ("column_equals_month",
+           "SELECT k, (a - b) = INTERVAL '1' MONTH AS r FROM inputs WHERE k NOT IN (2, 3)")
+    yield "column_concat", "SELECT k, concat('d=', a - b) AS r FROM inputs"
+    yield "try_sum", "SELECT try_sum(a - b) AS r FROM inputs"
     # A DATE plus the difference, without the two rows between years 1 and 9999, and one of
     # them alone.
     yield "column_plus_date", "SELECT k, b + (a - b) AS r FROM inputs WHERE k NOT IN (2, 3)"
