@@ -546,6 +546,61 @@ fn concat_constant_descendants_keep_native_conditional_reachability() -> Result<
 }
 
 #[tokio::test]
+async fn substring_null_length_keeps_unused_opt_out_descendants_uninvoked() -> Result<()> {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use datafusion::execution::SessionStateBuilder;
+    use datafusion::physical_plan::collect;
+    use datafusion::prelude::SessionContext;
+    use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
+
+    let session = SessionContext::new_with_state(
+        configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
+    );
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&calls);
+    session.register_udf(ScalarUDF::from(RetainConstant));
+    session.register_udf(create_udf(
+        "substring_unused_producer",
+        vec![DataType::Int32],
+        DataType::Int32,
+        Volatility::Immutable,
+        Arc::new(move |_| {
+            observed.fetch_add(1, Ordering::SeqCst);
+            exec_err!("unused substring producer was invoked")
+        }),
+    ));
+    for ansi_mode in [true, false] {
+        for length_type in ["INT", "STRING"] {
+            let sql = format!(
+                "SELECT substring('abcdef',retain_constant(substring_unused_producer(1)),CAST(NULL AS {length_type})) AS r"
+            );
+            let query = plan_query(
+                &session,
+                &sql,
+                &SparkSqlOptions {
+                    ansi_mode,
+                    ..Default::default()
+                },
+            )
+            .await?;
+            let physical = query.create_physical_plan(&session).await?;
+            assert_eq!(calls.load(Ordering::SeqCst), 0, "{sql}");
+            let batches = collect(physical, session.task_ctx()).await?;
+            assert_eq!(
+                batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
+                1
+            );
+            for batch in batches {
+                assert_eq!(batch.column(0).null_count(), batch.num_rows(), "{sql}");
+            }
+            assert_eq!(calls.load(Ordering::SeqCst), 0, "{sql}");
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn mixed_numeric_array_preparation_preserves_inherited_callback_limit() -> Result<()> {
     use datafusion::execution::SessionStateBuilder;
     use datafusion::physical_plan::collect;
