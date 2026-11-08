@@ -20,6 +20,7 @@ use sail_common_datafusion::utils::items::ItemTaker;
 use sail_function::error::generic_exec_err;
 use sail_function::scalar::datetime::negate_duration::NegateDuration;
 use sail_function::scalar::datetime::spark_date_to_timestamp::SparkDateToTimestamp;
+use sail_function::scalar::datetime::spark_subtract_dates::SparkSubtractDates;
 use sail_function::scalar::datetime::spark_subtract_timestamps::SparkSubtractTimestamps;
 use sail_function::scalar::datetime::spark_timestamp::SparkTimestamp;
 use sail_function::scalar::datetime::spark_timestamp_add_interval::SparkTimestampAddInterval;
@@ -396,6 +397,28 @@ fn is_date_ntz_subtraction(end: &DataType, start: &DataType) -> bool {
     (ntz(end) && date(start)) || (date(end) && ntz(start))
 }
 
+/// Whether Spark subtracts these types as two DATE values with `SubtractDates`: a DATE beside
+/// a DATE or an untyped NULL, in either order.
+fn is_date_subtraction(end: &DataType, start: &DataType) -> bool {
+    let date = |data_type: &DataType| matches!(data_type, DataType::Date32 | DataType::Date64);
+    let date_or_null = |data_type: &DataType| date(data_type) || data_type == &DataType::Null;
+    (date(end) && date_or_null(start)) || (date_or_null(end) && date(start))
+}
+
+/// `end` minus `start`, two DATE values or an untyped NULL and a DATE, with `subtraction`: the
+/// DAY interval between them.
+fn subtract_dates(
+    subtraction: SparkSubtractDates,
+    (end, end_type): (Expr, &DataType),
+    (start, start_type): (Expr, &DataType),
+) -> Expr {
+    let operand = |argument, data_type: &DataType| match data_type {
+        DataType::Date32 => argument,
+        _ => cast(argument, DataType::Date32),
+    };
+    ScalarUDF::from(subtraction).call(vec![operand(end, end_type), operand(start, start_type)])
+}
+
 /// `end` minus `start`, a DATE and a TIMESTAMP_NTZ in either order, with `-`, or with
 /// TRY_SUBTRACT for `try_mode`. Spark casts the DATE to TIMESTAMP_NTZ at its midnight, a
 /// nullable cast that fails with `long overflow` beyond BIGINT microseconds, which TRY turns into
@@ -543,9 +566,10 @@ fn try_add(input: ScalarFunctionInput) -> PlanResult<Expr> {
 }
 
 /// Spark's TRY_SUBTRACT: an interval from a TIMESTAMP or TIMESTAMP_NTZ; a TIMESTAMP and a
-/// TIMESTAMP, TIMESTAMP_NTZ, DATE or untyped NULL; two TIMESTAMP_NTZ values; and a DATE and a
-/// TIMESTAMP_NTZ subtract like `-` and give NULL where it fails. Other operands, including two
-/// DATE values, keep `SparkTrySubtract`; two untyped NULLs are a NULL DOUBLE.
+/// TIMESTAMP, TIMESTAMP_NTZ, DATE or untyped NULL; two TIMESTAMP_NTZ values; a DATE and a
+/// TIMESTAMP_NTZ; and two DATE values, or an untyped NULL and a DATE, subtract like `-` and give
+/// NULL where it fails. Other operands keep `SparkTrySubtract`; two untyped NULLs are a NULL
+/// DOUBLE.
 fn try_subtract(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let ScalarFunctionInput {
         arguments,
@@ -588,6 +612,13 @@ fn try_subtract(input: ScalarFunctionInput) -> PlanResult<Expr> {
         // non-constant operand; DAR returns NULL there (#1133).
         (Ok(end_type), Ok(start_type)) if is_date_ntz_subtraction(&end_type, &start_type) => {
             subtract_date_and_timestamp_ntz(true, (left, &end_type), (right, &start_type))
+        }
+        (Ok(end_type), Ok(start_type)) if is_date_subtraction(&end_type, &start_type) => {
+            subtract_dates(
+                SparkSubtractDates::try_subtract(),
+                (left, &end_type),
+                (right, &start_type),
+            )
         }
         // Spark reads an untyped NULL beside a TIMESTAMP as a value of its type.
         (Ok(end_type @ DataType::Timestamp(TimeUnit::Microsecond, _)), Ok(DataType::Null)) => {
@@ -663,6 +694,13 @@ fn spark_minus(input: ScalarFunctionInput) -> PlanResult<Expr> {
             }
             (Ok(end_type), Ok(start_type)) if is_date_ntz_subtraction(&end_type, &start_type) => {
                 subtract_date_and_timestamp_ntz(false, (left, &end_type), (right, &start_type))
+            }
+            (Ok(end_type), Ok(start_type)) if is_date_subtraction(&end_type, &start_type) => {
+                subtract_dates(
+                    SparkSubtractDates::new(),
+                    (left, &end_type),
+                    (right, &start_type),
+                )
             }
             (Ok(left_type), Ok(right_type))
                 if SparkIntervalArithmetic::accepts(&left_type, &right_type) =>
