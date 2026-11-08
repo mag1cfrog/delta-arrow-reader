@@ -19,6 +19,12 @@ use crate::scalar::math::utils::try_op::{
     try_op_interval_yearmonth, try_op_timestamp_duration,
 };
 
+/// The operand pairs `SparkTryAdd` accepts, for its errors.
+const ACCEPTED_TYPES: &str = "two Int32 or two Int64 numbers; a Date32 with Int32 days, an \
+    Interval(YearMonth) or an Interval(MonthDayNano); two Interval(YearMonth), \
+    Interval(MonthDayNano) or Duration(Microsecond) values; or a Timestamp(Microsecond) with a \
+    Duration(Microsecond)";
+
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkTryAdd {
     signature: Signature,
@@ -83,10 +89,15 @@ impl ScalarUDFImpl for SparkTryAdd {
                 DataType::Timestamp(Microsecond, _),
                 DataType::Duration(Microsecond),
             ] => DataType::Timestamp(Microsecond, None),
+            // Spark's DAY TO SECOND intervals, exact, NULL on overflow.
+            [
+                DataType::Duration(Microsecond),
+                DataType::Duration(Microsecond),
+            ] => DataType::Duration(Microsecond),
             _ => {
                 return Err(unsupported_data_types_exec_err(
                     "try_add",
-                    "Int32, Int64, Interval(YearMonth), Interval(MonthDayNano)",
+                    ACCEPTED_TYPES,
                     &arg_types,
                 ));
             }
@@ -171,6 +182,13 @@ impl ScalarUDFImpl for SparkTryAdd {
 
                 binary_op_scalar_or_array(left, right, result)
             }
+            (DataType::Duration(Microsecond), DataType::Duration(Microsecond)) => {
+                let l = left_arr.as_primitive::<DurationMicrosecondType>();
+                let r = right_arr.as_primitive::<DurationMicrosecondType>();
+                let result = try_binary_op_primitive(l, r, i64::checked_add);
+
+                binary_op_scalar_or_array(left, right, result)
+            }
             (DataType::Timestamp(Microsecond, _), DataType::Duration(Microsecond)) => {
                 let l = left_arr.as_primitive::<TimestampMicrosecondType>();
                 let r = right_arr.as_primitive::<DurationMicrosecondType>();
@@ -180,7 +198,7 @@ impl ScalarUDFImpl for SparkTryAdd {
             }
             (l, r) => Err(unsupported_data_types_exec_err(
                 "spark_try_add",
-                "Int32 or Int64",
+                ACCEPTED_TYPES,
                 &[l.clone(), r.clone()],
             )),
         }
@@ -214,6 +232,10 @@ impl ScalarUDFImpl for SparkTryAdd {
                     DataType::Interval(MonthDayNano),
                     DataType::Interval(MonthDayNano)
                 )
+                | (
+                    DataType::Duration(Microsecond),
+                    DataType::Duration(Microsecond)
+                )
         );
         if *left == DataType::Null {
             return Ok(vec![right.clone(), right.clone()]);
@@ -226,7 +248,7 @@ impl ScalarUDFImpl for SparkTryAdd {
         } else {
             Err(unsupported_data_types_exec_err(
                 "spark_try_add",
-                "Int32, Int64, Date32 or Interval(YearMonth)",
+                ACCEPTED_TYPES,
                 types,
             ))
         }
