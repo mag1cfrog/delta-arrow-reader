@@ -19,6 +19,13 @@ use serde_json::Value;
 mod string_binary;
 use string_binary::{TestResult, register_inputs};
 
+#[expect(
+    dead_code,
+    reason = "This target reuses only the accepted native async producer."
+)]
+#[path = "../vendor/sail/crates/sail-plan/src/test_utils/regexp_literal_producer.rs"]
+mod literal_producer;
+
 async fn check_counted(
     session: &SessionContext,
     sql: &str,
@@ -162,6 +169,20 @@ async fn substring_evaluates_each_needed_operand_once() -> TestResult {
                         )
                         .await?;
                     }
+                    for length_type in ["INT", "STRING"] {
+                        let sql = format!(
+                            "SELECT substring({source_function}(id,{source}),count_substring_position(id,p),CAST(NULL AS {length_type})) AS r FROM substring_text"
+                        );
+                        check_counted(
+                            &session,
+                            &sql,
+                            ansi_mode,
+                            &observed,
+                            [vec![], vec![], vec![]],
+                            12,
+                        )
+                        .await?;
+                    }
                 }
                 for (sql, expected, row_count) in [
                     (
@@ -215,6 +236,174 @@ async fn substring_evaluates_each_needed_operand_once() -> TestResult {
             );
             for rows in &observed {
                 assert_eq!(*rows.lock().unwrap(), vec![7]);
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn substring_keeps_native_async_descendant_values_fields_and_invocations() -> TestResult {
+    use std::sync::atomic::Ordering;
+
+    use arrow::compute::concat_batches;
+    use literal_producer::{Kind, producer};
+
+    let header: Value = serde_json::from_str(
+        include_str!("fixtures/substring-arguments-spark.jsonl")
+            .lines()
+            .next()
+            .ok_or("missing fixture header")?,
+    )?;
+    for representation in 0..3 {
+        for batch_size in [1, 32] {
+            let session = SessionContext::new_with_state(
+                configure_spark_sql(
+                    SessionStateBuilder::new()
+                        .with_default_features()
+                        .with_config(
+                            SessionConfig::new()
+                                .with_batch_size(batch_size)
+                                .with_target_partitions(1),
+                        ),
+                )
+                .build(),
+            );
+            register_inputs(&session, &header, representation, batch_size)?;
+            let source_schema = session.table_provider("substring_text").await?.schema();
+            let source_field = Arc::clone(&source_schema.fields()[source_schema.index_of("s")?]);
+            for ansi_mode in [true, false] {
+                for (length, reached_async) in [
+                    ("2", true),
+                    ("CAST(NULL AS INT)", false),
+                    ("CAST(NULL AS STRING)", false),
+                ] {
+                    let (callback, counts) = producer(Kind::AsyncFold);
+                    assert!(callback.as_async().is_some());
+                    session.register_udf(callback);
+                    let options = SparkSqlOptions {
+                        ansi_mode,
+                        ..Default::default()
+                    };
+                    let control_sql = format!(
+                        "SELECT id,substring(s,2,{length}) AS r FROM substring_text ORDER BY id"
+                    );
+                    let control = plan_query(&session, &control_sql, &options).await?;
+                    let control_plan = control.create_physical_plan(&session).await?;
+                    let control_schema = control_plan.schema();
+                    let control_batches = collect(control_plan, session.task_ctx()).await?;
+                    let expected = concat_batches(&control_schema, &control_batches)?;
+                    let sql =
+                        control_sql.replace("substring(s,", "substring(literal_async_fold(s),");
+                    let query = plan_query(&session, &sql, &options)
+                        .await
+                        .map_err(|error| {
+                            format!("async substring resolve: {sql}, ANSI={ansi_mode}: {error:?}")
+                        })?;
+                    assert_eq!(query.column_names, control.column_names, "{sql}");
+                    assert_eq!(
+                        query.column_names,
+                        vec!["id".to_owned(), "r".to_owned()],
+                        "{sql}"
+                    );
+                    assert_eq!(
+                        string_binary::capture_schema(
+                            query.logical_plan.schema().fields(),
+                            Some(&query.column_names)
+                        )?,
+                        string_binary::capture_schema(
+                            control.logical_plan.schema().fields(),
+                            Some(&control.column_names)
+                        )?,
+                        "{sql}"
+                    );
+                    let result = query.logical_plan.schema().field(1);
+                    assert_eq!(result.data_type(), source_field.data_type(), "{sql}");
+                    assert!(
+                        result.is_nullable() && result.metadata().is_empty(),
+                        "{sql}"
+                    );
+                    // These receipts count inner producer calls. The native wrapper's
+                    // rejected sync entries are not exposed by this product helper.
+                    assert_eq!(counts.calls.load(Ordering::SeqCst), 0, "{sql}");
+                    counts.phase.store(1, Ordering::SeqCst);
+                    let physical = query
+                        .create_physical_plan(&session)
+                        .await
+                        .map_err(|error| {
+                            format!(
+                                "async substring physical: {sql}, analyzed={:?}: {error:?}",
+                                query.logical_plan.schema()
+                            )
+                        })?;
+                    let actual_schema = physical.schema();
+                    assert_eq!(actual_schema.field(1).name(), "r", "{sql}");
+                    assert_eq!(actual_schema, control_schema, "{sql}");
+                    assert_eq!(counts.calls.load(Ordering::SeqCst), 0, "{sql}");
+                    counts.phase.store(2, Ordering::SeqCst);
+                    let batches = collect(physical, session.task_ctx()).await.map_err(|error| {
+                        format!("async substring execute: {sql}, analyzed={:?}, physical={actual_schema:?}: {error:?}", query.logical_plan.schema())
+                    })?;
+                    for batch in &batches {
+                        assert_eq!(batch.schema(), actual_schema, "{sql}");
+                    }
+                    let actual = concat_batches(&actual_schema, &batches)?;
+                    assert_eq!(actual, expected, "{sql}");
+                    assert_eq!(actual.num_rows(), 12, "{sql}");
+                    let snapshot = counts.snapshot();
+                    let events = snapshot["events"]
+                        .as_array()
+                        .ok_or("missing async events")?;
+                    assert_eq!(counts.calls.load(Ordering::SeqCst), events.len(), "{sql}");
+                    assert_eq!(
+                        events.len(),
+                        if reached_async {
+                            12_usize.div_ceil(batch_size)
+                        } else {
+                            0
+                        },
+                        "{sql}"
+                    );
+                    let mut rows = 0;
+                    for event in events {
+                        assert_eq!(event["phase"], 2, "{sql}: {event}");
+                        let row_count = event["number_rows"]
+                            .as_u64()
+                            .ok_or("missing async row count")?;
+                        assert!(
+                            row_count > 0 && row_count <= batch_size as u64,
+                            "{sql}: {event}"
+                        );
+                        rows += row_count;
+                        assert_eq!(
+                            event["arg_fields"],
+                            format!("{:?}", [Arc::clone(&source_field)]),
+                            "{sql}"
+                        );
+                        assert_eq!(event["return_field"], format!("{source_field:?}"), "{sql}");
+                        assert!(
+                            event["arguments"]
+                                .as_str()
+                                .is_some_and(|value| !value.is_empty()),
+                            "{sql}"
+                        );
+                    }
+                    // Existing native simplification removes known-NULL calls before
+                    // async extraction. Non-NULL calls execute the source once per row.
+                    assert_eq!(rows, if reached_async { 12 } else { 0 }, "{sql}");
+                    if reached_async {
+                        assert_eq!(
+                            arrow::util::display::array_value_to_string(
+                                actual.column(1).as_ref(),
+                                0
+                            )?,
+                            "bc",
+                            "{sql}"
+                        );
+                    } else {
+                        assert_eq!(actual.column(1).null_count(), 12, "{sql}");
+                    }
+                }
             }
         }
     }
