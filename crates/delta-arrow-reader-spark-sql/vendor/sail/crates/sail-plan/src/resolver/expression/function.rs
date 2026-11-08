@@ -14,7 +14,7 @@ use crate::error::{PlanError, PlanResult};
 use crate::formatter::SparkPlanFormatter;
 use crate::function::common::{AggFunctionInput, FunctionContextInput, ScalarFunctionInput};
 use crate::function::float_keys::normalize_spark_float_key;
-use crate::function::scalar::datetime::unresolved_timestamp_diff_routine;
+use crate::function::scalar::datetime::unresolved_routine_error;
 use crate::function::{
     get_built_in_aggregate_function, get_built_in_function, is_higher_order_function,
 };
@@ -47,6 +47,16 @@ impl PlanResolver<'_> {
         let Ok(function_name) = <Vec<String>>::from(function_name).one() else {
             return Err(PlanError::unsupported("qualified function name"));
         };
+        let canonical_function_name = function_name.to_ascii_lowercase();
+        // Spark has no TIMESTAMP_DIFF or TIMESTAMP_ADD routine, and resolves the routine before
+        // its arguments, named or not, whatever the unit; a host registration may add one.
+        if matches!(
+            canonical_function_name.as_str(),
+            "timestamp_diff" | "timestamp_add"
+        ) && self.ctx.udf(&canonical_function_name).is_err()
+        {
+            return Err(unresolved_routine_error(&function_name, self.ctx));
+        }
         if !named_arguments.is_empty()
             || arguments
                 .iter()
@@ -55,7 +65,6 @@ impl PlanResolver<'_> {
             return Err(PlanError::unsupported("named function arguments"));
         }
 
-        let canonical_function_name = function_name.to_ascii_lowercase();
         // ARRAY_CONCAT is native-only; a host registration may replace it.
         if canonical_function_name == "array_concat"
             && self
@@ -70,15 +79,6 @@ impl PlanResolver<'_> {
             return Err(PlanError::analysis(format!(
                 "[UNRESOLVED_ROUTINE] Cannot resolve routine `{function_name}` on search path [`system`.`builtin`, `system`.`session`, `{catalog_name}`.`{schema_name}`]. SQLSTATE: 42883"
             )));
-        }
-        // Spark has no TIMESTAMP_DIFF or TIMESTAMP_ADD routine, and resolves the routine before
-        // its arguments, whatever the unit; a host registration may add one.
-        if matches!(
-            canonical_function_name.as_str(),
-            "timestamp_diff" | "timestamp_add"
-        ) && self.ctx.udf(&canonical_function_name).is_err()
-        {
-            return Err(unresolved_timestamp_diff_routine(&function_name, self.ctx));
         }
         // For functions that accept a date-part keyword as the first argument
         // (e.g., DATEDIFF(DAY, start, end)), convert the unresolved attribute
@@ -509,7 +509,7 @@ impl PlanResolver<'_> {
         if matches!(function_name, "datediff" | "date_diff") {
             Ok(arguments)
         } else {
-            Err(unresolved_timestamp_diff_routine(function_name, self.ctx))
+            Err(unresolved_routine_error(function_name, self.ctx))
         }
     }
 }

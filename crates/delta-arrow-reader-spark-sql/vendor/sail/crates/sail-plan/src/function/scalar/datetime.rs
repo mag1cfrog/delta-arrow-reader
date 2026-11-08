@@ -676,13 +676,10 @@ fn date_diff_days(end: Expr, start: Expr) -> Expr {
     })
 }
 
-/// Spark resolves TIMESTAMPDIFF and TIMEDIFF only in their keyword-unit grammar, and has no
-/// TIMESTAMP_DIFF or TIMESTAMP_ADD routine; any other call names a routine that does not exist
-/// on the active search path.
-pub(crate) fn unresolved_timestamp_diff_routine(
-    function_name: &str,
-    session: &SessionContext,
-) -> PlanError {
+/// Spark's `UNRESOLVED_ROUTINE` error for `function_name`, as written, on the session's search
+/// path. It names a TIMESTAMPDIFF or TIMEDIFF call outside their keyword-unit grammar, and a
+/// TIMESTAMP_DIFF or TIMESTAMP_ADD call, for which Spark has no routine.
+pub(crate) fn unresolved_routine_error(function_name: &str, session: &SessionContext) -> PlanError {
     let state = session.state();
     let catalog = &state.config().options().catalog;
     let catalog_name = catalog.default_catalog.replace('`', "``");
@@ -744,7 +741,7 @@ fn timestamp_diff_with_name(input: ScalarFunctionInput, function_name: &str) -> 
         function_context,
     } = input;
     let Ok([unit, start, end]) = <[Expr; 3]>::try_from(arguments) else {
-        return Err(unresolved_timestamp_diff_routine(
+        return Err(unresolved_routine_error(
             function_name,
             function_context.session_context,
         ));
