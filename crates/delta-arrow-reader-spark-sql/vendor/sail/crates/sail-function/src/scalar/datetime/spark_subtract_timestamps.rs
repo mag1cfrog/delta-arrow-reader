@@ -20,7 +20,7 @@ use crate::scalar::datetime::local_time::TimestampZone;
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkSubtractTimestamps {
     /// TRY_SUBTRACT: NULL where the subtraction overflows.
-    null_on_overflow: bool,
+    null_on_error: bool,
     signature: Signature,
 }
 
@@ -33,17 +33,17 @@ impl Default for SparkSubtractTimestamps {
 impl SparkSubtractTimestamps {
     /// The `-` operator.
     pub fn new() -> Self {
-        Self::with_overflow(false)
+        Self::with_null_on_error(false)
     }
 
     /// TRY_SUBTRACT.
-    pub fn returning_null_on_overflow() -> Self {
-        Self::with_overflow(true)
+    pub fn try_subtract() -> Self {
+        Self::with_null_on_error(true)
     }
 
-    fn with_overflow(null_on_overflow: bool) -> Self {
+    fn with_null_on_error(null_on_error: bool) -> Self {
         Self {
-            null_on_overflow,
+            null_on_error,
             signature: Signature::any(2, Volatility::Immutable),
         }
     }
@@ -75,7 +75,7 @@ impl Operand {
 
 impl ScalarUDFImpl for SparkSubtractTimestamps {
     fn name(&self) -> &str {
-        if self.null_on_overflow {
+        if self.null_on_error {
             "spark_try_subtract_timestamps"
         } else {
             "spark_subtract_timestamps"
@@ -104,13 +104,13 @@ impl ScalarUDFImpl for SparkSubtractTimestamps {
         Ok(Arc::new(Field::new(
             self.name(),
             self.return_type(&types)?,
-            self.null_on_overflow || args.arg_fields.iter().any(|field| field.is_nullable()),
+            self.null_on_error || args.arg_fields.iter().any(|field| field.is_nullable()),
         )))
     }
 
     // Spark folds a constant subtraction during optimization, raising its overflow error.
     fn propagates_constant_folding_errors(&self) -> bool {
-        !self.null_on_overflow
+        !self.null_on_error
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
@@ -151,7 +151,7 @@ impl ScalarUDFImpl for SparkSubtractTimestamps {
                             Ok(Some(difference))
                         }
                         // Java's exact arithmetic message.
-                        _ if self.null_on_overflow => Ok(None),
+                        _ if self.null_on_error => Ok(None),
                         _ => exec_err!("long overflow"),
                     }
                 }

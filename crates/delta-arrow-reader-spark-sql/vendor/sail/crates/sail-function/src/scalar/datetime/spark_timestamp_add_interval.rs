@@ -56,10 +56,10 @@ impl SparkTimestampAddInterval {
         Self::new(Direction::Add, true)
     }
 
-    /// TRY_SUBTRACT of an interval from a TIMESTAMP, which negates a calendar interval as
-    /// outside ANSI.
+    /// TRY_SUBTRACT of an interval from a TIMESTAMP. Spark evaluates the subtraction under
+    /// ANSI inside TRY, so even a calendar interval is negated exactly, and an overflow is NULL.
     pub fn try_subtract() -> Self {
-        Self::new(Direction::Subtract { ansi_mode: false }, true)
+        Self::new(Direction::Subtract { ansi_mode: true }, true)
     }
 
     fn new(direction: Direction, null_on_error: bool) -> Self {

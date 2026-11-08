@@ -41,8 +41,50 @@ fn try_references() -> TestResult<Vec<Value>> {
             |build| build.contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
         )
     );
-    assert_eq!(records.len() - 1, 176);
+    assert_eq!(records.len() - 1, 224);
     Ok(records)
+}
+
+/// #1133: Spark folds the negation of a constant interval while optimizing, even inside TRY
+/// when the other operand is a column, and fails for the smallest calendar interval. DAR
+/// negates per row inside the TRY and returns NULL.
+const CONSTANT_NEGATION_RECORD: &str = "column_ntz_try_subtract_smallest_calendar_days";
+
+/// DAR's current result for the #1133 record: a NULL TIMESTAMP_NTZ for every `inputs` row,
+/// with the analyzed field through every stage.
+fn constant_negation_expectation(case: &Value, metadata: &Value) -> TestResult<Value> {
+    let mut current = case.clone();
+    if case["expected"]["condition"] != "ARITHMETIC_OVERFLOW"
+        || case["spark_error_phase"] != "optimized"
+    {
+        return Err(format!("expected Spark's optimization overflow: {case}").into());
+    }
+    let input = metadata["inputs"]
+        .as_array()
+        .ok_or("missing inputs")?
+        .iter()
+        .find(|input| input["name"] == "inputs")
+        .ok_or("missing inputs table")?;
+    let mut rows = input["rows"]
+        .as_array()
+        .ok_or("missing rows")?
+        .iter()
+        .map(|row| json!([row[0], null]))
+        .collect::<Vec<_>>();
+    rows.sort_by_key(|row| row.to_string());
+    current["expected"] = json!({"status": "ok", "rows": rows});
+    current
+        .as_object_mut()
+        .ok_or("expected a record")?
+        .remove("spark_error_phase");
+    let analyzed = current["schema_stages"]["analyzed"].clone();
+    let result = &analyzed["fields"][1];
+    if result["type"] != "timestamp_ntz" || result["nullable"] != true {
+        return Err(format!("expected a nullable TIMESTAMP_NTZ: {case}").into());
+    }
+    current["schema_stages"]["optimized"] = analyzed.clone();
+    current["schema_stages"]["executed"] = analyzed;
+    Ok(current)
 }
 
 /// The Arrow type family DAR uses for a recorded Spark type.
@@ -306,19 +348,31 @@ fn register_inputs(session: &SessionContext, metadata: &Value, batch_size: usize
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn try_timestamp_arithmetic_returns_null_on_failure_like_spark() -> TestResult {
     let records = try_references()?;
+    assert_eq!(
+        records[1..]
+            .iter()
+            .filter(|case| case["id"] == CONSTANT_NEGATION_RECORD)
+            .count(),
+        4
+    );
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
         let session = session_context(batch_size);
         register_inputs(&session, &records[0], batch_size)?;
         for case in &records[1..] {
+            let expectation = if case["id"] == CONSTANT_NEGATION_RECORD {
+                constant_negation_expectation(case, &records[0])?
+            } else {
+                case.clone()
+            };
             let observation = observe(&session, case).await;
-            let differing = differing_parts(case, &observation)?;
+            let differing = differing_parts(&expectation, &observation)?;
             if !differing.is_empty() {
                 differences.push(json!({
                     "id": case["id"], "timezone": case["timezone"], "ansi": case["ansi"],
                     "batch": batch_size, "differing": differing,
-                    "expected": case["expected"],
-                    "schema_stages": case["schema_stages"],
+                    "expected": expectation["expected"],
+                    "schema_stages": expectation["schema_stages"],
                     "observed": observation,
                 }));
             }
