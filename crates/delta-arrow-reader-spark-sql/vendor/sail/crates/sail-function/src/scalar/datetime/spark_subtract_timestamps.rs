@@ -1,7 +1,8 @@
 // Local Spark TIMESTAMP subtraction. See the host crate's UPSTREAM.md.
 //! Spark's TIMESTAMP subtraction, as `SubtractTimestamps` gives it: the DAY TO SECOND
 //! interval between the two local date-times in their time zone, which differs from the
-//! elapsed time Arrow gives across a DST change or a change of local mean time.
+//! elapsed time Arrow gives across a DST change or a change of local mean time. Against a
+//! TIMESTAMP_NTZ, Spark first converts the TIMESTAMP to its local date-time.
 
 use std::sync::Arc;
 
@@ -33,14 +34,36 @@ impl SparkSubtractTimestamps {
         }
     }
 
-    /// Whether the kernel subtracts TIMESTAMP values of these types: both with a time zone.
+    /// Whether the kernel subtracts values of these types: TIMESTAMP values, one of which may
+    /// be a TIMESTAMP_NTZ.
     pub fn accepts(end: &DataType, start: &DataType) -> bool {
-        [end, start].iter().all(|data_type| {
+        let timestamp = |data_type: &DataType| {
+            matches!(data_type, DataType::Timestamp(TimeUnit::Microsecond, _))
+        };
+        let zoned = |data_type: &DataType| {
             matches!(
                 data_type,
                 DataType::Timestamp(TimeUnit::Microsecond, Some(_))
             )
-        })
+        };
+        timestamp(end) && timestamp(start) && (zoned(end) || zoned(start))
+    }
+}
+
+/// How an operand reads its local date-time.
+enum Operand {
+    /// A TIMESTAMP, in the zone its type names.
+    Zoned(TimestampZone),
+    /// A TIMESTAMP_NTZ, which is its local date-time.
+    Local,
+}
+
+impl Operand {
+    fn local(&self, micros: i64) -> i128 {
+        match self {
+            Self::Zoned(zone) => i128::from(micros) + zone.offset_micros(micros),
+            Self::Local => i128::from(micros),
+        }
     }
 }
 
@@ -84,16 +107,21 @@ impl ScalarUDFImpl for SparkSubtractTimestamps {
         let [end, start] = args.args.as_slice() else {
             return internal_err!("{} requires two arguments", self.name());
         };
-        let zone = |value: &ColumnarValue| match value.data_type() {
+        let operand = |value: &ColumnarValue| match value.data_type() {
             DataType::Timestamp(TimeUnit::Microsecond, Some(zone)) => {
                 match TimestampZone::parse(&zone) {
-                    Some(parsed) => Ok(parsed),
+                    Some(parsed) => Ok(Operand::Zoned(parsed)),
                     None => exec_err!("invalid time zone {zone}"),
                 }
             }
+            DataType::Timestamp(TimeUnit::Microsecond, None) => Ok(Operand::Local),
             other => internal_err!("{} requires a TIMESTAMP, got {other}", self.name()),
         };
-        let (end_zone, start_zone) = (zone(end)?, zone(start)?);
+        let (end_operand, start_operand) = (operand(end)?, operand(start)?);
+        // Spark converts the TIMESTAMP against a TIMESTAMP_NTZ to a TIMESTAMP_NTZ, which fails
+        // beyond the BIGINT range.
+        let local_bounded =
+            matches!(end_operand, Operand::Local) || matches!(start_operand, Operand::Local);
         let scalar = matches!(
             (end, start),
             (ColumnarValue::Scalar(_), ColumnarValue::Scalar(_))
@@ -106,13 +134,14 @@ impl ScalarUDFImpl for SparkSubtractTimestamps {
             .zip(starts.as_primitive::<TimestampMicrosecondType>().iter())
             .map(|pair| match pair {
                 (Some(end), Some(start)) => {
-                    let local = |micros: i64, zone: &TimestampZone| {
-                        i128::from(micros) + zone.offset_micros(micros)
-                    };
-                    match i64::try_from(local(end, &end_zone) - local(start, &start_zone)) {
-                        Ok(difference) => Ok(Some(difference)),
+                    let (end, start) = (end_operand.local(end), start_operand.local(start));
+                    let in_range = |local: i128| i64::try_from(local).is_ok();
+                    match i64::try_from(end - start) {
+                        Ok(difference) if !local_bounded || (in_range(end) && in_range(start)) => {
+                            Ok(Some(difference))
+                        }
                         // Java's exact arithmetic message.
-                        Err(_) => exec_err!("long overflow"),
+                        _ => exec_err!("long overflow"),
                     }
                 }
                 _ => Ok(None),

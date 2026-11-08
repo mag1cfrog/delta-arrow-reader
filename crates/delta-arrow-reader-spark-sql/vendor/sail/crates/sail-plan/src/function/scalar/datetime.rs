@@ -49,6 +49,7 @@ use sail_function::scalar::spark_cast_numeric_to_integer::SparkCastNumericToInte
 use sail_function::scalar::spark_cast_string_to_integer::{
     SparkCastStringToInteger, StringIntegerCastMode,
 };
+use sail_function::scalar::spark_decimal_cast::{DecimalCastMode, SparkDecimalCast};
 use sail_sql_analyzer::literal::interval::IntervalValue;
 use sail_sql_analyzer::parser::parse_interval;
 
@@ -344,7 +345,25 @@ fn timestampadd_with_name(input: ScalarFunctionInput, function_name: &str) -> Pl
             let cast = SparkCastStringToInteger::try_new(DataType::Int64, mode)?;
             (ScalarUDF::from(cast).call(vec![quantity]), true)
         }
-        _ => (cast(quantity, DataType::Int64), true),
+        DataType::Float32 | DataType::Float64 => {
+            let cast =
+                SparkCastNumericToInteger::try_new(DataType::Int64, config.ansi_mode, false)?;
+            (ScalarUDF::from(cast).call(vec![quantity]), true)
+        }
+        DataType::Decimal128(..) | DataType::Decimal256(..) => {
+            let mode = if config.ansi_mode {
+                DecimalCastMode::Ansi
+            } else {
+                DecimalCastMode::Legacy
+            };
+            let cast = SparkDecimalCast::to_integer(DataType::Int64, mode)?;
+            (ScalarUDF::from(cast).call(vec![quantity]), true)
+        }
+        other => {
+            return Err(PlanError::invalid(format!(
+                "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] {function_name} requires a BIGINT quantity, got {other}"
+            )));
+        }
     };
     let (timestamp, cast_timestamp_nullable) = match timestamp.get_type(schema)? {
         DataType::Timestamp(TimeUnit::Microsecond, _) => (timestamp, false),

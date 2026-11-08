@@ -254,6 +254,9 @@ mod tests {
     #[test]
     fn counts_beyond_int_and_results_beyond_bigint_overflow() {
         assert_eq!(add("DAY", 2_147_483_648, 0, "UTC"), None);
+        // Wrapped to INT, these counts would be 1 (Spark 4.2.0: DATETIME_OVERFLOW).
+        assert_eq!(add("DAY", 4_294_967_297, 0, "UTC"), None);
+        assert_eq!(add("MONTH", 4_294_967_297, 0, "UTC"), None);
         assert_eq!(add("YEAR", 178_956_971, 0, "UTC"), None);
         assert_eq!(add("SECOND", i64::MAX, 0, "UTC"), None);
         assert_eq!(add("MICROSECOND", 1, i64::MAX, "UTC"), None);

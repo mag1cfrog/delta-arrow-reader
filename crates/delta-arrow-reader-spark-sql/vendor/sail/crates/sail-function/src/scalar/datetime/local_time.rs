@@ -84,17 +84,20 @@ impl TimestampZone {
     }
 
     /// Java's `ZonedDateTime.ofLocal(local, zone, preferred)`: the instant of the local
-    /// date-time `local` and its offset, both in microseconds. A repeated local date-time
+    /// date-time `local`, in microseconds, and its offset. A repeated local date-time
     /// keeps the `preferred` offset when it is one of its two, and otherwise takes the
     /// earlier instant; a skipped one moves forward by the length of the skipped interval.
     /// Local date-times beyond the date library's years take the offsets of the same local
     /// date-time in a nearer 400-year cycle. `None` only where the date library has no
     /// answer.
-    pub(crate) fn resolve_local(&self, local: i128, preferred: i128) -> Option<(i128, i128)> {
+    pub(crate) fn resolve_local(&self, local: i128, preferred: i128) -> Option<ZonedInstant> {
         let region = match &self.kind {
             ZoneKind::Fixed(offset) => {
                 let offset = i128::from(offset.local_minus_utc()) * 1_000_000;
-                return Some((local - offset, offset));
+                return Some(ZonedInstant {
+                    instant: local - offset,
+                    offset,
+                });
             }
             ZoneKind::Region(region) => region,
         };
@@ -123,8 +126,19 @@ impl TimestampZone {
                 (seconds(before.fix()), seconds(gap.end?.offset().fix()))
             }
         };
-        Some((local - applied, offset))
+        Some(ZonedInstant {
+            instant: local - applied,
+            offset,
+        })
     }
+}
+
+/// An instant and its offset in a zone, both in microseconds, beyond the BIGINT range where
+/// arithmetic leads there.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ZonedInstant {
+    pub(crate) instant: i128,
+    pub(crate) offset: i128,
 }
 
 /// Java's `LocalDateTime.plusMonths`: the local date-time `months` later, with the day of the
@@ -150,17 +164,19 @@ pub(crate) fn add_interval(
     added_micros: i64,
     zone: &TimestampZone,
 ) -> Option<i64> {
-    let mut instant = i128::from(micros);
-    let mut offset = zone.offset_micros(micros);
+    let mut zoned = ZonedInstant {
+        instant: i128::from(micros),
+        offset: zone.offset_micros(micros),
+    };
     if months != 0 {
-        let local = add_local_months(instant + offset, months)?;
-        (instant, offset) = zone.resolve_local(local, offset)?;
+        let local = add_local_months(zoned.instant + zoned.offset, months)?;
+        zoned = zone.resolve_local(local, zoned.offset)?;
     }
     if days != 0 {
-        let local = instant + offset + i128::from(days) * i128::from(MICROS_PER_DAY);
-        instant = zone.resolve_local(local, offset)?.0;
+        let local = zoned.instant + zoned.offset + i128::from(days) * i128::from(MICROS_PER_DAY);
+        zoned = zone.resolve_local(local, zoned.offset)?;
     }
-    i64::try_from(instant + i128::from(added_micros)).ok()
+    i64::try_from(zoned.instant + i128::from(added_micros)).ok()
 }
 
 /// The multiple of 400 years that moves `local` within the date library's years.
@@ -267,9 +283,13 @@ mod tests {
         let far = 2 * LOCAL_LIMIT;
         let near = far - cycle_shift(far);
         assert!(near <= LOCAL_LIMIT && near > LOCAL_LIMIT - i128::from(MICROS_PER_400_YEARS));
-        let (instant, offset) = la.resolve_local(far, 0).unwrap_or_else(|| unreachable!());
-        assert_eq!(offset, -8 * i128::from(HOUR));
-        assert_eq!(instant, far + 8 * i128::from(HOUR));
+        assert_eq!(
+            la.resolve_local(far, 0),
+            Some(ZonedInstant {
+                instant: far + 8 * i128::from(HOUR),
+                offset: -8 * i128::from(HOUR),
+            })
+        );
         assert_eq!(
             add_local_months(far, 12 * 400),
             Some(far + i128::from(MICROS_PER_400_YEARS))

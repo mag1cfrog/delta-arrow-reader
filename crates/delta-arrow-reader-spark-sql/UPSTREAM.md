@@ -494,11 +494,14 @@ the TIMESTAMP's zone, like Java's `ZonedDateTime` in Spark's `TimestampAddInterv
 move the local date-time: a repeated local time keeps the offset it had, and a skipped one
 moves forward by the skipped interval. The rest of a DAY TO SECOND interval, and
 TIMESTAMPADD units up to HOUR, move the instant. Arrow added elapsed time, and failed where
-months reached a skipped or repeated local time. Subtraction gives the difference of the
-two local date-times, reading a DATE or TIMESTAMP_NTZ operand in the session zone first,
-where DataFusion returned a nanosecond duration. TIMESTAMPADD adds a BIGINT quantity
-exactly, keeps a TIMESTAMP_NTZ in UTC, reads a DATE or STRING in the session zone, and fails
-with `DATETIME_OVERFLOW` where Spark does. Other results beyond BIGINT fail with Java's
+months reached a skipped or repeated local time. Negating the smallest interval for a
+subtraction fails with Spark's errors. Subtraction gives the difference of the two local
+date-times. A DATE operand is read in the session zone first, where DataFusion returned a
+nanosecond duration; against a TIMESTAMP_NTZ, the TIMESTAMP's local date-time is used, as
+Spark converts it to TIMESTAMP_NTZ. TIMESTAMPADD adds a BIGINT quantity exactly, converts a
+STRING, DOUBLE or DECIMAL quantity with Spark's casts and rejects other types, keeps a
+TIMESTAMP_NTZ in UTC, reads a DATE or STRING in the session zone, and fails with
+`DATETIME_OVERFLOW` where Spark does. Other results beyond BIGINT fail with Java's
 `long overflow`. STRING plus a DAY TO SECOND interval and SEQUENCE end points use the same
 arithmetic. Local date-times beyond Chrono's years take offsets from a nearer 400-year cycle
 (without DST after 2099, #1052). TIMESTAMP_NTZ intervals, DATE arithmetic (#952) and native

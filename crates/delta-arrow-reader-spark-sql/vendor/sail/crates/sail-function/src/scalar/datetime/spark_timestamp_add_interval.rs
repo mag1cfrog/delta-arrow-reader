@@ -20,17 +20,37 @@ use datafusion_expr::{
 
 use crate::scalar::datetime::local_time::{MICROS_PER_DAY, TimestampZone, add_interval};
 
+/// Whether the interval is added, or negated first as Spark subtracts it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum Direction {
+    Add,
+    /// Spark negates a calendar interval exactly only under ANSI; DAY TO SECOND and YEAR TO
+    /// MONTH intervals always.
+    Subtract {
+        ansi_mode: bool,
+    },
+}
+
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkTimestampAddInterval {
-    /// Subtract the interval, which Spark negates before adding it.
-    subtract: bool,
+    direction: Direction,
     signature: Signature,
 }
 
 impl SparkTimestampAddInterval {
-    pub fn new(subtract: bool) -> Self {
+    /// TIMESTAMP plus an interval.
+    pub fn add() -> Self {
+        Self::new(Direction::Add)
+    }
+
+    /// TIMESTAMP minus an interval.
+    pub fn subtract(ansi_mode: bool) -> Self {
+        Self::new(Direction::Subtract { ansi_mode })
+    }
+
+    fn new(direction: Direction) -> Self {
         Self {
-            subtract,
+            direction,
             signature: Signature::any(2, Volatility::Immutable),
         }
     }
@@ -50,80 +70,97 @@ impl SparkTimestampAddInterval {
     }
 }
 
+/// Spark's error for negating the smallest DAY TO SECOND or YEAR TO MONTH interval.
+const INTERVAL_OVERFLOW: &str = "[INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION] Integer \
+    overflow while operating with intervals. Try devising appropriate values for the interval \
+    parameters. SQLSTATE: 22015";
+/// Spark's ANSI error for negating a calendar interval with the smallest part.
+const CALENDAR_OVERFLOW: &str = "[ARITHMETIC_OVERFLOW] overflow. If necessary set \
+    \"spark.sql.ansi.enabled\" to \"false\" to bypass this error. SQLSTATE: 22003";
+
 /// An interval as Spark splits it: months and days of local date-time, then microseconds.
 struct IntervalParts {
-    months: i64,
+    months: i32,
     days: i64,
     micros: i64,
 }
 
 impl IntervalParts {
-    /// The parts of row `row` of `intervals`, negated for a subtraction.
-    fn at(intervals: &ArrayRef, row: usize, subtract: bool) -> Result<Self> {
-        let parts = match intervals.data_type() {
+    /// The parts of row `row` of `intervals`, negated as Spark negates them for a subtraction.
+    fn at(intervals: &ArrayRef, row: usize, direction: Direction) -> Result<Self> {
+        let subtract = direction != Direction::Add;
+        match intervals.data_type() {
             // Spark's `timestampAddDayTime`: whole days, then the remainder.
             DataType::Duration(TimeUnit::Microsecond) => {
                 let micros = intervals
                     .as_primitive::<DurationMicrosecondType>()
                     .value(row);
-                let micros = if subtract {
-                    match micros.checked_neg() {
-                        Some(micros) => micros,
-                        None => return exec_err!("long overflow"),
-                    }
-                } else {
-                    micros
+                let micros = match (subtract, micros.checked_neg()) {
+                    (false, _) => micros,
+                    (true, Some(negated)) => negated,
+                    (true, None) => return exec_err!("{INTERVAL_OVERFLOW}"),
                 };
                 let days = micros / MICROS_PER_DAY;
-                return Ok(Self {
+                Ok(Self {
                     months: 0,
                     days,
                     micros: micros - days * MICROS_PER_DAY,
-                });
+                })
             }
-            DataType::Interval(IntervalUnit::YearMonth) => Self {
-                months: i64::from(intervals.as_primitive::<IntervalYearMonthType>().value(row)),
-                days: 0,
-                micros: 0,
-            },
+            DataType::Interval(IntervalUnit::YearMonth) => {
+                let months = intervals.as_primitive::<IntervalYearMonthType>().value(row);
+                let months = match (subtract, months.checked_neg()) {
+                    (false, _) => months,
+                    (true, Some(negated)) => negated,
+                    (true, None) => return exec_err!("{INTERVAL_OVERFLOW}"),
+                };
+                Ok(Self {
+                    months,
+                    days: 0,
+                    micros: 0,
+                })
+            }
             // Spark's calendar intervals hold microseconds.
             DataType::Interval(IntervalUnit::MonthDayNano) => {
                 let interval = intervals
                     .as_primitive::<IntervalMonthDayNanoType>()
                     .value(row);
-                Self {
-                    months: i64::from(interval.months),
-                    days: i64::from(interval.days),
-                    micros: interval.nanoseconds / 1_000,
-                }
+                let (months, days, micros) =
+                    (interval.months, interval.days, interval.nanoseconds / 1_000);
+                let (months, days, micros) = match direction {
+                    Direction::Add => (months, days, micros),
+                    Direction::Subtract { ansi_mode: false } => (
+                        months.wrapping_neg(),
+                        days.wrapping_neg(),
+                        micros.wrapping_neg(),
+                    ),
+                    Direction::Subtract { ansi_mode: true } => {
+                        match (
+                            months.checked_neg(),
+                            days.checked_neg(),
+                            micros.checked_neg(),
+                        ) {
+                            (Some(months), Some(days), Some(micros)) => (months, days, micros),
+                            _ => return exec_err!("{CALENDAR_OVERFLOW}"),
+                        }
+                    }
+                };
+                Ok(Self {
+                    months,
+                    days: i64::from(days),
+                    micros,
+                })
             }
-            other => return internal_err!("expected an interval, got {other}"),
-        };
-        if !subtract {
-            return Ok(parts);
+            other => internal_err!("expected an interval, got {other}"),
         }
-        // Spark negates each part exactly, months and days as INT.
-        let negate_int = |value: i64| match i32::try_from(value).ok().and_then(i32::checked_neg) {
-            Some(value) => Ok(i64::from(value)),
-            None => exec_err!("integer overflow"),
-        };
-        Ok(Self {
-            months: negate_int(parts.months)?,
-            days: negate_int(parts.days)?,
-            micros: match parts.micros.checked_neg() {
-                Some(micros) => micros,
-                None => return exec_err!("long overflow"),
-            },
-        })
     }
 }
 
 impl ScalarUDFImpl for SparkTimestampAddInterval {
     fn name(&self) -> &str {
-        if self.subtract {
-            "spark_timestamp_subtract_interval"
-        } else {
-            "spark_timestamp_add_interval"
+        match self.direction {
+            Direction::Add => "spark_timestamp_add_interval",
+            Direction::Subtract { .. } => "spark_timestamp_subtract_interval",
         }
     }
 
@@ -178,8 +215,9 @@ impl ScalarUDFImpl for SparkTimestampAddInterval {
             .enumerate()
             .map(|(row, micros)| match micros {
                 Some(micros) if intervals.is_valid(row) => {
-                    let parts = IntervalParts::at(&intervals, row, self.subtract)?;
-                    match add_interval(micros, parts.months, parts.days, parts.micros, &parsed) {
+                    let parts = IntervalParts::at(&intervals, row, self.direction)?;
+                    let months = i64::from(parts.months);
+                    match add_interval(micros, months, parts.days, parts.micros, &parsed) {
                         Some(result) => Ok(Some(result)),
                         // Java's exact arithmetic message.
                         None => exec_err!("long overflow"),

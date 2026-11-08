@@ -126,8 +126,7 @@ fn add_day_time_interval_to_string(
         false,
     )?)
     .call(vec![string]);
-    let shifted =
-        ScalarUDF::from(SparkTimestampAddInterval::new(false)).call(vec![timestamp, interval]);
+    let shifted = ScalarUDF::from(SparkTimestampAddInterval::add()).call(vec![timestamp, interval]);
     match string_type {
         DataType::Utf8 => Ok(ScalarUDF::from(SparkToUtf8::new()).call(vec![shifted])),
         DataType::LargeUtf8 => Ok(ScalarUDF::from(SparkToLargeUtf8::new()).call(vec![shifted])),
@@ -285,12 +284,12 @@ fn spark_plus(input: ScalarFunctionInput) -> PlanResult<Expr> {
             (Ok(timestamp), Ok(interval))
                 if SparkTimestampAddInterval::accepts(&timestamp, &interval) =>
             {
-                ScalarUDF::from(SparkTimestampAddInterval::new(false)).call(vec![left, right])
+                ScalarUDF::from(SparkTimestampAddInterval::add()).call(vec![left, right])
             }
             (Ok(interval), Ok(timestamp))
                 if SparkTimestampAddInterval::accepts(&timestamp, &interval) =>
             {
-                ScalarUDF::from(SparkTimestampAddInterval::new(false)).call(vec![right, left])
+                ScalarUDF::from(SparkTimestampAddInterval::add()).call(vec![right, left])
             }
             (Ok(DataType::Timestamp(..)), Ok(DataType::Null)) => {
                 left + cast(right, DataType::Duration(TimeUnit::Microsecond))
@@ -355,9 +354,10 @@ fn spark_plus(input: ScalarFunctionInput) -> PlanResult<Expr> {
     }
 }
 
-/// Whether Spark subtracts these types as TIMESTAMP values in the session time zone: a
-/// TIMESTAMP with a time zone on one side, and one, a DATE or a TIMESTAMP_NTZ on the other,
-/// which Spark reads as a TIMESTAMP in the session time zone first.
+/// Whether Spark subtracts these types with `SubtractTimestamps` in a time zone: a TIMESTAMP
+/// with a time zone on one side, and one, a DATE or a TIMESTAMP_NTZ on the other. Spark reads
+/// the DATE as a TIMESTAMP in the session time zone, and against the TIMESTAMP_NTZ subtracts
+/// the TIMESTAMP's local date-time.
 fn is_ltz_subtraction(end: &DataType, start: &DataType) -> bool {
     let ltz = |data_type: &DataType| {
         matches!(
@@ -415,18 +415,22 @@ fn spark_minus(input: ScalarFunctionInput) -> PlanResult<Expr> {
             (Ok(timestamp), Ok(interval))
                 if SparkTimestampAddInterval::accepts(&timestamp, &interval) =>
             {
-                ScalarUDF::from(SparkTimestampAddInterval::new(true)).call(vec![left, right])
+                ScalarUDF::from(SparkTimestampAddInterval::subtract(
+                    function_context.plan_config.ansi_mode,
+                ))
+                .call(vec![left, right])
             }
             (Ok(end_type), Ok(start_type)) if is_ltz_subtraction(&end_type, &start_type) => {
                 let timezone = &function_context.plan_config.session_timezone;
-                let read_in_session_zone = |argument, data_type: &DataType| match data_type {
-                    DataType::Timestamp(TimeUnit::Microsecond, Some(_)) => argument,
-                    local => cast_local_timestamp_expr_to_ltz(argument, local, timezone),
+                let operand = |argument, data_type: &DataType| match data_type {
+                    DataType::Date32 | DataType::Date64 => {
+                        cast_local_timestamp_expr_to_ltz(argument, data_type, timezone)
+                    }
+                    DataType::Timestamp(TimeUnit::Microsecond, _) => argument,
+                    _ => cast(argument, DataType::Timestamp(TimeUnit::Microsecond, None)),
                 };
-                ScalarUDF::from(SparkSubtractTimestamps::new()).call(vec![
-                    read_in_session_zone(left, &end_type),
-                    read_in_session_zone(right, &start_type),
-                ])
+                ScalarUDF::from(SparkSubtractTimestamps::new())
+                    .call(vec![operand(left, &end_type), operand(right, &start_type)])
             }
             (Ok(DataType::Date32), Ok(DataType::Duration(TimeUnit::Microsecond))) => {
                 left - cast(right, DataType::Interval(IntervalUnit::MonthDayNano))
