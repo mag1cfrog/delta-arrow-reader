@@ -22,9 +22,10 @@ use crate::scalar::math::utils::try_op::{
 };
 
 /// The operand pairs `SparkTrySubtract` accepts, for its errors.
-const ACCEPTED_TYPES: &str = "Int32 or Int64 numbers, a Date32 with Int32 days or an \
-    interval, two Interval(YearMonth), Interval(MonthDayNano) or Duration(Microsecond) values, \
-    or a Timestamp(Microsecond) and a Duration(Microsecond)";
+const ACCEPTED_TYPES: &str = "Int32 or Int64 numbers; a Date32 minus Int32 days, an \
+    Interval(YearMonth) or an Interval(MonthDayNano); two Interval(YearMonth), \
+    Interval(MonthDayNano) or Duration(Microsecond) values; or a Timestamp(Microsecond) minus a \
+    Duration(Microsecond)";
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkTrySubtract {

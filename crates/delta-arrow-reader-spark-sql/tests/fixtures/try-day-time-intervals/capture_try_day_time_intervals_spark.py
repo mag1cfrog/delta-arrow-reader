@@ -93,7 +93,7 @@ QUALIFIERS = [
     ("second", "INTERVAL '4.000005' SECOND"),
 ]
 
-# The largest value of a qualifier beside a small one that overflows it.
+# The largest or smallest value of a qualifier beside a small one that overflows it.
 QUALIFIER_OVERFLOWS = [
     ("largest_days_plus_hours", "try_add(INTERVAL '106751991' DAY, INTERVAL '5' HOUR)"),
     ("largest_hours_plus_minute", "try_add(INTERVAL '2562047788' HOUR, INTERVAL '1' MINUTE)"),

@@ -20,9 +20,10 @@ use crate::scalar::math::utils::try_op::{
 };
 
 /// The operand pairs `SparkTryAdd` accepts, for its errors.
-const ACCEPTED_TYPES: &str = "Int32 or Int64 numbers, a Date32 with Int32 days or an \
-    interval, two Interval(YearMonth), Interval(MonthDayNano) or Duration(Microsecond) values, \
-    or a Timestamp(Microsecond) with a Duration(Microsecond)";
+const ACCEPTED_TYPES: &str = "two Int32 or two Int64 numbers; a Date32 with Int32 days, an \
+    Interval(YearMonth) or an Interval(MonthDayNano); two Interval(YearMonth), \
+    Interval(MonthDayNano) or Duration(Microsecond) values; or a Timestamp(Microsecond) with a \
+    Duration(Microsecond)";
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkTryAdd {

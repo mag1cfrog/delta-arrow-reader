@@ -447,7 +447,8 @@ fn two_arguments(arguments: Vec<Expr>, function: &str) -> PlanResult<(Expr, Expr
 }
 
 /// Spark's TRY_ADD: a TIMESTAMP or TIMESTAMP_NTZ and an interval or an untyped NULL, in either
-/// order, add like `+` and give NULL where it fails. Other operands keep `SparkTryAdd`.
+/// order, add like `+` and give NULL where it fails; two untyped NULLs are a NULL DOUBLE. Other
+/// operands keep `SparkTryAdd`.
 fn try_add(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let ScalarFunctionInput {
         arguments,
@@ -486,7 +487,7 @@ fn try_add(input: ScalarFunctionInput) -> PlanResult<Expr> {
 /// Spark's TRY_SUBTRACT: an interval from a TIMESTAMP or TIMESTAMP_NTZ; a TIMESTAMP and a
 /// TIMESTAMP, TIMESTAMP_NTZ, DATE or untyped NULL; two TIMESTAMP_NTZ values; and a DATE and a
 /// TIMESTAMP_NTZ subtract like `-` and give NULL where it fails. Other operands, including two
-/// DATE values, keep `SparkTrySubtract`.
+/// DATE values, keep `SparkTrySubtract`; two untyped NULLs are a NULL DOUBLE.
 fn try_subtract(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let ScalarFunctionInput {
         arguments,
