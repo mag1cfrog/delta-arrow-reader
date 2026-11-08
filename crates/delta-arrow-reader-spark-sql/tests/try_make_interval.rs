@@ -61,8 +61,8 @@ enum RetainedDifference {
     /// folds a failing constant argument cast outside TRY and fails while optimizing. DAR
     /// returns NULL, as TRY does for the same casts over columns.
     ConstantOutsideTry,
-    /// #749: Spark names an unaliased call with all seven cast arguments; DAR keeps the
-    /// arguments as written.
+    /// #749: Spark names an unaliased call with its arguments and the filled-in defaults; DAR
+    /// keeps the arguments as written.
     GeneratedName,
 }
 

@@ -610,9 +610,9 @@ non-numeric operand, which re-plans it like MAKE_INTERVAL; there Spark still fai
 optimizing a constant argument cast beside a non-constant operand, outside TRY, where DAR
 returns NULL (#1133). Results beyond Arrow's nanoseconds fail while collecting rows (#1145),
 seconds beyond DECIMAL(18, 6) and malformed STRING seconds fail without Spark's conditions
-(#1124), and unaliased names keep the arguments as written where Spark lists all seven (#749).
-The [TRY_MAKE_INTERVAL references](tests/fixtures/try-make-interval/README.md) record the
-checks.
+(#1124), and unaliased names keep the arguments as written where Spark adds the filled-in
+defaults (#749). The [TRY_MAKE_INTERVAL references](tests/fixtures/try-make-interval/README.md)
+record the checks.
 
 WEEKDAY numbers Monday 0 through Sunday 6, where it returned -1 for Sunday. WEEKDAY and
 DAYOFWEEK cast a TIMESTAMP_NTZ or NULL argument to DATE like Spark, and convert a STRING with

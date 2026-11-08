@@ -249,7 +249,8 @@ fn uncast_make_interval_argument(argument: Expr) -> Expr {
 /// operand inside `TryEval`, which turns any failure into NULL. Under ANSI this re-plans each
 /// MAKE_INTERVAL or TRY_MAKE_INTERVAL in an operand, and the casts of its arguments, to give
 /// NULL instead; outside ANSI neither fails. Spark still fails while optimizing a constant
-/// MAKE_INTERVAL beside a non-constant operand, outside TRY (#1133).
+/// MAKE_INTERVAL, or a constant argument cast, beside a non-constant operand, outside TRY
+/// (#1133).
 pub(crate) fn replan_make_interval_for_try(
     operand: Expr,
     schema: &DFSchemaRef,

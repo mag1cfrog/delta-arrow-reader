@@ -455,8 +455,8 @@ fn two_arguments(arguments: Vec<Expr>, function: &str) -> PlanResult<(Expr, Expr
 
 /// Spark evaluates TRY arithmetic over numbers in its TRY mode, which catches only the
 /// arithmetic's own failures, and over other operands inside `TryEval`, which turns any failure
-/// in them into NULL. For the latter, re-plan each failing MAKE_INTERVAL in the operands to
-/// give NULL.
+/// in them into NULL. For the latter, under ANSI, re-plan each MAKE_INTERVAL and
+/// TRY_MAKE_INTERVAL in the operands to give NULL.
 fn try_eval_operands(
     operands: Vec<Expr>,
     schema: &DFSchemaRef,

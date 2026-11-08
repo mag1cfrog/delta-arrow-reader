@@ -20,7 +20,7 @@ byte-identical.
   DOUBLE, STRING, malformed STRING and BOOLEAN parts, seconds beyond DECIMAL(18, 6), hours
   beyond Arrow's nanoseconds, TIMESTAMP minus an overflowing and the smallest interval, and
   TRY_ADD of a malformed argument, malformed STRING seconds, and unaliased calls whose
-  generated names Spark builds from all seven cast arguments.
+  generated names Spark builds from the arguments and the filled-in defaults.
 
 Spark's TRY_MAKE_INTERVAL is MAKE_INTERVAL with `failOnError = false` and one to seven
 arguments: an overflow gives NULL and the result is nullable in both ANSI modes, but the
@@ -41,8 +41,8 @@ retained, each at DAR's exact current result:
 - #1133: under ANSI, TRY_ADD or TRY_SUBTRACT of a column beside a constant malformed or
   overflowing argument returns NULL, where Spark folds the cast outside TRY and fails while
   optimizing (8 records);
-- #749: unaliased calls are named with the arguments as written, where Spark lists all seven
-  cast arguments (8 records, each at all three stages).
+- #749: unaliased calls are named with the arguments as written, where Spark adds the filled-in
+  defaults (8 records, each at all three stages).
 
 Recapture from the crate root:
 
