@@ -1764,7 +1764,8 @@ async fn higher_order_case_fields_do_not_evaluate_opaque_predicates() -> TestRes
                         DataType::Float64,
                         vec![vec![ScalarValue::Float64(None)]],
                         1,
-                        0,
+                        // Field inference may invoke the permitted scalar source before its rewrite.
+                        if error_if_invoked { 6 } else { 1 },
                     ),
                     spark,
                     ansi,
