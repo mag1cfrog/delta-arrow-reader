@@ -159,8 +159,7 @@ mod tests {
         let input = ColumnarValue::Array(Arc::new(Int32Array::from(vec![Some(0), Some(-2)])));
         let lenient = ColumnarValue::Array(Arc::new(Int32Array::from(vec![None, None])));
         let error = strict_cast_rows_until_error(&input, lenient, 2, strict)
-            .err()
-            .expect("an internal error");
+            .expect_err("an internal error");
         assert!(
             error.to_string().contains(
                 "the lenient cast gave NULL in row 0, where the strict cast gives a value"
