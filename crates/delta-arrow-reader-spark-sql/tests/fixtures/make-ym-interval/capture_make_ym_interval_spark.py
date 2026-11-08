@@ -5,10 +5,11 @@ stages, with the innermost Java exception of a failure, for MAKE_YM_INTERVAL wit
 nullable-column, NOT NULL-column, empty-input and NULL arguments, none, one and two arguments,
 signs, the YEAR TO MONTH limits and one month past them, INT, TINYINT, SMALLINT, BIGINT,
 DECIMAL, DOUBLE, BOOLEAN, STRING, malformed and empty STRING arguments, a NULL beside an
-overflowing argument or a failing argument cast in either order, unaliased generated names, and for comparisons, negation and IS NULL
-over its result. Every query runs in both ANSI modes in UTC and America/Los_Angeles. Run from
-the crate root in the reference environment described in README.md; the output path must not
-exist.
+overflowing argument or a failing argument cast in either order, STRING arguments beside a NULL
+literal, failing STRING arguments in row order, INT() of a STRING, unaliased generated names,
+and for comparisons, negation, IS NULL and TRY_ADD over its result. Every query runs in both
+ANSI modes in UTC and America/Los_Angeles. Run from the crate root in the reference environment
+described in README.md; the output path must not exist.
 """
 import argparse
 import hashlib
@@ -99,6 +100,15 @@ COLUMNS = [
     ("required_bigint_beyond_int", "make_ym_interval(0, b)", "required", "k = 3"),
     ("required_string", "make_ym_interval(0, t)", "required", "k <> 3"),
     ("required_string_malformed", "make_ym_interval(0, t)", "required", "k = 3"),
+    ("required_string_is_null", "make_ym_interval(t) IS NULL", "required", "k IN (0, 2, 3)"),
+    ("required_string_null_month", "make_ym_interval(t, NULL)", "required", "true"),
+    ("required_string_string_null_month", "make_ym_interval(t, CAST(NULL AS STRING))",
+     "required", "true"),
+    ("nullable_null_year_string", "make_ym_interval(NULL, t)", "nullable", "true"),
+    ("required_string_failures_in_row_order",
+     "make_ym_interval(t, CASE WHEN k = 0 THEN 'bad' ELSE '1' END)", "required", "true"),
+    ("required_int_function", "make_ym_interval(int(t))", "required", "k IN (0, 1)"),
+    ("required_int_function_is_null", "make_ym_interval(int(t)) IS NULL", "required", "k = 3"),
     ("required_small_types", "make_ym_interval(CAST(k AS TINYINT), CAST(mo AS SMALLINT))",
      "required", "true"),
     ("required_null_month", "make_ym_interval(y, NULL)", "required", "true"),
@@ -106,6 +116,8 @@ COLUMNS = [
     ("required_comparison", "make_ym_interval(y) = INTERVAL '1' YEAR", "required", "k <> 3"),
     ("required_negation", "-make_ym_interval(y, mo)", "required", "k IN (0, 1, 2)"),
     ("required_is_null", "make_ym_interval(y, mo) IS NULL", "required", "k <> 3"),
+    ("required_try_add_overflow", "try_add(make_ym_interval(y, mo), INTERVAL '1' MONTH)",
+     "required", "k = 3"),
     ("empty_both", "make_ym_interval(y, mo)", "empty", "true"),
 ]
 
@@ -126,6 +138,8 @@ LITERALS = [
     ("strings", "make_ym_interval('1', '2')"),
     ("string_malformed", "make_ym_interval('x')"),
     ("string_empty", "make_ym_interval('')"),
+    ("string_malformed_null_month", "make_ym_interval('x', NULL)"),
+    ("null_year_string_malformed", "make_ym_interval(NULL, 'x')"),
     ("bigints", "make_ym_interval(1L, 2L)"),
     ("bigint_beyond_int", "make_ym_interval(4294967297L)"),
     ("tinyint_smallint", "make_ym_interval(1Y, 2S)"),
@@ -133,6 +147,7 @@ LITERALS = [
     ("double", "make_ym_interval(1.5D)"),
     ("boolean", "make_ym_interval(true)"),
     ("comparison", "make_ym_interval(1) = INTERVAL '1' YEAR"),
+    ("try_add_overflow", "try_add(make_ym_interval(178956970, 8), INTERVAL '1' MONTH)"),
 ]
 
 # Unaliased queries, whose generated names Spark derives from both arguments.
