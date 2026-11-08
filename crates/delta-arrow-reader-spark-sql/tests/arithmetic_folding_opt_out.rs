@@ -628,49 +628,62 @@ async fn required_children_and_siblings_keep_the_first_error_without_invoking_op
 async fn array_index_parent_inference_does_not_invoke_opaque_int_producers() -> TestResult {
     for ansi in [true, false] {
         for error_if_invoked in [false, true] {
-            for (expression, data_type, value, physical_nullable) in [
+            // ANSI checked-add keeps the RHS ARRAY in CASE's live predicate and result.
+            // Success invokes both copies; a callback error stops at the first copy.
+            for (expression, data_type, value, physical_nullable, ansi_success_calls) in [
                 (
                     "(1 DIV 1)+ARRAY(mixed_counted_producer(7))[0]",
                     DataType::Int64,
                     ScalarValue::Int64(Some(8)),
                     true,
+                    2,
                 ),
                 (
                     "ARRAY(mixed_counted_producer(7))[0]+(1 DIV 1)",
                     DataType::Int64,
                     ScalarValue::Int64(Some(8)),
                     true,
+                    1,
                 ),
                 (
                     "1+ARRAY(mixed_counted_producer(7))[0]",
                     DataType::Int32,
                     ScalarValue::Int32(Some(8)),
                     true,
+                    2,
                 ),
                 (
                     "ARRAY(mixed_counted_producer(7))[0]+1",
                     DataType::Int32,
                     ScalarValue::Int32(Some(8)),
                     true,
+                    1,
                 ),
                 (
                     "(1 DIV 1)+mixed_counted_producer(7)",
                     DataType::Int64,
                     ScalarValue::Int64(Some(8)),
                     false,
+                    1,
                 ),
                 (
                     "mixed_counted_producer(7)+(1 DIV 1)",
                     DataType::Int64,
                     ScalarValue::Int64(Some(8)),
                     false,
+                    1,
                 ),
             ] {
+                let expected_calls = if ansi && !error_if_invoked {
+                    ansi_success_calls
+                } else {
+                    1
+                };
                 let mut case = scalar_case(
                     format!("SELECT {expression} AS r"),
                     data_type,
                     vec![vec![value]],
-                    1,
+                    expected_calls,
                     0,
                 );
                 // An opaque index cannot prove the generated error branch unreachable during inference.
