@@ -1,7 +1,8 @@
 // Local Spark MAKE_INTERVAL. See the host crate's UPSTREAM.md.
 //! Spark's MAKE_INTERVAL over its INT years, months, weeks, days, hours and minutes and its
-//! DECIMAL(18, 6) seconds: `IntervalUtils.makeInterval`'s exact arithmetic. With Spark's
-//! `failOnError`, set under ANSI, an overflow fails with `ARITHMETIC_OVERFLOW` and the result is
+//! DECIMAL(18, 6) seconds: `IntervalUtils.makeInterval`'s exact arithmetic, for MAKE_INTERVAL
+//! and TRY_MAKE_INTERVAL. With Spark's `failOnError`, set for MAKE_INTERVAL under ANSI, an
+//! overflow fails with `ARITHMETIC_OVERFLOW` and the result is
 //! nullable only for a nullable argument; otherwise an overflow is NULL. A NULL argument skips
 //! the later arguments for its row, as Spark evaluates them in order. `datafusion-spark`'s
 //! function returned NULL on overflow in both modes and was always nullable.
@@ -39,10 +40,6 @@ impl SparkMakeInterval {
             fail_on_error,
             signature: Signature::any(7, Volatility::Immutable),
         }
-    }
-
-    pub fn fails_on_error(&self) -> bool {
-        self.fail_on_error
     }
 }
 

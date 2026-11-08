@@ -77,6 +77,10 @@ enum MakeIntervalMode {
 }
 
 impl MakeIntervalMode {
+    fn of_session(ansi_mode: bool) -> Self {
+        if ansi_mode { Self::Ansi } else { Self::Legacy }
+    }
+
     fn decimal_cast_mode(self) -> DecimalCastMode {
         match self {
             Self::Legacy => DecimalCastMode::Legacy,
@@ -107,18 +111,39 @@ fn make_interval(input: ScalarFunctionInput) -> PlanResult<Expr> {
             arguments.len()
         )));
     }
-    let mode = if function_context.plan_config.ansi_mode {
-        MakeIntervalMode::Ansi
-    } else {
-        MakeIntervalMode::Legacy
-    };
-    plan_make_interval(arguments, function_context.schema, mode)
+    let mode = MakeIntervalMode::of_session(function_context.plan_config.ansi_mode);
+    plan_make_interval(
+        arguments,
+        function_context.schema,
+        mode,
+        mode == MakeIntervalMode::Ansi,
+    )
 }
 
+/// Spark's TRY_MAKE_INTERVAL: MAKE_INTERVAL with one to seven arguments whose arithmetic gives
+/// NULL on overflow in both ANSI modes (`failOnError = false`). Its argument casts still follow
+/// the session's ANSI mode, so under ANSI a malformed or overflowing argument fails.
+fn try_make_interval(input: ScalarFunctionInput) -> PlanResult<Expr> {
+    let ScalarFunctionInput {
+        arguments,
+        function_context,
+    } = input;
+    if arguments.is_empty() || arguments.len() > 7 {
+        return Err(PlanError::invalid(format!(
+            "[WRONG_NUM_ARGS.WITHOUT_SUGGESTION] The `try_make_interval` requires [1, 2, 3, 4, 5, 6, 7] parameters but the actual number is {}.",
+            arguments.len()
+        )));
+    }
+    let mode = MakeIntervalMode::of_session(function_context.plan_config.ansi_mode);
+    plan_make_interval(arguments, function_context.schema, mode, false)
+}
+
+/// MAKE_INTERVAL over `arguments` cast in `mode`, failing on overflow if `fail_on_error`.
 fn plan_make_interval(
     arguments: Vec<Expr>,
     schema: &DFSchemaRef,
     mode: MakeIntervalMode,
+    fail_on_error: bool,
 ) -> PlanResult<Expr> {
     let mut arguments = arguments.into_iter();
     let mut cast_arguments = Vec::with_capacity(7);
@@ -134,7 +159,6 @@ fn plan_make_interval(
         None => lit(ScalarValue::Decimal128(Some(0), 18, 6)),
     };
     cast_arguments.push(seconds);
-    let fail_on_error = mode == MakeIntervalMode::Ansi;
     Ok(ScalarUDF::from(SparkMakeInterval::new(fail_on_error)).call(cast_arguments))
 }
 
@@ -219,29 +243,27 @@ fn uncast_make_interval_argument(argument: Expr) -> Expr {
 }
 
 /// Spark evaluates TRY_ADD, TRY_SUBTRACT, TRY_MULTIPLY and TRY_DIVIDE over a non-numeric
-/// operand inside `TryEval`, which turns any failure into NULL. This re-plans each
-/// MAKE_INTERVAL in an operand that fails on error, and the casts of its arguments, to give
-/// NULL instead. Spark still fails while optimizing a constant MAKE_INTERVAL beside a
-/// non-constant operand, outside TRY (#1133).
+/// operand inside `TryEval`, which turns any failure into NULL. Under ANSI this re-plans each
+/// MAKE_INTERVAL or TRY_MAKE_INTERVAL in an operand, and the casts of its arguments, to give
+/// NULL instead; outside ANSI neither fails. Spark still fails while optimizing a constant
+/// MAKE_INTERVAL beside a non-constant operand, outside TRY (#1133).
 pub(crate) fn replan_make_interval_for_try(
     operand: Expr,
     schema: &DFSchemaRef,
+    ansi_mode: bool,
 ) -> PlanResult<Expr> {
+    if !ansi_mode {
+        return Ok(operand);
+    }
     Ok(operand
         .transform_up(|expr| match expr {
-            Expr::ScalarFunction(call)
-                if call
-                    .func
-                    .inner()
-                    .downcast_ref::<SparkMakeInterval>()
-                    .is_some_and(SparkMakeInterval::fails_on_error) =>
-            {
+            Expr::ScalarFunction(call) if call.func.inner().is::<SparkMakeInterval>() => {
                 let arguments = call
                     .args
                     .into_iter()
                     .map(uncast_make_interval_argument)
                     .collect();
-                plan_make_interval(arguments, schema, MakeIntervalMode::Try)
+                plan_make_interval(arguments, schema, MakeIntervalMode::Try, false)
                     .map(Transformed::yes)
                     .map_err(|error| DataFusionError::External(Box::new(error)))
             }
@@ -1792,7 +1814,7 @@ pub(super) fn list_built_in_datetime_functions() -> Vec<(&'static str, ScalarFun
         ("to_unix_timestamp", F::custom(to_unix_timestamp)),
         ("to_utc_timestamp", F::custom(to_utc_timestamp)),
         ("trunc", F::binary(trunc)),
-        ("try_make_interval", F::unknown("try_make_interval")),
+        ("try_make_interval", F::custom(try_make_interval)),
         (
             "try_make_timestamp",
             F::custom(|input| make_timestamp(input, true)),
