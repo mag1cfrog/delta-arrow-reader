@@ -132,14 +132,40 @@ mod tests {
         Ok(())
     }
 
+    /// A strict cast that also gives NULL for 0, as a strict DECIMAL cast does for NaN.
+    fn strict_null_for_zero(input: &ColumnarValue) -> Result<ColumnarValue> {
+        let values = strict(input)?.to_array(1)?;
+        Ok(ColumnarValue::Array(Arc::new(
+            values
+                .as_primitive::<Int32Type>()
+                .iter()
+                .map(|value| value.filter(|value| *value != 0))
+                .collect::<Int32Array>(),
+        )))
+    }
+
     #[test]
     fn a_null_the_strict_cast_also_gives_is_not_a_failure() -> Result<()> {
-        // The lenient cast gives NULL for 0 too, which the strict cast accepts as NULL.
         let input = ColumnarValue::Array(Arc::new(Int32Array::from(vec![Some(0), Some(-2)])));
         let lenient = ColumnarValue::Array(Arc::new(Int32Array::from(vec![None, None])));
-        let output = strict_cast_rows_until_error(&input, lenient, 2, strict)?;
+        let output = strict_cast_rows_until_error(&input, lenient, 2, strict_null_for_zero)?;
         assert_eq!(output.failure.map(|failure| failure.row_index), Some(1));
         Ok(())
+    }
+
+    #[test]
+    fn a_value_only_the_strict_cast_gives_is_an_internal_error() {
+        // The lenient cast gives NULL for 0, where `strict` gives 0.
+        let input = ColumnarValue::Array(Arc::new(Int32Array::from(vec![Some(0), Some(-2)])));
+        let lenient = ColumnarValue::Array(Arc::new(Int32Array::from(vec![None, None])));
+        let error = strict_cast_rows_until_error(&input, lenient, 2, strict)
+            .err()
+            .expect("an internal error");
+        assert!(
+            error.to_string().contains(
+                "the lenient cast gave NULL in row 0, where the strict cast gives a value"
+            )
+        );
     }
 
     #[test]
