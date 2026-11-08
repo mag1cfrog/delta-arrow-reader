@@ -11,7 +11,7 @@ use arrow::datatypes::{
 use arrow::record_batch::RecordBatch;
 use datafusion::datasource::MemTable;
 use datafusion::execution::SessionStateBuilder;
-use datafusion::logical_expr::LogicalPlan;
+use datafusion::logical_expr::{ColumnarValue, LogicalPlan, Volatility, create_udf};
 use datafusion::physical_optimizer::aggregate_statistics::PreserveAggregateStatisticsSchema;
 use datafusion::physical_plan::collect;
 use datafusion::prelude::{SessionConfig, SessionContext};
@@ -41,7 +41,7 @@ fn routine_name_references() -> TestResult<Vec<Value>> {
             |build| build.contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
         )
     );
-    assert_eq!(records.len() - 1, 96);
+    assert_eq!(records.len() - 1, 136);
     Ok(records)
 }
 
@@ -195,16 +195,18 @@ fn optimize(session: &SessionContext, plan: &LogicalPlan) -> TestResult<LogicalP
     Ok(state.optimize(plan)?)
 }
 
-/// The text DAR's error must contain for a recorded Spark failure: for an unresolved routine,
-/// Spark's message up to its search path, whose catalog names DAR's session sets, so that the
-/// routine is named as written; otherwise Spark's error condition, or the recorded message of
-/// Java's `ArithmeticException`.
-fn dar_message(case: &Value) -> Option<String> {
+/// The text DAR's error must contain for a recorded Spark failure: a retained difference's
+/// pinned text; for an unresolved routine, Spark's whole message before its query position,
+/// with DAR's session catalog in place of Spark's `spark_catalog`.`default`; otherwise Spark's
+/// error condition, or the recorded message of Java's `ArithmeticException`.
+fn expected_error_text(case: &Value) -> Option<String> {
+    if let Some(message) = case["expected"]["dar_message"].as_str() {
+        return Some(message.to_owned());
+    }
     if case["expected"]["condition"] == "UNRESOLVED_ROUTINE" {
         let message = case["expected"]["java_message"].as_str()?;
-        return message
-            .split_once(" on search path")
-            .map(|(routine, _)| routine.to_owned());
+        let (message, _) = message.split_once("; line ")?;
+        return Some(message.replace("`spark_catalog`.`default`", "`datafusion`.`public`"));
     }
     match case["expected"]["condition"].as_str() {
         Some(condition) => Some(format!("[{condition}]")),
@@ -213,6 +215,64 @@ fn dar_message(case: &Value) -> Option<String> {
         }
         None => None,
     }
+}
+
+/// #1185: TIMESTAMP_DIFF and TIMESTAMP_ADD in other call positions, beside an unresolved column
+/// or under a qualified name, where Spark reports the routine (or, in LATERAL VIEW, the
+/// generator's argument or a missing routine), with DAR's current error text.
+const ROUTINE_POSITION_RECORDS: [(&str, &str); 8] = [
+    (
+        "column_window_timestamp_diff",
+        "attribute ObjectName([Identifier(\"DAY\")]) is missing from the schema",
+    ),
+    (
+        "column_window_timestamp_add",
+        "not supported: unknown window function: timestamp_add",
+    ),
+    (
+        "column_order_by_timestamp_diff",
+        "invalid argument: sort expression: SortOrder { child: UnresolvedFunction(\
+         UnresolvedFunction { function_name: ObjectName([Identifier(\"timestamp_diff\")])",
+    ),
+    (
+        "column_sort_by_timestamp_add",
+        "invalid argument: sort expression: SortOrder { child: UnresolvedFunction(\
+         UnresolvedFunction { function_name: ObjectName([Identifier(\"timestamp_add\")])",
+    ),
+    (
+        "column_lateral_view_timestamp_diff",
+        "[UNRESOLVED_ROUTINE] Cannot resolve routine `timestamp_diff` on search path \
+         [`system`.`builtin`, `system`.`session`, `datafusion`.`public`]. SQLSTATE: 42883",
+    ),
+    (
+        "column_lateral_view_timestamp_add",
+        "[UNRESOLVED_ROUTINE] Cannot resolve routine `timestamp_add` on search path \
+         [`system`.`builtin`, `system`.`session`, `datafusion`.`public`]. SQLSTATE: 42883",
+    ),
+    (
+        "literal_unresolved_column_beside_timestamp_diff",
+        "attribute ObjectName([Identifier(\"nosuch\")]) is missing from the schema",
+    ),
+    (
+        "literal_qualified_timestamp_add",
+        "not supported: qualified function name",
+    ),
+];
+
+fn routine_position_message(case: &Value) -> Option<&'static str> {
+    ROUTINE_POSITION_RECORDS
+        .iter()
+        .find_map(|(id, message)| (case["id"] == *id).then_some(*message))
+}
+
+/// DAR's current failure for a #1185 record, while resolving like Spark's.
+fn routine_position_expectation(case: &Value, message: &str) -> TestResult<Value> {
+    if case["spark_error_phase"] != "sql" {
+        return Err(format!("expected Spark's analysis failure: {case}").into());
+    }
+    let mut current = case.clone();
+    current["expected"] = json!({"status": "error", "dar_message": message});
+    Ok(current)
 }
 
 /// The recorded stages and outcome that differ from the observation. A failure must occur
@@ -230,7 +290,7 @@ fn differing_parts(case: &Value, observation: &Value) -> TestResult<Vec<&'static
         Some("ok") => observation["rows"] == case["expected"]["rows"],
         Some("error") => {
             observation["error_phase"] == case["spark_error_phase"]
-                && dar_message(case)
+                && expected_error_text(case)
                     .zip(observation["error"].as_str())
                     .is_some_and(|(message, error)| error.contains(&message))
         }
@@ -285,21 +345,80 @@ fn register_inputs(session: &SessionContext, metadata: &Value, batch_size: usize
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn timestamp_routine_names_resolve_like_spark() -> TestResult {
     let records = routine_name_references()?;
+    let retained = records[1..]
+        .iter()
+        .filter(|case| routine_position_message(case).is_some())
+        .count();
+    assert_eq!(retained, ROUTINE_POSITION_RECORDS.len() * 4);
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
         let session = session_context(batch_size);
         register_inputs(&session, &records[0], batch_size)?;
         for case in &records[1..] {
+            let expectation = match routine_position_message(case) {
+                Some(message) => routine_position_expectation(case, message)?,
+                None => case.clone(),
+            };
             let observation = observe(&session, case).await;
-            let differing = differing_parts(case, &observation)?;
+            let differing = differing_parts(&expectation, &observation)?;
             if !differing.is_empty() {
                 differences.push(json!({
                     "id": case["id"], "timezone": case["timezone"], "ansi": case["ansi"],
                     "batch": batch_size, "differing": differing,
-                    "expected": case["expected"],
+                    "expected": expectation["expected"],
                     "schema_stages": case["schema_stages"],
                     "observed": observation,
                 }));
+            }
+        }
+    }
+    assert!(
+        differences.is_empty(),
+        "{} differences:\n{}",
+        differences.len(),
+        differences
+            .iter()
+            .map(Value::to_string)
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+    Ok(())
+}
+
+/// A host may register a function named TIMESTAMP_DIFF or TIMESTAMP_ADD. It then resolves like
+/// any registered function, under its own name and with its own arguments: no unit keyword is
+/// read from its first argument, and it is not named or planned as TIMESTAMPDIFF or
+/// TIMESTAMPADD.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn host_functions_named_timestamp_diff_and_add_resolve_as_registered() -> TestResult {
+    let records = routine_name_references()?;
+    let mut differences = Vec::new();
+    for batch_size in [1, 32] {
+        let session = session_context(batch_size);
+        register_inputs(&session, &records[0], batch_size)?;
+        for name in ["timestamp_diff", "timestamp_add"] {
+            // The host function returns its first argument.
+            session.register_udf(create_udf(
+                name,
+                vec![DataType::Int32, DataType::Int32, DataType::Int32],
+                DataType::Int32,
+                Volatility::Immutable,
+                Arc::new(|arguments: &[ColumnarValue]| Ok(arguments[0].clone())),
+            ));
+        }
+        for name in ["timestamp_diff", "timestamp_add"] {
+            for ansi in [false, true] {
+                let case = json!({"sql": format!("SELECT {name}(k, k, k) FROM inputs"),
+                    "ansi": ansi, "timezone": "UTC"});
+                let observation = observe(&session, &case).await;
+                let field = &observation["analyzed"][0];
+                if field["name"] != format!("{name}(k, k, k)")
+                    || field["type"] != "int32"
+                    || observation["rows"] != json!([["0"], ["1"], ["2"]])
+                {
+                    differences.push(json!({"name": name, "ansi": ansi, "batch": batch_size,
+                        "observed": observation}));
+                }
             }
         }
     }

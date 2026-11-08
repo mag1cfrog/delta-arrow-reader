@@ -66,6 +66,28 @@ def definitions():
             yield f"literal_{spelling}_timestamp_add_{case}", f"SELECT {name}({arguments}) AS r"
         yield (f"column_{spelling}_timestamp_add",
                f"SELECT k, {name}(HOUR, k, s) AS r FROM inputs")
+    # Named arguments.
+    yield ("literal_named_arguments_timestamp_diff",
+           "SELECT timestamp_diff(unit => 'DAY', "
+           "startTimestamp => TIMESTAMP '2024-01-01 23:00:00', "
+           "endTimestamp => TIMESTAMP '2024-01-02 01:00:00') AS r")
+    yield ("literal_named_arguments_timestamp_add",
+           f"SELECT timestamp_add(unit => 'DAY', quantity => 1, ts => {START}) AS r")
+    # Other call positions, and an unresolved column or a qualified name beside the call (#1185).
+    yield ("column_window_timestamp_diff",
+           "SELECT k, timestamp_diff(DAY, s, e) OVER (ORDER BY k) AS r FROM inputs")
+    yield ("column_window_timestamp_add",
+           "SELECT k, timestamp_add('DAY', 1, s) OVER (PARTITION BY k) AS r FROM inputs")
+    yield ("column_order_by_timestamp_diff",
+           "SELECT k FROM inputs ORDER BY timestamp_diff(HOUR, s, e)")
+    yield "column_sort_by_timestamp_add", "SELECT k FROM inputs SORT BY timestamp_add(DAY, 1, s)"
+    yield ("column_lateral_view_timestamp_diff",
+           "SELECT k, x FROM inputs LATERAL VIEW timestamp_diff(DAY, s, e) t AS x")
+    yield ("column_lateral_view_timestamp_add",
+           "SELECT k, x FROM inputs LATERAL VIEW timestamp_add('DAY', 1, s) t AS x")
+    yield ("literal_unresolved_column_beside_timestamp_diff",
+           f"SELECT nosuch, timestamp_diff(DAY, {PARTIAL_DAY}) AS r")
+    yield "literal_qualified_timestamp_add", f"SELECT builtin.timestamp_add(DAY, 1, {START}) AS r"
     # Spellings Spark accepts.
     yield "literal_timestampdiff", f"SELECT timestampdiff(DAY, {PARTIAL_DAY}) AS r"
     yield "literal_timestampadd", f"SELECT timestampadd(DAY, 1, {START}) AS r"
