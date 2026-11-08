@@ -300,8 +300,7 @@ fn spark_plus(input: ScalarFunctionInput) -> PlanResult<Expr> {
             (Ok(left_type), Ok(right_type))
                 if SparkIntervalArithmetic::accepts(&left_type, &right_type) =>
             {
-                ScalarUDF::from(SparkIntervalArithmetic::new(Operator::Plus))
-                    .call(vec![left, right])
+                ScalarUDF::from(SparkIntervalArithmetic::add()).call(vec![left, right])
             }
             (Ok(DataType::Timestamp(..)), Ok(DataType::Null)) => {
                 left + cast(right, DataType::Duration(TimeUnit::Microsecond))
@@ -610,8 +609,7 @@ fn spark_minus(input: ScalarFunctionInput) -> PlanResult<Expr> {
             (Ok(left_type), Ok(right_type))
                 if SparkIntervalArithmetic::accepts(&left_type, &right_type) =>
             {
-                ScalarUDF::from(SparkIntervalArithmetic::new(Operator::Minus))
-                    .call(vec![left, right])
+                ScalarUDF::from(SparkIntervalArithmetic::subtract()).call(vec![left, right])
             }
             (Ok(DataType::Date32), Ok(DataType::Duration(TimeUnit::Microsecond))) => {
                 left - cast(right, DataType::Interval(IntervalUnit::MonthDayNano))

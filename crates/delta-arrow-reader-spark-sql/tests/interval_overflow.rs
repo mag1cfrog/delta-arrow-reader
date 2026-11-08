@@ -40,7 +40,7 @@ fn overflow_references() -> TestResult<Vec<Value>> {
             |build| build.contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
         )
     );
-    assert_eq!(records.len() - 1, 92);
+    assert_eq!(records.len() - 1, 164);
     Ok(records)
 }
 
@@ -214,13 +214,20 @@ fn optimize(session: &SessionContext, plan: &LogicalPlan) -> TestResult<LogicalP
     Ok(state.optimize(plan)?)
 }
 
-/// The text DAR's error must contain for a recorded Spark failure: Spark's error condition,
-/// or the recorded message of Java's `ArithmeticException` for an overflow.
-fn dar_message(case: &Value) -> Option<String> {
-    match case["expected"]["condition"].as_str() {
-        Some(condition) => Some(format!("[{condition}]")),
-        None if case["expected"]["exception"] == "java.lang.ArithmeticException" => {
-            case["expected"]["java_message"].as_str().map(str::to_owned)
+/// The text DAR's error must contain for a recorded Spark failure: Spark's whole message for
+/// a condition, which names the TRY function it suggests, or the message of Java's
+/// `ArithmeticException` for an overflow.
+fn expected_error_text(case: &Value) -> Option<String> {
+    let expected = &case["expected"];
+    match expected["condition"].as_str() {
+        Some(condition) => {
+            let message = expected["java_message"].as_str()?;
+            message
+                .starts_with(&format!("[{condition}]"))
+                .then(|| message.to_owned())
+        }
+        None if expected["exception"] == "java.lang.ArithmeticException" => {
+            expected["java_message"].as_str().map(str::to_owned)
         }
         None => None,
     }
@@ -241,7 +248,7 @@ fn differing_parts(case: &Value, observation: &Value) -> TestResult<Vec<&'static
         Some("ok") => observation["rows"] == case["expected"]["rows"],
         Some("error") => {
             observation["error_phase"] == case["spark_error_phase"]
-                && dar_message(case)
+                && expected_error_text(case)
                     .zip(observation["error"].as_str())
                     .is_some_and(|(message, error)| error.contains(&message))
         }

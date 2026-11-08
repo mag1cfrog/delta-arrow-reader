@@ -2,35 +2,50 @@
 //! Spark's `+` and `-` of two DAY TO SECOND or two YEAR TO MONTH intervals: exact arithmetic
 //! on the stored microsecond or month counts, which fails with
 //! `INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION` in both ANSI modes. Spark folds a constant
-//! overflow while optimizing. Arrow's arithmetic failed only while collecting rows, with its own
-//! overflow error.
+//! overflow while optimizing, and a NULL operand skips the other for that row. Arrow's checked
+//! kernels do the arithmetic; Arrow's native operator failed only while collecting rows, with
+//! its own overflow error.
 
 use std::sync::Arc;
 
-use datafusion::arrow::array::{Array, ArrayRef, ArrowPrimitiveType, AsArray, PrimitiveArray};
-use datafusion::arrow::datatypes::{
-    DataType, DurationMicrosecondType, Field, FieldRef, IntervalUnit, IntervalYearMonthType,
-    TimeUnit,
-};
-use datafusion_common::{Result, ScalarValue, exec_err, internal_err};
+use datafusion::arrow::compute::kernels::numeric::{add, sub};
+use datafusion::arrow::datatypes::{DataType, Field, FieldRef, IntervalUnit, TimeUnit};
+use datafusion::arrow::error::ArrowError;
+use datafusion::physical_expr_common::datum::apply;
+use datafusion_common::{DataFusionError, Result, ScalarValue, exec_err, internal_err};
+use datafusion_expr::interval_arithmetic::Interval;
+use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
 use datafusion_expr::{
-    ColumnarValue, Operator, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature,
-    Volatility,
+    ColumnarValue, Expr, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
+    lit,
 };
-use num::traits::{CheckedAdd, CheckedSub};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum Operation {
+    Add,
+    Subtract,
+}
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkIntervalArithmetic {
-    /// `Operator::Plus` or `Operator::Minus`.
-    op: Operator,
+    operation: Operation,
     signature: Signature,
 }
 
 impl SparkIntervalArithmetic {
-    pub fn new(op: Operator) -> Self {
-        assert!(matches!(op, Operator::Plus | Operator::Minus));
+    /// Interval `+`.
+    pub fn add() -> Self {
+        Self::new(Operation::Add)
+    }
+
+    /// Interval `-`.
+    pub fn subtract() -> Self {
+        Self::new(Operation::Subtract)
+    }
+
+    fn new(operation: Operation) -> Self {
         Self {
-            op,
+            operation,
             signature: Signature::any(2, Volatility::Immutable),
         }
     }
@@ -44,52 +59,13 @@ impl SparkIntervalArithmetic {
                     | DataType::Interval(IntervalUnit::YearMonth)
             )
     }
-
-    /// The TRY function Spark's overflow error suggests.
-    fn try_function(&self) -> &'static str {
-        match self.op {
-            Operator::Plus => "try_add",
-            _ => "try_subtract",
-        }
-    }
-
-    /// Each row's exact sum or difference, failing on overflow.
-    fn apply<T>(&self, left: &ArrayRef, right: &ArrayRef) -> Result<PrimitiveArray<T>>
-    where
-        T: ArrowPrimitiveType,
-        T::Native: CheckedAdd + CheckedSub,
-    {
-        let left = left.as_primitive::<T>();
-        let right = right.as_primitive::<T>();
-        left.iter()
-            .zip(right.iter())
-            .map(|pair| match pair {
-                (Some(left), Some(right)) => {
-                    let result = match self.op {
-                        Operator::Plus => left.checked_add(&right),
-                        _ => left.checked_sub(&right),
-                    };
-                    match result {
-                        Some(result) => Ok(Some(result)),
-                        None => exec_err!(
-                            "[INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION] Integer overflow while \
-                             operating with intervals. Use `{}` to tolerate overflow and return \
-                             NULL instead. SQLSTATE: 22015",
-                            self.try_function()
-                        ),
-                    }
-                }
-                _ => Ok(None),
-            })
-            .collect()
-    }
 }
 
 impl ScalarUDFImpl for SparkIntervalArithmetic {
     fn name(&self) -> &str {
-        match self.op {
-            Operator::Plus => "spark_interval_add",
-            _ => "spark_interval_subtract",
+        match self.operation {
+            Operation::Add => "spark_interval_add",
+            Operation::Subtract => "spark_interval_subtract",
         }
     }
 
@@ -122,31 +98,59 @@ impl ScalarUDFImpl for SparkIntervalArithmetic {
         true
     }
 
+    // Like Spark, a NULL operand skips evaluating the other for that row. Unlike a conditional
+    // expression, both operands still fold, and fail, as constants.
+    fn short_circuits_on_any_null_argument(&self) -> bool {
+        true
+    }
+
+    // Spark propagates a NULL operand before folding constants, so a NULL interval discards
+    // errors in the other operand.
+    fn simplify(&self, args: Vec<Expr>, info: &SimplifyContext) -> Result<ExprSimplifyResult> {
+        if args
+            .iter()
+            .any(|arg| matches!(arg, Expr::Literal(value, _) if value.is_null()))
+        {
+            let interval_type = info.get_data_type(&args[0])?;
+            return Ok(ExprSimplifyResult::Simplified(lit(
+                ScalarValue::try_new_null(&interval_type)?,
+            )));
+        }
+        Ok(ExprSimplifyResult::Original(args))
+    }
+
+    // The result's range is unknown. Typing it as the interval, instead of the default NULL
+    // range, lets an enclosing expression such as a timestamp sort key derive its ordering.
+    fn evaluate_bounds(&self, inputs: &[&Interval]) -> Result<Interval> {
+        let [interval, _] = inputs else {
+            return internal_err!("{} requires two arguments", self.name());
+        };
+        Interval::make_unbounded(&interval.data_type())
+    }
+
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
         let [left, right] = args.args.as_slice() else {
             return internal_err!("{} requires two arguments", self.name());
         };
-        let scalar = matches!(
-            (left, right),
-            (ColumnarValue::Scalar(_), ColumnarValue::Scalar(_))
-        );
-        let left = left.to_array(args.number_rows)?;
-        let right = right.to_array(args.number_rows)?;
-        let result: ArrayRef = match left.data_type() {
-            DataType::Duration(TimeUnit::Microsecond) => {
-                Arc::new(self.apply::<DurationMicrosecondType>(&left, &right)?)
-            }
-            DataType::Interval(IntervalUnit::YearMonth) => {
-                Arc::new(self.apply::<IntervalYearMonthType>(&left, &right)?)
-            }
-            other => return internal_err!("{} requires intervals, got {other}", self.name()),
+        let kernel = match self.operation {
+            Operation::Add => add,
+            Operation::Subtract => sub,
         };
-        if scalar {
-            Ok(ColumnarValue::Scalar(ScalarValue::try_from_array(
-                &result, 0,
-            )?))
-        } else {
-            Ok(ColumnarValue::Array(result))
+        let function = match self.operation {
+            Operation::Add => "try_add",
+            Operation::Subtract => "try_subtract",
+        };
+        match apply(left, right, kernel) {
+            Err(DataFusionError::ArrowError(error, _))
+                if matches!(error.as_ref(), ArrowError::ArithmeticOverflow(_)) =>
+            {
+                exec_err!(
+                    "[INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION] Integer overflow while \
+                     operating with intervals. Use `{function}` to tolerate overflow and return \
+                     NULL instead. SQLSTATE: 22015"
+                )
+            }
+            result => result,
         }
     }
 }
