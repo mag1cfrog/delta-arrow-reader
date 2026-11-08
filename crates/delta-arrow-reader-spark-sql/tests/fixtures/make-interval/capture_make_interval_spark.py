@@ -1,4 +1,4 @@
-"""Capture Spark MAKE_INTERVAL values, errors and nullability (#1131).
+"""Capture Spark MAKE_INTERVAL values, errors and nullability (#1131, #1148).
 
 Records analyzed, optimized and executed schemas, typed internal-row values and failing
 stages, with the innermost Java exception of a failure, for MAKE_INTERVAL with literal,
@@ -6,7 +6,8 @@ column and NULL arguments, every argument count, fractional and negative values,
 that overflow its months or days or exceed Arrow's nanoseconds, TINYINT, SMALLINT, BIGINT,
 DECIMAL, FLOAT, DOUBLE, STRING, BOOLEAN and DATE arguments, NULL arguments before and after
 failing ones, and for MAKE_INTERVAL in a TIMESTAMP subtraction, TRY_ADD, TRY_SUBTRACT,
-TRY_MULTIPLY, TRY_DIVIDE and an unreached CASE branch.
+TRY_MULTIPLY, TRY_DIVIDE and an unreached CASE branch, and over rows that fail in different
+arguments or in the arithmetic, in different orders (#1148).
 Every query runs in both ANSI modes in UTC and America/Los_Angeles. Run from the crate root in
 the reference environment described in README.md; the output path must not exist.
 """
@@ -81,7 +82,28 @@ INPUTS = [{
         {"name": "dc", "type": "decimal(12,2)", "nullable": True, "metadata": {}},
         {"name": "n", "type": "integer", "nullable": True, "metadata": {}},
         {"name": "h", "type": "integer", "nullable": True, "metadata": {}}]},
-    "rows": [[str(key)] + list(row) for key, row in enumerate(OTHER_ROWS)]}]
+    "rows": [[str(key)] + list(row) for key, row in enumerate(OTHER_ROWS)]}, {
+    # #1148: failures in different arguments and rows. Row 0 has BIGINT hours beyond INT and
+    # years whose months overflow, row 2 malformed STRING years, row 4 malformed STRING seconds
+    # and row 6 DECIMAL years beyond INT; odd rows succeed. A failing row is even, so at batch
+    # size 1 the failing rows are in the same input partition, read in order, as the harness
+    # deals batches to two partitions in turn.
+    "name": "ordered",
+    "schema": {"type": "struct", "fields": [
+        {"name": "k", "type": "integer", "nullable": False, "metadata": {}},
+        {"name": "y", "type": "integer", "nullable": False, "metadata": {}},
+        {"name": "t", "type": "string", "nullable": False, "metadata": {}},
+        {"name": "b", "type": "long", "nullable": False, "metadata": {}},
+        {"name": "s", "type": "string", "nullable": False, "metadata": {}},
+        {"name": "dc", "type": "decimal(12,2)", "nullable": False, "metadata": {}}]},
+    "rows": [["0", "178956971", "1", "4294967297", "1", "1.00"],
+             ["1", "0", "1", "1", "1", "1.00"],
+             ["2", "0", "abc", "1", "1", "1.00"],
+             ["3", "0", "1", "1", "1", "1.00"],
+             ["4", "0", "1", "1", "x", "1.00"],
+             ["5", "0", "1", "1", "1", "1.00"],
+             ["6", "0", "1", "1", "1", "3000000000.50"],
+             ["7", "0", "1", "1", "1", "1.00"]]}]
 
 COLUMNS = [
     ("all_arguments", "make_interval(y, mo, w, d, h, mi, s)", "inputs", "k <> 3"),
@@ -130,6 +152,14 @@ COLUMNS = [
      "inputs", "k = 3"),
     ("try_add_hours_beyond_nanoseconds",
      "try_add(TIMESTAMP '2024-01-01 00:00:00', make_interval(0, 0, 0, 0, h))", "others", "k = 1"),
+    # #1148: the first failing row's error wins, whichever argument or the arithmetic fails.
+    ("ordered_string_years_then_bigint_hours", "make_interval(t, 0, 0, 0, b)", "ordered",
+     "true"),
+    ("ordered_bigint_years_then_string_months", "make_interval(b, t)", "ordered", "true"),
+    ("ordered_decimal_years_then_string_seconds", "make_interval(dc, 0, 0, 0, 0, 0, s)",
+     "ordered", "true"),
+    ("ordered_overflow_then_string_months", "make_interval(y, t)", "ordered", "true"),
+    ("ordered_no_failure", "make_interval(t, 0, 0, 0, b, 0, s)", "ordered", "k = 7"),
     ("case_overflow_without_rows",
      "CASE WHEN k >= 0 THEN make_interval(0, 0, 0, d) ELSE make_interval(178956971) END",
      "required", "k < 0"),
