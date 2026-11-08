@@ -19,7 +19,7 @@
 mod literal_lookup_table;
 
 use super::{Column, Literal};
-use crate::PhysicalExpr;
+use crate::{PhysicalExpr, ScalarFunctionExpr};
 use crate::expressions::{LambdaExpr, LambdaVariable, lit, try_cast};
 use crate::utils::rewrite_expr_columns;
 use arrow::array::*;
@@ -1405,6 +1405,14 @@ impl PhysicalExpr for CaseExpr {
 /// - `Some(false)` if the predicate evaluates to a falsy value.
 /// - `None` if the predicate could not be evaluated.
 fn evaluate_predicate(predicate: &Arc<dyn PhysicalExpr>) -> Result<Option<bool>> {
+    // Field inference cannot invoke a call that opted out of constant evaluation.
+    if predicate.exists(|expr| {
+        Ok(expr
+            .downcast_ref::<ScalarFunctionExpr>()
+            .is_some_and(|function| !function.fun().inner().supports_constant_folding()))
+    })? {
+        return Ok(None);
+    }
     // Create a dummy record with no columns and one row
     let batch = RecordBatch::try_new_with_options(
         Arc::new(Schema::empty()),

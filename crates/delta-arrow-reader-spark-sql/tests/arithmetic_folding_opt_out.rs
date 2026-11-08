@@ -341,29 +341,32 @@ async fn arithmetic_descendants_aliases_and_parents_wait_for_execution() -> Test
                     )
                     .await?;
                 }
-                let field = Field::new(
-                    "r",
-                    DataType::List(Arc::new(Field::new_list_field(DataType::Float64, true))),
-                    false,
-                );
-                check_case(
-                    FoldingCase {
-                        sql: "SELECT ARRAY(retain_constant(1/1)) AS r".into(),
-                        analyzed_fields: vec![field.clone()],
-                        physical_fields: vec![field],
-                        rows: vec![vec![ScalarValue::List(ScalarValue::new_list(
-                            &[ScalarValue::Float64(Some(1.0))],
-                            &DataType::Float64,
-                            true,
-                        ))]],
-                        expected_opt_out_calls: 1,
-                        permitted_planning_limit: 0,
-                    },
-                    spark,
-                    ansi,
-                    error_if_invoked,
-                )
-                .await?;
+                // Unconfigured native DataFusion does not register Spark's ARRAY function.
+                if spark {
+                    let field = Field::new(
+                        "r",
+                        DataType::List(Arc::new(Field::new_list_field(DataType::Float64, true))),
+                        false,
+                    );
+                    check_case(
+                        FoldingCase {
+                            sql: "SELECT ARRAY(retain_constant(1/1)) AS r".into(),
+                            analyzed_fields: vec![field.clone()],
+                            physical_fields: vec![field],
+                            rows: vec![vec![ScalarValue::List(ScalarValue::new_list(
+                                &[ScalarValue::Float64(Some(1.0))],
+                                &DataType::Float64,
+                                true,
+                            ))]],
+                            expected_opt_out_calls: 1,
+                            permitted_planning_limit: 0,
+                        },
+                        spark,
+                        ansi,
+                        error_if_invoked,
+                    )
+                    .await?;
+                }
             }
         }
     }

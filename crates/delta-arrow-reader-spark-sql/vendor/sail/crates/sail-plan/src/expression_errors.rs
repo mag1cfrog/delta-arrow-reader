@@ -4054,13 +4054,31 @@ impl Prepare {
             self.eval_constant(expr)?;
             return Ok(());
         }
-        // Spark defers failed constant evaluation inside nonconstant CASE and
-        // other conditional expressions. Subqueries still undergo optimization.
-        let conditional = matches!(expr, Expr::Case(_))
-            || matches!(expr, Expr::ScalarFunction(f) if f.func.short_circuits()
-                && !f.func.inner().downcast_ref::<SparkSubstring>()
-                    .is_some_and(SparkSubstring::has_logical_arguments))
-            || local_string_argument_bodies(expr)?.is_some();
+        // An opaque parent still checks eager arguments; only conditional arguments defer errors.
+        let conditional = match expr {
+            Expr::ScalarFunction(function)
+                if function.func.short_circuits()
+                    && !function
+                        .func
+                        .inner()
+                        .downcast_ref::<SparkSubstring>()
+                        .is_some_and(SparkSubstring::has_logical_arguments) =>
+            {
+                if let Some((eager_arguments, conditional_arguments)) =
+                    function.func.conditional_arguments(&function.args)
+                {
+                    for argument in eager_arguments {
+                        self.check_expr(argument, constants)?;
+                    }
+                    for argument in conditional_arguments {
+                        self.check_expr(argument, false)?;
+                    }
+                    return Ok(());
+                }
+                true
+            }
+            _ => matches!(expr, Expr::Case(_)) || local_string_argument_bodies(expr)?.is_some(),
+        };
         expr.apply_children(|child| {
             self.check_expr(child, constants && !conditional)?;
             Ok(TreeNodeRecursion::Continue)
