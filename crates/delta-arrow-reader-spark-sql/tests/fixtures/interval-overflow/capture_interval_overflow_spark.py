@@ -2,10 +2,11 @@
 
 Records analyzed, optimized and executed schemas, typed internal-row values and failing
 stages, with the innermost Java exception of a failure, for `+` and `-` of DAY TO SECOND and
-YEAR TO MONTH intervals: values that fit, and values that overflow at both ends as literals,
-beside columns, from columns, and in conditional branches that run or do not. Every query runs
-in both ANSI modes in UTC and America/Los_Angeles. Run from the crate root in the reference
-environment described in README.md; the output path must not exist.
+YEAR TO MONTH intervals: values that fit, and values that overflow at both ends as literals of
+every qualifier, beside columns, from columns, beside NULL operands, and in conditional
+branches that run or do not, and a sort key over a sum. Every query runs in both ANSI modes
+in UTC and America/Los_Angeles. Run from the crate root in the reference environment
+described in README.md; the output path must not exist.
 """
 import argparse
 from datetime import timedelta
@@ -38,6 +39,10 @@ ROWS = [
 ]
 
 
+# (m, n) YEAR TO MONTH months. Rows 0 and 1 fit; 2 and 3 overflow when added.
+MONTH_ROWS = [(12, 2), (None, 1), (2_147_483_647, 1), (-2_147_483_648, -1)]
+
+
 def text(value):
     return None if value is None else str(value)
 
@@ -48,7 +53,13 @@ INPUTS = [{
         {"name": "k", "type": "integer", "nullable": False, "metadata": {}},
         {"name": "a", "type": "interval day to second", "nullable": True, "metadata": {}},
         {"name": "b", "type": "interval day to second", "nullable": True, "metadata": {}}]},
-    "rows": [[str(key), text(a), text(b)] for key, (a, b) in enumerate(ROWS)]}]
+    "rows": [[str(key), text(a), text(b)] for key, (a, b) in enumerate(ROWS)]}, {
+    "name": "months",
+    "schema": {"type": "struct", "fields": [
+        {"name": "k", "type": "integer", "nullable": False, "metadata": {}},
+        {"name": "m", "type": "interval month", "nullable": True, "metadata": {}},
+        {"name": "n", "type": "interval month", "nullable": True, "metadata": {}}]},
+    "rows": [[str(key), text(m), text(n)] for key, (m, n) in enumerate(MONTH_ROWS)]}]
 
 LARGEST_LITERAL = "INTERVAL '106751991 04:00:54.775807' DAY TO SECOND"
 SMALLEST_LITERAL = "INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND"
@@ -56,16 +67,22 @@ MICROSECOND = "INTERVAL '0.000001' SECOND"
 OVERFLOW = f"{LARGEST_LITERAL} + {MICROSECOND}"
 
 COLUMNS = [
-    ("plus", "a + b", "k < 4"),
-    ("minus", "a - b", "k < 4"),
-    ("plus_overflow", "a + b", "k = 4"),
-    ("plus_negative_overflow", "a + b", "k = 5"),
-    ("minus_overflow", "a - b", "k = 6"),
-    ("plus_literal_overflow", f"a + {MICROSECOND}", "k = 4"),
-    ("literal_minus_overflow", f"{SMALLEST_LITERAL} - b", "k = 0"),
-    ("case_untaken_overflow", f"CASE WHEN k > 100 THEN {OVERFLOW} END", "true"),
-    ("case_taken_overflow", f"CASE WHEN k >= 0 THEN {OVERFLOW} END", "true"),
-    ("coalesce_overflow", f"coalesce(a, {OVERFLOW})", "k < 2"),
+    ("months_plus", "m + n", "months", "k < 2"),
+    ("months_minus", "m - n", "months", "k < 2"),
+    ("months_plus_overflow", "m + n", "months", "k = 2"),
+    ("months_plus_negative_overflow", "m + n", "months", "k = 3"),
+    # A NULL operand skips the other operand, which would overflow.
+    ("null_beside_overflow", f"a + (b + {LARGEST_LITERAL})", "inputs", "k = 2"),
+    ("plus", "a + b", "inputs", "k < 4"),
+    ("minus", "a - b", "inputs", "k < 4"),
+    ("plus_overflow", "a + b", "inputs", "k = 4"),
+    ("plus_negative_overflow", "a + b", "inputs", "k = 5"),
+    ("minus_overflow", "a - b", "inputs", "k = 6"),
+    ("plus_literal_overflow", f"a + {MICROSECOND}", "inputs", "k = 4"),
+    ("literal_minus_overflow", f"{SMALLEST_LITERAL} - b", "inputs", "k = 0"),
+    ("case_untaken_overflow", f"CASE WHEN k > 100 THEN {OVERFLOW} END", "inputs", "true"),
+    ("case_taken_overflow", f"CASE WHEN k >= 0 THEN {OVERFLOW} END", "inputs", "true"),
+    ("coalesce_overflow", f"coalesce(a, {OVERFLOW})", "inputs", "k < 2"),
 ]
 
 LITERALS = [
@@ -83,13 +100,36 @@ LITERALS = [
     ("year_month_minus_overflow",
      "INTERVAL '-178956970-8' YEAR TO MONTH - INTERVAL '1' MONTH"),
     ("year_month_plus", "INTERVAL '1' YEAR + INTERVAL '2' MONTH"),
+    # The largest value of every other qualifier beside its smallest unit.
+    ("largest_minutes_plus_second", "INTERVAL '153722867280' MINUTE + INTERVAL '55' SECOND"),
+    ("largest_minute_to_second_plus",
+     f"INTERVAL '153722867280:54.775807' MINUTE TO SECOND + {MICROSECOND}"),
+    ("largest_hour_to_second_plus",
+     f"INTERVAL '2562047788:00:54.775807' HOUR TO SECOND + {MICROSECOND}"),
+    ("largest_hour_to_minute_plus",
+     "INTERVAL '2562047788:00' HOUR TO MINUTE + INTERVAL '1' MINUTE"),
+    ("largest_day_to_minute_plus",
+     "INTERVAL '106751991 04:00' DAY TO MINUTE + INTERVAL '1' MINUTE"),
+    ("largest_day_to_hour_plus", "INTERVAL '106751991 04' DAY TO HOUR + INTERVAL '1' HOUR"),
+    ("largest_years_plus", "INTERVAL '178956970' YEAR + INTERVAL '1' YEAR"),
+    ("largest_months_plus", "INTERVAL '2147483647' MONTH + INTERVAL '1' MONTH"),
+    # A NULL operand discards the other operand's overflow, in either order.
+    ("null_plus_overflow", f"CAST(NULL AS INTERVAL DAY) + ({OVERFLOW})"),
+    ("overflow_plus_null", f"({OVERFLOW}) + CAST(NULL AS INTERVAL DAY)"),
+    ("null_minus_overflow", f"CAST(NULL AS INTERVAL DAY) - ({OVERFLOW})"),
+    ("null_months_plus_overflow",
+     "CAST(NULL AS INTERVAL MONTH) + (INTERVAL '2147483647' MONTH + INTERVAL '1' MONTH)"),
 ]
 
 
 def definitions():
     """The record names and queries, in capture order."""
-    for name, expression, condition in COLUMNS:
-        yield f"column_{name}", f"SELECT k, {expression} AS r FROM inputs WHERE {condition}"
+    for name, expression, table, condition in COLUMNS:
+        yield f"column_{name}", f"SELECT k, {expression} AS r FROM {table} WHERE {condition}"
+    # A sort key over a sum of intervals.
+    yield ("column_order_by_sum",
+           "SELECT k FROM inputs WHERE k < 2 "
+           "ORDER BY TIMESTAMP_NTZ '2020-01-10 00:00:00' + (a + b)")
     for name, expression in LITERALS:
         yield f"literal_{name}", f"SELECT {expression} AS r"
 
@@ -98,6 +138,9 @@ def python_value(value, kind):
     if value is None:
         return None
     if kind == "integer":
+        return int(value)
+    if kind == "interval month":
+        # Registered as INT months and cast in SQL; PySpark has no YEAR TO MONTH values.
         return int(value)
     if kind == "interval day to second":
         return timedelta(microseconds=int(value))
