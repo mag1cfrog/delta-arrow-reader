@@ -646,8 +646,10 @@ interval scaling, comparison and other consumers saw a number, and TRY_SUBTRACT 
 planning. Arrow's microsecond duration carries no qualifier, so a CAST of the difference to
 STRING gives DAY TO SECOND text (#953) and a CAST to an integer counts seconds (#1152), where
 Spark uses the DAY unit; a DATE plus a difference beyond Arrow's nanosecond calendar intervals
-fails (#952). The [DATE subtraction references](tests/fixtures/date-subtraction/README.md)
-record the checks.
+fails (#952). As for other day-time intervals, a comparison with a YEAR TO MONTH interval is
+accepted where Spark rejects it (#1182), CONCAT writes ISO 8601 duration text (#953), and
+TRY_SUM rejects it while planning (#1183). An Arrow Date64 operand subtracts like a DATE. The
+[DATE subtraction references](tests/fixtures/date-subtraction/README.md) record the checks.
 
 MAKE_INTERVAL uses a local function, `SparkMakeInterval`, in place of `datafusion-spark`'s,
 following Spark's `MakeInterval`. Missing trailing arguments are 0, and more than seven fail

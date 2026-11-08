@@ -51,8 +51,8 @@ impl SparkSubtractDates {
         }
     }
 
-    /// The difference of two days since the epoch in microseconds, or Java's exact arithmetic
-    /// message for the step that overflows.
+    /// The difference between two day numbers, counted from the epoch, in microseconds, or
+    /// Java's exact arithmetic message for the step that overflows.
     fn difference(end: i32, start: i32) -> std::result::Result<i64, &'static str> {
         let days = end.checked_sub(start).ok_or("integer overflow")?;
         i64::from(days)
