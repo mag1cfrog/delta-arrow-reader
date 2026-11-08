@@ -15,6 +15,7 @@ use sail_function::scalar::datetime::spark_interval::{
     SparkCalendarInterval, SparkDayTimeInterval, SparkYearMonthInterval,
 };
 use sail_function::scalar::datetime::spark_interval_truncate::SparkIntervalTruncate;
+use sail_function::scalar::datetime::spark_number_to_interval::SparkNumberToInterval;
 use sail_function::scalar::datetime::spark_timestamp::SparkTimestamp;
 use sail_function::scalar::spark_cast_numeric_to_integer::SparkCastNumericToInteger;
 use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
@@ -122,6 +123,23 @@ impl PlanResolver<'_> {
             ) => Some(day_time_field_to_microseconds(field)),
             _ => None,
         };
+        // Spark reads a number cast to an interval qualifier as a count of its end field.
+        let number_unit_length: Option<i64> = match (&cast_to_type, day_time_interval_field) {
+            (
+                spec::DataType::Interval {
+                    interval_unit: spec::IntervalUnit::YearMonth,
+                    start_field,
+                    end_field,
+                },
+                _,
+            ) => match end_field.or(*start_field) {
+                Some(spec::IntervalFieldType::Year) => Some(12),
+                Some(spec::IntervalFieldType::Month) => Some(1),
+                _ => None,
+            },
+            (_, Some(field)) => Some(day_time_field_to_microseconds(field)),
+            _ => None,
+        };
         let interval_type_name = match &cast_to_type {
             spec::DataType::Interval {
                 start_field: Some(start),
@@ -143,7 +161,7 @@ impl PlanResolver<'_> {
                 expr::Expr::Alias(_) | expr::Expr::Column(_) | expr::Expr::OuterReferenceColumn(..)
             );
         let name = if include_cast_in_name || !named_input {
-            let data_type_string = match interval_type_name {
+            let data_type_string = match interval_type_name.clone() {
                 Some(name) => name,
                 None => SparkPlanFormatter.data_type_to_simple_string(&cast_to_type)?,
             };
@@ -168,6 +186,36 @@ impl PlanResolver<'_> {
                 NamedExpr::new(name, drop_inherited_column_metadata(expr)),
                 named_input,
             ));
+        }
+        if let (Some(unit_length), Some(target_name)) = (number_unit_length, &interval_type_name) {
+            match expr_type {
+                DataType::Int8
+                | DataType::Int16
+                | DataType::Int32
+                | DataType::Int64
+                | DataType::Decimal128(..) => {
+                    let expr = ScalarUDF::from(SparkNumberToInterval::try_new(
+                        cast_to_type,
+                        unit_length,
+                        target_name.as_str(),
+                        is_try,
+                    )?)
+                    .call(vec![expr]);
+                    return Ok((
+                        NamedExpr::new(name, drop_inherited_column_metadata(expr)),
+                        named_input,
+                    ));
+                }
+                // Spark casts only exact numbers to intervals.
+                DataType::Float16 | DataType::Float32 | DataType::Float64 => {
+                    let source = SparkPlanFormatter.data_type_to_cast_error_string(&expr_type)?;
+                    return Err(PlanError::analysis(format!(
+                        "[DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION] cannot cast \"{source}\" to \"{}\". SQLSTATE: 42K09",
+                        target_name.to_ascii_lowercase()
+                    )));
+                }
+                _ => {}
+            }
         }
         if expr_type.is_numeric()
             && matches!(cast_to_type, DataType::Duration(_))

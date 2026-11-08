@@ -286,8 +286,24 @@ keeps only the target's units, as in Spark. When the target ends in YEAR, DAY,
 HOUR or MINUTE, a third local function truncates the stored month or microsecond
 count toward zero to whole units of that field; targets ending in MONTH or
 SECOND keep the count. Interval leaves of nested ARRAY, STRUCT and MAP casts
-still keep their count (#995). Numeric and string casts to intervals and native
-DataFusion SQL are unchanged.
+still keep their count (#995). String casts to intervals and native DataFusion
+SQL are unchanged; numeric casts follow below.
+
+### Numeric interval casts
+
+CAST and TRY_CAST of a TINYINT, SMALLINT, INT, BIGINT or DECIMAL to a year-month or day-time
+qualifier use a local function, `SparkNumberToInterval`, as Spark reads the number as a count of
+the qualifier's end field: `CAST(-7 AS INTERVAL YEAR)` is -84 months. A DECIMAL product is
+rounded HALF_UP to a whole month or microsecond. A result beyond INT months or BIGINT
+microseconds fails with Spark's `CAST_OVERFLOW` message in both ANSI modes, while optimizing for
+a constant, and TRY_CAST gives NULL. The result is nullable only for a nullable number or
+TRY_CAST. FLOAT and DOUBLE sources fail during analysis with
+`DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION`, as in Spark. Year-month targets used to read every
+number as months and rejected BIGINT, DECIMAL, TINYINT and SMALLINT sources. Day-time targets
+wrapped on overflow, truncated DECIMAL fractions and accepted FLOAT and DOUBLE sources. NULL
+sources and native DataFusion SQL are unchanged. The
+[numeric interval cast references](tests/fixtures/numeric-interval-casts/README.md) record the
+checks.
 
 ### Calendar interval ordering
 
