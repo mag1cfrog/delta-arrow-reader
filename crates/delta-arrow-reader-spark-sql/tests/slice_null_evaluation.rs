@@ -509,3 +509,317 @@ async fn slice_selected_lambda_coordinates_keep_variables_and_captures() -> Test
     }
     Ok(())
 }
+
+#[tokio::test]
+async fn slice_local_null_masks_skip_only_discarded_coordinate_rows() -> TestResult {
+    use std::sync::Arc;
+
+    use arrow::datatypes::{DataType, Field, Schema};
+    use delta_arrow_reader_spark_sql::{SparkSqlOptions, plan_query};
+
+    let cases = [
+        (
+            "slice_literal_null_div",
+            "SELECT SLICE(CAST(NULL AS ARRAY<INT>), 1 DIV 0, 1) AS r",
+            json!([[null]]),
+            true,
+            false,
+        ),
+        (
+            "slice_local_null_div",
+            "SELECT SLICE(a, 1 DIV 0, 1) AS r FROM VALUES(CAST(NULL AS ARRAY<INT>)) AS t(a)",
+            json!([[null]]),
+            true,
+            false,
+        ),
+        (
+            "slice_all_null_column_div",
+            "SELECT k, SLICE(a, 1 DIV d, 1) AS r FROM VALUES (0,CAST(NULL AS ARRAY<INT>),0),(1,CAST(NULL AS ARRAY<INT>),0) AS t(k,a,d) ORDER BY k",
+            json!([["0", null], ["1", null]]),
+            true,
+            true,
+        ),
+        (
+            "slice_all_null_column_cast",
+            "SELECT k, SLICE(a, CAST(txt AS INT), 1) AS r FROM VALUES (0,CAST(NULL AS ARRAY<INT>),'bad'),(1,CAST(NULL AS ARRAY<INT>),'worse') AS t(k,a,txt) ORDER BY k",
+            json!([["0", null], ["1", null]]),
+            true,
+            true,
+        ),
+        (
+            "slice_mixed_array_div",
+            "SELECT k, SLICE(a, 1 DIV d, 1) AS r FROM VALUES (0,CAST(NULL AS ARRAY<INT>),0),(1,ARRAY(7,8),1),(2,CAST(NULL AS ARRAY<INT>),0),(3,ARRAY(9,10),1) AS t(k,a,d) ORDER BY k",
+            json!([["0", null], ["1", ["7"]], ["2", null], ["3", ["9"]]]),
+            true,
+            true,
+        ),
+        (
+            "slice_mixed_array_cast",
+            "SELECT k, SLICE(a, CAST(txt AS INT), 1) AS r FROM VALUES (0,CAST(NULL AS ARRAY<INT>),'bad'),(1,ARRAY(7,8),'1'),(2,CAST(NULL AS ARRAY<INT>),'worse'),(3,ARRAY(9,10),'2') AS t(k,a,txt) ORDER BY k",
+            json!([["0", null], ["1", ["7"]], ["2", null], ["3", ["10"]]]),
+            true,
+            true,
+        ),
+        (
+            "slice_mixed_start_div",
+            "SELECT k, SLICE(a, s, 1 DIV d) AS r FROM VALUES (0,ARRAY(7,8),CAST(NULL AS INT),0),(1,ARRAY(7,8),1,1),(2,ARRAY(9,10),CAST(NULL AS INT),0),(3,ARRAY(9,10),2,1) AS t(k,a,s,d) ORDER BY k",
+            json!([["0", null], ["1", ["7"]], ["2", null], ["3", ["10"]]]),
+            false,
+            true,
+        ),
+        (
+            "slice_mixed_start_cast",
+            "SELECT k, SLICE(a, s, CAST(txt AS INT)) AS r FROM VALUES (0,ARRAY(7,8),CAST(NULL AS INT),'bad'),(1,ARRAY(7,8),1,'1'),(2,ARRAY(9,10),CAST(NULL AS INT),'worse'),(3,ARRAY(9,10),2,'1') AS t(k,a,s,txt) ORDER BY k",
+            json!([["0", null], ["1", ["7"]], ["2", null], ["3", ["10"]]]),
+            false,
+            true,
+        ),
+        (
+            "slice_mixed_array_and_start_masks",
+            "SELECT k, SLICE(a, CAST(txt AS INT), 1 DIV d) AS r FROM VALUES (0,CAST(NULL AS ARRAY<INT>),'bad',0),(1,ARRAY(7,8),CAST(NULL AS STRING),0),(2,ARRAY(7,8),'1',1),(3,CAST(NULL AS ARRAY<INT>),'worse',0),(4,ARRAY(9,10),'2',1) AS t(k,a,txt,d) ORDER BY k",
+            json!([
+                ["0", null],
+                ["1", null],
+                ["2", ["7"]],
+                ["3", null],
+                ["4", ["10"]]
+            ]),
+            true,
+            true,
+        ),
+        (
+            "slice_literal_null_cast",
+            "SELECT SLICE(CAST(NULL AS ARRAY<INT>), CAST('bad' AS INT), 1) AS r",
+            json!([[null]]),
+            true,
+            false,
+        ),
+    ];
+    for batch_size in [1, 32] {
+        let session = SessionContext::new_with_state(
+            configure_spark_sql(
+                SessionStateBuilder::new()
+                    .with_default_features()
+                    .with_config(
+                        SessionConfig::new()
+                            .with_batch_size(batch_size)
+                            .with_target_partitions(1),
+                    ),
+            )
+            .build(),
+        );
+        for ansi_mode in [true, false] {
+            for (id, sql, expected_rows, contains_null, keyed) in &cases {
+                let query = plan_query(
+                    &session,
+                    sql,
+                    &SparkSqlOptions {
+                        ansi_mode,
+                        ..Default::default()
+                    },
+                )
+                .await?;
+                let mut expected_fields = Vec::new();
+                if *keyed {
+                    expected_fields.push(Field::new("k", DataType::Int32, false));
+                }
+                expected_fields.push(Field::new(
+                    "r",
+                    DataType::List(Arc::new(Field::new_list_field(
+                        DataType::Int32,
+                        *contains_null,
+                    ))),
+                    true,
+                ));
+                let expected_schema = Schema::new(expected_fields);
+                let analyzed = query.logical_plan.schema().as_arrow();
+                let public_fields = analyzed
+                    .fields()
+                    .iter()
+                    .zip(&query.column_names)
+                    .map(|(field, name)| field.as_ref().clone().with_name(name.clone()))
+                    .collect::<Vec<_>>();
+                assert_eq!(query.column_names.len(), analyzed.fields().len(), "{id}");
+                assert_eq!(
+                    Schema::new_with_metadata(public_fields, analyzed.metadata().clone()),
+                    expected_schema,
+                    "analyzed {id} ANSI={ansi_mode} batch={batch_size}",
+                );
+                let physical = query.create_physical_plan(&session).await?;
+                let schema = physical.schema();
+                assert_eq!(
+                    schema.as_ref(),
+                    &expected_schema,
+                    "physical {id} ANSI={ansi_mode} batch={batch_size}",
+                );
+                let batches = collect(physical, session.task_ctx()).await?;
+                let mut rows = Vec::new();
+                for batch in batches {
+                    assert_eq!(batch.schema(), schema, "{id}");
+                    spark_results::validate_batch(schema.as_ref(), &batch)?;
+                    for row in 0..batch.num_rows() {
+                        rows.push(
+                            batch
+                                .columns()
+                                .iter()
+                                .map(|column| spark_results::encode_value(column.as_ref(), row))
+                                .collect::<TestResult<Vec<_>>>()?,
+                        );
+                    }
+                }
+                assert_eq!(
+                    json!(rows),
+                    *expected_rows,
+                    "{id} ANSI={ansi_mode} batch={batch_size}",
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn slice_local_null_masks_preserve_reached_coordinate_errors() -> TestResult {
+    use delta_arrow_reader_spark_sql::{SparkSqlOptions, plan_query};
+
+    let division: &[&str] = &[
+        "preserve_spark_expression_errors\ncaused by\nArrow error: Divide by zero error",
+        "Arrow error: Divide by zero error",
+        "Divide by zero error",
+    ];
+    let cast: &[&str] = &[
+        "[CAST_INVALID_INPUT]\ncaused by\nArrow error: Cast error: Cannot cast string 'reached_bad' to value of Int32 type",
+        "Arrow error: Cast error: Cannot cast string 'reached_bad' to value of Int32 type",
+        "Cast error: Cannot cast string 'reached_bad' to value of Int32 type",
+    ];
+    let folded_cast: &[&str] = &[
+        "Optimizer rule 'simplify_expressions' failed\ncaused by\n[CAST_INVALID_INPUT]\ncaused by\nArrow error: Cast error: Cannot cast string 'bad' to value of Int32 type",
+        "[CAST_INVALID_INPUT]\ncaused by\nArrow error: Cast error: Cannot cast string 'bad' to value of Int32 type",
+        "Arrow error: Cast error: Cannot cast string 'bad' to value of Int32 type",
+        "Cast error: Cannot cast string 'bad' to value of Int32 type",
+    ];
+    let cases = [
+        (
+            "slice_local_live_div",
+            "SELECT SLICE(a, 1 DIV 0, 1) AS r FROM VALUES(ARRAY(1)) AS t(a)",
+            "physical",
+            division,
+            json!([[null]]),
+        ),
+        (
+            "slice_mixed_reached_div",
+            "SELECT k, SLICE(a, 1 DIV d, 1) AS r FROM VALUES (0,CAST(NULL AS ARRAY<INT>),0),(1,ARRAY(7,8),1),(2,ARRAY(9,10),0) AS t(k,a,d) ORDER BY k",
+            "physical",
+            division,
+            json!([["0", null], ["1", ["7"]], ["2", null]]),
+        ),
+        (
+            "slice_mixed_reached_cast",
+            "SELECT k, SLICE(a, CAST(txt AS INT), 1) AS r FROM VALUES (0,CAST(NULL AS ARRAY<INT>),'discarded_bad'),(1,ARRAY(7,8),'1'),(2,ARRAY(9,10),'reached_bad') AS t(k,a,txt) ORDER BY k",
+            "execute",
+            cast,
+            json!([["0", null], ["1", ["7"]], ["2", null]]),
+        ),
+        (
+            "slice_mixed_reached_length_div",
+            "SELECT k, SLICE(a, s, 1 DIV d) AS r FROM VALUES (0,ARRAY(7,8),CAST(NULL AS INT),0),(1,ARRAY(7,8),1,1),(2,ARRAY(9,10),1,0) AS t(k,a,s,d) ORDER BY k",
+            "physical",
+            division,
+            json!([["0", null], ["1", ["7"]], ["2", null]]),
+        ),
+        (
+            "slice_mixed_reached_length_cast",
+            "SELECT k, SLICE(a, s, CAST(txt AS INT)) AS r FROM VALUES (0,ARRAY(7,8),CAST(NULL AS INT),'discarded_bad'),(1,ARRAY(7,8),1,'1'),(2,ARRAY(9,10),1,'reached_bad') AS t(k,a,s,txt) ORDER BY k",
+            "execute",
+            cast,
+            json!([["0", null], ["1", ["7"]], ["2", null]]),
+        ),
+        (
+            "slice_local_null_constant_cast",
+            "SELECT SLICE(a, CAST('bad' AS INT), 1) AS r FROM VALUES(CAST(NULL AS ARRAY<INT>)) AS t(a)",
+            "physical",
+            folded_cast,
+            json!([[null]]),
+        ),
+        (
+            "slice_mixed_constant_div",
+            "SELECT k, SLICE(a, 1 DIV 0, 1) AS r FROM VALUES (0,CAST(NULL AS ARRAY<INT>)),(1,ARRAY(7)) AS t(k,a) ORDER BY k",
+            "physical",
+            division,
+            json!([["0", null], ["1", null]]),
+        ),
+        (
+            "slice_mixed_constant_cast",
+            "SELECT k, SLICE(a, CAST('bad' AS INT), 1) AS r FROM VALUES (0,CAST(NULL AS ARRAY<INT>)),(1,ARRAY(7)) AS t(k,a) ORDER BY k",
+            "physical",
+            folded_cast,
+            json!([["0", null], ["1", null]]),
+        ),
+        (
+            "slice_literal_live_div",
+            "SELECT SLICE(ARRAY(7), 1 DIV 0, 1) AS r",
+            "physical",
+            division,
+            json!([[null]]),
+        ),
+        (
+            "slice_literal_live_cast",
+            "SELECT SLICE(ARRAY(7), CAST('bad' AS INT), 1) AS r",
+            "physical",
+            folded_cast,
+            json!([[null]]),
+        ),
+    ];
+    for batch_size in [1, 32] {
+        let session = SessionContext::new_with_state(
+            configure_spark_sql(
+                SessionStateBuilder::new()
+                    .with_default_features()
+                    .with_config(SessionConfig::new().with_batch_size(batch_size)),
+            )
+            .build(),
+        );
+        for (id, sql, error_phase, expected_chain, legacy_rows) in &cases {
+            let query = plan_query(&session, sql, &SparkSqlOptions::default()).await?;
+            let physical = query.create_physical_plan(&session).await;
+            let error = if *error_phase == "physical" {
+                physical.expect_err("reached ANSI error must fail physical preparation")
+            } else {
+                let physical = physical?;
+                let analyzed = query.logical_plan.schema().as_arrow();
+                let public_fields = analyzed
+                    .fields()
+                    .iter()
+                    .zip(&query.column_names)
+                    .map(|(field, name)| field.as_ref().clone().with_name(name.clone()))
+                    .collect::<Vec<_>>();
+                assert_eq!(query.column_names.len(), analyzed.fields().len(), "{id}");
+                assert_eq!(
+                    physical.schema().as_ref(),
+                    &arrow::datatypes::Schema::new_with_metadata(
+                        public_fields,
+                        analyzed.metadata().clone()
+                    ),
+                    "physical {id} batch={batch_size}",
+                );
+                collect(physical, session.task_ctx())
+                    .await
+                    .expect_err("reached ANSI cast must fail during execution")
+            };
+            let mut chain = Vec::new();
+            let mut source: Option<&(dyn std::error::Error + 'static)> = Some(&error);
+            while let Some(cause) = source {
+                chain.push(cause.to_string());
+                source = cause.source();
+            }
+            assert_eq!(chain, *expected_chain, "{id} batch={batch_size}");
+            let actual = spark_results::capture_spark_query_result(
+                &session,
+                &json!({"sql":sql,"ansi":false}),
+            )
+            .await?;
+            assert_eq!(actual["rows"], *legacy_rows, "{id} batch={batch_size}");
+        }
+    }
+    Ok(())
+}

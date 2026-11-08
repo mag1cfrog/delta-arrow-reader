@@ -53,6 +53,7 @@ struct CountedIdentity {
     signature: Signature,
     folding_permitted: bool,
     short_circuits: bool,
+    any_null: bool,
     error_if_invoked: bool,
     clone_argument_field: bool,
     rewrite_target: Option<Arc<ScalarUDF>>,
@@ -65,6 +66,7 @@ impl PartialEq for CountedIdentity {
             && self.signature == other.signature
             && self.folding_permitted == other.folding_permitted
             && self.short_circuits == other.short_circuits
+            && self.any_null == other.any_null
             && self.error_if_invoked == other.error_if_invoked
             && self.clone_argument_field == other.clone_argument_field
             && self.rewrite_target == other.rewrite_target
@@ -77,6 +79,7 @@ impl Hash for CountedIdentity {
         self.signature.hash(state);
         self.folding_permitted.hash(state);
         self.short_circuits.hash(state);
+        self.any_null.hash(state);
         self.error_if_invoked.hash(state);
         self.clone_argument_field.hash(state);
         self.rewrite_target.hash(state);
@@ -95,6 +98,9 @@ impl ScalarUDFImpl for CountedIdentity {
     }
     fn short_circuits(&self) -> bool {
         self.short_circuits
+    }
+    fn short_circuits_on_any_null_argument(&self) -> bool {
+        self.any_null
     }
     fn conditional_arguments<'a>(&self, _: &'a [Expr]) -> Option<(Vec<&'a Expr>, Vec<&'a Expr>)> {
         // The SDK defines None as all eager arguments, even when short_circuits is true.
@@ -158,6 +164,7 @@ fn session(spark: bool, error_if_invoked: bool) -> (SessionContext, InvocationCo
             signature: Signature::exact(vec![DataType::Float64], Volatility::Immutable),
             folding_permitted: false,
             short_circuits: false,
+            any_null: false,
             error_if_invoked,
             clone_argument_field: false,
             rewrite_target: None,
@@ -172,6 +179,7 @@ fn session(spark: bool, error_if_invoked: bool) -> (SessionContext, InvocationCo
             signature: Signature::exact(vec![DataType::Float64], Volatility::Immutable),
             folding_permitted: true,
             short_circuits: true,
+            any_null: false,
             error_if_invoked,
             clone_argument_field: false,
             rewrite_target: Some(retained_identity),
@@ -182,6 +190,7 @@ fn session(spark: bool, error_if_invoked: bool) -> (SessionContext, InvocationCo
             signature: Signature::any(1, Volatility::Immutable),
             folding_permitted: false,
             short_circuits: false,
+            any_null: false,
             error_if_invoked,
             clone_argument_field: false,
             rewrite_target: None,
@@ -192,6 +201,7 @@ fn session(spark: bool, error_if_invoked: bool) -> (SessionContext, InvocationCo
             signature: Signature::exact(vec![DataType::Int32], Volatility::Immutable),
             folding_permitted: false,
             short_circuits: false,
+            any_null: false,
             error_if_invoked,
             clone_argument_field: true,
             rewrite_target: None,
@@ -202,6 +212,18 @@ fn session(spark: bool, error_if_invoked: bool) -> (SessionContext, InvocationCo
             signature: Signature::exact(vec![DataType::Float64], Volatility::Immutable),
             folding_permitted: false,
             short_circuits: true,
+            any_null: false,
+            error_if_invoked,
+            clone_argument_field: false,
+            rewrite_target: None,
+            calls: Arc::clone(&counters.opaque),
+        },
+        CountedIdentity {
+            name: "any_null_identity",
+            signature: Signature::exact(vec![DataType::Float64], Volatility::Immutable),
+            folding_permitted: false,
+            short_circuits: false,
+            any_null: true,
             error_if_invoked,
             clone_argument_field: false,
             rewrite_target: None,
@@ -212,6 +234,7 @@ fn session(spark: bool, error_if_invoked: bool) -> (SessionContext, InvocationCo
             signature: Signature::exact(vec![DataType::Float64], Volatility::Immutable),
             folding_permitted: true,
             short_circuits: false,
+            any_null: false,
             error_if_invoked: false,
             clone_argument_field: false,
             rewrite_target: None,
@@ -1117,6 +1140,31 @@ async fn post_rewrite_local_consumers_keep_opaque_targets_for_execution() -> Tes
                     .clone()
                     .with_nullable(false);
                 check_case(cast_null_predicate, spark, ansi, error_if_invoked).await?;
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn local_any_null_parent_waits_for_execution() -> TestResult {
+    for ansi in [true, false] {
+        for spark in [true, false] {
+            for error_if_invoked in [false, true] {
+                check_case(
+                    scalar_case(
+                        "SELECT any_null_identity(v/1) AS r FROM VALUES(CAST(1 AS DOUBLE)) AS t(v)"
+                            .into(),
+                        DataType::Float64,
+                        vec![vec![ScalarValue::Float64(Some(1.0))]],
+                        1,
+                        0,
+                    ),
+                    spark,
+                    ansi,
+                    error_if_invoked,
+                )
+                .await?;
             }
         }
     }

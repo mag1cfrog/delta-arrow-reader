@@ -47,7 +47,8 @@ use datafusion_expr::sort_properties::ExprProperties;
 use datafusion_expr::type_coercion::functions::fields_with_udf;
 use datafusion_expr::{
     ColumnarValue, EvaluatedRowPrefix, ExpressionPlacement, ReturnFieldArgs,
-    ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Volatility, expr_vec_fmt,
+    RowEvaluationFailure, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Volatility,
+    expr_vec_fmt,
 };
 
 /// Physical expression of a scalar function
@@ -76,11 +77,23 @@ impl Debug for ScalarFunctionExpr {
 }
 
 impl ScalarFunctionExpr {
-    fn evaluate_eager_and_invoke(
+    /// Check the eager argument path without invoking this function's kernel.
+    /// The caller must separately permit preparation of every argument.
+    pub fn check_eager_argument_errors(&self, batch: &RecordBatch) -> Result<()> {
+        if batch.num_rows() == 0 && self.short_circuit_any_arg_null {
+            return Ok(());
+        }
+        match self.evaluate_eager_arguments(batch, true)?.1 {
+            Some(failure) => Err(failure.error),
+            None => Ok(()),
+        }
+    }
+
+    fn evaluate_eager_arguments(
         &self,
         batch: &RecordBatch,
         retain_row_errors: bool,
-    ) -> Result<EvaluatedRowPrefix> {
+    ) -> Result<(Vec<ColumnarValue>, Option<RowEvaluationFailure>)> {
         use arrow::array::BooleanArray;
 
         let mut active: Option<BooleanArray> = None;
@@ -133,12 +146,7 @@ impl ScalarFunctionExpr {
             if let Some(failure) = output.failure.take() {
                 rows = failure.row_index;
                 if rows == 0 {
-                    return Ok(EvaluatedRowPrefix {
-                        values: ColumnarValue::Array(arrow::array::new_empty_array(
-                            self.return_type(),
-                        )),
-                        failure: Some(failure),
-                    });
+                    return Ok((args, Some(failure)));
                 }
                 for value in &mut args {
                     if let ColumnarValue::Array(array) = value {
@@ -167,6 +175,27 @@ impl ScalarFunctionExpr {
                 }
             }
             args.push(output.values);
+        }
+        Ok((args, pending_failure))
+    }
+
+    fn evaluate_eager_and_invoke(
+        &self,
+        batch: &RecordBatch,
+        retain_row_errors: bool,
+    ) -> Result<EvaluatedRowPrefix> {
+        let (args, pending_failure) =
+            self.evaluate_eager_arguments(batch, retain_row_errors)?;
+        let rows = pending_failure
+            .as_ref()
+            .map_or(batch.num_rows(), |failure| failure.row_index);
+        if rows == 0 && pending_failure.is_some() {
+            return Ok(EvaluatedRowPrefix {
+                values: ColumnarValue::Array(arrow::array::new_empty_array(
+                    self.return_type(),
+                )),
+                failure: pending_failure,
+            });
         }
         let prefix_batch;
         let input = if rows == batch.num_rows() {

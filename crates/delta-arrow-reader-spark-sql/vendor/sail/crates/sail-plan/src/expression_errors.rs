@@ -13,7 +13,7 @@ use datafusion::optimizer::propagate_empty_relation::PropagateEmptyRelation;
 use datafusion::optimizer::push_down_filter::PushDownFilter;
 use datafusion::optimizer::simplify_expressions::{ExprSimplifier, prune_null};
 use datafusion::optimizer::{AnalyzerRule, OptimizerContext, OptimizerRule};
-use datafusion::physical_expr::create_physical_expr;
+use datafusion::physical_expr::{PhysicalExpr, ScalarFunctionExpr, create_physical_expr};
 use datafusion_common::config::{ConfigExtension, ConfigOptions};
 use datafusion_common::metadata::FieldMetadata;
 use datafusion_common::tree_node::{Transformed, TreeNode, TreeNodeRecursion};
@@ -3861,8 +3861,23 @@ impl Prepare {
         expr: &Expr,
         schema: &DFSchemaRef,
         batch: &RecordBatch,
+        arguments_only: bool,
     ) -> Result<()> {
-        let error = match create_physical_expr(expr, schema, &self.props)?.evaluate(batch) {
+        let evaluate = |physical: &dyn PhysicalExpr| {
+            if arguments_only {
+                physical
+                    .downcast_ref::<ScalarFunctionExpr>()
+                    .ok_or_else(|| {
+                        datafusion_common::internal_datafusion_err!(
+                            "Expected a scalar function for argument preparation"
+                        )
+                    })?
+                    .check_eager_argument_errors(batch)
+            } else {
+                physical.evaluate(batch).map(|_| ())
+            }
+        };
+        let error = match evaluate(create_physical_expr(expr, schema, &self.props)?.as_ref()) {
             Ok(_) => return Ok(()),
             Err(error) => error,
         };
@@ -3924,7 +3939,7 @@ impl Prepare {
         if !expr.transformed {
             return Err(error);
         }
-        create_physical_expr(&expr.data, schema, &self.props)?.evaluate(batch)?;
+        evaluate(create_physical_expr(&expr.data, schema, &self.props)?.as_ref())?;
         Ok(())
     }
 
@@ -3986,7 +4001,7 @@ impl Prepare {
                                 self.check_expr(&expr, true, Some((&schema, &batch)))?;
                             }
                         } else if arithmetic {
-                            self.check_local_expression_errors(&expr, &schema, &batch)?;
+                            self.check_local_expression_errors(&expr, &schema, &batch, false)?;
                         } else if let Err(error) =
                             create_physical_expr(&expr, &schema, &self.props)?.evaluate(&batch)
                             && SparkArrayIndexError::is(&error)
@@ -4072,11 +4087,27 @@ impl Prepare {
             && permits_constant_preparation(expr)?
         {
             if let Some((schema, batch)) = local_input {
-                self.check_local_expression_errors(expr, schema, batch)?;
+                self.check_local_expression_errors(expr, schema, batch, false)?;
             } else {
                 self.eval_constant(expr)?;
             }
             return Ok(());
+        }
+        // Local AnyNull arguments retain their native row masks without invoking the opaque parent.
+        if check_values
+            && let Some((schema, batch)) = local_input
+            && let Expr::ScalarFunction(function) = expr
+            && function.func.inner().short_circuits_on_any_null_argument()
+            && !function.func.short_circuits()
+            && function.func.as_async().is_none()
+            && is_locally_evaluable(expr, true)?
+            && function.args.iter().try_fold(true, |allowed, argument| {
+                Ok::<_, datafusion_common::DataFusionError>(
+                    allowed && permits_constant_preparation(argument)?,
+                )
+            })?
+        {
+            return self.check_local_expression_errors(expr, schema, batch, true);
         }
         // An opaque parent still checks eager arguments; only conditional arguments defer errors.
         let conditional = match expr {
