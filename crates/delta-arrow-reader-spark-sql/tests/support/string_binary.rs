@@ -19,6 +19,10 @@ use delta_arrow_reader_spark_sql::{SparkSqlOptions, plan_query};
 use sail_common_datafusion::rename::physical_plan::rename_physical_plan;
 use serde_json::{Value, json};
 
+#[allow(
+    clippy::duplicate_mod,
+    reason = "Independently importable integration helpers share this source in mixed targets."
+)]
 #[path = "c06_receipts.rs"]
 pub(crate) mod c06_receipts;
 
