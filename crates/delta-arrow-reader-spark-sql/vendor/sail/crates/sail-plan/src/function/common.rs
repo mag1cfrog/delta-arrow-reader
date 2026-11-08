@@ -11,6 +11,7 @@ use datafusion_common::metadata::FieldMetadata;
 use datafusion_common::tree_node::{Transformed, TreeNode};
 use datafusion_common::{DFSchema, DFSchemaRef, ScalarValue};
 use datafusion_expr::expr::{AggregateFunction, AggregateFunctionParams, WindowFunctionParams};
+use datafusion_expr::type_coercion::binary::comparison_coercion;
 use datafusion_expr::{
     AggregateUDF, BinaryExpr, ColumnarValue, ExprSchemable, ExpressionPlacement, Operator,
     ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
@@ -723,17 +724,18 @@ fn spark_error_type_name(data_type: &DataType) -> String {
     }
 }
 
-/// Whether `other` has the shape of `interval`, which holds a calendar interval, where a
-/// calendar interval sits: a NULL matches anything, and ARRAY and STRUCT shapes must match
-/// there. Positions without a calendar interval on either side are not compared, so an
-/// incompatible field beside one still gets the ordering error where Spark reports its type
-/// mismatch (#1163).
+/// Whether `other` has the shape of `interval`, which holds a calendar interval: a NULL matches
+/// anything, ARRAY and STRUCT shapes must match where a calendar interval sits, and other
+/// positions must have a common type under the comparison's own coercion. Where that coercion
+/// differs from Spark's, so does this check (#1176).
 fn matches_calendar_interval_shape(interval: &DataType, other: &DataType) -> bool {
     if *interval == DataType::Null || *other == DataType::Null {
         return true;
     }
+    // Fields without a calendar interval are compatible where the comparison's own coercion
+    // finds a common type.
     if !holds_calendar_interval(interval) && !holds_calendar_interval(other) {
-        return true;
+        return comparison_coercion(interval, other).is_some();
     }
     match (interval, other) {
         (
