@@ -36,6 +36,7 @@ use sail_function::scalar::math::spark_decimal_round::SparkDecimalRound;
 use sail_function::scalar::math::spark_div::SparkIntervalDiv;
 use sail_function::scalar::math::spark_float_round::SparkFloatRound;
 use sail_function::scalar::math::spark_integer_round::SparkIntegerRound;
+use sail_function::scalar::math::spark_interval_arithmetic::SparkIntervalArithmetic;
 use sail_function::scalar::math::spark_interval_negate::SparkIntervalNegate;
 use sail_function::scalar::math::spark_interval_scale::SparkIntervalScale;
 use sail_function::scalar::math::spark_negative::SparkNegative;
@@ -295,6 +296,11 @@ fn spark_plus(input: ScalarFunctionInput) -> PlanResult<Expr> {
                     && SparkTimestampAddInterval::accepts(&timestamp, &interval) =>
             {
                 ScalarUDF::from(SparkTimestampAddInterval::add()).call(vec![right, left])
+            }
+            (Ok(left_type), Ok(right_type))
+                if SparkIntervalArithmetic::accepts(&left_type, &right_type) =>
+            {
+                ScalarUDF::from(SparkIntervalArithmetic::add()).call(vec![left, right])
             }
             (Ok(DataType::Timestamp(..)), Ok(DataType::Null)) => {
                 left + cast(right, DataType::Duration(TimeUnit::Microsecond))
@@ -599,6 +605,11 @@ fn spark_minus(input: ScalarFunctionInput) -> PlanResult<Expr> {
             }
             (Ok(end_type), Ok(start_type)) if is_date_ntz_subtraction(&end_type, &start_type) => {
                 subtract_date_and_timestamp_ntz(false, (left, &end_type), (right, &start_type))
+            }
+            (Ok(left_type), Ok(right_type))
+                if SparkIntervalArithmetic::accepts(&left_type, &right_type) =>
+            {
+                ScalarUDF::from(SparkIntervalArithmetic::subtract()).call(vec![left, right])
             }
             (Ok(DataType::Date32), Ok(DataType::Duration(TimeUnit::Microsecond))) => {
                 left - cast(right, DataType::Interval(IntervalUnit::MonthDayNano))

@@ -223,8 +223,7 @@ run time. The expression-error analyzer marks its own evaluation of constants
 and local rows with the `SparkInterpretedEvaluation` configuration extension, so
 the function reports the optimizer's condition there and the run-time condition
 elsewhere. Its result range is typed as the interval, so enclosing sort keys
-keep their ordering properties. Interval addition and subtraction and native
-DataFusion SQL are unchanged. The [interval
+keep their ordering properties. Native DataFusion SQL is unchanged. The [interval
 references](tests/fixtures/interval-qualifiers/README.md) record the checks.
 
 ### Interval negation
@@ -242,6 +241,21 @@ Spark folds IS NULL and IS NOT NULL of a required expression before it folds
 constants, so a failing constant scaling or negation under either check returns
 a value. The expression-error analyzer's NULL-inspection precheck in the
 DataFusion simplifier fork now folds IS NOT NULL as well as IS NULL.
+
+### Interval addition and subtraction
+
+`+` and `-` of two DAY TO SECOND or two YEAR TO MONTH intervals use another local
+function, `SparkIntervalArithmetic`. It adds or subtracts the stored counts with Arrow's
+checked kernels and fails with Spark's `INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION`, which
+names `try_add` or `try_subtract`, in both ANSI modes. A constant overflow fails while
+optimizing through [constant folding errors](#constant-folding-errors), unless it sits in a
+CASE branch or COALESCE argument with a non-constant condition, which defers it to the rows
+that reach it while collecting. As in Spark, a NULL
+operand skips the other operand for its row and discards a constant overflow in it. Its
+result range is typed as the interval, so enclosing sort keys keep their ordering. Arrow's
+native operator failed only while collecting rows, with its own overflow error. TRY_ADD,
+TRY_SUBTRACT and native DataFusion SQL are unchanged. The
+[interval overflow references](tests/fixtures/interval-overflow/README.md) record the checks.
 
 ### Interval qualifier casts
 
@@ -1236,7 +1250,8 @@ folding, during optimization. A scalar UDF can return `true` from
 literal CASTs already do. A call inside a short-circuiting expression other than AND and
 OR, such as CASE or COALESCE, still defers its error, and so does an expression over a lambda
 variable, which has no value to fold. `AliasedScalarUDFImpl` forwards the choice. TIMESTAMPDIFF, TIMESTAMPADD, TIMESTAMP
-interval arithmetic and subtraction, and the TIMESTAMP to TIMESTAMP_NTZ conversion opt in.
+interval arithmetic and subtraction, interval `+` and `-`, and the TIMESTAMP to TIMESTAMP_NTZ
+conversion opt in.
 
 Strict DATE and TIMESTAMP parser calls, including TIMESTAMP_NTZ mode, also use
 this hook. Their existing reachability check runs before folding, preserving
