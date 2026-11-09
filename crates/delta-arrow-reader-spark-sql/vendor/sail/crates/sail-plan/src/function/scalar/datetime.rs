@@ -8,7 +8,6 @@ use datafusion::arrow::datatypes::{
 };
 use datafusion::functions::expr_fn;
 use datafusion::optimizer::simplify_expressions::ExprSimplifier;
-use datafusion::prelude::SessionContext;
 use datafusion_common::tree_node::{Transformed, TreeNode};
 use datafusion_common::{DFSchemaRef, DataFusionError, ScalarValue};
 use datafusion_expr::expr::{self, Expr};
