@@ -5,12 +5,12 @@ stages, with the innermost Java exception of a failure, for TIMESTAMPDIFF, DATED
 DATE_DIFF, TIMEDIFF, TIMESTAMPADD, DATEADD and three-argument DATE_ADD with keyword, lower-case,
 backquoted, string, double-quoted, parenthesized and unknown units, two-argument calls and
 upper-case names, over literals and columns, also beside a column named like a unit, and for
-backquoted names, DISTINCT, ALL, FILTER, IGNORE NULLS and OVER calls, adjacent, hex and
-lower-case string units, fewer than two and four arguments, and named arguments. Spark's
-grammar takes the unit only as a bare keyword in a plain call of a bare name; any other
-spelling makes an ordinary function call. Every query runs in both ANSI modes in UTC and
-America/Los_Angeles. Run from the crate root in the reference environment described in
-README.md; the output path must not exist.
+backquoted names, DISTINCT, ALL, FILTER, IGNORE NULLS, WITHIN GROUP and OVER calls,
+adjacent, hex and lower-case string units, a string unit under an upper-case name, fewer than
+two and four arguments, and named arguments. Spark's grammar takes the unit only as a bare
+keyword in a plain call of a bare name; any other spelling makes an ordinary function call.
+Every query runs in both ANSI modes in UTC and America/Los_Angeles. Run from the crate root in
+the reference environment described in README.md; the output path must not exist.
 """
 import argparse
 from datetime import datetime, timedelta, timezone
@@ -124,6 +124,12 @@ def definitions():
            "SELECT k, timestampdiff(DAY, s, endTimestamp => e) AS r FROM inputs")
     yield ("column_named_timestampadd",
            "SELECT k, timestampadd(DAY, k, timestamp => s) AS r FROM inputs")
+    # WITHIN GROUP, four arguments that resolve, and a string unit under an upper-case name.
+    yield ("column_within_group_datediff",
+           "SELECT k, datediff(DAY, s, e) WITHIN GROUP (ORDER BY k) AS r FROM inputs")
+    yield "column_datediff_four_columns", "SELECT k, datediff(s, e, s, e) AS r FROM inputs"
+    yield ("literal_upper_timestampdiff_string",
+           f"SELECT TIMESTAMPDIFF('DAY', {PARTIAL_DAY}) AS r")
 
 
 def python_value(value, kind):
