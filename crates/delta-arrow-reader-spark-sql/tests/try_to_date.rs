@@ -51,8 +51,9 @@ fn try_to_date_references() -> TestResult<Vec<Value>> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum RetainedDifference {
     /// #1057: TO_DATE with a format reports DAR's parser message for a string it cannot parse,
-    /// without Spark's `CANNOT_PARSE_TIMESTAMP` condition. Which row fails first depends on the
-    /// batch size, so either message holds.
+    /// without Spark's `CANNOT_PARSE_TIMESTAMP` condition. Which of two failing rows reports
+    /// first varies with the batch size and, at batch size 1, between runs, so either message
+    /// holds.
     ParserMessage,
     /// #1194: an INT, BOOLEAN, untyped NULL with a format or ARRAY argument is cast to DATE or
     /// fails, where Spark converts it to STRING or rejects it during analysis.

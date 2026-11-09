@@ -936,14 +936,14 @@ impl DateParser {
 }
 
 fn to_date(input: ScalarFunctionInput) -> PlanResult<Expr> {
-    parse_date(input, DateParser::ToDate)
+    to_date_with_parser(input, DateParser::ToDate)
 }
 
 /// Spark's TRY_TO_DATE: TO_DATE that gives NULL for a value it cannot parse in both ANSI modes.
 /// An invalid pattern still fails, as in Spark. With a format, its result over a DATE or
 /// TIMESTAMP column is nullable at every stage.
 fn try_to_date(input: ScalarFunctionInput) -> PlanResult<Expr> {
-    parse_date(input, DateParser::TryToDate)
+    to_date_with_parser(input, DateParser::TryToDate)
 }
 
 /// A dictionary-encoded STRING, as Delta's provider gives a STRING partition column, as its
@@ -955,7 +955,7 @@ fn dictionary_string_values(expr: Expr, schema: &DFSchemaRef) -> PlanResult<Expr
     })
 }
 
-fn parse_date(input: ScalarFunctionInput, parser: DateParser) -> PlanResult<Expr> {
+fn to_date_with_parser(input: ScalarFunctionInput, parser: DateParser) -> PlanResult<Expr> {
     let function_name = parser.name();
     let null_on_error = parser.null_on_error(input.function_context.plan_config.ansi_mode);
     if input.arguments.len() == 1 {

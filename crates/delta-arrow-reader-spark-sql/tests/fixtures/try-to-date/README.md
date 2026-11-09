@@ -39,7 +39,8 @@ gives partition columns; STRING columns as string views, as Delta's reader gives
 and as large strings; and DATE columns as Arrow's Date64. Four differences are retained, each at
 DAR's current result:
 - #1057: TO_DATE of `s` with the format in ANSI mode reports DAR's parser message without
-  Spark's condition (2 records, and their encoded copies);
+  Spark's condition, for whichever failing row reports first (2 records, and their encoded
+  copies);
 - #1194: TRY_TO_DATE of an INT gives 1970-01-02, of a BOOLEAN or an ARRAY fails while
   optimizing, and of an untyped NULL with a format fails while collecting rows (16 records);
 - #1195: TRY_TO_DATE of a TIMESTAMP_NTZ with the format in Los Angeles gives the value's own

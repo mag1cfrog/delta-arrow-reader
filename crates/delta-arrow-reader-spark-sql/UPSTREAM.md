@@ -868,8 +868,8 @@ differences:
 - an ignored parsed offset (#1015);
 - arguments of other types cast to DATE or failing, where Spark converts them to STRING (#1194);
 - a TIMESTAMP_NTZ with a format read as its own DATE outside UTC (#1195);
-- TO_DATE's formatted `CASE WHEN true` declaration, NOT NULL after optimization outside ANSI
-  mode (#1196).
+- TO_DATE's formatted `CASE WHEN true` declaration over a DATE or TIMESTAMP, NOT NULL after
+  optimization where Spark's result is nullable (#1196).
 
 The [temporal contract references](tests/fixtures/temporal-contracts/README.md) and the
 [TRY_TO_DATE references](tests/fixtures/try-to-date/README.md) record the checks (#1017).
