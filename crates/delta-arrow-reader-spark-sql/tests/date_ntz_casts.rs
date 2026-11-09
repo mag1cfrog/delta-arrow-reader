@@ -55,9 +55,6 @@ enum RetainedDifference {
     /// #1087: TRUNC of the TIMESTAMP_NTZ in year 1 fails while collecting rows, where DataFusion's
     /// truncation leaves the nanosecond range; Spark returns the truncated DATE.
     TruncBeyondNanoseconds,
-    /// #1188: UNIX_DATE casts a TIMESTAMP_NTZ argument to DATE and counts its days, where Spark
-    /// rejects the argument during analysis.
-    UnixDateOfTimestampNtz,
     /// #1190: a constant over an input proven empty keeps its analyzed nullability after
     /// optimization, where Spark folds it first.
     EmptyInputNullability,
@@ -73,12 +70,6 @@ enum RetainedDifference {
     /// optimization, where Spark's optimizer rewrites the comparison without the cast.
     ComparisonWithLiteral,
 }
-
-const UNIX_DATE_RECORDS: [&str; 3] = [
-    "required_unix_date",
-    "nullable_unix_date",
-    "literal_unix_date",
-];
 
 /// The EXTRACT fields DAR's date part rejects, by record suffix.
 const UNSUPPORTED_EXTRACT_FIELDS: [(&str, &str); 3] = [
@@ -96,7 +87,6 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
         "required_trunc_hour" => RetainedDifference::TruncUnsupportedUnit,
         "required_date_less_than_timestamp_ntz_literal"
         | "required_cast_to_date_equals_date_literal" => RetainedDifference::ComparisonWithLiteral,
-        id if UNIX_DATE_RECORDS.contains(&id) => RetainedDifference::UnixDateOfTimestampNtz,
         id if UNSUPPORTED_EXTRACT_FIELDS
             .iter()
             .any(|(suffix, _)| id.ends_with(suffix)) =>
@@ -166,23 +156,6 @@ fn current_expectation(
                 .as_object_mut()
                 .ok_or("missing schema stages")?
                 .remove("executed");
-        }
-        RetainedDifference::UnixDateOfTimestampNtz => {
-            if case["expected"]["condition"] != "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE"
-                || case["spark_error_phase"] != "sql"
-            {
-                return Err(format!("expected Spark's rejected UNIX_DATE argument: {case}").into());
-            }
-            let rows = match id {
-                "literal_unix_date" => json!([["19724"]]),
-                "required_unix_date" => days_of(metadata, 1, |_| true)?,
-                _ => days_of(metadata, 2, |_| true)?,
-            };
-            current["expected"] = json!({"status": "ok", "rows": rows});
-            current
-                .as_object_mut()
-                .ok_or("expected a record")?
-                .remove("spark_error_phase");
         }
         RetainedDifference::EmptyInputNullability => {
             if case["schema_stages"]["optimized"]["fields"][0]["nullable"] != false {
@@ -565,7 +538,6 @@ async fn date_ntz_casts_match_spark() -> TestResult {
         retained,
         std::collections::BTreeMap::from([
             (RetainedDifference::TruncBeyondNanoseconds, 4),
-            (RetainedDifference::UnixDateOfTimestampNtz, 12),
             (RetainedDifference::EmptyInputNullability, 4),
             (RetainedDifference::InListNullability, 4),
             (RetainedDifference::TruncUnsupportedUnit, 4),

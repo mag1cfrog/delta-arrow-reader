@@ -46,11 +46,9 @@ internal rows, collected through the Dataset API. `ConvertToLocalRelation` is ex
 batch sizes 1 and 32. A failure must occur at Spark's stage with Spark's condition. A second
 test runs the DATE to TIMESTAMP_NTZ cast, TO_TIMESTAMP_NTZ, TO_TIMESTAMP and TRY_TO_TIMESTAMP
 column records over Date64 copies of the DATE columns, which Spark lacks, and requires Spark's
-results. Seven differences are retained:
+results. Six differences are retained:
 - #1087: TRUNC of the year 1 row fails while collecting rows, where DataFusion's truncation leaves
   the nanosecond range, pinned to text DAR's error must contain (4 records);
-- #1188: UNIX_DATE casts the TIMESTAMP_NTZ to DATE and counts its days, where Spark rejects it,
-  at DAR's exact rows (12 records);
 - #1190: the constant cast over `WHERE false` stays nullable after optimization (4 records);
 - #1191: the DATE in an IN list of TIMESTAMP_NTZ values is NOT NULL (4 records);
 - #1192: TRUNC to HOUR gives each row's DATE where Spark gives NULL (4 records);
