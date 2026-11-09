@@ -309,13 +309,16 @@ fn register_inputs(session: &SessionContext, metadata: &Value, batch_size: usize
     Ok(())
 }
 
+/// The type a DAR source gives a recorded column type, if it differs.
+type Encoding = fn(&DataType) -> Option<DataType>;
+
 /// The recorded inputs with each column `encoding` gives another type cast to that type, as
 /// DAR's sources give it.
 fn register_encoded_inputs(
     session: &SessionContext,
     metadata: &Value,
     batch_size: usize,
-    encoding: fn(&DataType) -> Option<DataType>,
+    encoding: Encoding,
 ) -> TestResult {
     for input in metadata["inputs"].as_array().ok_or("missing inputs")? {
         let name = input["name"].as_str().ok_or("missing table name")?;
@@ -364,7 +367,7 @@ async fn encoded_arguments_resolve_like_their_spark_types() -> TestResult {
         "column_datediff_binary_end",
         "column_datediff_date",
     ];
-    let encodings: [(&str, fn(&DataType) -> Option<DataType>); 3] = [
+    let encodings: [(&str, Encoding); 3] = [
         ("dictionary", dictionary_encoding),
         ("string view", string_view_encoding),
         ("date64", date64_encoding),
