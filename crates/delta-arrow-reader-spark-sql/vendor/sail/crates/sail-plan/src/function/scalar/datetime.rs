@@ -987,7 +987,8 @@ fn computed_inputs(omitted: &Expr) -> PlanResult<Vec<Expr>> {
 /// not fold over a constant `expr` where Spark's expression, which has them as inputs, is not
 /// constant. Where Spark's result is NOT NULL and DataFusion already declares it so,
 /// `SparkWithInputs` carries them and keeps `expr`'s own nullability at every stage, which a
-/// grouping set can make nullable.
+/// grouping set can make nullable. `SparkQueryPlanner` drops the inputs once the physical plan is
+/// optimized, so they are never evaluated, as Spark never evaluates the argument.
 fn declare_spark_nullability(
     expr: Expr,
     nullable: bool,

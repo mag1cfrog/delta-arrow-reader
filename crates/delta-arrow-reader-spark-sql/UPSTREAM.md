@@ -913,11 +913,12 @@ TO_UNIX_TIMESTAMP with a format over these arguments declare their results the s
 give the declaration the ignored format's columns, aggregates and window functions as unused
 inputs. Spark computes those inputs although it does not evaluate the format, so an aggregate in
 the format makes the query an aggregation, and with a format column over a literal argument
-Spark's call is not constant and stays nullable after optimization (#1203). The declaration
-keeps a plain column only for a constant value it would otherwise fold, and once the optimizer
-merges a projection into an input, reads only the columns of the merged expression, so a derived
-format is not evaluated (#1231); DataFusion's physical optimizer still inlines one through a CTE
-or UNION ALL beside a constant argument (#1232). Where Spark's result is NOT NULL and
+Spark's call is not constant and stays nullable after optimization (#1203). Once the physical
+plan is optimized, `SparkQueryPlanner` drops the declarations' inputs and prunes what only they
+read, also under the inputs of a union, so a derived format is not evaluated where DataFusion's
+projection pushdown inlines it or leaves it below a union (#1231). Spark computes a derived
+column below a subquery's sort, where DataFusion moves the call below it, so there DAR returns
+rows where a failing column fails Spark's query (#1233). Where Spark's result is NOT NULL and
 DataFusion's already is, `SparkWithInputs` carries the inputs and keeps the call's own
 nullability, which a grouping set makes nullable over the argument key, though not over the
 format's key (#1223). Formatted TO_DATE and TRY_TO_DATE still fold there (#1215), and an ORDER

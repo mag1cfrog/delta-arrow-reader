@@ -17,6 +17,7 @@ use sail_logical_plan::monotonic_id::MonotonicIdNode;
 use sail_logical_plan::sort::{RequiredSortNode, SortWithinPartitionsNode};
 use sail_logical_plan::spark_partition_id::SparkPartitionIdNode;
 
+use self::declaration_inputs::drop_declaration_inputs;
 use self::input_sort_boundary::InputSortBoundaryExec;
 use self::monotonic_id::MonotonicIdExec;
 use self::signed_range_window::{
@@ -27,6 +28,7 @@ use crate::expression_errors::SparkSqlExpressionSemantics;
 use crate::function::scalar::{apply_unpivot_runtime_nullability, lower_runtime_concat};
 use crate::projection_row_errors::{ProjectionRowErrorNode, admit_prefix_producers};
 
+mod declaration_inputs;
 mod input_sort_boundary;
 mod monotonic_id;
 mod signed_range_window;
@@ -93,9 +95,11 @@ impl QueryPlanner for SparkQueryPlanner {
         } else {
             Cow::Borrowed(logical_plan)
         };
-        DefaultPhysicalPlanner::with_extension_planners(vec![Arc::new(SparkExtensionPlanner)])
-            .create_physical_plan(&runtime_plan, &state)
-            .await
+        let plan =
+            DefaultPhysicalPlanner::with_extension_planners(vec![Arc::new(SparkExtensionPlanner)])
+                .create_physical_plan(&runtime_plan, &state)
+                .await?;
+        drop_declaration_inputs(plan, state.config_options())
     }
 }
 
