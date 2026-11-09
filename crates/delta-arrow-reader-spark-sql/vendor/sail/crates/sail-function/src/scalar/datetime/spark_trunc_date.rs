@@ -1,13 +1,13 @@
 // Local Spark TRUNC. See the host crate's UPSTREAM.md.
 //! Spark's `TruncDate`: a DATE truncated to the first day of its year, quarter, month or week,
 //! which starts on Monday. Spark spells the units YEAR, YYYY and YY; QUARTER; MON, MONTH and MM;
-//! and WEEK, in any case and without trimming. Another unit, NULL included, gives NULL. Both
-//! arguments are evaluated for every row, the truncation works on the DATE's days whatever its
-//! year, and the result is declared nullable, as Spark's is.
+//! and WEEK, in any letter case and without trimming. Another unit, NULL included, gives NULL.
+//! Both arguments are evaluated for every row and a unit column's value is read once per row.
+//! The truncation works on the DATE's days over the whole DATE range; a first day before the
+//! earliest DATE fails, as Spark's does. The result is declared nullable, as Spark's is.
 
 use std::sync::Arc;
 
-use chrono::{Datelike, Duration, NaiveDate};
 use datafusion::arrow::array::{AsArray, Date32Array};
 use datafusion::arrow::datatypes::{DataType, Date32Type, Field, FieldRef};
 use datafusion_common::{Result, ScalarValue, exec_datafusion_err, internal_err};
@@ -37,21 +37,57 @@ impl TruncUnit {
         }
     }
 
-    /// The first day of the unit that holds the DATE `days`.
+    /// The first day of the unit that holds the DATE `days`, counted from 1970-01-01.
     pub fn truncate(self, days: i32) -> Result<i32> {
-        let date = Date32Type::to_naive_date_opt(days)
-            .ok_or_else(|| exec_datafusion_err!("DATE {days} is outside the supported range"))?;
-        let truncated = match self {
-            Self::Year => NaiveDate::from_ymd_opt(date.year(), 1, 1),
-            Self::Quarter => NaiveDate::from_ymd_opt(date.year(), date.month0() / 3 * 3 + 1, 1),
-            Self::Month => NaiveDate::from_ymd_opt(date.year(), date.month(), 1),
-            Self::Week => date.checked_sub_signed(Duration::days(i64::from(
-                date.weekday().num_days_from_monday(),
-            ))),
-        }
-        .ok_or_else(|| exec_datafusion_err!("cannot truncate DATE {days} to {self:?}"))?;
-        Ok(Date32Type::from_naive_date(truncated))
+        let day = i64::from(days);
+        let first = match self {
+            // 1970-01-01 is a Thursday, three days after a Monday.
+            Self::Week => day - (day + 3).rem_euclid(7),
+            Self::Year | Self::Quarter | Self::Month => {
+                let (year, month) = year_and_month(day);
+                let month = match self {
+                    Self::Year => 1,
+                    Self::Quarter => (month - 1) / 3 * 3 + 1,
+                    _ => month,
+                };
+                first_day_of_month(year, month)
+            }
+        };
+        i32::try_from(first).map_err(|_| {
+            exec_datafusion_err!("TRUNC of DATE {days} to {self:?} is before the earliest DATE")
+        })
     }
+}
+
+/// The proleptic Gregorian year and month of `day`, in days since 1970-01-01, by Howard
+/// Hinnant's `civil_from_days`.
+fn year_and_month(day: i64) -> (i64, i64) {
+    let day = day + 719_468;
+    let era = day.div_euclid(146_097);
+    let day_of_era = day - era * 146_097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    // Months counted from March, so that February ends the year.
+    let month_from_march = (5 * day_of_year + 2) / 153;
+    let month = if month_from_march < 10 {
+        month_from_march + 3
+    } else {
+        month_from_march - 9
+    };
+    (year_of_era + era * 400 + i64::from(month <= 2), month)
+}
+
+/// The day, in days since 1970-01-01, of the first of a proleptic Gregorian month, by Howard
+/// Hinnant's `days_from_civil`.
+fn first_day_of_month(year: i64, month: i64) -> i64 {
+    let year = year - i64::from(month <= 2);
+    let era = year.div_euclid(400);
+    let year_of_era = year - era * 400;
+    let month_from_march = if month > 2 { month - 3 } else { month + 9 };
+    let day_of_year = (153 * month_from_march + 2) / 5;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    era * 146_097 + day_of_era - 719_468
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -76,8 +112,9 @@ impl SparkTruncDate {
     }
 }
 
-fn truncate(days: Option<i32>, unit: Option<&str>) -> Result<Option<i32>> {
-    match (days, unit.and_then(TruncUnit::parse)) {
+/// One row: NULL for a NULL date or an unsupported unit.
+fn truncate_row(days: Option<i32>, unit: Option<TruncUnit>) -> Result<Option<i32>> {
+    match (days, unit) {
         (Some(days), Some(unit)) => unit.truncate(days).map(Some),
         _ => Ok(None),
     }
@@ -104,30 +141,54 @@ impl ScalarUDFImpl for SparkTruncDate {
         let [date, unit] = args.args.as_slice() else {
             return internal_err!("{} requires two arguments", self.name());
         };
-        if let (ColumnarValue::Scalar(date), ColumnarValue::Scalar(unit)) = (date, unit) {
-            let (ScalarValue::Date32(days), ScalarValue::Utf8(unit)) = (date, unit) else {
-                return internal_err!("{} requires a DATE and a STRING", self.name());
-            };
-            return Ok(ColumnarValue::Scalar(ScalarValue::Date32(truncate(
-                *days,
-                unit.as_deref(),
-            )?)));
-        }
-        let dates = date.to_array(args.number_rows)?;
-        let units = unit.to_array(args.number_rows)?;
-        let result = dates
-            .as_primitive::<Date32Type>()
-            .iter()
-            .zip(units.as_string::<i32>().iter())
-            .map(|(days, unit)| truncate(days, unit))
-            .collect::<Result<Date32Array>>()?;
+        let result = match (date, unit) {
+            (ColumnarValue::Scalar(date), ColumnarValue::Scalar(unit)) => {
+                let (ScalarValue::Date32(days), ScalarValue::Utf8(unit)) = (date, unit) else {
+                    return internal_err!("{} requires a DATE and a STRING", self.name());
+                };
+                let unit = unit.as_deref().and_then(TruncUnit::parse);
+                return Ok(ColumnarValue::Scalar(ScalarValue::Date32(truncate_row(
+                    *days, unit,
+                )?)));
+            }
+            (date, ColumnarValue::Scalar(unit)) => {
+                let ScalarValue::Utf8(unit) = unit else {
+                    return internal_err!("{} requires a STRING unit", self.name());
+                };
+                let unit = unit.as_deref().and_then(TruncUnit::parse);
+                date.to_array(args.number_rows)?
+                    .as_primitive::<Date32Type>()
+                    .iter()
+                    .map(|days| truncate_row(days, unit))
+                    .collect::<Result<Date32Array>>()?
+            }
+            (date, unit) => {
+                let dates = date.to_array(args.number_rows)?;
+                let units = unit.to_array(args.number_rows)?;
+                dates
+                    .as_primitive::<Date32Type>()
+                    .iter()
+                    .zip(units.as_string::<i32>().iter())
+                    .map(|(days, unit)| truncate_row(days, unit.and_then(TruncUnit::parse)))
+                    .collect::<Result<Date32Array>>()?
+            }
+        };
         Ok(ColumnarValue::Array(Arc::new(result)))
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use chrono::{Datelike, Duration, NaiveDate};
+
     use super::*;
+
+    const UNITS: [TruncUnit; 4] = [
+        TruncUnit::Year,
+        TruncUnit::Quarter,
+        TruncUnit::Month,
+        TruncUnit::Week,
+    ];
 
     fn day(text: &str) -> Result<i32> {
         let date = NaiveDate::parse_from_str(text, "%Y-%m-%d")
@@ -136,24 +197,67 @@ mod tests {
     }
 
     #[test]
-    fn truncates_to_spark_units_across_the_date_range() -> Result<()> {
+    fn truncates_to_spark_units() -> Result<()> {
         for (date, unit, expected) in [
             ("2024-05-17", "yy", "2024-01-01"),
             ("2024-05-17", "Quarter", "2024-04-01"),
             ("2024-05-17", "mon", "2024-05-01"),
             ("2024-05-17", "WEEK", "2024-05-13"),
+            ("2024-02-29", "MONTH", "2024-02-01"),
             ("0001-01-02", "MM", "0001-01-01"),
+            ("0001-01-07", "week", "0001-01-01"),
             ("9999-12-31", "YEAR", "9999-01-01"),
         ] {
-            assert_eq!(
-                truncate(Some(day(date)?), Some(unit))?,
-                Some(day(expected)?)
-            );
+            let unit = TruncUnit::parse(unit);
+            assert_eq!(truncate_row(Some(day(date)?), unit)?, Some(day(expected)?));
         }
-        for unit in [Some("DD"), Some(" MM"), Some(""), None] {
-            assert_eq!(truncate(Some(day("2024-05-17")?), unit)?, None);
+        for unit in ["DD", " MM", ""] {
+            let unit = TruncUnit::parse(unit);
+            assert_eq!(truncate_row(Some(day("2024-05-17")?), unit)?, None);
         }
-        assert_eq!(truncate(None, Some("MM"))?, None);
+        assert_eq!(truncate_row(None, Some(TruncUnit::Month))?, None);
+        Ok(())
+    }
+
+    /// The day arithmetic agrees with chrono across chrono's range.
+    #[test]
+    fn day_arithmetic_matches_chrono() -> Result<()> {
+        let mut days = -95_000_000_i32;
+        while days < 95_000_000 {
+            let date = Date32Type::to_naive_date_opt(days)
+                .ok_or_else(|| exec_datafusion_err!("DATE {days} outside chrono's range"))?;
+            let expected = [
+                NaiveDate::from_ymd_opt(date.year(), 1, 1),
+                NaiveDate::from_ymd_opt(date.year(), date.month0() / 3 * 3 + 1, 1),
+                NaiveDate::from_ymd_opt(date.year(), date.month(), 1),
+                date.checked_sub_signed(Duration::days(i64::from(
+                    date.weekday().num_days_from_monday(),
+                ))),
+            ];
+            for (unit, expected) in UNITS.iter().zip(expected) {
+                let expected = expected.ok_or_else(|| exec_datafusion_err!("chrono overflow"))?;
+                assert_eq!(unit.truncate(days)?, Date32Type::from_naive_date(expected));
+            }
+            days += 9_973;
+        }
+        Ok(())
+    }
+
+    /// Beyond chrono's range every DATE truncates to a first day no later than itself, except
+    /// that the earliest DATE, a Tuesday in June, has no first day of its unit to return.
+    #[test]
+    fn truncates_across_the_date_range() -> Result<()> {
+        for unit in UNITS {
+            for days in [i32::MAX, 100_000_000, -100_000_000, i32::MIN + 400] {
+                let first = unit.truncate(days)?;
+                assert!(
+                    first <= days && days - first < 366,
+                    "{unit:?} {days} {first}"
+                );
+                assert_eq!(unit.truncate(first)?, first);
+            }
+            assert!(unit.truncate(i32::MIN).is_err());
+        }
         Ok(())
     }
 }
