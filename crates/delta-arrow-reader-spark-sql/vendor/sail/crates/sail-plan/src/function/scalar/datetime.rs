@@ -401,13 +401,13 @@ fn date_trunc_part_conversion(part: Expr) -> Expr {
 /// as Spark declares it, until constant folding replaces a literal's.
 fn trunc(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let schema = input.function_context.schema;
+    let ansi = input.function_context.plan_config.ansi_mode;
     let (date, unit) = input.arguments.two()?;
     let date = dictionary_string_values(date, schema)?;
     let date = match date.get_type(schema)? {
-        data_type if data_type.is_string() => ScalarUDF::from(SparkDate::new(
-            !input.function_context.plan_config.ansi_mode,
-        ))
-        .call(vec![date]),
+        data_type if data_type.is_string() => {
+            ScalarUDF::from(SparkDate::new(!ansi)).call(vec![date])
+        }
         source @ (DataType::Date32
         | DataType::Date64
         | DataType::Timestamp(_, _)
