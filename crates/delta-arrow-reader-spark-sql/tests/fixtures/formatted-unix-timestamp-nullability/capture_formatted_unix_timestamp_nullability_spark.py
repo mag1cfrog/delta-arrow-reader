@@ -1,17 +1,17 @@
 """Capture Spark's nullability of formatted UNIX_TIMESTAMP over DATE and TIMESTAMP arguments
 (#1203).
 
-Records analyzed, optimized and executed schemas, typed internal-row values and failing
-stages, with the innermost Java exception of a failure, for UNIX_TIMESTAMP and
-TO_UNIX_TIMESTAMP with a format over NOT NULL and nullable DATE, TIMESTAMP and TIMESTAMP_NTZ
-columns and literals, with literal, NOT NULL column, nullable column and NULL formats; over a
-DATE column with a format that fails if evaluated; over a DATE expression; as a grouping key;
-and with aggregates and window functions in the format. Spark declares the result nullable
-outside ANSI mode, and in ANSI mode when an argument is nullable. It never evaluates the format
-of these arguments, but computes its aggregates and window functions, and a format column keeps
-a literal argument's result from being constant. Every query runs in both ANSI modes in UTC and
-America/Los_Angeles. Run from the crate root in the reference environment described in
-README.md; the output path must not exist.
+Records analyzed, optimized and executed schemas, typed internal-row values and failing stages,
+with the innermost Java exception of a failure, for UNIX_TIMESTAMP and TO_UNIX_TIMESTAMP with a
+format over NOT NULL and nullable DATE, TIMESTAMP and TIMESTAMP_NTZ columns and literals, with
+literal, NOT NULL column, nullable column and NULL formats; over a DATE column with a format
+that fails if evaluated; over a DATE expression; as a grouping key; with aggregates and window
+functions in the format; under grouping sets; and in ORDER BY. Spark declares the result
+nullable outside ANSI mode, and in ANSI mode when an argument is nullable. It never evaluates
+the format of these arguments, but computes its aggregates and window functions, and a format
+column keeps a literal argument's result from being constant. Every query runs in both ANSI
+modes in UTC and America/Los_Angeles. Run from the crate root in the reference environment
+described in README.md; the output path must not exist.
 """
 import argparse
 from datetime import date, datetime, timedelta, timezone
@@ -106,6 +106,20 @@ def definitions():
         yield (f"window_{function}_required_format",
                f"SELECT k, {function}(dt, CAST(row_number() OVER (ORDER BY k) AS STRING)) AS r "
                "FROM inputs")
+        # A grouping set makes a NOT NULL grouping key NULL in its subtotal rows.
+        for name, argument, groups in [
+                ("rollup", "dt", "ROLLUP(dt, g)"), ("cube", "dt", "CUBE(dt, g)"),
+                ("grouping_sets", "dt", "GROUPING SETS ((dt, g), ())"),
+                ("rollup_timestamp", "ts", "ROLLUP(ts, g)")]:
+            yield (f"{name}_{function}_required_format",
+                   f"SELECT {argument}, {function}({argument}, g) AS r FROM inputs "
+                   f"GROUP BY {groups}")
+        yield (f"rollup_{function}_count_format",
+               f"SELECT dt, {function}(dt, CAST(count(*) AS STRING)) AS r FROM inputs "
+               "GROUP BY ROLLUP(dt)")
+        yield (f"order_by_aggregate_{function}_nullable_format",
+               f"SELECT k FROM inputs GROUP BY k "
+               f"ORDER BY {function}(DATE '2024-01-02', max(f)), k")
 
 
 def python_value(value, kind):
