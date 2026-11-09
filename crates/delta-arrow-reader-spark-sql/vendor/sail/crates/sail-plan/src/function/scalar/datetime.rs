@@ -916,21 +916,6 @@ fn declare_spark_nullability(expr: Expr, nullable: bool, schema: &DFSchemaRef) -
     })
 }
 
-/// `expr` declared nullable with a `CASE WHEN true` wrapper, which the optimizer removes over a
-/// column; formatted UNIX_TIMESTAMP still uses it (#1203).
-fn declare_nullable_until_optimized(
-    expr: Expr,
-    nullable: bool,
-    schema: &DFSchemaRef,
-) -> PlanResult<Expr> {
-    if nullable && !expr.nullable(schema)? {
-        let null = lit(ScalarValue::try_from(&expr.get_type(schema)?)?);
-        Ok(when(lit(true), expr).otherwise(null)?)
-    } else {
-        Ok(expr)
-    }
-}
-
 /// TO_DATE or Spark's TRY_TO_DATE, which is TO_DATE outside ANSI mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DateParser {
@@ -1058,7 +1043,7 @@ fn unix_timestamp(input: ScalarFunctionInput) -> PlanResult<Expr> {
                 || format.nullable(input.function_context.schema)?;
             let result =
                 ScalarUDF::from(SparkUnixTimestamp::new(timezone, ansi_mode)).call(vec![expr]);
-            declare_nullable_until_optimized(result, nullable, input.function_context.schema)
+            declare_spark_nullability(result, nullable, input.function_context.schema)
         } else {
             Ok(
                 ScalarUDF::from(SparkUnixTimestamp::new(timezone, ansi_mode))

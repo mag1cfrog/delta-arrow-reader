@@ -29,9 +29,8 @@ internal rows, collected through the Dataset API. `ConvertToLocalRelation` is ex
 
 `formatted_to_date_nullability.rs` compares names, type families with the session zone,
 nullability, metadata and typed rows at batch sizes 1 and 32. A second test runs the DATE
-column records over Date64 copies of the DATE columns and requires the same results. One
-difference is retained, under #1203: UNIX_TIMESTAMP of `dt` with `f` in ANSI mode is NOT NULL
-after optimization, at DAR's exact fields (2 records).
+column records over Date64 copies of the DATE columns and requires the same results. No
+differences are retained; the UNIX_TIMESTAMP records match since #1203.
 
 Recapture from the crate root:
 
