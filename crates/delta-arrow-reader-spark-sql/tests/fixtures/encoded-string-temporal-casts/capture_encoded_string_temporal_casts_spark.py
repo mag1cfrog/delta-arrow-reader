@@ -3,11 +3,11 @@
 Records analyzed, optimized and executed schemas, typed internal-row values and failing stages,
 with the innermost Java exception of a failure, for CAST and TRY_CAST of STRING columns to DATE,
 TIMESTAMP and TIMESTAMP_NTZ, for DATE_ADD and DATE_SUB of STRING dates, and for the implicit
-conversions of STRING beside a DATE or TIMESTAMP in comparisons, DAYOFWEEK, WEEKDAY, WEEKOFYEAR,
-COALESCE, IF and CASE: over a NOT NULL column of values Spark reads, padded, with a time, with a
-`T` separator and at a Los Angeles DST gap, a NOT NULL column with malformed values and a
-nullable column with NULLs. DAR's harness runs the same queries over dictionary-encoded, viewed
-and large copies of the columns. Every query runs in both ANSI modes in UTC and
+conversions of STRING beside a DATE or TIMESTAMP in comparisons, NULLIF, DAYOFWEEK, WEEKDAY,
+WEEKOFYEAR, COALESCE, IF and CASE: over a NOT NULL column of values Spark reads, padded, with a
+time, with a `T` separator and at a Los Angeles DST gap, a NOT NULL column with malformed values
+and a nullable column with NULLs. DAR's harness runs the same queries over dictionary-encoded,
+viewed and large copies of the columns. Every query runs in both ANSI modes in UTC and
 America/Los_Angeles. Run from the crate root in the reference environment described in
 README.md; the output path must not exist.
 """
@@ -62,7 +62,8 @@ def definitions():
                 ("between_dates", f"{column} BETWEEN DATE '2024-01-01' AND DATE '2024-03-31'"),
                 ("null_safe_equal_date", f"{column} <=> DATE '2024-05-17'"),
                 ("date_equal", f"DATE '2024-05-17' = {column}"),
-                ("equal_timestamp", f"{column} = TIMESTAMP '2024-05-17 00:00:00'")]:
+                ("equal_timestamp", f"{column} = TIMESTAMP '2024-05-17 00:00:00'"),
+                ("nullif_date", f"NULLIF({column}, DATE '2024-05-17')")]:
             yield (f"{comparison_name}_{name}", f"SELECT k, {comparison} AS r FROM inputs")
         yield (f"filter_equal_date_{name}",
                f"SELECT k FROM inputs WHERE {column} = DATE '2024-05-17'")

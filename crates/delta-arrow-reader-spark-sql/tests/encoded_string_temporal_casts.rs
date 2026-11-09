@@ -30,7 +30,7 @@ mod spark_results;
 use spark_results::{TestResult, validate_batch};
 
 /// The number of recorded observations.
-const RECORD_COUNT: usize = 252;
+const RECORD_COUNT: usize = 264;
 
 fn string_temporal_cast_references() -> TestResult<Vec<Value>> {
     let records = include_str!(
@@ -78,6 +78,8 @@ fn dar_family(data_type: &DataType, timezone: &str) -> Value {
         DataType::Int64 => "int64".to_owned(),
         DataType::Date32 => "date32".to_owned(),
         DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => "string".to_owned(),
+        // A dictionary-encoded STRING, which NULLIF keeps from its left argument, is a STRING.
+        DataType::Dictionary(_, value) if value.is_string() => "string".to_owned(),
         DataType::Timestamp(TimeUnit::Microsecond, Some(zone)) if zone.as_ref() == timezone => {
             "timestamp".to_owned()
         }
@@ -133,6 +135,9 @@ fn encode_value(column: &dyn Array, row: usize) -> TestResult<Value> {
         DataType::Utf8 => json!(column.as_string::<i32>().value(row)),
         DataType::LargeUtf8 => json!(column.as_string::<i64>().value(row)),
         DataType::Utf8View => json!(column.as_string_view().value(row)),
+        DataType::Dictionary(_, value) if value.is_string() => {
+            return encode_value(arrow::compute::cast(column, value)?.as_ref(), row);
+        }
         other => return Err(format!("unexpected result type {other}").into()),
     })
 }
