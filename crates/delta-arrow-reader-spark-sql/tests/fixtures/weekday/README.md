@@ -33,11 +33,9 @@ stage. `ConvertToLocalRelation` is excluded.
 sizes 1 and 32 in each record's session zone. A failure must occur at Spark's stage with
 Spark's error condition in DAR's message.
 
-Existing differences keep their Spark expectation in the fixture. The test replaces only the
-retained part with the current DAR result and checks each count:
-- #1003: 16 records cast a NOT NULL TIMESTAMP_NTZ to DATE as NOT NULL. Spark declares the
-  implicit cast nullable: at analysis for the 8 literal records, and at every stage for the
-  8 NOT NULL column records.
+No differences are retained. The implicit cast of a NOT NULL TIMESTAMP_NTZ to DATE is
+nullable, as Spark declares it: at analysis for the 8 literal records, and at every stage for
+the 8 NOT NULL column records (#1003).
 
 Recapture from the crate root:
 

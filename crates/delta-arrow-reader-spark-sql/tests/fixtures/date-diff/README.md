@@ -24,11 +24,8 @@ errors in this corpus.
 `date_diff.rs` compares names, type families, nullability, metadata and typed
 rows at batch sizes 1 and 32, in each record's session time zone.
 
-Existing differences outside the DATEDIFF result contract keep their Spark
-expectations. The test checks the current DAR result:
-
-- #1003: 8 TIMESTAMP_NTZ records keep a required analyzed field, where Spark
-  declares the implicit DATE cast nullable until constant folding.
+No differences are retained. The 8 TIMESTAMP_NTZ records' implicit DATE cast is
+nullable until constant folding, as Spark declares it (#1003).
 
 Recapture from the crate root:
 
