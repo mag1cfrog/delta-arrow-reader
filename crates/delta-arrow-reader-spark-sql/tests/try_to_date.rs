@@ -61,9 +61,6 @@ enum RetainedDifference {
     /// #1195: with a format outside UTC, a TIMESTAMP_NTZ gives its own DATE, where Spark gives the
     /// session-zone DATE of the instant whose UTC time reads as that value.
     FormattedTimestampNtzZone,
-    /// #1196: TO_DATE with a format over a NOT NULL DATE outside ANSI mode is NOT NULL after
-    /// optimization, where Spark's is nullable at every stage.
-    FormattedToDateNullability,
 }
 
 /// DAR's parser messages for the strings `s` holds that TO_DATE cannot parse with a format.
@@ -86,7 +83,6 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
         {
             RetainedDifference::FormattedTimestampNtzZone
         }
-        "column_to_date_date_format" if !ansi => RetainedDifference::FormattedToDateNullability,
         _ => return None,
     })
 }
@@ -188,12 +184,6 @@ fn expectation(case: &Value, metadata: &Value) -> TestResult<Value> {
                 return Err(format!("expected Spark's session-zone dates: {case}").into());
             }
             current["expected"] = json!({"status": "ok", "rows": rows});
-        }
-        RetainedDifference::FormattedToDateNullability => {
-            if case["schema_stages"]["optimized"]["fields"][1]["nullable"] != true {
-                return Err(format!("expected Spark's nullable result: {case}").into());
-            }
-            set_nullable(&mut current, &["optimized", "executed"], false)?;
         }
     }
     Ok(current)
@@ -567,7 +557,6 @@ async fn try_to_date_matches_spark() -> TestResult {
             (RetainedDifference::ParserMessage, 2),
             (RetainedDifference::NonStringArgument, 16),
             (RetainedDifference::FormattedTimestampNtzZone, 4),
-            (RetainedDifference::FormattedToDateNullability, 2),
         ])
     );
     let mut differences = Vec::new();
