@@ -47,7 +47,10 @@ pub(crate) fn register_inputs(
     register_inputs_impl(session, metadata, representation, batch_size, 2, None)
 }
 
-#[allow(dead_code, reason = "Seeded controls need the captured one-partition input.")]
+#[allow(
+    dead_code,
+    reason = "Seeded controls need the captured one-partition input."
+)]
 pub(crate) async fn register_inputs_one_partition_with_receipts(
     session: &SessionContext,
     metadata: &Value,
@@ -55,7 +58,14 @@ pub(crate) async fn register_inputs_one_partition_with_receipts(
     batch_size: usize,
 ) -> TestResult<Value> {
     let mut registrations = Vec::new();
-    register_inputs_impl(session, metadata, representation, batch_size, 1, Some(&mut registrations))?;
+    register_inputs_impl(
+        session,
+        metadata,
+        representation,
+        batch_size,
+        1,
+        Some(&mut registrations),
+    )?;
     c06_receipts::provider_readbacks(session, registrations, encode_value).await
 }
 

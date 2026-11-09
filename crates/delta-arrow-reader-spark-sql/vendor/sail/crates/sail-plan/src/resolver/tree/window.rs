@@ -47,7 +47,12 @@ impl WindowRewriter<'_> {
             .ok_or_else(|| internal_datafusion_err!("Window input was not initialized"))?;
         let mut projected = match &self.rand_projection {
             Some(projection) => projection.expr.clone(),
-            None => input.schema().columns().into_iter().map(Expr::Column).collect(),
+            None => input
+                .schema()
+                .columns()
+                .into_iter()
+                .map(Expr::Column)
+                .collect(),
         };
         let previous_width = projected.len();
         let mut materialize = |expression: &mut Expr| -> Result<()> {
@@ -69,10 +74,10 @@ impl WindowRewriter<'_> {
         }
         let materialized = projected.len() > previous_width;
         if materialized {
-            let previous = self
-                .rand_projection
-                .as_ref()
-                .map_or_else(|| input.clone(), |projection| LogicalPlan::Projection(projection.clone()));
+            let previous = self.rand_projection.as_ref().map_or_else(
+                || input.clone(),
+                |projection| LogicalPlan::Projection(projection.clone()),
+            );
             let projection = Projection::try_new(projected, Arc::new(input.clone()))?;
             let replacement = LogicalPlan::Projection(projection.clone());
             let plan = mem::replace(&mut self.plan, empty_logical_plan());
@@ -160,9 +165,7 @@ impl TreeNodeRewriter for WindowRewriter<'_> {
                 let original = Expr::WindowFunction(function.clone());
                 let name = original.schema_name().to_string();
                 let seeded_rand = contains_seeded_rand(&original)?;
-                if seeded_rand
-                    && let Some(replacement) = self.seen.get(&name)
-                {
+                if seeded_rand && let Some(replacement) = self.seen.get(&name) {
                     return Ok(Transformed::yes(replacement.clone()));
                 }
                 let requires_input_order =
@@ -199,7 +202,8 @@ impl TreeNodeRewriter for WindowRewriter<'_> {
                 if self.input_before_windows.is_none() {
                     self.input_before_windows = Some(self.plan.clone());
                 }
-                let materialized_rand = seeded_rand && self.materialize_rand_inputs(&mut function)?;
+                let materialized_rand =
+                    seeded_rand && self.materialize_rand_inputs(&mut function)?;
                 let mut required = function
                     .params
                     .partition_by
@@ -245,7 +249,11 @@ impl TreeNodeRewriter for WindowRewriter<'_> {
                     self.stable_ordering = Some(desired);
                 }
                 let node = Expr::WindowFunction(function);
-                let node = if materialized_rand { node.alias(&name) } else { node };
+                let node = if materialized_rand {
+                    node.alias(&name)
+                } else {
+                    node
+                };
                 if let Some(replacement) = self.seen.get(&name) {
                     return Ok(Transformed::yes(replacement.clone()));
                 }

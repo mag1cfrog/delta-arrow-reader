@@ -200,9 +200,10 @@ fn is_active_native_negative_context(context: &Value) -> bool {
 }
 
 fn is_supplementary_seeded_case(case: &Value) -> bool {
-    matches!(case["id"].as_str(), Some(
-        "concat_885_seeded_random_after_mask" | "concat_885_seeded_random_before_mask"
-    ))
+    matches!(
+        case["id"].as_str(),
+        Some("concat_885_seeded_random_after_mask" | "concat_885_seeded_random_before_mask")
+    )
 }
 
 fn register_rng_inputs(session: &SessionContext, header: &Value, batch_size: usize) -> TestResult {
@@ -361,18 +362,27 @@ async fn run_runtime_control_matrix(rng: bool) -> TestResult {
             } else {
                 let configured = self::session(batch_size, 1);
                 let providers = register_inputs_one_partition_with_receipts(
-                    &configured, &records[0], representation, batch_size,
-                ).await?;
-                eprintln!("c06 concat seeded provider receipt: {}",json!({
-                    "matrix":matrix,"representation":representation,"batch_size":batch_size,
-                    "input_partitions":1,"target_partitions":configured.state().config().target_partitions(),
-                    "providers":providers,
-                }));
+                    &configured,
+                    &records[0],
+                    representation,
+                    batch_size,
+                )
+                .await?;
+                eprintln!(
+                    "c06 concat seeded provider receipt: {}",
+                    json!({
+                        "matrix":matrix,"representation":representation,"batch_size":batch_size,
+                        "input_partitions":1,"target_partitions":configured.state().config().target_partitions(),
+                        "providers":providers,
+                    })
+                );
                 Some(configured)
             };
             for case in &records[1..] {
                 let session = if is_supplementary_seeded_case(case) {
-                    seeded_session.as_ref().ok_or("missing one-partition seeded session")?
+                    seeded_session
+                        .as_ref()
+                        .ok_or("missing one-partition seeded session")?
                 } else {
                     &session
                 };
@@ -453,8 +463,7 @@ async fn run_runtime_control_matrix(rng: bool) -> TestResult {
     let profile_keys = profiles
         .iter()
         .filter(|profile| {
-            !rng
-                && profile["context"]["matrix"] == matrix
+            !rng && profile["context"]["matrix"] == matrix
                 && is_active_native_negative_context(&profile["context"])
         })
         .map(|profile| profile["context"].to_string())
@@ -519,7 +528,10 @@ fn retained_runtime_profiles_reject_changed_public_results_and_contexts() -> Tes
         let case = &profile["captured_observation"];
         let actual = &case["actual"];
         let active = is_active_native_negative_context(context);
-        assert_eq!(matches_retained_native_negative(context, case, actual, profiles)?, active);
+        assert_eq!(
+            matches_retained_native_negative(context, case, actual, profiles)?,
+            active
+        );
         retired_profiles += usize::from(!active);
         assert!(!matches_reference(case, actual)?);
         assert!(matches_historical_native_negative(

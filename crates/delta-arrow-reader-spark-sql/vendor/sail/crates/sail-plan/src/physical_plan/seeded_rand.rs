@@ -18,9 +18,8 @@ use datafusion_expr::ScalarUDF;
 use sail_function::scalar::math::random::Random;
 
 fn contains_rand(expression: &Arc<dyn PhysicalExpr>) -> Result<bool> {
-    expression.exists(|node| {
-        Ok(ScalarFunctionExpr::try_downcast_func::<Random>(node.as_ref()).is_some())
-    })
+    expression
+        .exists(|node| Ok(ScalarFunctionExpr::try_downcast_func::<Random>(node.as_ref()).is_some()))
 }
 
 fn bind_rand(
@@ -30,8 +29,7 @@ fn bind_rand(
 ) -> Result<Arc<dyn PhysicalExpr>> {
     expression
         .transform_up(|expression| {
-            let Some(random) =
-                ScalarFunctionExpr::try_downcast_func::<Random>(expression.as_ref())
+            let Some(random) = ScalarFunctionExpr::try_downcast_func::<Random>(expression.as_ref())
             else {
                 return Ok(Transformed::no(expression));
             };
@@ -58,17 +56,18 @@ fn wrap_rand_operator(plan: Arc<dyn ExecutionPlan>) -> Result<Transformed<Arc<dy
     if let Some(projection) = plan.downcast_ref::<ProjectionExec>() {
         for expression in projection.expr() {
             if contains_rand(&expression.expr)? {
-                return Ok(Transformed::yes(Arc::new(SeededRandExec::Projection(
-                    projection.clone(),
-                )) as Arc<dyn ExecutionPlan>));
+                return Ok(Transformed::yes(
+                    Arc::new(SeededRandExec::Projection(projection.clone()))
+                        as Arc<dyn ExecutionPlan>,
+                ));
             }
         }
     } else if let Some(filter) = plan.downcast_ref::<FilterExec>()
         && contains_rand(filter.predicate())?
     {
-        return Ok(Transformed::yes(Arc::new(SeededRandExec::Filter(
-            filter.clone(),
-        )) as Arc<dyn ExecutionPlan>));
+        return Ok(Transformed::yes(
+            Arc::new(SeededRandExec::Filter(filter.clone())) as Arc<dyn ExecutionPlan>,
+        ));
     }
     Ok(Transformed::no(plan))
 }

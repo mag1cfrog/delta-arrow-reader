@@ -33,11 +33,11 @@ use crate::function::float_keys::{NormalizeNestedFloatKeys, normalize_spark_floa
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
 use crate::resolver::state::{AggregateState, PlanResolverState};
+use crate::resolver::tree::contains_seeded_rand;
 use crate::resolver::tree::explode::ExplodeRewriter;
 use crate::resolver::tree::monotonic_id::MonotonicIdRewriter;
 use crate::resolver::tree::spark_partition_id::SparkPartitionIdRewriter;
 use crate::resolver::tree::window::WindowRewriter;
-use crate::resolver::tree::contains_seeded_rand;
 
 /// Projections resolved by index (a `None` marks a projection deferred until the
 /// grouping is materialized), paired with the indices of the deferred projections.
@@ -303,7 +303,8 @@ impl PlanResolver<'_> {
                         let (qualifier, name) = expr.qualified_name();
                         let field = state.register_hidden_field_name("__rand_group_key");
                         if rand_projection.is_empty() {
-                            rand_projection.extend(input.schema().columns().into_iter().map(Expr::Column));
+                            rand_projection
+                                .extend(input.schema().columns().into_iter().map(Expr::Column));
                         }
                         rand_projection.push(normalized.alias(&field));
                         ident(field).alias_qualified(qualifier, name)
