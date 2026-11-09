@@ -30,7 +30,7 @@ mod spark_results;
 use spark_results::{TestResult, validate_batch};
 
 /// The number of recorded observations.
-const RECORD_COUNT: usize = 96;
+const RECORD_COUNT: usize = 252;
 
 fn string_temporal_cast_references() -> TestResult<Vec<Value>> {
     let records = include_str!(
@@ -212,13 +212,14 @@ fn optimize(session: &SessionContext, plan: &LogicalPlan) -> TestResult<LogicalP
 }
 
 /// #943: DAR does not trim the padding of ` 2024-01-02 ` in `sv` (row 1) before reading it as a
-/// TIMESTAMP or TIMESTAMP_NTZ, so it gives NULL there, and CAST fails with ANSI enabled; Spark
-/// reads the date's first instant.
-const PADDED_TIMESTAMP_RECORDS: [&str; 4] = [
+/// TIMESTAMP or TIMESTAMP_NTZ, so it gives NULL there, and CAST and the comparison with a
+/// TIMESTAMP fail with ANSI enabled; Spark reads the date's first instant.
+const PADDED_TIMESTAMP_RECORDS: [&str; 5] = [
     "cast_valid_timestamp",
     "try_cast_valid_timestamp",
     "cast_valid_timestamp_ntz",
     "try_cast_valid_timestamp_ntz",
+    "equal_timestamp_valid",
 ];
 
 fn is_padded_timestamp_record(case: &Value) -> bool {
@@ -228,7 +229,7 @@ fn is_padded_timestamp_record(case: &Value) -> bool {
 }
 
 /// The expectation for a record: Spark's, or for a #943 record DAR's result: Spark's rows with
-/// row 1 NULL, or a failure for CAST with ANSI enabled.
+/// row 1 NULL, or a failure for CAST and the comparison with ANSI enabled.
 fn expectation(case: &Value) -> TestResult<Value> {
     if !is_padded_timestamp_record(case) {
         return Ok(case.clone());
@@ -239,10 +240,10 @@ fn expectation(case: &Value) -> TestResult<Value> {
         .filter(|rows| rows[1][0] == "1" && !rows[1][1].is_null())
         .ok_or_else(|| format!("expected Spark's value for row 1: {case}"))?;
     let mut current = case.clone();
-    let cast = case["id"]
+    let fails = case["id"]
         .as_str()
-        .is_some_and(|id| id.starts_with("cast_"));
-    if cast && case["ansi"] == true {
+        .is_some_and(|id| id.starts_with("cast_") || id.starts_with("equal_"));
+    if fails && case["ansi"] == true {
         current["expected"] = json!({"status": "error"});
         current["schema_stages"]
             .as_object_mut()
@@ -256,14 +257,33 @@ fn expectation(case: &Value) -> TestResult<Value> {
     Ok(current)
 }
 
-/// The recorded stages and outcome that differ from the observation. Where Spark fails, DAR must
-/// fail; its error condition, message and stage are not compared (#1236).
+/// `fields` without their nullability.
+fn without_nullability(fields: &Value) -> Value {
+    let mut fields = fields.clone();
+    for field in fields.as_array_mut().into_iter().flatten() {
+        if let Some(field) = field.as_object_mut() {
+            field.remove("nullable");
+        }
+    }
+    fields
+}
+
+/// The recorded stages and outcome that differ from the observation. The analyzed and optimized
+/// fields are compared without their nullability, and where Spark fails, DAR must fail; its error
+/// condition, message and stage are not compared (#1236).
 fn differing_parts(case: &Value, observation: &Value) -> TestResult<Vec<&'static str>> {
     let mut differing = Vec::new();
     for stage in ["analyzed", "optimized", "executed"] {
-        if let Some(expected) = case["schema_stages"].get(stage)
-            && observation[stage] != spark_fields(expected)?
-        {
+        let Some(expected) = case["schema_stages"].get(stage) else {
+            continue;
+        };
+        let expected = spark_fields(expected)?;
+        let matches = if stage == "executed" {
+            observation[stage] == expected
+        } else {
+            without_nullability(&observation[stage]) == without_nullability(&expected)
+        };
+        if !matches {
             differing.push(stage);
         }
     }
@@ -415,7 +435,7 @@ async fn string_temporal_casts_match_spark() -> TestResult {
             .iter()
             .filter(|case| is_padded_timestamp_record(case))
             .count(),
-        16
+        20
     );
     assert_no_differences(&differences_over(&records, &cases, None).await?);
     Ok(())

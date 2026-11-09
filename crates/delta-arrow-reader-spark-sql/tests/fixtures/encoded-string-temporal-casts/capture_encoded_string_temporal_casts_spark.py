@@ -2,12 +2,14 @@
 
 Records analyzed, optimized and executed schemas, typed internal-row values and failing stages,
 with the innermost Java exception of a failure, for CAST and TRY_CAST of STRING columns to DATE,
-TIMESTAMP and TIMESTAMP_NTZ and for DATE_ADD and DATE_SUB of STRING dates: a NOT NULL column of
-values Spark reads, padded, with a time, with a `T` separator and at a Los Angeles DST gap, a NOT
-NULL column with malformed values and a nullable column with NULLs. DAR's harness runs the same
-queries over dictionary-encoded, viewed and large copies of the columns. Every query runs in
-both ANSI modes in UTC and America/Los_Angeles. Run from the crate root in the reference
-environment described in README.md; the output path must not exist.
+TIMESTAMP and TIMESTAMP_NTZ, for DATE_ADD and DATE_SUB of STRING dates, and for the implicit
+conversions of STRING beside a DATE or TIMESTAMP in comparisons, DAYOFWEEK, WEEKDAY, WEEKOFYEAR,
+COALESCE, IF and CASE: over a NOT NULL column of values Spark reads, padded, with a time, with a
+`T` separator and at a Los Angeles DST gap, a NOT NULL column with malformed values and a
+nullable column with NULLs. DAR's harness runs the same queries over dictionary-encoded, viewed
+and large copies of the columns. Every query runs in both ANSI modes in UTC and
+America/Los_Angeles. Run from the crate root in the reference environment described in
+README.md; the output path must not exist.
 """
 import argparse
 from datetime import date, datetime, timedelta, timezone
@@ -53,6 +55,24 @@ def definitions():
                    f"SELECT k, TRY_CAST({column} AS {target}) AS r FROM inputs")
         for function in ["date_add", "date_sub"]:
             yield (f"{function}_{name}", f"SELECT k, {function}({column}, 1) AS r FROM inputs")
+        # Spark converts the STRING to DATE or TIMESTAMP implicitly beside one.
+        for comparison_name, comparison in [
+                ("equal_date", f"{column} = DATE '2024-05-17'"),
+                ("less_date", f"{column} < DATE '2024-03-01'"),
+                ("between_dates", f"{column} BETWEEN DATE '2024-01-01' AND DATE '2024-03-31'"),
+                ("null_safe_equal_date", f"{column} <=> DATE '2024-05-17'"),
+                ("date_equal", f"DATE '2024-05-17' = {column}"),
+                ("equal_timestamp", f"{column} = TIMESTAMP '2024-05-17 00:00:00'")]:
+            yield (f"{comparison_name}_{name}", f"SELECT k, {comparison} AS r FROM inputs")
+        yield (f"filter_equal_date_{name}",
+               f"SELECT k FROM inputs WHERE {column} = DATE '2024-05-17'")
+        for function in ["dayofweek", "weekday", "weekofyear"]:
+            yield (f"{function}_{name}", f"SELECT k, {function}({column}) AS r FROM inputs")
+        for result_name, result in [
+                ("coalesce_date", f"coalesce({column}, DATE '2000-01-01')"),
+                ("if_date", f"IF(k > 1, {column}, DATE '2000-01-01')"),
+                ("case_date", f"CASE WHEN k > 1 THEN DATE '2000-01-01' ELSE {column} END")]:
+            yield (f"{result_name}_{name}", f"SELECT k, {result} AS r FROM inputs")
 
 
 def python_value(value, kind):
