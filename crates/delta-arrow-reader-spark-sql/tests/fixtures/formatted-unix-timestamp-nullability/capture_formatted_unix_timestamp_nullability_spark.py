@@ -128,8 +128,9 @@ def definitions():
                f"SELECT k, {function}(dt, x) AS r "
                f"FROM (SELECT k, dt, CAST({failing} OVER () AS STRING) AS x FROM inputs) t")
         yield (f"union_failing_aggregate_{function}_format",
-               f"SELECT {function}(DATE '2024-01-02', x) AS r FROM (SELECT CAST(max(k) AS STRING) "
-               f"AS x FROM inputs UNION ALL SELECT CAST({failing} AS STRING) AS x FROM inputs) t")
+               f"SELECT k, {function}(DATE '2024-01-02', x) AS r FROM (SELECT k, "
+               f"CAST(max(k) AS STRING) AS x FROM inputs GROUP BY k UNION ALL SELECT k, "
+               f"CAST({failing} AS STRING) AS x FROM inputs GROUP BY k) t")
         # A grouping set makes a NOT NULL grouping key NULL in its subtotal rows.
         for name, argument, groups in [
                 ("rollup", "dt", "ROLLUP(dt, g)"), ("cube", "dt", "CUBE(dt, g)"),
@@ -196,6 +197,14 @@ def definitions():
         yield (f"derived_union_limit_{function}_format",
                f"SELECT k, {function}(dt, x) AS r FROM (SELECT * FROM (SELECT k, dt, {cast} "
                f"FROM inputs UNION ALL SELECT k, dt, {cast} FROM inputs) u LIMIT 10) t")
+        # A NOT NULL derived format keeps the result NOT NULL with ANSI enabled, and Spark never
+        # evaluates it either.
+        required = "coalesce(CAST(CAST(g AS INT) AS STRING), 'yyyy-MM-dd') AS x"
+        for name, argument in [("date", "dt"), ("timestamp", "ts"), ("timestamp_ntz", "tn"),
+                               ("literal", "DATE '2024-01-02'")]:
+            yield (f"derived_required_{name}_{function}_format",
+                   f"SELECT k, {function}({argument}, x) AS r "
+                   f"FROM (SELECT k, dt, ts, tn, {required} FROM inputs) t")
         # Spark computes a derived column below a join, so there it fails with ANSI enabled.
         yield (f"derived_joined_{function}_format",
                f"SELECT t.k, {function}(t.dt, t.x) AS r FROM inputs a JOIN {derived} "

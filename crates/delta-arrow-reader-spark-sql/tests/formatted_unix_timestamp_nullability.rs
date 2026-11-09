@@ -33,7 +33,7 @@ mod spark_results;
 use spark_results::{TestResult, validate_batch};
 
 /// The number of recorded observations.
-const RECORD_COUNT: usize = 712;
+const RECORD_COUNT: usize = 744;
 
 fn formatted_unix_timestamp_references() -> TestResult<Vec<Value>> {
     let records = include_str!(

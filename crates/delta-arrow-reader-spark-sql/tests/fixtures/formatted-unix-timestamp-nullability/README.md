@@ -1,6 +1,6 @@
 # Formatted UNIX_TIMESTAMP nullability
 
-`formatted-unix-timestamp-nullability-spark.jsonl` records 712 observations from Spark 4.2.0,
+`formatted-unix-timestamp-nullability-spark.jsonl` records 744 observations from Spark 4.2.0,
 revision `32f7299601108917fb01920a54e084595b7b3bf8`, Java 17.0.20.1 and Python 3.12.14 (#1203,
 #1231). The header stores the build properties, capture script hash, settings and the registered
 `inputs` table. Two captures were byte-identical.
@@ -10,7 +10,7 @@ TIMESTAMP_NTZ `tn`, nullable copies `dtn`, `tsn` and `tnn` that are NULL in the 
 NULL STRING format `g` and a nullable STRING format `f` holding `yyyy-MM-dd`, `dd/MM/yyyy` and
 NULL. The times are at noon.
 
-178 queries run in both ANSI modes in UTC and America/Los_Angeles, for UNIX_TIMESTAMP and
+186 queries run in both ANSI modes in UTC and America/Los_Angeles, for UNIX_TIMESTAMP and
 TO_UNIX_TIMESTAMP:
 - of each DATE, TIMESTAMP and TIMESTAMP_NTZ column with the format `'yyyy-MM-dd'`, `g`, `f`,
   `NULL` and `CAST(NULL AS STRING)`;
@@ -23,8 +23,8 @@ TO_UNIX_TIMESTAMP:
   `CAST(row_number() OVER (ORDER BY k) AS STRING)`;
 - of a DATE literal with `CAST(max(CAST(g AS INT)) AS STRING)`, of `dt` with that window
   function over `()`, of either with the aggregate or window function renamed by a subquery or
-  derived by it into the format, and of a DATE literal with a format a UNION ALL derives from it
-  in its second input;
+  derived by it into the format, and of a DATE literal with a format a UNION ALL of grouped
+  subqueries derives from it in its second input;
 - of `dt` with `g` under `ROLLUP(dt, g)`, `CUBE(dt, g)` and `GROUPING SETS ((dt, g), ())`, of
   `ts` with `g` under `ROLLUP(ts, g)`, and of `dt` with `CAST(count(*) AS STRING)` under
   `ROLLUP(dt)`;
@@ -34,7 +34,9 @@ TO_UNIX_TIMESTAMP:
   `k`, and of a DATE literal with such a column through a subquery, with and without an alias, a
   filter, a LIMIT, nesting, a window, DISTINCT, a CTE and UNION ALL;
 - of `dt` with such a column in a filter, a window's partition key, a join condition, under a
-  LIMIT of a UNION ALL and below a join, and of a DATE literal with it as a GROUP BY key.
+  LIMIT of a UNION ALL and below a join, and of a DATE literal with it as a GROUP BY key;
+- of `dt`, `ts`, `tn` and a DATE literal with the NOT NULL format column a subquery derives from
+  `coalesce(CAST(CAST(g AS INT) AS STRING), 'yyyy-MM-dd')`.
 
 Spark ignores the format of these arguments and never evaluates it, but computes its aggregates
 and window functions, so a DATE literal with `max(f)` gives one row, and with ANSI enabled a
