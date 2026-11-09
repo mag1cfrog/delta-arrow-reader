@@ -30,7 +30,7 @@ mod spark_results;
 use spark_results::{TestResult, validate_batch};
 
 /// The number of recorded observations.
-const RECORD_COUNT: usize = 244;
+const RECORD_COUNT: usize = 284;
 
 fn trunc_unit_references() -> TestResult<Vec<Value>> {
     let records = include_str!("fixtures/trunc-units/trunc-units-spark.jsonl")
