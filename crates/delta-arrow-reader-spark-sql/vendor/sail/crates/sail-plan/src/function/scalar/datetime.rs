@@ -53,6 +53,7 @@ use sail_function::scalar::spark_cast_string_to_integer::{
     SparkCastStringToInteger, StringIntegerCastMode,
 };
 use sail_function::scalar::spark_decimal_cast::{DecimalCastMode, SparkDecimalCast};
+use sail_function::scalar::spark_nullable_result::SparkNullableResult;
 use sail_sql_analyzer::literal::interval::IntervalValue;
 use sail_sql_analyzer::parser::parse_interval;
 
@@ -868,20 +869,26 @@ fn declare_nullable_result(expr: Expr, nullable: bool, schema: &DFSchemaRef) -> 
 
 fn to_date(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let null_on_error = !input.function_context.plan_config.ansi_mode;
-    to_date_with(input, null_on_error, "to_date")
+    to_date_with(input, null_on_error, false)
 }
 
 /// Spark's TRY_TO_DATE: TO_DATE that gives NULL for a value it cannot parse in both ANSI modes.
-/// An invalid pattern still fails, as in Spark.
+/// An invalid pattern still fails, as in Spark. With a format, its result is nullable at every
+/// stage, also for a DATE or TIMESTAMP argument.
 fn try_to_date(input: ScalarFunctionInput) -> PlanResult<Expr> {
-    to_date_with(input, true, "try_to_date")
+    to_date_with(input, true, true)
 }
 
 fn to_date_with(
     input: ScalarFunctionInput,
     null_on_error: bool,
-    function_name: &str,
+    try_function: bool,
 ) -> PlanResult<Expr> {
+    let function_name = if try_function {
+        "try_to_date"
+    } else {
+        "to_date"
+    };
     if input.arguments.len() == 1 {
         // If format is not supplied, the function is a synonym for cast(expr AS DATE).
         let expr = input.arguments[0].clone();
@@ -905,6 +912,10 @@ fn to_date_with(
             _ => None,
         };
         if let Some(date) = date {
+            if try_function {
+                return Ok(ScalarUDF::from(SparkNullableResult::new())
+                    .call(vec![cast(date, DataType::Date32)]));
+            }
             let nullable = null_on_error
                 || expr.nullable(input.function_context.schema)?
                 || format.nullable(input.function_context.schema)?;
