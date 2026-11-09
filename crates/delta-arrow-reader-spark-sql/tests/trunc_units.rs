@@ -1,6 +1,6 @@
 //! TRUNC truncates a DATE to Spark's units, YEAR, YYYY, YY, QUARTER, MON, MONTH, MM and WEEK in
-//! any case, gives NULL for any other unit, NULL included, reads a column of units row by row,
-//! and is nullable at every stage over a column, like Spark's.
+//! any letter case, gives NULL for any other unit, NULL included, evaluates its date and unit
+//! for every row, and is nullable at every stage over a column, like Spark's.
 
 use std::sync::Arc;
 
@@ -30,7 +30,7 @@ mod spark_results;
 use spark_results::{TestResult, validate_batch};
 
 /// The number of recorded observations.
-const RECORD_COUNT: usize = 192;
+const RECORD_COUNT: usize = 244;
 
 fn trunc_unit_references() -> TestResult<Vec<Value>> {
     let records = include_str!("fixtures/trunc-units/trunc-units-spark.jsonl")
@@ -207,20 +207,12 @@ fn optimize(session: &SessionContext, plan: &LogicalPlan) -> TestResult<LogicalP
     Ok(state.optimize(plan)?)
 }
 
-/// The texts one of which DAR's error must contain for a recorded failure: a retained record's
-/// pinned texts, or Spark's error condition. Spark's message quotes its plan.
-fn expected_error_texts(case: &Value) -> Vec<String> {
-    if let Some(messages) = case["expected"]["dar_messages"].as_array() {
-        return messages
-            .iter()
-            .filter_map(Value::as_str)
-            .map(str::to_owned)
-            .collect();
-    }
+/// The text DAR's error must contain for a recorded failure: Spark's error condition. Spark's
+/// message quotes its plan.
+fn expected_error_text(case: &Value) -> Option<String> {
     case["expected"]["condition"]
         .as_str()
-        .map(|condition| vec![format!("[{condition}]")])
-        .unwrap_or_default()
+        .map(|condition| format!("[{condition}]"))
 }
 
 /// The recorded stages and outcome that differ from the observation. A failure must occur
@@ -238,11 +230,10 @@ fn differing_parts(case: &Value, observation: &Value) -> TestResult<Vec<&'static
         Some("ok") => observation["rows"] == case["expected"]["rows"],
         Some("error") => {
             observation["error_phase"] == case["spark_error_phase"]
-                && observation["error"].as_str().is_some_and(|error| {
-                    expected_error_texts(case)
-                        .iter()
-                        .any(|text| error.contains(text.as_str()))
-                })
+                && observation["error"]
+                    .as_str()
+                    .zip(expected_error_text(case))
+                    .is_some_and(|(error, text)| error.contains(&text))
         }
         _ => false,
     };
@@ -323,6 +314,22 @@ fn register_encoded_inputs(
     Ok(())
 }
 
+/// Dictionary encoding, as Delta's provider gives a STRING partition column.
+fn dictionary_encoding(data_type: &DataType) -> Option<DataType> {
+    (data_type == &DataType::Utf8)
+        .then(|| DataType::Dictionary(Box::new(DataType::UInt16), Box::new(DataType::Utf8)))
+}
+
+/// String views, as Delta's reader gives a STRING data column by default.
+fn string_view_encoding(data_type: &DataType) -> Option<DataType> {
+    (data_type == &DataType::Utf8).then_some(DataType::Utf8View)
+}
+
+/// Large strings, as a registered Arrow table can give a STRING column.
+fn large_string_encoding(data_type: &DataType) -> Option<DataType> {
+    (data_type == &DataType::Utf8).then_some(DataType::LargeUtf8)
+}
+
 /// Arrow's Date64, which another producer can give for a DATE.
 fn date64_encoding(data_type: &DataType) -> Option<DataType> {
     (data_type == &DataType::Date32).then_some(DataType::Date64)
@@ -392,5 +399,25 @@ async fn date64_arguments_match_their_date_records() -> TestResult {
         .collect::<Vec<_>>();
     assert!(!cases.is_empty());
     assert_no_differences(&differences_over(&records, &cases, Some(date64_encoding)).await?);
+    Ok(())
+}
+
+/// A dictionary-encoded, viewed or large STRING behaves like a STRING, as a date argument and as
+/// a unit, so every Spark record holds over copies of the inputs with their STRING columns so
+/// encoded.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn encoded_strings_match_their_string_records() -> TestResult {
+    let records = trunc_unit_references()?;
+    let cases = records[1..].iter().collect::<Vec<_>>();
+    let encodings: [Encoding; 3] = [
+        dictionary_encoding,
+        string_view_encoding,
+        large_string_encoding,
+    ];
+    let mut differences = Vec::new();
+    for encoding in encodings {
+        differences.extend(differences_over(&records, &cases, Some(encoding)).await?);
+    }
+    assert_no_differences(&differences);
     Ok(())
 }

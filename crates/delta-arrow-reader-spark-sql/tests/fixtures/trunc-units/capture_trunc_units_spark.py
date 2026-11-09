@@ -2,11 +2,12 @@
 
 Records analyzed, optimized and executed schemas, typed internal-row values and failing
 stages, with the innermost Java exception of a failure, for TRUNC of NOT NULL and nullable DATE
-columns, DATE literals and TIMESTAMP, TIMESTAMP_NTZ and STRING arguments, with every unit
-spelling Spark supports in mixed case, unsupported, empty, padded and NULL units, and a column
-of units. Spark supports YEAR, YYYY, YY, QUARTER, MON, MONTH, MM and WEEK, in any case, and
-gives NULL for any other unit; the result is nullable. Every query runs in both ANSI modes in
-UTC and America/Los_Angeles. Run from the crate root in the reference environment described in
+columns, DATE literals and TIMESTAMP, TIMESTAMP_NTZ, STRING and INT arguments, with every unit
+spelling Spark supports in mixed case, unsupported, empty, padded and NULL units, constant unit
+expressions, INT and BINARY units, a volatile unit, and columns of units, also beside malformed
+STRING dates. Spark supports YEAR, YYYY, YY, QUARTER, MON, MONTH, MM and WEEK, in any letter
+case, and gives NULL for any other unit; the result is nullable. Every query runs in both ANSI
+modes in UTC and America/Los_Angeles. Run from the crate root in the reference environment described in
 README.md; the output path must not exist.
 """
 import argparse
@@ -22,13 +23,14 @@ SPARK_REVISION = "32f7299601108917fb01920a54e084595b7b3bf8"
 CONVERT_TO_LOCAL_RELATION = "org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation"
 ZONES = ["UTC", "America/Los_Angeles"]
 
-# (DATE, TIMESTAMP instant in UTC, TIMESTAMP_NTZ, STRING, unit); the nullable copies are NULL in
-# the last row. Noon keeps each date the same in UTC and Los Angeles.
+# (DATE, TIMESTAMP instant in UTC, TIMESTAMP_NTZ, STRING, STRING in other forms Spark reads as
+# a DATE, STRING malformed in the rows of an unsupported or NULL unit, unit); the nullable copies
+# are NULL in the last row. Noon keeps each date the same in UTC and Los Angeles.
 ROWS = [
-    ("2024-05-17", "2024-05-17 12:00:00", "2024-05-17", "MM"),
-    ("2024-03-10", "2024-03-10 12:00:00", "2024-03-10", "week"),
-    ("1969-12-31", "1969-12-31 12:00:00", "1969-12-31", "DD"),
-    ("2024-01-01", "2024-01-01 12:00:00", "2024-01-01", None),
+    ("2024-05-17", "2024-05-17 12:00:00", "2024-05-17", " 2024-03-10 ", "2024-05-17", "MM"),
+    ("2024-03-10", "2024-03-10 12:00:00", "2024-03-10", "2024-05", "2024-03-10", "week"),
+    ("1969-12-31", "1969-12-31 12:00:00", "1969-12-31", "2024", "garbage", "DD"),
+    ("2024-01-01", "2024-01-01 12:00:00", "2024-01-01", "2024-02-29T10:00:00", "garbage", None),
 ]
 
 
@@ -52,10 +54,12 @@ INPUTS = [{
         {"name": "ts", "type": "timestamp", "nullable": False, "metadata": {}},
         {"name": "tn", "type": "timestamp_ntz", "nullable": False, "metadata": {}},
         {"name": "s", "type": "string", "nullable": False, "metadata": {}},
+        {"name": "sv", "type": "string", "nullable": False, "metadata": {}},
+        {"name": "sb", "type": "string", "nullable": False, "metadata": {}},
         {"name": "u", "type": "string", "nullable": True, "metadata": {}}]},
     "rows": [[str(key), str(days(day)), None if key == LAST else str(days(day)),
-              str(micros(instant)), str(micros(instant)), text, unit]
-             for key, (day, instant, text, unit) in enumerate(ROWS)]}]
+              str(micros(instant)), str(micros(instant)), text, other, malformed, unit]
+             for key, (day, instant, text, other, malformed, unit) in enumerate(ROWS)]}]
 
 # (name, unit argument)
 UNITS = [
@@ -79,6 +83,21 @@ def definitions():
         yield f"column_string_{name}", f"SELECT k, trunc(s, {unit}) AS r FROM inputs"
     yield "column_date_unit_column", "SELECT k, trunc(dr, u) AS r FROM inputs"
     yield "literal_null_date_mm", "SELECT trunc(CAST(NULL AS DATE), 'MM') AS r"
+    for name, unit in [("mm", "'MM'"), ("week", "'WEEK'")]:
+        yield f"column_string_forms_{name}", f"SELECT k, trunc(sv, {unit}) AS r FROM inputs"
+    yield "column_malformed_string_mm", "SELECT k, trunc(sb, 'MM') AS r FROM inputs"
+    yield "column_malformed_string_unit_column", "SELECT k, trunc(sb, u) AS r FROM inputs"
+    for name, unit in [("concat", "concat('M', 'M')"), ("upper", "upper('mm')"),
+                       ("nullif", "nullif('MM', '')"), ("int", "1"), ("binary", "X'4D4D'")]:
+        yield f"column_date_{name}_unit", f"SELECT k, trunc(dr, {unit}) AS r FROM inputs"
+    yield "column_timestamp_concat_unit", \
+        "SELECT k, trunc(ts, concat('M', 'M')) AS r FROM inputs"
+    yield "column_date_int_unit_column", "SELECT k, trunc(dr, k) AS r FROM inputs"
+    yield "column_int_mm", "SELECT k, trunc(k, 'MM') AS r FROM inputs"
+    # Each of the 256 rows reads its unit once, so none is NULL. Spark rejects a volatile
+    # aggregate argument, so the subquery computes TRUNC.
+    yield "volatile_unit", ("SELECT count(r) AS n FROM (SELECT trunc(a.dr, IF(rand() < 0.5, "
+                            "'MM', 'YEAR')) AS r FROM inputs a, inputs b, inputs c, inputs d)")
 
 
 def python_value(value, kind):
