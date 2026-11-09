@@ -60,6 +60,9 @@ impl PlanResolver<'_> {
         {
             return Err(unresolved_routine_error(&function_name, self.ctx));
         }
+        // Spark resolves these routines before named arguments, too.
+        let (arguments, arity_error) =
+            self.resolve_datetime_unit_call(&function_name, arguments)?;
         if !named_arguments.is_empty()
             || arguments
                 .iter()
@@ -77,8 +80,6 @@ impl PlanResolver<'_> {
         {
             return Err(unresolved_routine_error(&function_name, self.ctx));
         }
-        let (arguments, arity_error) =
-            self.resolve_datetime_unit_call(&function_name, arguments)?;
 
         // For `mode() WITHIN GROUP (ORDER BY col)`, move the sort expression and a
         // tie-break sentinel into the argument list before resolution, so that the
@@ -448,7 +449,7 @@ impl PlanResolver<'_> {
     /// `written_name`. A call the SQL analyzer marked with a datetime unit keyword reads the unit
     /// as a string. Any other call is ordinary: TIMESTAMPDIFF, TIMEDIFF and TIMESTAMPADD name no
     /// routine, as written, before their arguments resolve; DATEDIFF, DATE_DIFF, DATEADD and
-    /// DATE_ADD take two arguments, so a third fails once the arguments resolve, with the
+    /// DATE_ADD take two arguments, so another count fails once the arguments resolve, with the
     /// returned error, which names the routine in lower case as Spark's registry does.
     fn resolve_datetime_unit_call(
         &self,
@@ -466,7 +467,7 @@ impl PlanResolver<'_> {
             return Err(unresolved_routine_error(written_name, self.ctx));
         }
         let arity_error = (DATETIME_UNIT_FUNCTIONS_WITH_ROUTINE.contains(&routine_name.as_str())
-            && arguments.len() > 2)
+            && arguments.len() != 2)
             .then(|| {
                 PlanError::invalid(format!(
                     "[WRONG_NUM_ARGS.WITHOUT_SUGGESTION] The `{routine_name}` requires 2 \
