@@ -867,9 +867,17 @@ differences:
 - strings beyond the date library's range (#1011);
 - an ignored parsed offset (#1015);
 - arguments of other types cast to DATE or failing, where Spark converts them to STRING (#1194);
-- a TIMESTAMP_NTZ with a format read as its own DATE outside UTC (#1195);
-- TO_DATE's formatted `CASE WHEN true` declaration over a DATE or TIMESTAMP, NOT NULL after
-  optimization where Spark's result is nullable (#1196).
+- a TIMESTAMP_NTZ with a format read as its own DATE outside UTC (#1195).
+
+With a format over a DATE, TIMESTAMP or TIMESTAMP_NTZ, TO_DATE ignores the format, as Spark's
+does, and declares Spark's nullability at every stage: nullable outside ANSI mode, and in ANSI
+mode for a nullable argument, over a column, and over a literal until constant folding. Where
+DataFusion declares the result otherwise, `SparkKnownNullable` or `SparkKnownNotNull`, after
+Spark's `KnownNullable` and `KnownNotNull`, declares it; DataFusion's `to_local_time` is nullable
+even for a NOT NULL TIMESTAMP. It used a `CASE WHEN true` declaration, which the optimizer
+removed over a column (#1196). UNIX_TIMESTAMP with a format still declares its result that way
+(#1203). The [formatted TO_DATE references](tests/fixtures/formatted-to-date-nullability/README.md)
+record the checks.
 
 The [temporal contract references](tests/fixtures/temporal-contracts/README.md) and the
 [TRY_TO_DATE references](tests/fixtures/try-to-date/README.md) record the checks (#1017).

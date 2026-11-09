@@ -54,6 +54,7 @@ use sail_function::scalar::spark_cast_string_to_integer::{
     SparkCastStringToInteger, StringIntegerCastMode,
 };
 use sail_function::scalar::spark_decimal_cast::{DecimalCastMode, SparkDecimalCast};
+use sail_function::scalar::spark_known_not_null::SparkKnownNotNull;
 use sail_function::scalar::spark_known_nullable::SparkKnownNullable;
 use sail_sql_analyzer::literal::interval::IntervalValue;
 use sail_sql_analyzer::parser::parse_interval;
@@ -905,6 +906,18 @@ fn coerce_datetime_format(
     }
 }
 
+/// `expr` declared with Spark's nullability, where DataFusion declares it otherwise. Unlike a
+/// `CASE WHEN true` wrapper, the declaration survives optimization over a column.
+fn declare_spark_nullability(expr: Expr, nullable: bool, schema: &DFSchemaRef) -> PlanResult<Expr> {
+    Ok(match (nullable, expr.nullable(schema)?) {
+        (true, false) => ScalarUDF::from(SparkKnownNullable::new()).call(vec![expr]),
+        (false, true) => ScalarUDF::from(SparkKnownNotNull::new()).call(vec![expr]),
+        _ => expr,
+    })
+}
+
+/// `expr` declared nullable with a `CASE WHEN true` wrapper, which the optimizer removes over a
+/// column; formatted UNIX_TIMESTAMP still uses it (#1203).
 fn declare_nullable_result(expr: Expr, nullable: bool, schema: &DFSchemaRef) -> PlanResult<Expr> {
     if nullable && !expr.nullable(schema)? {
         let null = lit(ScalarValue::try_from(&expr.get_type(schema)?)?);
@@ -987,14 +1000,12 @@ fn to_date_with_parser(input: ScalarFunctionInput, parser: DateParser) -> PlanRe
             _ => None,
         };
         if let Some(date) = date {
-            if parser == DateParser::TryToDate {
-                return Ok(ScalarUDF::from(SparkKnownNullable::new())
-                    .call(vec![cast(date, DataType::Date32)]));
-            }
+            // Spark ignores the format of a DATE or TIMESTAMP. Its result is nullable outside
+            // ANSI mode, and in ANSI mode for a nullable argument, at every stage over a column.
             let nullable = null_on_error
                 || expr.nullable(input.function_context.schema)?
                 || format.nullable(input.function_context.schema)?;
-            return declare_nullable_result(
+            return declare_spark_nullability(
                 cast(date, DataType::Date32),
                 nullable,
                 input.function_context.schema,
