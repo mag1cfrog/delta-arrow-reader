@@ -73,10 +73,8 @@ typed rows at batch sizes 1 and 32. A failure must occur at Spark's stage with S
 condition in DAR's message. A second test runs the DATE column records over Date64 copies of the
 DATE columns, and a third runs every record over dictionary-encoded, viewed and large copies of
 the STRING columns; both require the same results. A fourth runs the derived date records and
-those with a failing aggregate or window function at four target partitions. One difference is
-retained: a dictionary-encoded STRING casts to DATE with Arrow's rules, so over such a copy of
-`sb` the aggregate and window function records fail while collecting rows in both ANSI modes,
-with Arrow's cast error (#1218, 16 records).
+those with a failing aggregate or window function at four target partitions. No differences are
+retained.
 
 Recapture from the crate root:
 
