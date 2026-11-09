@@ -30,6 +30,7 @@ use crate::projection_row_errors::{ProjectionRowErrorNode, admit_prefix_producer
 
 mod input_sort_boundary;
 mod monotonic_id;
+mod seeded_rand;
 mod signed_range_window;
 mod spark_partition_id;
 
@@ -95,9 +96,11 @@ impl QueryPlanner for SparkQueryPlanner {
             Cow::Borrowed(logical_plan)
         };
         let runtime_plan = drop_declaration_inputs(runtime_plan.into_owned(), session_state)?;
-        DefaultPhysicalPlanner::with_extension_planners(vec![Arc::new(SparkExtensionPlanner)])
-            .create_physical_plan(&runtime_plan, &state)
-            .await
+        let physical =
+            DefaultPhysicalPlanner::with_extension_planners(vec![Arc::new(SparkExtensionPlanner)])
+                .create_physical_plan(&runtime_plan, &state)
+                .await?;
+        seeded_rand::bind_seeded_rand_streams(physical)
     }
 }
 

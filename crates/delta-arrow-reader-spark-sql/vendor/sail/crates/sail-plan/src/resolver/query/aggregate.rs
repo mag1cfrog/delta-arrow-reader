@@ -16,7 +16,7 @@ use datafusion_expr::{
     Aggregate, AggregateUDF, ColumnarValue, Expr, ExprSchemable, Extension, LogicalPlan,
     LogicalPlanBuilder, Projection, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl,
     Signature, SortExpr, Volatility, bitwise_and, bitwise_or, bitwise_shift_left,
-    bitwise_shift_right, cast, lit, when,
+    bitwise_shift_right, cast, ident, lit, when,
 };
 use datafusion_spark::function::aggregate::try_sum::SparkTrySum;
 use sail_common::spec;
@@ -37,6 +37,7 @@ use crate::resolver::tree::explode::ExplodeRewriter;
 use crate::resolver::tree::monotonic_id::MonotonicIdRewriter;
 use crate::resolver::tree::spark_partition_id::SparkPartitionIdRewriter;
 use crate::resolver::tree::window::WindowRewriter;
+use crate::resolver::tree::contains_seeded_rand;
 
 /// Projections resolved by index (a `None` marks a projection deferred until the
 /// grouping is materialized), paired with the indices of the deferred projections.
@@ -275,6 +276,7 @@ impl PlanResolver<'_> {
             aggregate_candidates.push(having.clone());
         }
         let aggregate_exprs = find_aggregate_exprs(&aggregate_candidates);
+        let mut rand_projection = Vec::new();
         // Normalize only each complete grouping key. Aggregate arguments and
         // operands inside a computed key must continue to see the original values.
         let group_exprs = group_exprs
@@ -296,17 +298,35 @@ impl PlanResolver<'_> {
                         expr.clone().unalias()
                     };
                     let normalize = normalized != expr.clone().unalias();
-                    let expr = if normalize {
+                    let seeded_rand = contains_seeded_rand(&normalized)?;
+                    let expr = if seeded_rand {
+                        let (qualifier, name) = expr.qualified_name();
+                        let field = state.register_hidden_field_name("__rand_group_key");
+                        if rand_projection.is_empty() {
+                            rand_projection.extend(input.schema().columns().into_iter().map(Expr::Column));
+                        }
+                        rand_projection.push(normalized.alias(&field));
+                        ident(field).alias_qualified(qualifier, name)
+                    } else if normalize {
                         let (qualifier, name) = expr.qualified_name();
                         normalized.alias_qualified(qualifier, name)
                     } else {
                         expr
                     };
-                    Ok(Transformed::new(expr, normalize, TreeNodeRecursion::Jump))
+                    Ok(Transformed::new(
+                        expr,
+                        normalize || seeded_rand,
+                        TreeNodeRecursion::Jump,
+                    ))
                 })
                 .data()
             })
             .collect::<DataFusionResult<Vec<_>>>()?;
+        let input = if !rand_projection.is_empty() {
+            LogicalPlan::Projection(Projection::try_new(rand_projection, Arc::new(input))?)
+        } else {
+            input
+        };
         let mut plan = LogicalPlanBuilder::from(input)
             .aggregate(group_exprs, aggregate_exprs.clone())?
             .build()?;

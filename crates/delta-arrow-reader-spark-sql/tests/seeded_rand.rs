@@ -1,4 +1,4 @@
-//! Collect the fixed #901 lifecycle matrix before semantic assertions are enabled.
+//! Compare seeded RAND values and executed SQL types with independent Spark output.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -178,6 +178,17 @@ async fn collect_once(plan: Arc<dyn ExecutionPlan>, session: &SessionContext) ->
             return observed;
         }
     };
+    match batches
+        .iter()
+        .map(|batch| string_binary::capture_schema(batch.schema().fields(), None))
+        .collect::<TestResult<Vec<_>>>()
+    {
+        Ok(schemas) => observed["executed_batch_sql_schemas"] = json!(schemas),
+        Err(error) => {
+            observed["schema_encoding_error"] =
+                c06_receipts::failure(error.as_ref(), "batch_schema_encode");
+        }
+    }
     match c06_receipts::batches(&batches, string_binary::encode_value) {
         Ok(output) => observed["output"] = output,
         Err(error) => observed["error"] = c06_receipts::failure(error.as_ref(), "encode"),
@@ -246,12 +257,21 @@ async fn observe(
                 "actual":collect_once(plan.clone(), &session).await}));
         }
         if case["id"] == "rand901_repeat_collect" {
-            let (left, right) = tokio::join!(
-                collect_once(plan.clone(), &session),
-                collect_once(plan.clone(), &session),
-            );
-            collections.push(json!({"mode":"concurrent","index":0,"actual":left}));
-            collections.push(json!({"mode":"concurrent","index":1,"actual":right}));
+            let barrier = Arc::new(tokio::sync::Barrier::new(2));
+            let tasks = (0..2).map(|_| {
+                let (plan, session, barrier) = (plan.clone(), session.clone(), barrier.clone());
+                tokio::spawn(async move {
+                    barrier.wait().await;
+                    collect_once(plan, &session).await
+                })
+            }).collect::<Vec<_>>();
+            for (index, task) in tasks.into_iter().enumerate() {
+                let actual = match task.await {
+                    Ok(actual) => actual,
+                    Err(error) => json!({"error":c06_receipts::failure(&error,"concurrent_collect_task")}),
+                };
+                collections.push(json!({"mode":"concurrent","index":index,"actual":actual}));
+            }
         }
         observed["collections"] = json!(collections);
         Ok(())
@@ -263,11 +283,102 @@ async fn observe(
     observed
 }
 
-#[tokio::test]
-#[ignore = "Set DAR_C06_RAND901_INPUTS to the fixed external input packet; baseline capture only."]
-async fn collect_seeded_rand_lifecycle_baseline() -> TestResult {
-    let path = std::env::var("DAR_C06_RAND901_INPUTS")?;
-    let packet: Value = serde_json::from_slice(&std::fs::read(&path)?)?;
+fn sql_types(schema: &Value) -> TestResult<Vec<Value>> {
+    schema["fields"]
+        .as_array()
+        .ok_or("missing executed fields")?
+        .iter()
+        .map(|field| field.get("type").cloned().ok_or_else(|| "missing executed type".into()))
+        .collect()
+}
+
+fn value_multiset(rows: &Value, types: &[Value]) -> TestResult<Vec<String>> {
+    let mut rows = rows
+        .as_array()
+        .ok_or("missing complete rows")?
+        .iter()
+        .map(|row| {
+            let cells = row.as_array().ok_or("missing row cells")?;
+            if cells.len() != types.len() {
+                return Err("row width differs from executed SQL types".into());
+            }
+            let cells = cells
+                .iter()
+                .zip(types)
+                .map(|(value, data_type)| {
+                    Ok(if data_type == "double" && !value.is_null() {
+                        // Both engines supply finite decimal doubles; compare their exact bits.
+                        json!(format!("{:016x}",value.as_str().ok_or("missing double")?.parse::<f64>()?.to_bits()))
+                    } else {
+                        value.clone()
+                    })
+                })
+                .collect::<TestResult<Vec<_>>>()?;
+            Ok(serde_json::to_string(&cells)?)
+        })
+        .collect::<TestResult<Vec<_>>>()?;
+    rows.sort();
+    Ok(rows)
+}
+
+fn compare_collection(actual: &Value, reference: &Value) -> TestResult<Value> {
+    let expected = &reference["observed"];
+    let types = sql_types(&expected["physical_schema"])?;
+    let plan_types = sql_types(&actual["executed_sql_schema"])?;
+    let batch_types = actual["executed_batch_sql_schemas"]
+        .as_array()
+        .ok_or("missing executed batch schemas")?
+        .iter()
+        .map(sql_types)
+        .collect::<TestResult<Vec<_>>>()?;
+    let rows_match = value_multiset(&actual["output"]["rows"], &types)?
+        == value_multiset(&expected["rows"], &types)?;
+    let types_match = plan_types == types && batch_types.iter().all(|batch| batch == &types);
+    let errors_absent = ["error", "schema_encoding_error", "bit_encoding_error"]
+        .iter()
+        .all(|key| actual.get(*key).is_none_or(Value::is_null));
+    Ok(json!({"rows_match":rows_match,"types_match":types_match,
+        "errors_absent":errors_absent,"matches":rows_match && types_match && errors_absent,
+        "expected_types":types,"executed_plan_types":plan_types,"executed_batch_types":batch_types}))
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn seeded_rand_values_and_types_match_spark_across_lifecycles() -> TestResult {
+    let packet: Value = serde_json::from_str(include_str!("fixtures/seeded-rand/inputs.json"))?;
+    let records = include_str!("fixtures/seeded-rand/spark-reference.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(records[0]["kind"], "run_start");
+    assert_eq!(records[0]["inputs"], packet);
+    assert_eq!(records[1]["kind"], "runtime_identity");
+    assert_eq!(records[1]["spark_version"], "4.2.0");
+    assert_eq!(records.last().ok_or("missing capture closure")?, &json!({
+        "kind":"capture_complete","observations":18,"semantic_errors":0,
+        "capture_metadata_or_partition_errors":false,
+    }));
+    let references = records.iter().filter(|record| record["kind"] == "observation")
+        .collect::<Vec<_>>();
+    assert_eq!(references.len(), 18);
+    let expected_references = CASES.iter().flat_map(|(id, count)| {
+        [false, true].into_iter().flat_map(move |ansi| {
+            (0..*count).map(move |index| json!([id,ansi,index]).to_string())
+        })
+    }).collect::<HashSet<_>>();
+    let actual_references = references.iter().map(|reference| {
+        json!([reference["id"],reference["ansi"],reference["collect_index"]]).to_string()
+    }).collect::<HashSet<_>>();
+    assert_eq!(actual_references, expected_references);
+    for reference in &references {
+        assert_eq!(reference["observed"]["status"], "ok");
+        assert_eq!(reference["observed"]["rows_complete"], true);
+        assert_eq!(reference["observed"]["metadata_errors"], json!([]));
+        assert_eq!(reference["definition"], packet["definitions"]
+            .as_array().ok_or("missing reference input definitions")?
+            .iter().find(|case| case["id"] == reference["id"])
+            .ok_or("missing reference input definition")?.clone());
+        assert_eq!(reference["sql"], reference["definition"]["sql"]);
+    }
     assert_eq!(packet["format_version"], 1);
     assert_eq!(packet["ansi_modes"], json!([false, true]));
     let definitions = packet["definitions"].as_array().ok_or("missing definitions")?;
@@ -311,12 +422,15 @@ async fn collect_seeded_rand_lifecycle_baseline() -> TestResult {
     }
     assert_eq!(expected_keys.len(), 108);
     assert_eq!(expected_collection_slots, 180);
-    eprintln!("c06 rand901 baseline header: {}", json!({"input_path":path,"input_packet":packet,
-        "expected_contexts":108,"expected_collection_slots":180,"compatibility_assessed":false}));
+    eprintln!("c06 rand901 strict header: {}", json!({"input_packet":packet,
+        "reference_fixture":"fixtures/seeded-rand/spark-reference.jsonl",
+        "expected_contexts":108,"expected_collection_slots":180,
+        "comparison":"complete_values_and_executed_sql_types"}));
     let mut keys = HashSet::new();
     let mut collection_slots = 0;
     let mut completed_collections = 0;
     let mut context_errors = 0;
+    let mut failures = Vec::new();
     for case in definitions {
         let input = inputs
             .iter()
@@ -348,26 +462,69 @@ async fn collect_seeded_rand_lifecycle_baseline() -> TestResult {
                         Ok(actual) => actual,
                         Err(error) => json!({"error":c06_receipts::failure(&error,"capture_task")}),
                     };
+                    let mut comparisons = Vec::new();
                     if actual["error"].is_null() {
-                        let collections = actual["collections"].as_array().ok_or("missing collections")?;
-                        assert_eq!(collections.len(), slots);
-                        completed_collections += collections.len();
+                        if let Some(collections) = actual["collections"].as_array() {
+                            let mut collection_keys = HashSet::new();
+                            let expected_collections = if case["id"] == "rand901_repeat_collect" {
+                                vec![("sequential",0),("sequential",1),("concurrent",0),("concurrent",1)]
+                            } else {
+                                vec![("sequential",0)]
+                            };
+                            let expected_collection_keys = expected_collections.into_iter()
+                                .map(|(mode,index)| json!([mode,index]).to_string())
+                                .collect::<HashSet<_>>();
+                            completed_collections += collections.len();
+                            for collection in collections {
+                                collection_keys.insert(json!([collection["mode"],collection["index"]]).to_string());
+                                let reference = references.iter().find(|reference| {
+                                    reference["id"] == case["id"] && reference["ansi"] == ansi
+                                        && reference["collect_index"] == collection["index"]
+                                });
+                                let comparison = match reference {
+                                    Some(reference) => match compare_collection(&collection["actual"], reference) {
+                                        Ok(comparison) => comparison,
+                                        Err(error) => json!({"matches":false,
+                                            "error":c06_receipts::failure(error.as_ref(),"compare")}),
+                                    },
+                                    None => json!({"matches":false,"error":"missing fixed Spark reference"}),
+                                };
+                                comparisons.push(json!({"mode":collection["mode"],"index":collection["index"],
+                                    "comparison":comparison}));
+                            }
+                            if collections.len() != slots || collection_keys != expected_collection_keys {
+                                comparisons.push(json!({"comparison":{"matches":false,
+                                    "error":"incomplete collection inventory"}}));
+                            }
+                        } else {
+                            comparisons.push(json!({"comparison":{"matches":false,"error":"missing collections"}}));
+                        }
                     } else {
                         context_errors += 1;
+                        comparisons.push(json!({"comparison":{"matches":false,"error":actual["error"]}}));
                     }
-                    eprintln!("c06 rand901 baseline observation: {}", json!({
+                    let matches = comparisons.iter().all(|comparison| comparison["comparison"]["matches"] == true);
+                    let context = json!({
                         "id":case["id"],"ansi":ansi,"sql":case["sql"],"representation":representation,
                         "batch_size":batch_size,"empty_batches":empty_batches,"input":case["input"],
-                        "collection_slots":slots,"actual":actual,"compatibility_assessed":false}));
+                    });
+                    eprintln!("c06 rand901 strict observation: {}", json!({"context":context,
+                        "collection_slots":slots,"actual":actual,"comparisons":comparisons,"matches":matches}));
+                    if !matches {
+                        failures.push(json!({"context":context,"comparisons":comparisons}));
+                    }
                 }
             }
         }
     }
-    eprintln!("c06 rand901 baseline summary: {}",json!({"contexts":keys.len(),
+    eprintln!("c06 rand901 strict summary: {}",json!({"contexts":keys.len(),
         "expected_contexts":108,"collection_slots":collection_slots,"expected_collection_slots":180,
         "completed_collections":completed_collections,"context_errors":context_errors,
-        "compatibility_assessed":false}));
+        "failed_contexts":failures.len(),"values_and_executed_types_match":failures.is_empty()}));
     assert_eq!(keys, expected_keys);
     assert_eq!(collection_slots, expected_collection_slots);
+    assert_eq!(completed_collections, 180);
+    assert_eq!(context_errors, 0);
+    assert!(failures.is_empty(), "{failures:#?}");
     Ok(())
 }

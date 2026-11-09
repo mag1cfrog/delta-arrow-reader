@@ -196,6 +196,31 @@ impl ProjectionExec {
         &self.input
     }
 
+    /// Execute with a stream-local copy of the projection's expressions.
+    /// The supplied projector must preserve expression semantics and output fields.
+    pub fn execute_with_projector(
+        &self,
+        projector: &Projector,
+        partition: usize,
+        context: Arc<TaskContext>,
+    ) -> Result<SendableRecordBatchStream> {
+        if projector.output_schema() != self.projector.output_schema() {
+            return internal_err!("Execution projector changed the projection output schema");
+        }
+        trace!(
+            "Start ProjectionExec::execute for partition {} of context session_id {} and task_id {:?}",
+            partition,
+            context.session_id(),
+            context.task_id()
+        );
+        Ok(Box::pin(ProjectionStream::new(
+            projector.with_metrics(&self.metrics, partition),
+            self.input.execute(partition, context)?,
+            BaselineMetrics::new(&self.metrics, partition),
+            self.row_error_prefix,
+        )?))
+    }
+
     /// This function creates the cache object that stores the plan properties such as schema, equivalence properties, ordering, partitioning, etc.
     fn compute_properties(
         input: &Arc<dyn ExecutionPlan>,
@@ -353,20 +378,7 @@ impl ExecutionPlan for ProjectionExec {
         partition: usize,
         context: Arc<TaskContext>,
     ) -> Result<SendableRecordBatchStream> {
-        trace!(
-            "Start ProjectionExec::execute for partition {} of context session_id {} and task_id {:?}",
-            partition,
-            context.session_id(),
-            context.task_id()
-        );
-
-        let projector = self.projector.with_metrics(&self.metrics, partition);
-        Ok(Box::pin(ProjectionStream::new(
-            projector,
-            self.input.execute(partition, context)?,
-            BaselineMetrics::new(&self.metrics, partition),
-            self.row_error_prefix,
-        )?))
+        self.execute_with_projector(&self.projector, partition, context)
     }
 
     fn metrics(&self) -> Option<MetricsSet> {
