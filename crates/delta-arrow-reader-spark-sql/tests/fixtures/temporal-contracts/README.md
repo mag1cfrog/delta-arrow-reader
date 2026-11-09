@@ -57,7 +57,6 @@ belong to several classes:
 
 - #943: 12 typed TIMESTAMP literals with second 60 roll over to the next minute;
   their fields are those of the same literal for a valid time.
-- #1003: 24 `CAST(DATE AS TIMESTAMP_NTZ)` literals are required at analysis.
 - #1010: 324 invalid-pattern or reserved-character cases retain DAR's error
   message or literal formatting. Strict ANSI formatted-parser literals fail
   during optimization; the other retained errors occur during collection.

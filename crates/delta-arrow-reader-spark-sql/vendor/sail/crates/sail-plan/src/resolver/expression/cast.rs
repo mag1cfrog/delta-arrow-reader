@@ -11,6 +11,7 @@ use sail_common::spec;
 use sail_common::utils::datetime::time_unit_to_multiplier;
 use sail_common_datafusion::variant::is_variant_storage_field;
 use sail_function::scalar::datetime::spark_date::SparkDate;
+use sail_function::scalar::datetime::spark_date_timestamp_ntz_cast::SparkDateTimestampNtzCast;
 use sail_function::scalar::datetime::spark_interval::{
     SparkCalendarInterval, SparkDayTimeInterval, SparkYearMonthInterval,
 };
@@ -289,6 +290,17 @@ impl PlanResolver<'_> {
                 DataType::Timestamp(TimeUnit::Microsecond, Some(timezone)),
                 is_try,
             ) => cast_date_expr_to_ltz(expr, &timezone, is_try),
+            // Spark declares a cast between TIMESTAMP_NTZ and DATE nullable, except a TRY_CAST
+            // from DATE, which cannot fail.
+            (from, DataType::Date32, _)
+                if SparkDateTimestampNtzCast::accepts(&from, &DataType::Date32) =>
+            {
+                ScalarUDF::from(SparkDateTimestampNtzCast::to_date()).call(vec![expr])
+            }
+            (from, to, is_try) if SparkDateTimestampNtzCast::accepts(&from, &to) => {
+                ScalarUDF::from(SparkDateTimestampNtzCast::to_timestamp_ntz(is_try))
+                    .call(vec![expr])
+            }
             (
                 DataType::Timestamp(_, None),
                 DataType::Timestamp(TimeUnit::Microsecond, Some(timezone)),

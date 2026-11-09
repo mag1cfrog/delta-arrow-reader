@@ -14,7 +14,7 @@ use sail_function::scalar::spark_cast_string_to_integer::{
 use sail_function::scalar::spark_to_string::SparkToUtf8;
 
 use crate::error::{PlanError, PlanResult};
-use crate::function::common::FunctionContextInput;
+use crate::function::common::{FunctionContextInput, cast_with_date_ntz_nullability};
 use crate::function::numeric_coercion::common_numeric_type;
 use crate::function::temporal_coercion::{cast_local_timestamp_expr_to_ltz, common_temporal_type};
 
@@ -292,7 +292,8 @@ pub(crate) fn coerce_to_temporal(
     {
         Ok(cast_local_timestamp_expr_to_ltz(arg, data_type, timezone))
     } else if is_temporal_type(data_type) {
-        Ok(cast(arg, target_type.clone()))
+        // Spark declares the DATE and TIMESTAMP_NTZ pair's cast nullable.
+        Ok(cast_with_date_ntz_nullability(arg, data_type, target_type))
     } else {
         Ok(arg)
     }

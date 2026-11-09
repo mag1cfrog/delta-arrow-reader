@@ -36,10 +36,8 @@ quotes its plan. A second test runs the STRING, BINARY and DATE column records o
 encoded copies of the inputs, and requires Spark's results: dictionary-encoded STRING and
 BINARY columns, as Delta's provider gives partition columns; STRING columns as string views,
 as Delta's reader gives data columns, and as large strings; and DATE columns as Arrow's
-Date64. Two differences are
+Date64. One difference is
 retained:
-- #1003: the implicit cast of the TIMESTAMP_NTZ control to DATE is NOT NULL during analysis,
-  where Spark's is nullable (4 records, at DAR's exact result);
 - #1185: the failing ORDER BY key reports DAR's dump of the sort expression without Spark's
   condition, pinned to text DAR's error must contain (4 records).
 

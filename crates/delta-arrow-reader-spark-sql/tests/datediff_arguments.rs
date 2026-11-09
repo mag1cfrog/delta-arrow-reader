@@ -43,10 +43,6 @@ fn datediff_argument_references() -> TestResult<Vec<Value>> {
     Ok(records)
 }
 
-/// #1003: Spark declares the implicit cast of a TIMESTAMP_NTZ to DATE nullable during analysis,
-/// where DAR declares it NOT NULL; constant folding makes both NOT NULL afterwards.
-const NTZ_CAST_NULLABILITY_RECORDS: [&str; 1] = ["literal_date_diff_timestamp_ntz"];
-
 /// #1185: a failing sort key reports DAR's dump of the unresolved expression, without Spark's
 /// condition, as for an unknown routine there.
 const SORT_KEY_RECORD: &str = "column_order_by_datediff_int";
@@ -54,29 +50,16 @@ const SORT_KEY_TEXT: &str = "invalid argument: sort expression: SortOrder { chil
     UnresolvedFunction(UnresolvedFunction { function_name: ObjectName([Identifier(\"datediff\")])";
 
 fn is_retained(case: &Value) -> bool {
-    case["id"]
-        .as_str()
-        .is_some_and(|id| NTZ_CAST_NULLABILITY_RECORDS.contains(&id) || id == SORT_KEY_RECORD)
+    case["id"] == SORT_KEY_RECORD
 }
 
-/// DAR's current result for a retained record: for #1003 Spark's, with the analyzed result NOT
-/// NULL; for #1185 DAR's error text, at Spark's stage.
+/// DAR's current result for the #1185 record: DAR's error text, at Spark's stage.
 fn current_expectation(case: &Value) -> TestResult<Value> {
+    if case["spark_error_phase"] != "sql" {
+        return Err(format!("expected Spark's analysis failure: {case}").into());
+    }
     let mut current = case.clone();
-    if case["id"] == SORT_KEY_RECORD {
-        if case["spark_error_phase"] != "sql" {
-            return Err(format!("expected Spark's analysis failure: {case}").into());
-        }
-        current["expected"] = json!({"status": "error", "dar_message": SORT_KEY_TEXT});
-        return Ok(current);
-    }
-    let result = &mut current["schema_stages"]["analyzed"]["fields"][0];
-    if result["nullable"] != true
-        || case["schema_stages"]["optimized"]["fields"][0]["nullable"] != false
-    {
-        return Err(format!("expected Spark's nullable analyzed cast: {case}").into());
-    }
-    result["nullable"] = json!(false);
+    current["expected"] = json!({"status": "error", "dar_message": SORT_KEY_TEXT});
     Ok(current)
 }
 
@@ -419,7 +402,7 @@ async fn encoded_arguments_resolve_like_their_spark_types() -> TestResult {
 async fn datediff_arguments_resolve_like_spark() -> TestResult {
     let records = datediff_argument_references()?;
     let retained = records[1..].iter().filter(|case| is_retained(case)).count();
-    assert_eq!(retained, 8);
+    assert_eq!(retained, 4);
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
         let session = session_context(batch_size);
