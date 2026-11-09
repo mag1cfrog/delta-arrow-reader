@@ -242,6 +242,18 @@ impl PlanResolver<'_> {
         let expr_field = expr.to_field(schema)?.1;
         let expr_type = expr_field.data_type().clone();
         let expr_is_variant = is_variant_storage_field(expr_field.as_ref());
+        // A dictionary-encoded STRING, as Delta's provider gives a STRING partition column, casts
+        // to a DATE or TIMESTAMP as its STRING values do.
+        if let DataType::Dictionary(_, value) = &expr_type
+            && value.is_string()
+            && matches!(
+                cast_to_type,
+                DataType::Date32 | DataType::Timestamp(TimeUnit::Microsecond, _)
+            )
+        {
+            let values = cast(expr, value.as_ref().clone());
+            return self.cast_resolved_expression(values, cast_to_type, is_try, schema);
+        }
         // Spark reads each instant's local date-time in the session time zone; Arrow's cast
         // keeps its UTC date-time.
         if cast_to_type == DataType::Timestamp(TimeUnit::Microsecond, None)

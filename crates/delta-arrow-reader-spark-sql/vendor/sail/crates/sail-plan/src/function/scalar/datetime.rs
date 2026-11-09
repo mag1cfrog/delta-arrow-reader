@@ -583,6 +583,7 @@ fn date_offset_by_days(
     let (date, days) = input.arguments.two()?;
     let schema = input.function_context.schema;
     let ansi = input.function_context.plan_config.ansi_mode;
+    let date = dictionary_string_values(date, schema)?;
     let date = match date.get_type(schema)? {
         DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => {
             ScalarUDF::from(SparkDate::new(!ansi)).call(vec![date])
