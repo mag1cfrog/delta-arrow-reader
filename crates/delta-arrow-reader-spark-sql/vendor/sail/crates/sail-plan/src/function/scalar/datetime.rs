@@ -868,6 +868,20 @@ fn declare_nullable_result(expr: Expr, nullable: bool, schema: &DFSchemaRef) -> 
 
 fn to_date(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let null_on_error = !input.function_context.plan_config.ansi_mode;
+    to_date_with(input, null_on_error, "to_date")
+}
+
+/// Spark's TRY_TO_DATE: TO_DATE that gives NULL for a value it cannot parse in both ANSI modes.
+/// An invalid pattern still fails, as in Spark.
+fn try_to_date(input: ScalarFunctionInput) -> PlanResult<Expr> {
+    to_date_with(input, true, "try_to_date")
+}
+
+fn to_date_with(
+    input: ScalarFunctionInput,
+    null_on_error: bool,
+    function_name: &str,
+) -> PlanResult<Expr> {
     if input.arguments.len() == 1 {
         // If format is not supplied, the function is a synonym for cast(expr AS DATE).
         let expr = input.arguments[0].clone();
@@ -880,7 +894,7 @@ fn to_date(input: ScalarFunctionInput) -> PlanResult<Expr> {
     } else if input.arguments.len() == 2 {
         let expr = input.arguments[0].clone();
         let format = coerce_datetime_format(
-            "to_date",
+            function_name,
             input.arguments[1].clone(),
             input.function_context.schema,
         )?;
@@ -891,7 +905,7 @@ fn to_date(input: ScalarFunctionInput) -> PlanResult<Expr> {
             _ => None,
         };
         if let Some(date) = date {
-            let nullable = !input.function_context.plan_config.ansi_mode
+            let nullable = null_on_error
                 || expr.nullable(input.function_context.schema)?
                 || format.nullable(input.function_context.schema)?;
             return declare_nullable_result(
@@ -906,7 +920,9 @@ fn to_date(input: ScalarFunctionInput) -> PlanResult<Expr> {
         };
         Ok(ScalarUDF::from(SparkDate::new(null_on_error)).call(vec![expr, format]))
     } else {
-        Err(PlanError::invalid("to_date requires 1 or 2 arguments"))
+        Err(PlanError::invalid(format!(
+            "{function_name} requires 1 or 2 arguments"
+        )))
     }
 }
 
@@ -1849,6 +1865,7 @@ pub(super) fn list_built_in_datetime_functions() -> Vec<(&'static str, ScalarFun
         ("timestampdiff", F::custom(timestampdiff)),
         ("timediff", F::custom(timediff)),
         ("to_date", F::custom(to_date)),
+        ("try_to_date", F::custom(try_to_date)),
         ("to_time", F::custom(to_time)),
         ("try_to_time", F::custom(try_to_time)),
         (
