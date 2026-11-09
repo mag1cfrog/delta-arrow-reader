@@ -654,7 +654,7 @@ outside the nanosecond range, before 1677-09-21 or after 2262-04-11 (#1087). Sti
 optimizer rewrites a column compared with a literal without the cast, NOT NULL once optimized,
 which DAR does not do (#1197); a DATE in an IN list of TIMESTAMP_NTZ values keeps
 DataFusion's coercion (#1191); a constant over an input proven empty stays nullable after
-optimization (#1190); UNIX_DATE accepts a TIMESTAMP_NTZ that Spark rejects (#1188); TRUNC to a
+optimization (#1190); TRUNC to a
 unit Spark does not support gives a DATE (#1192); and EXTRACT of DAYOFWEEK, DOW_ISO and
 YEAROFWEEK is unsupported (#1116). The [cast references](tests/fixtures/date-ntz-casts/README.md) record the checks.
 
@@ -886,6 +886,13 @@ number, BOOLEAN, interval, BINARY, ARRAY or MAP in either position with
 `DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE`, where any argument used to be cast. In an ORDER BY
 key the failure loses its condition (#1185). The [argument references](tests/fixtures/datediff-arguments/README.md)
 record the checks (#1005).
+
+UNIX_DATE takes only a DATE, also as Date64, or an untyped NULL, and returns its INT day number.
+Spark casts no argument to DATE for it, so a TIMESTAMP, TIMESTAMP_NTZ, STRING, TIME, number,
+BOOLEAN, BINARY, interval, ARRAY or a NULL of another type fails while resolving with
+`DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE`, where DAR used to cast it to DATE or fail while
+optimizing. In an ORDER BY or SORT BY key the failure loses its condition (#1185). The
+[UNIX_DATE references](tests/fixtures/unix-date-arguments/README.md) record the checks (#1188).
 
 TIMESTAMPDIFF, and its three-argument DATEDIFF, DATE_DIFF and TIMEDIFF spellings, first
 convert both arguments to TIMESTAMP in the session time zone:

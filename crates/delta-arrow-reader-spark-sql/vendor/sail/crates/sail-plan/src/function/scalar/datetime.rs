@@ -720,6 +720,21 @@ fn casts_implicitly_to_date(data_type: &DataType) -> bool {
     }
 }
 
+/// Spark's `UnixDate`: the INT number of days since the epoch of a DATE. Spark casts no argument
+/// to DATE, so any type but a DATE or an untyped NULL fails while resolving.
+fn unix_date(input: ScalarFunctionInput) -> PlanResult<Expr> {
+    let argument = input.arguments.one()?;
+    match argument.get_type(input.function_context.schema)? {
+        DataType::Date32 | DataType::Date64 | DataType::Null => {
+            Ok(cast(cast(argument, DataType::Date32), DataType::Int32))
+        }
+        data_type => Err(PlanError::invalid(format!(
+            "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] `unix_date`: The first parameter requires \
+             the \"DATE\" type, got {data_type}"
+        ))),
+    }
+}
+
 /// Spark's `DateDiff`: the INT number of days from `start` to `end`, computed as a Java `int`
 /// subtraction, which wraps at the DATE limits. TIMESTAMP arguments are cast to DATE. The
 /// three-argument form is TIMESTAMPDIFF instead.
@@ -2071,10 +2086,7 @@ pub(super) fn list_built_in_datetime_functions() -> Vec<(&'static str, ScalarFun
         ),
         ("time_diff", F::udf(SparkTimeDiff::new())),
         ("time_trunc", F::udf(SparkTimeTrunc::new())),
-        (
-            "unix_date",
-            F::unary(|arg| cast(cast(arg, DataType::Date32), DataType::Int32)),
-        ),
+        ("unix_date", F::custom(unix_date)),
         (
             "unix_micros",
             F::custom(|input| unix_time_unit(input, TimeUnit::Microsecond)),
