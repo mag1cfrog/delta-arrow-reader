@@ -869,10 +869,10 @@ record the checks (#1005).
 
 UNIX_DATE takes only a DATE, also as Date64, or an untyped NULL, and returns its INT day number.
 Spark casts no argument to DATE for it, so a TIMESTAMP, TIMESTAMP_NTZ, STRING, TIME, number,
-BOOLEAN, BINARY, interval, ARRAY or typed NULL fails while resolving with
+BOOLEAN, BINARY, interval, ARRAY or a NULL of another type fails while resolving with
 `DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE`, where DAR used to cast it to DATE or fail while
-optimizing. The [UNIX_DATE references](tests/fixtures/unix-date-arguments/README.md) record the
-checks (#1188).
+optimizing. In an ORDER BY or SORT BY key the failure loses its condition (#1185). The
+[UNIX_DATE references](tests/fixtures/unix-date-arguments/README.md) record the checks (#1188).
 
 TIMESTAMPDIFF, and its three-argument DATEDIFF, DATE_DIFF and TIMEDIFF spellings, first
 convert both arguments to TIMESTAMP in the session time zone:

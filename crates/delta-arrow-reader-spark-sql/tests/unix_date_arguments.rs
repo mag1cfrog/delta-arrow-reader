@@ -1,6 +1,6 @@
 //! UNIX_DATE takes only a DATE or an untyped NULL, like Spark, which casts no argument to DATE:
-//! TIMESTAMP, TIMESTAMP_NTZ, STRING, TIME, numbers, BOOLEAN, BINARY, intervals, ARRAY and typed
-//! NULL arguments fail while resolving, in projections and filters. DATE arguments keep their
+//! TIMESTAMP, TIMESTAMP_NTZ, STRING, TIME, numbers, BOOLEAN, BINARY, intervals, ARRAY and NULLs
+//! of those types fail while resolving, in projections and filters. DATE arguments keep their
 //! day numbers, also as DAR's other encodings of them.
 
 use std::sync::Arc;
@@ -39,7 +39,7 @@ fn unix_date_argument_references() -> TestResult<Vec<Value>> {
             |build| build.contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
         )
     );
-    assert_eq!(records.len() - 1, 124);
+    assert_eq!(records.len() - 1, 132);
     Ok(records)
 }
 
@@ -165,10 +165,13 @@ fn optimize(session: &SessionContext, plan: &LogicalPlan) -> TestResult<LogicalP
     Ok(state.optimize(plan)?)
 }
 
-/// The texts DAR's error must contain for a recorded Spark failure: Spark's error condition, and
-/// for an argument type the function and the argument's position, as Spark's message names
-/// them. Spark's message also quotes its plan.
+/// The texts DAR's error must contain for a recorded failure: a retained record's pinned text;
+/// otherwise Spark's error condition, and for an argument type the function and the argument's
+/// position, as Spark's message names them. Spark's message also quotes its plan.
 fn expected_error_texts(case: &Value) -> Option<Vec<String>> {
+    if let Some(message) = case["expected"]["dar_message"].as_str() {
+        return Some(vec![message.to_owned()]);
+    }
     let condition = case["expected"]["condition"].as_str()?;
     let mut texts = vec![format!("[{condition}]")];
     if condition == "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE" {
@@ -179,6 +182,31 @@ fn expected_error_texts(case: &Value) -> Option<Vec<String>> {
         texts.extend(["unix_date".to_owned(), "first parameter".to_owned()]);
     }
     Some(texts)
+}
+
+/// #1185: a rejected argument in a sort key reports DAR's dump of the sort expression, without
+/// Spark's condition, as for DATEDIFF there.
+const SORT_KEY_RECORDS: [&str; 2] = ["column_order_by_string", "column_sort_by_string"];
+const SORT_KEY_TEXT: &str = "invalid argument: sort expression: SortOrder { child: \
+    UnresolvedFunction(UnresolvedFunction { function_name: ObjectName([Identifier(\"unix_date\")])";
+
+/// The expectation for a record: Spark's, or for a #1185 record DAR's error text at Spark's
+/// stage.
+fn expectation(case: &Value) -> TestResult<Value> {
+    if !case["id"]
+        .as_str()
+        .is_some_and(|id| SORT_KEY_RECORDS.contains(&id))
+    {
+        return Ok(case.clone());
+    }
+    if case["spark_error_phase"] != "sql"
+        || case["expected"]["condition"] != "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE"
+    {
+        return Err(format!("expected Spark's rejected sort key: {case}").into());
+    }
+    let mut current = case.clone();
+    current["expected"] = json!({"status": "error", "dar_message": SORT_KEY_TEXT});
+    Ok(current)
 }
 
 /// The recorded stages and outcome that differ from the observation. A failure must occur
@@ -316,8 +344,9 @@ async fn differences_over(
             None => register_inputs(&session, &records[0], batch_size)?,
         }
         for case in cases {
+            let expectation = expectation(case)?;
             let observation = observe(&session, case).await;
-            let differing = differing_parts(case, &observation)?;
+            let differing = differing_parts(&expectation, &observation)?;
             if !differing.is_empty() {
                 differences.push(json!({
                     "id": case["id"], "timezone": case["timezone"], "ansi": case["ansi"],
@@ -380,6 +409,15 @@ async fn encoded_arguments_resolve_like_their_spark_types() -> TestResult {
 async fn unix_date_arguments_resolve_like_spark() -> TestResult {
     let records = unix_date_argument_references()?;
     let cases = records[1..].iter().collect::<Vec<_>>();
+    let retained = cases
+        .iter()
+        .filter(|case| {
+            case["id"]
+                .as_str()
+                .is_some_and(|id| SORT_KEY_RECORDS.contains(&id))
+        })
+        .count();
+    assert_eq!(retained, SORT_KEY_RECORDS.len() * 4);
     assert_no_differences(&differences_over(&records, &cases, None).await?);
     Ok(())
 }

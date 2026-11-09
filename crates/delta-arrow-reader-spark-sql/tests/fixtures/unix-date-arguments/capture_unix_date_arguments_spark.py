@@ -4,10 +4,10 @@ Records analyzed, optimized and executed schemas, typed internal-row values and 
 stages, with the innermost Java exception of a failure, for UNIX_DATE over NOT NULL and nullable
 DATE columns, DATE literals across the DATE range, and NULL, which Spark accepts, and over
 TIMESTAMP, TIMESTAMP_NTZ, STRING, TIME, INT, BIGINT, DOUBLE, DECIMAL, BOOLEAN, BINARY,
-interval and ARRAY arguments, as literals, typed NULLs and columns, in projections, filters and
-an unreached filter, which Spark rejects during analysis without an implicit cast. Every query
-runs in both ANSI modes in UTC and America/Los_Angeles. Run from the crate root in the reference
-environment described in README.md; the output path must not exist.
+interval and ARRAY arguments, as literals, NULLs of those types and columns, in projections,
+filters, an unreached filter and sort keys, which Spark rejects during analysis without an
+implicit cast. Every query runs in both ANSI modes in UTC and America/Los_Angeles. Run from the
+crate root in the reference environment described in README.md; the output path must not exist.
 """
 import argparse
 from datetime import date, datetime, timedelta, timezone
@@ -99,6 +99,9 @@ def definitions():
         yield f"column_{name}", f"SELECT k, unix_date({column}) AS r FROM inputs"
     yield "column_string_filter", "SELECT k FROM inputs WHERE unix_date(t) > 0"
     yield "column_string_unreached", "SELECT k, unix_date(t) AS r FROM inputs WHERE false"
+    # A rejected argument in a sort key (#1185).
+    yield "column_order_by_string", "SELECT k FROM inputs ORDER BY unix_date(t)"
+    yield "column_sort_by_string", "SELECT k FROM inputs SORT BY unix_date(t)"
 
 
 def python_value(value, kind):
