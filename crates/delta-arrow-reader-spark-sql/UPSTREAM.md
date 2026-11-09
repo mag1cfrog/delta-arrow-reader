@@ -668,8 +668,10 @@ argument is read with Spark's STRING-to-DATE rules through `SparkDate`, and an a
 than a DATE, TIMESTAMP, TIMESTAMP_NTZ or STRING fails. A unit of another type than STRING is
 cast to STRING, as Spark casts it, where BINARY that is not UTF-8 spells no unit; an ARRAY, MAP
 or STRUCT unit fails. The result is nullable, as Spark declares it, until constant folding
-replaces it over literals; over an input proven empty it stays nullable (#1190). The [TRUNC unit
-references](tests/fixtures/trunc-units/README.md) record the checks (#1192).
+replaces it over literals; over an input proven empty it stays nullable (#1190). A
+scalar-subquery date beside a constant unsupported unit, a constant malformed date beside a unit
+the optimizer makes constant, and the stage of a constant QUARTER overflow still differ (#1226).
+The [TRUNC unit references](tests/fixtures/trunc-units/README.md) record the checks (#1192).
 
 Two DATE values subtract with `-` and TRY_SUBTRACT as Spark's `SubtractDates` does outside its
 legacy interval mode, with a local function, `SparkSubtractDates`: the result is the DAY

@@ -41,18 +41,19 @@ impl TruncUnit {
     }
 
     /// The first day of the unit that holds the DATE `days`, counted from 1970-01-01, as Spark's
-    /// `DateTimeUtils.truncDate` computes it. Near the earliest DATE, where that day is before
-    /// it, Spark's INT arithmetic wraps for WEEK, MONTH and YEAR, and its QUARTER fails.
+    /// `DateTimeUtils.truncDate` computes it. Near the earliest DATE, Spark's INT arithmetic
+    /// wraps for WEEK, MONTH and YEAR, and its QUARTER overflows.
     pub fn truncate(self, days: i32) -> Result<i32> {
         let day = i64::from(days);
         let (year, month) = year_and_month(day);
         let first_month = match self {
-            // `getNextDateForDayOfWeek(days - 7, MONDAY)`: the first Monday after a week back.
+            // `getNextDateForDayOfWeek(days - 7, MONDAY)`, the first Monday after a week back:
+            // `startDay + 1 + ((dayOfWeek - 1 - startDay) % 7 + 7) % 7`, where 1970-01-01, a
+            // Thursday, is day 0 of the week and Monday day 4, in Java's INT arithmetic.
             Self::Week => {
                 let start = days.wrapping_sub(7);
-                // 1970-01-01 is a Thursday, three days after a Monday.
-                let since_monday = (start.rem_euclid(7) + 3) % 7;
-                return Ok(start.wrapping_add(7 - since_monday));
+                let to_monday = (3_i32.wrapping_sub(start) % 7 + 7) % 7;
+                return Ok(start.wrapping_add(1).wrapping_add(to_monday));
             }
             Self::Year => 1,
             Self::Month => month,
@@ -61,7 +62,10 @@ impl TruncUnit {
         let first = first_day_of_month(year, first_month);
         if self == Self::Quarter {
             return i32::try_from(first).map_err(|_| {
-                exec_datafusion_err!("TRUNC of DATE {days} to QUARTER is before the earliest DATE")
+                exec_datafusion_err!(
+                    "[ARITHMETIC_OVERFLOW] overflow: TRUNC of DATE {days} to QUARTER is before \
+                     the earliest DATE"
+                )
             });
         }
         // `days - getDayInYear(days) + 1` and `days - getDayOfMonth(days) + 1`.
@@ -286,6 +290,16 @@ mod tests {
         }
         let earliest = i32::MIN + 1;
         assert_eq!(TruncUnit::Week.truncate(earliest)?, 2_147_483_643);
+        // Spark's `dayOfWeek - 1 - startDay` overflows for these days.
+        for (days, monday) in [
+            (-2_147_483_641, -2_147_483_646),
+            (-2_147_483_640, -2_147_483_646),
+            (-2_147_483_639, -2_147_483_639),
+            (-2_147_483_638, -2_147_483_639),
+            (-2_147_483_637, -2_147_483_642),
+        ] {
+            assert_eq!(TruncUnit::Week.truncate(days)?, monday);
+        }
         assert_eq!(TruncUnit::Month.truncate(earliest)?, 2_147_483_626);
         assert_eq!(TruncUnit::Year.truncate(earliest)?, 2_147_483_475);
         assert!(TruncUnit::Quarter.truncate(earliest).is_err());
