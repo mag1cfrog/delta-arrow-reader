@@ -35,6 +35,7 @@ use sail_function::scalar::datetime::spark_make_interval::{
 use sail_function::scalar::datetime::spark_make_time::SparkMakeTime;
 use sail_function::scalar::datetime::spark_make_timestamp_ntz::SparkMakeTimestampNtz;
 use sail_function::scalar::datetime::spark_make_ym_interval::SparkMakeYmInterval;
+use sail_function::scalar::datetime::spark_months_between_round_off::SparkMonthsBetweenRoundOff;
 use sail_function::scalar::datetime::spark_next_day::SparkNextDay;
 use sail_function::scalar::datetime::spark_time::SparkTime;
 use sail_function::scalar::datetime::spark_time_diff::SparkTimeDiff;
@@ -49,6 +50,7 @@ use sail_function::scalar::datetime::spark_year::SparkYear;
 use sail_function::scalar::datetime::timestamp_now::TimestampNow;
 use sail_function::scalar::explode::{Explode, ExplodeKind};
 use sail_function::scalar::spark_cast_numeric_to_integer::SparkCastNumericToInteger;
+use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
 use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
 use sail_function::scalar::spark_cast_string_to_integer::{
     SparkCastStringToInteger, StringIntegerCastMode,
@@ -1726,6 +1728,11 @@ fn extract_part(input: ScalarFunctionInput) -> PlanResult<Expr> {
     Ok(date_part(part, source))
 }
 
+/// Spark's MONTHS_BETWEEN, whose nullability follows from its parts at every stage: NOT NULL for
+/// NOT NULL DATE, TIMESTAMP and TIMESTAMP_NTZ arguments and `roundOff`. Spark's implicit cast of
+/// a STRING argument to TIMESTAMP is nullable, which `SparkKnownNullable` declares until constant
+/// folding replaces a literal's. `SparkMonthsBetweenRoundOff` applies `roundOff` after the month
+/// count, reading each row's once, and gives NULL for a NULL one.
 fn months_between(input: ScalarFunctionInput) -> PlanResult<Expr> {
     // args extraction:
     let ScalarFunctionInput {
@@ -1745,6 +1752,18 @@ fn months_between(input: ScalarFunctionInput) -> PlanResult<Expr> {
     // helper functions:
     let ensure_timestamp = |dt: Expr| match dt.get_type(function_context.schema) {
         Ok(DataType::Timestamp(time_unit, _tz)) => (dt.clone(), time_unit),
+        Ok(data_type)
+            if data_type.is_string()
+                || matches!(&data_type, DataType::Dictionary(_, value) if value.is_string()) =>
+        {
+            (
+                ScalarUDF::from(SparkKnownNullable::new()).call(vec![cast(
+                    dt.clone(),
+                    DataType::Timestamp(TimeUnit::Microsecond, None),
+                )]),
+                TimeUnit::Microsecond,
+            )
+        }
         _ => (
             cast(dt.clone(), DataType::Timestamp(TimeUnit::Microsecond, None)),
             TimeUnit::Microsecond,
@@ -1789,15 +1808,27 @@ fn months_between(input: ScalarFunctionInput) -> PlanResult<Expr> {
             .or(is_last_day(date1).and(is_last_day(date2))),
         month_diff.clone(),
     )
-    .when(lit(true), month_diff + seconds_diff / seconds_in_month)
-    .end()?;
+    .otherwise(month_diff + seconds_diff / seconds_in_month)?;
 
-    Ok(when(
-        round_off,
-        expr_fn::round(vec![months_between.clone(), lit(8)]),
-    )
-    .when(lit(true), months_between)
-    .end()?)
+    // Spark accepts a BOOLEAN or NULL `roundOff`, and in ANSI mode a STRING, through its
+    // implicit cast, which is nullable.
+    let round_off = dictionary_string_values(round_off, function_context.schema)?;
+    let round_off = match round_off.get_type(function_context.schema)? {
+        DataType::Boolean => round_off,
+        DataType::Null => cast(round_off, DataType::Boolean),
+        data_type if data_type.is_string() && function_context.plan_config.ansi_mode => {
+            ScalarUDF::from(SparkKnownNullable::new()).call(vec![
+                ScalarUDF::from(SparkCastStringToBoolean::new(false)).call(vec![round_off]),
+            ])
+        }
+        data_type => {
+            return Err(PlanError::invalid(format!(
+                "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] `months_between`: The third parameter \
+                 requires the \"BOOLEAN\" type, got {data_type}"
+            )));
+        }
+    };
+    Ok(ScalarUDF::from(SparkMonthsBetweenRoundOff::new()).call(vec![months_between, round_off]))
 }
 
 const MICROS_PER_DAY: i64 = 24 * 60 * 60 * 1_000_000;

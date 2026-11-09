@@ -673,6 +673,24 @@ scalar-subquery date beside a constant unsupported unit, a constant malformed da
 the optimizer makes constant, and the stage of a constant QUARTER overflow still differ (#1226).
 The [TRUNC unit references](tests/fixtures/trunc-units/README.md) record the checks (#1192).
 
+MONTHS_BETWEEN builds its result so that its nullability follows from its parts at every stage,
+as Spark's does: NOT NULL for NOT NULL DATE, TIMESTAMP and TIMESTAMP_NTZ arguments and
+`roundOff`. Its CASE expressions ended in `WHEN true` without ELSE, which made the result
+nullable until the optimizer removed it (#1199). Spark's cast of a STRING argument to TIMESTAMP
+is nullable, which `SparkKnownNullable` declares until constant folding replaces a literal's. A
+local function, `SparkMonthsBetweenRoundOff`, applies `roundOff` to the month count as Spark's
+last step: it reads the count, and with it the arguments, before `roundOff` in each batch, and
+each row's `roundOff` once, gives NULL for a NULL `roundOff`, where DAR gave the unrounded
+value, and is nullable when either input is. `roundOff` must be a BOOLEAN or NULL, or in ANSI
+mode a STRING, which Spark's STRING-to-BOOLEAN cast reads and `SparkKnownNullable` declares
+nullable, as Spark's implicit cast is; other types fail while analyzing, as in Spark, where DAR
+cast them. DAR counts the wall-clock seconds of a day, not the seconds since the instant of its
+midnight, for a STRING argument, which it casts to TIMESTAMP_NTZ (#942), and for a TIMESTAMP_NTZ
+argument (#1228), so on a change day of a DST zone the fraction can differ by an hour. It also
+reads `roundOff` beside a NULL argument and reports the first failure of a batch, not of a row
+(#1229). The [MONTHS_BETWEEN references](tests/fixtures/months-between-nullability/README.md)
+record the checks.
+
 Two DATE values subtract with `-` and TRY_SUBTRACT as Spark's `SubtractDates` does outside its
 legacy interval mode, with a local function, `SparkSubtractDates`: the result is the DAY
 interval between the dates, in microseconds, nullable only for a nullable operand. The day
