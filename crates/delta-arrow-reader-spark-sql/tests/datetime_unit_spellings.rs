@@ -1,8 +1,8 @@
 //! TIMESTAMPDIFF, DATEDIFF, DATE_DIFF, TIMEDIFF, TIMESTAMPADD, DATEADD and three-argument
-//! DATE_ADD read a datetime unit only from a bare keyword, like Spark's grammar. A string unit
-//! fails as Spark's parser does, and a backquoted, parenthesized or unknown unit makes an
-//! ordinary call: TIMESTAMPDIFF, TIMEDIFF and TIMESTAMPADD then name no routine, and the others
-//! resolve their arguments and take two.
+//! DATE_ADD read a datetime unit only from a bare keyword in a plain call of a bare name, like
+//! Spark's grammar. A string unit fails as Spark's parser does, and any other call is ordinary:
+//! TIMESTAMPDIFF, TIMEDIFF and TIMESTAMPADD then name no routine, and the others resolve their
+//! arguments and take two.
 
 use std::sync::Arc;
 
@@ -43,7 +43,7 @@ fn unit_spelling_references() -> TestResult<Vec<Value>> {
             |build| build.contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
         )
     );
-    assert_eq!(records.len() - 1, 360);
+    assert_eq!(records.len() - 1, 412);
     Ok(records)
 }
 
@@ -197,11 +197,34 @@ fn optimize(session: &SessionContext, plan: &LogicalPlan) -> TestResult<LogicalP
     Ok(state.optimize(plan)?)
 }
 
-/// The text DAR's error must contain for a recorded Spark failure: Spark's message before its
-/// query position for an unresolved routine, with DAR's session catalog in place of Spark's
-/// `spark_catalog`.`default`; Spark's message before its SQLSTATE for a string unit and before
-/// its documentation hint for the wrong number of arguments; otherwise Spark's condition.
+/// #1185: a TIMESTAMPDIFF window call reports DAR's unknown window function, where Spark names
+/// no routine, as for other unknown routines there.
+const WINDOW_RECORD: &str = "column_window_timestampdiff";
+const WINDOW_TEXT: &str = "not supported: unknown window function: timestampdiff";
+
+/// The expectation for a record: Spark's, or for the #1185 record DAR's error text at Spark's
+/// stage.
+fn expectation(case: &Value) -> TestResult<Value> {
+    if case["id"] != WINDOW_RECORD {
+        return Ok(case.clone());
+    }
+    if case["spark_error_phase"] != "sql" || case["expected"]["condition"] != "UNRESOLVED_ROUTINE" {
+        return Err(format!("expected Spark's unresolved routine: {case}").into());
+    }
+    let mut current = case.clone();
+    current["expected"] = json!({"status": "error", "dar_message": WINDOW_TEXT});
+    Ok(current)
+}
+
+/// The text DAR's error must contain for a recorded failure: a retained record's pinned text;
+/// Spark's message before its query position for an unresolved routine, with DAR's session
+/// catalog in place of Spark's `spark_catalog`.`default`; Spark's message before its SQLSTATE
+/// for a string unit and before its documentation hint for the wrong number of arguments;
+/// otherwise Spark's condition.
 fn expected_error_text(case: &Value) -> TestResult<String> {
+    if let Some(message) = case["expected"]["dar_message"].as_str() {
+        return Ok(message.to_owned());
+    }
     let condition = case["expected"]["condition"]
         .as_str()
         .ok_or("expected Spark's condition")?;
@@ -296,13 +319,19 @@ fn register_inputs(session: &SessionContext, metadata: &Value, batch_size: usize
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn datetime_unit_spellings_resolve_like_spark() -> TestResult {
     let records = unit_spelling_references()?;
+    let retained = records[1..]
+        .iter()
+        .filter(|case| case["id"] == WINDOW_RECORD)
+        .count();
+    assert_eq!(retained, 4);
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
         let session = session_context(batch_size);
         register_inputs(&session, &records[0], batch_size)?;
         for case in &records[1..] {
+            let expectation = expectation(case)?;
             let observation = observe(&session, case).await;
-            let differing = differing_parts(case, &observation)?;
+            let differing = differing_parts(&expectation, &observation)?;
             if !differing.is_empty() {
                 differences.push(json!({
                     "id": case["id"], "timezone": case["timezone"], "ansi": case["ansi"],

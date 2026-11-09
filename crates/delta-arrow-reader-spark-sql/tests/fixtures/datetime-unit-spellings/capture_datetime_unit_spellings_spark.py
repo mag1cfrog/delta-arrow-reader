@@ -4,10 +4,12 @@ Records analyzed, optimized and executed schemas, typed internal-row values and 
 stages, with the innermost Java exception of a failure, for TIMESTAMPDIFF, DATEDIFF,
 DATE_DIFF, TIMEDIFF, TIMESTAMPADD, DATEADD and three-argument DATE_ADD with keyword, lower-case,
 backquoted, string, double-quoted, parenthesized and unknown units, two-argument calls and
-upper-case names, over literals and columns, also beside a column named like a unit. Spark's
-grammar takes the unit only as a bare keyword; any other spelling makes an ordinary function
-call. Every query runs in both ANSI modes in UTC and America/Los_Angeles. Run from the crate
-root in the reference environment described in README.md; the output path must not exist.
+upper-case names, over literals and columns, also beside a column named like a unit, and for
+backquoted names, DISTINCT, ALL, FILTER, IGNORE NULLS and OVER calls, adjacent, hex and
+lower-case string units and four arguments. Spark's grammar takes the unit only as a bare
+keyword in a plain call of a bare name; any other spelling makes an ordinary function call.
+Every query runs in both ANSI modes in UTC and America/Los_Angeles. Run from the crate root in
+the reference environment described in README.md; the output path must not exist.
 """
 import argparse
 from datetime import datetime, timedelta, timezone
@@ -89,6 +91,29 @@ def definitions():
     for name, unit in [("string", "'day'"), ("backquoted", "`day`")]:
         yield (f"literal_timestampadd_{name}_bigint_quantity",
                f"SELECT timestampadd({unit}, 4294967297L, {START}) AS r")
+    # Ordinary calls named in upper case, which Spark's registry names in lower case.
+    yield "column_upper_datediff_backquoted_lower", "SELECT k, DATEDIFF(`day`, s, e) AS r FROM inputs"
+    yield "column_upper_dateadd_backquoted_lower", "SELECT k, DATEADD(`day`, 1, s) AS r FROM inputs"
+    # Calls outside the grammar: a backquoted name, DISTINCT, ALL, FILTER, IGNORE NULLS and OVER.
+    yield "column_backquoted_name_datediff", "SELECT k, `datediff`(DAY, s, e) AS r FROM inputs"
+    yield ("column_backquoted_name_timestampdiff",
+           "SELECT k, `timestampdiff`(DAY, s, e) AS r FROM inputs")
+    yield "column_distinct_datediff", "SELECT k, datediff(DISTINCT DAY, s, e) AS r FROM inputs"
+    yield "column_all_timestampadd", "SELECT k, timestampadd(ALL DAY, k, s) AS r FROM inputs"
+    yield ("column_filter_datediff",
+           "SELECT k, datediff(DAY, s, e) FILTER (WHERE k > 0) AS r FROM inputs")
+    yield ("column_ignore_nulls_timestampdiff",
+           "SELECT k, timestampdiff(DAY, s, e) IGNORE NULLS AS r FROM inputs")
+    yield ("column_window_timestampdiff",
+           "SELECT k, timestampdiff(DAY, s, e) OVER (ORDER BY k) AS r FROM inputs")
+    # Other unit spellings.
+    yield ("literal_datediff_adjacent_strings",
+           f"SELECT datediff('DA' 'Y', {PARTIAL_DAY}) AS r")
+    yield "literal_timestampadd_hex_unit", f"SELECT timestampadd(X'01', 1, {START}) AS r"
+    yield ("literal_timestampdiff_lower_string",
+           f"SELECT timestampdiff('day', {PARTIAL_DAY}) AS r")
+    yield ("literal_datediff_four_arguments",
+           f"SELECT datediff(DAY, {PARTIAL_DAY}, {START}) AS r")
 
 
 def python_value(value, kind):
