@@ -50,8 +50,8 @@ fn cast_references() -> TestResult<Vec<Value>> {
 /// an issue.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum RetainedDifference {
-    /// #1087: TRUNC of the DATE in year 1 fails while collecting rows, where DataFusion converts
-    /// it to a nanosecond TIMESTAMP; Spark returns the truncated DATE.
+    /// #1087: TRUNC of the TIMESTAMP_NTZ in year 1 fails while collecting rows, where DataFusion's
+    /// truncation leaves the nanosecond range; Spark returns the truncated DATE.
     TruncBeyondNanoseconds,
     /// #1188: UNIX_DATE casts a TIMESTAMP_NTZ argument to DATE and counts its days, where Spark
     /// rejects the argument during analysis.
@@ -153,7 +153,7 @@ fn current_expectation(
                 return Err(format!("expected Spark's truncated DATE: {case}").into());
             }
             current["expected"] = json!({"status": "error",
-                "dar_message": "Cannot cast Date32 value -719162 to Timestamp(ns)"});
+                "dar_message": "Timestamp -62135596800000000 out of range"});
             current["spark_error_phase"] = json!("collect");
             current["schema_stages"]
                 .as_object_mut()

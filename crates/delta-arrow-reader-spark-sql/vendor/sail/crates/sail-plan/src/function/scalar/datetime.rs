@@ -391,14 +391,19 @@ fn trunc_part_conversion(part: Expr) -> Expr {
     })
 }
 
-/// TRUNC of a DATE, to which Spark casts a TIMESTAMP_NTZ argument, a nullable cast.
+/// TRUNC of a DATE, to which Spark casts a TIMESTAMP_NTZ argument, a nullable cast. A
+/// TIMESTAMP_NTZ is truncated before that cast, which gives the same DATE for Spark's units and
+/// keeps its microseconds out of DataFusion's nanosecond DATE truncation.
 fn trunc(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let (date, part) = input.arguments.two()?;
-    let date = date_argument(date, input.function_context.schema)?;
-    Ok(cast(
-        expr_fn::date_trunc(trunc_part_conversion(part), date),
-        DataType::Date32,
-    ))
+    let source = date.get_type(input.function_context.schema)?;
+    let truncated = expr_fn::date_trunc(trunc_part_conversion(part), date);
+    Ok(match source {
+        DataType::Timestamp(_, None) => {
+            cast_with_date_ntz_nullability(truncated, &source, &DataType::Date32)
+        }
+        _ => cast(truncated, DataType::Date32),
+    })
 }
 
 /// A DATE function's argument: Spark casts a TIMESTAMP_NTZ to DATE, a nullable cast. Other

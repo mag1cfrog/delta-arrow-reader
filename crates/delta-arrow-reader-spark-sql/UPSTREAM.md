@@ -648,9 +648,9 @@ folding:
   and UNION.
 
 They were NOT NULL for a NOT NULL input (#1003). TRY_CAST of a DATE to TIMESTAMP_NTZ cannot
-fail and keeps its input's nullability. Values are unchanged, except that TRUNC reads a
-TIMESTAMP_NTZ's DATE, as Spark does, so a value before 1677 now fails for every unit as a
-DATE's does (#1087). Still open: a DATE in an IN list of TIMESTAMP_NTZ values keeps
+fail and keeps its input's nullability. Values are unchanged: TRUNC truncates a TIMESTAMP_NTZ
+before its cast to DATE, which gives the same DATE for Spark's units, and like a DATE fails
+before 1677 (#1087). Still open: a DATE in an IN list of TIMESTAMP_NTZ values keeps
 DataFusion's coercion (#1191); a constant over an input proven empty stays nullable after
 optimization (#1190); UNIX_DATE accepts a TIMESTAMP_NTZ that Spark rejects (#1188); TRUNC to a
 unit Spark does not support gives a DATE (#1192); and EXTRACT of DAYOFWEEK, DOW_ISO and
