@@ -1,6 +1,7 @@
 //! Two-argument DATEDIFF and DATE_DIFF take only arguments Spark casts to DATE: numbers,
 //! BOOLEAN, intervals, BINARY, ARRAY and MAP fail while resolving, like Spark, in either
-//! position. DATE, TIMESTAMP, TIMESTAMP_NTZ and NULL arguments keep their results.
+//! position, and so does TIME, whose cast fails. DATE, TIMESTAMP, TIMESTAMP_NTZ, STRING and NULL
+//! arguments keep their results, also as DAR's other encodings of them.
 
 use std::sync::Arc;
 
@@ -38,7 +39,7 @@ fn datediff_argument_references() -> TestResult<Vec<Value>> {
             |build| build.contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
         )
     );
-    assert_eq!(records.len() - 1, 268);
+    assert_eq!(records.len() - 1, 288);
     Ok(records)
 }
 
@@ -46,9 +47,29 @@ fn datediff_argument_references() -> TestResult<Vec<Value>> {
 /// where DAR declares it NOT NULL; constant folding makes both NOT NULL afterwards.
 const NTZ_CAST_NULLABILITY_RECORDS: [&str; 1] = ["literal_date_diff_timestamp_ntz"];
 
-/// DAR's current result for a #1003 record: Spark's, with the analyzed result NOT NULL.
+/// #1185: a failing sort key reports DAR's dump of the unresolved expression, without Spark's
+/// condition, as for an unknown routine there.
+const SORT_KEY_RECORD: &str = "column_order_by_datediff_int";
+const SORT_KEY_TEXT: &str = "invalid argument: sort expression: SortOrder { child: \
+    UnresolvedFunction(UnresolvedFunction { function_name: ObjectName([Identifier(\"datediff\")])";
+
+fn retained_records(case: &Value) -> bool {
+    case["id"]
+        .as_str()
+        .is_some_and(|id| NTZ_CAST_NULLABILITY_RECORDS.contains(&id) || id == SORT_KEY_RECORD)
+}
+
+/// DAR's current result for a retained record: for #1003 Spark's, with the analyzed result NOT
+/// NULL; for #1185 DAR's error text, at Spark's stage.
 fn current_expectation(case: &Value) -> TestResult<Value> {
     let mut current = case.clone();
+    if case["id"] == SORT_KEY_RECORD {
+        if case["spark_error_phase"] != "sql" {
+            return Err(format!("expected Spark's analysis failure: {case}").into());
+        }
+        current["expected"] = json!({"status": "error", "dar_message": SORT_KEY_TEXT});
+        return Ok(current);
+    }
     let result = &mut current["schema_stages"]["analyzed"]["fields"][0];
     if result["nullable"] != true
         || case["schema_stages"]["optimized"]["fields"][0]["nullable"] != false
@@ -190,13 +211,32 @@ fn optimize(session: &SessionContext, plan: &LogicalPlan) -> TestResult<LogicalP
     Ok(state.optimize(plan)?)
 }
 
-/// The text DAR's error must contain for a recorded Spark failure: Spark's error condition, or
-/// the recorded message of Java's `ArithmeticException`. Spark's message quotes its plan.
-fn dar_message(case: &Value) -> Option<String> {
+/// The texts DAR's error must contain for a recorded Spark failure: a retained record's pinned
+/// text; otherwise Spark's error condition and, for an argument type, the argument's position
+/// as Spark names it; or the recorded message of Java's `ArithmeticException`. Spark's message
+/// quotes its plan.
+fn expected_error_texts(case: &Value) -> Option<Vec<String>> {
+    if let Some(message) = case["expected"]["dar_message"].as_str() {
+        return Some(vec![message.to_owned()]);
+    }
+    let position = |message: &str| {
+        ["first", "second"]
+            .into_iter()
+            .find(|ordinal| message.contains(&format!("The {ordinal} parameter")))
+            .map(|ordinal| format!("{ordinal} parameter"))
+    };
     match case["expected"]["condition"].as_str() {
-        Some(condition) => Some(format!("[{condition}]")),
+        Some(condition) => {
+            let mut texts = vec![format!("[{condition}]")];
+            if condition == "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE" {
+                texts.extend(position(case["expected"]["java_message"].as_str()?));
+            }
+            Some(texts)
+        }
         None if case["expected"]["exception"] == "java.lang.ArithmeticException" => {
-            case["expected"]["java_message"].as_str().map(str::to_owned)
+            case["expected"]["java_message"]
+                .as_str()
+                .map(|message| vec![message.to_owned()])
         }
         None => None,
     }
@@ -217,9 +257,9 @@ fn differing_parts(case: &Value, observation: &Value) -> TestResult<Vec<&'static
         Some("ok") => observation["rows"] == case["expected"]["rows"],
         Some("error") => {
             observation["error_phase"] == case["spark_error_phase"]
-                && dar_message(case)
+                && expected_error_texts(case)
                     .zip(observation["error"].as_str())
-                    .is_some_and(|(message, error)| error.contains(&message))
+                    .is_some_and(|(texts, error)| texts.iter().all(|text| error.contains(text)))
         }
         _ => false,
     };
@@ -269,23 +309,23 @@ fn register_inputs(session: &SessionContext, metadata: &Value, batch_size: usize
     Ok(())
 }
 
-/// The recorded inputs with STRING columns dictionary-encoded, as Delta's provider gives a
-/// STRING partition column.
-fn register_dictionary_inputs(
+/// The recorded inputs with each column `encoding` gives another type cast to that type, as
+/// DAR's sources give it.
+fn register_encoded_inputs(
     session: &SessionContext,
     metadata: &Value,
     batch_size: usize,
+    encoding: fn(&DataType) -> Option<DataType>,
 ) -> TestResult {
-    let dictionary = DataType::Dictionary(Box::new(DataType::UInt16), Box::new(DataType::Utf8));
     for input in metadata["inputs"].as_array().ok_or("missing inputs")? {
         let name = input["name"].as_str().ok_or("missing table name")?;
         let batch = decode_recorded_batch(input)?;
         let mut fields = Vec::new();
         let mut columns = Vec::new();
         for (field, column) in batch.schema().fields().iter().zip(batch.columns()) {
-            if field.data_type() == &DataType::Utf8 {
-                fields.push(field.as_ref().clone().with_data_type(dictionary.clone()));
-                columns.push(arrow::compute::cast(column, &dictionary)?);
+            if let Some(encoded) = encoding(field.data_type()) {
+                fields.push(field.as_ref().clone().with_data_type(encoded.clone()));
+                columns.push(arrow::compute::cast(column, &encoded)?);
             } else {
                 fields.push(field.as_ref().clone());
                 columns.push(column.clone());
@@ -297,13 +337,37 @@ fn register_dictionary_inputs(
     Ok(())
 }
 
-/// A dictionary-encoded STRING argument casts to DATE like a STRING, so the Spark records over
-/// the STRING column hold for its dictionary-encoded copy.
+/// Dictionary encoding, as Delta's provider gives a STRING or BINARY partition column.
+fn dictionary_encoding(data_type: &DataType) -> Option<DataType> {
+    matches!(data_type, DataType::Utf8 | DataType::Binary)
+        .then(|| DataType::Dictionary(Box::new(DataType::UInt16), Box::new(data_type.clone())))
+}
+
+/// String views, as Delta's reader gives a STRING data column by default.
+fn string_view_encoding(data_type: &DataType) -> Option<DataType> {
+    (data_type == &DataType::Utf8).then_some(DataType::Utf8View)
+}
+
+/// Arrow's Date64, which another producer can give for a DATE.
+fn date64_encoding(data_type: &DataType) -> Option<DataType> {
+    (data_type == &DataType::Date32).then_some(DataType::Date64)
+}
+
+/// A dictionary-encoded or viewed STRING casts to DATE like a STRING, a Date64 like a DATE,
+/// and a dictionary-encoded BINARY fails like a BINARY, so the Spark records over those columns
+/// hold for each encoded copy.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn dictionary_encoded_string_arguments_resolve_like_strings() -> TestResult {
-    const RECORDS: [&str; 2] = [
+async fn encoded_arguments_resolve_like_their_spark_types() -> TestResult {
+    const RECORDS: [&str; 4] = [
         "column_datediff_string_end",
         "column_date_diff_string_start",
+        "column_datediff_binary_end",
+        "column_datediff_date",
+    ];
+    let encodings: [(&str, fn(&DataType) -> Option<DataType>); 3] = [
+        ("dictionary", dictionary_encoding),
+        ("string view", string_view_encoding),
+        ("date64", date64_encoding),
     ];
     let records = datediff_argument_references()?;
     let cases = records[1..]
@@ -312,17 +376,20 @@ async fn dictionary_encoded_string_arguments_resolve_like_strings() -> TestResul
         .collect::<Vec<_>>();
     assert_eq!(cases.len(), RECORDS.len() * 4);
     let mut differences = Vec::new();
-    for batch_size in [1, 32] {
-        let session = session_context(batch_size);
-        register_dictionary_inputs(&session, &records[0], batch_size)?;
-        for case in &cases {
-            let observation = observe(&session, case).await;
-            let differing = differing_parts(case, &observation)?;
-            if !differing.is_empty() {
-                differences.push(json!({
-                    "id": case["id"], "timezone": case["timezone"], "ansi": case["ansi"],
-                    "batch": batch_size, "differing": differing, "observed": observation,
-                }));
+    for (encoding_name, encoding) in encodings {
+        for batch_size in [1, 32] {
+            let session = session_context(batch_size);
+            register_encoded_inputs(&session, &records[0], batch_size, encoding)?;
+            for case in &cases {
+                let observation = observe(&session, case).await;
+                let differing = differing_parts(case, &observation)?;
+                if !differing.is_empty() {
+                    differences.push(json!({
+                        "id": case["id"], "timezone": case["timezone"], "ansi": case["ansi"],
+                        "encoding": encoding_name, "batch": batch_size, "differing": differing,
+                        "observed": observation,
+                    }));
+                }
             }
         }
     }
@@ -344,22 +411,15 @@ async fn datediff_arguments_resolve_like_spark() -> TestResult {
     let records = datediff_argument_references()?;
     let retained = records[1..]
         .iter()
-        .filter(|case| {
-            case["id"]
-                .as_str()
-                .is_some_and(|id| NTZ_CAST_NULLABILITY_RECORDS.contains(&id))
-        })
+        .filter(|case| retained_records(case))
         .count();
-    assert_eq!(retained, 4);
+    assert_eq!(retained, 8);
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
         let session = session_context(batch_size);
         register_inputs(&session, &records[0], batch_size)?;
         for case in &records[1..] {
-            let retained = case["id"]
-                .as_str()
-                .is_some_and(|id| NTZ_CAST_NULLABILITY_RECORDS.contains(&id));
-            let expectation = if retained {
+            let expectation = if retained_records(case) {
                 current_expectation(case)?
             } else {
                 (*case).clone()

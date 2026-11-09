@@ -2,7 +2,7 @@
 
 Records analyzed, optimized and executed schemas, typed internal-row values and failing
 stages, with the innermost Java exception of a failure, for DATEDIFF and DATE_DIFF with INT,
-BIGINT, DOUBLE, DECIMAL, BOOLEAN, interval, BINARY, ARRAY and MAP arguments in either
+BIGINT, DOUBLE, DECIMAL, BOOLEAN, TIME, interval, BINARY, ARRAY and MAP arguments in either
 position, as literals and columns, beside NULL, in an unreached filter, and beside DATE,
 TIMESTAMP, TIMESTAMP_NTZ and STRING column controls. Spark casts only DATE, TIMESTAMP, TIMESTAMP_NTZ, STRING
 and NULL arguments to DATE, and rejects the others during analysis. Every query runs in both
@@ -23,11 +23,11 @@ SPARK_REVISION = "32f7299601108917fb01920a54e084595b7b3bf8"
 CONVERT_TO_LOCAL_RELATION = "org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation"
 ZONES = ["UTC", "America/Los_Angeles"]
 
-# (DATE, INT, DOUBLE, BOOLEAN, STRING)
+# (DATE, INT, DOUBLE, BOOLEAN, STRING, BINARY as hex)
 ROWS = [
-    ("2024-01-02", 1, 1.5, True, "2024-01-01"),
-    ("2024-03-11", -1, -0.5, False, "2024-01-31"),
-    (None, None, None, None, None),
+    ("2024-01-02", 1, 1.5, True, "2024-01-01", "01"),
+    ("2024-03-11", -1, -0.5, False, "2024-01-31", "0203"),
+    (None, None, None, None, None, None),
 ]
 
 
@@ -48,12 +48,13 @@ INPUTS = [{
         {"name": "i", "type": "integer", "nullable": True, "metadata": {}},
         {"name": "f", "type": "double", "nullable": True, "metadata": {}},
         {"name": "b", "type": "boolean", "nullable": True, "metadata": {}},
-        {"name": "t", "type": "string", "nullable": True, "metadata": {}}]},
+        {"name": "t", "type": "string", "nullable": True, "metadata": {}},
+        {"name": "x", "type": "binary", "nullable": True, "metadata": {}}]},
     "rows": [[str(key), None if day is None else str(days(day)),
               None if number is None else str(number),
               None if real is None else double_bits(real),
-              None if flag is None else str(flag).lower(), text]
-             for key, (day, number, real, flag, text) in enumerate(ROWS)]}]
+              None if flag is None else str(flag).lower(), text, raw]
+             for key, (day, number, real, flag, text, raw) in enumerate(ROWS)]}]
 
 DATE = "DATE '2024-01-01'"
 
@@ -88,6 +89,13 @@ def definitions():
         yield f"column_date_diff_{name}_start", f"SELECT k, date_diff(d, {argument}) AS r FROM inputs"
     yield ("column_datediff_int_unreached",
            "SELECT k, datediff(d, i) AS r FROM inputs WHERE false")
+    yield "column_datediff_binary_end", "SELECT k, datediff(x, d) AS r FROM inputs"
+    # Spark casts a TIME to DATE implicitly, and the cast fails.
+    yield "literal_datediff_time_end", f"SELECT datediff(TIME '01:02:03', {DATE}) AS r"
+    yield "literal_datediff_time_start", f"SELECT datediff({DATE}, TIME '01:02:03') AS r"
+    yield "literal_date_diff_time_end", f"SELECT date_diff(TIME '01:02:03', {DATE}) AS r"
+    # A failing argument in a sort key (#1185).
+    yield "column_order_by_datediff_int", "SELECT k FROM inputs ORDER BY datediff(i, d)"
     # Arguments Spark casts to DATE.
     yield "column_datediff_date", f"SELECT k, datediff(d, {DATE}) AS r FROM inputs"
     yield "column_datediff_string_end", "SELECT k, datediff(t, d) AS r FROM inputs"
@@ -112,6 +120,8 @@ def python_value(value, kind):
         return {"true": True, "false": False}[value]
     if kind == "string":
         return value
+    if kind == "binary":
+        return bytearray.fromhex(value)
     raise AssertionError(kind)
 
 
@@ -125,6 +135,8 @@ def encode_value(row, index, data_type, types):
         return str(row.getLong(index))
     if isinstance(data_type, types.DoubleType):
         return double_bits(row.getDouble(index))
+    if isinstance(data_type, types.BinaryType):
+        return bytes(row.getBinary(index)).hex()
     if isinstance(data_type, types.StringType):
         return row.getUTF8String(index).toString()
     if isinstance(data_type, types.BooleanType):
@@ -229,7 +241,8 @@ def main():
             "capture_script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
             "value_encoding": ("INT and DATE days since the epoch as int text; BIGINT as long "
                                "text; DOUBLE as the hex of its IEEE 754 bits; STRING as text; "
-                               "BOOLEAN as true or false text; ARRAY as a list of its elements"),
+                               "BINARY as hex text; BOOLEAN as true or false text; ARRAY as a "
+                               "list of its elements"),
             "settings": {
                 "spark.sql.timestampType": spark.conf.get("spark.sql.timestampType"),
                 "spark.sql.optimizer.excludedRules":
