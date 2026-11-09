@@ -43,6 +43,7 @@ use sail_function::scalar::datetime::spark_time_trunc::SparkTimeTrunc;
 use sail_function::scalar::datetime::spark_timestamp::SparkTimestamp;
 use sail_function::scalar::datetime::spark_timestamp_add::SparkTimestampAdd;
 use sail_function::scalar::datetime::spark_timestamp_diff::SparkTimestampDiff;
+use sail_function::scalar::datetime::spark_trunc_date::SparkTruncDate;
 use sail_function::scalar::datetime::spark_unix_timestamp::SparkUnixTimestamp;
 use sail_function::scalar::datetime::spark_window_buckets::SparkWindowBuckets;
 use sail_function::scalar::datetime::spark_year::SparkYear;
@@ -364,7 +365,7 @@ fn years(arg: Expr) -> Expr {
     integer_part(arg, "YEAR")
 }
 
-fn trunc_part_conversion(part: Expr) -> Expr {
+fn date_trunc_part_conversion(part: Expr) -> Expr {
     Expr::Case(expr::Case {
         expr: None,
         when_then_expr: vec![
@@ -393,73 +394,33 @@ fn trunc_part_conversion(part: Expr) -> Expr {
     })
 }
 
-/// Spark's TRUNC units, in any case, as the granularities DataFusion's `date_trunc` names:
-/// YEAR, YYYY and YY; QUARTER; MON, MONTH and MM; and WEEK.
-const TRUNC_UNITS: [(&str, &[&str]); 4] = [
-    ("year", &["YEAR", "YYYY", "YY"]),
-    ("quarter", &["QUARTER"]),
-    ("month", &["MON", "MONTH", "MM"]),
-    ("week", &["WEEK"]),
-];
-
-/// The granularity of a Spark TRUNC unit, or `None` for a unit Spark does not support.
-fn trunc_granularity(unit: &str) -> Option<&'static str> {
-    let unit = unit.to_uppercase();
-    TRUNC_UNITS.iter().find_map(|(granularity, spellings)| {
-        spellings.contains(&unit.as_str()).then_some(*granularity)
-    })
-}
-
-/// Spark's TRUNC of a DATE, to which Spark casts a TIMESTAMP_NTZ argument, a nullable cast. A
-/// TIMESTAMP_NTZ is truncated before that cast, which gives the same DATE for Spark's units and
-/// keeps its microseconds out of DataFusion's nanosecond DATE truncation. A unit Spark does not
-/// support, NULL included, gives NULL, and a column of units is read row by row. The result is
-/// nullable, as Spark declares it.
+/// Spark's TRUNC of a DATE. Spark casts a STRING argument to DATE with its STRING-to-DATE
+/// rules, read here from a dictionary's values, and a TIMESTAMP or TIMESTAMP_NTZ to DATE, a
+/// nullable cast for a TIMESTAMP_NTZ; it rejects other types. It casts the unit to STRING.
+/// `SparkTruncDate` evaluates both for every row, reads each row's unit and truncates the DATE's
+/// days, giving NULL for a unit Spark does not support, NULL included. Its result is nullable,
+/// as Spark declares it, until constant folding replaces a literal's.
 fn trunc(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let schema = input.function_context.schema;
     let (date, unit) = input.arguments.two()?;
-    let source = date.get_type(schema)?;
-    let truncate = |granularity: &str| {
-        let truncated = expr_fn::date_trunc(lit(granularity), date.clone());
-        match &source {
-            DataType::Timestamp(_, None) => {
-                cast_with_date_ntz_nullability(truncated, &source, &DataType::Date32)
-            }
-            _ => cast(truncated, DataType::Date32),
+    let date = dictionary_string_values(date, schema)?;
+    let date = match date.get_type(schema)? {
+        data_type if data_type.is_string() => ScalarUDF::from(SparkDate::new(
+            !input.function_context.plan_config.ansi_mode,
+        ))
+        .call(vec![date]),
+        source @ (DataType::Date32
+        | DataType::Date64
+        | DataType::Timestamp(_, _)
+        | DataType::Null) => cast_with_date_ntz_nullability(date, &source, &DataType::Date32),
+        data_type => {
+            return Err(PlanError::invalid(format!(
+                "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] `trunc`: The first parameter requires \
+                 the \"DATE\" type, got {data_type}"
+            )));
         }
     };
-    let result = match &unit {
-        Expr::Literal(
-            ScalarValue::Utf8(text) | ScalarValue::LargeUtf8(text) | ScalarValue::Utf8View(text),
-            _,
-        ) => match text.as_deref().and_then(trunc_granularity) {
-            Some(granularity) => truncate(granularity),
-            None => lit(ScalarValue::Date32(None)),
-        },
-        Expr::Literal(ScalarValue::Null, _) => lit(ScalarValue::Date32(None)),
-        _ => {
-            let unit = expr_fn::upper(unit.clone());
-            Expr::Case(expr::Case {
-                expr: None,
-                when_then_expr: TRUNC_UNITS
-                    .iter()
-                    .map(|(granularity, spellings)| {
-                        let spellings = spellings.iter().map(|spelling| lit(*spelling)).collect();
-                        (
-                            Box::new(unit.clone().in_list(spellings, false)),
-                            Box::new(truncate(granularity)),
-                        )
-                    })
-                    .collect(),
-                else_expr: None,
-            })
-        }
-    };
-    Ok(if result.nullable(schema)? {
-        result
-    } else {
-        ScalarUDF::from(SparkKnownNullable::new()).call(vec![result])
-    })
+    Ok(ScalarUDF::from(SparkTruncDate::new()).call(vec![date, cast(unit, DataType::Utf8)]))
 }
 
 /// A DATE function's argument: Spark casts a TIMESTAMP_NTZ to DATE, a nullable cast. Other
@@ -484,8 +445,8 @@ fn date_field(input: ScalarFunctionInput, part: &str) -> PlanResult<Expr> {
 
 fn date_trunc(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let (part, timestamp) = input.arguments.two()?;
-    let truncated =
-        ScalarUDF::from(SparkDateTrunc::new()).call(vec![trunc_part_conversion(part), timestamp]);
+    let truncated = ScalarUDF::from(SparkDateTrunc::new())
+        .call(vec![date_trunc_part_conversion(part), timestamp]);
     let truncated = match truncated.get_type(input.function_context.schema)? {
         DataType::Timestamp(TimeUnit::Microsecond, _) => truncated,
         DataType::Timestamp(_, tz) => {

@@ -52,9 +52,6 @@ fn cast_references() -> TestResult<Vec<Value>> {
 /// an issue.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum RetainedDifference {
-    /// #1087: TRUNC of the TIMESTAMP_NTZ in year 1 fails while collecting rows, where DataFusion's
-    /// truncation leaves the nanosecond range; Spark returns the truncated DATE.
-    TruncBeyondNanoseconds,
     /// #1190: a constant over an input proven empty keeps its analyzed nullability after
     /// optimization, where Spark folds it first.
     EmptyInputNullability,
@@ -79,7 +76,6 @@ const UNSUPPORTED_EXTRACT_FIELDS: [(&str, &str); 3] = [
 fn retained_difference(case: &Value) -> Option<RetainedDifference> {
     let id = case["id"].as_str()?;
     Some(match id {
-        "required_trunc" => RetainedDifference::TruncBeyondNanoseconds,
         "literal_cast_to_date_where_false" => RetainedDifference::EmptyInputNullability,
         "required_date_in_timestamp_ntz" => RetainedDifference::InListNullability,
         "required_date_less_than_timestamp_ntz_literal"
@@ -111,18 +107,6 @@ fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResu
     let mut current = case.clone();
     let id = case["id"].as_str().ok_or("missing id")?;
     match difference {
-        RetainedDifference::TruncBeyondNanoseconds => {
-            if case["expected"]["status"] != "ok" {
-                return Err(format!("expected Spark's truncated DATE: {case}").into());
-            }
-            current["expected"] = json!({"status": "error",
-                "dar_message": "Timestamp -62135596800000000 out of range"});
-            current["spark_error_phase"] = json!("collect");
-            current["schema_stages"]
-                .as_object_mut()
-                .ok_or("missing schema stages")?
-                .remove("executed");
-        }
         RetainedDifference::EmptyInputNullability => {
             if case["schema_stages"]["optimized"]["fields"][0]["nullable"] != false {
                 return Err(format!("expected Spark's folded NOT NULL constant: {case}").into());
@@ -496,7 +480,6 @@ async fn date_ntz_casts_match_spark() -> TestResult {
     assert_eq!(
         retained,
         std::collections::BTreeMap::from([
-            (RetainedDifference::TruncBeyondNanoseconds, 4),
             (RetainedDifference::EmptyInputNullability, 4),
             (RetainedDifference::InListNullability, 4),
             (RetainedDifference::UnsupportedExtractField, 36),

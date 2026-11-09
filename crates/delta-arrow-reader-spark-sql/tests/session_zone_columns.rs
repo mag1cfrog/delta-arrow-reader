@@ -288,7 +288,7 @@ enum RetainedDifference {
 const UNPARSED_ZONES: [&str; 3] = ["Z", "PST", "GMT+08:00"];
 
 /// Records that fail on the nanosecond range, and the message each fails with.
-const NANOSECOND_RANGE_FAILURES: [(&str, &str); 12] = [
+const NANOSECOND_RANGE_FAILURES: [(&str, &str); 9] = [
     ("date_trunc_year", "out of range"),
     ("date_trunc_quarter", "out of range"),
     ("date_trunc_month", "out of range"),
@@ -296,9 +296,6 @@ const NANOSECOND_RANGE_FAILURES: [(&str, &str); 12] = [
     ("date_trunc_day", "out of range"),
     ("date_trunc_hour", "out of range"),
     ("struct_date_trunc", "out of range"),
-    ("trunc_week", "out of range"),
-    ("trunc_month", "out of range"),
-    ("trunc_year", "out of range"),
     ("months_between", "out of range"),
     ("weekofyear", "Arithmetic overflow"),
 ];
@@ -608,7 +605,7 @@ async fn timestamp_columns_follow_the_session_zone_like_spark() -> TestResult {
     assert_eq!(
         retained,
         BTreeMap::from([
-            (RetainedDifference::NanosecondRange, 48),
+            (RetainedDifference::NanosecondRange, 36),
             (RetainedDifference::NullableGreatest, 4),
             (RetainedDifference::UnparsedSessionZone, 12),
             (RetainedDifference::JsonTimestampText, 4),
