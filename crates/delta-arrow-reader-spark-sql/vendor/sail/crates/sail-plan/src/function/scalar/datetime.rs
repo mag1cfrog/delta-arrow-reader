@@ -1081,15 +1081,16 @@ fn to_date_with_parser(input: ScalarFunctionInput, parser: DateParser) -> PlanRe
             _ => None,
         };
         if let Some(date) = date {
-            // Spark ignores the format of a DATE or TIMESTAMP. Its result is nullable outside
-            // ANSI mode, and in ANSI mode for a nullable argument, at every stage over a column.
+            // Spark ignores the format of a DATE or TIMESTAMP, but has it as an input. Its result
+            // is nullable outside ANSI mode, and in ANSI mode for a nullable argument, at every
+            // stage over a column, and the format's columns keep it from folding over a literal.
             let nullable = null_on_error
                 || expr.nullable(input.function_context.schema)?
                 || format.nullable(input.function_context.schema)?;
             return declare_spark_nullability(
                 cast(date, DataType::Date32),
                 nullable,
-                None,
+                Some(&format),
                 input.function_context.schema,
             );
         }
