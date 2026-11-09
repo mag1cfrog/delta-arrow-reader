@@ -2,7 +2,7 @@
 //! nullability: nullable at every stage over a column outside ANSI mode, and in ANSI mode for a
 //! nullable argument, and over a literal until constant folding, unless the format has a
 //! column. Spark ignores the format there, so the values are the argument's dates, but computes
-//! its aggregates.
+//! its aggregates and window functions.
 
 use std::sync::Arc;
 

@@ -1035,8 +1035,8 @@ fn to_date(input: ScalarFunctionInput) -> PlanResult<Expr> {
 }
 
 /// Spark's TRY_TO_DATE: TO_DATE that gives NULL for a value it cannot parse in both ANSI modes.
-/// An invalid pattern still fails, as in Spark. With a format, its result over a DATE or
-/// TIMESTAMP is nullable at every stage, over a literal too when the format reads a column.
+/// An invalid pattern still fails, as in Spark. With a format, its result is nullable at every
+/// stage over a DATE or TIMESTAMP column, and over a literal when the format reads a column.
 fn try_to_date(input: ScalarFunctionInput) -> PlanResult<Expr> {
     to_date_with_parser(input, DateParser::TryToDate)
 }
