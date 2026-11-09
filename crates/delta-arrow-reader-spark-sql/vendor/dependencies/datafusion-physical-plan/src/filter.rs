@@ -296,6 +296,38 @@ impl FilterExec {
         &self.predicate
     }
 
+    /// Execute with a stream-local copy of this plan's Boolean predicate.
+    /// The supplied expression must preserve the original predicate's semantics.
+    pub fn execute_with_predicate(
+        &self,
+        predicate: Arc<dyn PhysicalExpr>,
+        partition: usize,
+        context: Arc<TaskContext>,
+    ) -> Result<SendableRecordBatchStream> {
+        if predicate.data_type(&self.input.schema())? != DataType::Boolean {
+            return internal_err!("Execution filter predicate must return Boolean");
+        }
+        trace!(
+            "Start FilterExec::execute for partition {} of context session_id {} and task_id {:?}",
+            partition,
+            context.session_id(),
+            context.task_id()
+        );
+        let metrics = FilterExecMetrics::new(&self.metrics, partition);
+        Ok(Box::pin(FilterExecStream {
+            schema: self.schema(),
+            predicate,
+            input: self.input.execute(partition, context)?,
+            metrics,
+            projection: self.projection.clone(),
+            batch_coalescer: LimitedBatchCoalescer::new(
+                self.schema(),
+                self.batch_size,
+                self.fetch,
+            ),
+        }))
+    }
+
     /// The input plan
     pub fn input(&self) -> &Arc<dyn ExecutionPlan> {
         &self.input
@@ -543,25 +575,7 @@ impl ExecutionPlan for FilterExec {
         partition: usize,
         context: Arc<TaskContext>,
     ) -> Result<SendableRecordBatchStream> {
-        trace!(
-            "Start FilterExec::execute for partition {} of context session_id {} and task_id {:?}",
-            partition,
-            context.session_id(),
-            context.task_id()
-        );
-        let metrics = FilterExecMetrics::new(&self.metrics, partition);
-        Ok(Box::pin(FilterExecStream {
-            schema: self.schema(),
-            predicate: Arc::clone(&self.predicate),
-            input: self.input.execute(partition, context)?,
-            metrics,
-            projection: self.projection.clone(),
-            batch_coalescer: LimitedBatchCoalescer::new(
-                self.schema(),
-                self.batch_size,
-                self.fetch,
-            ),
-        }))
+        self.execute_with_predicate(Arc::clone(&self.predicate), partition, context)
     }
 
     fn metrics(&self) -> Option<MetricsSet> {

@@ -20,7 +20,10 @@ use serde_json::{Value, json};
 
 #[path = "support/string_binary.rs"]
 mod string_binary;
-use string_binary::{TestResult, capture_observation, capture_result, register_inputs};
+use string_binary::{
+    TestResult, capture_observation, capture_result, register_inputs,
+    register_inputs_one_partition_with_receipts,
+};
 
 fn session(batch_size: usize, target_partitions: usize) -> SessionContext {
     SessionContext::new_with_state(
@@ -124,17 +127,27 @@ fn public_native_observation(actual: &Value) -> TestResult<Value> {
     Ok(Value::Object(public))
 }
 
-// This checks active native expectations; the captured receipts remain unchanged.
+// Active dispositions cover only the remaining competing-error observations.
 fn matches_retained_native_negative(
     context: &Value,
     case: &Value,
     actual: &Value,
     profiles: &[Value],
 ) -> TestResult<bool> {
-    if !is_active_native_negative_context(context)
-        || matches_reference(case, actual)?
-        || matches_local_preexecution_divide(case, actual)
-        || !has_arrow_receipt(actual, "analyzed_arrow_schema")
+    if !is_active_native_negative_context(context) {
+        return Ok(false);
+    }
+    matches_historical_native_negative(context, case, actual, profiles)
+}
+
+// Historical recognition retains every original profile and its mutation checks.
+fn matches_historical_native_negative(
+    context: &Value,
+    case: &Value,
+    actual: &Value,
+    profiles: &[Value],
+) -> TestResult<bool> {
+    if !has_arrow_receipt(actual, "analyzed_arrow_schema")
         || !has_arrow_receipt(actual, "physical_arrow_schema")
     {
         return Ok(false);
@@ -159,21 +172,7 @@ fn matches_retained_native_negative(
     {
         return Ok(false);
     }
-    let mut expected = public_native_observation(&captured["actual"])?;
-    if context["matrix"] == "one_partition_rng"
-        && context["id"] == "rng_885_one_partition_direct"
-        && context["batch_size"] == 1
-    {
-        // #838 repairs the declaration while the captured seeded-row gap remains.
-        for stage in ["analyzed_schema", "physical_schema"] {
-            if expected[stage]["fields"][1]["nullable"] != true
-                || case["expected"][stage]["fields"][1]["nullable"] != false
-            {
-                return Ok(false);
-            }
-            expected[stage]["fields"][1]["nullable"] = json!(false);
-        }
-    }
+    let expected = public_native_observation(&captured["actual"])?;
     Ok(public_native_observation(actual)? == expected)
 }
 
@@ -183,21 +182,28 @@ fn runtime_control_context(
     representation: usize,
     batch_size: usize,
 ) -> Value {
-    let partitions = if matrix == "one_partition_rng" { 1 } else { 2 };
+    let partitions = if matrix == "one_partition_rng" || is_supplementary_seeded_case(case) {
+        1
+    } else {
+        2
+    };
     json!({"matrix":matrix,"id":case["id"],"ansi":case["ansi"],"sql":case["sql"],
         "representation":representation,"batch_size":batch_size,"input_partitions":partitions,
         "target_partitions":partitions,"timezone":"UTC"})
 }
 
 fn is_active_native_negative_context(context: &Value) -> bool {
-    if context["matrix"] == "one_partition_rng" {
-        context["batch_size"] == 1
-    } else {
-        (context["id"] == "concat_885_seeded_random_before_mask" && context["batch_size"] == 1)
-            || (context["id"] == "concat_885_competing_cast_before_division"
-                && context["ansi"] == true
-                && context["batch_size"] == 32)
-    }
+    context["matrix"] == "supplementary"
+        && context["id"] == "concat_885_competing_cast_before_division"
+        && context["ansi"] == true
+        && context["batch_size"] == 32
+}
+
+fn is_supplementary_seeded_case(case: &Value) -> bool {
+    matches!(
+        case["id"].as_str(),
+        Some("concat_885_seeded_random_after_mask" | "concat_885_seeded_random_before_mask")
+    )
 }
 
 fn register_rng_inputs(session: &SessionContext, header: &Value, batch_size: usize) -> TestResult {
@@ -351,10 +357,38 @@ async fn run_runtime_control_matrix(rng: bool) -> TestResult {
             } else {
                 register_inputs(&session, &records[0], representation, batch_size)?;
             }
+            let seeded_session = if rng {
+                None
+            } else {
+                let configured = self::session(batch_size, 1);
+                let providers = register_inputs_one_partition_with_receipts(
+                    &configured,
+                    &records[0],
+                    representation,
+                    batch_size,
+                )
+                .await?;
+                eprintln!(
+                    "c06 concat seeded provider receipt: {}",
+                    json!({
+                        "matrix":matrix,"representation":representation,"batch_size":batch_size,
+                        "input_partitions":1,"target_partitions":configured.state().config().target_partitions(),
+                        "providers":providers,
+                    })
+                );
+                Some(configured)
+            };
             for case in &records[1..] {
+                let session = if is_supplementary_seeded_case(case) {
+                    seeded_session
+                        .as_ref()
+                        .ok_or("missing one-partition seeded session")?
+                } else {
+                    &session
+                };
                 let context = runtime_control_context(matrix, case, representation, batch_size);
                 let key = context.to_string();
-                if is_active_native_negative_context(&context) {
+                if !rng && is_active_native_negative_context(&context) {
                     expected_negative_keys.insert(key.clone());
                 }
                 let observation_key =
@@ -363,15 +397,16 @@ async fn run_runtime_control_matrix(rng: bool) -> TestResult {
                     failures
                         .push(json!({"context":context,"failure":"duplicate observation context"}));
                 }
-                let actual = match capture_observation(&session, case).await {
+                let actual = match capture_observation(session, case).await {
                     Ok(actual) => actual,
                     Err(error) => json!({"capture_failure":error.to_string()}),
                 };
                 let comparison: TestResult<(bool, bool, bool, bool)> = (|| {
                     let strict = matches_reference(case, &actual)?;
                     let local = matches_local_preexecution_divide(case, &actual);
-                    let retained =
-                        matches_retained_native_negative(&context, case, &actual, profiles)?;
+                    // Keep historical profiles; seeded RNG now requires the Spark reference.
+                    let retained = !rng
+                        && matches_retained_native_negative(&context, case, &actual, profiles)?;
                     let rows = actual["rows"].is_array()
                         && case["expected"]["rows"].is_array()
                         && row_counts(&actual["rows"])? == row_counts(&case["expected"]["rows"])?;
@@ -428,16 +463,16 @@ async fn run_runtime_control_matrix(rng: bool) -> TestResult {
     let profile_keys = profiles
         .iter()
         .filter(|profile| {
-            profile["context"]["matrix"] == matrix
+            !rng && profile["context"]["matrix"] == matrix
                 && is_active_native_negative_context(&profile["context"])
         })
         .map(|profile| profile["context"].to_string())
         .collect::<Vec<_>>();
     let unique_profile_keys = profile_keys.iter().cloned().collect::<HashSet<_>>();
     let expected_counts = if rng {
-        [6, 0, 0, 6, 0]
+        [12, 0, 0, 0, 0]
     } else {
-        [54, 21, 12, 9, 0]
+        [60, 21, 12, 3, 0]
     };
     let expected_contexts = if rng { 12 } else { 96 };
     eprintln!(
@@ -463,7 +498,7 @@ async fn run_runtime_control_matrix(rng: bool) -> TestResult {
     assert_eq!(profile_keys.len(), expected_counts[3]);
     assert_eq!(unique_profile_keys, expected_negative_keys);
     assert_eq!(retained_keys, expected_negative_keys);
-    assert_eq!(row_matches, if rng { 6 } else { 54 });
+    assert_eq!(row_matches, if rng { 12 } else { 60 });
     assert!(failures.is_empty(), "{failures:#?}");
     Ok(())
 }
@@ -474,7 +509,7 @@ async fn concat_runtime_supplementary_controls_retain_all_96_outcomes() -> TestR
 }
 
 #[tokio::test]
-async fn concat_runtime_one_partition_rng_controls_retain_all_12_outcomes() -> TestResult {
+async fn seeded_rand_values_match_spark_across_input_batches() -> TestResult {
     run_runtime_control_matrix(true).await
 }
 
@@ -486,39 +521,20 @@ fn retained_runtime_profiles_reject_changed_public_results_and_contexts() -> Tes
         .collect::<Result<Vec<_>, _>>()?;
     let profiles = &records[1..];
     assert_eq!(profiles.len(), 17);
-    let mut retired_rng_profiles = 0;
+    let mut retired_profiles = 0;
     for profile in profiles {
         // These are mutations of real captured native receipts, not new engine observations.
         let context = &profile["context"];
         let case = &profile["captured_observation"];
-        let mut active_actual = case["actual"].clone();
-        if context["matrix"] == "one_partition_rng"
-            && context["id"] == "rng_885_one_partition_direct"
-        {
-            assert!(!matches_retained_native_negative(
-                context,
-                case,
-                &active_actual,
-                profiles
-            )?);
-            // Current Fields come from Spark; captured rows and raw receipts stay exact.
-            active_actual["analyzed_schema"] = case["expected"]["analyzed_schema"].clone();
-            active_actual["physical_schema"] = case["expected"]["physical_schema"].clone();
-        }
-        let actual = &active_actual;
-        if !is_active_native_negative_context(context) {
-            assert_eq!(context["matrix"], "one_partition_rng");
-            assert_eq!(context["id"], "rng_885_one_partition_direct");
-            assert_eq!(context["batch_size"], 32);
-            assert!(matches_reference(case, actual)?);
-            assert!(!matches_retained_native_negative(
-                context, case, actual, profiles
-            )?);
-            retired_rng_profiles += 1;
-            continue;
-        }
+        let actual = &case["actual"];
+        let active = is_active_native_negative_context(context);
+        assert_eq!(
+            matches_retained_native_negative(context, case, actual, profiles)?,
+            active
+        );
+        retired_profiles += usize::from(!active);
         assert!(!matches_reference(case, actual)?);
-        assert!(matches_retained_native_negative(
+        assert!(matches_historical_native_negative(
             context, case, actual, profiles
         )?);
         if context["matrix"] == "supplementary" {
@@ -534,7 +550,7 @@ fn retained_runtime_profiles_reject_changed_public_results_and_contexts() -> Tes
             let mut changed = actual.clone();
             changed[key] = value;
             assert!(
-                !matches_retained_native_negative(context, case, &changed, profiles)?,
+                !matches_historical_native_negative(context, case, &changed, profiles)?,
                 "{key}"
             );
         }
@@ -555,7 +571,7 @@ fn retained_runtime_profiles_reject_changed_public_results_and_contexts() -> Tes
                     let mut changed = actual.clone();
                     changed[stage]["fields"][index][key] = value;
                     assert!(
-                        !matches_retained_native_negative(context, case, &changed, profiles)?,
+                        !matches_historical_native_negative(context, case, &changed, profiles)?,
                         "{stage}, {index}, {key}"
                     );
                 }
@@ -567,18 +583,18 @@ fn retained_runtime_profiles_reject_changed_public_results_and_contexts() -> Tes
                 "{} [internal #999 @0x1]",
                 actual[key].as_str().ok_or("missing Arrow receipt")?
             ));
-            assert!(matches_retained_native_negative(
+            assert!(matches_historical_native_negative(
                 context, case, &changed, profiles
             )?);
             changed[key] = json!("");
-            assert!(!matches_retained_native_negative(
+            assert!(!matches_historical_native_negative(
                 context, case, &changed, profiles
             )?);
             changed
                 .as_object_mut()
                 .ok_or("missing observation")?
                 .remove(key);
-            assert!(!matches_retained_native_negative(
+            assert!(!matches_historical_native_negative(
                 context, case, &changed, profiles
             )?);
         }
@@ -589,19 +605,19 @@ fn retained_runtime_profiles_reject_changed_public_results_and_contexts() -> Tes
                 .as_array_mut()
                 .ok_or("missing rows")?
                 .reverse();
-            assert!(matches_retained_native_negative(
+            assert!(matches_historical_native_negative(
                 context, case, &changed, profiles
             )?);
             changed["rows"]
                 .as_array_mut()
                 .ok_or("missing rows")?
                 .push(rows[0].clone());
-            assert!(!matches_retained_native_negative(
+            assert!(!matches_historical_native_negative(
                 context, case, &changed, profiles
             )?);
             changed = actual.clone();
             changed["rows"].as_array_mut().ok_or("missing rows")?.pop();
-            assert!(!matches_retained_native_negative(
+            assert!(!matches_historical_native_negative(
                 context, case, &changed, profiles
             )?);
             let row = rows
@@ -614,13 +630,13 @@ fn retained_runtime_profiles_reject_changed_public_results_and_contexts() -> Tes
             let last = rows[row].as_array().ok_or("missing row")?.len() - 1;
             changed = actual.clone();
             changed["rows"][row][last] = json!("wrong_seeded_value");
-            assert!(!matches_retained_native_negative(
+            assert!(!matches_historical_native_negative(
                 context, case, &changed, profiles
             )?);
             if context["matrix"] == "one_partition_rng" {
                 changed = actual.clone();
                 changed["rows"][0][0] = json!("wrong_row_id");
-                assert!(!matches_retained_native_negative(
+                assert!(!matches_historical_native_negative(
                     context, case, &changed, profiles
                 )?);
             }
@@ -631,7 +647,7 @@ fn retained_runtime_profiles_reject_changed_public_results_and_contexts() -> Tes
                     .as_object_mut()
                     .ok_or("missing observation")?
                     .remove(key);
-                assert!(!matches_retained_native_negative(
+                assert!(!matches_historical_native_negative(
                     context, case, &changed, profiles
                 )?);
             }
@@ -650,13 +666,13 @@ fn retained_runtime_profiles_reject_changed_public_results_and_contexts() -> Tes
             let mut changed = context.clone();
             changed[key] = json!("wrong_context");
             assert!(
-                !matches_retained_native_negative(&changed, case, actual, profiles)?,
+                !matches_historical_native_negative(&changed, case, actual, profiles)?,
                 "{key}"
             );
         }
         let mut duplicate_profiles = profiles.to_vec();
         duplicate_profiles.push(profile.clone());
-        assert!(!matches_retained_native_negative(
+        assert!(!matches_historical_native_negative(
             context,
             case,
             actual,
@@ -664,7 +680,7 @@ fn retained_runtime_profiles_reject_changed_public_results_and_contexts() -> Tes
         )?);
         let mut changed_case = case.clone();
         changed_case["expected"]["status"] = json!("wrong_reference");
-        assert!(!matches_retained_native_negative(
+        assert!(!matches_historical_native_negative(
             context,
             &changed_case,
             actual,
@@ -672,7 +688,7 @@ fn retained_runtime_profiles_reject_changed_public_results_and_contexts() -> Tes
         )?);
     }
 
-    assert_eq!(retired_rng_profiles, 2);
+    assert_eq!(retired_profiles, 14);
     let local = &records[0]["local_preexecution_control"];
     let actual = &local["actual"];
     assert!(!matches_reference(local, actual)?);

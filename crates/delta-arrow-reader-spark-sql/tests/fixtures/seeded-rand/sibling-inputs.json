@@ -1,0 +1,133 @@
+{
+  "format_version": 1,
+  "purpose": "One independent Spark supplement for #901 sibling-window RAND arguments. Input only; no expected outcomes.",
+  "source_revision": "da5935c3ae42d4bfc208f19c94936d5a12b29ef0",
+  "native_red_commit": "7f1deabaf311ace32d9a2c9224d005f75f907386",
+  "ansi_modes": [
+    false,
+    true
+  ],
+  "registered_inputs": [
+    {
+      "name": "rand901_one",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "row_id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "c06_source": "rng.row_id"
+            }
+          },
+          {
+            "name": "s",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "c06_source": "rng.s"
+            }
+          }
+        ]
+      },
+      "partitions": [
+        [
+          [
+            "0",
+            null
+          ],
+          [
+            "1",
+            "a"
+          ],
+          [
+            "2",
+            "b"
+          ],
+          [
+            "3",
+            null
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "rand_partitioned",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "row_id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "c06_source": "rng.row_id"
+            }
+          },
+          {
+            "name": "s",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "c06_source": "rng.s"
+            }
+          }
+        ]
+      },
+      "partitions": [
+        [
+          [
+            "0",
+            null
+          ],
+          [
+            "1",
+            "a"
+          ],
+          [
+            "2",
+            "b"
+          ],
+          [
+            "3",
+            null
+          ]
+        ],
+        [
+          [
+            "4",
+            null
+          ],
+          [
+            "5",
+            "a"
+          ],
+          [
+            "6",
+            "b"
+          ],
+          [
+            "7",
+            null
+          ]
+        ]
+      ]
+    }
+  ],
+  "definitions": [
+    {
+      "id": "rand901_sibling_window_lag",
+      "input": "rand901_one",
+      "sql": "SELECT row_id,lag(rand(7),1) OVER (ORDER BY row_id DESC) AS previous_desc,lag(rand(7),1) OVER (ORDER BY row_id ASC) AS previous_asc FROM rand901_one",
+      "collect_count": 1,
+      "purpose": "Each RAND argument belongs to the same original input, before either generated sibling Window sort."
+    }
+  ],
+  "comparison_contract": {
+    "native_input_partitions": "Exactly the authored partitions, including row order within each partition. Do not distribute record batches round-robin across these partitions.",
+    "native_batch_layouts": "Vary record-batch boundaries inside each fixed partition: [4], [1,1,1,1], [2,2], with optional empty batches. Keep complete raw results.",
+    "spark_output_order": "Preserve every row in collect order. Compare by row_id where present, otherwise as a multiset; do not add ORDER BY to the query under test.",
+    "existing_frozen_references": "The original sealed #901 r1 packet and raw observations are unchanged. This supplement writes only under sibling/spark-reference-r1."
+  }
+}

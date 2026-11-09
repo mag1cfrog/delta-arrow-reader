@@ -6,11 +6,11 @@ use std::sync::Arc;
 use datafusion::common::Result;
 use datafusion::functions_window::nth_value::{NthValue, NthValueKind};
 use datafusion::logical_expr::logical_plan::Window;
-use datafusion_common::tree_node::{Transformed, TreeNodeRewriter};
-use datafusion_common::{DFSchemaRef, DataFusionError};
+use datafusion_common::tree_node::{Transformed, TreeNode, TreeNodeRecursion, TreeNodeRewriter};
+use datafusion_common::{DFSchemaRef, DataFusionError, internal_datafusion_err};
 use datafusion_expr::expr::{WindowFunction, WindowFunctionDefinition};
 use datafusion_expr::{
-    Expr, Extension, LogicalPlan, SortExpr, WindowFrame, WindowFrameUnits, ident,
+    Expr, Extension, LogicalPlan, Projection, SortExpr, WindowFrame, WindowFrameUnits, ident,
 };
 use sail_logical_plan::monotonic_id::{MonotonicIdNode, MonotonicIdPurpose};
 use sail_logical_plan::sort::RequiredSortNode;
@@ -20,7 +20,8 @@ use crate::function::sort_keys::spark_sort_key;
 use crate::resolver::PlanResolver;
 use crate::resolver::state::PlanResolverState;
 use crate::resolver::tree::{
-    PlanRewriter, empty_logical_plan, skip_aggregate_arguments_needing_validation,
+    PlanRewriter, contains_seeded_rand, empty_logical_plan,
+    skip_aggregate_arguments_needing_validation,
 };
 
 pub(crate) struct WindowRewriter<'s> {
@@ -34,9 +35,75 @@ pub(crate) struct WindowRewriter<'s> {
     input_order_initialized: bool,
     stable_ordering: Option<Vec<SortExpr>>,
     stable_ordering_enforced: bool,
+    input_before_windows: Option<LogicalPlan>,
+    rand_projection: Option<Projection>,
 }
 
 impl WindowRewriter<'_> {
+    fn materialize_rand_inputs(&mut self, function: &mut WindowFunction) -> Result<bool> {
+        let input = self
+            .input_before_windows
+            .as_ref()
+            .ok_or_else(|| internal_datafusion_err!("Window input was not initialized"))?;
+        let mut projected = match &self.rand_projection {
+            Some(projection) => projection.expr.clone(),
+            None => input
+                .schema()
+                .columns()
+                .into_iter()
+                .map(Expr::Column)
+                .collect(),
+        };
+        let previous_width = projected.len();
+        let mut materialize = |expression: &mut Expr| -> Result<()> {
+            if contains_seeded_rand(expression)? {
+                let field = self.state.register_hidden_field_name("__rand_window_input");
+                projected.push(expression.clone().alias(&field));
+                *expression = ident(field);
+            }
+            Ok(())
+        };
+        for argument in &mut function.params.args {
+            materialize(argument)?;
+        }
+        for partition in &mut function.params.partition_by {
+            materialize(partition)?;
+        }
+        for order in &mut function.params.order_by {
+            materialize(&mut order.expr)?;
+        }
+        let materialized = projected.len() > previous_width;
+        if materialized {
+            let previous = self.rand_projection.as_ref().map_or_else(
+                || input.clone(),
+                |projection| LogicalPlan::Projection(projection.clone()),
+            );
+            let projection = Projection::try_new(projected, Arc::new(input.clone()))?;
+            let replacement = LogicalPlan::Projection(projection.clone());
+            let plan = mem::replace(&mut self.plan, empty_logical_plan());
+            // Stop at the common input: only windows and sorts added by this
+            // rewriter need wider schemas. Original input boundaries stay intact.
+            self.plan = plan
+                .transform_down_up(
+                    |node| {
+                        if node == previous {
+                            Ok(Transformed::new(
+                                replacement.clone(),
+                                true,
+                                TreeNodeRecursion::Jump,
+                            ))
+                        } else {
+                            Ok(Transformed::no(node))
+                        }
+                    },
+                    |node| node.recompute_schema().map(Transformed::yes),
+                )?
+                .data;
+            self.rand_projection = Some(projection);
+        }
+        Ok(materialized)
+    }
+
     fn requires_input_order(function: &WindowFunction, schema: &DFSchemaRef) -> PlanResult<bool> {
         let function_requires_order = match &function.fun {
             WindowFunctionDefinition::AggregateUDF(udaf) => {
@@ -68,6 +135,8 @@ impl<'s> PlanRewriter<'s> for WindowRewriter<'s> {
             input_order_initialized: false,
             stable_ordering: None,
             stable_ordering_enforced: false,
+            input_before_windows: None,
+            rand_projection: None,
         }
     }
 
@@ -92,6 +161,12 @@ impl TreeNodeRewriter for WindowRewriter<'_> {
                 }
                 for sort in &mut function.params.order_by {
                     sort.expr = spark_sort_key(sort.expr.clone(), self.plan.schema())?;
+                }
+                let original = Expr::WindowFunction(function.clone());
+                let name = original.schema_name().to_string();
+                let seeded_rand = contains_seeded_rand(&original)?;
+                if seeded_rand && let Some(replacement) = self.seen.get(&name) {
+                    return Ok(Transformed::yes(replacement.clone()));
                 }
                 let requires_input_order =
                     Self::requires_input_order(&function, self.plan.schema())
@@ -124,6 +199,11 @@ impl TreeNodeRewriter for WindowRewriter<'_> {
                     }
                 }
 
+                if self.input_before_windows.is_none() {
+                    self.input_before_windows = Some(self.plan.clone());
+                }
+                let materialized_rand =
+                    seeded_rand && self.materialize_rand_inputs(&mut function)?;
                 let mut required = function
                     .params
                     .partition_by
@@ -169,7 +249,11 @@ impl TreeNodeRewriter for WindowRewriter<'_> {
                     self.stable_ordering = Some(desired);
                 }
                 let node = Expr::WindowFunction(function);
-                let name = node.schema_name().to_string();
+                let node = if materialized_rand {
+                    node.alias(&name)
+                } else {
+                    node
+                };
                 if let Some(replacement) = self.seen.get(&name) {
                     return Ok(Transformed::yes(replacement.clone()));
                 }

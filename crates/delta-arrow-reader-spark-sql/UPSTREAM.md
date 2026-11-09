@@ -2028,3 +2028,23 @@ and stop evaluating unrequested output rows while retaining frame lookahead.
 LIMIT 0 can prune a deferred upper-bound check before it folds. The
 [signed-integer RANGE references](tests/fixtures/README.md#signed-integer-range-bounds)
 cover source-width conversion, membership, Fields, error phases and limited output.
+
+### Seeded RAND execution streams
+
+Native projections and filters bind each Sail RAND occurrence when an execution
+partition starts. The existing Spark XORShift generator uses wrapping signed
+seed-plus-partition initialization and advances across batches. Each execution
+gets fresh state, including concurrent executions of the same physical plan.
+Selected-row and lambda rewrites retain the bound occurrence, so CASE and CONCAT
+consume draws only for their evaluated rows. Native projection and filter stream
+entry points retain the original metrics, output fields and execution options.
+Binding runs after physical optimization and preserves expression placement.
+Grouping keys and window arguments, partition keys and order keys containing a
+seeded Sail RAND are materialized as complete expressions in lower projections.
+Sibling windows share a projection above their original input boundary, before
+the sorts introduced for those windows.
+Window execution and sorting reuse those values instead of drawing again from
+retained input buffers. DataFusion's constant-expression inference stops at
+volatile nodes, so a constant RAND seed cannot make its output column constant
+or remove a required sort. Nonvolatile constant inference retains its existing
+rules.

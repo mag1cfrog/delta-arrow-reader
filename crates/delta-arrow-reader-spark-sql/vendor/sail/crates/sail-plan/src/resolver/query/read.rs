@@ -135,7 +135,6 @@ impl PlanResolver<'_> {
         });
 
         // Keep the existing Bernoulli filter used by SQL TABLESAMPLE.
-        // TODO: Random restarts per batch; Spark needs a sampler that advances per partition.
         let name = state.register_field_name("rand_value");
         let columns = plan
             .schema()

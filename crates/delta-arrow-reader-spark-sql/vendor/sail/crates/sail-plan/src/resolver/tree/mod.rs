@@ -1,9 +1,10 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
-use datafusion_common::tree_node::{Transformed, TreeNodeRecursion};
+use datafusion_common::tree_node::{Transformed, TreeNode, TreeNodeRecursion};
 use datafusion_common::{DFSchema, Result};
 use datafusion_expr::{EmptyRelation, Expr, LogicalPlan};
+use sail_function::scalar::math::random::Random;
 
 use crate::function::aggregate_argument_needs_validation;
 use crate::resolver::state::PlanResolverState;
@@ -12,6 +13,13 @@ pub(crate) mod explode;
 pub(crate) mod monotonic_id;
 pub(crate) mod spark_partition_id;
 pub(crate) mod window;
+
+pub(crate) fn contains_seeded_rand(expression: &Expr) -> Result<bool> {
+    expression.exists(|node| {
+        Ok(matches!(node, Expr::ScalarFunction(function)
+            if !function.args.is_empty() && function.func.inner().is::<Random>()))
+    })
+}
 
 fn skip_aggregate_arguments_needing_validation(node: Expr) -> Result<Transformed<Expr>> {
     // Hoisting must not erase arguments before typed-query validation inspects them.

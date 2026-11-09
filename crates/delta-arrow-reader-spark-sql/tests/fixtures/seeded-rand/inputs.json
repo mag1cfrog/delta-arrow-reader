@@ -1,0 +1,182 @@
+{
+  "format_version": 1,
+  "purpose": "Focused independent Spark reference capture for #901 lifecycle regressions. Input only; no expected outcomes.",
+  "source_revision": "da5935c3ae42d4bfc208f19c94936d5a12b29ef0",
+  "native_red_commit": "7f1deabaf311ace32d9a2c9224d005f75f907386",
+  "ansi_modes": [
+    false,
+    true
+  ],
+  "registered_inputs": [
+    {
+      "name": "rand901_one",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "row_id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "c06_source": "rng.row_id"
+            }
+          },
+          {
+            "name": "s",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "c06_source": "rng.s"
+            }
+          }
+        ]
+      },
+      "partitions": [
+        [
+          [
+            "0",
+            null
+          ],
+          [
+            "1",
+            "a"
+          ],
+          [
+            "2",
+            "b"
+          ],
+          [
+            "3",
+            null
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "rand_partitioned",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "row_id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "c06_source": "rng.row_id"
+            }
+          },
+          {
+            "name": "s",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "c06_source": "rng.s"
+            }
+          }
+        ]
+      },
+      "partitions": [
+        [
+          [
+            "0",
+            null
+          ],
+          [
+            "1",
+            "a"
+          ],
+          [
+            "2",
+            "b"
+          ],
+          [
+            "3",
+            null
+          ]
+        ],
+        [
+          [
+            "4",
+            null
+          ],
+          [
+            "5",
+            "a"
+          ],
+          [
+            "6",
+            "b"
+          ],
+          [
+            "7",
+            null
+          ]
+        ]
+      ]
+    }
+  ],
+  "definitions": [
+    {
+      "id": "rand901_occurrences",
+      "input": "rand901_one",
+      "sql": "SELECT row_id,rand(7) AS r7_left,rand(7) AS r7_right,rand(8) AS r8 FROM rand901_one",
+      "collect_count": 1,
+      "purpose": "Independent equal-seed occurrences and a separate seed-8 stream."
+    },
+    {
+      "id": "rand901_repeat_collect",
+      "input": "rand901_one",
+      "sql": "SELECT row_id,rand(7) AS r FROM rand901_one",
+      "collect_count": 2,
+      "purpose": "Collect twice from the same DataFrame and query execution without persistence."
+    },
+    {
+      "id": "rand901_two_partitions",
+      "input": "rand_partitioned",
+      "sql": "SELECT row_id,rand(7) AS r FROM rand_partitioned",
+      "collect_count": 1,
+      "purpose": "Observe direct RAND on explicit source partitions [0,1,2,3] and [4,5,6,7]. The separate provider debug receipt records partition IDs."
+    },
+    {
+      "id": "rand901_group_floor",
+      "input": "rand901_one",
+      "sql": "SELECT count(*) AS n FROM rand901_one GROUP BY floor(rand(7)*2)",
+      "collect_count": 1,
+      "purpose": "Observe group sizes without an unrelated nondeterministic grouped-output admission check."
+    },
+    {
+      "id": "rand901_window_order",
+      "input": "rand901_one",
+      "sql": "SELECT row_id,row_number() OVER (ORDER BY rand(7)) AS rn FROM rand901_one",
+      "collect_count": 1,
+      "purpose": "Observe seeded random window ordering."
+    },
+    {
+      "id": "rand901_window_lag",
+      "input": "rand901_one",
+      "sql": "SELECT row_id,lag(rand(7),1) OVER (ORDER BY row_id) AS previous_r FROM rand901_one",
+      "collect_count": 1,
+      "purpose": "Observe random window input with stable row-id ordering."
+    },
+    {
+      "id": "rand901_filter",
+      "input": "rand901_one",
+      "sql": "SELECT row_id FROM rand901_one WHERE rand(7) > 0.5",
+      "collect_count": 1,
+      "purpose": "Observe a retained simple seeded random filter predicate."
+    },
+    {
+      "id": "rand901_selected_case_concat",
+      "input": "rand901_one",
+      "sql": "SELECT row_id,concat(s,CAST(CASE WHEN row_id = 1 THEN rand(7) ELSE rand(8) END AS STRING)) AS r FROM rand901_one",
+      "collect_count": 1,
+      "purpose": "Observe selected CASE occurrences beneath the existing left-to-right CONCAT NULL guard."
+    }
+  ],
+  "comparison_contract": {
+    "native_input_partitions": "Exactly the authored partitions, including row order within each partition. Do not distribute record batches round-robin across these partitions.",
+    "native_batch_layouts": "Vary record-batch boundaries inside each fixed partition: [4], [1,1,1,1], [2,2], with optional empty batches. Keep complete raw results.",
+    "spark_output_order": "Preserve every row in collect order. Compare by row_id where present, otherwise as a multiset; do not add ORDER BY to the query under test.",
+    "existing_frozen_references": "Reuse the unchanged rng-one-partition-spark.jsonl for the three original direct/CONCAT queries; do not overwrite or recapture those references."
+  }
+}

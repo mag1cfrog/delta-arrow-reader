@@ -757,6 +757,9 @@ impl EquivalenceGroup {
         &self,
         expr: &Arc<dyn PhysicalExpr>,
     ) -> Option<AcrossPartitions> {
+        if expr.is_volatile_node() {
+            return None;
+        }
         if let Some(lit) = expr.downcast_ref::<Literal>() {
             return Some(AcrossPartitions::Uniform(Some(lit.value().clone())));
         }
