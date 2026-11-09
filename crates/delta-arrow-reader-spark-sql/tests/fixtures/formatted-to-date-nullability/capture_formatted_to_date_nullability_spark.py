@@ -1,14 +1,17 @@
-"""Capture Spark's nullability of formatted TO_DATE over DATE and TIMESTAMP arguments (#1196).
+"""Capture Spark's nullability of formatted TO_DATE over DATE and TIMESTAMP arguments (#1196,
+#1215, #1232).
 
-Records analyzed, optimized and executed schemas, typed internal-row values and failing
-stages, with the innermost Java exception of a failure, for TO_DATE with a format over NOT NULL
-and nullable DATE, TIMESTAMP and TIMESTAMP_NTZ columns and literals, with literal, NOT NULL
-column, nullable column and NULL formats, and with an invalid pattern over a DATE, and for
-UNIX_TIMESTAMP of a DATE with a literal and a nullable format. Spark declares the result
-nullable outside ANSI mode, and in ANSI mode when an argument is nullable. Every query runs in
-both ANSI modes in UTC and America/Los_Angeles. Run from the crate root in the reference
-environment described in README.md; the output path must not exist.
-"""
+Records analyzed, optimized and executed schemas, typed internal-row values and failing stages,
+with the innermost Java exception of a failure, for TO_DATE with a format over NOT NULL and
+nullable DATE, TIMESTAMP and TIMESTAMP_NTZ columns and literals, with literal, NOT NULL column,
+nullable column and NULL formats, and with an invalid pattern over a DATE, for UNIX_TIMESTAMP of
+a DATE with a literal and a nullable format, and for TO_DATE and TRY_TO_DATE of literals with
+format columns and with aggregates and window functions in the format, also in an ORDER BY, of
+an ungrouped column beside an aggregate, and of literals and DATE columns with a derived format
+column through a subquery, a CTE and UNION ALL. Spark declares the result nullable outside ANSI
+mode, and in ANSI mode when an argument is nullable. Every query runs in both ANSI modes in UTC
+and America/Los_Angeles. Run from the crate root in the reference environment described in
+README.md; the output path must not exist."""
 import argparse
 from datetime import date, datetime, timedelta, timezone
 import hashlib
@@ -82,6 +85,55 @@ def definitions():
            "SELECT k, unix_timestamp(dt, 'yyyy-MM-dd') AS r FROM inputs")
     yield ("column_unix_timestamp_date_nullable_format",
            "SELECT k, unix_timestamp(dt, f) AS r FROM inputs")
+    # A format column keeps a literal's result from being constant, and Spark computes the
+    # format's aggregates although it ignores the format.
+    for function in ["to_date", "try_to_date"]:
+        for name, value in LITERALS:
+            for format_name, pattern in FORMATS[1:3]:
+                yield (f"literal_{function}_{name}_{format_name}",
+                       f"SELECT k, {function}({value}, {pattern}) AS r FROM inputs")
+        yield (f"literal_aggregate_{function}_nullable_format",
+               f"SELECT {function}(DATE '2024-01-02', max(f)) AS r FROM inputs")
+        yield (f"grouped_aggregate_{function}_required_format",
+               f"SELECT k, {function}(min(dt), max(g)) AS r FROM inputs GROUP BY k")
+        yield (f"order_by_aggregate_{function}_nullable_format",
+               f"SELECT k FROM inputs GROUP BY k "
+               f"ORDER BY {function}(DATE '2024-01-02', max(f)), k")
+        # Spark analyzes the ignored format with the argument, so an ungrouped column fails.
+        yield (f"ungrouped_format_{function}",
+               f"SELECT {function}(min(dt), f) AS r FROM inputs")
+        yield (f"ungrouped_argument_{function}",
+               f"SELECT {function}(dt, max(f)) AS r FROM inputs")
+        yield (f"grouped_format_{function}",
+               f"SELECT k, {function}(min(dt), f) AS r FROM inputs GROUP BY k")
+        # Spark computes the format's aggregates and window functions, so with ANSI enabled a
+        # failing CAST in one fails.
+        yield (f"literal_failing_aggregate_{function}_format",
+               f"SELECT {function}(DATE '2024-01-02', "
+               f"CAST(max(CAST(g AS INT)) AS STRING)) AS r FROM inputs")
+        yield (f"literal_window_{function}_required_format",
+               f"SELECT k, {function}(DATE '2024-01-02', "
+               f"CAST(row_number() OVER (ORDER BY k) AS STRING)) AS r FROM inputs")
+        yield (f"literal_failing_window_{function}_format",
+               f"SELECT k, {function}(DATE '2024-01-02', "
+               f"CAST(max(CAST(g AS INT)) OVER () AS STRING)) AS r FROM inputs")
+        # Spark never evaluates a derived format column, also through a CTE or UNION ALL.
+        yield (f"derived_literal_cte_{function}_format",
+               f"WITH d AS (SELECT k, CAST(CAST(g AS INT) AS STRING) AS x FROM inputs) "
+               f"SELECT k, {function}(DATE '2024-01-02', x) AS r FROM d")
+        yield (f"derived_literal_union_{function}_format",
+               f"SELECT k, {function}(DATE '2024-01-02', x) AS r FROM (SELECT k, "
+               f"CAST(k / 0 AS STRING) AS x FROM inputs UNION ALL SELECT k, "
+               f"CAST(k / 0 AS STRING) AS x FROM inputs)")
+        yield (f"derived_column_{function}_format",
+               f"SELECT k, {function}(dt, x) AS r FROM "
+               f"(SELECT k, dt, CAST(CAST(g AS INT) AS STRING) AS x FROM inputs) t")
+        # A NOT NULL derived format keeps the result NOT NULL with ANSI enabled.
+        required = "coalesce(CAST(CAST(g AS INT) AS STRING), 'yyyy-MM-dd') AS x"
+        for name, argument in [("date", "dt"), ("timestamp", "ts"), ("timestamp_ntz", "tn")]:
+            yield (f"derived_required_{name}_{function}_format",
+                   f"SELECT k, {function}({argument}, x) AS r "
+                   f"FROM (SELECT k, dt, ts, tn, {required} FROM inputs) t")
 
 
 def python_value(value, kind):

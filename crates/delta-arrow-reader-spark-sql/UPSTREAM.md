@@ -923,9 +923,10 @@ and evaluates a scalar subquery column, so there a failing column fails Spark's 
 returns rows (#1233). Where Spark's result is NOT NULL and DataFusion's already is,
 `SparkWithInputs` carries the inputs and keeps the call's own nullability, which a grouping set
 makes nullable over the argument key, though not over the format's key (#1223). Formatted
-TO_DATE and TRY_TO_DATE still fold there (#1215), and an ORDER BY of such a call fails while
-analyzing, as any ORDER BY of an aggregate that is not selected does (#1221). The [formatted
-TO_DATE references](tests/fixtures/formatted-to-date-nullability/README.md) and [formatted
+TO_DATE and TRY_TO_DATE give the declaration their ignored format's inputs the same way (#1215).
+An ORDER BY of such a call with an aggregate in the format fails while analyzing, as any ORDER
+BY of an aggregate that is not selected does (#1221). The [formatted TO_DATE
+references](tests/fixtures/formatted-to-date-nullability/README.md) and [formatted
 UNIX_TIMESTAMP references](tests/fixtures/formatted-unix-timestamp-nullability/README.md) record
 the checks.
 
