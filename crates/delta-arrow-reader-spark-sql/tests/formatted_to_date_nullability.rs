@@ -32,7 +32,7 @@ mod spark_results;
 use spark_results::{TestResult, validate_batch};
 
 /// The number of recorded observations.
-const RECORD_COUNT: usize = 236;
+const RECORD_COUNT: usize = 332;
 
 fn formatted_to_date_references() -> TestResult<Vec<Value>> {
     let records = include_str!(
@@ -64,14 +64,41 @@ fn is_retained(case: &Value) -> bool {
         .is_some_and(|id| ORDER_BY_AGGREGATE_RECORDS.contains(&id))
 }
 
-/// The expectation for a record: Spark's, or for a #1221 record DAR's schema error while
-/// analyzing.
+/// #1204: an ungrouped column in the argument or the format fails while analyzing with a schema
+/// error, where Spark reports its condition at the same stage.
+const UNGROUPED_RECORDS: [(&str, &str); 6] = [
+    ("ungrouped_format_to_date", "MISSING_GROUP_BY"),
+    ("ungrouped_format_try_to_date", "MISSING_GROUP_BY"),
+    ("ungrouped_argument_to_date", "MISSING_GROUP_BY"),
+    ("ungrouped_argument_try_to_date", "MISSING_GROUP_BY"),
+    ("grouped_format_to_date", "MISSING_AGGREGATION"),
+    ("grouped_format_try_to_date", "MISSING_AGGREGATION"),
+];
+
+/// The condition Spark rejects a #1204 record with.
+fn ungrouped_condition(case: &Value) -> Option<&'static str> {
+    UNGROUPED_RECORDS
+        .iter()
+        .find(|(id, _)| case["id"] == *id)
+        .map(|(_, condition)| *condition)
+}
+
+/// The expectation for a record: Spark's, or for a #1221 or #1204 record DAR's schema error
+/// while analyzing.
 fn expectation(case: &Value) -> TestResult<Value> {
-    if !is_retained(case) {
+    if let Some(condition) = ungrouped_condition(case) {
+        if case["expected"]["status"] != "error"
+            || case["expected"]["condition"] != condition
+            || case["spark_error_phase"] != "sql"
+        {
+            return Err(format!("expected Spark's {condition} while analyzing: {case}").into());
+        }
+    } else if is_retained(case) {
+        if case["expected"]["status"] != "ok" {
+            return Err(format!("expected Spark's sorted rows: {case}").into());
+        }
+    } else {
         return Ok(case.clone());
-    }
-    if case["expected"]["status"] != "ok" {
-        return Err(format!("expected Spark's sorted rows: {case}").into());
     }
     let mut current = case.clone();
     current["expected"] = json!({"status": "error",
@@ -408,6 +435,13 @@ async fn formatted_to_date_nullability_matches_spark() -> TestResult {
     let records = formatted_to_date_references()?;
     let cases = records[1..].iter().collect::<Vec<_>>();
     assert_eq!(cases.iter().filter(|case| is_retained(case)).count(), 8);
+    assert_eq!(
+        cases
+            .iter()
+            .filter(|case| ungrouped_condition(case).is_some())
+            .count(),
+        24
+    );
     assert_no_differences(&differences_over(&records, &cases, None).await?);
     Ok(())
 }
