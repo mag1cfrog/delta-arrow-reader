@@ -31,8 +31,9 @@ and window functions, so a DATE literal with `max(f)` gives one row. The result 
 every stage over a column outside ANSI mode, and in ANSI mode for a nullable argument or format.
 Over a literal it is nullable until constant folding, unless the format has a column: Spark's
 call has it as an input and is not constant, so the result stays nullable outside ANSI mode, and
-in ANSI mode for `f`. A grouping set makes a NOT NULL grouping key NULL in its subtotal rows,
-so the result over it is nullable.
+in ANSI mode for `f`. A grouping set makes a NOT NULL argument key NULL in its subtotal rows,
+so the result over it is nullable. Spark also declares the result nullable when a grouping set
+makes the format's key NULL, which DAR does not follow (#1223); no record covers it.
 
 Each record keeps the analyzed, optimized and executed schemas and values read from Spark's
 internal rows, collected through the Dataset API. `ConvertToLocalRelation` is excluded.
