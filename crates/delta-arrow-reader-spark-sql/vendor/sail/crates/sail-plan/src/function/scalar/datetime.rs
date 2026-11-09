@@ -67,7 +67,7 @@ use crate::config::DefaultTimestampType;
 use crate::error::{PlanError, PlanResult};
 use crate::function::common::{
     FunctionContextInput, ScalarFunction, ScalarFunctionInput, cast_with_date_ntz_nullability,
-    expr_contains_spark_cast_to_variant, unresolved_routine_error,
+    dictionary_string_values, expr_contains_spark_cast_to_variant, unresolved_routine_error,
 };
 use crate::function::common::{literal_value_without_evaluation, without_metadata_annotations};
 use crate::function::temporal_coercion::{
@@ -345,12 +345,13 @@ fn integer_part(expr: Expr, part: &str) -> Expr {
     )
 }
 
-/// The argument of WEEKDAY and DAYOFWEEK. Spark casts a STRING, TIMESTAMP_NTZ or NULL argument
-/// to DATE, with its STRING-to-DATE rules for a STRING, and a nullable cast for a
-/// TIMESTAMP_NTZ. DATE passes through, and a TIMESTAMP is read in its annotated zone, the
-/// session zone. Other types pass through unchecked, although Spark rejects them (#1116).
+/// The argument of WEEKDAY, DAYOFWEEK and WEEKOFYEAR. Spark casts a STRING, also
+/// dictionary-encoded, TIMESTAMP_NTZ or NULL argument to DATE, with its STRING-to-DATE rules for
+/// a STRING, and a nullable cast for a TIMESTAMP_NTZ. DATE passes through, and a TIMESTAMP is read
+/// in its annotated zone, the session zone. Other types pass through unchecked, although Spark
+/// rejects them (#1116).
 fn day_of_week_argument(input: ScalarFunctionInput) -> PlanResult<Expr> {
-    let argument = input.arguments.one()?;
+    let argument = dictionary_string_values(input.arguments.one()?, input.function_context.schema)?;
     Ok(match argument.get_type(input.function_context.schema)? {
         DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => ScalarUDF::from(
             SparkDate::new(!input.function_context.plan_config.ansi_mode),
@@ -1040,15 +1041,6 @@ fn to_date(input: ScalarFunctionInput) -> PlanResult<Expr> {
 /// stage over a DATE or TIMESTAMP column, and over a literal when the format reads a column.
 fn try_to_date(input: ScalarFunctionInput) -> PlanResult<Expr> {
     to_date_with_parser(input, DateParser::TryToDate)
-}
-
-/// A dictionary-encoded STRING, as Delta's provider gives a STRING partition column, as its
-/// STRING values; any other argument unchanged.
-fn dictionary_string_values(expr: Expr, schema: &DFSchemaRef) -> PlanResult<Expr> {
-    Ok(match expr.get_type(schema)? {
-        DataType::Dictionary(_, value) if value.is_string() => cast(expr, *value),
-        _ => expr,
-    })
 }
 
 fn to_date_with_parser(input: ScalarFunctionInput, parser: DateParser) -> PlanResult<Expr> {
@@ -2225,7 +2217,10 @@ pub(super) fn list_built_in_datetime_functions() -> Vec<(&'static str, ScalarFun
         ),
         (
             "weekofyear",
-            F::unary(|arg| cast(expr_fn::to_char(arg, lit("%V")), DataType::Int32)),
+            F::custom(|input| {
+                let date = day_of_week_argument(input)?;
+                Ok(cast(expr_fn::to_char(date, lit("%V")), DataType::Int32))
+            }),
         ),
         ("window", F::custom(window)),
         ("window_time", F::custom(window_time)),

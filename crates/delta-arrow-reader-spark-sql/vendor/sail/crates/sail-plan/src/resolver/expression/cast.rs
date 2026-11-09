@@ -36,7 +36,7 @@ use sail_function::scalar::variant::spark_variant_to_json::SparkVariantToJsonUdf
 
 use crate::error::{PlanError, PlanResult};
 use crate::formatter::SparkPlanFormatter;
-use crate::function::common::drop_inherited_column_metadata;
+use crate::function::common::{dictionary_string_type, drop_inherited_column_metadata};
 use crate::function::is_spark_compatible_arrow_fixed_offset;
 use crate::function::temporal_coercion::{
     cast_date_expr_to_ltz, cast_local_timestamp_expr_to_ltz, ltz_expr_to_local_timestamp,
@@ -244,14 +244,13 @@ impl PlanResolver<'_> {
         let expr_is_variant = is_variant_storage_field(expr_field.as_ref());
         // A dictionary-encoded STRING, as Delta's provider gives a STRING partition column, casts
         // to a DATE or TIMESTAMP as its STRING values do.
-        if let DataType::Dictionary(_, value) = &expr_type
-            && value.is_string()
+        if let Some(values) = dictionary_string_type(&expr_type)
             && matches!(
                 cast_to_type,
                 DataType::Date32 | DataType::Timestamp(TimeUnit::Microsecond, _)
             )
         {
-            let values = cast(expr, value.as_ref().clone());
+            let values = cast(expr, values.clone());
             return self.cast_resolved_expression(values, cast_to_type, is_try, schema);
         }
         // Spark reads each instant's local date-time in the session time zone; Arrow's cast
