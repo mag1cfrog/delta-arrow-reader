@@ -53,7 +53,7 @@ const SORT_KEY_RECORD: &str = "column_order_by_datediff_int";
 const SORT_KEY_TEXT: &str = "invalid argument: sort expression: SortOrder { child: \
     UnresolvedFunction(UnresolvedFunction { function_name: ObjectName([Identifier(\"datediff\")])";
 
-fn retained_records(case: &Value) -> bool {
+fn is_retained(case: &Value) -> bool {
     case["id"]
         .as_str()
         .is_some_and(|id| NTZ_CAST_NULLABILITY_RECORDS.contains(&id) || id == SORT_KEY_RECORD)
@@ -351,12 +351,17 @@ fn string_view_encoding(data_type: &DataType) -> Option<DataType> {
     (data_type == &DataType::Utf8).then_some(DataType::Utf8View)
 }
 
+/// Large strings, as a registered Arrow table can give a STRING column.
+fn large_string_encoding(data_type: &DataType) -> Option<DataType> {
+    (data_type == &DataType::Utf8).then_some(DataType::LargeUtf8)
+}
+
 /// Arrow's Date64, which another producer can give for a DATE.
 fn date64_encoding(data_type: &DataType) -> Option<DataType> {
     (data_type == &DataType::Date32).then_some(DataType::Date64)
 }
 
-/// A dictionary-encoded or viewed STRING casts to DATE like a STRING, a Date64 like a DATE,
+/// A dictionary-encoded, viewed or large STRING casts to DATE like a STRING, a Date64 like a DATE,
 /// and a dictionary-encoded BINARY fails like a BINARY, so the Spark records over those columns
 /// hold for each encoded copy.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -367,9 +372,10 @@ async fn encoded_arguments_resolve_like_their_spark_types() -> TestResult {
         "column_datediff_binary_end",
         "column_datediff_date",
     ];
-    let encodings: [(&str, Encoding); 3] = [
+    let encodings: [(&str, Encoding); 4] = [
         ("dictionary", dictionary_encoding),
         ("string view", string_view_encoding),
+        ("large string", large_string_encoding),
         ("date64", date64_encoding),
     ];
     let records = datediff_argument_references()?;
@@ -412,17 +418,14 @@ async fn encoded_arguments_resolve_like_their_spark_types() -> TestResult {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn datediff_arguments_resolve_like_spark() -> TestResult {
     let records = datediff_argument_references()?;
-    let retained = records[1..]
-        .iter()
-        .filter(|case| retained_records(case))
-        .count();
+    let retained = records[1..].iter().filter(|case| is_retained(case)).count();
     assert_eq!(retained, 8);
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
         let session = session_context(batch_size);
         register_inputs(&session, &records[0], batch_size)?;
         for case in &records[1..] {
-            let expectation = if retained_records(case) {
+            let expectation = if is_retained(case) {
                 current_expectation(case)?
             } else {
                 (*case).clone()

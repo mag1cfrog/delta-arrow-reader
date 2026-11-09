@@ -32,10 +32,11 @@ internal rows, collected through the Dataset API. `ConvertToLocalRelation` is ex
 `datediff_arguments.rs` compares names, type families, nullability, metadata and typed rows at
 batch sizes 1 and 32. A failure must occur at Spark's stage with Spark's condition, and an
 argument type failure must also name Spark's `first` or `second` parameter; Spark's message
-quotes its plan. A second test runs the STRING, BINARY and DATE column records over three
+quotes its plan. A second test runs the STRING, BINARY and DATE column records over four
 encoded copies of the inputs, and requires Spark's results: dictionary-encoded STRING and
 BINARY columns, as Delta's provider gives partition columns; STRING columns as string views,
-as Delta's reader gives data columns; and DATE columns as Arrow's Date64. Two differences are
+as Delta's reader gives data columns, and as large strings; and DATE columns as Arrow's
+Date64. Two differences are
 retained:
 - #1003: the implicit cast of the TIMESTAMP_NTZ control to DATE is NOT NULL during analysis,
   where Spark's is nullable (4 records, at DAR's exact result);
