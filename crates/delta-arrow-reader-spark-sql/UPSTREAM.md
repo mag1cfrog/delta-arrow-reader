@@ -673,6 +673,16 @@ scalar-subquery date beside a constant unsupported unit, a constant malformed da
 the optimizer makes constant, and the stage of a constant QUARTER overflow still differ (#1226).
 The [TRUNC unit references](tests/fixtures/trunc-units/README.md) record the checks (#1192).
 
+MONTHS_BETWEEN builds its result so that its nullability follows from its parts at every stage,
+as Spark's does: NOT NULL for NOT NULL DATE, TIMESTAMP and TIMESTAMP_NTZ arguments and
+`roundOff`. Its CASE expressions ended in `WHEN true` without ELSE, which made the result
+nullable until the optimizer removed it (#1199). Spark's cast of a STRING argument to TIMESTAMP
+is nullable, which `SparkKnownNullable` declares until constant folding replaces a literal's,
+and a NULL `roundOff` now gives NULL, as in Spark, where DAR gave the unrounded value. A STRING
+argument is still cast to TIMESTAMP_NTZ, not to a TIMESTAMP in the session zone, so on a change
+day of a DST zone the fraction can differ by an hour (#942). The [MONTHS_BETWEEN
+references](tests/fixtures/months-between-nullability/README.md) record the checks.
+
 Two DATE values subtract with `-` and TRY_SUBTRACT as Spark's `SubtractDates` does outside its
 legacy interval mode, with a local function, `SparkSubtractDates`: the result is the DAY
 interval between the dates, in microseconds, nullable only for a nullable operand. The day

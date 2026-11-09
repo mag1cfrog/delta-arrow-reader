@@ -1726,6 +1726,10 @@ fn extract_part(input: ScalarFunctionInput) -> PlanResult<Expr> {
     Ok(date_part(part, source))
 }
 
+/// Spark's MONTHS_BETWEEN, whose nullability follows from its parts at every stage: NOT NULL for
+/// NOT NULL DATE, TIMESTAMP and TIMESTAMP_NTZ arguments and `roundOff`. Spark's implicit cast of
+/// a STRING argument to TIMESTAMP is nullable, which `SparkKnownNullable` declares until constant
+/// folding replaces a literal's, and a NULL `roundOff` gives NULL.
 fn months_between(input: ScalarFunctionInput) -> PlanResult<Expr> {
     // args extraction:
     let ScalarFunctionInput {
@@ -1745,6 +1749,18 @@ fn months_between(input: ScalarFunctionInput) -> PlanResult<Expr> {
     // helper functions:
     let ensure_timestamp = |dt: Expr| match dt.get_type(function_context.schema) {
         Ok(DataType::Timestamp(time_unit, _tz)) => (dt.clone(), time_unit),
+        Ok(data_type)
+            if data_type.is_string()
+                || matches!(&data_type, DataType::Dictionary(_, value) if value.is_string()) =>
+        {
+            (
+                ScalarUDF::from(SparkKnownNullable::new()).call(vec![cast(
+                    dt.clone(),
+                    DataType::Timestamp(TimeUnit::Microsecond, None),
+                )]),
+                TimeUnit::Microsecond,
+            )
+        }
         _ => (
             cast(dt.clone(), DataType::Timestamp(TimeUnit::Microsecond, None)),
             TimeUnit::Microsecond,
@@ -1789,15 +1805,18 @@ fn months_between(input: ScalarFunctionInput) -> PlanResult<Expr> {
             .or(is_last_day(date1).and(is_last_day(date2))),
         month_diff.clone(),
     )
-    .when(lit(true), month_diff + seconds_diff / seconds_in_month)
-    .end()?;
+    .otherwise(month_diff + seconds_diff / seconds_in_month)?;
 
-    Ok(when(
-        round_off,
+    let rounded = when(
+        round_off.clone(),
         expr_fn::round(vec![months_between.clone(), lit(8)]),
     )
-    .when(lit(true), months_between)
-    .end()?)
+    .otherwise(months_between)?;
+    Ok(if round_off.nullable(function_context.schema)? {
+        when(round_off.is_null(), lit(ScalarValue::Float64(None))).otherwise(rounded)?
+    } else {
+        rounded
+    })
 }
 
 const MICROS_PER_DAY: i64 = 24 * 60 * 60 * 1_000_000;
