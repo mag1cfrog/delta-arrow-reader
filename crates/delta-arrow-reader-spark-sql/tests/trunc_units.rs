@@ -30,7 +30,7 @@ mod spark_results;
 use spark_results::{TestResult, validate_batch};
 
 /// The number of recorded observations.
-const RECORD_COUNT: usize = 364;
+const RECORD_COUNT: usize = 380;
 
 fn trunc_unit_references() -> TestResult<Vec<Value>> {
     let records = include_str!("fixtures/trunc-units/trunc-units-spark.jsonl")
@@ -210,9 +210,53 @@ fn optimize(session: &SessionContext, plan: &LogicalPlan) -> TestResult<LogicalP
 /// The text DAR's error must contain for a recorded failure: Spark's error condition. Spark's
 /// message quotes its plan.
 fn expected_error_text(case: &Value) -> Option<String> {
+    if let Some(message) = case["expected"]["dar_message"].as_str() {
+        return Some(message.to_string());
+    }
     case["expected"]["condition"]
         .as_str()
         .map(|condition| format!("[{condition}]"))
+}
+
+/// #1218: a dictionary-encoded STRING casts to DATE with Arrow's rules, so where an aggregate or
+/// window function computes `CAST(sb AS DATE)` over such a copy of `sb`, `garbage` fails while
+/// collecting rows in both ANSI modes; Spark fails with CAST_INVALID_INPUT with ANSI enabled and
+/// otherwise reads it as NULL.
+const DICTIONARY_CAST_RECORDS: [&str; 4] = [
+    "failing_aggregate_date_garbage",
+    "failing_window_date_garbage",
+    "renamed_failing_aggregate_date_garbage",
+    "derived_failing_aggregate_date_garbage",
+];
+
+/// The expectation for a record over dictionary-encoded STRING columns: Spark's, or for a #1218
+/// record DAR's cast error while collecting rows, after the schemas Spark analyzes and optimizes.
+fn dictionary_expectation(case: &Value) -> TestResult<Value> {
+    if !case["id"]
+        .as_str()
+        .is_some_and(|id| DICTIONARY_CAST_RECORDS.contains(&id))
+    {
+        return Ok(case.clone());
+    }
+    let spark_outcome = if case["ansi"] == true {
+        case["expected"]["status"] == "error"
+            && case["expected"]["condition"] == "CAST_INVALID_INPUT"
+            && case["spark_error_phase"] == "collect"
+    } else {
+        case["expected"]["status"] == "ok"
+    };
+    if !spark_outcome {
+        return Err(format!("expected Spark's CAST_INVALID_INPUT or rows: {case}").into());
+    }
+    let mut current = case.clone();
+    current["expected"] = json!({"status": "error",
+        "dar_message": "Cast error: Cannot cast string 'garbage' to value of Date32 type"});
+    current["spark_error_phase"] = json!("collect");
+    current["schema_stages"]
+        .as_object_mut()
+        .ok_or("missing schema stages")?
+        .remove("executed");
+    Ok(current)
 }
 
 /// The recorded stages and outcome that differ from the observation. A failure must occur
@@ -413,17 +457,27 @@ async fn date64_arguments_match_their_date_records() -> TestResult {
 
 /// A dictionary-encoded, viewed or large STRING behaves like a STRING, as a date argument and as
 /// a unit, so every Spark record holds over copies of the inputs with their STRING columns so
-/// encoded.
+/// encoded, except where a dictionary STRING is cast to DATE (#1218).
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn encoded_strings_match_their_string_records() -> TestResult {
     let records = trunc_unit_references()?;
+    let pinned = records[1..]
+        .iter()
+        .map(dictionary_expectation)
+        .collect::<TestResult<Vec<_>>>()?;
+    let changed = pinned
+        .iter()
+        .zip(&records[1..])
+        .filter(|(pinned, case)| pinned != case);
+    assert_eq!(changed.count(), 16);
+    let mut differences = differences_over(
+        &records,
+        &pinned.iter().collect::<Vec<_>>(),
+        Some(dictionary_encoding),
+    )
+    .await?;
     let cases = records[1..].iter().collect::<Vec<_>>();
-    let encodings: [Encoding; 3] = [
-        dictionary_encoding,
-        string_view_encoding,
-        large_string_encoding,
-    ];
-    let mut differences = Vec::new();
+    let encodings: [Encoding; 2] = [string_view_encoding, large_string_encoding];
     for encoding in encodings {
         differences.extend(differences_over(&records, &cases, Some(encoding)).await?);
     }
@@ -431,17 +485,20 @@ async fn encoded_strings_match_their_string_records() -> TestResult {
     Ok(())
 }
 
-/// The derived date records hold also when DataFusion plans four partitions, where its physical
-/// optimizer moves projections differently.
+/// The derived date records and those with a failing aggregate or window function hold also when
+/// DataFusion plans four partitions, where its physical optimizer moves projections differently
+/// and splits aggregates.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn derived_dates_match_spark_at_four_partitions() -> TestResult {
+async fn derived_and_aggregated_dates_match_spark_at_four_partitions() -> TestResult {
     let records = trunc_unit_references()?;
     let cases = records[1..]
         .iter()
         .filter(|case| {
-            case["id"]
-                .as_str()
-                .is_some_and(|id| id.starts_with("derived_"))
+            case["id"].as_str().is_some_and(|id| {
+                ["derived_", "failing_", "renamed_failing_", "union_failing_"]
+                    .iter()
+                    .any(|prefix| id.starts_with(prefix))
+            })
         })
         .collect::<Vec<_>>();
     assert!(!cases.is_empty());

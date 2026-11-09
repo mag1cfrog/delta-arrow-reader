@@ -1,6 +1,6 @@
 # Formatted UNIX_TIMESTAMP nullability
 
-`formatted-unix-timestamp-nullability-spark.jsonl` records 656 observations from Spark 4.2.0,
+`formatted-unix-timestamp-nullability-spark.jsonl` records 712 observations from Spark 4.2.0,
 revision `32f7299601108917fb01920a54e084595b7b3bf8`, Java 17.0.20.1 and Python 3.12.14 (#1203,
 #1231). The header stores the build properties, capture script hash, settings and the registered
 `inputs` table. Two captures were byte-identical.
@@ -10,7 +10,7 @@ TIMESTAMP_NTZ `tn`, nullable copies `dtn`, `tsn` and `tnn` that are NULL in the 
 NULL STRING format `g` and a nullable STRING format `f` holding `yyyy-MM-dd`, `dd/MM/yyyy` and
 NULL. The times are at noon.
 
-164 queries run in both ANSI modes in UTC and America/Los_Angeles, for UNIX_TIMESTAMP and
+178 queries run in both ANSI modes in UTC and America/Los_Angeles, for UNIX_TIMESTAMP and
 TO_UNIX_TIMESTAMP:
 - of each DATE, TIMESTAMP and TIMESTAMP_NTZ column with the format `'yyyy-MM-dd'`, `g`, `f`,
   `NULL` and `CAST(NULL AS STRING)`;
@@ -21,6 +21,10 @@ TO_UNIX_TIMESTAMP:
 - of `min(dt)` with `max(f)`, and with `max(g)` grouped by `k`; of a DATE literal with `max(f)`
   and with `CAST(count(*) AS STRING)`; and of `dt` with
   `CAST(row_number() OVER (ORDER BY k) AS STRING)`;
+- of a DATE literal with `CAST(max(CAST(g AS INT)) AS STRING)`, of `dt` with that window
+  function over `()`, of either with the aggregate or window function renamed by a subquery or
+  derived by it into the format, and of a DATE literal with a format a UNION ALL derives from it
+  in its second input;
 - of `dt` with `g` under `ROLLUP(dt, g)`, `CUBE(dt, g)` and `GROUPING SETS ((dt, g), ())`, of
   `ts` with `g` under `ROLLUP(ts, g)`, and of `dt` with `CAST(count(*) AS STRING)` under
   `ROLLUP(dt)`;
@@ -33,15 +37,17 @@ TO_UNIX_TIMESTAMP:
   LIMIT of a UNION ALL and below a join, and of a DATE literal with it as a GROUP BY key.
 
 Spark ignores the format of these arguments and never evaluates it, but computes its aggregates
-and window functions, so a DATE literal with `max(f)` gives one row. The result is nullable at
-every stage over a column outside ANSI mode, and in ANSI mode for a nullable argument or format.
-Over a literal it is nullable until constant folding, unless the format has a column: Spark's
-call has it as an input and is not constant, so the result stays nullable outside ANSI mode, and
-in ANSI mode for `f`. A grouping set makes a NOT NULL argument key NULL in its subtotal rows, so
-the result over it is nullable. Spark also declares the result nullable when a grouping set
-makes the format's key NULL, which DAR does not follow (#1223); no record covers it. Spark never
-evaluates a derived format column either where it collapses the projections, but computes one
-below a subquery's sort or a join, so the sorted and joined CASTs fail with ANSI enabled.
+and window functions, so a DATE literal with `max(f)` gives one row, and with ANSI enabled a
+CAST in such an aggregate or window function fails, also when a subquery derives the format from
+it. The result is nullable at every stage over a column outside ANSI mode, and in ANSI mode for
+a nullable argument or format. Over a literal it is nullable until constant folding, unless the
+format has a column: Spark's call has it as an input and is not constant, so the result stays
+nullable outside ANSI mode, and in ANSI mode for `f`. A grouping set makes a NOT NULL argument
+key NULL in its subtotal rows, so the result over it is nullable. Spark also declares the result
+nullable when a grouping set makes the format's key NULL, which DAR does not follow (#1223); no
+record covers it. Spark never evaluates a derived format column either where it collapses the
+projections, but computes one below a subquery's sort or a join, so the sorted and joined CASTs
+fail with ANSI enabled.
 
 Each record keeps the analyzed, optimized and executed schemas and values read from Spark's
 internal rows, collected through the Dataset API. `ConvertToLocalRelation` is excluded.
@@ -53,7 +59,8 @@ are retained: the ORDER BY records fail while analyzing with a schema error, whe
 the rows, since DAR does not sort by an aggregate it does not select (#1221, 8 records); and
 with ANSI enabled the sorted and joined subqueries return the dates' seconds, where Spark
 computes the failing CAST below the sort or join and DAR prunes the unused column (#1233, 8
-records). A third test runs the derived format records at four target partitions.
+records). A third test runs the derived format records and those with a failing aggregate or
+window function at four target partitions.
 
 Recapture from the crate root:
 

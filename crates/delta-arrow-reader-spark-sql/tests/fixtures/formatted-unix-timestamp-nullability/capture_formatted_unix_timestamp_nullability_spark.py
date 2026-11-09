@@ -107,6 +107,29 @@ def definitions():
         yield (f"window_{function}_required_format",
                f"SELECT k, {function}(dt, CAST(row_number() OVER (ORDER BY k) AS STRING)) AS r "
                "FROM inputs")
+        # With ANSI enabled the CAST in a computed aggregate or window function fails, also once
+        # a subquery renames it, derives the format from it or reads it in a union's second input.
+        failing = "max(CAST(g AS INT))"
+        yield (f"failing_aggregate_{function}_format",
+               f"SELECT {function}(DATE '2024-01-02', CAST({failing} AS STRING)) AS r "
+               "FROM inputs")
+        yield (f"failing_window_{function}_format",
+               f"SELECT k, {function}(dt, CAST({failing} OVER () AS STRING)) AS r FROM inputs")
+        yield (f"renamed_failing_aggregate_{function}_format",
+               f"SELECT k, {function}(DATE '2024-01-02', CAST(m AS STRING)) AS r "
+               f"FROM (SELECT k, {failing} AS m FROM inputs GROUP BY k) t")
+        yield (f"renamed_failing_window_{function}_format",
+               f"SELECT k, {function}(dt, CAST(m AS STRING)) AS r "
+               f"FROM (SELECT k, dt, {failing} OVER () AS m FROM inputs) t")
+        yield (f"derived_failing_aggregate_{function}_format",
+               f"SELECT k, {function}(DATE '2024-01-02', x) AS r "
+               f"FROM (SELECT k, CAST({failing} AS STRING) AS x FROM inputs GROUP BY k) t")
+        yield (f"derived_failing_window_{function}_format",
+               f"SELECT k, {function}(dt, x) AS r "
+               f"FROM (SELECT k, dt, CAST({failing} OVER () AS STRING) AS x FROM inputs) t")
+        yield (f"union_failing_aggregate_{function}_format",
+               f"SELECT {function}(DATE '2024-01-02', x) AS r FROM (SELECT CAST(max(k) AS STRING) "
+               f"AS x FROM inputs UNION ALL SELECT CAST({failing} AS STRING) AS x FROM inputs) t")
         # A grouping set makes a NOT NULL grouping key NULL in its subtotal rows.
         for name, argument, groups in [
                 ("rollup", "dt", "ROLLUP(dt, g)"), ("cube", "dt", "CUBE(dt, g)"),

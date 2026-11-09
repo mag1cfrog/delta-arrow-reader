@@ -136,6 +136,18 @@ def definitions():
             ("null_unit", "max(sb)", "NULL", ""), ("mm", "max(dr)", "'MM'", ""),
             ("coalesce_unit", "max(dr)", "coalesce('DD', max(u))", "")]:
         yield f"aggregate_date_{name}", f"SELECT trunc({date}, {unit}) AS r FROM inputs{where}"
+    # With ANSI enabled the CAST in a computed aggregate or window function fails, also once a
+    # subquery renames it or derives the date from it.
+    failing = "max(CAST(sb AS DATE))"
+    yield "failing_aggregate_date_garbage", f"SELECT trunc({failing}, 'garbage') AS r FROM inputs"
+    yield ("failing_window_date_garbage",
+           f"SELECT k, trunc({failing} OVER (), 'garbage') AS r FROM inputs")
+    yield ("renamed_failing_aggregate_date_garbage",
+           f"SELECT k, trunc(m, 'garbage') AS r "
+           f"FROM (SELECT k, {failing} AS m FROM inputs GROUP BY k) t")
+    yield ("derived_failing_aggregate_date_garbage",
+           f"SELECT k, trunc(x, 'garbage') AS r "
+           f"FROM (SELECT k, date_add({failing}, 1) AS x FROM inputs GROUP BY k) t")
     # A constant unsupported unit reads no date, also once Spark inlines a derived column.
     for name, unit in [("dd", "'DD'"), ("null_unit", "NULL")]:
         yield (f"derived_malformed_date_{name}",

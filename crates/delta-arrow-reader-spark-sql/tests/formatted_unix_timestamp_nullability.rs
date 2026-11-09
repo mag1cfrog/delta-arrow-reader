@@ -33,7 +33,7 @@ mod spark_results;
 use spark_results::{TestResult, validate_batch};
 
 /// The number of recorded observations.
-const RECORD_COUNT: usize = 656;
+const RECORD_COUNT: usize = 712;
 
 fn formatted_unix_timestamp_references() -> TestResult<Vec<Value>> {
     let records = include_str!(
@@ -493,17 +493,20 @@ async fn date64_arguments_match_their_date_records() -> TestResult {
     Ok(())
 }
 
-/// The derived format records hold also when DataFusion plans four partitions, where its
-/// physical optimizer moves projections differently.
+/// The derived format records and those with a failing aggregate or window function hold also
+/// when DataFusion plans four partitions, where its physical optimizer moves projections
+/// differently and splits aggregates.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn derived_formats_match_spark_at_four_partitions() -> TestResult {
+async fn derived_and_aggregated_formats_match_spark_at_four_partitions() -> TestResult {
     let records = formatted_unix_timestamp_references()?;
     let cases = records[1..]
         .iter()
         .filter(|case| {
-            case["id"]
-                .as_str()
-                .is_some_and(|id| id.starts_with("derived_"))
+            case["id"].as_str().is_some_and(|id| {
+                ["derived_", "failing_", "renamed_failing_", "union_failing_"]
+                    .iter()
+                    .any(|prefix| id.starts_with(prefix))
+            })
         })
         .collect::<Vec<_>>();
     assert!(!cases.is_empty());
