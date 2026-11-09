@@ -4,10 +4,13 @@
 Records analyzed, optimized and executed schemas, typed internal-row values and failing
 stages, with the innermost Java exception of a failure, for UNIX_TIMESTAMP and
 TO_UNIX_TIMESTAMP with a format over NOT NULL and nullable DATE, TIMESTAMP and TIMESTAMP_NTZ
-columns and literals, with literal, NOT NULL column, nullable column and NULL formats. Spark
-declares the result nullable outside ANSI mode, and in ANSI mode when an argument is nullable.
-Every query runs in both ANSI modes in UTC and America/Los_Angeles. Run from the crate root in
-the reference environment described in README.md; the output path must not exist.
+columns and literals, with literal, NOT NULL column, nullable column and NULL formats; over a
+DATE column with a format that fails if evaluated; over a DATE expression; and as a grouping
+key. Spark declares the result nullable outside ANSI mode, and in ANSI mode when an argument is
+nullable; it never evaluates the format of these arguments, and a format column keeps a literal
+argument's result from being constant. Every query runs in both ANSI modes in UTC and
+America/Los_Angeles. Run from the crate root in the reference environment described in
+README.md; the output path must not exist.
 """
 import argparse
 from datetime import date, datetime, timedelta, timezone
@@ -51,15 +54,18 @@ INPUTS = [{
         {"name": "ts", "type": "timestamp", "nullable": False, "metadata": {}},
         {"name": "tsn", "type": "timestamp", "nullable": True, "metadata": {}},
         {"name": "tn", "type": "timestamp_ntz", "nullable": False, "metadata": {}},
+        {"name": "tnn", "type": "timestamp_ntz", "nullable": True, "metadata": {}},
         {"name": "g", "type": "string", "nullable": False, "metadata": {}},
         {"name": "f", "type": "string", "nullable": True, "metadata": {}}]},
     "rows": [[str(key), str(days(day)), None if key == LAST else str(days(day)),
               str(micros(instant)), None if key == LAST else str(micros(instant)),
-              str(micros(instant)), "yyyy-MM-dd", pattern]
+              str(micros(instant)), None if key == LAST else str(micros(instant)),
+              "yyyy-MM-dd", pattern]
              for key, (day, instant, pattern) in enumerate(ROWS)]}]
 
 COLUMNS = [("date", "dt"), ("nullable_date", "dtn"), ("timestamp", "ts"),
-           ("nullable_timestamp", "tsn"), ("timestamp_ntz", "tn")]
+           ("nullable_timestamp", "tsn"), ("timestamp_ntz", "tn"),
+           ("nullable_timestamp_ntz", "tnn")]
 LITERALS = [("date", "DATE '2024-01-02'"), ("timestamp", "TIMESTAMP '2024-01-02 12:00:00'"),
             ("timestamp_ntz", "TIMESTAMP_NTZ '2024-01-02 12:00:00'"),
             ("null_date", "CAST(NULL AS DATE)")]
@@ -77,6 +83,15 @@ def definitions():
             for format_name, pattern in FORMATS[:1] + FORMATS[3:4]:
                 yield (f"literal_{function}_{name}_{format_name}",
                        f"SELECT {function}({value}, {pattern}) AS r")
+            for format_name, pattern in FORMATS[1:3]:
+                yield (f"literal_{function}_{name}_{format_name}",
+                       f"SELECT k, {function}({value}, {pattern}) AS r FROM inputs")
+        yield (f"column_{function}_date_failing_format",
+               f"SELECT k, {function}(dt, raise_error('format evaluated')) AS r FROM inputs")
+        yield (f"expression_{function}_date_nullable_format",
+               f"SELECT k, {function}(date_add(dt, 1), f) AS r FROM inputs")
+        yield (f"grouped_{function}_date_required_format",
+               f"SELECT {function}(dt, g) AS r, count(*) AS n FROM inputs GROUP BY 1")
 
 
 def python_value(value, kind):
