@@ -97,6 +97,90 @@ fn negated(expr: spec::Expr) -> spec::Expr {
     })
 }
 
+/// Spark's `datetimeUnit` keywords: the units its TIMESTAMPDIFF and TIMESTAMPADD grammar reads.
+pub const DATETIME_UNIT_KEYWORDS: [&str; 11] = [
+    "YEAR",
+    "QUARTER",
+    "MONTH",
+    "WEEK",
+    "DAY",
+    "DAYOFYEAR",
+    "HOUR",
+    "MINUTE",
+    "SECOND",
+    "MILLISECOND",
+    "MICROSECOND",
+];
+
+/// Names Spark spells only in its datetime unit grammar: an ordinary call names no routine.
+pub const DATETIME_UNIT_FUNCTIONS_WITHOUT_ROUTINE: [&str; 3] =
+    ["timestampdiff", "timediff", "timestampadd"];
+
+/// Names Spark also spells in its datetime unit grammar, whose ordinary call is a two-argument
+/// routine.
+pub const DATETIME_UNIT_FUNCTIONS_WITH_ROUTINE: [&str; 4] =
+    ["datediff", "date_diff", "dateadd", "date_add"];
+
+/// The unit of a call in Spark's TIMESTAMPDIFF and TIMESTAMPADD grammar: a bare function name
+/// called plainly, with a bare datetime unit keyword as the first of three positional arguments.
+/// A string literal there fails, as in Spark's parser. Any other call is an ordinary function
+/// call, for which this gives `None`: a backquoted name, DISTINCT or ALL, a FILTER, WITHIN GROUP
+/// or OVER clause, a null treatment, or a backquoted or parenthesized unit.
+fn datetime_unit_keyword(
+    name: &ObjectName,
+    plain_call: bool,
+    arguments: &[FunctionArgument],
+) -> SqlResult<Option<String>> {
+    let mut parts = name.0.items();
+    let (Some(name), None) = (parts.next(), parts.next()) else {
+        return Ok(None);
+    };
+    let canonical_name = name.value.to_ascii_lowercase();
+    if name.quoted
+        || !plain_call
+        || !(DATETIME_UNIT_FUNCTIONS_WITHOUT_ROUTINE.contains(&canonical_name.as_str())
+            || DATETIME_UNIT_FUNCTIONS_WITH_ROUTINE.contains(&canonical_name.as_str()))
+    {
+        return Ok(None);
+    }
+    let name = name.value.as_str();
+    let [
+        FunctionArgument::Unnamed(unit),
+        FunctionArgument::Unnamed(_),
+        FunctionArgument::Unnamed(_),
+    ] = arguments
+    else {
+        return Ok(None);
+    };
+    match unit {
+        Expr::Atom(AtomExpr::Identifier(ident))
+            if !ident.quoted
+                && DATETIME_UNIT_KEYWORDS.contains(&ident.value.to_ascii_uppercase().as_str()) =>
+        {
+            Ok(Some(ident.value.clone()))
+        }
+        Expr::Atom(AtomExpr::StringLiteral(head, tail)) => {
+            match from_ast_expression(unit.clone())? {
+                // Spark quotes the literal as written.
+                spec::Expr::Literal(spec::Literal::Utf8 { value: Some(_) }) => {
+                    let text = once(head)
+                        .chain(tail)
+                        .map(|literal| literal.text.as_str())
+                        .collect::<String>();
+                    Err(SqlError::invalid(format!(
+                        "[INVALID_PARAMETER_VALUE.DATETIME_UNIT] The value of parameter(s) `unit` \
+                         in `{name}` is invalid: expects one of the units without quotes {}, but \
+                         got the string literal {text}.",
+                        DATETIME_UNIT_KEYWORDS.join(", ")
+                    )))
+                }
+                _ => Ok(None),
+            }
+        }
+        _ => Ok(None),
+    }
+}
+
 #[expect(clippy::type_complexity)]
 pub(crate) fn from_ast_function_arguments(
     args: impl IntoIterator<Item = FunctionArgument>,
@@ -969,11 +1053,21 @@ fn from_ast_atom_expression(atom: AtomExpr) -> SqlResult<spec::Expr> {
                 null_treatment: inner_null_treatment,
                 right: _,
             } = arguments;
-            let function_name = from_ast_object_name(name)?;
-            let (arguments, named_arguments) = arguments
-                .map(|x| from_ast_function_arguments(x.into_items()))
-                .transpose()?
+            let plain_call = duplicate_treatment.is_none()
+                && inner_null_treatment.is_none()
+                && null_treatment.is_none()
+                && within_group.is_none()
+                && filter.is_none()
+                && over_clause.is_none();
+            let arguments = arguments
+                .map(|x| x.into_items().collect::<Vec<_>>())
                 .unwrap_or_default();
+            let unit = datetime_unit_keyword(&name, plain_call, &arguments)?;
+            let function_name = from_ast_object_name(name)?;
+            let (mut arguments, named_arguments) = from_ast_function_arguments(arguments)?;
+            if let Some(unit) = unit {
+                arguments[0] = spec::Expr::DatetimeUnitKeyword(unit);
+            }
             let is_distinct = match duplicate_treatment {
                 Some(DuplicateTreatment::All(_)) | None => false,
                 Some(DuplicateTreatment::Distinct(_)) => true,
