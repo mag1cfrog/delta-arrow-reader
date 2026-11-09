@@ -877,9 +877,11 @@ folding. Where DataFusion declares the result otherwise, `SparkKnownNullable` or
 `to_local_time` is nullable even for a NOT NULL TIMESTAMP. It used a `CASE WHEN true`
 declaration, which the optimizer removed over a column (#1196). UNIX_TIMESTAMP and
 TO_UNIX_TIMESTAMP with a format over these arguments declare their results the same way, and
-also give `SparkKnownNullable` the ignored format's columns as unused inputs: over a literal
-argument with a format column, Spark's call reads the column and is not constant, so the result
-stays nullable after optimization (#1203). Formatted TO_DATE still folds there (#1215).
+give the declaration the ignored format's columns, aggregates and window functions as unused
+inputs. Spark computes those inputs although it does not evaluate the format, so an aggregate
+in the format makes the query an aggregation, and with a format column over a literal argument
+Spark's call is not constant and stays nullable after optimization (#1203). Formatted TO_DATE
+and TRY_TO_DATE still fold there (#1215).
 The [formatted TO_DATE references](tests/fixtures/formatted-to-date-nullability/README.md) and
 [formatted UNIX_TIMESTAMP references](tests/fixtures/formatted-unix-timestamp-nullability/README.md)
 record the checks.

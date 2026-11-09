@@ -3,9 +3,11 @@
 //! declares, for a Spark expression that is nullable over a column at every stage, such as
 //! TRY_TO_DATE with a format. Unlike a `CASE WHEN true` wrapper, the optimizer cannot simplify
 //! it away over a column; over a constant it folds like any immutable function, so the folded
-//! value is NOT NULL, as Spark's is. Further arguments are columns that Spark's expression has
-//! as inputs but DAR's does not read, such as an ignored format's; they are not used, and keep
-//! the declaration from folding over a constant value where Spark's expression is not constant.
+//! value is NOT NULL, as Spark's is. Further arguments are inputs that Spark's expression has
+//! and DAR's omits, such as the columns, aggregates and window functions of a format Spark does
+//! not evaluate. They are not used: they keep the operators below computing what Spark's do, and
+//! keep the declaration from folding over a constant value where Spark's expression is not
+//! constant.
 
 use std::sync::Arc;
 
