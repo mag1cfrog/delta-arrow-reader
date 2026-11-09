@@ -681,11 +681,13 @@ is nullable, which `SparkKnownNullable` declares until constant folding replaces
 local function, `SparkMonthsBetweenRoundOff`, applies `roundOff` to the month count as Spark's
 last step: it reads the count, and with it the arguments, first, then `roundOff` once per row,
 gives NULL for a NULL `roundOff`, where DAR gave the unrounded value, and is nullable when
-either input is. DAR counts the wall-clock seconds of a day, not the seconds since the instant
-of its midnight, for a STRING argument, which it casts to TIMESTAMP_NTZ (#942), and for a
-TIMESTAMP_NTZ argument (#1228), so on a change day of a DST zone the fraction can differ by an
-hour. The [MONTHS_BETWEEN references](tests/fixtures/months-between-nullability/README.md)
-record the checks.
+either input is. `roundOff` must be a BOOLEAN or NULL, or in ANSI mode a STRING, which Spark's
+STRING-to-BOOLEAN cast reads and `SparkKnownNullable` declares nullable, as Spark's implicit
+cast is; other types fail while analyzing, as in Spark, where DAR cast them. DAR counts the
+wall-clock seconds of a day, not the seconds since the instant of its midnight, for a STRING
+argument, which it casts to TIMESTAMP_NTZ (#942), and for a TIMESTAMP_NTZ argument (#1228), so
+on a change day of a DST zone the fraction can differ by an hour. The [MONTHS_BETWEEN
+references](tests/fixtures/months-between-nullability/README.md) record the checks.
 
 Two DATE values subtract with `-` and TRY_SUBTRACT as Spark's `SubtractDates` does outside its
 legacy interval mode, with a local function, `SparkSubtractDates`: the result is the DAY

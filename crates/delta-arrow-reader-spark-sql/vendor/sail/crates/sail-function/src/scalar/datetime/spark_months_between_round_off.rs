@@ -1,8 +1,8 @@
 // Local Spark MONTHS_BETWEEN rounding. See the host crate's UPSTREAM.md.
 //! The last step of Spark's MONTHS_BETWEEN: a month count rounded to 8 digits when `roundOff` is
-//! true, and NULL when either is NULL. As a function, it reads its month count first, and with it
-//! the arguments, then `roundOff` once per row, and its nullability follows its arguments' at
-//! every stage.
+//! true, and NULL when either is NULL. As a function, it reads its month count, and with it the
+//! arguments, before `roundOff` in each batch, and each row's `roundOff` once, and its
+//! nullability follows its arguments' at every stage.
 
 use std::sync::Arc;
 
@@ -35,10 +35,11 @@ impl SparkMonthsBetweenRoundOff {
     }
 }
 
-/// `months` rounded to 8 digits as DataFusion's `round(months, 8)` does, or unchanged.
-fn round_off(months: Option<f64>, round_off: Option<bool>) -> Option<f64> {
+/// `months` rounded to 8 digits as DataFusion's `round(months, 8)` does when `round` is true,
+/// unchanged when it is false, and NULL when either is NULL.
+fn apply_round_off(months: Option<f64>, round: Option<bool>) -> Option<f64> {
     let factor = 10_f64.powi(8);
-    match (months, round_off) {
+    match (months, round) {
         (Some(months), Some(true)) => Some((months * factor).round() / factor),
         (Some(months), Some(false)) => Some(months),
         _ => None,
@@ -76,9 +77,9 @@ impl ScalarUDFImpl for SparkMonthsBetweenRoundOff {
             else {
                 return internal_err!("{} requires a DOUBLE and a BOOLEAN", self.name());
             };
-            return Ok(ColumnarValue::Scalar(ScalarValue::Float64(round_off(
-                *months, *round,
-            ))));
+            return Ok(ColumnarValue::Scalar(ScalarValue::Float64(
+                apply_round_off(*months, *round),
+            )));
         }
         let months = months.to_array(args.number_rows)?;
         let round = round.to_array(args.number_rows)?;
@@ -86,7 +87,7 @@ impl ScalarUDFImpl for SparkMonthsBetweenRoundOff {
             .as_primitive::<Float64Type>()
             .iter()
             .zip(round.as_boolean().iter())
-            .map(|(months, round)| round_off(months, round))
+            .map(|(months, round)| apply_round_off(months, round))
             .collect::<Float64Array>();
         Ok(ColumnarValue::Array(Arc::new(result)))
     }
@@ -98,9 +99,15 @@ mod tests {
 
     #[test]
     fn rounds_to_eight_digits_and_propagates_null() {
-        assert_eq!(round_off(Some(1.0 / 3.0), Some(true)), Some(0.33333333));
-        assert_eq!(round_off(Some(1.0 / 3.0), Some(false)), Some(1.0 / 3.0));
-        assert_eq!(round_off(Some(1.0 / 3.0), None), None);
-        assert_eq!(round_off(None, Some(true)), None);
+        assert_eq!(
+            apply_round_off(Some(1.0 / 3.0), Some(true)),
+            Some(0.33333333)
+        );
+        assert_eq!(
+            apply_round_off(Some(1.0 / 3.0), Some(false)),
+            Some(1.0 / 3.0)
+        );
+        assert_eq!(apply_round_off(Some(1.0 / 3.0), None), None);
+        assert_eq!(apply_round_off(None, Some(true)), None);
     }
 }
