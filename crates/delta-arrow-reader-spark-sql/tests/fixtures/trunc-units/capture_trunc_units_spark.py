@@ -1,16 +1,17 @@
 """Capture Spark's TRUNC units, values and nullability (#1192).
 
-Records analyzed, optimized and executed schemas, typed internal-row values and failing
-stages, with the innermost Java exception of a failure, for TRUNC of NOT NULL and nullable DATE
-columns, DATE literals and TIMESTAMP, TIMESTAMP_NTZ, STRING and INT arguments, with every unit
-spelling Spark supports in mixed case, unsupported, empty, padded and NULL units, constant unit
+Records analyzed, optimized and executed schemas, typed internal-row values and failing stages,
+with the innermost Java exception of a failure, for TRUNC of NOT NULL and nullable DATE columns,
+DATE literals and TIMESTAMP, TIMESTAMP_NTZ, STRING and INT arguments, with every unit spelling
+Spark supports in mixed case, unsupported, empty, padded and NULL units, constant unit
 expressions, INT, BINARY and ARRAY units, a volatile unit, a constant unit that fails to
 evaluate, and columns of units; constant unsupported units, units the optimizer makes constant
-and unit columns beside malformed STRING dates; aggregates in the date; dates beyond year 200000
-and near the earliest DATE. Spark supports YEAR, YYYY, YY, QUARTER, MON, MONTH,
-MM and WEEK, in any letter case, and gives NULL for any other unit; the result is nullable.
-Every query runs in both ANSI modes in UTC and America/Los_Angeles. Run from the crate root in
-the reference environment described in README.md; the output path must not exist.
+and unit columns beside malformed STRING dates; aggregates in the date; derived date columns
+that fail if evaluated beside a constant unsupported unit; dates beyond year 200000 and near the
+earliest DATE. Spark supports YEAR, YYYY, YY, QUARTER, MON, MONTH, MM and WEEK, in any letter
+case, and gives NULL for any other unit; the result is nullable. Every query runs in both ANSI
+modes in UTC and America/Los_Angeles. Run from the crate root in the reference environment
+described in README.md; the output path must not exist.
 """
 import argparse
 from datetime import date, datetime, timedelta, timezone
@@ -135,6 +136,17 @@ def definitions():
             ("null_unit", "max(sb)", "NULL", ""), ("mm", "max(dr)", "'MM'", ""),
             ("coalesce_unit", "max(dr)", "coalesce('DD', max(u))", "")]:
         yield f"aggregate_date_{name}", f"SELECT trunc({date}, {unit}) AS r FROM inputs{where}"
+    # A constant unsupported unit reads no date, also once Spark inlines a derived column.
+    for name, unit in [("dd", "'DD'"), ("null_unit", "NULL")]:
+        yield (f"derived_malformed_date_{name}",
+               f"SELECT k, trunc(x, {unit}) AS r FROM "
+               f"(SELECT k, CAST(sb AS DATE) AS x FROM inputs)")
+    yield ("derived_cte_malformed_date_dd",
+           "WITH d AS (SELECT k, CAST(sb AS DATE) AS x FROM inputs) "
+           "SELECT k, trunc(x, 'DD') AS r FROM d")
+    yield ("derived_division_date_dd",
+           "SELECT k, trunc(x, 'DD') AS r FROM "
+           "(SELECT k, date_add(dr, CAST(10 DIV (k - 2) AS INT)) AS x FROM inputs)")
     # Each of the 256 rows reads its unit once, so none is NULL. Spark rejects a volatile
     # aggregate argument, so the subquery computes TRUNC.
     yield "volatile_unit", ("SELECT count(r) AS n FROM (SELECT trunc(a.dr, IF(rand() < 0.5, "

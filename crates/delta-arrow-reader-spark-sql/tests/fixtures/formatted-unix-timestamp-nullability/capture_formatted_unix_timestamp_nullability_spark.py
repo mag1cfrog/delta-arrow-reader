@@ -6,12 +6,13 @@ with the innermost Java exception of a failure, for UNIX_TIMESTAMP and TO_UNIX_T
 format over NOT NULL and nullable DATE, TIMESTAMP and TIMESTAMP_NTZ columns and literals, with
 literal, NOT NULL column, nullable column and NULL formats; over a DATE column with a format
 that fails if evaluated; over a DATE expression; as a grouping key; with aggregates and window
-functions in the format; under grouping sets; and in ORDER BY. Spark declares the result
-nullable outside ANSI mode, and in ANSI mode when an argument is nullable. It never evaluates
-the format of these arguments, but computes its aggregates and window functions, and a format
-column keeps a literal argument's result from being constant. Every query runs in both ANSI
-modes in UTC and America/Los_Angeles. Run from the crate root in the reference environment
-described in README.md; the output path must not exist.
+functions in the format; under grouping sets; in ORDER BY; and with derived format columns whose
+expressions fail if evaluated. Spark declares the result nullable outside ANSI mode, and in ANSI
+mode when an argument is nullable. It never evaluates the format of these arguments, but
+computes its aggregates and window functions, and a format column keeps a literal argument's
+result from being constant. Every query runs in both ANSI modes in UTC and America/Los_Angeles.
+Run from the crate root in the reference environment described in README.md; the output path
+must not exist.
 """
 import argparse
 from datetime import date, datetime, timedelta, timezone
@@ -120,6 +121,32 @@ def definitions():
         yield (f"order_by_aggregate_{function}_nullable_format",
                f"SELECT k FROM inputs GROUP BY k "
                f"ORDER BY {function}(DATE '2024-01-02', max(f)), k")
+        # Spark never evaluates the format, also once it inlines a derived column into the call.
+        for name, derived in [("raise", "raise_error('derived format evaluated')"),
+                              ("division", "CAST(k / 0 AS STRING)"),
+                              ("cast", "CAST(CAST(g AS INT) AS STRING)")]:
+            yield (f"derived_{name}_{function}_format",
+                   f"SELECT k, {function}(dt, x) AS r FROM "
+                   f"(SELECT k, dt, {derived} AS x FROM inputs)")
+        yield (f"derived_literal_{function}_format",
+               f"SELECT k, {function}(DATE '2024-01-02', x) AS r FROM "
+               f"(SELECT k, CAST(CAST(g AS INT) AS STRING) AS x FROM inputs)")
+        yield (f"derived_cte_{function}_format",
+               f"WITH d AS (SELECT k, dt, raise_error('derived format evaluated') AS x "
+               f"FROM inputs) SELECT k, {function}(dt, x) AS r FROM d")
+        yield (f"derived_union_{function}_format",
+               f"SELECT k, {function}(dt, x) AS r FROM (SELECT k, dt, CAST(k / 0 AS STRING) "
+               f"AS x FROM inputs UNION ALL SELECT k, dt, CAST(k / 0 AS STRING) AS x FROM inputs)")
+        yield (f"derived_literal_cte_{function}_format",
+               f"WITH d AS (SELECT k, CAST(CAST(g AS INT) AS STRING) AS x FROM inputs) "
+               f"SELECT k, {function}(DATE '2024-01-02', x) AS r FROM d")
+        yield (f"derived_literal_union_{function}_format",
+               f"SELECT k, {function}(DATE '2024-01-02', x) AS r FROM (SELECT k, "
+               f"CAST(k / 0 AS STRING) AS x FROM inputs UNION ALL SELECT k, "
+               f"CAST(k / 0 AS STRING) AS x FROM inputs)")
+        yield (f"derived_grouped_{function}_format",
+               f"SELECT k, {function}(d, x) AS r FROM (SELECT k, max(dt) AS d, "
+               f"CAST(CAST(max(g) AS INT) AS STRING) AS x FROM inputs GROUP BY k)")
 
 
 def python_value(value, kind):

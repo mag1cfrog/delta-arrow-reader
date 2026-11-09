@@ -33,7 +33,7 @@ mod spark_results;
 use spark_results::{TestResult, validate_batch};
 
 /// The number of recorded observations.
-const RECORD_COUNT: usize = 480;
+const RECORD_COUNT: usize = 552;
 
 fn formatted_unix_timestamp_references() -> TestResult<Vec<Value>> {
     let records = include_str!(
@@ -65,9 +65,72 @@ fn is_retained(case: &Value) -> bool {
         .is_some_and(|id| ORDER_BY_AGGREGATE_RECORDS.contains(&id))
 }
 
-/// The expectation for a record: Spark's, or for a #1221 record DAR's schema error while
-/// analyzing.
+/// #1232: with ANSI enabled, a constant argument keeps its format's column as an input, and
+/// DataFusion's physical optimizer inlines a column derived through a CTE or UNION ALL, so the
+/// derived format is evaluated and fails while collecting rows; Spark returns the argument's
+/// seconds in every row. Each record, the text DAR's error contains, and Spark's row count.
+type DerivedConstantRecord = (&'static str, &'static str, usize);
+
+const DERIVED_CONSTANT_RECORDS: [DerivedConstantRecord; 4] = [
+    (
+        "derived_literal_cte_unix_timestamp_format",
+        "[CAST_INVALID_INPUT]",
+        3,
+    ),
+    (
+        "derived_literal_cte_to_unix_timestamp_format",
+        "[CAST_INVALID_INPUT]",
+        3,
+    ),
+    (
+        "derived_literal_union_unix_timestamp_format",
+        "Divide by zero error",
+        6,
+    ),
+    (
+        "derived_literal_union_to_unix_timestamp_format",
+        "Divide by zero error",
+        6,
+    ),
+];
+/// The seconds of DATE '2024-01-02' in each session zone.
+const DERIVED_CONSTANT_SECONDS: [(&str, &str); 2] =
+    [("UTC", "1704153600"), ("America/Los_Angeles", "1704182400")];
+
+fn derived_constant_record(case: &Value) -> Option<&'static DerivedConstantRecord> {
+    if case["ansi"] != true {
+        return None;
+    }
+    DERIVED_CONSTANT_RECORDS
+        .iter()
+        .find(|(id, ..)| case["id"] == *id)
+}
+
+/// The expectation for a record: Spark's, for a #1221 record DAR's schema error while analyzing,
+/// or for a #1232 record DAR's error while collecting rows.
 fn expectation(case: &Value) -> TestResult<Value> {
+    if let Some((_, message, rows)) = derived_constant_record(case) {
+        let (_, seconds) = DERIVED_CONSTANT_SECONDS
+            .iter()
+            .find(|(zone, _)| case["timezone"] == *zone)
+            .ok_or("missing session zone")?;
+        let spark_rows = case["expected"]["rows"].as_array();
+        if case["expected"]["status"] != "ok"
+            || spark_rows.is_none_or(|spark_rows| {
+                spark_rows.len() != *rows || spark_rows.iter().any(|row| row[1] != *seconds)
+            })
+        {
+            return Err(format!("expected Spark's seconds in every row: {case}").into());
+        }
+        let mut current = case.clone();
+        current["expected"] = json!({"status": "error", "dar_messages": [message]});
+        current["spark_error_phase"] = json!("collect");
+        current["schema_stages"]
+            .as_object_mut()
+            .ok_or("missing schema stages")?
+            .remove("executed");
+        return Ok(current);
+    }
     if !is_retained(case) {
         return Ok(case.clone());
     }
@@ -409,6 +472,13 @@ async fn formatted_unix_timestamp_nullability_matches_spark() -> TestResult {
     let records = formatted_unix_timestamp_references()?;
     let cases = records[1..].iter().collect::<Vec<_>>();
     assert_eq!(cases.iter().filter(|case| is_retained(case)).count(), 8);
+    assert_eq!(
+        cases
+            .iter()
+            .filter(|case| derived_constant_record(case).is_some())
+            .count(),
+        8
+    );
     assert_no_differences(&differences_over(&records, &cases, None).await?);
     Ok(())
 }
