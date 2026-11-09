@@ -677,11 +677,15 @@ MONTHS_BETWEEN builds its result so that its nullability follows from its parts 
 as Spark's does: NOT NULL for NOT NULL DATE, TIMESTAMP and TIMESTAMP_NTZ arguments and
 `roundOff`. Its CASE expressions ended in `WHEN true` without ELSE, which made the result
 nullable until the optimizer removed it (#1199). Spark's cast of a STRING argument to TIMESTAMP
-is nullable, which `SparkKnownNullable` declares until constant folding replaces a literal's,
-and a NULL `roundOff` now gives NULL, as in Spark, where DAR gave the unrounded value. A STRING
-argument is still cast to TIMESTAMP_NTZ, not to a TIMESTAMP in the session zone, so on a change
-day of a DST zone the fraction can differ by an hour (#942). The [MONTHS_BETWEEN
-references](tests/fixtures/months-between-nullability/README.md) record the checks.
+is nullable, which `SparkKnownNullable` declares until constant folding replaces a literal's. A
+local function, `SparkMonthsBetweenRoundOff`, applies `roundOff` to the month count as Spark's
+last step: it reads the count, and with it the arguments, first, then `roundOff` once per row,
+gives NULL for a NULL `roundOff`, where DAR gave the unrounded value, and is nullable when
+either input is. DAR counts the wall-clock seconds of a day, not the seconds since the instant
+of its midnight, for a STRING argument, which it casts to TIMESTAMP_NTZ (#942), and for a
+TIMESTAMP_NTZ argument (#1228), so on a change day of a DST zone the fraction can differ by an
+hour. The [MONTHS_BETWEEN references](tests/fixtures/months-between-nullability/README.md)
+record the checks.
 
 Two DATE values subtract with `-` and TRY_SUBTRACT as Spark's `SubtractDates` does outside its
 legacy interval mode, with a local function, `SparkSubtractDates`: the result is the DAY

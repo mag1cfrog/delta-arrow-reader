@@ -35,6 +35,7 @@ use sail_function::scalar::datetime::spark_make_interval::{
 use sail_function::scalar::datetime::spark_make_time::SparkMakeTime;
 use sail_function::scalar::datetime::spark_make_timestamp_ntz::SparkMakeTimestampNtz;
 use sail_function::scalar::datetime::spark_make_ym_interval::SparkMakeYmInterval;
+use sail_function::scalar::datetime::spark_months_between_round_off::SparkMonthsBetweenRoundOff;
 use sail_function::scalar::datetime::spark_next_day::SparkNextDay;
 use sail_function::scalar::datetime::spark_time::SparkTime;
 use sail_function::scalar::datetime::spark_time_diff::SparkTimeDiff;
@@ -1729,7 +1730,8 @@ fn extract_part(input: ScalarFunctionInput) -> PlanResult<Expr> {
 /// Spark's MONTHS_BETWEEN, whose nullability follows from its parts at every stage: NOT NULL for
 /// NOT NULL DATE, TIMESTAMP and TIMESTAMP_NTZ arguments and `roundOff`. Spark's implicit cast of
 /// a STRING argument to TIMESTAMP is nullable, which `SparkKnownNullable` declares until constant
-/// folding replaces a literal's, and a NULL `roundOff` gives NULL.
+/// folding replaces a literal's. `SparkMonthsBetweenRoundOff` applies `roundOff` after the month
+/// count, reading it once per row, and gives NULL for a NULL one.
 fn months_between(input: ScalarFunctionInput) -> PlanResult<Expr> {
     // args extraction:
     let ScalarFunctionInput {
@@ -1807,14 +1809,11 @@ fn months_between(input: ScalarFunctionInput) -> PlanResult<Expr> {
     )
     .otherwise(month_diff + seconds_diff / seconds_in_month)?;
 
-    let rounded = when(
-        round_off.clone(),
-        expr_fn::round(vec![months_between.clone(), lit(8)]),
-    )
-    .otherwise(months_between)?;
-    // A NULL `roundOff` gives NULL; for a NOT NULL one the guard cannot apply, and DataFusion
-    // keeps the result NOT NULL.
-    Ok(when(round_off.is_null(), lit(ScalarValue::Float64(None))).otherwise(rounded)?)
+    let round_off = match round_off.get_type(function_context.schema)? {
+        DataType::Boolean => round_off,
+        _ => cast(round_off, DataType::Boolean),
+    };
+    Ok(ScalarUDF::from(SparkMonthsBetweenRoundOff::new()).call(vec![months_between, round_off]))
 }
 
 const MICROS_PER_DAY: i64 = 24 * 60 * 60 * 1_000_000;
