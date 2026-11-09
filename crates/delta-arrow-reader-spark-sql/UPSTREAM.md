@@ -864,9 +864,8 @@ DAYOFYEAR fails for each evaluated row.
 TIMESTAMPDIFF opts in to [constant folding errors](#constant-folding-errors), so its unit,
 overflow and STRING conversion errors keep Spark's optimization stage.
 
-The harness pins two remaining differences, each with an owner:
-- `timestamp_diff` still resolves as an alias (#1051);
-- the zone table applies no DST after 2099 (#1052).
+The TIMESTAMPDIFF harness pins one remaining difference, with its owner: the zone table
+applies no DST after 2099 (#1052).
 
 Two more have owners but no pinned records:
 - backquoted, parenthesized and two-argument unit spellings fail differently or not at
@@ -875,6 +874,15 @@ Two more have owners but no pinned records:
   `CAST_INVALID_INPUT` (#1057).
 
 The [TIMESTAMPDIFF references](tests/fixtures/timestamp-diff/README.md) record the checks.
+
+Spark has no TIMESTAMP_DIFF or TIMESTAMP_ADD routine. An expression call of either name fails
+with `UNRESOLVED_ROUTINE` while resolving, before its arguments, named or not, and names the
+function as written. A host may register a function by either name, which then resolves as
+registered. Both names were aliases of TIMESTAMPDIFF and TIMESTAMPADD. Window calls, sort keys,
+LATERAL VIEW generators, qualified names and calls beside an unresolved column or table still
+fail otherwise, as other unknown routines do (#1185). The
+[routine name references](tests/fixtures/timestamp-routine-names/README.md) record the checks
+(#1051).
 
 Searched CASE conditions must have BOOLEAN type before branch simplification.
 The [condition references](tests/fixtures/README.md#case-condition-types) retain
