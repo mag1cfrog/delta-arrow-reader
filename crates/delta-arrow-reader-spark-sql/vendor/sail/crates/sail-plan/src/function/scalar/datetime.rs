@@ -345,12 +345,12 @@ fn integer_part(expr: Expr, part: &str) -> Expr {
     )
 }
 
-/// The argument of WEEKDAY, DAYOFWEEK and WEEKOFYEAR. Spark casts a STRING, also
+/// The implicit DATE argument of WEEKDAY, DAYOFWEEK and WEEKOFYEAR. Spark casts a STRING, also
 /// dictionary-encoded, TIMESTAMP_NTZ or NULL argument to DATE, with its STRING-to-DATE rules for
 /// a STRING, and a nullable cast for a TIMESTAMP_NTZ. DATE passes through, and a TIMESTAMP is read
 /// in its annotated zone, the session zone. Other types pass through unchecked, although Spark
 /// rejects them (#1116).
-fn day_of_week_argument(input: ScalarFunctionInput) -> PlanResult<Expr> {
+fn implicit_date_argument(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let argument = dictionary_string_values(input.arguments.one()?, input.function_context.schema)?;
     Ok(match argument.get_type(input.function_context.schema)? {
         DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => ScalarUDF::from(
@@ -2065,7 +2065,7 @@ pub(super) fn list_built_in_datetime_functions() -> Vec<(&'static str, ScalarFun
         ("dayofmonth", F::custom(|input| date_field(input, "DAY"))),
         (
             "dayofweek",
-            F::custom(|input| Ok(integer_part(day_of_week_argument(input)?, "DOW") + lit(1))),
+            F::custom(|input| Ok(integer_part(implicit_date_argument(input)?, "DOW") + lit(1))),
         ),
         ("dayofyear", F::custom(|input| date_field(input, "DOY"))),
         ("extract", F::custom(extract_part)),
@@ -2212,13 +2212,13 @@ pub(super) fn list_built_in_datetime_functions() -> Vec<(&'static str, ScalarFun
         (
             "weekday",
             F::custom(|input| {
-                Ok((integer_part(day_of_week_argument(input)?, "DOW") + lit(6)) % lit(7))
+                Ok((integer_part(implicit_date_argument(input)?, "DOW") + lit(6)) % lit(7))
             }),
         ),
         (
             "weekofyear",
             F::custom(|input| {
-                let date = day_of_week_argument(input)?;
+                let date = implicit_date_argument(input)?;
                 Ok(cast(expr_fn::to_char(date, lit("%V")), DataType::Int32))
             }),
         ),

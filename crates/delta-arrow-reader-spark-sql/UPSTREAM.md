@@ -892,10 +892,10 @@ DATE, TIMESTAMP or TIMESTAMP_NTZ cast its STRING values, so they read it with Sp
 declare Spark's nullability, as for a plain STRING; Arrow's cast of the dictionary failed on a
 malformed value outside ANSI mode and kept the column's nullability. Two-argument DATE_ADD and
 DATE_SUB read a dictionary-encoded STRING date the same way, where they rejected it, and so do
-comparisons with a DATE or TIMESTAMP, DAYOFWEEK, WEEKDAY and WEEKOFYEAR, and COALESCE, IF and
-CASE beside a DATE or TIMESTAMP, where Arrow's rules applied. WEEKOFYEAR reads any STRING with
-Spark's STRING-to-DATE rules, as DAYOFWEEK does; it used DataFusion's conversion, which failed
-for a string view. The [encoded STRING cast
+comparisons and NULLIF with a DATE or TIMESTAMP, DAYOFWEEK, WEEKDAY and WEEKOFYEAR, and
+COALESCE, IF and CASE beside a DATE or TIMESTAMP, where Arrow's rules applied. WEEKOFYEAR reads
+any STRING with Spark's STRING-to-DATE rules, as DAYOFWEEK does; it used DataFusion's
+conversion, which failed for a string view. The [encoded STRING cast
 references](tests/fixtures/encoded-string-temporal-casts/README.md) record the checks (#1218).
 
 TRY_TO_DATE plans TO_DATE with the parser's NULL-on-error mode in both ANSI modes, as Spark's
