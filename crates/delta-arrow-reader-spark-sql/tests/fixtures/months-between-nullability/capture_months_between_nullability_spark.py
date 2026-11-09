@@ -117,6 +117,13 @@ def definitions():
                             ("null_int", "CAST(NULL AS INT)"), ("date", "dt")]:
         yield (f"column_{name}_typed_round_off",
                f"SELECT k, months_between(ts, dt, {round_off}) AS r FROM inputs")
+    # With ANSI, a STRING that is no BOOLEAN fails: 'on' while optimizing, `s` while collecting.
+    for name, round_off in [("literal", "'on'"), ("column", "s")]:
+        yield (f"column_invalid_string_{name}_round_off",
+               f"SELECT k, months_between(ts, dt, {round_off}) AS r FROM inputs")
+    # Spark does not read roundOff beside a NULL argument.
+    yield ("column_nullable_date_failing_round_off",
+           "SELECT k, months_between(dtn, dt, 1 DIV (k - 2) > 0) AS r FROM inputs")
     # TIMESTAMP_NTZ times after the Los Angeles spring and autumn changes.
     for name, value, day in [("spring", "2024-03-10 12:00:00", "2024-02-29"),
                              ("autumn", "2023-11-05 12:00:00", "2023-04-30")]:

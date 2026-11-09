@@ -31,7 +31,7 @@ mod spark_results;
 use spark_results::{TestResult, validate_batch};
 
 /// The number of recorded observations.
-const RECORD_COUNT: usize = 236;
+const RECORD_COUNT: usize = 248;
 
 fn months_between_references() -> TestResult<Vec<Value>> {
     let records =
@@ -83,8 +83,31 @@ fn retained_value(case: &Value) -> Option<&'static RetainedValue> {
     RETAINED_VALUES.iter().find(|(id, ..)| case["id"] == *id)
 }
 
-/// The expectation for a record: Spark's, or for a retained record DAR's value in its row.
+/// #1229: DAR reads `roundOff` on every row, so with ANSI enabled the row whose argument is
+/// NULL divides by zero, where Spark gives NULL without reading `roundOff`.
+const ROUND_OFF_ORDER_RECORD: &str = "column_nullable_date_failing_round_off";
+const ROUND_OFF_ORDER_ERROR: &str = "Divide by zero error";
+
+fn is_round_off_order_record(case: &Value) -> bool {
+    case["id"] == ROUND_OFF_ORDER_RECORD && case["ansi"] == true
+}
+
+/// The expectation for a record: Spark's, or for a retained record DAR's value in its row or
+/// DAR's error.
 fn expectation(case: &Value) -> TestResult<Value> {
+    if is_round_off_order_record(case) {
+        if case["expected"]["status"] != "ok" {
+            return Err(format!("expected Spark's rows: {case}").into());
+        }
+        let mut current = case.clone();
+        current["expected"] = json!({"status": "error", "dar_message": ROUND_OFF_ORDER_ERROR});
+        current["spark_error_phase"] = json!("collect");
+        current["schema_stages"]
+            .as_object_mut()
+            .ok_or("missing schema stages")?
+            .remove("executed");
+        return Ok(current);
+    }
     let Some((_, row, spark, dar)) = retained_value(case) else {
         return Ok(case.clone());
     };
@@ -266,9 +289,12 @@ fn optimize(session: &SessionContext, plan: &LogicalPlan) -> TestResult<LogicalP
     Ok(state.optimize(plan)?)
 }
 
-/// The text DAR's error must contain for a recorded failure: Spark's error condition. Spark's
-/// message quotes its plan.
+/// The text DAR's error must contain for a recorded failure: a retained record's pinned text, or
+/// Spark's error condition. Spark's message quotes its plan.
 fn expected_error_text(case: &Value) -> Option<String> {
+    if let Some(message) = case["expected"]["dar_message"].as_str() {
+        return Some(message.to_owned());
+    }
     case["expected"]["condition"]
         .as_str()
         .map(|condition| format!("[{condition}]"))
@@ -445,6 +471,13 @@ async fn months_between_matches_spark() -> TestResult {
             .filter(|case| retained_value(case).is_some())
             .count(),
         6
+    );
+    assert_eq!(
+        cases
+            .iter()
+            .filter(|case| is_round_off_order_record(case))
+            .count(),
+        2
     );
     assert_no_differences(&differences_over(&records, &cases, None).await?);
     Ok(())
