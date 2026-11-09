@@ -36,7 +36,7 @@ typed rows at batch sizes 1 and 32. A failure must occur at Spark's stage with S
 condition. A second test runs the STRING and DATE column records over encoded copies of the
 inputs and requires the same results: dictionary-encoded STRING columns, as Delta's provider
 gives partition columns; STRING columns as string views, as Delta's reader gives data columns,
-and as large strings; and DATE columns as Arrow's Date64. Four differences are retained, each at
+and as large strings; and DATE columns as Arrow's Date64. Three differences are retained, each at
 DAR's current result:
 - #1057: TO_DATE of `s` with the format in ANSI mode reports DAR's parser message without
   Spark's condition, for whichever failing row reports first (2 records, and their encoded
@@ -44,9 +44,7 @@ DAR's current result:
 - #1194: TRY_TO_DATE of an INT gives 1970-01-02, of a BOOLEAN or an ARRAY fails while
   optimizing, and of an untyped NULL with a format fails while collecting rows (16 records);
 - #1195: TRY_TO_DATE of a TIMESTAMP_NTZ with the format in Los Angeles gives the value's own
-  DATE (4 records);
-- #1196: TO_DATE of `dt` with the format is NOT NULL after optimization outside ANSI mode
-  (2 records).
+  DATE (4 records).
 
 Recapture from the crate root:
 
