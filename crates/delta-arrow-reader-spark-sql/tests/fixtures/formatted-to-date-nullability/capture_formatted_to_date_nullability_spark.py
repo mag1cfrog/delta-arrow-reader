@@ -1,10 +1,12 @@
-"""Capture Spark's nullability of formatted TO_DATE over DATE and TIMESTAMP arguments (#1196).
+"""Capture Spark's nullability of formatted TO_DATE over DATE and TIMESTAMP arguments (#1196,
+#1215).
 
-Records analyzed, optimized and executed schemas, typed internal-row values and failing
-stages, with the innermost Java exception of a failure, for TO_DATE with a format over NOT NULL
-and nullable DATE, TIMESTAMP and TIMESTAMP_NTZ columns and literals, with literal, NOT NULL
-column, nullable column and NULL formats, and with an invalid pattern over a DATE, and for
-UNIX_TIMESTAMP of a DATE with a literal and a nullable format. Spark declares the result
+Records analyzed, optimized and executed schemas, typed internal-row values and failing stages,
+with the innermost Java exception of a failure, for TO_DATE with a format over NOT NULL and
+nullable DATE, TIMESTAMP and TIMESTAMP_NTZ columns and literals, with literal, NOT NULL column,
+nullable column and NULL formats, and with an invalid pattern over a DATE, for UNIX_TIMESTAMP of
+a DATE with a literal and a nullable format, and for TO_DATE and TRY_TO_DATE of literals with
+format columns and with aggregates in the format, also in an ORDER BY. Spark declares the result
 nullable outside ANSI mode, and in ANSI mode when an argument is nullable. Every query runs in
 both ANSI modes in UTC and America/Los_Angeles. Run from the crate root in the reference
 environment described in README.md; the output path must not exist.
@@ -82,6 +84,20 @@ def definitions():
            "SELECT k, unix_timestamp(dt, 'yyyy-MM-dd') AS r FROM inputs")
     yield ("column_unix_timestamp_date_nullable_format",
            "SELECT k, unix_timestamp(dt, f) AS r FROM inputs")
+    # A format column keeps a literal's result from being constant, and Spark computes the
+    # format's aggregates although it ignores the format.
+    for function in ["to_date", "try_to_date"]:
+        for name, value in LITERALS:
+            for format_name, pattern in FORMATS[1:3]:
+                yield (f"literal_{function}_{name}_{format_name}",
+                       f"SELECT k, {function}({value}, {pattern}) AS r FROM inputs")
+        yield (f"literal_aggregate_{function}_nullable_format",
+               f"SELECT {function}(DATE '2024-01-02', max(f)) AS r FROM inputs")
+        yield (f"grouped_aggregate_{function}_required_format",
+               f"SELECT k, {function}(min(dt), max(g)) AS r FROM inputs GROUP BY k")
+        yield (f"order_by_aggregate_{function}_nullable_format",
+               f"SELECT k FROM inputs GROUP BY k "
+               f"ORDER BY {function}(DATE '2024-01-02', max(f)), k")
 
 
 def python_value(value, kind):
