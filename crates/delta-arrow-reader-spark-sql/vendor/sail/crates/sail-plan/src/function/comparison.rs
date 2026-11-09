@@ -59,7 +59,7 @@ pub(crate) fn nanosecond_comparison_cast(
 
 /// The STRING values of a dictionary-encoded STRING compared with a DATE or TIMESTAMP, as a
 /// Delta STRING partition column can be; Spark compares it as a STRING.
-pub(crate) fn temporal_comparison_string_values(
+pub(crate) fn temporal_comparison_string_type(
     data_type: &DataType,
     other: &DataType,
 ) -> Option<DataType> {

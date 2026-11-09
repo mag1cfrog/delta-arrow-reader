@@ -30,7 +30,7 @@ use crate::error::{IntoPlanResult, PlanError, PlanResult};
 use crate::formatter::SparkPlanFormatter;
 use crate::function::comparison::{
     nanosecond_comparison_cast, string_comparison_cast, string_comparison_type,
-    temporal_comparison_string_values, temporal_comparison_type,
+    temporal_comparison_string_type, temporal_comparison_type,
 };
 use crate::function::temporal_coercion::cast_local_timestamp_expr_to_ltz;
 
@@ -1056,11 +1056,11 @@ pub(crate) fn spark_binary_expr(
             right_type = target;
         }
         // A dictionary-encoded STRING compares with a DATE or TIMESTAMP as its values do.
-        if let Some(values) = temporal_comparison_string_values(&left_type, &right_type) {
+        if let Some(values) = temporal_comparison_string_type(&left_type, &right_type) {
             left = cast(left, values.clone());
             left_type = values;
         }
-        if let Some(values) = temporal_comparison_string_values(&right_type, &left_type) {
+        if let Some(values) = temporal_comparison_string_type(&right_type, &left_type) {
             right = cast(right, values.clone());
             right_type = values;
         }

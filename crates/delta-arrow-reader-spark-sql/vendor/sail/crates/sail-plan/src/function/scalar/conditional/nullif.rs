@@ -19,7 +19,7 @@ use std::sync::Arc;
 use crate::function::common::{SparkComparisonFloat, spark_comparison_widens_to_double};
 use crate::function::comparison::{
     nanosecond_comparison_cast, string_comparison_cast, string_comparison_type,
-    temporal_comparison_string_values, temporal_comparison_type,
+    temporal_comparison_string_type, temporal_comparison_type,
 };
 use crate::function::temporal_coercion::cast_local_timestamp_value_to_ltz;
 
@@ -51,8 +51,8 @@ impl SparkNullIf {
     fn comparison_type(&self, left: &DataType, right: &DataType) -> Result<DataType> {
         // A dictionary-encoded STRING compares with a DATE or TIMESTAMP as its values do.
         let (left, right) = (
-            &temporal_comparison_string_values(left, right).unwrap_or_else(|| left.clone()),
-            &temporal_comparison_string_values(right, left).unwrap_or_else(|| right.clone()),
+            &temporal_comparison_string_type(left, right).unwrap_or_else(|| left.clone()),
+            &temporal_comparison_string_type(right, left).unwrap_or_else(|| right.clone()),
         );
         if let Some(conversion) = nanosecond_comparison_cast(left, right, &self.session_timezone) {
             return conversion.inner().return_type(&[left.clone()]);
@@ -152,7 +152,7 @@ impl ScalarUDFImpl for SparkNullIf {
         if !same_type {
             for (value, field) in input.args.iter_mut().zip(&mut input.arg_fields) {
                 if let Some(values) =
-                    temporal_comparison_string_values(&value.data_type(), &comparison_type)
+                    temporal_comparison_string_type(&value.data_type(), &comparison_type)
                 {
                     *value = value.cast_to(&values, None)?;
                     *field = Arc::new(field.as_ref().clone().with_data_type(values));
