@@ -44,7 +44,19 @@ pub(crate) fn register_inputs(
     representation: usize,
     batch_size: usize,
 ) -> TestResult {
-    register_inputs_impl(session, metadata, representation, batch_size, None)
+    register_inputs_impl(session, metadata, representation, batch_size, 2, None)
+}
+
+#[allow(dead_code, reason = "Seeded controls need the captured one-partition input.")]
+pub(crate) async fn register_inputs_one_partition_with_receipts(
+    session: &SessionContext,
+    metadata: &Value,
+    representation: usize,
+    batch_size: usize,
+) -> TestResult<Value> {
+    let mut registrations = Vec::new();
+    register_inputs_impl(session, metadata, representation, batch_size, 1, Some(&mut registrations))?;
+    c06_receipts::provider_readbacks(session, registrations, encode_value).await
 }
 
 #[allow(dead_code, reason = "Only C06 callers request additive receipts.")]
@@ -60,6 +72,7 @@ pub(crate) async fn register_inputs_with_receipts(
         metadata,
         representation,
         batch_size,
+        2,
         Some(&mut registrations),
     ) {
         c06_receipts::emit(
@@ -80,6 +93,7 @@ fn register_inputs_impl(
     metadata: &Value,
     representation: usize,
     batch_size: usize,
+    input_partitions: usize,
     mut receipts: Option<&mut Vec<Value>>,
 ) -> TestResult {
     let inputs = metadata
@@ -171,9 +185,9 @@ fn register_inputs_impl(
         }
         let schema = Arc::new(Schema::new(fields));
         let batch = RecordBatch::try_new(schema.clone(), columns)?;
-        let mut partitions = vec![Vec::new(); 2];
+        let mut partitions = vec![Vec::new(); input_partitions];
         for (chunk, offset) in (0..batch.num_rows()).step_by(batch_size).enumerate() {
-            partitions[chunk % 2]
+            partitions[chunk % input_partitions]
                 .push(batch.slice(offset, batch_size.min(batch.num_rows() - offset)));
         }
         if let Some(receipts) = receipts.as_deref_mut() {

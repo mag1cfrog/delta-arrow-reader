@@ -15,6 +15,15 @@ rows, schemas, plans, settings and its successful closure record. The input
 tables have one and two explicit partitions; native tests preserve those rows
 and their partition order while changing batch boundaries.
 
+`sibling-spark-reference.jsonl` preserves the separate capture from
+`901-spark-probes/sibling/spark-reference-r1/observations.jsonl`, including two
+successful collects for sibling LAG windows in both ANSI modes. SHA256:
+`b440a3c171e6c2c9333dfb47e5cce3f6e64eb980109524edb9510287e99d6030`.
+Its unchanged `sibling-inputs.json` has SHA256
+`443a08567da48278ea9d1f7b95761a7fc8b053aa318da372fce85f4e98d19edb`.
+The test combines the nine definitions in memory and exercises 120 contexts
+with 192 collections. Both original input files and both captures stay intact.
+
 The native test compares complete row multisets and executed SQL type vectors.
 Repeated and concurrent executions use one physical plan; pair and interleaved
 empty-batch layouts use the same captured direct-query values. Field names,

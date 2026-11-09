@@ -24,7 +24,7 @@ mod spark_results;
 mod string_binary;
 use string_binary::{TestResult, c06_receipts};
 
-const CASES: [(&str, usize); 8] = [
+const CASES: [(&str, usize); 9] = [
     ("rand901_occurrences", 1),
     ("rand901_repeat_collect", 2),
     ("rand901_two_partitions", 1),
@@ -33,6 +33,7 @@ const CASES: [(&str, usize); 8] = [
     ("rand901_window_lag", 1),
     ("rand901_filter", 1),
     ("rand901_selected_case_concat", 1),
+    ("rand901_sibling_window_lag", 1),
 ];
 
 fn session(batch_size: usize, partitions: usize) -> SessionContext {
@@ -344,22 +345,35 @@ fn compare_collection(actual: &Value, reference: &Value) -> TestResult<Value> {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn seeded_rand_values_and_types_match_spark_across_lifecycles() -> TestResult {
-    let packet: Value = serde_json::from_str(include_str!("fixtures/seeded-rand/inputs.json"))?;
+    let mut packet: Value = serde_json::from_str(include_str!("fixtures/seeded-rand/inputs.json"))?;
+    let sibling_packet: Value = serde_json::from_str(include_str!("fixtures/seeded-rand/sibling-inputs.json"))?;
     let records = include_str!("fixtures/seeded-rand/spark-reference.jsonl")
         .lines()
         .map(serde_json::from_str::<Value>)
         .collect::<Result<Vec<_>, _>>()?;
-    assert_eq!(records[0]["kind"], "run_start");
-    assert_eq!(records[0]["inputs"], packet);
-    assert_eq!(records[1]["kind"], "runtime_identity");
-    assert_eq!(records[1]["spark_version"], "4.2.0");
-    assert_eq!(records.last().ok_or("missing capture closure")?, &json!({
-        "kind":"capture_complete","observations":18,"semantic_errors":0,
-        "capture_metadata_or_partition_errors":false,
-    }));
-    let references = records.iter().filter(|record| record["kind"] == "observation")
+    let sibling_records = include_str!("fixtures/seeded-rand/sibling-spark-reference.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    for (records, inputs, count) in [(&records, &packet, 18), (&sibling_records, &sibling_packet, 2)] {
+        assert_eq!(records[0]["kind"], "run_start");
+        assert_eq!(records[0]["inputs"], *inputs);
+        assert_eq!(records[1]["kind"], "runtime_identity");
+        assert_eq!(records[1]["spark_version"], "4.2.0");
+        assert_eq!(records.last().ok_or("missing capture closure")?, &json!({
+            "kind":"capture_complete","observations":count,"semantic_errors":0,
+            "capture_metadata_or_partition_errors":false,
+        }));
+    }
+    assert_eq!(packet["registered_inputs"], sibling_packet["registered_inputs"]);
+    assert_eq!(packet["ansi_modes"], sibling_packet["ansi_modes"]);
+    packet["definitions"].as_array_mut().ok_or("missing definitions")?.extend(
+        sibling_packet["definitions"].as_array().ok_or("missing sibling definitions")?.iter().cloned(),
+    );
+    let references = records.iter().chain(&sibling_records)
+        .filter(|record| record["kind"] == "observation")
         .collect::<Vec<_>>();
-    assert_eq!(references.len(), 18);
+    assert_eq!(references.len(), 20);
     let expected_references = CASES.iter().flat_map(|(id, count)| {
         [false, true].into_iter().flat_map(move |ansi| {
             (0..*count).map(move |index| json!([id,ansi,index]).to_string())
@@ -387,7 +401,7 @@ async fn seeded_rand_values_and_types_match_spark_across_lifecycles() -> TestRes
         .iter()
         .map(|case| Ok(case["id"].as_str().ok_or("missing case ID")?))
         .collect::<TestResult<HashSet<_>>>()?;
-    assert_eq!(definitions.len(), 8);
+    assert_eq!(definitions.len(), 9);
     assert_eq!(actual_ids, expected_ids);
     for (id, count) in CASES {
         assert_eq!(
@@ -420,11 +434,12 @@ async fn seeded_rand_values_and_types_match_spark_across_lifecycles() -> TestRes
             }
         }
     }
-    assert_eq!(expected_keys.len(), 108);
-    assert_eq!(expected_collection_slots, 180);
+    assert_eq!(expected_keys.len(), 120);
+    assert_eq!(expected_collection_slots, 192);
     eprintln!("c06 rand901 strict header: {}", json!({"input_packet":packet,
-        "reference_fixture":"fixtures/seeded-rand/spark-reference.jsonl",
-        "expected_contexts":108,"expected_collection_slots":180,
+        "reference_fixtures":["fixtures/seeded-rand/spark-reference.jsonl",
+            "fixtures/seeded-rand/sibling-spark-reference.jsonl"],
+        "expected_contexts":120,"expected_collection_slots":192,
         "comparison":"complete_values_and_executed_sql_types"}));
     let mut keys = HashSet::new();
     let mut collection_slots = 0;
@@ -518,12 +533,12 @@ async fn seeded_rand_values_and_types_match_spark_across_lifecycles() -> TestRes
         }
     }
     eprintln!("c06 rand901 strict summary: {}",json!({"contexts":keys.len(),
-        "expected_contexts":108,"collection_slots":collection_slots,"expected_collection_slots":180,
+        "expected_contexts":120,"collection_slots":collection_slots,"expected_collection_slots":192,
         "completed_collections":completed_collections,"context_errors":context_errors,
         "failed_contexts":failures.len(),"values_and_executed_types_match":failures.is_empty()}));
     assert_eq!(keys, expected_keys);
     assert_eq!(collection_slots, expected_collection_slots);
-    assert_eq!(completed_collections, 180);
+    assert_eq!(completed_collections, 192);
     assert_eq!(context_errors, 0);
     assert!(failures.is_empty(), "{failures:#?}");
     Ok(())
