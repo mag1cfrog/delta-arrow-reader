@@ -871,8 +871,8 @@ differences:
 
 With a format over a DATE, TIMESTAMP or TIMESTAMP_NTZ, TO_DATE ignores the format, as Spark's
 does, and declares Spark's nullability at every stage: nullable outside ANSI mode, and in ANSI
-mode for a nullable argument, over a column, and over a literal until constant folding. Where
-DataFusion declares the result otherwise, `SparkKnownNullable` or `SparkKnownNotNull`, after
+mode for a nullable argument or format, over a column, and over a literal until constant
+folding. Where DataFusion declares the result otherwise, `SparkKnownNullable` or `SparkKnownNotNull`, after
 Spark's `KnownNullable` and `KnownNotNull`, declares it; DataFusion's `to_local_time` is nullable
 even for a NOT NULL TIMESTAMP. It used a `CASE WHEN true` declaration, which the optimizer
 removed over a column (#1196). UNIX_TIMESTAMP with a format still declares its result that way

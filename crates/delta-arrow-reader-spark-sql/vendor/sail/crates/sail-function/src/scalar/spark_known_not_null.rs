@@ -63,12 +63,44 @@ impl ScalarUDFImpl for SparkKnownNotNull {
             return internal_err!("{} requires one argument", self.name());
         };
         let has_null = match argument {
-            ColumnarValue::Array(array) => array.null_count() > 0,
+            ColumnarValue::Array(array) => array.logical_null_count() > 0,
             ColumnarValue::Scalar(scalar) => scalar.is_null(),
         };
         if has_null {
             return internal_err!("{} received a NULL value", self.name());
         }
         Ok(argument.clone())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use datafusion::arrow::array::{ArrayRef, Date32Array};
+    use datafusion_common::ScalarValue;
+    use datafusion_common::config::ConfigOptions;
+
+    use super::*;
+
+    fn invoke(argument: ColumnarValue) -> Result<ColumnarValue> {
+        let field = Arc::new(Field::new("a", DataType::Date32, true));
+        SparkKnownNotNull::new().invoke_with_args(ScalarFunctionArgs {
+            args: vec![argument],
+            arg_fields: vec![Arc::clone(&field)],
+            number_rows: 2,
+            return_field: Arc::new(Field::new("r", DataType::Date32, false)),
+            config_options: Arc::new(ConfigOptions::default()),
+        })
+    }
+
+    #[test]
+    fn passes_values_through_and_fails_on_null() -> Result<()> {
+        let values: ArrayRef = Arc::new(Date32Array::from(vec![1, 2]));
+        let result = invoke(ColumnarValue::Array(Arc::clone(&values)))?;
+        assert!(matches!(result, ColumnarValue::Array(array) if array == values));
+        let with_null: ArrayRef = Arc::new(Date32Array::from(vec![Some(1), None]));
+        assert!(invoke(ColumnarValue::Array(with_null)).is_err());
+        assert!(invoke(ColumnarValue::Scalar(ScalarValue::Date32(None))).is_err());
+        assert!(invoke(ColumnarValue::Scalar(ScalarValue::Date32(Some(3)))).is_ok());
+        Ok(())
     }
 }

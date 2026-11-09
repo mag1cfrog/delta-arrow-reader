@@ -922,7 +922,8 @@ fn coerce_datetime_format(
 }
 
 /// `expr` declared with Spark's nullability, where DataFusion declares it otherwise. Unlike a
-/// `CASE WHEN true` wrapper, the declaration survives optimization over a column.
+/// `CASE WHEN true` wrapper, the declaration survives optimization over a column. Declaring NOT
+/// NULL over a value that can be NULL fails the query when such a value occurs.
 fn declare_spark_nullability(expr: Expr, nullable: bool, schema: &DFSchemaRef) -> PlanResult<Expr> {
     Ok(match (nullable, expr.nullable(schema)?) {
         (true, false) => ScalarUDF::from(SparkKnownNullable::new()).call(vec![expr]),
@@ -933,7 +934,11 @@ fn declare_spark_nullability(expr: Expr, nullable: bool, schema: &DFSchemaRef) -
 
 /// `expr` declared nullable with a `CASE WHEN true` wrapper, which the optimizer removes over a
 /// column; formatted UNIX_TIMESTAMP still uses it (#1203).
-fn declare_nullable_result(expr: Expr, nullable: bool, schema: &DFSchemaRef) -> PlanResult<Expr> {
+fn declare_nullable_until_optimized(
+    expr: Expr,
+    nullable: bool,
+    schema: &DFSchemaRef,
+) -> PlanResult<Expr> {
     if nullable && !expr.nullable(schema)? {
         let null = lit(ScalarValue::try_from(&expr.get_type(schema)?)?);
         Ok(when(lit(true), expr).otherwise(null)?)
@@ -1069,7 +1074,7 @@ fn unix_timestamp(input: ScalarFunctionInput) -> PlanResult<Expr> {
                 || format.nullable(input.function_context.schema)?;
             let result =
                 ScalarUDF::from(SparkUnixTimestamp::new(timezone, ansi_mode)).call(vec![expr]);
-            declare_nullable_result(result, nullable, input.function_context.schema)
+            declare_nullable_until_optimized(result, nullable, input.function_context.schema)
         } else {
             Ok(
                 ScalarUDF::from(SparkUnixTimestamp::new(timezone, ansi_mode))

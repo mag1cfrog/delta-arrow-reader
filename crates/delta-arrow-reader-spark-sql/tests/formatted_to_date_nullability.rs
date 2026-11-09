@@ -238,16 +238,9 @@ fn optimize(session: &SessionContext, plan: &LogicalPlan) -> TestResult<LogicalP
     Ok(state.optimize(plan)?)
 }
 
-/// The texts one of which DAR's error must contain for a recorded failure: a retained record's
-/// pinned texts, or Spark's error condition. Spark's message quotes its plan.
+/// The texts one of which DAR's error must contain for a recorded failure: Spark's error
+/// condition. Spark's message quotes its plan.
 fn expected_error_texts(case: &Value) -> Vec<String> {
-    if let Some(messages) = case["expected"]["dar_messages"].as_array() {
-        return messages
-            .iter()
-            .filter_map(Value::as_str)
-            .map(str::to_owned)
-            .collect();
-    }
     case["expected"]["condition"]
         .as_str()
         .map(|condition| vec![format!("[{condition}]")])
