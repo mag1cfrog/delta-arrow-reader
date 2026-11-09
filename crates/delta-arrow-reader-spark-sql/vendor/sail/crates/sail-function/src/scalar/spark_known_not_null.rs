@@ -2,7 +2,8 @@
 //! Like Spark's `KnownNotNull`: its argument unchanged, declared NOT NULL, for a Spark expression
 //! that is NOT NULL for NOT NULL inputs where DataFusion declares a step of it nullable, such as
 //! formatted TO_DATE of a NOT NULL TIMESTAMP in ANSI mode. A NULL value fails, since the
-//! declaration would make the batch invalid.
+//! declaration would make the batch invalid. Further arguments are inputs that Spark's expression
+//! has and DAR's omits, as for `SparkKnownNullable`; they are not used.
 
 use std::sync::Arc;
 
@@ -26,7 +27,7 @@ impl Default for SparkKnownNotNull {
 impl SparkKnownNotNull {
     pub fn new() -> Self {
         Self {
-            signature: Signature::any(1, Volatility::Immutable),
+            signature: Signature::variadic_any(Volatility::Immutable),
         }
     }
 }
@@ -42,14 +43,14 @@ impl ScalarUDFImpl for SparkKnownNotNull {
 
     fn return_type(&self, types: &[DataType]) -> Result<DataType> {
         match types {
-            [data_type] => Ok(data_type.clone()),
-            _ => internal_err!("{} requires one argument", self.name()),
+            [data_type, ..] => Ok(data_type.clone()),
+            [] => internal_err!("{} requires an argument", self.name()),
         }
     }
 
     fn return_field_from_args(&self, args: ReturnFieldArgs) -> Result<FieldRef> {
-        let [argument] = args.arg_fields else {
-            return internal_err!("{} requires one argument", self.name());
+        let [argument, ..] = args.arg_fields else {
+            return internal_err!("{} requires an argument", self.name());
         };
         Ok(Arc::new(Field::new(
             self.name(),
@@ -59,8 +60,8 @@ impl ScalarUDFImpl for SparkKnownNotNull {
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
-        let [argument] = args.args.as_slice() else {
-            return internal_err!("{} requires one argument", self.name());
+        let [argument, ..] = args.args.as_slice() else {
+            return internal_err!("{} requires an argument", self.name());
         };
         let has_null = match argument {
             ColumnarValue::Array(array) => array.logical_null_count() > 0,

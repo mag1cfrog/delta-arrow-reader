@@ -884,11 +884,22 @@ differences:
 With a format over a DATE, TIMESTAMP or TIMESTAMP_NTZ, TO_DATE ignores the format, as Spark's
 does, and declares Spark's nullability at every stage: nullable outside ANSI mode, and in ANSI
 mode for a nullable argument or format, over a column, and over a literal until constant
-folding. Where DataFusion declares the result otherwise, `SparkKnownNullable` or `SparkKnownNotNull`, after
-Spark's `KnownNullable` and `KnownNotNull`, declares it; DataFusion's `to_local_time` is nullable
-even for a NOT NULL TIMESTAMP. It used a `CASE WHEN true` declaration, which the optimizer
-removed over a column (#1196). UNIX_TIMESTAMP with a format still declares its result that way
-(#1203). The [formatted TO_DATE references](tests/fixtures/formatted-to-date-nullability/README.md)
+folding. Where DataFusion declares the result otherwise, `SparkKnownNullable` or
+`SparkKnownNotNull`, after Spark's `KnownNullable` and `KnownNotNull`, declares it; DataFusion's
+`to_local_time` is nullable even for a NOT NULL TIMESTAMP. It used a `CASE WHEN true`
+declaration, which the optimizer removed over a column (#1196). UNIX_TIMESTAMP and
+TO_UNIX_TIMESTAMP with a format over these arguments declare their results the same way, and
+give the declaration the ignored format's columns, aggregates and window functions as unused
+inputs. Spark computes those inputs although it does not evaluate the format, so an aggregate
+in the format makes the query an aggregation, and with a format column over a literal argument
+Spark's call is not constant and stays nullable after optimization (#1203). Where Spark's result
+is NOT NULL and DataFusion's already is, `SparkWithInputs` carries the inputs and keeps the
+call's own nullability, which a grouping set makes nullable over the argument key, though not
+over the format's key (#1223). Formatted TO_DATE and TRY_TO_DATE
+still fold there (#1215), and an ORDER BY of such a call fails while analyzing, as any ORDER BY
+of an aggregate that is not selected does (#1221).
+The [formatted TO_DATE references](tests/fixtures/formatted-to-date-nullability/README.md) and
+[formatted UNIX_TIMESTAMP references](tests/fixtures/formatted-unix-timestamp-nullability/README.md)
 record the checks.
 
 The [temporal contract references](tests/fixtures/temporal-contracts/README.md) and the

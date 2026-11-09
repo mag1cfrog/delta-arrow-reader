@@ -8,7 +8,7 @@ use datafusion::arrow::datatypes::{
 };
 use datafusion::functions::expr_fn;
 use datafusion::optimizer::simplify_expressions::ExprSimplifier;
-use datafusion_common::tree_node::{Transformed, TreeNode};
+use datafusion_common::tree_node::{Transformed, TreeNode, TreeNodeRecursion};
 use datafusion_common::{DFSchemaRef, DataFusionError, ScalarValue};
 use datafusion_expr::expr::{self, Expr};
 use datafusion_expr::simplify::SimplifyContextBuilder;
@@ -56,6 +56,7 @@ use sail_function::scalar::spark_cast_string_to_integer::{
 use sail_function::scalar::spark_decimal_cast::{DecimalCastMode, SparkDecimalCast};
 use sail_function::scalar::spark_known_not_null::SparkKnownNotNull;
 use sail_function::scalar::spark_known_nullable::SparkKnownNullable;
+use sail_function::scalar::spark_with_inputs::SparkWithInputs;
 use sail_sql_analyzer::literal::interval::IntervalValue;
 use sail_sql_analyzer::parser::parse_interval;
 
@@ -950,30 +951,52 @@ fn coerce_datetime_format(
     }
 }
 
+/// The inputs of `omitted` that operators below a projection compute: its columns, and its
+/// aggregate and window functions whole.
+fn computed_inputs(omitted: &Expr) -> PlanResult<Vec<Expr>> {
+    let mut inputs = Vec::new();
+    omitted.apply(|expr| {
+        Ok(match expr {
+            Expr::Column(_) | Expr::AggregateFunction(_) | Expr::WindowFunction(_) => {
+                if !inputs.contains(expr) {
+                    inputs.push(expr.clone());
+                }
+                TreeNodeRecursion::Jump
+            }
+            _ => TreeNodeRecursion::Continue,
+        })
+    })?;
+    Ok(inputs)
+}
+
 /// `expr` declared with Spark's nullability, where DataFusion declares it otherwise. Unlike a
 /// `CASE WHEN true` wrapper, the declaration survives optimization over a column. Declaring NOT
 /// NULL over a value that can be NULL fails the query when such a value occurs.
-fn declare_spark_nullability(expr: Expr, nullable: bool, schema: &DFSchemaRef) -> PlanResult<Expr> {
-    Ok(match (nullable, expr.nullable(schema)?) {
-        (true, false) => ScalarUDF::from(SparkKnownNullable::new()).call(vec![expr]),
-        (false, true) => ScalarUDF::from(SparkKnownNotNull::new()).call(vec![expr]),
-        _ => expr,
-    })
-}
-
-/// `expr` declared nullable with a `CASE WHEN true` wrapper, which the optimizer removes over a
-/// column; formatted UNIX_TIMESTAMP still uses it (#1203).
-fn declare_nullable_until_optimized(
+/// `omitted_input` is an input of Spark's expression that `expr` leaves out, such as a format
+/// Spark does not evaluate. Its columns, aggregates and window functions become unused inputs
+/// of the declaration, so they are computed as Spark computes them, and the declaration does
+/// not fold over a constant `expr` where Spark's expression, which has them as inputs, is not
+/// constant. Where Spark's result is NOT NULL and DataFusion already declares it so,
+/// `SparkWithInputs` carries them and keeps `expr`'s own nullability at every stage, which a
+/// grouping set can make nullable.
+fn declare_spark_nullability(
     expr: Expr,
     nullable: bool,
+    omitted_input: Option<&Expr>,
     schema: &DFSchemaRef,
 ) -> PlanResult<Expr> {
-    if nullable && !expr.nullable(schema)? {
-        let null = lit(ScalarValue::try_from(&expr.get_type(schema)?)?);
-        Ok(when(lit(true), expr).otherwise(null)?)
-    } else {
-        Ok(expr)
-    }
+    let inputs = omitted_input
+        .map(computed_inputs)
+        .transpose()?
+        .unwrap_or_default();
+    let declared = expr.nullable(schema)?;
+    let declaration = match (nullable, declared) {
+        (true, true) | (false, false) if inputs.is_empty() => return Ok(expr),
+        (true, _) => ScalarUDF::from(SparkKnownNullable::new()),
+        (false, false) => ScalarUDF::from(SparkWithInputs::new()),
+        (false, true) => ScalarUDF::from(SparkKnownNotNull::new()),
+    };
+    Ok(declaration.call(std::iter::once(expr).chain(inputs).collect()))
 }
 
 /// TO_DATE or Spark's TRY_TO_DATE, which is TO_DATE outside ANSI mode.
@@ -1057,6 +1080,7 @@ fn to_date_with_parser(input: ScalarFunctionInput, parser: DateParser) -> PlanRe
             return declare_spark_nullability(
                 cast(date, DataType::Date32),
                 nullable,
+                None,
                 input.function_context.schema,
             );
         }
@@ -1103,7 +1127,12 @@ fn unix_timestamp(input: ScalarFunctionInput) -> PlanResult<Expr> {
                 || format.nullable(input.function_context.schema)?;
             let result =
                 ScalarUDF::from(SparkUnixTimestamp::new(timezone, ansi_mode)).call(vec![expr]);
-            declare_nullable_until_optimized(result, nullable, input.function_context.schema)
+            declare_spark_nullability(
+                result,
+                nullable,
+                Some(&format),
+                input.function_context.schema,
+            )
         } else {
             Ok(
                 ScalarUDF::from(SparkUnixTimestamp::new(timezone, ansi_mode))
