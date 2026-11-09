@@ -97,6 +97,85 @@ fn negated(expr: spec::Expr) -> spec::Expr {
     })
 }
 
+/// Spark's `datetimeUnit` keywords: the units its TIMESTAMPDIFF and TIMESTAMPADD grammar reads.
+pub const DATETIME_UNIT_KEYWORDS: [&str; 11] = [
+    "YEAR",
+    "QUARTER",
+    "MONTH",
+    "WEEK",
+    "DAY",
+    "DAYOFYEAR",
+    "HOUR",
+    "MINUTE",
+    "SECOND",
+    "MILLISECOND",
+    "MICROSECOND",
+];
+
+/// The names Spark's grammar also spells with a datetime unit keyword as the first of three
+/// arguments.
+const DATETIME_UNIT_FUNCTIONS: [&str; 7] = [
+    "timestampdiff",
+    "datediff",
+    "date_diff",
+    "timediff",
+    "timestampadd",
+    "dateadd",
+    "date_add",
+];
+
+/// The unit of a call in Spark's TIMESTAMPDIFF and TIMESTAMPADD grammar: a bare datetime unit
+/// keyword as the first of three positional arguments. A string literal there fails, as in
+/// Spark's parser. Any other call is an ordinary function call, for which this gives `None`;
+/// a backquoted or parenthesized unit is not a keyword.
+fn datetime_unit_keyword(
+    function_name: &spec::ObjectName,
+    arguments: &[FunctionArgument],
+) -> SqlResult<Option<String>> {
+    let [name] = function_name.parts() else {
+        return Ok(None);
+    };
+    let name: &str = name.as_ref();
+    if !DATETIME_UNIT_FUNCTIONS.contains(&name.to_ascii_lowercase().as_str()) {
+        return Ok(None);
+    }
+    let [
+        FunctionArgument::Unnamed(unit),
+        FunctionArgument::Unnamed(_),
+        FunctionArgument::Unnamed(_),
+    ] = arguments
+    else {
+        return Ok(None);
+    };
+    match unit {
+        Expr::Atom(AtomExpr::Identifier(ident))
+            if !ident.quoted
+                && DATETIME_UNIT_KEYWORDS.contains(&ident.value.to_ascii_uppercase().as_str()) =>
+        {
+            Ok(Some(ident.value.clone()))
+        }
+        Expr::Atom(AtomExpr::StringLiteral(head, tail)) => {
+            match from_ast_expression(unit.clone())? {
+                // Spark quotes the literal as written.
+                spec::Expr::Literal(spec::Literal::Utf8 { value: Some(_) }) => {
+                    let text = once(head)
+                        .chain(tail)
+                        .map(|literal| literal.text.as_str())
+                        .collect::<String>();
+                    Err(SqlError::invalid(format!(
+                        "[INVALID_PARAMETER_VALUE.DATETIME_UNIT] The value of parameter(s) `unit` \
+                         in `{name}` is invalid: expects one of the units without quotes {}, but \
+                         got the string literal {text}.",
+                        DATETIME_UNIT_KEYWORDS.join(", ")
+                    )))
+                }
+                _ => Ok(None),
+            }
+        }
+        _ => Ok(None),
+    }
+}
+
 #[expect(clippy::type_complexity)]
 pub(crate) fn from_ast_function_arguments(
     args: impl IntoIterator<Item = FunctionArgument>,
@@ -970,10 +1049,14 @@ fn from_ast_atom_expression(atom: AtomExpr) -> SqlResult<spec::Expr> {
                 right: _,
             } = arguments;
             let function_name = from_ast_object_name(name)?;
-            let (arguments, named_arguments) = arguments
-                .map(|x| from_ast_function_arguments(x.into_items()))
-                .transpose()?
+            let arguments = arguments
+                .map(|x| x.into_items().collect::<Vec<_>>())
                 .unwrap_or_default();
+            let unit = datetime_unit_keyword(&function_name, &arguments)?;
+            let (mut arguments, named_arguments) = from_ast_function_arguments(arguments)?;
+            if let Some(unit) = unit {
+                arguments[0] = spec::Expr::DatetimeUnitKeyword(unit);
+            }
             let is_distinct = match duplicate_treatment {
                 Some(DuplicateTreatment::All(_)) | None => false,
                 Some(DuplicateTreatment::Distinct(_)) => true,

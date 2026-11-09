@@ -73,6 +73,10 @@ pub enum Expr {
     // extensions
     DefaultColumnValue,
     Placeholder(String),
+    /// A datetime unit written as a bare keyword where Spark's grammar reads one: the first of
+    /// three arguments of TIMESTAMPDIFF, DATEDIFF, DATE_DIFF, TIMEDIFF, TIMESTAMPADD, DATEADD and
+    /// DATE_ADD, such as `DAY` in `timestampdiff(DAY, a, b)`.
+    DatetimeUnitKeyword(String),
     Rollup(Vec<Expr>),
     Cube(Vec<Expr>),
     GroupingSets(Vec<Vec<Expr>>),

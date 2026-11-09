@@ -20,19 +20,8 @@ const MICROS_PER_DAY: i128 = 86_400_000_000;
 
 /// The units Spark's parser accepts for TIMESTAMPDIFF. DAYOFYEAR parses but fails when a row
 /// is evaluated.
-pub const TIMESTAMP_DIFF_PARSER_UNITS: [&str; 11] = [
-    "YEAR",
-    "QUARTER",
-    "MONTH",
-    "WEEK",
-    "DAY",
-    "DAYOFYEAR",
-    "HOUR",
-    "MINUTE",
-    "SECOND",
-    "MILLISECOND",
-    "MICROSECOND",
-];
+pub const TIMESTAMP_DIFF_PARSER_UNITS: [&str; 11] =
+    sail_sql_analyzer::expression::DATETIME_UNIT_KEYWORDS;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TimestampDiffUnit {

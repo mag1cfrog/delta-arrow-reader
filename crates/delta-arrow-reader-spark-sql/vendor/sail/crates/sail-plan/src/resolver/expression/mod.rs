@@ -174,6 +174,14 @@ impl PlanResolver<'_> {
                 plan_id: None,
                 is_metadata_column,
             } => self.resolve_expression_attribute(name, is_metadata_column, schema, state),
+            // Outside the call that reads it as a unit, a unit keyword is a column name, as Spark
+            // reads a bare word there.
+            Expr::DatetimeUnitKeyword(unit) => self.resolve_expression_attribute(
+                spec::ObjectName::bare(unit),
+                false,
+                schema,
+                state,
+            ),
             Expr::UnresolvedFunction(function) => {
                 self.resolve_expression_function(function, schema, state)
                     .await

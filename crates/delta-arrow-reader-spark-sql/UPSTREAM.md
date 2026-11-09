@@ -854,10 +854,19 @@ It then counts whole units between the two local date-times, as Java's
 `LocalDateTime.until` does. For instants beyond Chrono's range, the offset comes from the
 same position in a nearer 400-year calendar cycle.
 
-Only Spark's unit keywords become a unit. Any other first argument behaves as in Spark:
-- a string unit fails as Spark's parser does;
-- under TIMESTAMPDIFF and TIMEDIFF it names no routine;
-- under DATEDIFF and DATE_DIFF it stays an ordinary argument.
+Only Spark's unit keywords, written bare as the first of three arguments, become a unit. The
+SQL analyzer marks such a unit as `spec::Expr::DatetimeUnitKeyword`, since the parser's
+identifiers now record whether they were quoted. Any other spelling behaves as in Spark:
+- a single- or double-quoted string unit fails as Spark's parser does, also under TIMESTAMPADD,
+  DATEADD and DATE_ADD;
+- a backquoted, parenthesized or unknown unit, or another argument count, makes an ordinary
+  call: TIMESTAMPDIFF, TIMEDIFF and TIMESTAMPADD then name no routine, as written, before their
+  arguments resolve, and DATEDIFF, DATE_DIFF, DATEADD and DATE_ADD resolve their arguments and
+  then fail with `WRONG_NUM_ARGS` for a third.
+
+ARRAY_CONCAT builds its `UNRESOLVED_ROUTINE` error with the same helper. The
+[unit spelling references](tests/fixtures/datetime-unit-spellings/README.md) record the
+checks (#1056).
 
 DAYOFYEAR fails for each evaluated row.
 
@@ -867,11 +876,8 @@ overflow and STRING conversion errors keep Spark's optimization stage.
 The TIMESTAMPDIFF harness pins one remaining difference, with its owner: the zone table
 applies no DST after 2099 (#1052).
 
-Two more have owners but no pinned records:
-- backquoted, parenthesized and two-argument unit spellings fail differently or not at
-  all (#1056);
-- a malformed STRING argument reports DAR's parser message instead of
-  `CAST_INVALID_INPUT` (#1057).
+One more has an owner but no pinned records: a malformed STRING argument reports DAR's parser
+message instead of `CAST_INVALID_INPUT` (#1057).
 
 The [TIMESTAMPDIFF references](tests/fixtures/timestamp-diff/README.md) record the checks.
 
