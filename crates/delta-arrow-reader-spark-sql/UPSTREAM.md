@@ -847,7 +847,13 @@ DATE days as a native INT subtraction that wraps at the DATE limits like Spark's
 `int` arithmetic; TIMESTAMP arguments are cast to DATE in their TIMESTAMP type's
 zone, which is the session time zone for Spark-typed values. The three-argument
 form is TIMESTAMPDIFF. The [DATEDIFF references](tests/fixtures/date-diff/README.md)
-record the checks.
+record the checks. As in Spark, only DATE, TIMESTAMP, TIMESTAMP_NTZ, STRING and untyped NULL
+arguments are cast to DATE, including dictionary-encoded and string-view STRING values and
+Date64; a TIME fails while resolving with `DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION`, and a
+number, BOOLEAN, interval, BINARY, ARRAY or MAP in either position with
+`DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE`, where any argument used to be cast. In an ORDER BY
+key the failure loses its condition (#1185). The [argument references](tests/fixtures/datediff-arguments/README.md)
+record the checks (#1005).
 
 TIMESTAMPDIFF, and its three-argument DATEDIFF, DATE_DIFF and TIMEDIFF spellings, first
 convert both arguments to TIMESTAMP in the session time zone:

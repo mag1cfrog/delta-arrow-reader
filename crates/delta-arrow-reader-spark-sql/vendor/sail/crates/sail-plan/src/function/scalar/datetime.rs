@@ -691,6 +691,24 @@ fn make_date(year: Expr, month: Expr, day: Expr) -> Expr {
     }
 }
 
+/// Whether Spark casts an argument of this type to DATE implicitly and successfully, as
+/// DATEDIFF's: a DATE, a TIMESTAMP or TIMESTAMP_NTZ, a STRING, also dictionary-encoded as a Delta
+/// partition column or as a string view, or an untyped NULL. Spark also casts a TIME, and that
+/// cast fails.
+fn casts_implicitly_to_date(data_type: &DataType) -> bool {
+    match data_type {
+        DataType::Null
+        | DataType::Date32
+        | DataType::Date64
+        | DataType::Timestamp(_, _)
+        | DataType::Utf8
+        | DataType::LargeUtf8
+        | DataType::Utf8View => true,
+        DataType::Dictionary(_, value) => casts_implicitly_to_date(value),
+        _ => false,
+    }
+}
+
 /// Spark's `DateDiff`: the INT number of days from `start` to `end`, computed as a Java `int`
 /// subtraction, which wraps at the DATE limits. TIMESTAMP arguments are cast to DATE. The
 /// three-argument form is TIMESTAMPDIFF instead.
@@ -797,10 +815,28 @@ fn timestamp_diff_with_name(input: ScalarFunctionInput, function_name: &str) -> 
 fn datediff_with_name(input: ScalarFunctionInput, function_name: &str) -> PlanResult<Expr> {
     match input.arguments.len() {
         2 => {
+            let schema = input.function_context.schema;
             let [end, start] = <[Expr; 2]>::try_from(input.arguments).map_err(|_| {
                 PlanError::invalid(format!("{function_name} requires 2 or 3 arguments"))
             })?;
-            let schema = input.function_context.schema;
+            for (ordinal, argument) in [("first", &end), ("second", &start)] {
+                match argument.get_type(schema)? {
+                    // Spark casts a TIME to DATE implicitly, and the cast fails.
+                    data_type @ (DataType::Time32(_) | DataType::Time64(_)) => {
+                        return Err(PlanError::invalid(format!(
+                            "[DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION] `{function_name}` \
+                             cannot cast the {ordinal} parameter from {data_type} to \"DATE\""
+                        )));
+                    }
+                    data_type if !casts_implicitly_to_date(&data_type) => {
+                        return Err(PlanError::invalid(format!(
+                            "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] `{function_name}`: The \
+                             {ordinal} parameter requires the \"DATE\" type, got {data_type}"
+                        )));
+                    }
+                    _ => {}
+                }
+            }
             let (end_type, start_type) = (end.get_type(schema)?, start.get_type(schema)?);
             Ok(date_diff_days((end, &end_type), (start, &start_type)))
         }
