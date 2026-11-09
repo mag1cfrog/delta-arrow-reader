@@ -663,9 +663,10 @@ fn make_date(year: Expr, month: Expr, day: Expr) -> Expr {
     }
 }
 
-/// Whether Spark casts an argument of this type to DATE implicitly, as DATEDIFF's do: a DATE, a
-/// TIMESTAMP or TIMESTAMP_NTZ, a STRING, also dictionary-encoded as a Delta partition column, or
-/// an untyped NULL.
+/// Whether Spark casts an argument of this type to DATE implicitly and successfully, as
+/// DATEDIFF's: a DATE, a TIMESTAMP or TIMESTAMP_NTZ, a STRING, also dictionary-encoded as a Delta
+/// partition column or as a string view, or an untyped NULL. Spark also casts a TIME, and that
+/// cast fails.
 fn casts_implicitly_to_date(data_type: &DataType) -> bool {
     match data_type {
         DataType::Null
@@ -785,12 +786,21 @@ fn datediff_with_name(input: ScalarFunctionInput, function_name: &str) -> PlanRe
                 PlanError::invalid(format!("{function_name} requires 2 or 3 arguments"))
             })?;
             for (ordinal, argument) in [("first", &end), ("second", &start)] {
-                let data_type = argument.get_type(schema)?;
-                if !casts_implicitly_to_date(&data_type) {
-                    return Err(PlanError::invalid(format!(
-                        "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] The {ordinal} parameter of \
-                         `{function_name}` requires the \"DATE\" type, got {data_type}"
-                    )));
+                match argument.get_type(schema)? {
+                    // Spark casts a TIME to DATE implicitly, and the cast fails.
+                    data_type @ (DataType::Time32(_) | DataType::Time64(_)) => {
+                        return Err(PlanError::invalid(format!(
+                            "[DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION] `{function_name}` \
+                             cannot cast the {ordinal} parameter from {data_type} to \"DATE\""
+                        )));
+                    }
+                    data_type if !casts_implicitly_to_date(&data_type) => {
+                        return Err(PlanError::invalid(format!(
+                            "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] `{function_name}`: The \
+                             {ordinal} parameter requires the \"DATE\" type, got {data_type}"
+                        )));
+                    }
+                    _ => {}
                 }
             }
             Ok(date_diff_days(end, start))
