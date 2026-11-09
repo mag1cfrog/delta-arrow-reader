@@ -654,7 +654,7 @@ outside the nanosecond range, before 1677-09-21 or after 2262-04-11 (#1087). Sti
 optimizer rewrites a column compared with a literal without the cast, NOT NULL once optimized,
 which DAR does not do (#1197); a DATE in an IN list of TIMESTAMP_NTZ values keeps
 DataFusion's coercion (#1191); a constant over an input proven empty stays nullable after
-optimization (#1190); UNIX_DATE accepts a TIMESTAMP_NTZ that Spark rejects (#1188); TRUNC to a
+optimization (#1190); TRUNC to a
 unit Spark does not support gives a DATE (#1192); and EXTRACT of DAYOFWEEK, DOW_ISO and
 YEAROFWEEK is unsupported (#1116). The [cast references](tests/fixtures/date-ntz-casts/README.md) record the checks.
 
