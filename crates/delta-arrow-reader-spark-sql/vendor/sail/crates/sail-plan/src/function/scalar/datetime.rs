@@ -1812,11 +1812,9 @@ fn months_between(input: ScalarFunctionInput) -> PlanResult<Expr> {
         expr_fn::round(vec![months_between.clone(), lit(8)]),
     )
     .otherwise(months_between)?;
-    Ok(if round_off.nullable(function_context.schema)? {
-        when(round_off.is_null(), lit(ScalarValue::Float64(None))).otherwise(rounded)?
-    } else {
-        rounded
-    })
+    // A NULL `roundOff` gives NULL; for a NOT NULL one the guard cannot apply, and DataFusion
+    // keeps the result NOT NULL.
+    Ok(when(round_off.is_null(), lit(ScalarValue::Float64(None))).otherwise(rounded)?)
 }
 
 const MICROS_PER_DAY: i64 = 24 * 60 * 60 * 1_000_000;
