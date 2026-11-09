@@ -144,6 +144,24 @@ def definitions():
                f"SELECT k, {function}(DATE '2024-01-02', x) AS r FROM (SELECT k, "
                f"CAST(k / 0 AS STRING) AS x FROM inputs UNION ALL SELECT k, "
                f"CAST(k / 0 AS STRING) AS x FROM inputs)")
+        # Spark collapses these shapes too, so it never evaluates the derived format.
+        cast = "CAST(CAST(g AS INT) AS STRING) AS x"
+        for name, source in [
+                ("alias", f"(SELECT k, {cast} FROM inputs) t"),
+                ("filter", f"(SELECT k, {cast} FROM inputs WHERE 1 = 1) t"),
+                ("limit", f"(SELECT k, {cast} FROM inputs LIMIT 10) t"),
+                ("nested", f"(SELECT * FROM (SELECT k, {cast} FROM inputs) u) t"),
+                ("window", "(SELECT k, CAST(CAST(max(g) OVER () AS INT) AS STRING) AS x "
+                           "FROM inputs) t")]:
+            yield (f"derived_literal_{name}_{function}_format",
+                   f"SELECT k, {function}(DATE '2024-01-02', x) AS r FROM {source}")
+        yield (f"derived_literal_distinct_{function}_format",
+               f"SELECT DISTINCT k, {function}(DATE '2024-01-02', x) AS r "
+               f"FROM (SELECT k, {cast} FROM inputs) t")
+        # Spark computes a derived column below a sort, so there it fails with ANSI enabled.
+        yield (f"derived_sorted_{function}_format",
+               f"SELECT k, {function}(dt, x) AS r FROM (SELECT k, dt, {cast} FROM inputs "
+               f"ORDER BY k) t")
         yield (f"derived_grouped_{function}_format",
                f"SELECT k, {function}(d, x) AS r FROM (SELECT k, max(dt) AS d, "
                f"CAST(CAST(max(g) AS INT) AS STRING) AS x FROM inputs GROUP BY k)")

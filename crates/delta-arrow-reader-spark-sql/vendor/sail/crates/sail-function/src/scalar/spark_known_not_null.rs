@@ -3,19 +3,15 @@
 //! that is NOT NULL for NOT NULL inputs where DataFusion declares a step of it nullable, such as
 //! formatted TO_DATE of a NOT NULL TIMESTAMP in ANSI mode. A NULL value fails, since the
 //! declaration would make the batch invalid. Further arguments are inputs that Spark's expression
-//! has and DAR's omits, as for `SparkKnownNullable`; they are not used, and read columns only.
+//! has and DAR's omits, as for `SparkKnownNullable`; they are not used.
 
 use std::sync::Arc;
 
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
 use datafusion_common::{Result, internal_err};
-use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
 use datafusion_expr::{
-    ColumnarValue, Expr, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature,
-    Volatility,
+    ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
 };
-
-use crate::scalar::spark_known_nullable::simplify_kept_inputs;
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkKnownNotNull {
@@ -61,10 +57,6 @@ impl ScalarUDFImpl for SparkKnownNotNull {
             argument.data_type().clone(),
             false,
         )))
-    }
-
-    fn simplify(&self, args: Vec<Expr>, _info: &SimplifyContext) -> Result<ExprSimplifyResult> {
-        Ok(simplify_kept_inputs(ScalarUDF::from(Self::new()), args))
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {

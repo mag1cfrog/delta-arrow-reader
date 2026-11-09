@@ -144,6 +144,9 @@ def definitions():
     yield ("derived_cte_malformed_date_dd",
            "WITH d AS (SELECT k, CAST(sb AS DATE) AS x FROM inputs) "
            "SELECT k, trunc(x, 'DD') AS r FROM d")
+    yield ("derived_alias_filter_malformed_date_dd",
+           "SELECT k, trunc(x, 'DD') AS r FROM "
+           "(SELECT k, CAST(sb AS DATE) AS x FROM inputs WHERE 1 = 1) t")
     yield ("derived_division_date_dd",
            "SELECT k, trunc(x, 'DD') AS r FROM "
            "(SELECT k, date_add(dr, CAST(10 DIV (k - 2) AS INT)) AS x FROM inputs)")

@@ -7,53 +7,15 @@
 //! and DAR's omits, such as the columns, aggregates and window functions of a format Spark does
 //! not evaluate. They are not used: they keep the operators below computing what Spark's do, and
 //! keep the declaration from folding over a constant value where Spark's expression is not
-//! constant. They read columns only, see `simplify_kept_inputs`.
+//! constant.
 
 use std::sync::Arc;
 
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
 use datafusion_common::{Result, internal_err};
-use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
 use datafusion_expr::{
-    ColumnarValue, Expr, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature,
-    Volatility,
+    ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
 };
-
-/// An input a declaration keeps as it was planned: a column, or an aggregate or window function,
-/// which the operators below compute.
-fn is_planned_input(input: &Expr) -> bool {
-    matches!(
-        input,
-        Expr::Column(_) | Expr::AggregateFunction(_) | Expr::WindowFunction(_)
-    )
-}
-
-/// `declaration` over `args` with each input after the value that the optimizer has turned into
-/// another expression, by merging a projection into it, replaced by the columns that expression
-/// reads. The inputs are never used, and Spark never evaluates them; reading a column cannot
-/// fail, where evaluating the merged expression could.
-pub(crate) fn simplify_kept_inputs(declaration: ScalarUDF, args: Vec<Expr>) -> ExprSimplifyResult {
-    if args.iter().skip(1).all(is_planned_input) {
-        return ExprSimplifyResult::Original(args);
-    }
-    let mut args = args.into_iter();
-    let mut kept = args.next().into_iter().collect::<Vec<_>>();
-    for input in args {
-        let inputs = if is_planned_input(&input) {
-            vec![input]
-        } else {
-            let mut columns = input.column_refs().into_iter().cloned().collect::<Vec<_>>();
-            columns.sort();
-            columns.into_iter().map(Expr::Column).collect()
-        };
-        for input in inputs {
-            if !kept[1..].contains(&input) {
-                kept.push(input);
-            }
-        }
-    }
-    ExprSimplifyResult::Simplified(declaration.call(kept))
-}
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkKnownNullable {
@@ -99,10 +61,6 @@ impl ScalarUDFImpl for SparkKnownNullable {
             argument.data_type().clone(),
             true,
         )))
-    }
-
-    fn simplify(&self, args: Vec<Expr>, _info: &SimplifyContext) -> Result<ExprSimplifyResult> {
-        Ok(simplify_kept_inputs(ScalarUDF::from(Self::new()), args))
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {

@@ -1,6 +1,6 @@
 # TRUNC units
 
-`trunc-units-spark.jsonl` records 352 observations from Spark 4.2.0, revision
+`trunc-units-spark.jsonl` records 356 observations from Spark 4.2.0, revision
 `32f7299601108917fb01920a54e084595b7b3bf8`, Java 17.0.20.1 and Python 3.12.14 (#1192).
 The header stores the build properties, capture script hash, settings and the registered
 `inputs` table. Two captures were byte-identical.
@@ -13,7 +13,7 @@ Day; the times are at noon, so each date is the same in UTC and Los Angeles. The
 `sv` holds ` 2024-03-10 `, `2024-05`, `2024` and `2024-02-29T10:00:00`, which Spark reads as
 dates, and `sb` holds two dates and then `garbage` in the rows whose unit is `DD` or NULL.
 
-88 queries run in both ANSI modes in UTC and America/Los_Angeles:
+89 queries run in both ANSI modes in UTC and America/Los_Angeles:
 - TRUNC of `dr` and of a DATE literal with `'YEAR'`, `'yyyy'`, `'Yy'`, `'Quarter'`, `'MON'`,
   `'month'`, `'MM'`, `'WEEK'`, `'DD'`, `'DAY'`, `'HOUR'`, `'Q'`, `'invalid'`, `''`, `' MM'`,
   `NULL` and `CAST(NULL AS STRING)`;
@@ -38,7 +38,8 @@ dates, and `sb` holds two dates and then `garbage` in the rows whose unit is `DD
   gives for the other rows, and with `'QUARTER'`; and UNIX_DATE of TRUNC of
   `date_sub(DATE '1970-01-01', 2147483641 - k)` with `'WEEK'`;
 - TRUNC of a date column a subquery derives from `CAST(sb AS DATE)` with `'DD'` and `NULL`, also
-  through a CTE with `'DD'`, and from a `date_add` that divides by zero, with `'DD'`;
+  through a CTE and a filtered aliased subquery with `'DD'`, and from a `date_add` that divides by
+  zero, with `'DD'`;
 - TRUNC of the INT `k` with `'MM'`;
 - the count of TRUNC of `dr` by `IF(rand() < 0.5, 'MM', 'YEAR')` over 256 rows of a self join,
   computed in a subquery, since Spark rejects a volatile aggregate argument.

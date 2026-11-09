@@ -33,7 +33,7 @@ mod spark_results;
 use spark_results::{TestResult, validate_batch};
 
 /// The number of recorded observations.
-const RECORD_COUNT: usize = 552;
+const RECORD_COUNT: usize = 608;
 
 fn formatted_unix_timestamp_references() -> TestResult<Vec<Value>> {
     let records = include_str!(
@@ -65,70 +65,49 @@ fn is_retained(case: &Value) -> bool {
         .is_some_and(|id| ORDER_BY_AGGREGATE_RECORDS.contains(&id))
 }
 
-/// #1232: with ANSI enabled, a constant argument keeps its format's column as an input, and
-/// DataFusion's physical optimizer inlines a column derived through a CTE or UNION ALL, so the
-/// derived format is evaluated and fails while collecting rows; Spark returns the argument's
-/// seconds in every row. Each record, the text DAR's error contains, and Spark's row count.
-type DerivedConstantRecord = (&'static str, &'static str, usize);
-
-const DERIVED_CONSTANT_RECORDS: [DerivedConstantRecord; 4] = [
+/// #1233: Spark computes a derived format column below a subquery's sort, so with ANSI enabled the
+/// failing CAST fails while collecting rows; DAR moves the call below the sort, drops the unused
+/// format and returns the dates' seconds, in each session zone.
+const SORTED_RECORDS: [&str; 2] = [
+    "derived_sorted_unix_timestamp_format",
+    "derived_sorted_to_unix_timestamp_format",
+];
+const SORTED_SECONDS: [(&str, [&str; 3]); 2] = [
+    ("UTC", ["1704153600", "1710028800", "-86400"]),
     (
-        "derived_literal_cte_unix_timestamp_format",
-        "[CAST_INVALID_INPUT]",
-        3,
-    ),
-    (
-        "derived_literal_cte_to_unix_timestamp_format",
-        "[CAST_INVALID_INPUT]",
-        3,
-    ),
-    (
-        "derived_literal_union_unix_timestamp_format",
-        "Divide by zero error",
-        6,
-    ),
-    (
-        "derived_literal_union_to_unix_timestamp_format",
-        "Divide by zero error",
-        6,
+        "America/Los_Angeles",
+        ["1704182400", "1710057600", "-57600"],
     ),
 ];
-/// The seconds of DATE '2024-01-02' in each session zone.
-const DERIVED_CONSTANT_SECONDS: [(&str, &str); 2] =
-    [("UTC", "1704153600"), ("America/Los_Angeles", "1704182400")];
 
-fn derived_constant_record(case: &Value) -> Option<&'static DerivedConstantRecord> {
-    if case["ansi"] != true {
-        return None;
-    }
-    DERIVED_CONSTANT_RECORDS
-        .iter()
-        .find(|(id, ..)| case["id"] == *id)
+fn is_sorted_record(case: &Value) -> bool {
+    case["ansi"] == true
+        && case["id"]
+            .as_str()
+            .is_some_and(|id| SORTED_RECORDS.contains(&id))
 }
 
-/// The expectation for a record: Spark's, for a #1221 record DAR's schema error while analyzing,
-/// or for a #1232 record DAR's error while collecting rows.
+/// The expectation for a record: Spark's, for a #1221 record DAR's schema error while
+/// analyzing, or for a #1233 record DAR's rows.
 fn expectation(case: &Value) -> TestResult<Value> {
-    if let Some((_, message, rows)) = derived_constant_record(case) {
-        let (_, seconds) = DERIVED_CONSTANT_SECONDS
+    if is_sorted_record(case) {
+        if case["expected"]["status"] != "error"
+            || case["expected"]["condition"] != "CAST_INVALID_INPUT"
+            || case["spark_error_phase"] != "collect"
+        {
+            return Err(format!("expected Spark's CAST_INVALID_INPUT: {case}").into());
+        }
+        let (_, seconds) = SORTED_SECONDS
             .iter()
             .find(|(zone, _)| case["timezone"] == *zone)
             .ok_or("missing session zone")?;
-        let spark_rows = case["expected"]["rows"].as_array();
-        if case["expected"]["status"] != "ok"
-            || spark_rows.is_none_or(|spark_rows| {
-                spark_rows.len() != *rows || spark_rows.iter().any(|row| row[1] != *seconds)
-            })
-        {
-            return Err(format!("expected Spark's seconds in every row: {case}").into());
-        }
+        let rows = seconds
+            .iter()
+            .enumerate()
+            .map(|(key, seconds)| json!([key.to_string(), seconds]))
+            .collect::<Vec<_>>();
         let mut current = case.clone();
-        current["expected"] = json!({"status": "error", "dar_messages": [message]});
-        current["spark_error_phase"] = json!("collect");
-        current["schema_stages"]
-            .as_object_mut()
-            .ok_or("missing schema stages")?
-            .remove("executed");
+        current["expected"] = json!({"status": "ok", "rows": rows});
         return Ok(current);
     }
     if !is_retained(case) {
@@ -473,11 +452,8 @@ async fn formatted_unix_timestamp_nullability_matches_spark() -> TestResult {
     let cases = records[1..].iter().collect::<Vec<_>>();
     assert_eq!(cases.iter().filter(|case| is_retained(case)).count(), 8);
     assert_eq!(
-        cases
-            .iter()
-            .filter(|case| derived_constant_record(case).is_some())
-            .count(),
-        8
+        cases.iter().filter(|case| is_sorted_record(case)).count(),
+        4
     );
     assert_no_differences(&differences_over(&records, &cases, None).await?);
     Ok(())
