@@ -7,6 +7,7 @@ pub mod spark_date;
 pub mod spark_date_day_arithmetic;
 pub mod spark_date_format;
 pub mod spark_date_part;
+pub mod spark_date_timestamp_ntz_cast;
 pub mod spark_date_to_timestamp;
 pub mod spark_date_trunc;
 pub mod spark_interval;
