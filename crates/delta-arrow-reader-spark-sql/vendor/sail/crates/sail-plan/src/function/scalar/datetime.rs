@@ -983,9 +983,10 @@ fn computed_inputs(omitted: &Expr) -> PlanResult<Vec<Expr>> {
 /// NULL over a value that can be NULL fails the query when such a value occurs.
 /// `omitted_input` is an input of Spark's expression that `expr` leaves out, such as a format
 /// Spark does not evaluate. Its columns, aggregates and window functions become unused inputs
-/// of the declaration, so they are computed as Spark computes them, and the declaration does
-/// not fold over a constant `expr` where Spark's expression, which has them as inputs, is not
-/// constant. Where Spark's result is NOT NULL and DataFusion already declares it so,
+/// of the declaration, so the aggregates and window functions are computed as Spark computes
+/// them, and the declaration does not fold over a constant `expr` where Spark's expression, which
+/// has them as inputs, is not constant. The declaration keeps them reading columns only, so they
+/// are not evaluated, as Spark never evaluates an argument it ignores. Where Spark's result is NOT NULL and DataFusion already declares it so,
 /// `SparkWithInputs` carries them and keeps `expr`'s own nullability at every stage, which a
 /// grouping set can make nullable.
 fn declare_spark_nullability(
@@ -994,10 +995,19 @@ fn declare_spark_nullability(
     omitted_input: Option<&Expr>,
     schema: &DFSchemaRef,
 ) -> PlanResult<Expr> {
+    // A column keeps a nullable declaration from folding over a constant value, which only a
+    // value other than NULL needs; aggregates and window functions are kept so that they are
+    // computed. Any other column would only force the operators below to compute it.
+    let folds = nullable
+        && expr.column_refs().is_empty()
+        && !matches!(&expr, Expr::Literal(value, _) if value.is_null());
     let inputs = omitted_input
         .map(computed_inputs)
         .transpose()?
-        .unwrap_or_default();
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|input| folds || !matches!(input, Expr::Column(_)))
+        .collect::<Vec<_>>();
     let declared = expr.nullable(schema)?;
     let declaration = match (nullable, declared) {
         (true, true) | (false, false) if inputs.is_empty() => return Ok(expr),

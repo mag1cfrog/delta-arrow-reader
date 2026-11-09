@@ -4,16 +4,20 @@
 //! aggregates and window functions of a format Spark does not evaluate, where DataFusion already
 //! declares Spark's nullability. They are not used: they keep the operators below computing what
 //! Spark's do, and keep the value from folding over a constant where Spark's expression is not
-//! constant. Unlike `SparkKnownNotNull`, it checks no value, so a grouping set that makes the
+//! constant. They read columns only, as for `SparkKnownNullable`. Unlike `SparkKnownNotNull`, it checks no value, so a grouping set that makes the
 //! value NULL keeps it nullable, as Spark's is.
 
 use std::sync::Arc;
 
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
 use datafusion_common::{Result, internal_err};
+use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
 use datafusion_expr::{
-    ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
+    ColumnarValue, Expr, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature,
+    Volatility,
 };
+
+use crate::scalar::spark_known_nullable::simplify_kept_inputs;
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkWithInputs {
@@ -59,6 +63,10 @@ impl ScalarUDFImpl for SparkWithInputs {
             argument.data_type().clone(),
             argument.is_nullable(),
         )))
+    }
+
+    fn simplify(&self, args: Vec<Expr>, _info: &SimplifyContext) -> Result<ExprSimplifyResult> {
+        Ok(simplify_kept_inputs(ScalarUDF::from(Self::new()), args))
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
