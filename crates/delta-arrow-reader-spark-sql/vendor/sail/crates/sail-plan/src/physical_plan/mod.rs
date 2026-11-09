@@ -95,11 +95,10 @@ impl QueryPlanner for SparkQueryPlanner {
         } else {
             Cow::Borrowed(logical_plan)
         };
-        let plan =
-            DefaultPhysicalPlanner::with_extension_planners(vec![Arc::new(SparkExtensionPlanner)])
-                .create_physical_plan(&runtime_plan, &state)
-                .await?;
-        drop_declaration_inputs(plan, state.config_options())
+        let runtime_plan = drop_declaration_inputs(runtime_plan.into_owned(), session_state)?;
+        DefaultPhysicalPlanner::with_extension_planners(vec![Arc::new(SparkExtensionPlanner)])
+            .create_physical_plan(&runtime_plan, &state)
+            .await
     }
 }
 

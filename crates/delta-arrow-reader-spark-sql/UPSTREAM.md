@@ -913,18 +913,17 @@ TO_UNIX_TIMESTAMP with a format over these arguments declare their results the s
 give the declaration the ignored format's columns, aggregates and window functions as unused
 inputs. Spark computes those inputs although it does not evaluate the format, so an aggregate in
 the format makes the query an aggregation, and with a format column over a literal argument
-Spark's call is not constant and stays nullable after optimization (#1203). Once the physical
-plan is optimized, `SparkQueryPlanner` drops the declarations' inputs and prunes what only they
-read, also under the inputs of a union, so a derived format is not evaluated where DataFusion's
-projection pushdown inlines it or leaves it below a union (#1231). Spark computes a derived
-column below a subquery's sort, where DataFusion moves the call below it, so there DAR returns
-rows where a failing column fails Spark's query (#1233). Where Spark's result is NOT NULL and
-DataFusion's already is, `SparkWithInputs` carries the inputs and keeps the call's own
-nullability, which a grouping set makes nullable over the argument key, though not over the
-format's key (#1223). Formatted TO_DATE and TRY_TO_DATE still fold there (#1215), and an ORDER
-BY of such a call fails while analyzing, as any ORDER BY of an aggregate that is not selected
-does (#1221). The [formatted TO_DATE
-references](tests/fixtures/formatted-to-date-nullability/README.md) and [formatted
+Spark's call is not constant and stays nullable after optimization (#1203). Once the logical
+plan is optimized, `SparkQueryPlanner` drops the declarations' inputs from every operator's
+expressions, except the outputs of aggregates and window functions, and prunes the columns that
+only they read, so a derived format is never evaluated (#1231). Spark computes a derived column
+below a subquery's sort or a join, so there a failing column fails Spark's query, where DAR
+returns rows (#1233). Where Spark's result is NOT NULL and DataFusion's already is,
+`SparkWithInputs` carries the inputs and keeps the call's own nullability, which a grouping set
+makes nullable over the argument key, though not over the format's key (#1223). Formatted
+TO_DATE and TRY_TO_DATE still fold there (#1215), and an ORDER BY of such a call fails while
+analyzing, as any ORDER BY of an aggregate that is not selected does (#1221). The [formatted
+TO_DATE references](tests/fixtures/formatted-to-date-nullability/README.md) and [formatted
 UNIX_TIMESTAMP references](tests/fixtures/formatted-unix-timestamp-nullability/README.md) record
 the checks.
 
