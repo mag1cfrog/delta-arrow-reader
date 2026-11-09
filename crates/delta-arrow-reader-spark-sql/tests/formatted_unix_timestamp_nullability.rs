@@ -1,7 +1,8 @@
 //! UNIX_TIMESTAMP and TO_UNIX_TIMESTAMP with a format over a DATE, TIMESTAMP or TIMESTAMP_NTZ
 //! ignore the format and declare Spark's nullability: nullable at every stage over a column
 //! outside ANSI mode, and in ANSI mode for a nullable argument or format, and over a literal
-//! until constant folding, unless the format reads a column.
+//! until constant folding, unless the format has a column. The format's aggregates and window
+//! functions are computed, as Spark computes them.
 
 use std::sync::Arc;
 
@@ -31,7 +32,7 @@ mod spark_results;
 use spark_results::{TestResult, validate_batch};
 
 /// The number of recorded observations.
-const RECORD_COUNT: usize = 392;
+const RECORD_COUNT: usize = 432;
 
 fn formatted_unix_timestamp_references() -> TestResult<Vec<Value>> {
     let records = include_str!(

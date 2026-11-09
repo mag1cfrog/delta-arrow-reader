@@ -5,10 +5,11 @@ Records analyzed, optimized and executed schemas, typed internal-row values and 
 stages, with the innermost Java exception of a failure, for UNIX_TIMESTAMP and
 TO_UNIX_TIMESTAMP with a format over NOT NULL and nullable DATE, TIMESTAMP and TIMESTAMP_NTZ
 columns and literals, with literal, NOT NULL column, nullable column and NULL formats; over a
-DATE column with a format that fails if evaluated; over a DATE expression; and as a grouping
-key. Spark declares the result nullable outside ANSI mode, and in ANSI mode when an argument is
-nullable; it never evaluates the format of these arguments, and a format column keeps a literal
-argument's result from being constant. Every query runs in both ANSI modes in UTC and
+DATE column with a format that fails if evaluated; over a DATE expression; as a grouping key;
+and with aggregates and window functions in the format. Spark declares the result nullable
+outside ANSI mode, and in ANSI mode when an argument is nullable. It never evaluates the format
+of these arguments, but computes its aggregates and window functions, and a format column keeps
+a literal argument's result from being constant. Every query runs in both ANSI modes in UTC and
 America/Los_Angeles. Run from the crate root in the reference environment described in
 README.md; the output path must not exist.
 """
@@ -92,6 +93,19 @@ def definitions():
                f"SELECT k, {function}(date_add(dt, 1), f) AS r FROM inputs")
         yield (f"grouped_{function}_date_required_format",
                f"SELECT {function}(dt, g) AS r, count(*) AS n FROM inputs GROUP BY 1")
+        # Spark computes the aggregates and window functions of a format it does not evaluate.
+        yield (f"aggregate_{function}_nullable_format",
+               f"SELECT {function}(min(dt), max(f)) AS r FROM inputs")
+        yield (f"grouped_aggregate_{function}_required_format",
+               f"SELECT k, {function}(min(dt), max(g)) AS r FROM inputs GROUP BY k")
+        yield (f"literal_aggregate_{function}_nullable_format",
+               f"SELECT {function}(DATE '2024-01-02', max(f)) AS r FROM inputs")
+        yield (f"literal_aggregate_{function}_required_format",
+               f"SELECT {function}(DATE '2024-01-02', CAST(count(*) AS STRING)) AS r "
+               "FROM inputs")
+        yield (f"window_{function}_required_format",
+               f"SELECT k, {function}(dt, CAST(row_number() OVER (ORDER BY k) AS STRING)) AS r "
+               "FROM inputs")
 
 
 def python_value(value, kind):
