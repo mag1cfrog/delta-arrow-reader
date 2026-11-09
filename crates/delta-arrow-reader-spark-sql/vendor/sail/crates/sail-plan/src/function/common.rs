@@ -34,6 +34,20 @@ use crate::function::comparison::{
 };
 use crate::function::temporal_coercion::cast_local_timestamp_expr_to_ltz;
 
+/// Spark's `UNRESOLVED_ROUTINE` error for a routine named `function_name`, as written, on the
+/// session's search path.
+pub(crate) fn unresolved_routine_error(function_name: &str, session: &SessionContext) -> PlanError {
+    let state = session.state();
+    let catalog = &state.config().options().catalog;
+    let catalog_name = catalog.default_catalog.replace('`', "``");
+    let schema_name = catalog.default_schema.replace('`', "``");
+    PlanError::analysis(format!(
+        "[UNRESOLVED_ROUTINE] Cannot resolve routine `{function_name}` on search path \
+         [`system`.`builtin`, `system`.`session`, `{catalog_name}`.`{schema_name}`]. \
+         SQLSTATE: 42883"
+    ))
+}
+
 pub(crate) fn drop_inherited_column_metadata(expression: expr::Expr) -> expr::Expr {
     set_result_metadata(expression, vec![])
 }

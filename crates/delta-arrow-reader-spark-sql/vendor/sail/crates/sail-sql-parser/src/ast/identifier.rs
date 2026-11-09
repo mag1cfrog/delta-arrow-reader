@@ -35,6 +35,7 @@ where
             let ident = Ident {
                 span: input.span_since(&before).into(),
                 value: raw.to_string(),
+                quoted: false,
             };
             skip_whitespace(input);
             return Ok(ident);
@@ -48,6 +49,7 @@ where
                 let output = Ident {
                     span: input.span_since(&before).into(),
                     value: value.clone(),
+                    quoted: true,
                 };
                 skip_whitespace(input);
                 return Ok(output);
@@ -66,6 +68,9 @@ where
 pub struct Ident {
     pub span: TokenSpan,
     pub value: String,
+    /// Whether the identifier was written quoted, backquoted or, where double quotes delimit
+    /// identifiers, double-quoted, rather than as a bare word.
+    pub quoted: bool,
 }
 
 impl<'a, I, E> TreeParser<'a, I, E> for Ident

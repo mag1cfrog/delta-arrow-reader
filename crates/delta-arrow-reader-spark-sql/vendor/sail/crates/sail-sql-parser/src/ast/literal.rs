@@ -269,6 +269,8 @@ impl TreeSyntax for IntegerLiteral {
 pub struct StringLiteral {
     pub span: TokenSpan,
     pub value: StringValue,
+    /// The string token as written, with its quotes.
+    pub text: String,
 }
 
 /// Parse the `UESCAPE 'c'` clause following a Unicode string literal.
@@ -334,6 +336,7 @@ where
                     let literal = StringLiteral {
                         span: input.span_since(before.cursor()).into(),
                         value,
+                        text: raw.to_string(),
                     };
                     skip_whitespace(input);
                     return Ok(literal);
