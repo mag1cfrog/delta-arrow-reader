@@ -655,20 +655,21 @@ DataFusion's coercion (#1191); a constant over an input proven empty stays nulla
 optimization (#1190); and EXTRACT of DAYOFWEEK, DOW_ISO and YEAROFWEEK is unsupported (#1116).
 The [cast references](tests/fixtures/date-ntz-casts/README.md) record the checks.
 
-TRUNC uses a local function, `SparkTruncDate`, like Spark's `TruncDate`. It truncates to
-Spark's units only, YEAR, YYYY, YY, QUARTER, MON, MONTH, MM and WEEK in any letter case, and
-gives NULL for any other unit, NULL included; DataFusion's `date_trunc` also accepted DAY, HOUR
-and other units. Like Spark, it gives NULL for a constant unit it does not support without
-reading the date, and otherwise evaluates the date and the unit for every row, so under ANSI a
+TRUNC uses a local function, `SparkTruncDate`, like Spark's `TruncDate`. It truncates to Spark's
+units only, YEAR, YYYY, YY, QUARTER, MON, MONTH, MM and WEEK in any letter case, and gives NULL
+for any other unit, NULL included; DataFusion's `date_trunc` also accepted DAY, HOUR and other
+units. Like Spark, it gives NULL for a constant unit it does not support without reading the
+date, also for a unit the optimizer makes constant, though it still computes the date's
+aggregates; otherwise it evaluates the date and the unit for every row, so under ANSI a
 malformed STRING date fails beside a unit column whatever its row's unit; each row's unit is
-read once. It truncates the DATE's days over the whole DATE range, where `date_trunc` failed
-outside the nanosecond range (#1087). A STRING argument is read with Spark's STRING-to-DATE
-rules through `SparkDate`, and an argument other than a DATE, TIMESTAMP, TIMESTAMP_NTZ or STRING
-fails. A unit of another type than STRING is cast to STRING, as Spark casts it, where BINARY
-that is not UTF-8 spells no unit; an ARRAY, MAP or STRUCT unit fails. The result is nullable, as
-Spark declares it, until constant folding replaces it over literals; over an input proven empty
-it stays nullable (#1190). The [TRUNC unit references](tests/fixtures/trunc-units/README.md)
-record the checks (#1192).
+read once. It truncates the DATE's days over the whole DATE range, with Spark's INT arithmetic
+near the earliest DATE, where `date_trunc` failed outside the nanosecond range (#1087). A STRING
+argument is read with Spark's STRING-to-DATE rules through `SparkDate`, and an argument other
+than a DATE, TIMESTAMP, TIMESTAMP_NTZ or STRING fails. A unit of another type than STRING is
+cast to STRING, as Spark casts it, where BINARY that is not UTF-8 spells no unit; an ARRAY, MAP
+or STRUCT unit fails. The result is nullable, as Spark declares it, until constant folding
+replaces it over literals; over an input proven empty it stays nullable (#1190). The [TRUNC unit
+references](tests/fixtures/trunc-units/README.md) record the checks (#1192).
 
 Two DATE values subtract with `-` and TRY_SUBTRACT as Spark's `SubtractDates` does outside its
 legacy interval mode, with a local function, `SparkSubtractDates`: the result is the DAY

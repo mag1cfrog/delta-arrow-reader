@@ -409,14 +409,14 @@ fn is_spark_foldable(expr: &Expr) -> PlanResult<bool> {
         })?)
 }
 
-/// Spark's TRUNC of a DATE. Spark casts a STRING argument to DATE with its STRING-to-DATE
-/// rules, read here from a dictionary's values, and a TIMESTAMP or TIMESTAMP_NTZ to DATE; it
-/// rejects other types. It casts a unit of a type other than ARRAY, MAP or STRUCT to STRING;
-/// BINARY that is not UTF-8 spells no unit. A constant unit it does not support, NULL included,
-/// gives NULL without reading the date. Otherwise `SparkTruncDate` evaluates the date and the
-/// unit for every row, reads each row's unit and truncates the DATE's days, giving NULL for a
-/// unit Spark does not support. Its result is nullable, as Spark declares it, until constant
-/// folding replaces a literal's.
+/// Spark's TRUNC of a DATE. Spark casts a STRING argument to DATE with its STRING-to-DATE rules,
+/// read here from a dictionary's values, and a TIMESTAMP or TIMESTAMP_NTZ to DATE; it rejects other
+/// types. It casts a unit of a type other than ARRAY, MAP or STRUCT to STRING; BINARY that is not
+/// UTF-8 spells no unit. A constant unit it does not support, NULL included, gives NULL without
+/// reading the date, also when the optimizer makes the unit constant, which `SparkTruncDate`
+/// handles. Otherwise `SparkTruncDate` evaluates the date and the unit for every row, reads each
+/// row's unit and truncates the DATE's days, giving NULL for a unit Spark does not support. Its
+/// result is nullable, as Spark declares it, until constant folding replaces a literal's.
 fn trunc(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let schema = input.function_context.schema;
     let ansi = input.function_context.plan_config.ansi_mode;
@@ -458,7 +458,14 @@ fn trunc(input: ScalarFunctionInput) -> PlanResult<Expr> {
                 _ => false,
             };
             if !supported {
-                return Ok(lit(ScalarValue::Date32(None)));
+                // Spark computes the date's columns, aggregates and window functions, though
+                // it does not read the date.
+                return declare_spark_nullability(
+                    lit(ScalarValue::Date32(None)),
+                    true,
+                    Some(&date),
+                    schema,
+                );
             }
         }
     }

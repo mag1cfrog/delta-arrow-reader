@@ -2,17 +2,20 @@
 //! Spark's `TruncDate`: a DATE truncated to the first day of its year, quarter, month or week,
 //! which starts on Monday. Spark spells the units YEAR, YYYY and YY; QUARTER; MON, MONTH and MM;
 //! and WEEK, in any letter case and without trimming. Another unit, NULL included, gives NULL.
-//! Both arguments are evaluated for every row and a unit column's value is read once per row.
-//! The truncation works on the DATE's days over the whole DATE range; a first day before the
-//! earliest DATE fails, as Spark's does. The result is declared nullable, as Spark's is.
+//! Both arguments are evaluated for every row and a unit column's value is read once per row,
+//! except that a unit the optimizer makes a constant Spark does not support gives NULL without
+//! the date. The truncation works on the DATE's days over the whole DATE range, with Spark's
+//! INT arithmetic near the earliest DATE. The result is declared nullable, as Spark's is.
 
 use std::sync::Arc;
 
 use datafusion::arrow::array::{AsArray, Date32Array};
 use datafusion::arrow::datatypes::{DataType, Date32Type, Field, FieldRef};
 use datafusion_common::{Result, ScalarValue, exec_datafusion_err, internal_err};
+use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
 use datafusion_expr::{
-    ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
+    ColumnarValue, Expr, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
+    lit,
 };
 
 /// A unit Spark's TRUNC supports.
@@ -37,25 +40,34 @@ impl TruncUnit {
         }
     }
 
-    /// The first day of the unit that holds the DATE `days`, counted from 1970-01-01.
+    /// The first day of the unit that holds the DATE `days`, counted from 1970-01-01, as Spark's
+    /// `DateTimeUtils.truncDate` computes it. Near the earliest DATE, where that day is before
+    /// it, Spark's INT arithmetic wraps for WEEK, MONTH and YEAR, and its QUARTER fails.
     pub fn truncate(self, days: i32) -> Result<i32> {
         let day = i64::from(days);
-        let first = match self {
-            // 1970-01-01 is a Thursday, three days after a Monday.
-            Self::Week => day - (day + 3).rem_euclid(7),
-            Self::Year | Self::Quarter | Self::Month => {
-                let (year, month) = year_and_month(day);
-                let month = match self {
-                    Self::Year => 1,
-                    Self::Quarter => (month - 1) / 3 * 3 + 1,
-                    _ => month,
-                };
-                first_day_of_month(year, month)
+        let (year, month) = year_and_month(day);
+        let first_month = match self {
+            // `getNextDateForDayOfWeek(days - 7, MONDAY)`: the first Monday after a week back.
+            Self::Week => {
+                let start = days.wrapping_sub(7);
+                // 1970-01-01 is a Thursday, three days after a Monday.
+                let since_monday = (start.rem_euclid(7) + 3) % 7;
+                return Ok(start.wrapping_add(7 - since_monday));
             }
+            Self::Year => 1,
+            Self::Month => month,
+            Self::Quarter => (month - 1) / 3 * 3 + 1,
         };
-        i32::try_from(first).map_err(|_| {
-            exec_datafusion_err!("TRUNC of DATE {days} to {self:?} is before the earliest DATE")
-        })
+        let first = first_day_of_month(year, first_month);
+        if self == Self::Quarter {
+            return i32::try_from(first).map_err(|_| {
+                exec_datafusion_err!("TRUNC of DATE {days} to QUARTER is before the earliest DATE")
+            });
+        }
+        // `days - getDayInYear(days) + 1` and `days - getDayOfMonth(days) + 1`.
+        let offset = i32::try_from(day - first)
+            .map_err(|_| exec_datafusion_err!("TRUNC of DATE {days} to {self:?} out of range"))?;
+        Ok(days.wrapping_sub(offset))
     }
 }
 
@@ -135,6 +147,19 @@ impl ScalarUDFImpl for SparkTruncDate {
 
     fn return_field_from_args(&self, _args: ReturnFieldArgs) -> Result<FieldRef> {
         Ok(Arc::new(Field::new(self.name(), DataType::Date32, true)))
+    }
+
+    /// Spark's TRUNC reads no date for a constant unit it does not support, also when its
+    /// optimizer makes the unit constant, so a unit that becomes such a literal gives NULL.
+    fn simplify(&self, args: Vec<Expr>, _info: &SimplifyContext) -> Result<ExprSimplifyResult> {
+        if let [_, Expr::Literal(ScalarValue::Utf8(unit), _)] = args.as_slice()
+            && unit.as_deref().and_then(TruncUnit::parse).is_none()
+        {
+            return Ok(ExprSimplifyResult::Simplified(lit(ScalarValue::Date32(
+                None,
+            ))));
+        }
+        Ok(ExprSimplifyResult::Original(args))
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
@@ -243,8 +268,10 @@ mod tests {
         Ok(())
     }
 
-    /// Beyond chrono's range every DATE truncates to a first day no later than itself, except
-    /// that the earliest DATE, a Tuesday in June, has no first day of its unit to return.
+    /// Beyond chrono's range every DATE truncates to a first day no later than itself. Near the
+    /// earliest DATE, a Tuesday in June, the first day is before it, and Spark's INT arithmetic
+    /// wraps for WEEK, MONTH and YEAR, as `trunc(date_sub(DATE '1970-01-01', 2147483647), unit)`
+    /// shows in Spark 4.2.0; QUARTER fails.
     #[test]
     fn truncates_across_the_date_range() -> Result<()> {
         for unit in UNITS {
@@ -256,8 +283,12 @@ mod tests {
                 );
                 assert_eq!(unit.truncate(first)?, first);
             }
-            assert!(unit.truncate(i32::MIN).is_err());
         }
+        let earliest = i32::MIN + 1;
+        assert_eq!(TruncUnit::Week.truncate(earliest)?, 2_147_483_643);
+        assert_eq!(TruncUnit::Month.truncate(earliest)?, 2_147_483_626);
+        assert_eq!(TruncUnit::Year.truncate(earliest)?, 2_147_483_475);
+        assert!(TruncUnit::Quarter.truncate(earliest).is_err());
         Ok(())
     }
 }
