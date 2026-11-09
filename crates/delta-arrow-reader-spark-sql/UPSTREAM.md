@@ -854,6 +854,26 @@ cover the full Date32 boundary, string coercion and invalid inputs. Month/year
 intervals, three-argument timestamp forms and the Sail-only ADD_DAYS keep their
 existing paths.
 
+TRY_TO_DATE plans TO_DATE with the parser's NULL-on-error mode in both ANSI modes, as Spark's
+does: a string it cannot parse, with or without a format, gives NULL, while an invalid pattern
+still fails. It was an unknown function. With a format, its result over a TIMESTAMP or DATE
+column is nullable at every stage, as Spark declares it, through a local function,
+`SparkKnownNullable`, that the optimizer cannot simplify away over a column; over a literal it
+folds to NOT NULL, as in Spark. TO_DATE and TRY_TO_DATE parse a dictionary-encoded STRING, such
+as a Delta partition column, as its STRING values, and report Spark's
+`WRONG_NUM_ARGS.WITHOUT_SUGGESTION` for the wrong number of arguments. They share these open
+differences:
+- DAR's invalid-pattern messages (#1010) and parser messages (#1057);
+- strings beyond the date library's range (#1011);
+- an ignored parsed offset (#1015);
+- arguments of other types cast to DATE or failing, where Spark converts them to STRING (#1194);
+- a TIMESTAMP_NTZ with a format read as its own DATE outside UTC (#1195);
+- TO_DATE's formatted `CASE WHEN true` declaration over a DATE or TIMESTAMP, NOT NULL after
+  optimization where Spark's result is nullable (#1196).
+
+The [temporal contract references](tests/fixtures/temporal-contracts/README.md) and the
+[TRY_TO_DATE references](tests/fixtures/try-to-date/README.md) record the checks (#1017).
+
 Two-argument DATEDIFF/DATE_DIFF return Spark's INT day count, subtracting the
 DATE days as a native INT subtraction that wraps at the DATE limits like Spark's
 `int` arithmetic; TIMESTAMP arguments are cast to DATE in their TIMESTAMP type's
