@@ -33,7 +33,7 @@ mod spark_results;
 use spark_results::{TestResult, validate_batch};
 
 /// The number of recorded observations.
-const RECORD_COUNT: usize = 744;
+const RECORD_COUNT: usize = 776;
 
 fn formatted_unix_timestamp_references() -> TestResult<Vec<Value>> {
     let records = include_str!(
@@ -65,49 +65,91 @@ fn is_retained(case: &Value) -> bool {
         .is_some_and(|id| ORDER_BY_AGGREGATE_RECORDS.contains(&id))
 }
 
-/// #1233: Spark computes a derived format column below a subquery's sort or a join, so with ANSI
-/// enabled the failing CAST fails while collecting rows; DAR drops the unused format and prunes the
-/// column, and returns the dates' seconds, in each session zone.
-const SORTED_RECORDS: [&str; 4] = [
-    "derived_sorted_unix_timestamp_format",
-    "derived_sorted_to_unix_timestamp_format",
-    "derived_joined_unix_timestamp_format",
-    "derived_joined_to_unix_timestamp_format",
+/// #1233: Spark computes a derived format column below a subquery's sort, a join, an aggregate
+/// and a generator, so with ANSI enabled the failing CAST fails while collecting rows, and it
+/// evaluates a scalar subquery column, which returns more than one row in both modes. DAR drops
+/// the unused format and prunes the column, so it returns the dates' seconds, or for the
+/// aggregate the literal's, in each session zone.
+const COMPUTED_BELOW_RECORDS: [(&str, &str); 10] = [
+    ("derived_sorted_unix_timestamp_format", "CAST_INVALID_INPUT"),
+    (
+        "derived_sorted_to_unix_timestamp_format",
+        "CAST_INVALID_INPUT",
+    ),
+    ("derived_joined_unix_timestamp_format", "CAST_INVALID_INPUT"),
+    (
+        "derived_joined_to_unix_timestamp_format",
+        "CAST_INVALID_INPUT",
+    ),
+    (
+        "derived_generated_unix_timestamp_format",
+        "CAST_INVALID_INPUT",
+    ),
+    (
+        "derived_generated_to_unix_timestamp_format",
+        "CAST_INVALID_INPUT",
+    ),
+    (
+        "derived_aggregated_unix_timestamp_format",
+        "CAST_INVALID_INPUT",
+    ),
+    (
+        "derived_aggregated_to_unix_timestamp_format",
+        "CAST_INVALID_INPUT",
+    ),
+    (
+        "derived_scalar_subquery_unix_timestamp_format",
+        "SCALAR_SUBQUERY_TOO_MANY_ROWS",
+    ),
+    (
+        "derived_scalar_subquery_to_unix_timestamp_format",
+        "SCALAR_SUBQUERY_TOO_MANY_ROWS",
+    ),
 ];
-const SORTED_SECONDS: [(&str, [&str; 3]); 2] = [
-    ("UTC", ["1704153600", "1710028800", "-86400"]),
+/// The seconds of the dates in `dt`, and of DATE '2024-01-02', in each session zone.
+const ZONE_SECONDS: [(&str, [&str; 3], &str); 2] = [
+    ("UTC", ["1704153600", "1710028800", "-86400"], "1704153600"),
     (
         "America/Los_Angeles",
         ["1704182400", "1710057600", "-57600"],
+        "1704182400",
     ),
 ];
 
-fn is_sorted_record(case: &Value) -> bool {
-    case["ansi"] == true
-        && case["id"]
-            .as_str()
-            .is_some_and(|id| SORTED_RECORDS.contains(&id))
+/// The condition Spark fails a #1233 record with, where DAR returns rows.
+fn computed_below_condition(case: &Value) -> Option<&'static str> {
+    let (_, condition) = COMPUTED_BELOW_RECORDS
+        .iter()
+        .find(|(id, _)| case["id"] == *id)?;
+    (case["ansi"] == true || *condition == "SCALAR_SUBQUERY_TOO_MANY_ROWS").then_some(*condition)
 }
 
 /// The expectation for a record: Spark's, for a #1221 record DAR's schema error while
 /// analyzing, or for a #1233 record DAR's rows.
 fn expectation(case: &Value) -> TestResult<Value> {
-    if is_sorted_record(case) {
+    if let Some(condition) = computed_below_condition(case) {
         if case["expected"]["status"] != "error"
-            || case["expected"]["condition"] != "CAST_INVALID_INPUT"
+            || case["expected"]["condition"] != condition
             || case["spark_error_phase"] != "collect"
         {
-            return Err(format!("expected Spark's CAST_INVALID_INPUT: {case}").into());
+            return Err(format!("expected Spark's {condition}: {case}").into());
         }
-        let (_, seconds) = SORTED_SECONDS
+        let (_, dates, literal) = ZONE_SECONDS
             .iter()
-            .find(|(zone, _)| case["timezone"] == *zone)
+            .find(|(zone, ..)| case["timezone"] == *zone)
             .ok_or("missing session zone")?;
-        let rows = seconds
-            .iter()
-            .enumerate()
-            .map(|(key, seconds)| json!([key.to_string(), seconds]))
-            .collect::<Vec<_>>();
+        let aggregated = case["id"]
+            .as_str()
+            .is_some_and(|id| id.starts_with("derived_aggregated_"));
+        let rows = if aggregated {
+            vec![json!([literal])]
+        } else {
+            dates
+                .iter()
+                .enumerate()
+                .map(|(key, seconds)| json!([key.to_string(), seconds]))
+                .collect()
+        };
         let mut current = case.clone();
         current["expected"] = json!({"status": "ok", "rows": rows});
         return Ok(current);
@@ -463,8 +505,11 @@ async fn formatted_unix_timestamp_nullability_matches_spark() -> TestResult {
     let cases = records[1..].iter().collect::<Vec<_>>();
     assert_eq!(cases.iter().filter(|case| is_retained(case)).count(), 8);
     assert_eq!(
-        cases.iter().filter(|case| is_sorted_record(case)).count(),
-        8
+        cases
+            .iter()
+            .filter(|case| computed_below_condition(case).is_some())
+            .count(),
+        24
     );
     assert_no_differences(&differences_over(&records, &cases, None).await?);
     Ok(())

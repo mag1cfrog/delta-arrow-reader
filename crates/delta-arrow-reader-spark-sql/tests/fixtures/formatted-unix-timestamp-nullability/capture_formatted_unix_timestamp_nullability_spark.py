@@ -127,6 +127,9 @@ def definitions():
         yield (f"derived_failing_window_{function}_format",
                f"SELECT k, {function}(dt, x) AS r "
                f"FROM (SELECT k, dt, CAST({failing} OVER () AS STRING) AS x FROM inputs) t")
+        yield (f"failing_second_aggregate_{function}_format",
+               f"SELECT {function}(DATE '2024-01-02', concat(CAST(max(f) AS STRING), "
+               f"CAST({failing} AS STRING))) AS r FROM inputs")
         yield (f"union_failing_aggregate_{function}_format",
                f"SELECT k, {function}(DATE '2024-01-02', x) AS r FROM (SELECT k, "
                f"CAST(max(k) AS STRING) AS x FROM inputs GROUP BY k UNION ALL SELECT k, "
@@ -205,10 +208,19 @@ def definitions():
             yield (f"derived_required_{name}_{function}_format",
                    f"SELECT k, {function}({argument}, x) AS r "
                    f"FROM (SELECT k, dt, ts, tn, {required} FROM inputs) t")
-        # Spark computes a derived column below a join, so there it fails with ANSI enabled.
+        # Spark computes a derived column below a join, an aggregate and a generator, so there
+        # it fails with ANSI enabled, and evaluates a scalar subquery column, which fails.
         yield (f"derived_joined_{function}_format",
                f"SELECT t.k, {function}(t.dt, t.x) AS r FROM inputs a JOIN {derived} "
                f"ON a.k = t.k")
+        yield (f"derived_aggregated_{function}_format",
+               f"SELECT max({function}(DATE '2024-01-02', x)) AS r FROM {derived}")
+        yield (f"derived_generated_{function}_format",
+               f"SELECT k, {function}(dt, x) AS r FROM (SELECT k, dt, x FROM (SELECT k, dt, "
+               f"{cast}, array(1) AS a FROM inputs) s LATERAL VIEW explode(a) e AS v) t")
+        yield (f"derived_scalar_subquery_{function}_format",
+               f"SELECT k, {function}(dt, x) AS r FROM "
+               f"(SELECT k, dt, (SELECT f FROM inputs) AS x FROM inputs) t")
         # Spark computes a derived column below a sort, so there it fails with ANSI enabled.
         yield (f"derived_sorted_{function}_format",
                f"SELECT k, {function}(dt, x) AS r FROM (SELECT k, dt, {cast} FROM inputs "
