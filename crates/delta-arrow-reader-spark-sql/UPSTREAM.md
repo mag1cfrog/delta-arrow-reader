@@ -635,6 +635,29 @@ operand outside a conditional branch, and fails there; DAR returns NULL (#1133).
 [DATE and TIMESTAMP_NTZ subtraction references](tests/fixtures/date-ntz-subtraction/README.md)
 record the checks.
 
+Casts between TIMESTAMP_NTZ and DATE use a local function, `SparkDateTimestampNtzCast`, with
+Arrow's values and Spark's nullability. Spark declares such a cast nullable whatever its input,
+so these results are nullable over a column, and over a literal until constant folding:
+- CAST and TRY_CAST of a TIMESTAMP_NTZ to DATE, CAST of a DATE to TIMESTAMP_NTZ, DATE(), and
+  TO_TIMESTAMP_NTZ of a DATE, also TO_TIMESTAMP and TRY_TO_TIMESTAMP with the session timestamp
+  type TIMESTAMP_NTZ;
+- the implicit casts of the TO_DATE, DATE_ADD, DATE_SUB, ADD_MONTHS, DATEDIFF, TRUNC, DAY,
+  DAYOFMONTH, DAYOFYEAR, MONTH, QUARTER, WEEKDAY and DAYOFWEEK arguments and of the date fields
+  of EXTRACT, DATE_PART and DATEPART;
+- a DATE compared with a TIMESTAMP_NTZ, and a DATE beside a TIMESTAMP_NTZ in CASE, IF, COALESCE
+  and UNION.
+
+They were NOT NULL for a NOT NULL input (#1003). TRY_CAST of a DATE to TIMESTAMP_NTZ cannot
+fail and keeps its input's nullability. Values are unchanged: TRUNC truncates a TIMESTAMP_NTZ
+before its cast to DATE, which gives the same DATE for Spark's units, and like a DATE fails
+outside the nanosecond range, before 1677-09-21 or after 2262-04-11 (#1087). Still open: Spark's
+optimizer rewrites a column compared with a literal without the cast, NOT NULL once optimized,
+which DAR does not do (#1197); a DATE in an IN list of TIMESTAMP_NTZ values keeps
+DataFusion's coercion (#1191); a constant over an input proven empty stays nullable after
+optimization (#1190); UNIX_DATE accepts a TIMESTAMP_NTZ that Spark rejects (#1188); TRUNC to a
+unit Spark does not support gives a DATE (#1192); and EXTRACT of DAYOFWEEK, DOW_ISO and
+YEAROFWEEK is unsupported (#1116). The [cast references](tests/fixtures/date-ntz-casts/README.md) record the checks.
+
 Two DATE values subtract with `-` and TRY_SUBTRACT as Spark's `SubtractDates` does outside its
 legacy interval mode, with a local function, `SparkSubtractDates`: the result is the DAY
 interval between the dates, in microseconds, nullable only for a nullable operand. The day

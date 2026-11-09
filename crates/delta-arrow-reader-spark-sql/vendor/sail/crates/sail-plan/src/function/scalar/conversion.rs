@@ -8,7 +8,9 @@ use sail_function::scalar::datetime::spark_time::SparkTime;
 use sail_function::scalar::datetime::spark_timestamp::SparkTimestamp;
 
 use crate::error::PlanResult;
-use crate::function::common::{ScalarFunction, ScalarFunctionInput};
+use crate::function::common::{
+    ScalarFunction, ScalarFunctionInput, cast_with_date_ntz_nullability,
+};
 
 pub(crate) fn cast_to_date(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let arg = input.arguments.one()?;
@@ -26,10 +28,12 @@ pub(crate) fn cast_to_date(input: ScalarFunctionInput) -> PlanResult<expr::Expr>
             args: vec![arg],
         }))
     } else {
-        Ok(expr::Expr::Cast(expr::Cast::new(
-            Box::new(arg),
-            DataType::Date32,
-        )))
+        // Spark's DATE() is its cast, nullable for a TIMESTAMP_NTZ.
+        Ok(cast_with_date_ntz_nullability(
+            arg,
+            &data_type,
+            &DataType::Date32,
+        ))
     }
 }
 

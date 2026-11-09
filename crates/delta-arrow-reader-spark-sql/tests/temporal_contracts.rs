@@ -267,9 +267,6 @@ fn differing_parts(expectation: &Value, observation: &Value) -> Vec<&'static str
 enum RetainedDifference {
     /// #943: typed TIMESTAMP literals roll second 60 over to the next minute.
     RolledOverLeapSecond,
-    /// #1003: CAST(DATE AS TIMESTAMP_NTZ) is required at analysis, where Spark declares it
-    /// nullable.
-    RequiredDateNtzCast,
     /// #1010: invalid datetime patterns use DAR's message, and `#`, `{` and `}` are
     /// formatted as literal text.
     DarPatternErrors,
@@ -656,13 +653,6 @@ fn current_expectation(
         if declared_nullable {
             retained.insert(RetainedDifference::NullableFormattingResults);
         }
-        if section == "convert" && operator == "date_to_ntz" {
-            if fields[0]["nullable"] != true {
-                return Err("expected Spark's nullable DATE to TIMESTAMP_NTZ cast".into());
-            }
-            fields[0]["nullable"] = json!(false);
-            retained.insert(RetainedDifference::RequiredDateNtzCast);
-        }
     }
     if section == "formatted"
         && input == "offset"
@@ -755,7 +745,6 @@ async fn temporal_contracts_match_spark() -> TestResult {
         retained,
         [
             (RetainedDifference::RolledOverLeapSecond, 12),
-            (RetainedDifference::RequiredDateNtzCast, 24),
             (RetainedDifference::DarPatternErrors, 324),
             (RetainedDifference::OutOfRangeStrings, 212),
             (RetainedDifference::ZoneTokenText, 96),
