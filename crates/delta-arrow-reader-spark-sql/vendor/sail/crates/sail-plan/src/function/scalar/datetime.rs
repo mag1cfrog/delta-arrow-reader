@@ -53,7 +53,7 @@ use sail_function::scalar::spark_cast_string_to_integer::{
     SparkCastStringToInteger, StringIntegerCastMode,
 };
 use sail_function::scalar::spark_decimal_cast::{DecimalCastMode, SparkDecimalCast};
-use sail_function::scalar::spark_nullable_result::SparkNullableResult;
+use sail_function::scalar::spark_known_nullable::SparkKnownNullable;
 use sail_sql_analyzer::literal::interval::IntervalValue;
 use sail_sql_analyzer::parser::parse_interval;
 
@@ -867,31 +867,54 @@ fn declare_nullable_result(expr: Expr, nullable: bool, schema: &DFSchemaRef) -> 
     }
 }
 
+/// TO_DATE or Spark's TRY_TO_DATE, which is TO_DATE outside ANSI mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DateParser {
+    ToDate,
+    TryToDate,
+}
+
+impl DateParser {
+    fn name(self) -> &'static str {
+        match self {
+            Self::ToDate => "to_date",
+            Self::TryToDate => "try_to_date",
+        }
+    }
+
+    /// Whether a value it cannot parse gives NULL rather than failing.
+    fn null_on_error(self, ansi_mode: bool) -> bool {
+        self == Self::TryToDate || !ansi_mode
+    }
+}
+
 fn to_date(input: ScalarFunctionInput) -> PlanResult<Expr> {
-    let null_on_error = !input.function_context.plan_config.ansi_mode;
-    to_date_with(input, null_on_error, false)
+    parse_date(input, DateParser::ToDate)
 }
 
 /// Spark's TRY_TO_DATE: TO_DATE that gives NULL for a value it cannot parse in both ANSI modes.
-/// An invalid pattern still fails, as in Spark. With a format, its result is nullable at every
-/// stage, also for a DATE or TIMESTAMP argument.
+/// An invalid pattern still fails, as in Spark. With a format, its result over a DATE or
+/// TIMESTAMP column is nullable at every stage.
 fn try_to_date(input: ScalarFunctionInput) -> PlanResult<Expr> {
-    to_date_with(input, true, true)
+    parse_date(input, DateParser::TryToDate)
 }
 
-fn to_date_with(
-    input: ScalarFunctionInput,
-    null_on_error: bool,
-    try_function: bool,
-) -> PlanResult<Expr> {
-    let function_name = if try_function {
-        "try_to_date"
-    } else {
-        "to_date"
-    };
+/// A dictionary-encoded STRING, as Delta's provider gives a STRING partition column, as its
+/// STRING values; any other argument unchanged.
+fn dictionary_string_values(expr: Expr, schema: &DFSchemaRef) -> PlanResult<Expr> {
+    Ok(match expr.get_type(schema)? {
+        DataType::Dictionary(_, value) if value.is_string() => cast(expr, *value),
+        _ => expr,
+    })
+}
+
+fn parse_date(input: ScalarFunctionInput, parser: DateParser) -> PlanResult<Expr> {
+    let function_name = parser.name();
+    let null_on_error = parser.null_on_error(input.function_context.plan_config.ansi_mode);
     if input.arguments.len() == 1 {
         // If format is not supplied, the function is a synonym for cast(expr AS DATE).
-        let expr = input.arguments[0].clone();
+        let expr =
+            dictionary_string_values(input.arguments[0].clone(), input.function_context.schema)?;
         let data_type = expr.get_type(input.function_context.schema)?;
         if data_type.is_string() {
             Ok(ScalarUDF::from(SparkDate::new(null_on_error)).call(vec![expr]))
@@ -899,7 +922,8 @@ fn to_date_with(
             Ok(cast(expr, DataType::Date32))
         }
     } else if input.arguments.len() == 2 {
-        let expr = input.arguments[0].clone();
+        let expr =
+            dictionary_string_values(input.arguments[0].clone(), input.function_context.schema)?;
         let format = coerce_datetime_format(
             function_name,
             input.arguments[1].clone(),
@@ -912,8 +936,8 @@ fn to_date_with(
             _ => None,
         };
         if let Some(date) = date {
-            if try_function {
-                return Ok(ScalarUDF::from(SparkNullableResult::new())
+            if parser == DateParser::TryToDate {
+                return Ok(ScalarUDF::from(SparkKnownNullable::new())
                     .call(vec![cast(date, DataType::Date32)]));
             }
             let nullable = null_on_error
@@ -932,7 +956,9 @@ fn to_date_with(
         Ok(ScalarUDF::from(SparkDate::new(null_on_error)).call(vec![expr, format]))
     } else {
         Err(PlanError::invalid(format!(
-            "{function_name} requires 1 or 2 arguments"
+            "[WRONG_NUM_ARGS.WITHOUT_SUGGESTION] The `{function_name}` requires [1, 2] \
+             parameters but the actual number is {}.",
+            input.arguments.len()
         )))
     }
 }

@@ -1,8 +1,9 @@
 // Local Spark nullability declaration. See the host crate's UPSTREAM.md.
-//! Its argument unchanged, declared nullable whatever the argument declares, for a Spark
-//! expression that is nullable at every stage, such as TRY_TO_DATE. Unlike a `CASE WHEN true`
-//! wrapper, the optimizer cannot simplify it away over a column; over a constant it folds like
-//! any immutable function, so the folded value is NOT NULL, as Spark's is.
+//! Like Spark's `KnownNullable`: its argument unchanged, declared nullable whatever the argument
+//! declares, for a Spark expression that is nullable over a column at every stage, such as
+//! TRY_TO_DATE with a format. Unlike a `CASE WHEN true` wrapper, the optimizer cannot simplify
+//! it away over a column; over a constant it folds like any immutable function, so the folded
+//! value is NOT NULL, as Spark's is.
 
 use std::sync::Arc;
 
@@ -13,17 +14,17 @@ use datafusion_expr::{
 };
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-pub struct SparkNullableResult {
+pub struct SparkKnownNullable {
     signature: Signature,
 }
 
-impl Default for SparkNullableResult {
+impl Default for SparkKnownNullable {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl SparkNullableResult {
+impl SparkKnownNullable {
     pub fn new() -> Self {
         Self {
             signature: Signature::any(1, Volatility::Immutable),
@@ -31,9 +32,9 @@ impl SparkNullableResult {
     }
 }
 
-impl ScalarUDFImpl for SparkNullableResult {
+impl ScalarUDFImpl for SparkKnownNullable {
     fn name(&self) -> &str {
-        "spark_nullable_result"
+        "spark_known_nullable"
     }
 
     fn signature(&self) -> &Signature {

@@ -833,13 +833,22 @@ existing paths.
 
 TRY_TO_DATE plans TO_DATE with the parser's NULL-on-error mode in both ANSI modes, as Spark's
 does: a string it cannot parse, with or without a format, gives NULL, while an invalid pattern
-still fails. It was an unknown function. With a format, its result over a TIMESTAMP or DATE is
-nullable at every stage, as Spark declares it, through a local function,
-`SparkNullableResult`, that the optimizer cannot simplify away over a column; TO_DATE keeps its
-`CASE WHEN true` declaration (#1016). Its formatted
-parsing shares TO_DATE's open differences: DAR's invalid-pattern messages (#1010), strings
-beyond the date library's range (#1011) and an ignored parsed offset (#1015). The
-[temporal contract references](tests/fixtures/temporal-contracts/README.md) and the
+still fails. It was an unknown function. With a format, its result over a TIMESTAMP or DATE
+column is nullable at every stage, as Spark declares it, through a local function,
+`SparkKnownNullable`, that the optimizer cannot simplify away over a column; over a literal it
+folds to NOT NULL, as in Spark. TO_DATE and TRY_TO_DATE parse a dictionary-encoded STRING, such
+as a Delta partition column, as its STRING values, and report Spark's
+`WRONG_NUM_ARGS.WITHOUT_SUGGESTION` for the wrong number of arguments. They share these open
+differences:
+- DAR's invalid-pattern messages (#1010) and parser messages (#1057);
+- strings beyond the date library's range (#1011);
+- an ignored parsed offset (#1015);
+- arguments of other types cast to DATE or failing, where Spark converts them to STRING (#1194);
+- a TIMESTAMP_NTZ with a format read as its own DATE outside UTC (#1195);
+- TO_DATE's formatted `CASE WHEN true` declaration, NOT NULL after optimization outside ANSI
+  mode (#1196).
+
+The [temporal contract references](tests/fixtures/temporal-contracts/README.md) and the
 [TRY_TO_DATE references](tests/fixtures/try-to-date/README.md) record the checks (#1017).
 
 Two-argument DATEDIFF/DATE_DIFF return Spark's INT day count, subtracting the
