@@ -24,6 +24,7 @@ pub mod spark_known_not_null;
 pub mod spark_known_nullable;
 pub mod spark_struct_rename;
 pub mod spark_to_string;
+pub mod spark_with_inputs;
 pub mod string;
 pub mod struct_function;
 pub mod table_input;

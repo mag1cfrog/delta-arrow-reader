@@ -50,34 +50,6 @@ fn formatted_to_date_references() -> TestResult<Vec<Value>> {
     Ok(records)
 }
 
-/// #1203: formatted UNIX_TIMESTAMP keeps a `CASE WHEN true` declaration, so with a nullable
-/// format in ANSI mode its result is NOT NULL after optimization, where Spark's is nullable.
-const UNIX_TIMESTAMP_RECORD: &str = "column_unix_timestamp_date_nullable_format";
-
-fn is_retained(case: &Value) -> bool {
-    case["id"] == UNIX_TIMESTAMP_RECORD && case["ansi"] == true
-}
-
-/// The expectation for a record: Spark's, or for a #1203 record DAR's NOT NULL result after
-/// analysis.
-fn expectation(case: &Value) -> TestResult<Value> {
-    if !is_retained(case) {
-        return Ok(case.clone());
-    }
-    let mut current = case.clone();
-    for stage in ["optimized", "executed"] {
-        let field = current["schema_stages"][stage]["fields"]
-            .as_array_mut()
-            .and_then(|fields| fields.last_mut())
-            .ok_or("missing result field")?;
-        if field["nullable"] != true {
-            return Err(format!("expected Spark's nullable result: {case}").into());
-        }
-        field["nullable"] = json!(false);
-    }
-    Ok(current)
-}
-
 /// The Arrow type family DAR uses for a recorded Spark type.
 fn spark_family(spark_type: &Value) -> TestResult<Value> {
     if spark_type["type"] == "array" {
@@ -365,9 +337,8 @@ async fn differences_over(
             None => register_inputs(&session, &records[0], batch_size)?,
         }
         for case in cases {
-            let expectation = expectation(case)?;
             let observation = observe(&session, case).await;
-            let differing = differing_parts(&expectation, &observation)?;
+            let differing = differing_parts(case, &observation)?;
             if !differing.is_empty() {
                 differences.push(json!({
                     "id": case["id"], "timezone": case["timezone"], "ansi": case["ansi"],
@@ -398,7 +369,6 @@ fn assert_no_differences(differences: &[Value]) {
 async fn formatted_to_date_nullability_matches_spark() -> TestResult {
     let records = formatted_to_date_references()?;
     let cases = records[1..].iter().collect::<Vec<_>>();
-    assert_eq!(cases.iter().filter(|case| is_retained(case)).count(), 2);
     assert_no_differences(&differences_over(&records, &cases, None).await?);
     Ok(())
 }
