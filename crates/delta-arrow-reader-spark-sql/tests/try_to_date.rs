@@ -1,6 +1,8 @@
-//! TRY_TO_DATE over TIMESTAMP, DATE and STRING arguments, with and without a format, gives
-//! Spark's values and nullability: a value it cannot parse is NULL in both ANSI modes, and a
-//! formatted result is nullable at every stage.
+//! TRY_TO_DATE over TIMESTAMP, DATE, TIMESTAMP_NTZ and STRING arguments, with and without a
+//! format, gives Spark's values and nullability: a value it cannot parse is NULL in both ANSI
+//! modes, and a formatted result over a column is nullable at every stage. TRY_TO_DATE and
+//! TO_DATE parse dictionary-encoded, viewed and large STRING columns like STRING columns, and
+//! report Spark's condition for the wrong number of arguments.
 
 use std::sync::Arc;
 
@@ -40,8 +42,160 @@ fn try_to_date_references() -> TestResult<Vec<Value>> {
             |build| build.contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
         )
     );
-    assert_eq!(records.len() - 1, 48);
+    assert_eq!(records.len() - 1, 116);
     Ok(records)
+}
+
+/// Differences outside TRY_TO_DATE's own planning, each named for DAR's current result and owned
+/// by an issue.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum RetainedDifference {
+    /// #1057: TO_DATE with a format reports DAR's parser message for a string it cannot parse,
+    /// without Spark's `CANNOT_PARSE_TIMESTAMP` condition. Which row fails first depends on the
+    /// batch size, so either message holds.
+    ParserMessage,
+    /// #1194: an INT, BOOLEAN, untyped NULL with a format or ARRAY argument is cast to DATE or
+    /// fails, where Spark converts it to STRING or rejects it during analysis.
+    NonStringArgument,
+    /// #1195: with a format outside UTC, a TIMESTAMP_NTZ gives its own DATE, where Spark gives the
+    /// session-zone DATE of the instant whose UTC time reads as that value.
+    FormattedTimestampNtzZone,
+    /// #1196: TO_DATE with a format over a NOT NULL DATE outside ANSI mode is NOT NULL after
+    /// optimization, where Spark's is nullable at every stage.
+    FormattedToDateNullability,
+}
+
+/// DAR's parser messages for the strings `s` holds that TO_DATE cannot parse with a format.
+const PARSER_MESSAGES: [&str; 2] = [
+    "Execution error: invalid parsed date: input is out of range",
+    "Execution error: expected numeric datetime field at byte offset 0",
+];
+
+fn retained_difference(case: &Value) -> Option<RetainedDifference> {
+    let ansi = case["ansi"].as_bool()?;
+    let utc = case["timezone"] == "UTC";
+    Some(match case["id"].as_str()? {
+        "nullable_to_date_string_format" if ansi => RetainedDifference::ParserMessage,
+        "literal_try_to_date_int"
+        | "literal_try_to_date_boolean"
+        | "literal_try_to_date_null_format"
+        | "literal_try_to_date_array" => RetainedDifference::NonStringArgument,
+        "column_try_to_date_timestamp_ntz_format" | "literal_try_to_date_timestamp_ntz_format"
+            if !utc =>
+        {
+            RetainedDifference::FormattedTimestampNtzZone
+        }
+        "column_to_date_date_format" if !ansi => RetainedDifference::FormattedToDateNullability,
+        _ => return None,
+    })
+}
+
+/// Set the result field's nullability at the given stages.
+fn set_nullable(current: &mut Value, stages: &[&str], nullable: bool) -> TestResult {
+    for stage in stages {
+        let fields = current["schema_stages"][*stage]["fields"]
+            .as_array_mut()
+            .ok_or("missing fields")?;
+        let field = fields.last_mut().ok_or("missing result field")?;
+        field["nullable"] = json!(nullable);
+    }
+    Ok(())
+}
+
+/// DAR's current failure at `phase`, with text its error must contain; Spark's later stages are
+/// dropped.
+fn fail_at(current: &mut Value, phase: &str, message: &str) -> TestResult {
+    current["expected"] = json!({"status": "error", "dar_messages": [message]});
+    current["spark_error_phase"] = json!(phase);
+    let stages = current["schema_stages"]
+        .as_object_mut()
+        .ok_or("missing schema stages")?;
+    let later: &[&str] = match phase {
+        "optimized" => &["optimized", "executed"],
+        "collect" => &["executed"],
+        _ => return Err(format!("unexpected phase {phase}").into()),
+    };
+    for stage in later {
+        stages.remove(*stage);
+    }
+    Ok(())
+}
+
+/// The expectation for a record: Spark's, or DAR's current result for a retained record.
+fn expectation(case: &Value, metadata: &Value) -> TestResult<Value> {
+    let Some(difference) = retained_difference(case) else {
+        return Ok(case.clone());
+    };
+    let mut current = case.clone();
+    let spark_ok = case["expected"]["status"] == "ok";
+    match difference {
+        RetainedDifference::ParserMessage => {
+            if case["expected"]["condition"] != "CANNOT_PARSE_TIMESTAMP"
+                || case["spark_error_phase"] != "collect"
+            {
+                return Err(format!("expected Spark's parse failure: {case}").into());
+            }
+            current["expected"] = json!({"status": "error", "dar_messages": PARSER_MESSAGES});
+        }
+        RetainedDifference::NonStringArgument => match case["id"].as_str() {
+            Some("literal_try_to_date_int") if spark_ok => {
+                current["expected"] = json!({"status": "ok", "rows": [["1"]]});
+                set_nullable(&mut current, &["analyzed", "optimized", "executed"], false)?;
+            }
+            Some("literal_try_to_date_boolean") if spark_ok => {
+                fail_at(
+                    &mut current,
+                    "optimized",
+                    "Unsupported CAST from Boolean to Date32",
+                )?;
+                set_nullable(&mut current, &["analyzed"], false)?;
+            }
+            Some("literal_try_to_date_null_format") if spark_ok => {
+                fail_at(&mut current, "collect", "expected string scalar for `date`")?;
+            }
+            Some("literal_try_to_date_array")
+                if case["expected"]["condition"] == "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE" =>
+            {
+                current["expected"] = json!({"status": "error",
+                    "dar_messages": ["Unsupported CAST from List(non-null Utf8) to Date32"]});
+                current["spark_error_phase"] = json!("optimized");
+            }
+            _ => return Err(format!("expected Spark's converted argument: {case}").into()),
+        },
+        RetainedDifference::FormattedTimestampNtzZone => {
+            // Each TIMESTAMP_NTZ value's own day: `tn` is column 4 of `inputs`, and the literal
+            // is TIMESTAMP_NTZ '2024-01-03 03:00:00'.
+            let rows = if case["id"] == "literal_try_to_date_timestamp_ntz_format" {
+                json!([["19725"]])
+            } else {
+                let mut rows = metadata["inputs"][0]["rows"]
+                    .as_array()
+                    .ok_or("missing inputs rows")?
+                    .iter()
+                    .map(|row| {
+                        let micros = row[4].as_str().ok_or("missing tn")?.parse::<i64>()?;
+                        Ok(json!([
+                            row[0],
+                            micros.div_euclid(86_400_000_000).to_string()
+                        ]))
+                    })
+                    .collect::<TestResult<Vec<_>>>()?;
+                rows.sort_by_key(Value::to_string);
+                json!(rows)
+            };
+            if !spark_ok || case["expected"]["rows"] == rows {
+                return Err(format!("expected Spark's session-zone dates: {case}").into());
+            }
+            current["expected"] = json!({"status": "ok", "rows": rows});
+        }
+        RetainedDifference::FormattedToDateNullability => {
+            if case["schema_stages"]["optimized"]["fields"][1]["nullable"] != true {
+                return Err(format!("expected Spark's nullable result: {case}").into());
+            }
+            set_nullable(&mut current, &["optimized", "executed"], false)?;
+        }
+    }
+    Ok(current)
 }
 
 /// The Arrow type family DAR uses for a recorded Spark type.
@@ -201,20 +355,20 @@ fn optimize(session: &SessionContext, plan: &LogicalPlan) -> TestResult<LogicalP
     Ok(state.optimize(plan)?)
 }
 
-/// The text DAR's error must contain for a recorded failure: a retained record's pinned text,
-/// Spark's error condition, or the recorded message of Java's `ArithmeticException`. Spark's
-/// message quotes its plan.
-fn expected_error_text(case: &Value) -> Option<String> {
-    if let Some(message) = case["expected"]["dar_message"].as_str() {
-        return Some(message.to_owned());
+/// The texts one of which DAR's error must contain for a recorded failure: a retained record's
+/// pinned texts, or Spark's error condition. Spark's message quotes its plan.
+fn expected_error_texts(case: &Value) -> Vec<String> {
+    if let Some(messages) = case["expected"]["dar_messages"].as_array() {
+        return messages
+            .iter()
+            .filter_map(Value::as_str)
+            .map(str::to_owned)
+            .collect();
     }
-    match case["expected"]["condition"].as_str() {
-        Some(condition) => Some(format!("[{condition}]")),
-        None if case["expected"]["exception"] == "java.lang.ArithmeticException" => {
-            case["expected"]["java_message"].as_str().map(str::to_owned)
-        }
-        None => None,
-    }
+    case["expected"]["condition"]
+        .as_str()
+        .map(|condition| vec![format!("[{condition}]")])
+        .unwrap_or_default()
 }
 
 /// The recorded stages and outcome that differ from the observation. A failure must occur
@@ -232,9 +386,11 @@ fn differing_parts(case: &Value, observation: &Value) -> TestResult<Vec<&'static
         Some("ok") => observation["rows"] == case["expected"]["rows"],
         Some("error") => {
             observation["error_phase"] == case["spark_error_phase"]
-                && expected_error_text(case)
-                    .zip(observation["error"].as_str())
-                    .is_some_and(|(message, error)| error.contains(&message))
+                && observation["error"].as_str().is_some_and(|error| {
+                    expected_error_texts(case)
+                        .iter()
+                        .any(|text| error.contains(text.as_str()))
+                })
         }
         _ => false,
     };
@@ -284,15 +440,141 @@ fn register_inputs(session: &SessionContext, metadata: &Value, batch_size: usize
     Ok(())
 }
 
+/// The type a DAR source gives a recorded column type, if it differs.
+type Encoding = fn(&DataType) -> Option<DataType>;
+
+/// The recorded inputs with each column `encoding` gives another type cast to that type, as
+/// DAR's sources give it.
+fn register_encoded_inputs(
+    session: &SessionContext,
+    metadata: &Value,
+    batch_size: usize,
+    encoding: Encoding,
+) -> TestResult {
+    for input in metadata["inputs"].as_array().ok_or("missing inputs")? {
+        let name = input["name"].as_str().ok_or("missing table name")?;
+        let batch = decode_recorded_batch(input)?;
+        let mut fields = Vec::new();
+        let mut columns = Vec::new();
+        for (field, column) in batch.schema().fields().iter().zip(batch.columns()) {
+            if let Some(encoded) = encoding(field.data_type()) {
+                fields.push(field.as_ref().clone().with_data_type(encoded.clone()));
+                columns.push(arrow::compute::cast(column, &encoded)?);
+            } else {
+                fields.push(field.as_ref().clone());
+                columns.push(column.clone());
+            }
+        }
+        let batch = RecordBatch::try_new(Arc::new(arrow::datatypes::Schema::new(fields)), columns)?;
+        register(session, name, &batch, batch_size)?;
+    }
+    Ok(())
+}
+
+/// Dictionary encoding, as Delta's provider gives a STRING partition column.
+fn dictionary_encoding(data_type: &DataType) -> Option<DataType> {
+    (data_type == &DataType::Utf8)
+        .then(|| DataType::Dictionary(Box::new(DataType::UInt16), Box::new(DataType::Utf8)))
+}
+
+/// String views, as Delta's reader gives a STRING data column by default.
+fn string_view_encoding(data_type: &DataType) -> Option<DataType> {
+    (data_type == &DataType::Utf8).then_some(DataType::Utf8View)
+}
+
+/// Large strings, as a registered Arrow table can give a STRING column.
+fn large_string_encoding(data_type: &DataType) -> Option<DataType> {
+    (data_type == &DataType::Utf8).then_some(DataType::LargeUtf8)
+}
+
+/// Arrow's Date64, which another producer can give for a DATE.
+fn date64_encoding(data_type: &DataType) -> Option<DataType> {
+    (data_type == &DataType::Date32).then_some(DataType::Date64)
+}
+
+/// A dictionary-encoded, viewed or large STRING parses like a STRING, and a Date64 like a DATE,
+/// in TRY_TO_DATE and TO_DATE, so the Spark records over those columns hold for each encoded
+/// copy.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn encoded_arguments_parse_like_their_spark_types() -> TestResult {
+    const RECORDS: [&str; 8] = [
+        "column_try_to_date_string",
+        "column_try_to_date_string_format",
+        "nullable_try_to_date_string",
+        "nullable_try_to_date_string_format",
+        "nullable_to_date_string",
+        "nullable_to_date_string_format",
+        "column_try_to_date_date",
+        "column_try_to_date_date_format",
+    ];
+    let encodings: [(&str, Encoding); 4] = [
+        ("dictionary", dictionary_encoding),
+        ("string view", string_view_encoding),
+        ("large string", large_string_encoding),
+        ("date64", date64_encoding),
+    ];
+    let records = try_to_date_references()?;
+    let cases = records[1..]
+        .iter()
+        .filter(|case| case["id"].as_str().is_some_and(|id| RECORDS.contains(&id)))
+        .collect::<Vec<_>>();
+    assert_eq!(cases.len(), RECORDS.len() * 4);
+    let mut differences = Vec::new();
+    for (encoding_name, encoding) in encodings {
+        for batch_size in [1, 32] {
+            let session = session_context(batch_size);
+            register_encoded_inputs(&session, &records[0], batch_size, encoding)?;
+            for case in &cases {
+                let expectation = expectation(case, &records[0])?;
+                let observation = observe(&session, case).await;
+                let differing = differing_parts(&expectation, &observation)?;
+                if !differing.is_empty() {
+                    differences.push(json!({
+                        "id": case["id"], "timezone": case["timezone"], "ansi": case["ansi"],
+                        "encoding": encoding_name, "batch": batch_size, "differing": differing,
+                        "observed": observation,
+                    }));
+                }
+            }
+        }
+    }
+    assert!(
+        differences.is_empty(),
+        "{} differences:\n{}",
+        differences.len(),
+        differences
+            .iter()
+            .map(Value::to_string)
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+    Ok(())
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn try_to_date_matches_spark() -> TestResult {
     let records = try_to_date_references()?;
+    let mut retained = std::collections::BTreeMap::new();
+    for case in &records[1..] {
+        if let Some(difference) = retained_difference(case) {
+            *retained.entry(difference).or_insert(0) += 1;
+        }
+    }
+    assert_eq!(
+        retained,
+        std::collections::BTreeMap::from([
+            (RetainedDifference::ParserMessage, 2),
+            (RetainedDifference::NonStringArgument, 16),
+            (RetainedDifference::FormattedTimestampNtzZone, 4),
+            (RetainedDifference::FormattedToDateNullability, 2),
+        ])
+    );
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
         let session = session_context(batch_size);
         register_inputs(&session, &records[0], batch_size)?;
         for case in &records[1..] {
-            let expectation = case.clone();
+            let expectation = expectation(case, &records[0])?;
             let observation = observe(&session, case).await;
             let differing = differing_parts(&expectation, &observation)?;
             if !differing.is_empty() {

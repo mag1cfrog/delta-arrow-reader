@@ -1,12 +1,14 @@
-"""Capture Spark's TRY_TO_DATE over TIMESTAMP, DATE and STRING arguments (#1017).
+"""Capture Spark's TRY_TO_DATE over TIMESTAMP, DATE, TIMESTAMP_NTZ and STRING arguments (#1017).
 
 Records analyzed, optimized and executed schemas, typed internal-row values and failing
 stages, with the innermost Java exception of a failure, for TRY_TO_DATE with and without a
-format over NOT NULL TIMESTAMP, DATE and STRING columns and literals. The temporal contract
-references (#153) record TRY_TO_DATE and TO_DATE over STRING values; these add the other
-argument types and the nullability of NOT NULL inputs. Every query runs in both ANSI
-modes in UTC and America/Los_Angeles. Run from the crate root in the reference environment
-described in README.md; the output path must not exist.
+format over NOT NULL TIMESTAMP, DATE, TIMESTAMP_NTZ and STRING columns and literals, for
+TRY_TO_DATE and TO_DATE over a nullable STRING column, and for TRY_TO_DATE and TO_DATE with the
+wrong number of arguments. The temporal contract references (#153) record TRY_TO_DATE and
+TO_DATE over STRING values; these add the other argument types and the nullability of NOT NULL
+inputs. A few cases owned by other issues are recorded too. Every query runs in both ANSI modes
+in UTC and America/Los_Angeles. Run from the crate root in the reference environment described
+in README.md; the output path must not exist.
 """
 import argparse
 from datetime import date, datetime, timedelta, timezone
@@ -21,11 +23,14 @@ SPARK_REVISION = "32f7299601108917fb01920a54e084595b7b3bf8"
 CONVERT_TO_LOCAL_RELATION = "org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation"
 ZONES = ["UTC", "America/Los_Angeles"]
 
-# (TIMESTAMP instant in UTC, DATE, STRING)
+# (TIMESTAMP instant in UTC, DATE, NOT NULL STRING, TIMESTAMP_NTZ, nullable STRING)
 ROWS = [
-    ("2024-01-02 23:30:00", "2024-01-02", "2024-01-02"),
-    ("2024-03-10 10:30:00", "2024-03-10", "not a date"),
-    ("1969-12-31 23:59:59.999999", "1969-12-31", "1969-12-31"),
+    ("2024-01-02 23:30:00", "2024-01-02", "2024-01-02", "2024-01-02 23:30:00", "2024-01-02"),
+    ("2024-03-10 10:30:00", "2024-03-10", "not a date", "2024-03-10 02:30:00", "not a date"),
+    ("1969-12-31 23:59:59.999999", "1969-12-31", "1969-12-31", "1969-12-31 23:59:59.999999",
+     "2024-02-30"),
+    # Los Angeles is still on 2024-01-02 at this instant.
+    ("2024-01-03 03:00:00", "2024-01-03", "2024-01-03", "2024-01-03 03:00:00", None),
 ]
 
 
@@ -45,22 +50,43 @@ INPUTS = [{
         {"name": "k", "type": "integer", "nullable": False, "metadata": {}},
         {"name": "ts", "type": "timestamp", "nullable": False, "metadata": {}},
         {"name": "dt", "type": "date", "nullable": False, "metadata": {}},
-        {"name": "t", "type": "string", "nullable": False, "metadata": {}}]},
-    "rows": [[str(key), str(micros(instant)), str(days(day)), text]
-             for key, (instant, day, text) in enumerate(ROWS)]}]
+        {"name": "t", "type": "string", "nullable": False, "metadata": {}},
+        {"name": "tn", "type": "timestamp_ntz", "nullable": False, "metadata": {}},
+        {"name": "s", "type": "string", "nullable": True, "metadata": {}}]},
+    "rows": [[str(key), str(micros(instant)), str(days(day)), text, str(micros(local)), other]
+             for key, (instant, day, text, local, other) in enumerate(ROWS)]}]
 
-LITERALS = {"ts": "TIMESTAMP '2024-01-02 23:30:00'", "dt": "DATE '2024-01-02'",
-            "t": "'2024-01-02'"}
+LITERALS = {"ts": "TIMESTAMP '2024-01-03 03:00:00'", "dt": "DATE '2024-01-02'",
+            "t": "'2024-01-02'", "tn": "TIMESTAMP_NTZ '2024-01-03 03:00:00'"}
+FORMATS = [("", ""), ("_format", ", 'yyyy-MM-dd'")]
 
 
 def definitions():
-    for function in ["try_to_date"]:
-        for column, name in [("ts", "timestamp"), ("dt", "date"), ("t", "string")]:
-            for format_name, format_argument in [("", ""), ("_format", ", 'yyyy-MM-dd'")]:
-                yield (f"column_{function}_{name}{format_name}",
-                       f"SELECT k, {function}({column}{format_argument}) AS r FROM inputs")
-                yield (f"literal_{function}_{name}{format_name}",
-                       f"SELECT {function}({LITERALS[column]}{format_argument}) AS r")
+    for column, name in [("ts", "timestamp"), ("dt", "date"), ("t", "string"),
+                         ("tn", "timestamp_ntz")]:
+        for format_name, format_argument in FORMATS:
+            yield (f"column_try_to_date_{name}{format_name}",
+                   f"SELECT k, try_to_date({column}{format_argument}) AS r FROM inputs")
+            yield (f"literal_try_to_date_{name}{format_name}",
+                   f"SELECT try_to_date({LITERALS[column]}{format_argument}) AS r")
+    # A nullable STRING column, also for TO_DATE: DAR's sources give STRING columns other
+    # encodings.
+    for function in ["try_to_date", "to_date"]:
+        for format_name, format_argument in FORMATS:
+            yield (f"nullable_{function}_string{format_name}",
+                   f"SELECT k, {function}(s{format_argument}) AS r FROM inputs")
+    # The wrong number of arguments.
+    for function in ["try_to_date", "to_date"]:
+        yield f"{function}_no_arguments", f"SELECT {function}() AS r"
+        yield (f"{function}_three_arguments",
+               f"SELECT {function}('2024-01-02', 'yyyy-MM-dd', 'x') AS r")
+    # Owned elsewhere: arguments that are not STRING, DATE or TIMESTAMP values, and TO_DATE's
+    # formatted nullability over a DATE without ANSI mode.
+    yield "literal_try_to_date_int", "SELECT try_to_date(1) AS r"
+    yield "literal_try_to_date_boolean", "SELECT try_to_date(true) AS r"
+    yield "literal_try_to_date_null_format", "SELECT try_to_date(NULL, 'yyyy-MM-dd') AS r"
+    yield "literal_try_to_date_array", "SELECT try_to_date(array('2024-01-02')) AS r"
+    yield "column_to_date_date_format", "SELECT k, to_date(dt, 'yyyy-MM-dd') AS r FROM inputs"
 
 
 def python_value(value, kind):
@@ -72,6 +98,8 @@ def python_value(value, kind):
         return date(1970, 1, 1) + timedelta(days=int(value))
     if kind == "timestamp":
         return datetime(1970, 1, 1, tzinfo=timezone.utc) + timedelta(microseconds=int(value))
+    if kind == "timestamp_ntz":
+        return datetime(1970, 1, 1) + timedelta(microseconds=int(value))
     if kind == "string":
         return value
     raise AssertionError(kind)
@@ -83,7 +111,7 @@ def encode_value(row, index, data_type, types):
         return None
     if isinstance(data_type, (types.IntegerType, types.DateType)):
         return str(row.getInt(index))
-    if isinstance(data_type, (types.LongType, types.TimestampType)):
+    if isinstance(data_type, (types.LongType, types.TimestampType, types.TimestampNTZType)):
         return str(row.getLong(index))
     if isinstance(data_type, types.StringType):
         return row.getUTF8String(index).toString()
@@ -188,9 +216,9 @@ def main():
             "python_version": sys.version.split()[0],
             "capture_script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
             "value_encoding": ("INT and DATE days since the epoch as int text; BIGINT and "
-                               "TIMESTAMP UTC-epoch microseconds as long text; STRING as text; "
-                               "BOOLEAN as true or false text; ARRAY as a list of its "
-                               "elements"),
+                               "TIMESTAMP UTC-epoch microseconds and TIMESTAMP_NTZ wall-clock "
+                               "microseconds as long text; STRING as text; BOOLEAN as true or "
+                               "false text; ARRAY as a list of its elements"),
             "settings": {
                 "spark.sql.timestampType": spark.conf.get("spark.sql.timestampType"),
                 "spark.sql.optimizer.excludedRules":

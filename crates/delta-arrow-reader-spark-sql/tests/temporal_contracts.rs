@@ -627,7 +627,7 @@ fn current_expectation(
             "format" => 0..fields.len(),
             "formatted"
                 if ansi
-                    && operator != "try_to_timestamp"
+                    && !matches!(operator, "try_to_timestamp" | "try_to_date")
                     && !matches!(input, "null_string" | "null_pattern") =>
             {
                 0..1
