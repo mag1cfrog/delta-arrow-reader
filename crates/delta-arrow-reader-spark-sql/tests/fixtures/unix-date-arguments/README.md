@@ -21,8 +21,9 @@ and the time Los Angeles skips on its spring change day.
   in a filter, under an unreached filter and in ORDER BY and SORT BY keys.
 
 Spark accepts only a DATE or an untyped NULL, without an implicit cast. Any other argument,
-a NULL of another type included, fails during analysis with `DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE`, naming the first
-parameter, whatever the rows. The result is NOT NULL for a NOT NULL DATE.
+a NULL of another type included, fails during analysis with
+`DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE`, naming the first parameter, whatever the rows. The
+result is NOT NULL for a NOT NULL DATE.
 
 Each record keeps the analyzed, optimized and executed schemas and values read from Spark's
 internal rows, collected through the Dataset API. `ConvertToLocalRelation` is excluded.
