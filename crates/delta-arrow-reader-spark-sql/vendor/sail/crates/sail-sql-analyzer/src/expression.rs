@@ -112,33 +112,38 @@ pub const DATETIME_UNIT_KEYWORDS: [&str; 11] = [
     "MICROSECOND",
 ];
 
-/// The names Spark's grammar also spells with a datetime unit keyword as the first of three
-/// arguments.
-const DATETIME_UNIT_FUNCTIONS: [&str; 7] = [
-    "timestampdiff",
-    "datediff",
-    "date_diff",
-    "timediff",
-    "timestampadd",
-    "dateadd",
-    "date_add",
-];
+/// Names Spark spells only in its datetime unit grammar: an ordinary call names no routine.
+pub const DATETIME_UNIT_FUNCTIONS_WITHOUT_ROUTINE: [&str; 3] =
+    ["timestampdiff", "timediff", "timestampadd"];
 
-/// The unit of a call in Spark's TIMESTAMPDIFF and TIMESTAMPADD grammar: a bare datetime unit
-/// keyword as the first of three positional arguments. A string literal there fails, as in
-/// Spark's parser. Any other call is an ordinary function call, for which this gives `None`;
-/// a backquoted or parenthesized unit is not a keyword.
+/// Names Spark also spells in its datetime unit grammar, whose ordinary call is a two-argument
+/// routine.
+pub const DATETIME_UNIT_FUNCTIONS_WITH_ROUTINE: [&str; 4] =
+    ["datediff", "date_diff", "dateadd", "date_add"];
+
+/// The unit of a call in Spark's TIMESTAMPDIFF and TIMESTAMPADD grammar: a bare function name
+/// called plainly, with a bare datetime unit keyword as the first of three positional arguments.
+/// A string literal there fails, as in Spark's parser. Any other call is an ordinary function
+/// call, for which this gives `None`: a backquoted name, DISTINCT or ALL, a FILTER, WITHIN GROUP
+/// or OVER clause, a null treatment, or a backquoted or parenthesized unit.
 fn datetime_unit_keyword(
-    function_name: &spec::ObjectName,
+    name: &ObjectName,
+    plain_call: bool,
     arguments: &[FunctionArgument],
 ) -> SqlResult<Option<String>> {
-    let [name] = function_name.parts() else {
+    let mut parts = name.0.items();
+    let (Some(name), None) = (parts.next(), parts.next()) else {
         return Ok(None);
     };
-    let name: &str = name.as_ref();
-    if !DATETIME_UNIT_FUNCTIONS.contains(&name.to_ascii_lowercase().as_str()) {
+    let canonical_name = name.value.to_ascii_lowercase();
+    if name.quoted
+        || !plain_call
+        || !(DATETIME_UNIT_FUNCTIONS_WITHOUT_ROUTINE.contains(&canonical_name.as_str())
+            || DATETIME_UNIT_FUNCTIONS_WITH_ROUTINE.contains(&canonical_name.as_str()))
+    {
         return Ok(None);
     }
+    let name = name.value.as_str();
     let [
         FunctionArgument::Unnamed(unit),
         FunctionArgument::Unnamed(_),
@@ -1048,11 +1053,17 @@ fn from_ast_atom_expression(atom: AtomExpr) -> SqlResult<spec::Expr> {
                 null_treatment: inner_null_treatment,
                 right: _,
             } = arguments;
-            let function_name = from_ast_object_name(name)?;
+            let plain_call = duplicate_treatment.is_none()
+                && inner_null_treatment.is_none()
+                && null_treatment.is_none()
+                && within_group.is_none()
+                && filter.is_none()
+                && over_clause.is_none();
             let arguments = arguments
                 .map(|x| x.into_items().collect::<Vec<_>>())
                 .unwrap_or_default();
-            let unit = datetime_unit_keyword(&function_name, &arguments)?;
+            let unit = datetime_unit_keyword(&name, plain_call, &arguments)?;
+            let function_name = from_ast_object_name(name)?;
             let (mut arguments, named_arguments) = from_ast_function_arguments(arguments)?;
             if let Some(unit) = unit {
                 arguments[0] = spec::Expr::DatetimeUnitKeyword(unit);

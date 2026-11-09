@@ -897,17 +897,20 @@ It then counts whole units between the two local date-times, as Java's
 `LocalDateTime.until` does. For instants beyond Chrono's range, the offset comes from the
 same position in a nearer 400-year calendar cycle.
 
-Only Spark's unit keywords, written bare as the first of three arguments, become a unit. The
-SQL analyzer marks such a unit as `spec::Expr::DatetimeUnitKeyword`, since the parser's
-identifiers now record whether they were quoted. Any other spelling behaves as in Spark:
-- a single- or double-quoted string unit fails as Spark's parser does, also under TIMESTAMPADD,
-  DATEADD and DATE_ADD;
-- a backquoted, parenthesized or unknown unit, or another argument count, makes an ordinary
+Only Spark's unit keywords, written bare as the first of three arguments in a plain call of a
+bare name, become a unit. The SQL analyzer marks such a unit as
+`spec::Expr::DatetimeUnitKeyword`, since the parser's identifiers now record whether they were
+quoted and its string literals keep their text. Any other spelling behaves as in Spark:
+- a single- or double-quoted string unit fails as Spark's parser does, quoting the literal as
+  written, also under TIMESTAMPADD, DATEADD and DATE_ADD;
+- a backquoted, parenthesized or unknown unit, another argument count, a backquoted name,
+  DISTINCT or ALL, or a FILTER, null treatment, WITHIN GROUP or OVER clause makes an ordinary
   call: TIMESTAMPDIFF, TIMEDIFF and TIMESTAMPADD then name no routine, as written, before their
   arguments resolve, and DATEDIFF, DATE_DIFF, DATEADD and DATE_ADD resolve their arguments and
-  then fail with `WRONG_NUM_ARGS` for a third.
+  then fail with `WRONG_NUM_ARGS`, naming the routine in lower case, for a third.
 
-ARRAY_CONCAT builds its `UNRESOLVED_ROUTINE` error with the same helper. The
+`unresolved_routine_error` in `function/common.rs` builds the `UNRESOLVED_ROUTINE` error for
+these names, TIMESTAMP_DIFF, TIMESTAMP_ADD and ARRAY_CONCAT. The
 [unit spelling references](tests/fixtures/datetime-unit-spellings/README.md) record the
 checks (#1056).
 

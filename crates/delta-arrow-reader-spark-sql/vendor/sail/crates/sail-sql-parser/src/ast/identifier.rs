@@ -68,8 +68,8 @@ where
 pub struct Ident {
     pub span: TokenSpan,
     pub value: String,
-    /// Whether the identifier was written quoted, as a backquoted identifier, rather than as a
-    /// bare word.
+    /// Whether the identifier was written quoted, backquoted or, where double quotes delimit
+    /// identifiers, double-quoted, rather than as a bare word.
     pub quoted: bool,
 }
 

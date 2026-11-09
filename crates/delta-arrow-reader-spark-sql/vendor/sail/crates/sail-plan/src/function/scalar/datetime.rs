@@ -63,7 +63,7 @@ use crate::config::DefaultTimestampType;
 use crate::error::{PlanError, PlanResult};
 use crate::function::common::{
     FunctionContextInput, ScalarFunction, ScalarFunctionInput, cast_with_date_ntz_nullability,
-    expr_contains_spark_cast_to_variant,
+    expr_contains_spark_cast_to_variant, unresolved_routine_error,
 };
 use crate::function::common::{literal_value_without_evaluation, without_metadata_annotations};
 use crate::function::temporal_coercion::{
@@ -741,21 +741,6 @@ fn date_diff_days(
     })
 }
 
-/// Spark's `UNRESOLVED_ROUTINE` error for `function_name`, as written, on the session's search
-/// path. It names a TIMESTAMPDIFF or TIMEDIFF call outside their keyword-unit grammar, and a
-/// TIMESTAMP_DIFF or TIMESTAMP_ADD call, for which Spark has no routine.
-pub(crate) fn unresolved_routine_error(function_name: &str, session: &SessionContext) -> PlanError {
-    let state = session.state();
-    let catalog = &state.config().options().catalog;
-    let catalog_name = catalog.default_catalog.replace('`', "``");
-    let schema_name = catalog.default_schema.replace('`', "``");
-    PlanError::analysis(format!(
-        "[UNRESOLVED_ROUTINE] Cannot resolve routine `{function_name}` on search path \
-         [`system`.`builtin`, `system`.`session`, `{catalog_name}`.`{schema_name}`]. \
-         SQLSTATE: 42883"
-    ))
-}
-
 /// Casts a TIMESTAMPDIFF argument to the TIMESTAMP instant Spark's implicit cast gives it in
 /// the session time zone.
 fn cast_timestamp_diff_argument(
@@ -798,8 +783,8 @@ fn cast_timestamp_diff_argument(
 }
 
 /// Spark's TIMESTAMPDIFF, also spelled as three-argument DATEDIFF, DATE_DIFF and TIMEDIFF. The
-/// resolver passes a datetime unit keyword as a string literal; any other first argument is an
-/// ordinary argument, which leaves too many for two-argument DATEDIFF.
+/// resolver reaches it only for Spark's datetime unit grammar, with the unit keyword as a string
+/// literal.
 fn timestamp_diff_with_name(input: ScalarFunctionInput, function_name: &str) -> PlanResult<Expr> {
     let ScalarFunctionInput {
         arguments,

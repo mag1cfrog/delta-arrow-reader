@@ -13,15 +13,11 @@ use datafusion_common::{Result, ScalarValue, exec_err, internal_err};
 use datafusion_expr::{
     ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
 };
+use sail_sql_analyzer::expression::DATETIME_UNIT_KEYWORDS;
 
 use crate::scalar::datetime::local_time::local_micros;
 
 const MICROS_PER_DAY: i128 = 86_400_000_000;
-
-/// The units Spark's parser accepts for TIMESTAMPDIFF. DAYOFYEAR parses but fails when a row
-/// is evaluated.
-pub const TIMESTAMP_DIFF_PARSER_UNITS: [&str; 11] =
-    sail_sql_analyzer::expression::DATETIME_UNIT_KEYWORDS;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TimestampDiffUnit {
@@ -94,7 +90,7 @@ impl SparkTimestampDiff {
                 "[INVALID_PARAMETER_VALUE.DATETIME_UNIT] The value of parameter(s) `unit` in \
                  `TIMESTAMPDIFF` is invalid: expects one of the units without quotes {}, but got \
                  the string literal '{}'.",
-                TIMESTAMP_DIFF_PARSER_UNITS.join(", "),
+                DATETIME_UNIT_KEYWORDS.join(", "),
                 self.unit_text
             );
         };

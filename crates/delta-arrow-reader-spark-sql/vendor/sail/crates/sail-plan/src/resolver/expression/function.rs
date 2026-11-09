@@ -8,12 +8,16 @@ use datafusion_functions_nested::concat::ArrayConcat;
 use sail_common::spec;
 use sail_common_datafusion::utils::items::ItemTaker;
 use sail_function::scalar::multi_expr::MultiExpr;
+use sail_sql_analyzer::expression::{
+    DATETIME_UNIT_FUNCTIONS_WITH_ROUTINE, DATETIME_UNIT_FUNCTIONS_WITHOUT_ROUTINE,
+};
 
 use crate::error::{PlanError, PlanResult};
 use crate::formatter::SparkPlanFormatter;
-use crate::function::common::{AggFunctionInput, FunctionContextInput, ScalarFunctionInput};
+use crate::function::common::{
+    AggFunctionInput, FunctionContextInput, ScalarFunctionInput, unresolved_routine_error,
+};
 use crate::function::float_keys::normalize_spark_float_key;
-use crate::function::scalar::datetime::unresolved_routine_error;
 use crate::function::{
     get_built_in_aggregate_function, get_built_in_function, is_higher_order_function,
 };
@@ -74,7 +78,7 @@ impl PlanResolver<'_> {
             return Err(unresolved_routine_error(&function_name, self.ctx));
         }
         let (arguments, arity_error) =
-            self.convert_date_part_argument(&function_name, arguments)?;
+            self.resolve_datetime_unit_call(&function_name, arguments)?;
 
         // For `mode() WITHIN GROUP (ORDER BY col)`, move the sort expression and a
         // tie-break sentinel into the argument list before resolution, so that the
@@ -440,33 +444,32 @@ impl PlanResolver<'_> {
         ))
     }
 
-    /// Spark's TIMESTAMPDIFF and TIMESTAMPADD grammar: a call whose first argument is a bare
-    /// datetime unit keyword reads the unit as a string. Any other call to these names is an
-    /// ordinary call. TIMESTAMPDIFF, TIMEDIFF and TIMESTAMPADD then name no routine, before their
-    /// arguments resolve. DATEDIFF, DATE_DIFF, DATEADD and DATE_ADD take two arguments, so a
-    /// third fails once the arguments resolve, with the returned error.
-    fn convert_date_part_argument(
+    /// Spark's TIMESTAMPDIFF and TIMESTAMPADD grammar for a call of one of its names, written as
+    /// `written_name`. A call the SQL analyzer marked with a datetime unit keyword reads the unit
+    /// as a string. Any other call is ordinary: TIMESTAMPDIFF, TIMEDIFF and TIMESTAMPADD name no
+    /// routine, as written, before their arguments resolve; DATEDIFF, DATE_DIFF, DATEADD and
+    /// DATE_ADD take two arguments, so a third fails once the arguments resolve, with the
+    /// returned error, which names the routine in lower case as Spark's registry does.
+    fn resolve_datetime_unit_call(
         &self,
-        function_name: &str,
+        written_name: &str,
         mut arguments: Vec<spec::Expr>,
     ) -> PlanResult<(Vec<spec::Expr>, Option<PlanError>)> {
-        const WITHOUT_ROUTINE: [&str; 3] = ["timestampdiff", "timediff", "timestampadd"];
-        const TWO_ARGUMENTS: [&str; 4] = ["datediff", "date_diff", "dateadd", "date_add"];
         if let Some(spec::Expr::DatetimeUnitKeyword(unit)) = arguments.first() {
             arguments[0] = spec::Expr::Literal(spec::Literal::Utf8 {
                 value: Some(unit.clone()),
             });
             return Ok((arguments, None));
         }
-        let canonical_function_name = function_name.to_ascii_lowercase();
-        if WITHOUT_ROUTINE.contains(&canonical_function_name.as_str()) {
-            return Err(unresolved_routine_error(function_name, self.ctx));
+        let routine_name = written_name.to_ascii_lowercase();
+        if DATETIME_UNIT_FUNCTIONS_WITHOUT_ROUTINE.contains(&routine_name.as_str()) {
+            return Err(unresolved_routine_error(written_name, self.ctx));
         }
-        let arity_error = (TWO_ARGUMENTS.contains(&canonical_function_name.as_str())
+        let arity_error = (DATETIME_UNIT_FUNCTIONS_WITH_ROUTINE.contains(&routine_name.as_str())
             && arguments.len() > 2)
             .then(|| {
                 PlanError::invalid(format!(
-                    "[WRONG_NUM_ARGS.WITHOUT_SUGGESTION] The `{function_name}` requires 2 \
+                    "[WRONG_NUM_ARGS.WITHOUT_SUGGESTION] The `{routine_name}` requires 2 \
                      parameters but the actual number is {}.",
                     arguments.len()
                 ))
