@@ -32,7 +32,7 @@ const DECLARATIONS: [&str; 3] = [
 
 /// `plan` with the inputs of every declaration dropped, the columns that only they read pruned,
 /// and the outputs of aggregates and window functions they read kept computed.
-pub(super) fn drop_declaration_inputs(
+pub(crate) fn drop_declaration_inputs(
     plan: LogicalPlan,
     config: &dyn OptimizerConfig,
 ) -> Result<LogicalPlan> {
@@ -95,7 +95,8 @@ fn computed_columns(node: &LogicalPlan) -> Result<Vec<Column>> {
 }
 
 /// The names of the columns aggregates and window functions compute that `inputs` read, also
-/// through the projections and unions that define the columns they read.
+/// through the projections that define the columns they read. Sail names the columns of a union's
+/// inputs like its own, so these are the projections of every input.
 fn computed_reads(plan: &LogicalPlan, inputs: &[Expr]) -> Result<HashSet<String>> {
     let mut computed = HashSet::new();
     let mut definitions: HashMap<String, Vec<Expr>> = HashMap::new();
@@ -105,23 +106,11 @@ fn computed_reads(plan: &LogicalPlan, inputs: &[Expr]) -> Result<HashSet<String>
                 .into_iter()
                 .map(|column| column.name),
         );
-        match node {
-            LogicalPlan::Projection(projection) => {
-                for (expr, field) in projection.expr.iter().zip(projection.schema.fields()) {
-                    let definition = definitions.entry(field.name().clone()).or_default();
-                    definition.push(expr.clone());
-                }
+        if let LogicalPlan::Projection(projection) = node {
+            for (expr, field) in projection.expr.iter().zip(projection.schema.fields()) {
+                let definition = definitions.entry(field.name().clone()).or_default();
+                definition.push(expr.clone());
             }
-            LogicalPlan::Union(union) => {
-                for input in &union.inputs {
-                    let columns = input.schema().columns();
-                    for (field, column) in union.schema.fields().iter().zip(columns) {
-                        let definition = definitions.entry(field.name().clone()).or_default();
-                        definition.push(Expr::Column(column));
-                    }
-                }
-            }
-            _ => {}
         }
         Ok(TreeNodeRecursion::Continue)
     })?;

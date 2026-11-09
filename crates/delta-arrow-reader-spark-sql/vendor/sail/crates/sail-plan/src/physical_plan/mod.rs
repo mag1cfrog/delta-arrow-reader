@@ -17,18 +17,17 @@ use sail_logical_plan::monotonic_id::MonotonicIdNode;
 use sail_logical_plan::sort::{RequiredSortNode, SortWithinPartitionsNode};
 use sail_logical_plan::spark_partition_id::SparkPartitionIdNode;
 
-use self::declaration_inputs::drop_declaration_inputs;
 use self::input_sort_boundary::InputSortBoundaryExec;
 use self::monotonic_id::MonotonicIdExec;
 use self::signed_range_window::{
     SparkSignedRangeWindowNode, lower_signed_range_windows, plan_signed_range_window,
 };
 use self::spark_partition_id::SparkPartitionIdExec;
+use crate::declaration_inputs::drop_declaration_inputs;
 use crate::expression_errors::SparkSqlExpressionSemantics;
 use crate::function::scalar::{apply_unpivot_runtime_nullability, lower_runtime_concat};
 use crate::projection_row_errors::{ProjectionRowErrorNode, admit_prefix_producers};
 
-mod declaration_inputs;
 mod input_sort_boundary;
 mod monotonic_id;
 mod signed_range_window;
