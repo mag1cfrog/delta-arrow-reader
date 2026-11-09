@@ -3,11 +3,12 @@
 Records analyzed, optimized and executed schemas, typed internal-row values and failing stages,
 with the innermost Java exception of a failure, for MONTHS_BETWEEN with and without `roundOff`
 over NOT NULL and nullable DATE, TIMESTAMP, TIMESTAMP_NTZ and STRING columns and literals, with
-literal, NOT NULL column, nullable column, NULL, volatile and Boolean-expression `roundOff`
-values, beside a failing argument, and of TIMESTAMP_NTZ times on the Los Angeles change days.
-Spark casts both arguments to TIMESTAMP, and declares the result nullable when an argument or
-`roundOff` is. Every query runs in both ANSI modes in UTC and America/Los_Angeles. Run from the
-crate root in the reference environment described in README.md; the output path must not exist.
+literal, NOT NULL column, nullable column, NULL, volatile, Boolean-expression, STRING, INT and
+DATE `roundOff` values, beside a failing argument, and of TIMESTAMP_NTZ times on the Los Angeles
+change days. Spark casts both arguments to TIMESTAMP, and declares the result nullable when an
+argument or `roundOff` is. Every query runs in both ANSI modes in UTC and America/Los_Angeles.
+Run from the crate root in the reference environment described in README.md; the output path
+must not exist.
 """
 import argparse
 from datetime import date, datetime, timedelta, timezone
@@ -23,13 +24,15 @@ SPARK_REVISION = "32f7299601108917fb01920a54e084595b7b3bf8"
 CONVERT_TO_LOCAL_RELATION = "org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation"
 ZONES = ["UTC", "America/Los_Angeles"]
 
-# (DATE, TIMESTAMP instant in UTC, TIMESTAMP_NTZ, STRING, roundOff); the nullable copies are NULL
-# in the last row. The rows hold month ends, a leap day, the Los Angeles spring and autumn change
-# days and the epoch.
+# (DATE, TIMESTAMP instant in UTC, TIMESTAMP_NTZ, STRING, roundOff, STRING roundOff); the
+# nullable copies are NULL in the last row. The rows hold month ends, a leap day, the Los Angeles
+# spring and autumn change days and the epoch.
 ROWS = [
-    ("2024-01-31", "2024-03-31 12:00:00", "2024-02-29 23:30:00", "2024-02-29 06:00:00", True),
-    ("2024-03-10", "2023-11-05 09:30:00", "2023-11-05 01:30:00", "2024-03-10 03:00:00", False),
-    ("1969-12-31", "1970-01-31 00:00:00", "1960-02-29 23:59:59", "1970-01-01", True),
+    ("2024-01-31", "2024-03-31 12:00:00", "2024-02-29 23:30:00", "2024-02-29 06:00:00", True,
+     "true"),
+    ("2024-03-10", "2023-11-05 09:30:00", "2023-11-05 01:30:00", "2024-03-10 03:00:00", False,
+     "no"),
+    ("1969-12-31", "1970-01-31 00:00:00", "1960-02-29 23:59:59", "1970-01-01", True, "Y"),
 ]
 
 
@@ -62,13 +65,14 @@ INPUTS = [{
         {"name": "s", "type": "string", "nullable": False, "metadata": {}},
         {"name": "sn", "type": "string", "nullable": True, "metadata": {}},
         {"name": "ro", "type": "boolean", "nullable": False, "metadata": {}},
-        {"name": "ron", "type": "boolean", "nullable": True, "metadata": {}}]},
+        {"name": "ron", "type": "boolean", "nullable": True, "metadata": {}},
+        {"name": "rs", "type": "string", "nullable": False, "metadata": {}}]},
     "rows": [[str(key), str(days(day)), None if key == LAST else str(days(day)),
               str(micros(instant)), None if key == LAST else str(micros(instant)),
               str(micros(local)), None if key == LAST else str(micros(local)),
               text, None if key == LAST else text,
-              str(round_off).lower(), None if key == LAST else str(round_off).lower()]
-             for key, (day, instant, local, text, round_off) in enumerate(ROWS)]}]
+              str(round_off).lower(), None if key == LAST else str(round_off).lower(), spelled]
+             for key, (day, instant, local, text, round_off, spelled) in enumerate(ROWS)]}]
 
 # (name, NOT NULL column, nullable column)
 COLUMNS = [("date", "dt", "dtn"), ("timestamp", "ts", "tsn"), ("timestamp_ntz", "tn", "tnn"),
@@ -108,6 +112,11 @@ def definitions():
            "CASE WHEN rand() > 0.5 THEN true END) AS r FROM range(2000))")
     yield ("column_round_off_or_true",
            "SELECT k, months_between(ts, dt, ron OR true) AS r FROM inputs")
+    # Spark casts a STRING roundOff to BOOLEAN only in ANSI mode, and rejects other types.
+    for name, round_off in [("string", "rs"), ("string_literal", "'yes'"), ("int", "1"),
+                            ("null_int", "CAST(NULL AS INT)"), ("date", "dt")]:
+        yield (f"column_{name}_typed_round_off",
+               f"SELECT k, months_between(ts, dt, {round_off}) AS r FROM inputs")
     # TIMESTAMP_NTZ times after the Los Angeles spring and autumn changes.
     for name, value, day in [("spring", "2024-03-10 12:00:00", "2024-02-29"),
                              ("autumn", "2023-11-05 12:00:00", "2023-04-30")]:

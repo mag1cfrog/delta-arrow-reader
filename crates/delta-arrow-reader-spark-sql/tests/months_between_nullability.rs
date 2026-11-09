@@ -31,7 +31,7 @@ mod spark_results;
 use spark_results::{TestResult, validate_batch};
 
 /// The number of recorded observations.
-const RECORD_COUNT: usize = 216;
+const RECORD_COUNT: usize = 236;
 
 fn months_between_references() -> TestResult<Vec<Value>> {
     let records =
