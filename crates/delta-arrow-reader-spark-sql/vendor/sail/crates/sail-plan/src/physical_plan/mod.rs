@@ -23,6 +23,7 @@ use self::signed_range_window::{
     SparkSignedRangeWindowNode, lower_signed_range_windows, plan_signed_range_window,
 };
 use self::spark_partition_id::SparkPartitionIdExec;
+use crate::declaration_inputs::drop_declaration_inputs;
 use crate::expression_errors::SparkSqlExpressionSemantics;
 use crate::function::scalar::{apply_unpivot_runtime_nullability, lower_runtime_concat};
 use crate::projection_row_errors::{ProjectionRowErrorNode, admit_prefix_producers};
@@ -93,6 +94,7 @@ impl QueryPlanner for SparkQueryPlanner {
         } else {
             Cow::Borrowed(logical_plan)
         };
+        let runtime_plan = drop_declaration_inputs(runtime_plan.into_owned(), session_state)?;
         DefaultPhysicalPlanner::with_extension_planners(vec![Arc::new(SparkExtensionPlanner)])
             .create_physical_plan(&runtime_plan, &state)
             .await
