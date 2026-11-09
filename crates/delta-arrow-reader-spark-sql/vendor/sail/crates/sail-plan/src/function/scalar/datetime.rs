@@ -1146,10 +1146,11 @@ fn timestamp_with_try(
                 }
                 _ => expr,
             };
-            // Spark declares a DATE's cast to TIMESTAMP_NTZ nullable, except under TRY.
+            // Spark declares a DATE's cast to TIMESTAMP_NTZ nullable. Without a format, its TRY
+            // forms are that cast too, not a TRY cast.
             if timestamp_ntz && matches!(expr_type, DataType::Date32 | DataType::Date64) {
                 return Ok(
-                    ScalarUDF::from(SparkDateTimestampNtzCast::to_timestamp_ntz(is_try))
+                    ScalarUDF::from(SparkDateTimestampNtzCast::to_timestamp_ntz(false))
                         .call(vec![expr]),
                 );
             }
