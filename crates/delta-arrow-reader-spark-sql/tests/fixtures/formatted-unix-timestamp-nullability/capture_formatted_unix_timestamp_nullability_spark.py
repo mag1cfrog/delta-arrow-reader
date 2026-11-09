@@ -158,6 +158,25 @@ def definitions():
         yield (f"derived_literal_distinct_{function}_format",
                f"SELECT DISTINCT k, {function}(DATE '2024-01-02', x) AS r "
                f"FROM (SELECT k, {cast} FROM inputs) t")
+        # Outside a projection, Spark never evaluates the derived format either.
+        derived = f"(SELECT k, dt, {cast} FROM inputs) t"
+        yield (f"derived_filter_{function}_format",
+               f"SELECT k FROM {derived} WHERE {function}(dt, x) IS NOT NULL")
+        yield (f"derived_group_key_{function}_format",
+               f"SELECT {function}(DATE '2024-01-02', x) AS r, count(*) AS n FROM {derived} "
+               f"GROUP BY 1")
+        yield (f"derived_window_key_{function}_format",
+               f"SELECT k, count(*) OVER (PARTITION BY {function}(dt, x)) AS n FROM {derived}")
+        yield (f"derived_join_condition_{function}_format",
+               f"SELECT a.k FROM inputs a JOIN {derived} "
+               f"ON a.k = t.k AND {function}(DATE '2024-01-02', t.x) IS NOT NULL")
+        yield (f"derived_union_limit_{function}_format",
+               f"SELECT k, {function}(dt, x) AS r FROM (SELECT * FROM (SELECT k, dt, {cast} "
+               f"FROM inputs UNION ALL SELECT k, dt, {cast} FROM inputs) u LIMIT 10) t")
+        # Spark computes a derived column below a join, so there it fails with ANSI enabled.
+        yield (f"derived_joined_{function}_format",
+               f"SELECT t.k, {function}(t.dt, t.x) AS r FROM inputs a JOIN {derived} "
+               f"ON a.k = t.k")
         # Spark computes a derived column below a sort, so there it fails with ANSI enabled.
         yield (f"derived_sorted_{function}_format",
                f"SELECT k, {function}(dt, x) AS r FROM (SELECT k, dt, {cast} FROM inputs "

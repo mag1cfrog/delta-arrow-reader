@@ -33,7 +33,7 @@ mod spark_results;
 use spark_results::{TestResult, validate_batch};
 
 /// The number of recorded observations.
-const RECORD_COUNT: usize = 608;
+const RECORD_COUNT: usize = 656;
 
 fn formatted_unix_timestamp_references() -> TestResult<Vec<Value>> {
     let records = include_str!(
@@ -65,12 +65,14 @@ fn is_retained(case: &Value) -> bool {
         .is_some_and(|id| ORDER_BY_AGGREGATE_RECORDS.contains(&id))
 }
 
-/// #1233: Spark computes a derived format column below a subquery's sort, so with ANSI enabled the
-/// failing CAST fails while collecting rows; DAR moves the call below the sort, drops the unused
-/// format and returns the dates' seconds, in each session zone.
-const SORTED_RECORDS: [&str; 2] = [
+/// #1233: Spark computes a derived format column below a subquery's sort or a join, so with ANSI
+/// enabled the failing CAST fails while collecting rows; DAR drops the unused format and prunes the
+/// column, and returns the dates' seconds, in each session zone.
+const SORTED_RECORDS: [&str; 4] = [
     "derived_sorted_unix_timestamp_format",
     "derived_sorted_to_unix_timestamp_format",
+    "derived_joined_unix_timestamp_format",
+    "derived_joined_to_unix_timestamp_format",
 ];
 const SORTED_SECONDS: [(&str, [&str; 3]); 2] = [
     ("UTC", ["1704153600", "1710028800", "-86400"]),
@@ -329,7 +331,7 @@ fn differing_parts(case: &Value, observation: &Value) -> TestResult<Vec<&'static
     Ok(differing)
 }
 
-fn session_context(batch_size: usize) -> SessionContext {
+fn session_context(batch_size: usize, partitions: usize) -> SessionContext {
     SessionContext::new_with_state(
         configure_spark_sql(
             SessionStateBuilder::new()
@@ -337,7 +339,7 @@ fn session_context(batch_size: usize) -> SessionContext {
                 .with_config(
                     SessionConfig::new()
                         .with_batch_size(batch_size)
-                        .with_target_partitions(1),
+                        .with_target_partitions(partitions),
                 ),
         )
         .build(),
@@ -410,9 +412,18 @@ async fn differences_over(
     cases: &[&Value],
     encoding: Option<Encoding>,
 ) -> TestResult<Vec<Value>> {
+    differences_over_partitions(records, cases, encoding, 1).await
+}
+
+async fn differences_over_partitions(
+    records: &[Value],
+    cases: &[&Value],
+    encoding: Option<Encoding>,
+    partitions: usize,
+) -> TestResult<Vec<Value>> {
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
-        let session = session_context(batch_size);
+        let session = session_context(batch_size, partitions);
         match encoding {
             Some(encoding) => register_encoded_inputs(&session, &records[0], batch_size, encoding)?,
             None => register_inputs(&session, &records[0], batch_size)?,
@@ -453,7 +464,7 @@ async fn formatted_unix_timestamp_nullability_matches_spark() -> TestResult {
     assert_eq!(cases.iter().filter(|case| is_retained(case)).count(), 8);
     assert_eq!(
         cases.iter().filter(|case| is_sorted_record(case)).count(),
-        4
+        8
     );
     assert_no_differences(&differences_over(&records, &cases, None).await?);
     Ok(())
@@ -479,5 +490,23 @@ async fn date64_arguments_match_their_date_records() -> TestResult {
         .collect::<Vec<_>>();
     assert!(!cases.is_empty());
     assert_no_differences(&differences_over(&records, &cases, Some(date64_encoding)).await?);
+    Ok(())
+}
+
+/// The derived format records hold also when DataFusion plans four partitions, where its
+/// physical optimizer moves projections differently.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn derived_formats_match_spark_at_four_partitions() -> TestResult {
+    let records = formatted_unix_timestamp_references()?;
+    let cases = records[1..]
+        .iter()
+        .filter(|case| {
+            case["id"]
+                .as_str()
+                .is_some_and(|id| id.starts_with("derived_"))
+        })
+        .collect::<Vec<_>>();
+    assert!(!cases.is_empty());
+    assert_no_differences(&differences_over_partitions(&records, &cases, None, 4).await?);
     Ok(())
 }

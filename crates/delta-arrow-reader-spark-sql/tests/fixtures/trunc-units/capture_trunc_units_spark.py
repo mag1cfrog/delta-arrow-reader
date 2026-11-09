@@ -147,6 +147,11 @@ def definitions():
     yield ("derived_alias_filter_malformed_date_dd",
            "SELECT k, trunc(x, 'DD') AS r FROM "
            "(SELECT k, CAST(sb AS DATE) AS x FROM inputs WHERE 1 = 1) t")
+    malformed = "(SELECT k, CAST(sb AS DATE) AS x FROM inputs) t"
+    yield ("derived_filter_malformed_date_garbage",
+           f"SELECT k FROM {malformed} WHERE trunc(x, 'garbage') IS NULL")
+    yield ("derived_group_key_malformed_date_garbage",
+           f"SELECT trunc(x, 'garbage') AS r, count(*) AS n FROM {malformed} GROUP BY 1")
     yield ("derived_division_date_dd",
            "SELECT k, trunc(x, 'DD') AS r FROM "
            "(SELECT k, date_add(dr, CAST(10 DIV (k - 2) AS INT)) AS x FROM inputs)")

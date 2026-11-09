@@ -1,7 +1,7 @@
 # TRUNC units
 
-`trunc-units-spark.jsonl` records 356 observations from Spark 4.2.0, revision
-`32f7299601108917fb01920a54e084595b7b3bf8`, Java 17.0.20.1 and Python 3.12.14 (#1192).
+`trunc-units-spark.jsonl` records 364 observations from Spark 4.2.0, revision
+`32f7299601108917fb01920a54e084595b7b3bf8`, Java 17.0.20.1 and Python 3.12.14 (#1192, #1231).
 The header stores the build properties, capture script hash, settings and the registered
 `inputs` table. Two captures were byte-identical.
 
@@ -13,7 +13,7 @@ Day; the times are at noon, so each date is the same in UTC and Los Angeles. The
 `sv` holds ` 2024-03-10 `, `2024-05`, `2024` and `2024-02-29T10:00:00`, which Spark reads as
 dates, and `sb` holds two dates and then `garbage` in the rows whose unit is `DD` or NULL.
 
-89 queries run in both ANSI modes in UTC and America/Los_Angeles:
+91 queries run in both ANSI modes in UTC and America/Los_Angeles:
 - TRUNC of `dr` and of a DATE literal with `'YEAR'`, `'yyyy'`, `'Yy'`, `'Quarter'`, `'MON'`,
   `'month'`, `'MM'`, `'WEEK'`, `'DD'`, `'DAY'`, `'HOUR'`, `'Q'`, `'invalid'`, `''`, `' MM'`,
   `NULL` and `CAST(NULL AS STRING)`;
@@ -39,7 +39,7 @@ dates, and `sb` holds two dates and then `garbage` in the rows whose unit is `DD
   `date_sub(DATE '1970-01-01', 2147483641 - k)` with `'WEEK'`;
 - TRUNC of a date column a subquery derives from `CAST(sb AS DATE)` with `'DD'` and `NULL`, also
   through a CTE and a filtered aliased subquery with `'DD'`, and from a `date_add` that divides by
-  zero, with `'DD'`;
+  zero, with `'DD'`, and of the malformed one with `'garbage'` in a filter and as a GROUP BY key;
 - TRUNC of the INT `k` with `'MM'`;
 - the count of TRUNC of `dr` by `IF(rand() < 0.5, 'MM', 'YEAR')` over 256 rows of a self join,
   computed in a subquery, since Spark rejects a volatile aggregate argument.
@@ -70,7 +70,8 @@ internal rows, collected through the Dataset API, or the failing stage and Spark
 typed rows at batch sizes 1 and 32. A failure must occur at Spark's stage with Spark's error
 condition in DAR's message. A second test runs the DATE column records over Date64 copies of the
 DATE columns, and a third runs every record over dictionary-encoded, viewed and large copies of
-the STRING columns; both require the same results. No differences are retained.
+the STRING columns; both require the same results. A fourth runs the derived date records at
+four target partitions. No differences are retained.
 
 Recapture from the crate root:
 
