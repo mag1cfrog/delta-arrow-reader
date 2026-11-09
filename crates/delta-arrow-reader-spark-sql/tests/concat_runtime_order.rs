@@ -354,7 +354,7 @@ async fn run_runtime_control_matrix(rng: bool) -> TestResult {
             for case in &records[1..] {
                 let context = runtime_control_context(matrix, case, representation, batch_size);
                 let key = context.to_string();
-                if is_active_native_negative_context(&context) {
+                if !rng && is_active_native_negative_context(&context) {
                     expected_negative_keys.insert(key.clone());
                 }
                 let observation_key =
@@ -370,8 +370,9 @@ async fn run_runtime_control_matrix(rng: bool) -> TestResult {
                 let comparison: TestResult<(bool, bool, bool, bool)> = (|| {
                     let strict = matches_reference(case, &actual)?;
                     let local = matches_local_preexecution_divide(case, &actual);
-                    let retained =
-                        matches_retained_native_negative(&context, case, &actual, profiles)?;
+                    // Keep historical profiles; seeded RNG now requires the Spark reference.
+                    let retained = !rng
+                        && matches_retained_native_negative(&context, case, &actual, profiles)?;
                     let rows = actual["rows"].is_array()
                         && case["expected"]["rows"].is_array()
                         && row_counts(&actual["rows"])? == row_counts(&case["expected"]["rows"])?;
@@ -428,14 +429,15 @@ async fn run_runtime_control_matrix(rng: bool) -> TestResult {
     let profile_keys = profiles
         .iter()
         .filter(|profile| {
-            profile["context"]["matrix"] == matrix
+            !rng
+                && profile["context"]["matrix"] == matrix
                 && is_active_native_negative_context(&profile["context"])
         })
         .map(|profile| profile["context"].to_string())
         .collect::<Vec<_>>();
     let unique_profile_keys = profile_keys.iter().cloned().collect::<HashSet<_>>();
     let expected_counts = if rng {
-        [6, 0, 0, 6, 0]
+        [12, 0, 0, 0, 0]
     } else {
         [54, 21, 12, 9, 0]
     };
@@ -463,7 +465,7 @@ async fn run_runtime_control_matrix(rng: bool) -> TestResult {
     assert_eq!(profile_keys.len(), expected_counts[3]);
     assert_eq!(unique_profile_keys, expected_negative_keys);
     assert_eq!(retained_keys, expected_negative_keys);
-    assert_eq!(row_matches, if rng { 6 } else { 54 });
+    assert_eq!(row_matches, if rng { 12 } else { 54 });
     assert!(failures.is_empty(), "{failures:#?}");
     Ok(())
 }
@@ -474,7 +476,7 @@ async fn concat_runtime_supplementary_controls_retain_all_96_outcomes() -> TestR
 }
 
 #[tokio::test]
-async fn concat_runtime_one_partition_rng_controls_retain_all_12_outcomes() -> TestResult {
+async fn seeded_rand_values_match_spark_across_input_batches() -> TestResult {
     run_runtime_control_matrix(true).await
 }
 
