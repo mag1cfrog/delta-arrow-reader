@@ -33,7 +33,7 @@ mod spark_results;
 use spark_results::{TestResult, validate_batch};
 
 /// The number of recorded observations.
-const RECORD_COUNT: usize = 480;
+const RECORD_COUNT: usize = 776;
 
 fn formatted_unix_timestamp_references() -> TestResult<Vec<Value>> {
     let records = include_str!(
@@ -65,9 +65,95 @@ fn is_retained(case: &Value) -> bool {
         .is_some_and(|id| ORDER_BY_AGGREGATE_RECORDS.contains(&id))
 }
 
-/// The expectation for a record: Spark's, or for a #1221 record DAR's schema error while
-/// analyzing.
+/// #1233: Spark computes a derived format column below a subquery's sort, a join, an aggregate
+/// and a generator, so with ANSI enabled the failing CAST fails while collecting rows, and it
+/// evaluates a scalar subquery column, which returns more than one row in both modes. DAR drops
+/// the unused format and prunes the column, so it returns the dates' seconds, or for the
+/// aggregate the literal's, in each session zone.
+const COMPUTED_BELOW_RECORDS: [(&str, &str); 10] = [
+    ("derived_sorted_unix_timestamp_format", "CAST_INVALID_INPUT"),
+    (
+        "derived_sorted_to_unix_timestamp_format",
+        "CAST_INVALID_INPUT",
+    ),
+    ("derived_joined_unix_timestamp_format", "CAST_INVALID_INPUT"),
+    (
+        "derived_joined_to_unix_timestamp_format",
+        "CAST_INVALID_INPUT",
+    ),
+    (
+        "derived_generated_unix_timestamp_format",
+        "CAST_INVALID_INPUT",
+    ),
+    (
+        "derived_generated_to_unix_timestamp_format",
+        "CAST_INVALID_INPUT",
+    ),
+    (
+        "derived_aggregated_unix_timestamp_format",
+        "CAST_INVALID_INPUT",
+    ),
+    (
+        "derived_aggregated_to_unix_timestamp_format",
+        "CAST_INVALID_INPUT",
+    ),
+    (
+        "derived_scalar_subquery_unix_timestamp_format",
+        "SCALAR_SUBQUERY_TOO_MANY_ROWS",
+    ),
+    (
+        "derived_scalar_subquery_to_unix_timestamp_format",
+        "SCALAR_SUBQUERY_TOO_MANY_ROWS",
+    ),
+];
+/// The seconds of the dates in `dt`, and of DATE '2024-01-02', in each session zone.
+const ZONE_SECONDS: [(&str, [&str; 3], &str); 2] = [
+    ("UTC", ["1704153600", "1710028800", "-86400"], "1704153600"),
+    (
+        "America/Los_Angeles",
+        ["1704182400", "1710057600", "-57600"],
+        "1704182400",
+    ),
+];
+
+/// The condition Spark fails a #1233 record with, where DAR returns rows.
+fn computed_below_condition(case: &Value) -> Option<&'static str> {
+    let (_, condition) = COMPUTED_BELOW_RECORDS
+        .iter()
+        .find(|(id, _)| case["id"] == *id)?;
+    (case["ansi"] == true || *condition == "SCALAR_SUBQUERY_TOO_MANY_ROWS").then_some(*condition)
+}
+
+/// The expectation for a record: Spark's, for a #1221 record DAR's schema error while
+/// analyzing, or for a #1233 record DAR's rows.
 fn expectation(case: &Value) -> TestResult<Value> {
+    if let Some(condition) = computed_below_condition(case) {
+        if case["expected"]["status"] != "error"
+            || case["expected"]["condition"] != condition
+            || case["spark_error_phase"] != "collect"
+        {
+            return Err(format!("expected Spark's {condition}: {case}").into());
+        }
+        let (_, dates, literal) = ZONE_SECONDS
+            .iter()
+            .find(|(zone, ..)| case["timezone"] == *zone)
+            .ok_or("missing session zone")?;
+        let aggregated = case["id"]
+            .as_str()
+            .is_some_and(|id| id.starts_with("derived_aggregated_"));
+        let rows = if aggregated {
+            vec![json!([literal])]
+        } else {
+            dates
+                .iter()
+                .enumerate()
+                .map(|(key, seconds)| json!([key.to_string(), seconds]))
+                .collect()
+        };
+        let mut current = case.clone();
+        current["expected"] = json!({"status": "ok", "rows": rows});
+        return Ok(current);
+    }
     if !is_retained(case) {
         return Ok(case.clone());
     }
@@ -287,7 +373,7 @@ fn differing_parts(case: &Value, observation: &Value) -> TestResult<Vec<&'static
     Ok(differing)
 }
 
-fn session_context(batch_size: usize) -> SessionContext {
+fn session_context(batch_size: usize, partitions: usize) -> SessionContext {
     SessionContext::new_with_state(
         configure_spark_sql(
             SessionStateBuilder::new()
@@ -295,7 +381,7 @@ fn session_context(batch_size: usize) -> SessionContext {
                 .with_config(
                     SessionConfig::new()
                         .with_batch_size(batch_size)
-                        .with_target_partitions(1),
+                        .with_target_partitions(partitions),
                 ),
         )
         .build(),
@@ -368,9 +454,18 @@ async fn differences_over(
     cases: &[&Value],
     encoding: Option<Encoding>,
 ) -> TestResult<Vec<Value>> {
+    differences_over_partitions(records, cases, encoding, 1).await
+}
+
+async fn differences_over_partitions(
+    records: &[Value],
+    cases: &[&Value],
+    encoding: Option<Encoding>,
+    partitions: usize,
+) -> TestResult<Vec<Value>> {
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
-        let session = session_context(batch_size);
+        let session = session_context(batch_size, partitions);
         match encoding {
             Some(encoding) => register_encoded_inputs(&session, &records[0], batch_size, encoding)?,
             None => register_inputs(&session, &records[0], batch_size)?,
@@ -409,6 +504,13 @@ async fn formatted_unix_timestamp_nullability_matches_spark() -> TestResult {
     let records = formatted_unix_timestamp_references()?;
     let cases = records[1..].iter().collect::<Vec<_>>();
     assert_eq!(cases.iter().filter(|case| is_retained(case)).count(), 8);
+    assert_eq!(
+        cases
+            .iter()
+            .filter(|case| computed_below_condition(case).is_some())
+            .count(),
+        24
+    );
     assert_no_differences(&differences_over(&records, &cases, None).await?);
     Ok(())
 }
@@ -433,5 +535,26 @@ async fn date64_arguments_match_their_date_records() -> TestResult {
         .collect::<Vec<_>>();
     assert!(!cases.is_empty());
     assert_no_differences(&differences_over(&records, &cases, Some(date64_encoding)).await?);
+    Ok(())
+}
+
+/// The derived format records and those with a failing aggregate or window function hold also
+/// when DataFusion plans four partitions, where its physical optimizer moves projections
+/// differently and splits aggregates.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn derived_and_aggregated_formats_match_spark_at_four_partitions() -> TestResult {
+    let records = formatted_unix_timestamp_references()?;
+    let cases = records[1..]
+        .iter()
+        .filter(|case| {
+            case["id"].as_str().is_some_and(|id| {
+                ["derived_", "failing_", "renamed_failing_", "union_failing_"]
+                    .iter()
+                    .any(|prefix| id.starts_with(prefix))
+            })
+        })
+        .collect::<Vec<_>>();
+    assert!(!cases.is_empty());
+    assert_no_differences(&differences_over_partitions(&records, &cases, None, 4).await?);
     Ok(())
 }

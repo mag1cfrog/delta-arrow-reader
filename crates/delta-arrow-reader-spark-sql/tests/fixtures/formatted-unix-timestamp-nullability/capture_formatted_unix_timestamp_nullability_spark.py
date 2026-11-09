@@ -6,12 +6,13 @@ with the innermost Java exception of a failure, for UNIX_TIMESTAMP and TO_UNIX_T
 format over NOT NULL and nullable DATE, TIMESTAMP and TIMESTAMP_NTZ columns and literals, with
 literal, NOT NULL column, nullable column and NULL formats; over a DATE column with a format
 that fails if evaluated; over a DATE expression; as a grouping key; with aggregates and window
-functions in the format; under grouping sets; and in ORDER BY. Spark declares the result
-nullable outside ANSI mode, and in ANSI mode when an argument is nullable. It never evaluates
-the format of these arguments, but computes its aggregates and window functions, and a format
-column keeps a literal argument's result from being constant. Every query runs in both ANSI
-modes in UTC and America/Los_Angeles. Run from the crate root in the reference environment
-described in README.md; the output path must not exist.
+functions in the format; under grouping sets; in ORDER BY; and with derived format columns whose
+expressions fail if evaluated. Spark declares the result nullable outside ANSI mode, and in ANSI
+mode when an argument is nullable. It never evaluates the format of these arguments, but
+computes its aggregates and window functions, and a format column keeps a literal argument's
+result from being constant. Every query runs in both ANSI modes in UTC and America/Los_Angeles.
+Run from the crate root in the reference environment described in README.md; the output path
+must not exist.
 """
 import argparse
 from datetime import date, datetime, timedelta, timezone
@@ -106,6 +107,33 @@ def definitions():
         yield (f"window_{function}_required_format",
                f"SELECT k, {function}(dt, CAST(row_number() OVER (ORDER BY k) AS STRING)) AS r "
                "FROM inputs")
+        # With ANSI enabled the CAST in a computed aggregate or window function fails, also once
+        # a subquery renames it, derives the format from it or reads it in a union's second input.
+        failing = "max(CAST(g AS INT))"
+        yield (f"failing_aggregate_{function}_format",
+               f"SELECT {function}(DATE '2024-01-02', CAST({failing} AS STRING)) AS r "
+               "FROM inputs")
+        yield (f"failing_window_{function}_format",
+               f"SELECT k, {function}(dt, CAST({failing} OVER () AS STRING)) AS r FROM inputs")
+        yield (f"renamed_failing_aggregate_{function}_format",
+               f"SELECT k, {function}(DATE '2024-01-02', CAST(m AS STRING)) AS r "
+               f"FROM (SELECT k, {failing} AS m FROM inputs GROUP BY k) t")
+        yield (f"renamed_failing_window_{function}_format",
+               f"SELECT k, {function}(dt, CAST(m AS STRING)) AS r "
+               f"FROM (SELECT k, dt, {failing} OVER () AS m FROM inputs) t")
+        yield (f"derived_failing_aggregate_{function}_format",
+               f"SELECT k, {function}(DATE '2024-01-02', x) AS r "
+               f"FROM (SELECT k, CAST({failing} AS STRING) AS x FROM inputs GROUP BY k) t")
+        yield (f"derived_failing_window_{function}_format",
+               f"SELECT k, {function}(dt, x) AS r "
+               f"FROM (SELECT k, dt, CAST({failing} OVER () AS STRING) AS x FROM inputs) t")
+        yield (f"failing_second_aggregate_{function}_format",
+               f"SELECT {function}(DATE '2024-01-02', concat(CAST(max(f) AS STRING), "
+               f"CAST({failing} AS STRING))) AS r FROM inputs")
+        yield (f"union_failing_aggregate_{function}_format",
+               f"SELECT k, {function}(DATE '2024-01-02', x) AS r FROM (SELECT k, "
+               f"CAST(max(k) AS STRING) AS x FROM inputs GROUP BY k UNION ALL SELECT k, "
+               f"CAST({failing} AS STRING) AS x FROM inputs GROUP BY k) t")
         # A grouping set makes a NOT NULL grouping key NULL in its subtotal rows.
         for name, argument, groups in [
                 ("rollup", "dt", "ROLLUP(dt, g)"), ("cube", "dt", "CUBE(dt, g)"),
@@ -120,6 +148,86 @@ def definitions():
         yield (f"order_by_aggregate_{function}_nullable_format",
                f"SELECT k FROM inputs GROUP BY k "
                f"ORDER BY {function}(DATE '2024-01-02', max(f)), k")
+        # Spark never evaluates the format, also once it inlines a derived column into the call.
+        for name, derived in [("raise", "raise_error('derived format evaluated')"),
+                              ("division", "CAST(k / 0 AS STRING)"),
+                              ("cast", "CAST(CAST(g AS INT) AS STRING)")]:
+            yield (f"derived_{name}_{function}_format",
+                   f"SELECT k, {function}(dt, x) AS r FROM "
+                   f"(SELECT k, dt, {derived} AS x FROM inputs)")
+        yield (f"derived_literal_{function}_format",
+               f"SELECT k, {function}(DATE '2024-01-02', x) AS r FROM "
+               f"(SELECT k, CAST(CAST(g AS INT) AS STRING) AS x FROM inputs)")
+        yield (f"derived_cte_{function}_format",
+               f"WITH d AS (SELECT k, dt, raise_error('derived format evaluated') AS x "
+               f"FROM inputs) SELECT k, {function}(dt, x) AS r FROM d")
+        yield (f"derived_union_{function}_format",
+               f"SELECT k, {function}(dt, x) AS r FROM (SELECT k, dt, CAST(k / 0 AS STRING) "
+               f"AS x FROM inputs UNION ALL SELECT k, dt, CAST(k / 0 AS STRING) AS x FROM inputs)")
+        yield (f"derived_literal_cte_{function}_format",
+               f"WITH d AS (SELECT k, CAST(CAST(g AS INT) AS STRING) AS x FROM inputs) "
+               f"SELECT k, {function}(DATE '2024-01-02', x) AS r FROM d")
+        yield (f"derived_literal_union_{function}_format",
+               f"SELECT k, {function}(DATE '2024-01-02', x) AS r FROM (SELECT k, "
+               f"CAST(k / 0 AS STRING) AS x FROM inputs UNION ALL SELECT k, "
+               f"CAST(k / 0 AS STRING) AS x FROM inputs)")
+        # Spark collapses these shapes too, so it never evaluates the derived format.
+        cast = "CAST(CAST(g AS INT) AS STRING) AS x"
+        for name, source in [
+                ("alias", f"(SELECT k, {cast} FROM inputs) t"),
+                ("filter", f"(SELECT k, {cast} FROM inputs WHERE 1 = 1) t"),
+                ("limit", f"(SELECT k, {cast} FROM inputs LIMIT 10) t"),
+                ("nested", f"(SELECT * FROM (SELECT k, {cast} FROM inputs) u) t"),
+                ("window", "(SELECT k, CAST(CAST(max(g) OVER () AS INT) AS STRING) AS x "
+                           "FROM inputs) t")]:
+            yield (f"derived_literal_{name}_{function}_format",
+                   f"SELECT k, {function}(DATE '2024-01-02', x) AS r FROM {source}")
+        yield (f"derived_literal_distinct_{function}_format",
+               f"SELECT DISTINCT k, {function}(DATE '2024-01-02', x) AS r "
+               f"FROM (SELECT k, {cast} FROM inputs) t")
+        # Outside a projection, Spark never evaluates the derived format either.
+        derived = f"(SELECT k, dt, {cast} FROM inputs) t"
+        yield (f"derived_filter_{function}_format",
+               f"SELECT k FROM {derived} WHERE {function}(dt, x) IS NOT NULL")
+        yield (f"derived_group_key_{function}_format",
+               f"SELECT {function}(DATE '2024-01-02', x) AS r, count(*) AS n FROM {derived} "
+               f"GROUP BY 1")
+        yield (f"derived_window_key_{function}_format",
+               f"SELECT k, count(*) OVER (PARTITION BY {function}(dt, x)) AS n FROM {derived}")
+        yield (f"derived_join_condition_{function}_format",
+               f"SELECT a.k FROM inputs a JOIN {derived} "
+               f"ON a.k = t.k AND {function}(DATE '2024-01-02', t.x) IS NOT NULL")
+        yield (f"derived_union_limit_{function}_format",
+               f"SELECT k, {function}(dt, x) AS r FROM (SELECT * FROM (SELECT k, dt, {cast} "
+               f"FROM inputs UNION ALL SELECT k, dt, {cast} FROM inputs) u LIMIT 10) t")
+        # A NOT NULL derived format keeps the result NOT NULL with ANSI enabled, and Spark never
+        # evaluates it either.
+        required = "coalesce(CAST(CAST(g AS INT) AS STRING), 'yyyy-MM-dd') AS x"
+        for name, argument in [("date", "dt"), ("timestamp", "ts"), ("timestamp_ntz", "tn"),
+                               ("literal", "DATE '2024-01-02'")]:
+            yield (f"derived_required_{name}_{function}_format",
+                   f"SELECT k, {function}({argument}, x) AS r "
+                   f"FROM (SELECT k, dt, ts, tn, {required} FROM inputs) t")
+        # Spark computes a derived column below a join, an aggregate and a generator, so there
+        # it fails with ANSI enabled, and evaluates a scalar subquery column, which fails.
+        yield (f"derived_joined_{function}_format",
+               f"SELECT t.k, {function}(t.dt, t.x) AS r FROM inputs a JOIN {derived} "
+               f"ON a.k = t.k")
+        yield (f"derived_aggregated_{function}_format",
+               f"SELECT max({function}(DATE '2024-01-02', x)) AS r FROM {derived}")
+        yield (f"derived_generated_{function}_format",
+               f"SELECT k, {function}(dt, x) AS r FROM (SELECT k, dt, x FROM (SELECT k, dt, "
+               f"{cast}, array(1) AS a FROM inputs) s LATERAL VIEW explode(a) e AS v) t")
+        yield (f"derived_scalar_subquery_{function}_format",
+               f"SELECT k, {function}(dt, x) AS r FROM "
+               f"(SELECT k, dt, (SELECT f FROM inputs) AS x FROM inputs) t")
+        # Spark computes a derived column below a sort, so there it fails with ANSI enabled.
+        yield (f"derived_sorted_{function}_format",
+               f"SELECT k, {function}(dt, x) AS r FROM (SELECT k, dt, {cast} FROM inputs "
+               f"ORDER BY k) t")
+        yield (f"derived_grouped_{function}_format",
+               f"SELECT k, {function}(d, x) AS r FROM (SELECT k, max(dt) AS d, "
+               f"CAST(CAST(max(g) AS INT) AS STRING) AS x FROM inputs GROUP BY k)")
 
 
 def python_value(value, kind):
