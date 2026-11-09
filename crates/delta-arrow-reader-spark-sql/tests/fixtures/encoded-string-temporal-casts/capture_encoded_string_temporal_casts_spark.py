@@ -63,7 +63,10 @@ def definitions():
                 ("null_safe_equal_date", f"{column} <=> DATE '2024-05-17'"),
                 ("date_equal", f"DATE '2024-05-17' = {column}"),
                 ("equal_timestamp", f"{column} = TIMESTAMP '2024-05-17 00:00:00'"),
-                ("nullif_date", f"NULLIF({column}, DATE '2024-05-17')")]:
+                ("nullif_date", f"NULLIF({column}, DATE '2024-05-17')"),
+                ("nullif_timestamp", f"NULLIF({column}, TIMESTAMP '2024-05-17 00:00:00')"),
+                ("nullif_timestamp_ntz",
+                 f"NULLIF({column}, TIMESTAMP_NTZ '2024-05-17 00:00:00')")]:
             yield (f"{comparison_name}_{name}", f"SELECT k, {comparison} AS r FROM inputs")
         yield (f"filter_equal_date_{name}",
                f"SELECT k FROM inputs WHERE {column} = DATE '2024-05-17'")

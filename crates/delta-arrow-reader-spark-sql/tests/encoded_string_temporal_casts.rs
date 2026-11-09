@@ -30,7 +30,7 @@ mod spark_results;
 use spark_results::{TestResult, validate_batch};
 
 /// The number of recorded observations.
-const RECORD_COUNT: usize = 264;
+const RECORD_COUNT: usize = 288;
 
 fn string_temporal_cast_references() -> TestResult<Vec<Value>> {
     let records = include_str!(
@@ -217,24 +217,28 @@ fn optimize(session: &SessionContext, plan: &LogicalPlan) -> TestResult<LogicalP
 }
 
 /// #943: DAR does not trim the padding of ` 2024-01-02 ` in `sv` (row 1) before reading it as a
-/// TIMESTAMP or TIMESTAMP_NTZ, so it gives NULL there, and CAST and the comparison with a
-/// TIMESTAMP fail with ANSI enabled; Spark reads the date's first instant.
-const PADDED_TIMESTAMP_RECORDS: [&str; 5] = [
+/// TIMESTAMP or TIMESTAMP_NTZ, so it gives NULL there, and CAST, the comparison with a TIMESTAMP
+/// and NULLIF with one fail with ANSI enabled; Spark reads the date's first instant. Without ANSI,
+/// NULLIF keeps its left value where the comparison gives NULL, as Spark's result does.
+const PADDED_TIMESTAMP_RECORDS: [&str; 7] = [
     "cast_valid_timestamp",
     "try_cast_valid_timestamp",
     "cast_valid_timestamp_ntz",
     "try_cast_valid_timestamp_ntz",
     "equal_timestamp_valid",
+    "nullif_timestamp_valid",
+    "nullif_timestamp_ntz_valid",
 ];
 
 fn is_padded_timestamp_record(case: &Value) -> bool {
-    case["id"]
-        .as_str()
-        .is_some_and(|id| PADDED_TIMESTAMP_RECORDS.contains(&id))
+    case["id"].as_str().is_some_and(|id| {
+        PADDED_TIMESTAMP_RECORDS.contains(&id)
+            && (!id.starts_with("nullif_") || case["ansi"] == true)
+    })
 }
 
 /// The expectation for a record: Spark's, or for a #943 record DAR's result: Spark's rows with
-/// row 1 NULL, or a failure for CAST and the comparison with ANSI enabled.
+/// row 1 NULL, or a failure for CAST, the comparison and NULLIF with ANSI enabled.
 fn expectation(case: &Value) -> TestResult<Value> {
     if !is_padded_timestamp_record(case) {
         return Ok(case.clone());
@@ -245,9 +249,11 @@ fn expectation(case: &Value) -> TestResult<Value> {
         .filter(|rows| rows[1][0] == "1" && !rows[1][1].is_null())
         .ok_or_else(|| format!("expected Spark's value for row 1: {case}"))?;
     let mut current = case.clone();
-    let fails = case["id"]
-        .as_str()
-        .is_some_and(|id| id.starts_with("cast_") || id.starts_with("equal_"));
+    let fails = case["id"].as_str().is_some_and(|id| {
+        ["cast_", "equal_", "nullif_"]
+            .iter()
+            .any(|kind| id.starts_with(kind))
+    });
     if fails && case["ansi"] == true {
         current["expected"] = json!({"status": "error"});
         current["schema_stages"]
@@ -440,7 +446,7 @@ async fn string_temporal_casts_match_spark() -> TestResult {
             .iter()
             .filter(|case| is_padded_timestamp_record(case))
             .count(),
-        20
+        24
     );
     assert_no_differences(&differences_over(&records, &cases, None).await?);
     Ok(())
