@@ -1036,7 +1036,7 @@ fn to_date(input: ScalarFunctionInput) -> PlanResult<Expr> {
 
 /// Spark's TRY_TO_DATE: TO_DATE that gives NULL for a value it cannot parse in both ANSI modes.
 /// An invalid pattern still fails, as in Spark. With a format, its result over a DATE or
-/// TIMESTAMP column is nullable at every stage.
+/// TIMESTAMP is nullable at every stage, over a literal too when the format reads a column.
 fn try_to_date(input: ScalarFunctionInput) -> PlanResult<Expr> {
     to_date_with_parser(input, DateParser::TryToDate)
 }
@@ -1082,9 +1082,10 @@ fn to_date_with_parser(input: ScalarFunctionInput, parser: DateParser) -> PlanRe
             _ => None,
         };
         if let Some(date) = date {
-            // Spark ignores the format of a DATE or TIMESTAMP, but has it as an input. Its result
-            // is nullable outside ANSI mode, and in ANSI mode for a nullable argument, at every
-            // stage over a column, and the format's columns keep it from folding over a literal.
+            // Spark ignores the format of a DATE or TIMESTAMP: it never evaluates it, but
+            // computes its aggregates and window functions. Its result is nullable outside ANSI
+            // mode, and in ANSI mode for a nullable argument or format, at every stage over a
+            // column, and the format's columns keep it from folding over a literal.
             let nullable = null_on_error
                 || expr.nullable(input.function_context.schema)?
                 || format.nullable(input.function_context.schema)?;
