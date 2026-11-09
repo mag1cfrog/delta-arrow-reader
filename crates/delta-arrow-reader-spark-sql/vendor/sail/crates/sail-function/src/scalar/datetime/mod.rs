@@ -29,6 +29,7 @@ pub mod spark_timestamp_add;
 pub mod spark_timestamp_add_interval;
 pub mod spark_timestamp_diff;
 pub mod spark_timestamp_to_ntz;
+pub mod spark_trunc_date;
 pub mod spark_unix_timestamp;
 pub mod spark_window_buckets;
 pub mod spark_year;

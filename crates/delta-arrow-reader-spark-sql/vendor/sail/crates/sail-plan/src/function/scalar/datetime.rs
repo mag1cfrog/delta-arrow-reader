@@ -42,6 +42,7 @@ use sail_function::scalar::datetime::spark_time_trunc::SparkTimeTrunc;
 use sail_function::scalar::datetime::spark_timestamp::SparkTimestamp;
 use sail_function::scalar::datetime::spark_timestamp_add::SparkTimestampAdd;
 use sail_function::scalar::datetime::spark_timestamp_diff::SparkTimestampDiff;
+use sail_function::scalar::datetime::spark_trunc_date::{SparkTruncDate, TruncUnit};
 use sail_function::scalar::datetime::spark_unix_timestamp::SparkUnixTimestamp;
 use sail_function::scalar::datetime::spark_window_buckets::SparkWindowBuckets;
 use sail_function::scalar::datetime::spark_year::SparkYear;
@@ -364,7 +365,7 @@ fn years(arg: Expr) -> Expr {
     integer_part(arg, "YEAR")
 }
 
-fn trunc_part_conversion(part: Expr) -> Expr {
+fn date_trunc_part_conversion(part: Expr) -> Expr {
     Expr::Case(expr::Case {
         expr: None,
         when_then_expr: vec![
@@ -393,19 +394,82 @@ fn trunc_part_conversion(part: Expr) -> Expr {
     })
 }
 
-/// TRUNC of a DATE, to which Spark casts a TIMESTAMP_NTZ argument, a nullable cast. A
-/// TIMESTAMP_NTZ is truncated before that cast, which gives the same DATE for Spark's units and
-/// keeps its microseconds out of DataFusion's nanosecond DATE truncation.
+/// Whether Spark folds `expr` while planning: it reads no column, outer reference, scalar
+/// subquery or lambda variable, and calls no volatile function.
+fn is_spark_foldable(expr: &Expr) -> PlanResult<bool> {
+    Ok(!expr.is_volatile()
+        && expr.column_refs().is_empty()
+        && !expr.contains_outer()
+        && !expr.contains_scalar_subquery()
+        && !expr.exists(|expr| {
+            Ok(matches!(
+                expr,
+                Expr::LambdaVariable(_) | Expr::HigherOrderFunction(_)
+            ))
+        })?)
+}
+
+/// Spark's TRUNC of a DATE. Spark casts a STRING argument to DATE with its STRING-to-DATE rules,
+/// read here from a dictionary's values, and a TIMESTAMP or TIMESTAMP_NTZ to DATE; it rejects other
+/// types. It casts a unit of a type other than ARRAY, MAP or STRUCT to STRING; BINARY that is not
+/// UTF-8 spells no unit. A constant unit it does not support, NULL included, gives NULL without
+/// reading the date, also when the optimizer makes the unit constant, which `SparkTruncDate`
+/// handles. Otherwise `SparkTruncDate` evaluates the date and the unit for every row, reads each
+/// row's unit and truncates the DATE's days, giving NULL for a unit Spark does not support. Its
+/// result is nullable, as Spark declares it, until constant folding replaces a literal's.
 fn trunc(input: ScalarFunctionInput) -> PlanResult<Expr> {
-    let (date, part) = input.arguments.two()?;
-    let source = date.get_type(input.function_context.schema)?;
-    let truncated = expr_fn::date_trunc(trunc_part_conversion(part), date);
-    Ok(match source {
-        DataType::Timestamp(_, None) => {
-            cast_with_date_ntz_nullability(truncated, &source, &DataType::Date32)
+    let schema = input.function_context.schema;
+    let ansi = input.function_context.plan_config.ansi_mode;
+    let (date, unit) = input.arguments.two()?;
+    let date = dictionary_string_values(date, schema)?;
+    let date = match date.get_type(schema)? {
+        data_type if data_type.is_string() => {
+            ScalarUDF::from(SparkDate::new(!ansi)).call(vec![date])
         }
-        _ => cast(truncated, DataType::Date32),
-    })
+        DataType::Date32 | DataType::Date64 | DataType::Timestamp(_, _) | DataType::Null => {
+            cast(date, DataType::Date32)
+        }
+        data_type => {
+            return Err(PlanError::invalid(format!(
+                "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] `trunc`: The first parameter requires \
+                 the \"DATE\" type, got {data_type}"
+            )));
+        }
+    };
+    let unit = match unit.get_type(schema)? {
+        data_type if data_type.is_nested() => {
+            return Err(PlanError::invalid(format!(
+                "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] `trunc`: The second parameter requires \
+                 the \"STRING\" type, got {data_type}"
+            )));
+        }
+        _ => Expr::TryCast(expr::TryCast::new(Box::new(unit), DataType::Utf8)),
+    };
+    if is_spark_foldable(&unit)? {
+        let context = SimplifyContextBuilder::default()
+            .with_schema(schema.clone())
+            .build();
+        let constant = ExprSimplifier::new(context).coerce(unit.clone(), schema)?;
+        // A unit that fails to evaluate is left to the optimizer, which fails folding it, as
+        // Spark's does.
+        if let Ok(value) = LiteralEvaluator::new().evaluate(&constant) {
+            let supported = match value {
+                ScalarValue::Utf8(Some(spelling)) => TruncUnit::parse(&spelling).is_some(),
+                _ => false,
+            };
+            if !supported {
+                // Spark computes the date's columns, aggregates and window functions, though
+                // it does not read the date.
+                return declare_spark_nullability(
+                    lit(ScalarValue::Date32(None)),
+                    true,
+                    Some(&date),
+                    schema,
+                );
+            }
+        }
+    }
+    Ok(ScalarUDF::from(SparkTruncDate::new()).call(vec![date, unit]))
 }
 
 /// A DATE function's argument: Spark casts a TIMESTAMP_NTZ to DATE, a nullable cast. Other
@@ -430,8 +494,8 @@ fn date_field(input: ScalarFunctionInput, part: &str) -> PlanResult<Expr> {
 
 fn date_trunc(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let (part, timestamp) = input.arguments.two()?;
-    let truncated =
-        ScalarUDF::from(SparkDateTrunc::new()).call(vec![trunc_part_conversion(part), timestamp]);
+    let truncated = ScalarUDF::from(SparkDateTrunc::new())
+        .call(vec![date_trunc_part_conversion(part), timestamp]);
     let truncated = match truncated.get_type(input.function_context.schema)? {
         DataType::Timestamp(TimeUnit::Microsecond, _) => truncated,
         DataType::Timestamp(_, tz) => {
@@ -536,19 +600,7 @@ fn date_offset_by_days(
             cast(days, DataType::Int32)
         }
         DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View if ansi => days,
-        other
-            if other.is_string()
-                && !days.is_volatile()
-                && days.column_refs().is_empty()
-                && !days.contains_outer()
-                && !days.contains_scalar_subquery()
-                && !days.exists(|expr| {
-                    Ok(matches!(
-                        expr,
-                        Expr::LambdaVariable(_) | Expr::HigherOrderFunction(_)
-                    ))
-                })? =>
-        {
+        other if other.is_string() && is_spark_foldable(&days)? => {
             let context = SimplifyContextBuilder::default()
                 .with_schema(schema.clone())
                 .build();

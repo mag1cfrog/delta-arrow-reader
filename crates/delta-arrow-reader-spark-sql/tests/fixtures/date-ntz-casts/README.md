@@ -24,9 +24,9 @@ NULL columns, the nullable columns and literals:
 Over the columns, CASE and IF choose between a DATE and a TIMESTAMP_NTZ, and UNION ALL combines
 them. TO_TIMESTAMP and TRY_TO_TIMESTAMP of the DATE columns and a literal run with the session
 timestamp type TIMESTAMP_NTZ; those records name it in `timestamp_type`. Five more queries
-record cases owned elsewhere: a constant cast over `WHERE false`, a DATE in an IN list of
-TIMESTAMP_NTZ values, TRUNC to HOUR, a DATE column compared with a TIMESTAMP_NTZ literal, and a
-TIMESTAMP_NTZ column cast to DATE compared with a DATE literal.
+record cases owned by other issues: a constant cast over `WHERE false`, a DATE in an IN list of
+TIMESTAMP_NTZ values, TRUNC to HOUR (#1192, now matching), a DATE column compared with a
+TIMESTAMP_NTZ literal, and a TIMESTAMP_NTZ column cast to DATE compared with a DATE literal.
 
 Spark declares a cast between TIMESTAMP_NTZ and DATE nullable whatever its input
 (`Cast.forceNullable`). So each of these results over a NOT NULL column is nullable at every
@@ -46,12 +46,9 @@ internal rows, collected through the Dataset API. `ConvertToLocalRelation` is ex
 batch sizes 1 and 32. A failure must occur at Spark's stage with Spark's condition. A second
 test runs the DATE to TIMESTAMP_NTZ cast, TO_TIMESTAMP_NTZ, TO_TIMESTAMP and TRY_TO_TIMESTAMP
 column records over Date64 copies of the DATE columns, which Spark lacks, and requires Spark's
-results. Six differences are retained:
-- #1087: TRUNC of the year 1 row fails while collecting rows, where DataFusion's truncation leaves
-  the nanosecond range, pinned to text DAR's error must contain (4 records);
+results. Four differences are retained:
 - #1190: the constant cast over `WHERE false` stays nullable after optimization (4 records);
 - #1191: the DATE in an IN list of TIMESTAMP_NTZ values is NOT NULL (4 records);
-- #1192: TRUNC to HOUR gives each row's DATE where Spark gives NULL (4 records);
 - #1116: EXTRACT of DAYOFWEEK, DOW_ISO and YEAROFWEEK fails while collecting rows as an
   unsupported date part, pinned to text DAR's error must contain (36 records);
 - #1197: the comparisons with a literal stay nullable after optimization (8 records).

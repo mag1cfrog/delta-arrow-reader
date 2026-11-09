@@ -641,22 +641,37 @@ so these results are nullable over a column, and over a literal until constant f
 - CAST and TRY_CAST of a TIMESTAMP_NTZ to DATE, CAST of a DATE to TIMESTAMP_NTZ, DATE(), and
   TO_TIMESTAMP_NTZ of a DATE, also TO_TIMESTAMP and TRY_TO_TIMESTAMP with the session timestamp
   type TIMESTAMP_NTZ;
-- the implicit casts of the TO_DATE, DATE_ADD, DATE_SUB, ADD_MONTHS, DATEDIFF, TRUNC, DAY,
-  DAYOFMONTH, DAYOFYEAR, MONTH, QUARTER, WEEKDAY and DAYOFWEEK arguments and of the date fields
-  of EXTRACT, DATE_PART and DATEPART;
+- the implicit casts of the TO_DATE, DATE_ADD, DATE_SUB, ADD_MONTHS, DATEDIFF, DAY, DAYOFMONTH,
+  DAYOFYEAR, MONTH, QUARTER, WEEKDAY and DAYOFWEEK arguments and of the date fields of EXTRACT,
+  DATE_PART and DATEPART;
 - a DATE compared with a TIMESTAMP_NTZ, and a DATE beside a TIMESTAMP_NTZ in CASE, IF, COALESCE
   and UNION.
 
 They were NOT NULL for a NOT NULL input (#1003). TRY_CAST of a DATE to TIMESTAMP_NTZ cannot
-fail and keeps its input's nullability. Values are unchanged: TRUNC truncates a TIMESTAMP_NTZ
-before its cast to DATE, which gives the same DATE for Spark's units, and like a DATE fails
-outside the nanosecond range, before 1677-09-21 or after 2262-04-11 (#1087). Still open: Spark's
+fail and keeps its input's nullability. Values are unchanged. Still open: Spark's
 optimizer rewrites a column compared with a literal without the cast, NOT NULL once optimized,
 which DAR does not do (#1197); a DATE in an IN list of TIMESTAMP_NTZ values keeps
 DataFusion's coercion (#1191); a constant over an input proven empty stays nullable after
-optimization (#1190); TRUNC to a
-unit Spark does not support gives a DATE (#1192); and EXTRACT of DAYOFWEEK, DOW_ISO and
-YEAROFWEEK is unsupported (#1116). The [cast references](tests/fixtures/date-ntz-casts/README.md) record the checks.
+optimization (#1190); and EXTRACT of DAYOFWEEK, DOW_ISO and YEAROFWEEK is unsupported (#1116).
+The [cast references](tests/fixtures/date-ntz-casts/README.md) record the checks.
+
+TRUNC uses a local function, `SparkTruncDate`, like Spark's `TruncDate`. It truncates to Spark's
+units only, YEAR, YYYY, YY, QUARTER, MON, MONTH, MM and WEEK in any letter case, and gives NULL
+for any other unit, NULL included; DataFusion's `date_trunc` also accepted DAY, HOUR and other
+units. Like Spark, it gives NULL for a constant unit it does not support without reading the
+date, also for a unit the optimizer makes constant, though it still computes the date's
+aggregates; otherwise it evaluates the date and the unit for every row, so under ANSI a
+malformed STRING date fails beside a unit column whatever its row's unit; each row's unit is
+read once. It truncates the DATE's days over the whole DATE range, with Spark's INT arithmetic
+near the earliest DATE, where `date_trunc` failed outside the nanosecond range (#1087). A STRING
+argument is read with Spark's STRING-to-DATE rules through `SparkDate`, and an argument other
+than a DATE, TIMESTAMP, TIMESTAMP_NTZ or STRING fails. A unit of another type than STRING is
+cast to STRING, as Spark casts it, where BINARY that is not UTF-8 spells no unit; an ARRAY, MAP
+or STRUCT unit fails. The result is nullable, as Spark declares it, until constant folding
+replaces it over literals; over an input proven empty it stays nullable (#1190). A
+scalar-subquery date beside a constant unsupported unit, a constant malformed date beside a unit
+the optimizer makes constant, and the stage of a constant QUARTER overflow still differ (#1226).
+The [TRUNC unit references](tests/fixtures/trunc-units/README.md) record the checks (#1192).
 
 Two DATE values subtract with `-` and TRY_SUBTRACT as Spark's `SubtractDates` does outside its
 legacy interval mode, with a local function, `SparkSubtractDates`: the result is the DAY
