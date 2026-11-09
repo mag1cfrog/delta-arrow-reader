@@ -61,8 +61,6 @@ enum RetainedDifference {
     /// #1191: a DATE in an IN list of TIMESTAMP_NTZ values uses DataFusion's coercion and is NOT
     /// NULL, where Spark's cast makes it nullable.
     InListNullability,
-    /// #1192: TRUNC to HOUR gives the DATE, where Spark gives NULL for that unit.
-    TruncUnsupportedUnit,
     /// #1116: EXTRACT of DAYOFWEEK, DOW_ISO and YEAROFWEEK fails while collecting rows as an
     /// unsupported date part.
     UnsupportedExtractField,
@@ -84,7 +82,6 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
         "required_trunc" => RetainedDifference::TruncBeyondNanoseconds,
         "literal_cast_to_date_where_false" => RetainedDifference::EmptyInputNullability,
         "required_date_in_timestamp_ntz" => RetainedDifference::InListNullability,
-        "required_trunc_hour" => RetainedDifference::TruncUnsupportedUnit,
         "required_date_less_than_timestamp_ntz_literal"
         | "required_cast_to_date_equals_date_literal" => RetainedDifference::ComparisonWithLiteral,
         id if UNSUPPORTED_EXTRACT_FIELDS
@@ -95,33 +92,6 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
         }
         _ => return None,
     })
-}
-
-/// The day of each TIMESTAMP_NTZ value of `inputs` column `column` (1 `tn`, 2 `n`), keyed by
-/// row, for rows the filter keeps.
-fn days_of(metadata: &Value, column: usize, keep: impl Fn(&str) -> bool) -> TestResult<Value> {
-    let inputs = metadata["inputs"][0]["rows"]
-        .as_array()
-        .ok_or("missing inputs rows")?;
-    let mut rows = Vec::new();
-    for row in inputs {
-        let key = row[0].as_str().ok_or("missing key")?;
-        if !keep(key) {
-            continue;
-        }
-        let day = match row[column].as_str() {
-            Some(micros) => json!(
-                micros
-                    .parse::<i64>()?
-                    .div_euclid(86_400_000_000)
-                    .to_string()
-            ),
-            None => Value::Null,
-        };
-        rows.push(json!([key, day]));
-    }
-    rows.sort_by_key(|row| row.to_string());
-    Ok(json!(rows))
 }
 
 /// Set the result field's nullability at the given stages.
@@ -137,11 +107,7 @@ fn set_nullable(current: &mut Value, stages: &[&str], nullable: bool) -> TestRes
 }
 
 /// DAR's current result for a retained record.
-fn current_expectation(
-    case: &Value,
-    difference: RetainedDifference,
-    metadata: &Value,
-) -> TestResult<Value> {
+fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResult<Value> {
     let mut current = case.clone();
     let id = case["id"].as_str().ok_or("missing id")?;
     match difference {
@@ -168,13 +134,6 @@ fn current_expectation(
                 return Err(format!("expected Spark's nullable IN list: {case}").into());
             }
             set_nullable(&mut current, &["analyzed", "optimized", "executed"], false)?;
-        }
-        RetainedDifference::TruncUnsupportedUnit => {
-            let rows = case["expected"]["rows"].as_array().ok_or("expected rows")?;
-            if rows.iter().any(|row| !row[1].is_null()) {
-                return Err(format!("expected Spark's NULL truncation: {case}").into());
-            }
-            current["expected"]["rows"] = days_of(metadata, 1, |key| key != "3")?;
         }
         RetainedDifference::UnsupportedExtractField => {
             if case["expected"]["status"] != "ok" {
@@ -540,7 +499,6 @@ async fn date_ntz_casts_match_spark() -> TestResult {
             (RetainedDifference::TruncBeyondNanoseconds, 4),
             (RetainedDifference::EmptyInputNullability, 4),
             (RetainedDifference::InListNullability, 4),
-            (RetainedDifference::TruncUnsupportedUnit, 4),
             (RetainedDifference::UnsupportedExtractField, 36),
             (RetainedDifference::ComparisonWithLiteral, 8),
         ])
@@ -551,7 +509,7 @@ async fn date_ntz_casts_match_spark() -> TestResult {
         register_inputs(&session, &records[0], batch_size)?;
         for case in &records[1..] {
             let expectation = match retained_difference(case) {
-                Some(difference) => current_expectation(case, difference, &records[0])?,
+                Some(difference) => current_expectation(case, difference)?,
                 None => case.clone(),
             };
             let observation = observe(&session, case).await;

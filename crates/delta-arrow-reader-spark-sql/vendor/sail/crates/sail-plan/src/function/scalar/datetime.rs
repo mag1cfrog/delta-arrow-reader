@@ -392,18 +392,72 @@ fn trunc_part_conversion(part: Expr) -> Expr {
     })
 }
 
-/// TRUNC of a DATE, to which Spark casts a TIMESTAMP_NTZ argument, a nullable cast. A
+/// Spark's TRUNC units, in any case, as the granularities DataFusion's `date_trunc` names:
+/// YEAR, YYYY and YY; QUARTER; MON, MONTH and MM; and WEEK.
+const TRUNC_UNITS: [(&str, &[&str]); 4] = [
+    ("year", &["YEAR", "YYYY", "YY"]),
+    ("quarter", &["QUARTER"]),
+    ("month", &["MON", "MONTH", "MM"]),
+    ("week", &["WEEK"]),
+];
+
+/// The granularity of a Spark TRUNC unit, or `None` for a unit Spark does not support.
+fn trunc_granularity(unit: &str) -> Option<&'static str> {
+    let unit = unit.to_uppercase();
+    TRUNC_UNITS.iter().find_map(|(granularity, spellings)| {
+        spellings.contains(&unit.as_str()).then_some(*granularity)
+    })
+}
+
+/// Spark's TRUNC of a DATE, to which Spark casts a TIMESTAMP_NTZ argument, a nullable cast. A
 /// TIMESTAMP_NTZ is truncated before that cast, which gives the same DATE for Spark's units and
-/// keeps its microseconds out of DataFusion's nanosecond DATE truncation.
+/// keeps its microseconds out of DataFusion's nanosecond DATE truncation. A unit Spark does not
+/// support, NULL included, gives NULL, and a column of units is read row by row. The result is
+/// nullable, as Spark declares it.
 fn trunc(input: ScalarFunctionInput) -> PlanResult<Expr> {
-    let (date, part) = input.arguments.two()?;
-    let source = date.get_type(input.function_context.schema)?;
-    let truncated = expr_fn::date_trunc(trunc_part_conversion(part), date);
-    Ok(match source {
-        DataType::Timestamp(_, None) => {
-            cast_with_date_ntz_nullability(truncated, &source, &DataType::Date32)
+    let schema = input.function_context.schema;
+    let (date, unit) = input.arguments.two()?;
+    let source = date.get_type(schema)?;
+    let truncate = |granularity: &str| {
+        let truncated = expr_fn::date_trunc(lit(granularity), date.clone());
+        match &source {
+            DataType::Timestamp(_, None) => {
+                cast_with_date_ntz_nullability(truncated, &source, &DataType::Date32)
+            }
+            _ => cast(truncated, DataType::Date32),
         }
-        _ => cast(truncated, DataType::Date32),
+    };
+    let result = match &unit {
+        Expr::Literal(
+            ScalarValue::Utf8(text) | ScalarValue::LargeUtf8(text) | ScalarValue::Utf8View(text),
+            _,
+        ) => match text.as_deref().and_then(trunc_granularity) {
+            Some(granularity) => truncate(granularity),
+            None => lit(ScalarValue::Date32(None)),
+        },
+        Expr::Literal(ScalarValue::Null, _) => lit(ScalarValue::Date32(None)),
+        _ => {
+            let unit = expr_fn::upper(unit.clone());
+            Expr::Case(expr::Case {
+                expr: None,
+                when_then_expr: TRUNC_UNITS
+                    .iter()
+                    .map(|(granularity, spellings)| {
+                        let spellings = spellings.iter().map(|spelling| lit(*spelling)).collect();
+                        (
+                            Box::new(unit.clone().in_list(spellings, false)),
+                            Box::new(truncate(granularity)),
+                        )
+                    })
+                    .collect(),
+                else_expr: None,
+            })
+        }
+    };
+    Ok(if result.nullable(schema)? {
+        result
+    } else {
+        ScalarUDF::from(SparkKnownNullable::new()).call(vec![result])
     })
 }
 
