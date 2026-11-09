@@ -31,7 +31,7 @@ mod spark_results;
 use spark_results::{TestResult, validate_batch};
 
 /// The number of recorded observations.
-const RECORD_COUNT: usize = 196;
+const RECORD_COUNT: usize = 216;
 
 fn months_between_references() -> TestResult<Vec<Value>> {
     let records =
@@ -49,28 +49,54 @@ fn months_between_references() -> TestResult<Vec<Value>> {
     Ok(records)
 }
 
-/// #942: DAR casts a STRING argument to TIMESTAMP_NTZ, not to a TIMESTAMP in the session zone,
-/// so on a Los Angeles change day it counts wall-clock seconds where Spark counts the instant's.
-/// In this record the second row's '2024-03-10 03:00:00' gives one hour more than Spark's.
-const STRING_ZONE_RECORD: &str = "column_string_by_nullable";
-const SPARK_STRING_ZONE_VALUE: &str = "c010a4791e4ef586";
-const DAR_STRING_ZONE_VALUE: &str = "c010a5d976a954a3";
+/// Values DAR still gives in America/Los_Angeles, each owned by an issue: a record, the row of
+/// the value, Spark's value and DAR's. DAR casts a STRING argument to TIMESTAMP_NTZ (#942) and
+/// keeps a TIMESTAMP_NTZ (#1228), not a TIMESTAMP in the session zone, so on a change day it
+/// counts wall-clock seconds where Spark counts the instant's, an hour apart.
+type RetainedValue = (&'static str, usize, &'static str, &'static str);
 
-fn is_retained(case: &Value) -> bool {
-    case["id"] == STRING_ZONE_RECORD && case["timezone"] == "America/Los_Angeles"
+const RETAINED_VALUES: [RetainedValue; 3] = [
+    (
+        "column_string_by_nullable",
+        1,
+        "c010a4791e4ef586",
+        "c010a5d976a954a3",
+    ),
+    (
+        "literal_timestamp_ntz_spring_change_day",
+        0,
+        "3fd9b86e1b10a798",
+        "3fd9ce73a0b6995a",
+    ),
+    (
+        "literal_timestamp_ntz_autumn_change_day",
+        0,
+        "4018d81605d0cf66",
+        "4018d6b5ad76704a",
+    ),
+];
+
+fn retained_value(case: &Value) -> Option<&'static RetainedValue> {
+    if case["timezone"] != "America/Los_Angeles" {
+        return None;
+    }
+    RETAINED_VALUES.iter().find(|(id, ..)| case["id"] == *id)
 }
 
-/// The expectation for a record: Spark's, or for a #942 record DAR's value in the second row.
+/// The expectation for a record: Spark's, or for a retained record DAR's value in its row.
 fn expectation(case: &Value) -> TestResult<Value> {
-    if !is_retained(case) {
+    let Some((_, row, spark, dar)) = retained_value(case) else {
         return Ok(case.clone());
-    }
+    };
     let mut current = case.clone();
-    let value = &mut current["expected"]["rows"][1][1];
-    if *value != SPARK_STRING_ZONE_VALUE {
-        return Err(format!("expected Spark's value in the second row: {case}").into());
+    let value = current["expected"]["rows"][*row]
+        .as_array_mut()
+        .and_then(|row| row.last_mut())
+        .ok_or("missing retained row")?;
+    if *value != *spark {
+        return Err(format!("expected Spark's value {spark}: {case}").into());
     }
-    *value = json!(DAR_STRING_ZONE_VALUE);
+    *value = json!(dar);
     Ok(current)
 }
 
@@ -413,13 +439,19 @@ fn assert_no_differences(differences: &[Value]) {
 async fn months_between_matches_spark() -> TestResult {
     let records = months_between_references()?;
     let cases = records[1..].iter().collect::<Vec<_>>();
-    assert_eq!(cases.iter().filter(|case| is_retained(case)).count(), 2);
+    assert_eq!(
+        cases
+            .iter()
+            .filter(|case| retained_value(case).is_some())
+            .count(),
+        6
+    );
     assert_no_differences(&differences_over(&records, &cases, None).await?);
     Ok(())
 }
 
-/// A Date64 behaves like a DATE, so every Spark record, each of which reads the DATE column `dt`
-/// or none, holds over Date64 copies of the DATE columns.
+/// A Date64 behaves like a DATE, so every Spark record holds over Date64 copies of the DATE
+/// columns `dt` and `dtn`.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn date64_arguments_match_their_date_records() -> TestResult {
     let records = months_between_references()?;
@@ -428,9 +460,8 @@ async fn date64_arguments_match_their_date_records() -> TestResult {
     Ok(())
 }
 
-/// A dictionary-encoded, viewed or large STRING behaves like a STRING, as a date argument and as
-/// a unit, so every Spark record holds over copies of the inputs with their STRING columns so
-/// encoded.
+/// A dictionary-encoded, viewed or large STRING behaves like a STRING argument, so every Spark
+/// record holds over copies of the inputs with their STRING columns so encoded.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn encoded_strings_match_their_string_records() -> TestResult {
     let records = months_between_references()?;

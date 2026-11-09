@@ -3,10 +3,11 @@
 Records analyzed, optimized and executed schemas, typed internal-row values and failing stages,
 with the innermost Java exception of a failure, for MONTHS_BETWEEN with and without `roundOff`
 over NOT NULL and nullable DATE, TIMESTAMP, TIMESTAMP_NTZ and STRING columns and literals, with
-literal, NOT NULL column, nullable column and NULL `roundOff` values. Spark casts both arguments
-to TIMESTAMP, and declares the result nullable when an argument or `roundOff` is. Every query
-runs in both ANSI modes in UTC and America/Los_Angeles. Run from the crate root in the reference
-environment described in README.md; the output path must not exist.
+literal, NOT NULL column, nullable column, NULL, volatile and Boolean-expression `roundOff`
+values, beside a failing argument, and of TIMESTAMP_NTZ times on the Los Angeles change days.
+Spark casts both arguments to TIMESTAMP, and declares the result nullable when an argument or
+`roundOff` is. Every query runs in both ANSI modes in UTC and America/Los_Angeles. Run from the
+crate root in the reference environment described in README.md; the output path must not exist.
 """
 import argparse
 from datetime import date, datetime, timedelta, timezone
@@ -96,6 +97,22 @@ def definitions():
                f"SELECT k, months_between({value}, dt) AS r FROM inputs")
     yield ("literal_timestamp_ntz_date",
            "SELECT months_between(TIMESTAMP_NTZ '2024-01-02 00:30:00', DATE '2024-01-02') AS r")
+    # The arguments are evaluated before roundOff, so a failing argument fails beside a NULL one.
+    yield ("column_failing_date_nullable_round_off",
+           "SELECT k, months_between(CAST(CASE WHEN k = 2 THEN 'garbage' ELSE '2024-01-01' END "
+           "AS DATE), dt, ron) AS r FROM inputs")
+    # A volatile roundOff is read once per row, so each row is rounded or NULL.
+    yield ("volatile_round_off",
+           "SELECT count(DISTINCT r) AS n FROM (SELECT months_between("
+           "TIMESTAMP '2024-03-10 12:00:00', DATE '2024-02-01', "
+           "CASE WHEN rand() > 0.5 THEN true END) AS r FROM range(2000))")
+    yield ("column_round_off_or_true",
+           "SELECT k, months_between(ts, dt, ron OR true) AS r FROM inputs")
+    # TIMESTAMP_NTZ times after the Los Angeles spring and autumn changes.
+    for name, value, day in [("spring", "2024-03-10 12:00:00", "2024-02-29"),
+                             ("autumn", "2023-11-05 12:00:00", "2023-04-30")]:
+        yield (f"literal_timestamp_ntz_{name}_change_day",
+               f"SELECT months_between(TIMESTAMP_NTZ '{value}', DATE '{day}') AS r")
 
 
 def python_value(value, kind):
