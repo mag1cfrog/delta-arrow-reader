@@ -1,7 +1,6 @@
 //! WEEKDAY numbers Monday 0 through Sunday 6 and DAYOFWEEK Sunday 1 through Saturday 7 like
 //! Spark, for DATE, TIMESTAMP in the session time zone, TIMESTAMP_NTZ and STRING values.
 
-use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use arrow::array::{Array, AsArray};
@@ -233,40 +232,6 @@ fn differing_parts(case: &Value, observation: &Value) -> TestResult<Vec<&'static
     Ok(differing)
 }
 
-/// Differences outside WEEKDAY and DAYOFWEEK, each named for DAR's current behavior and owned
-/// by an issue. A record can have several.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum RetainedDifference {
-    /// #1003: the implicit cast of a NOT NULL TIMESTAMP_NTZ to DATE is NOT NULL, where Spark
-    /// declares it nullable, until constant folding for a literal.
-    RequiredNtzDateCast,
-}
-
-/// DAR's current result for a record: Spark's record with each retained part replaced by
-/// DAR's result, and the differences that changed it.
-fn current_expectation(case: &Value) -> TestResult<(Value, Vec<RetainedDifference>)> {
-    let mut current = case.clone();
-    let mut retained = Vec::new();
-    let id = case["id"].as_str().ok_or("missing id")?;
-    if id.ends_with("_literal_timestamp_ntz") || id.ends_with("_required_tn") {
-        let mut changed = false;
-        for stage in ["analyzed", "optimized", "executed"] {
-            if let Some(fields) = current["schema_stages"][stage]["fields"].as_array_mut() {
-                for field in fields.iter_mut().filter(|field| field["name"] == "r") {
-                    if field["nullable"] == true {
-                        field["nullable"] = json!(false);
-                        changed = true;
-                    }
-                }
-            }
-        }
-        if changed {
-            retained.push(RetainedDifference::RequiredNtzDateCast);
-        }
-    }
-    Ok((current, retained))
-}
-
 fn session_context(batch_size: usize) -> SessionContext {
     SessionContext::new_with_state(
         configure_spark_sql(
@@ -310,28 +275,19 @@ fn register_inputs(session: &SessionContext, metadata: &Value, batch_size: usize
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn weekday_and_dayofweek_match_spark() -> TestResult {
     let records = weekday_references()?;
-    let mut retained = BTreeMap::new();
-    let mut expectations = Vec::new();
-    for case in &records[1..] {
-        let (expectation, differences) = current_expectation(case)?;
-        for difference in differences {
-            *retained.entry(difference).or_insert(0) += 1;
-        }
-        expectations.push(expectation);
-    }
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
         let session = session_context(batch_size);
         register_inputs(&session, &records[0], batch_size)?;
-        for (case, expectation) in records[1..].iter().zip(&expectations) {
+        for case in &records[1..] {
             let observation = observe(&session, case).await;
-            let differing = differing_parts(expectation, &observation)?;
+            let differing = differing_parts(case, &observation)?;
             if !differing.is_empty() {
                 differences.push(json!({
                     "id": case["id"], "timezone": case["timezone"], "ansi": case["ansi"],
                     "batch": batch_size, "differing": differing,
-                    "expected": expectation["expected"],
-                    "schema_stages": expectation["schema_stages"],
+                    "expected": case["expected"],
+                    "schema_stages": case["schema_stages"],
                     "observed": observation,
                 }));
             }
@@ -346,10 +302,6 @@ async fn weekday_and_dayofweek_match_spark() -> TestResult {
             .map(Value::to_string)
             .collect::<Vec<_>>()
             .join("\n")
-    );
-    assert_eq!(
-        retained,
-        BTreeMap::from([(RetainedDifference::RequiredNtzDateCast, 16)])
     );
     Ok(())
 }

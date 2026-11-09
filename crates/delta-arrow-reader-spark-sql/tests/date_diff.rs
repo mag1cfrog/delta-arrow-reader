@@ -156,25 +156,6 @@ async fn observe(session: &SessionContext, case: &Value) -> Value {
     observation
 }
 
-/// #1003: a TIMESTAMP_NTZ argument's DATE cast is required at analysis, where Spark declares it
-/// nullable until constant folding.
-fn retains_ntz_cast_nullability(case: &Value) -> bool {
-    case["id"]
-        .as_str()
-        .is_some_and(|id| id.ends_with("_timestamp_ntz"))
-}
-
-/// Replace only the retained analyzed nullability with DAR's current required field.
-fn current_expectation(case: &Value) -> TestResult<Value> {
-    let mut current = case.clone();
-    let field = &mut current["schema_stages"]["analyzed"]["fields"][0];
-    if field["nullable"] != true {
-        return Err(format!("expected Spark's nullable analyzed field: {field}").into());
-    }
-    field["nullable"] = json!(false);
-    Ok(current)
-}
-
 /// Compare every recorded stage and the typed rows. The corpus records no errors.
 fn compare(case: &Value, observation: &Value) -> TestResult<Vec<&'static str>> {
     let mut differences = Vec::new();
@@ -192,13 +173,6 @@ fn compare(case: &Value, observation: &Value) -> TestResult<Vec<&'static str>> {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn date_diff_matches_spark() -> TestResult {
     let records = date_diff_references()?;
-    assert_eq!(
-        records[1..]
-            .iter()
-            .filter(|case| retains_ntz_cast_nullability(case))
-            .count(),
-        8
-    );
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
         let session = SessionContext::new_with_state(
@@ -216,12 +190,7 @@ async fn date_diff_matches_spark() -> TestResult {
         register_recorded_inputs(&session, &records[0], batch_size)?;
         for case in &records[1..] {
             let observation = observe(&session, case).await;
-            let expectation = if retains_ntz_cast_nullability(case) {
-                current_expectation(case)?
-            } else {
-                case.clone()
-            };
-            let differing = compare(&expectation, &observation)?;
+            let differing = compare(case, &observation)?;
             if !differing.is_empty() {
                 differences.push(json!({
                     "id": case["id"], "timezone": case["timezone"], "ansi": case["ansi"],

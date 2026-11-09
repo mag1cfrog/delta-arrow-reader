@@ -267,9 +267,6 @@ fn differing_parts(expectation: &Value, observation: &Value) -> Vec<&'static str
 enum RetainedDifference {
     /// #943: typed TIMESTAMP literals roll second 60 over to the next minute.
     RolledOverLeapSecond,
-    /// #1003: CAST(DATE AS TIMESTAMP_NTZ) is required at analysis, where Spark declares it
-    /// nullable.
-    RequiredDateNtzCast,
     /// #1010: invalid datetime patterns use DAR's message, and `#`, `{` and `}` are
     /// formatted as literal text.
     DarPatternErrors,
@@ -282,13 +279,11 @@ enum RetainedDifference {
     /// #1014: DATE_FORMAT keeps the hour of a TIMESTAMP_NTZ local time skipped by a DST
     /// change instead of moving it past the gap.
     SkippedLocalTimeAsWritten,
-    /// #1015: formatted TO_DATE ignores a parsed zone offset.
+    /// #1015: formatted TO_DATE and TRY_TO_DATE ignore a parsed zone offset.
     IgnoredParsedOffset,
     /// #1016: DATE_FORMAT, ANSI formatted parsing and temporal-to-STRING casts are nullable
     /// at analysis, where Spark declares them required.
     NullableFormattingResults,
-    /// #1017: TRY_TO_DATE is an unknown function.
-    UnknownTryToDate,
 }
 
 /// Strings beyond the date library's range in the `parse_inputs` table.
@@ -550,15 +545,6 @@ fn current_expectation(
     let input = case["input"].as_str().unwrap_or_default();
     let operator = case["operator"].as_str().unwrap_or_default();
 
-    if operator == "try_to_date" {
-        // DAR fails while resolving the query, before any stage or row exists.
-        current["expected"] = json!({"status": "error",
-            "dar_message": "unknown function: TRY_TO_DATE"});
-        current["spark_error_phase"] = json!("sql");
-        current["schema_stages"] = json!({});
-        retained.insert(RetainedDifference::UnknownTryToDate);
-        return Ok((current, retained));
-    }
     if section == "parse"
         && OUT_OF_RANGE_INPUTS.contains(&input)
         && rewrite_out_of_range(&mut current, case, references)?
@@ -638,7 +624,7 @@ fn current_expectation(
             "format" => 0..fields.len(),
             "formatted"
                 if ansi
-                    && operator != "try_to_timestamp"
+                    && !matches!(operator, "try_to_timestamp" | "try_to_date")
                     && !matches!(input, "null_string" | "null_pattern") =>
             {
                 0..1
@@ -656,21 +642,14 @@ fn current_expectation(
         if declared_nullable {
             retained.insert(RetainedDifference::NullableFormattingResults);
         }
-        if section == "convert" && operator == "date_to_ntz" {
-            if fields[0]["nullable"] != true {
-                return Err("expected Spark's nullable DATE to TIMESTAMP_NTZ cast".into());
-            }
-            fields[0]["nullable"] = json!(false);
-            retained.insert(RetainedDifference::RequiredDateNtzCast);
-        }
     }
     if section == "formatted"
         && input == "offset"
-        && operator == "to_date"
+        && matches!(operator, "to_date" | "try_to_date")
         && current["expected"]["status"] == "ok"
     {
         // DAR keeps the local date, which is the date of TO_TIMESTAMP_NTZ for the string.
-        let id = text(case, "id")?.replacen("_to_date_", "_to_timestamp_ntz_", 1);
+        let id = text(case, "id")?.replacen(&format!("_{operator}_"), "_to_timestamp_ntz_", 1);
         let mut rows = references.sibling(case, &id, timezone)?["expected"]["rows"].clone();
         for row in rows.as_array_mut().ok_or("missing rows")? {
             let row = row.as_array_mut().ok_or("missing row")?;
@@ -755,14 +734,12 @@ async fn temporal_contracts_match_spark() -> TestResult {
         retained,
         [
             (RetainedDifference::RolledOverLeapSecond, 12),
-            (RetainedDifference::RequiredDateNtzCast, 24),
-            (RetainedDifference::DarPatternErrors, 324),
-            (RetainedDifference::OutOfRangeStrings, 212),
+            (RetainedDifference::DarPatternErrors, 340),
+            (RetainedDifference::OutOfRangeStrings, 236),
             (RetainedDifference::ZoneTokenText, 96),
             (RetainedDifference::SkippedLocalTimeAsWritten, 24),
-            (RetainedDifference::IgnoredParsedOffset, 4),
+            (RetainedDifference::IgnoredParsedOffset, 8),
             (RetainedDifference::NullableFormattingResults, 712),
-            (RetainedDifference::UnknownTryToDate, 448),
         ]
     );
     Ok(())
