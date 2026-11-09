@@ -58,21 +58,20 @@ belong to several classes:
 - #943: 12 typed TIMESTAMP literals with second 60 roll over to the next minute;
   their fields are those of the same literal for a valid time.
 - #1003: 24 `CAST(DATE AS TIMESTAMP_NTZ)` literals are required at analysis.
-- #1010: 324 invalid-pattern or reserved-character cases retain DAR's error
+- #1010: 340 invalid-pattern or reserved-character cases retain DAR's error
   message or literal formatting. Strict ANSI formatted-parser literals fail
   during optimization; the other retained errors occur during collection.
   `#`, `{` and `}` are still formatted as text.
-- #1011: 212 strings beyond the date library's range behave like `'bad'`.
+- #1011: 236 strings beyond the date library's range behave like `'bad'`.
 - #1014: 96 DATE_FORMAT results print other zone names and `O` offsets, including
   the Los Angeles local mean time offset without its seconds, or UTC zone tokens
   for DATE and TIMESTAMP_NTZ inputs; 24 keep the hour of the
   registered TIMESTAMP_NTZ local time skipped by the Los Angeles spring change,
   two of them also with zone tokens.
-- #1015: 4 formatted TO_DATE calls ignore the parsed offset and keep the local
-  date of TO_TIMESTAMP_NTZ.
+- #1015: 8 formatted TO_DATE and TRY_TO_DATE calls ignore the parsed offset and
+  keep the local date of TO_TIMESTAMP_NTZ.
 - #1016: 712 DATE_FORMAT, ANSI formatted parsing and temporal-to-STRING literals
   are nullable at analysis.
-- #1017: 448 TRY_TO_DATE calls fail as an unknown function while resolving.
 
 Recapture from the crate root:
 
