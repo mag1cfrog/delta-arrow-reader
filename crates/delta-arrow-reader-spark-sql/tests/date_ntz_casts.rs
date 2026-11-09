@@ -1,8 +1,8 @@
 //! Casts between TIMESTAMP_NTZ and DATE are nullable like Spark's in CAST, DATE(),
-//! TO_TIMESTAMP_NTZ, the date functions and EXTRACT fields that read a DATE, comparisons and
-//! CASE, IF, COALESCE and UNION: at every stage over a column, and until constant folding over a
-//! literal. TRY_CAST from DATE to TIMESTAMP_NTZ, which cannot fail, keeps its input's
-//! nullability.
+//! TO_TIMESTAMP_NTZ, TO_TIMESTAMP and TRY_TO_TIMESTAMP with the TIMESTAMP_NTZ session type, the
+//! date functions and EXTRACT fields that read a DATE, comparisons and CASE, IF, COALESCE and
+//! UNION: over a column, and until constant folding over a literal. TRY_CAST from DATE to
+//! TIMESTAMP_NTZ, which cannot fail, keeps its input's nullability.
 
 use std::sync::Arc;
 
@@ -17,7 +17,9 @@ use datafusion::logical_expr::LogicalPlan;
 use datafusion::physical_optimizer::aggregate_statistics::PreserveAggregateStatisticsSchema;
 use datafusion::physical_plan::collect;
 use datafusion::prelude::{SessionConfig, SessionContext};
-use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
+use delta_arrow_reader_spark_sql::{
+    DefaultTimestampType, SparkSqlOptions, configure_spark_sql, plan_query,
+};
 use sail_plan::expression_errors::SparkSqlExpressionSemantics;
 use serde_json::{Value, json};
 
@@ -42,7 +44,7 @@ fn cast_references() -> TestResult<Vec<Value>> {
             |build| build.contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
         )
     );
-    assert_eq!(records.len() - 1, 540);
+    assert_eq!(records.len() - 1, 644);
     Ok(records)
 }
 
@@ -67,6 +69,9 @@ enum RetainedDifference {
     /// #1116: EXTRACT of DAYOFWEEK, DOW_ISO and YEAROFWEEK fails while collecting rows as an
     /// unsupported date part.
     UnsupportedExtractField,
+    /// #1197: a column compared with a literal through the cast stays nullable after
+    /// optimization, where Spark's optimizer rewrites the comparison without the cast.
+    ComparisonWithLiteral,
 }
 
 const UNIX_DATE_RECORDS: [&str; 3] = [
@@ -89,6 +94,8 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
         "literal_cast_to_date_where_false" => RetainedDifference::EmptyInputNullability,
         "required_date_in_timestamp_ntz" => RetainedDifference::InListNullability,
         "required_trunc_hour" => RetainedDifference::TruncUnsupportedUnit,
+        "required_date_less_than_timestamp_ntz_literal"
+        | "required_cast_to_date_equals_date_literal" => RetainedDifference::ComparisonWithLiteral,
         id if UNIX_DATE_RECORDS.contains(&id) => RetainedDifference::UnixDateOfTimestampNtz,
         id if UNSUPPORTED_EXTRACT_FIELDS
             .iter()
@@ -212,6 +219,20 @@ fn current_expectation(
                 .ok_or("missing schema stages")?
                 .remove("executed");
         }
+        RetainedDifference::ComparisonWithLiteral => {
+            let nullable = |stage: &str| {
+                case["schema_stages"][stage]["fields"]
+                    .as_array()
+                    .and_then(|fields| fields.last())
+                    .map(|field| field["nullable"].clone())
+            };
+            if nullable("analyzed") != Some(json!(true))
+                || nullable("optimized") != Some(json!(false))
+            {
+                return Err(format!("expected Spark's unwrapped comparison: {case}").into());
+            }
+            set_nullable(&mut current, &["optimized", "executed"], true)?;
+        }
     }
     Ok(current)
 }
@@ -297,9 +318,15 @@ fn encode_value(column: &dyn Array, row: usize) -> TestResult<Value> {
 }
 
 fn options(case: &Value) -> TestResult<SparkSqlOptions> {
+    let default_timestamp_type = match case.get("timestamp_type").and_then(Value::as_str) {
+        None => DefaultTimestampType::TimestampLtz,
+        Some("TIMESTAMP_NTZ") => DefaultTimestampType::TimestampNtz,
+        Some(other) => return Err(format!("unexpected timestamp type {other}").into()),
+    };
     Ok(SparkSqlOptions {
         ansi_mode: case["ansi"].as_bool().ok_or("missing ANSI mode")?,
         session_timezone: case["timezone"].as_str().ok_or("missing time zone")?.into(),
+        default_timestamp_type,
         ..SparkSqlOptions::default()
     })
 }
@@ -479,13 +506,17 @@ fn register_date64_inputs(
 /// of those casts over DATE columns hold for Date64 copies of them.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn date64_values_cast_to_timestamp_ntz_like_dates() -> TestResult {
-    const RECORDS: [&str; 6] = [
+    const RECORDS: [&str; 10] = [
         "required_cast_to_timestamp_ntz",
         "nullable_cast_to_timestamp_ntz",
         "required_try_cast_to_timestamp_ntz",
         "nullable_try_cast_to_timestamp_ntz",
         "required_to_timestamp_ntz",
         "nullable_to_timestamp_ntz",
+        "ntz_session_required_to_timestamp",
+        "ntz_session_nullable_to_timestamp",
+        "ntz_session_required_try_to_timestamp",
+        "ntz_session_nullable_try_to_timestamp",
     ];
     let records = cast_references()?;
     let cases = records[1..]
@@ -539,6 +570,7 @@ async fn date_ntz_casts_match_spark() -> TestResult {
             (RetainedDifference::InListNullability, 4),
             (RetainedDifference::TruncUnsupportedUnit, 4),
             (RetainedDifference::UnsupportedExtractField, 36),
+            (RetainedDifference::ComparisonWithLiteral, 8),
         ])
     );
     let mut differences = Vec::new();

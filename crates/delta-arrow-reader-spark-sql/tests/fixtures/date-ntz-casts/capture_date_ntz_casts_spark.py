@@ -5,10 +5,11 @@ stages, with the innermost Java exception of a failure, for explicit CAST and TR
 TIMESTAMP_NTZ and DATE in both directions, and for the implicit casts of TO_DATE, DATE_ADD,
 DATE_SUB, DATEDIFF, LAST_DAY, YEAR, MONTH, DAY, DAYOFMONTH, DAYOFYEAR, QUARTER, WEEKOFYEAR,
 DAYNAME, MONTHNAME, ADD_MONTHS, NEXT_DAY, TRUNC, UNIX_DATE, WEEKDAY and DAYOFWEEK arguments, of
-DATE(), TO_TIMESTAMP_NTZ, the date fields of EXTRACT, DATE_PART and DATEPART, of a DATE compared
-with a TIMESTAMP_NTZ, and of a DATE beside a TIMESTAMP_NTZ in CASE, IF, COALESCE and UNION ALL,
-over NOT NULL and nullable columns and literals. Three cases owned elsewhere are recorded
-too. Spark declares a cast between the two types nullable whatever its input, so a NOT NULL
+DATE(), TO_TIMESTAMP_NTZ, the date fields of EXTRACT, DATE_PART and DATEPART, also by their
+aliases, of a DATE compared with a TIMESTAMP_NTZ, and of a DATE beside a TIMESTAMP_NTZ in CASE,
+IF, COALESCE and UNION ALL, over NOT NULL and nullable columns and literals, and of TO_TIMESTAMP
+and TRY_TO_TIMESTAMP of a DATE with the session timestamp type TIMESTAMP_NTZ. Five cases owned
+elsewhere are recorded too. Spark declares a cast between the two types nullable whatever its input, so a NOT NULL
 column's cast is nullable at every stage, and a literal's cast is nullable until constant
 folding. Every query runs in both ANSI modes in UTC and America/Los_Angeles. Run from the crate
 root in the reference environment described in README.md; the output path must not exist.
@@ -101,12 +102,24 @@ CASES = [
     ("extract_doy", "extract(DOY FROM {x})"),
     ("extract_yearofweek", "extract(YEAROFWEEK FROM {x})"),
     ("extract_hour", "extract(HOUR FROM {x})"),
+    ("extract_y", "extract(Y FROM {x})"),
+    ("extract_qtr", "extract(QTR FROM {x})"),
+    ("extract_mons", "extract(MONS FROM {x})"),
+    ("extract_w", "extract(W FROM {x})"),
+    ("extract_d", "extract(D FROM {x})"),
+    ("extract_days", "extract(DAYS FROM {x})"),
     ("date_part_day", "date_part('day', {x})"),
     ("datepart_month", "datepart('MONTH', {x})"),
     ("to_timestamp_ntz", "to_timestamp_ntz({y})"),
     ("coalesce_date_timestamp_ntz", "coalesce({y}, {x})"),
 ]
 
+
+# Cases run with the session timestamp type TIMESTAMP_NTZ: (name, expression over a DATE y).
+NTZ_SESSION_CASES = [
+    ("to_timestamp", "to_timestamp({y})"),
+    ("try_to_timestamp", "try_to_timestamp({y})"),
+]
 
 # Column cases with a row condition: (name, expression over a TIMESTAMP_NTZ x and a DATE y).
 COLUMN_CASES = [
@@ -116,6 +129,18 @@ COLUMN_CASES = [
 
 
 def definitions():
+    """Yield (name, SQL, session timestamp type or None)."""
+    for name, sql in plain_definitions():
+        yield name, sql, None
+    for name, expression in NTZ_SESSION_CASES:
+        for prefix, y in [("required", "dr"), ("nullable", "d")]:
+            yield (f"ntz_session_{prefix}_{name}",
+                   f"SELECT k, {expression.format(y=y)} AS r FROM inputs", "TIMESTAMP_NTZ")
+        yield (f"ntz_session_literal_{name}", f"SELECT {expression.format(y=DATE)} AS r",
+               "TIMESTAMP_NTZ")
+
+
+def plain_definitions():
     for name, expression in CASES:
         yield f"required_{name}", f"SELECT k, {expression.format(x='tn', y='dr')} AS r FROM inputs"
         yield f"nullable_{name}", f"SELECT k, {expression.format(x='n', y='d')} AS r FROM inputs"
@@ -127,13 +152,18 @@ def definitions():
            "SELECT k, dr AS r FROM inputs UNION ALL SELECT k, tn AS r FROM inputs")
     yield ("nullable_union_date_timestamp_ntz",
            "SELECT k, d AS r FROM inputs UNION ALL SELECT k, n AS r FROM inputs")
-    # Owned elsewhere: a constant over an input proven empty (#1190), an IN list (#1191) and
-    # TRUNC to an unsupported unit (#1192).
+    # Owned elsewhere: a constant over an input proven empty (#1190), an IN list (#1191),
+    # TRUNC to an unsupported unit (#1192) and comparisons with a literal, which Spark's
+    # optimizer unwraps (#1197).
     yield ("literal_cast_to_date_where_false",
            f"SELECT CAST({NTZ} AS DATE) AS r FROM inputs WHERE false")
     yield ("required_date_in_timestamp_ntz",
            "SELECT k, dr IN (TIMESTAMP_NTZ '2024-03-10 00:00:00', tn) AS r FROM inputs")
     yield ("required_trunc_hour", "SELECT k, trunc(tn, 'HOUR') AS r FROM inputs WHERE k < 3")
+    yield ("required_date_less_than_timestamp_ntz_literal",
+           "SELECT k, dr < TIMESTAMP_NTZ '2024-03-10 00:30:00' AS r FROM inputs")
+    yield ("required_cast_to_date_equals_date_literal",
+           "SELECT k, CAST(tn AS DATE) = DATE '2024-03-10' AS r FROM inputs")
 
 
 def python_value(value, kind):
@@ -270,14 +300,19 @@ def main():
         }
         records = [header]
         cases = list(definitions())
-        assert len({name for name, _ in cases}) == len(cases)
+        assert len({name for name, _, _ in cases}) == len(cases)
+        default_timestamp_type = spark.conf.get("spark.sql.timestampType")
         for zone in ZONES:
             spark.conf.set("spark.sql.session.timeZone", zone)
             for ansi in [True, False]:
                 spark.conf.set("spark.sql.ansi.enabled", str(ansi).lower())
-                for name, sql in cases:
-                    records.append({"id": name, "timezone": zone, "ansi": ansi, "sql": sql,
-                                    **capture(spark, sql, types, Py4JError)})
+                for name, sql, timestamp_type in cases:
+                    record = {"id": name, "timezone": zone, "ansi": ansi, "sql": sql}
+                    if timestamp_type is not None:
+                        record["timestamp_type"] = timestamp_type
+                    spark.conf.set("spark.sql.timestampType",
+                                   timestamp_type or default_timestamp_type)
+                    records.append({**record, **capture(spark, sql, types, Py4JError)})
         with args.output.open("x") as output:
             for record in records:
                 output.write(json.dumps(record, separators=(",", ":")) + "\n")
