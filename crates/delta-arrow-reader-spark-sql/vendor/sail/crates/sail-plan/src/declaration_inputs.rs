@@ -37,6 +37,7 @@ pub(crate) fn drop_declaration_inputs(
     config: &dyn OptimizerConfig,
 ) -> Result<LogicalPlan> {
     let mut inputs = vec![];
+    // DataFusion has decorrelated most subqueries into joins by now; this also reaches the rest.
     plan.apply_with_subqueries(|node| {
         node.apply_expressions(|expr| {
             expr.apply(|expr| {
