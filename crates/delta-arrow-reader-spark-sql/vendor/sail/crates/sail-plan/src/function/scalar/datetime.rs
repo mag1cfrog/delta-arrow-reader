@@ -55,6 +55,7 @@ use sail_function::scalar::spark_cast_string_to_integer::{
 use sail_function::scalar::spark_decimal_cast::{DecimalCastMode, SparkDecimalCast};
 use sail_function::scalar::spark_known_not_null::SparkKnownNotNull;
 use sail_function::scalar::spark_known_nullable::SparkKnownNullable;
+use sail_function::scalar::spark_with_inputs::SparkWithInputs;
 use sail_sql_analyzer::literal::interval::IntervalValue;
 use sail_sql_analyzer::parser::parse_interval;
 
@@ -930,7 +931,9 @@ fn computed_inputs(omitted: &Expr) -> PlanResult<Vec<Expr>> {
 /// Spark does not evaluate. Its columns, aggregates and window functions become unused inputs
 /// of the declaration, so they are computed as Spark computes them, and the declaration does
 /// not fold over a constant `expr` where Spark's expression, which has them as inputs, is not
-/// constant.
+/// constant. Where Spark's result is NOT NULL and DataFusion already declares it so,
+/// `SparkWithInputs` carries them and keeps `expr`'s own nullability at every stage, which a
+/// grouping set can make nullable.
 fn declare_spark_nullability(
     expr: Expr,
     nullable: bool,
@@ -941,13 +944,12 @@ fn declare_spark_nullability(
         .map(computed_inputs)
         .transpose()?
         .unwrap_or_default();
-    if inputs.is_empty() && nullable == expr.nullable(schema)? {
-        return Ok(expr);
-    }
-    let declaration = if nullable {
-        ScalarUDF::from(SparkKnownNullable::new())
-    } else {
-        ScalarUDF::from(SparkKnownNotNull::new())
+    let declared = expr.nullable(schema)?;
+    let declaration = match (nullable, declared) {
+        (true, true) | (false, false) if inputs.is_empty() => return Ok(expr),
+        (true, _) => ScalarUDF::from(SparkKnownNullable::new()),
+        (false, false) => ScalarUDF::from(SparkWithInputs::new()),
+        (false, true) => ScalarUDF::from(SparkKnownNotNull::new()),
     };
     Ok(declaration.call(std::iter::once(expr).chain(inputs).collect()))
 }
