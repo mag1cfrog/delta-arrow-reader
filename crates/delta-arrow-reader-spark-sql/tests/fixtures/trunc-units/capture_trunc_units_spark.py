@@ -117,6 +117,12 @@ def definitions():
         yield f"column_earliest_date_{name}", \
             f"SELECT k, trunc(date_sub(DATE '1970-01-01', 2147483647 - k), {unit}) AS r " \
             f"FROM inputs{where}"
+    # WEEK's own arithmetic overflows a week after the earliest DATE; UNIX_DATE reads the days.
+    yield "column_earliest_week_unix_date", \
+        "SELECT k, unix_date(trunc(date_sub(DATE '1970-01-01', 2147483641 - k), 'WEEK')) AS r " \
+        "FROM inputs"
+    yield "column_earliest_date_quarter", \
+        "SELECT k, trunc(date_sub(DATE '1970-01-01', 2147483647 - k), 'QUARTER') AS r FROM inputs"
     # The optimizer makes these units constant, so Spark does not read the date.
     for name, unit in [("coalesce", "coalesce('DD', u)"),
                        ("case", "CASE WHEN k IS NULL THEN 'MM' ELSE 'DD' END"),
