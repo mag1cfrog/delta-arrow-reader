@@ -49,11 +49,6 @@ impl SparkNullIf {
     }
 
     fn comparison_type(&self, left: &DataType, right: &DataType) -> Result<DataType> {
-        // A dictionary-encoded STRING compares with a DATE or TIMESTAMP as its values do.
-        let (left, right) = (
-            &temporal_comparison_string_values(left, right).unwrap_or_else(|| left.clone()),
-            &temporal_comparison_string_values(right, left).unwrap_or_else(|| right.clone()),
-        );
         if let Some(conversion) = nanosecond_comparison_cast(left, right, &self.session_timezone) {
             return conversion.inner().return_type(&[left.clone()]);
         }
@@ -151,6 +146,8 @@ impl ScalarUDFImpl for SparkNullIf {
         };
         if !same_type {
             for (value, field) in input.args.iter_mut().zip(&mut input.arg_fields) {
+                // A dictionary-encoded STRING compares with a DATE or TIMESTAMP as its values
+                // do; DataFusion's comparison coercion already gives their comparison type.
                 if let Some(values) =
                     temporal_comparison_string_values(&value.data_type(), &comparison_type)
                 {
