@@ -1,6 +1,8 @@
-//! Casts between TIMESTAMP_NTZ and DATE, explicit or implicit, are nullable like Spark's: at
-//! every stage over a column, and until constant folding over a literal. TRY_CAST from DATE to
-//! TIMESTAMP_NTZ, which cannot fail, keeps its input's nullability.
+//! Casts between TIMESTAMP_NTZ and DATE are nullable like Spark's in CAST, DATE(),
+//! TO_TIMESTAMP_NTZ, the date functions and EXTRACT fields that read a DATE, comparisons and
+//! CASE, IF, COALESCE and UNION: at every stage over a column, and until constant folding over a
+//! literal. TRY_CAST from DATE to TIMESTAMP_NTZ, which cannot fail, keeps its input's
+//! nullability.
 
 use std::sync::Arc;
 
@@ -40,53 +42,77 @@ fn cast_references() -> TestResult<Vec<Value>> {
             |build| build.contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
         )
     );
-    assert_eq!(records.len() - 1, 324);
+    assert_eq!(records.len() - 1, 540);
     Ok(records)
 }
 
-/// #1087: TRUNC of the DATE in year 1 fails while collecting rows, where DataFusion converts it
-/// to a nanosecond TIMESTAMP; Spark returns the truncated DATE.
-const TRUNC_RANGE_RECORD: &str = "required_trunc";
+/// Differences outside the casts' nullability, each named for DAR's current result and owned by
+/// an issue.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum RetainedDifference {
+    /// #1087: TRUNC of the DATE in year 1 fails while collecting rows, where DataFusion converts
+    /// it to a nanosecond TIMESTAMP; Spark returns the truncated DATE.
+    TruncBeyondNanoseconds,
+    /// #1188: UNIX_DATE casts a TIMESTAMP_NTZ argument to DATE and counts its days, where Spark
+    /// rejects the argument during analysis.
+    UnixDateOfTimestampNtz,
+    /// #1190: a constant over an input proven empty keeps its analyzed nullability after
+    /// optimization, where Spark folds it first.
+    EmptyInputNullability,
+    /// #1191: a DATE in an IN list of TIMESTAMP_NTZ values uses DataFusion's coercion and is NOT
+    /// NULL, where Spark's cast makes it nullable.
+    InListNullability,
+    /// #1192: TRUNC to HOUR gives the DATE, where Spark gives NULL for that unit.
+    TruncUnsupportedUnit,
+    /// #1116: EXTRACT of DAYOFWEEK, DOW_ISO and YEAROFWEEK fails while collecting rows as an
+    /// unsupported date part.
+    UnsupportedExtractField,
+}
 
-/// #1188: UNIX_DATE casts a TIMESTAMP_NTZ argument to DATE and counts its days, where Spark
-/// rejects the argument during analysis.
 const UNIX_DATE_RECORDS: [&str; 3] = [
     "required_unix_date",
     "nullable_unix_date",
     "literal_unix_date",
 ];
 
-fn retained(case: &Value) -> bool {
-    case["id"] == TRUNC_RANGE_RECORD
-        || case["id"]
-            .as_str()
-            .is_some_and(|id| UNIX_DATE_RECORDS.contains(&id))
+/// The EXTRACT fields DAR's date part rejects, by record suffix.
+const UNSUPPORTED_EXTRACT_FIELDS: [(&str, &str); 3] = [
+    ("_extract_dayofweek", "DAYOFWEEK"),
+    ("_extract_dow_iso", "DOW_ISO"),
+    ("_extract_yearofweek", "YEAROFWEEK"),
+];
+
+fn retained_difference(case: &Value) -> Option<RetainedDifference> {
+    let id = case["id"].as_str()?;
+    Some(match id {
+        "required_trunc" => RetainedDifference::TruncBeyondNanoseconds,
+        "literal_cast_to_date_where_false" => RetainedDifference::EmptyInputNullability,
+        "required_date_in_timestamp_ntz" => RetainedDifference::InListNullability,
+        "required_trunc_hour" => RetainedDifference::TruncUnsupportedUnit,
+        id if UNIX_DATE_RECORDS.contains(&id) => RetainedDifference::UnixDateOfTimestampNtz,
+        id if UNSUPPORTED_EXTRACT_FIELDS
+            .iter()
+            .any(|(suffix, _)| id.ends_with(suffix)) =>
+        {
+            RetainedDifference::UnsupportedExtractField
+        }
+        _ => return None,
+    })
 }
 
-/// DAR's current result for a retained record.
-fn current_expectation(case: &Value, metadata: &Value) -> TestResult<Value> {
-    let mut current = case.clone();
-    if case["id"] == TRUNC_RANGE_RECORD {
-        if case["expected"]["status"] != "ok" {
-            return Err(format!("expected Spark's truncated DATE: {case}").into());
+/// The day of each TIMESTAMP_NTZ value of `inputs` column `column` (1 `tn`, 2 `n`), keyed by
+/// row, for rows the filter keeps.
+fn days_of(metadata: &Value, column: usize, keep: impl Fn(&str) -> bool) -> TestResult<Value> {
+    let inputs = metadata["inputs"][0]["rows"]
+        .as_array()
+        .ok_or("missing inputs rows")?;
+    let mut rows = Vec::new();
+    for row in inputs {
+        let key = row[0].as_str().ok_or("missing key")?;
+        if !keep(key) {
+            continue;
         }
-        current["expected"] = json!({"status": "error",
-            "dar_message": "Cannot cast Date32 value -719162 to Timestamp(ns)"});
-        current["spark_error_phase"] = json!("collect");
-        current["schema_stages"]
-            .as_object_mut()
-            .ok_or("missing schema stages")?
-            .remove("executed");
-        return Ok(current);
-    }
-    if case["expected"]["condition"] != "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE"
-        || case["spark_error_phase"] != "sql"
-    {
-        return Err(format!("expected Spark's rejected UNIX_DATE argument: {case}").into());
-    }
-    // The day of each TIMESTAMP_NTZ value: column 1 (`tn`) or 2 (`n`) of `inputs`.
-    let day = |micros: &Value| -> TestResult<Value> {
-        Ok(match micros.as_str() {
+        let day = match row[column].as_str() {
             Some(micros) => json!(
                 micros
                     .parse::<i64>()?
@@ -94,29 +120,99 @@ fn current_expectation(case: &Value, metadata: &Value) -> TestResult<Value> {
                     .to_string()
             ),
             None => Value::Null,
-        })
-    };
-    let rows = match case["id"].as_str() {
-        Some("literal_unix_date") => json!([["19724"]]),
-        Some(id) => {
-            let column = if id == "required_unix_date" { 1 } else { 2 };
-            let inputs = metadata["inputs"][0]["rows"]
-                .as_array()
-                .ok_or("missing inputs rows")?;
-            let mut rows = inputs
-                .iter()
-                .map(|row| Ok(json!([row[0], day(&row[column])?])))
-                .collect::<TestResult<Vec<_>>>()?;
-            rows.sort_by_key(|row| row.to_string());
-            json!(rows)
+        };
+        rows.push(json!([key, day]));
+    }
+    rows.sort_by_key(|row| row.to_string());
+    Ok(json!(rows))
+}
+
+/// Set the result field's nullability at the given stages.
+fn set_nullable(current: &mut Value, stages: &[&str], nullable: bool) -> TestResult {
+    for stage in stages {
+        let fields = current["schema_stages"][*stage]["fields"]
+            .as_array_mut()
+            .ok_or("missing fields")?;
+        let field = fields.last_mut().ok_or("missing result field")?;
+        field["nullable"] = json!(nullable);
+    }
+    Ok(())
+}
+
+/// DAR's current result for a retained record.
+fn current_expectation(
+    case: &Value,
+    difference: RetainedDifference,
+    metadata: &Value,
+) -> TestResult<Value> {
+    let mut current = case.clone();
+    let id = case["id"].as_str().ok_or("missing id")?;
+    match difference {
+        RetainedDifference::TruncBeyondNanoseconds => {
+            if case["expected"]["status"] != "ok" {
+                return Err(format!("expected Spark's truncated DATE: {case}").into());
+            }
+            current["expected"] = json!({"status": "error",
+                "dar_message": "Cannot cast Date32 value -719162 to Timestamp(ns)"});
+            current["spark_error_phase"] = json!("collect");
+            current["schema_stages"]
+                .as_object_mut()
+                .ok_or("missing schema stages")?
+                .remove("executed");
         }
-        None => return Err("missing record id".into()),
-    };
-    current["expected"] = json!({"status": "ok", "rows": rows});
-    current
-        .as_object_mut()
-        .ok_or("expected a record")?
-        .remove("spark_error_phase");
+        RetainedDifference::UnixDateOfTimestampNtz => {
+            if case["expected"]["condition"] != "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE"
+                || case["spark_error_phase"] != "sql"
+            {
+                return Err(format!("expected Spark's rejected UNIX_DATE argument: {case}").into());
+            }
+            let rows = match id {
+                "literal_unix_date" => json!([["19724"]]),
+                "required_unix_date" => days_of(metadata, 1, |_| true)?,
+                _ => days_of(metadata, 2, |_| true)?,
+            };
+            current["expected"] = json!({"status": "ok", "rows": rows});
+            current
+                .as_object_mut()
+                .ok_or("expected a record")?
+                .remove("spark_error_phase");
+        }
+        RetainedDifference::EmptyInputNullability => {
+            if case["schema_stages"]["optimized"]["fields"][0]["nullable"] != false {
+                return Err(format!("expected Spark's folded NOT NULL constant: {case}").into());
+            }
+            set_nullable(&mut current, &["optimized", "executed"], true)?;
+        }
+        RetainedDifference::InListNullability => {
+            if case["schema_stages"]["analyzed"]["fields"][1]["nullable"] != true {
+                return Err(format!("expected Spark's nullable IN list: {case}").into());
+            }
+            set_nullable(&mut current, &["analyzed", "optimized", "executed"], false)?;
+        }
+        RetainedDifference::TruncUnsupportedUnit => {
+            let rows = case["expected"]["rows"].as_array().ok_or("expected rows")?;
+            if rows.iter().any(|row| !row[1].is_null()) {
+                return Err(format!("expected Spark's NULL truncation: {case}").into());
+            }
+            current["expected"]["rows"] = days_of(metadata, 1, |key| key != "3")?;
+        }
+        RetainedDifference::UnsupportedExtractField => {
+            if case["expected"]["status"] != "ok" {
+                return Err(format!("expected Spark's field values: {case}").into());
+            }
+            let field = UNSUPPORTED_EXTRACT_FIELDS
+                .iter()
+                .find_map(|(suffix, field)| id.ends_with(suffix).then_some(*field))
+                .ok_or("missing field")?;
+            current["expected"] = json!({"status": "error",
+                "dar_message": format!("Date part '{field}' not supported")});
+            current["spark_error_phase"] = json!("collect");
+            current["schema_stages"]
+                .as_object_mut()
+                .ok_or("missing schema stages")?
+                .remove("executed");
+        }
+    }
     Ok(current)
 }
 
@@ -352,20 +448,107 @@ fn register_inputs(session: &SessionContext, metadata: &Value, batch_size: usize
     Ok(())
 }
 
+/// The recorded inputs with every DATE column as Arrow's Date64, which another producer can
+/// give DAR and Spark does not have.
+fn register_date64_inputs(
+    session: &SessionContext,
+    metadata: &Value,
+    batch_size: usize,
+) -> TestResult {
+    for input in metadata["inputs"].as_array().ok_or("missing inputs")? {
+        let name = input["name"].as_str().ok_or("missing table name")?;
+        let batch = decode_recorded_batch(input)?;
+        let mut fields = Vec::new();
+        let mut columns = Vec::new();
+        for (field, column) in batch.schema().fields().iter().zip(batch.columns()) {
+            if field.data_type() == &DataType::Date32 {
+                fields.push(field.as_ref().clone().with_data_type(DataType::Date64));
+                columns.push(arrow::compute::cast(column, &DataType::Date64)?);
+            } else {
+                fields.push(field.as_ref().clone());
+                columns.push(column.clone());
+            }
+        }
+        let batch = RecordBatch::try_new(Arc::new(arrow::datatypes::Schema::new(fields)), columns)?;
+        register(session, name, &batch, batch_size)?;
+    }
+    Ok(())
+}
+
+/// A Date64 casts to TIMESTAMP_NTZ like a DATE, with Spark's nullability, so the Spark records
+/// of those casts over DATE columns hold for Date64 copies of them.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn date64_values_cast_to_timestamp_ntz_like_dates() -> TestResult {
+    const RECORDS: [&str; 6] = [
+        "required_cast_to_timestamp_ntz",
+        "nullable_cast_to_timestamp_ntz",
+        "required_try_cast_to_timestamp_ntz",
+        "nullable_try_cast_to_timestamp_ntz",
+        "required_to_timestamp_ntz",
+        "nullable_to_timestamp_ntz",
+    ];
+    let records = cast_references()?;
+    let cases = records[1..]
+        .iter()
+        .filter(|case| case["id"].as_str().is_some_and(|id| RECORDS.contains(&id)))
+        .collect::<Vec<_>>();
+    assert_eq!(cases.len(), RECORDS.len() * 4);
+    let mut differences = Vec::new();
+    for batch_size in [1, 32] {
+        let session = session_context(batch_size);
+        register_date64_inputs(&session, &records[0], batch_size)?;
+        for case in &cases {
+            let observation = observe(&session, case).await;
+            let differing = differing_parts(case, &observation)?;
+            if !differing.is_empty() {
+                differences.push(json!({
+                    "id": case["id"], "timezone": case["timezone"], "ansi": case["ansi"],
+                    "batch": batch_size, "differing": differing, "observed": observation,
+                }));
+            }
+        }
+    }
+    assert!(
+        differences.is_empty(),
+        "{} differences:\n{}",
+        differences.len(),
+        differences
+            .iter()
+            .map(Value::to_string)
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+    Ok(())
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn date_ntz_casts_match_spark() -> TestResult {
     let records = cast_references()?;
-    let retained_count = records[1..].iter().filter(|case| retained(case)).count();
-    assert_eq!(retained_count, 16);
+    let mut retained = std::collections::BTreeMap::new();
+    for case in &records[1..] {
+        if let Some(difference) = retained_difference(case) {
+            *retained.entry(difference).or_insert(0) += 1;
+        }
+    }
+    assert_eq!(
+        retained,
+        std::collections::BTreeMap::from([
+            (RetainedDifference::TruncBeyondNanoseconds, 4),
+            (RetainedDifference::UnixDateOfTimestampNtz, 12),
+            (RetainedDifference::EmptyInputNullability, 4),
+            (RetainedDifference::InListNullability, 4),
+            (RetainedDifference::TruncUnsupportedUnit, 4),
+            (RetainedDifference::UnsupportedExtractField, 36),
+        ])
+    );
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
         let session = session_context(batch_size);
         register_inputs(&session, &records[0], batch_size)?;
         for case in &records[1..] {
-            let expectation = if retained(case) {
-                current_expectation(case, &records[0])?
-            } else {
-                case.clone()
+            let expectation = match retained_difference(case) {
+                Some(difference) => current_expectation(case, difference, &records[0])?,
+                None => case.clone(),
             };
             let observation = observe(&session, case).await;
             let differing = differing_parts(&expectation, &observation)?;

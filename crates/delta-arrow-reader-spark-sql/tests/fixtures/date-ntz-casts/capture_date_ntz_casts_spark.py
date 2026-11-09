@@ -4,13 +4,14 @@ Records analyzed, optimized and executed schemas, typed internal-row values and 
 stages, with the innermost Java exception of a failure, for explicit CAST and TRY_CAST between
 TIMESTAMP_NTZ and DATE in both directions, and for the implicit casts of TO_DATE, DATE_ADD,
 DATE_SUB, DATEDIFF, LAST_DAY, YEAR, MONTH, DAY, DAYOFMONTH, DAYOFYEAR, QUARTER, WEEKOFYEAR,
-DAYNAME, MONTHNAME, ADD_MONTHS, NEXT_DAY, TRUNC, UNIX_DATE, WEEKDAY and DAYOFWEEK arguments and
-of a
-DATE compared with a TIMESTAMP_NTZ, over NOT NULL and nullable columns and literals. Spark
-declares a cast between the two types nullable whatever its input, so a NOT NULL column's cast
-is nullable at every stage, and a literal's cast is nullable until constant folding. Every
-query runs in both ANSI modes in UTC and America/Los_Angeles. Run from the crate root in the
-reference environment described in README.md; the output path must not exist.
+DAYNAME, MONTHNAME, ADD_MONTHS, NEXT_DAY, TRUNC, UNIX_DATE, WEEKDAY and DAYOFWEEK arguments, of
+DATE(), TO_TIMESTAMP_NTZ, the date fields of EXTRACT, DATE_PART and DATEPART, of a DATE compared
+with a TIMESTAMP_NTZ, and of a DATE beside a TIMESTAMP_NTZ in CASE, IF, COALESCE and UNION ALL,
+over NOT NULL and nullable columns and literals. Three cases owned elsewhere are recorded
+too. Spark declares a cast between the two types nullable whatever its input, so a NOT NULL
+column's cast is nullable at every stage, and a literal's cast is nullable until constant
+folding. Every query runs in both ANSI modes in UTC and America/Los_Angeles. Run from the crate
+root in the reference environment described in README.md; the output path must not exist.
 """
 import argparse
 from datetime import date, datetime, timedelta
@@ -89,6 +90,28 @@ CASES = [
     ("try_cast_to_timestamp_ntz", "TRY_CAST({y} AS TIMESTAMP_NTZ)"),
     ("date_less_than_timestamp_ntz", "{y} < {x}"),
     ("date_equals_timestamp_ntz", "{y} = {x}"),
+    ("date_alias", "date({x})"),
+    ("extract_year", "extract(YEAR FROM {x})"),
+    ("extract_quarter", "extract(QUARTER FROM {x})"),
+    ("extract_month", "extract(MONTH FROM {x})"),
+    ("extract_week", "extract(WEEK FROM {x})"),
+    ("extract_day", "extract(DAY FROM {x})"),
+    ("extract_dayofweek", "extract(DAYOFWEEK FROM {x})"),
+    ("extract_dow_iso", "extract(DOW_ISO FROM {x})"),
+    ("extract_doy", "extract(DOY FROM {x})"),
+    ("extract_yearofweek", "extract(YEAROFWEEK FROM {x})"),
+    ("extract_hour", "extract(HOUR FROM {x})"),
+    ("date_part_day", "date_part('day', {x})"),
+    ("datepart_month", "datepart('MONTH', {x})"),
+    ("to_timestamp_ntz", "to_timestamp_ntz({y})"),
+    ("coalesce_date_timestamp_ntz", "coalesce({y}, {x})"),
+]
+
+
+# Column cases with a row condition: (name, expression over a TIMESTAMP_NTZ x and a DATE y).
+COLUMN_CASES = [
+    ("case_date_or_timestamp_ntz", "CASE WHEN k > 1 THEN {y} ELSE {x} END"),
+    ("if_date_or_timestamp_ntz", "if(k > 1, {y}, {x})"),
 ]
 
 
@@ -97,6 +120,20 @@ def definitions():
         yield f"required_{name}", f"SELECT k, {expression.format(x='tn', y='dr')} AS r FROM inputs"
         yield f"nullable_{name}", f"SELECT k, {expression.format(x='n', y='d')} AS r FROM inputs"
         yield f"literal_{name}", f"SELECT {expression.format(x=NTZ, y=DATE)} AS r"
+    for name, expression in COLUMN_CASES:
+        yield f"required_{name}", f"SELECT k, {expression.format(x='tn', y='dr')} AS r FROM inputs"
+        yield f"nullable_{name}", f"SELECT k, {expression.format(x='n', y='d')} AS r FROM inputs"
+    yield ("required_union_date_timestamp_ntz",
+           "SELECT k, dr AS r FROM inputs UNION ALL SELECT k, tn AS r FROM inputs")
+    yield ("nullable_union_date_timestamp_ntz",
+           "SELECT k, d AS r FROM inputs UNION ALL SELECT k, n AS r FROM inputs")
+    # Owned elsewhere: a constant over an input proven empty (#1190), an IN list (#1191) and
+    # TRUNC to an unsupported unit (#1192).
+    yield ("literal_cast_to_date_where_false",
+           f"SELECT CAST({NTZ} AS DATE) AS r FROM inputs WHERE false")
+    yield ("required_date_in_timestamp_ntz",
+           "SELECT k, dr IN (TIMESTAMP_NTZ '2024-03-10 00:00:00', tn) AS r FROM inputs")
+    yield ("required_trunc_hour", "SELECT k, trunc(tn, 'HOUR') AS r FROM inputs WHERE k < 3")
 
 
 def python_value(value, kind):
