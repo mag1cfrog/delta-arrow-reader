@@ -907,10 +907,30 @@ fn coerce_datetime_format(
 
 /// `expr` declared with Spark's nullability, where DataFusion declares it otherwise. Unlike a
 /// `CASE WHEN true` wrapper, the declaration survives optimization over a column. Declaring NOT
-/// NULL over a value that can be NULL fails the query when such a value occurs.
-fn declare_spark_nullability(expr: Expr, nullable: bool, schema: &DFSchemaRef) -> PlanResult<Expr> {
+/// NULL over a value that can be NULL fails the query when such a value occurs. `ignored` is an
+/// argument of Spark's expression that `expr` leaves out, such as a format Spark does not
+/// evaluate: a nullable declaration keeps its columns as unused inputs, so it does not fold over
+/// a constant `expr` where Spark's expression, which reads those columns, is not constant.
+fn declare_spark_nullability(
+    expr: Expr,
+    nullable: bool,
+    ignored: Option<&Expr>,
+    schema: &DFSchemaRef,
+) -> PlanResult<Expr> {
+    let mut columns = ignored.map_or_else(Vec::new, |ignored| {
+        ignored
+            .column_refs()
+            .into_iter()
+            .cloned()
+            .collect::<Vec<_>>()
+    });
+    columns.sort();
     Ok(match (nullable, expr.nullable(schema)?) {
-        (true, false) => ScalarUDF::from(SparkKnownNullable::new()).call(vec![expr]),
+        (true, declared) if !declared || !columns.is_empty() => {
+            let mut arguments = vec![expr];
+            arguments.extend(columns.into_iter().map(Expr::Column));
+            ScalarUDF::from(SparkKnownNullable::new()).call(arguments)
+        }
         (false, true) => ScalarUDF::from(SparkKnownNotNull::new()).call(vec![expr]),
         _ => expr,
     })
@@ -997,6 +1017,7 @@ fn to_date_with_parser(input: ScalarFunctionInput, parser: DateParser) -> PlanRe
             return declare_spark_nullability(
                 cast(date, DataType::Date32),
                 nullable,
+                None,
                 input.function_context.schema,
             );
         }
@@ -1043,7 +1064,12 @@ fn unix_timestamp(input: ScalarFunctionInput) -> PlanResult<Expr> {
                 || format.nullable(input.function_context.schema)?;
             let result =
                 ScalarUDF::from(SparkUnixTimestamp::new(timezone, ansi_mode)).call(vec![expr]);
-            declare_spark_nullability(result, nullable, input.function_context.schema)
+            declare_spark_nullability(
+                result,
+                nullable,
+                Some(&format),
+                input.function_context.schema,
+            )
         } else {
             Ok(
                 ScalarUDF::from(SparkUnixTimestamp::new(timezone, ansi_mode))

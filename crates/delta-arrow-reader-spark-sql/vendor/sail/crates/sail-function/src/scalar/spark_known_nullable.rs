@@ -3,7 +3,9 @@
 //! declares, for a Spark expression that is nullable over a column at every stage, such as
 //! TRY_TO_DATE with a format. Unlike a `CASE WHEN true` wrapper, the optimizer cannot simplify
 //! it away over a column; over a constant it folds like any immutable function, so the folded
-//! value is NOT NULL, as Spark's is.
+//! value is NOT NULL, as Spark's is. Further arguments are columns that Spark's expression has
+//! as inputs but DAR's does not read, such as an ignored format's; they are not used, and keep
+//! the declaration from folding over a constant value where Spark's expression is not constant.
 
 use std::sync::Arc;
 
@@ -27,7 +29,7 @@ impl Default for SparkKnownNullable {
 impl SparkKnownNullable {
     pub fn new() -> Self {
         Self {
-            signature: Signature::any(1, Volatility::Immutable),
+            signature: Signature::variadic_any(Volatility::Immutable),
         }
     }
 }
@@ -43,14 +45,14 @@ impl ScalarUDFImpl for SparkKnownNullable {
 
     fn return_type(&self, types: &[DataType]) -> Result<DataType> {
         match types {
-            [data_type] => Ok(data_type.clone()),
-            _ => internal_err!("{} requires one argument", self.name()),
+            [data_type, ..] => Ok(data_type.clone()),
+            [] => internal_err!("{} requires an argument", self.name()),
         }
     }
 
     fn return_field_from_args(&self, args: ReturnFieldArgs) -> Result<FieldRef> {
-        let [argument] = args.arg_fields else {
-            return internal_err!("{} requires one argument", self.name());
+        let [argument, ..] = args.arg_fields else {
+            return internal_err!("{} requires an argument", self.name());
         };
         Ok(Arc::new(Field::new(
             self.name(),
@@ -60,8 +62,8 @@ impl ScalarUDFImpl for SparkKnownNullable {
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
-        let [argument] = args.args.as_slice() else {
-            return internal_err!("{} requires one argument", self.name());
+        let [argument, ..] = args.args.as_slice() else {
+            return internal_err!("{} requires an argument", self.name());
         };
         Ok(argument.clone())
     }
