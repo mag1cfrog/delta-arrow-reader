@@ -18,6 +18,7 @@ use datafusion_expr::{
     WindowFrame, WindowFunctionDefinition, WindowUDF, cast, expr, lit,
 };
 use sail_common_datafusion::utils::items::ItemTaker;
+use sail_function::scalar::datetime::spark_date_timestamp_ntz_cast::SparkDateTimestampNtzCast;
 use sail_function::scalar::spark_cast_numeric_to_integer::SparkCastNumericToInteger;
 use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
 use sail_function::scalar::spark_decimal_cast::{DecimalCastMode, SparkDecimalCast};
@@ -935,6 +936,18 @@ pub(crate) fn spark_comparison_widens_to_double(
                 || (right == &DataType::Float32 && left.is_signed_integer())))
 }
 
+/// Spark's implicit cast of `expr` from `from` to `to`: a cast between TIMESTAMP_NTZ and DATE is
+/// nullable whatever its input, as Spark declares it; any other is DataFusion's cast.
+pub(crate) fn spark_implicit_cast(expr: expr::Expr, from: &DataType, to: &DataType) -> expr::Expr {
+    if !SparkDateTimestampNtzCast::accepts(from, to) {
+        cast(expr, to.clone())
+    } else if to == &DataType::Date32 {
+        ScalarUDF::from(SparkDateTimestampNtzCast::to_date()).call(vec![expr])
+    } else {
+        ScalarUDF::from(SparkDateTimestampNtzCast::to_timestamp_ntz(false)).call(vec![expr])
+    }
+}
+
 pub(crate) fn spark_binary_expr(
     mut left: expr::Expr,
     op: Operator,
@@ -994,7 +1007,7 @@ pub(crate) fn spark_binary_expr(
                 {
                     cast_local_timestamp_expr_to_ltz(value, source, timezone)
                 } else if source != &target {
-                    cast(value, target.clone())
+                    spark_implicit_cast(value, source, &target)
                 } else {
                     value
                 }

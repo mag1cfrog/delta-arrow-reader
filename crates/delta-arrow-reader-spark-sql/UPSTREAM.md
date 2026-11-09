@@ -635,6 +635,17 @@ operand outside a conditional branch, and fails there; DAR returns NULL (#1133).
 [DATE and TIMESTAMP_NTZ subtraction references](tests/fixtures/date-ntz-subtraction/README.md)
 record the checks.
 
+Casts between TIMESTAMP_NTZ and DATE use a local function, `SparkDateTimestampNtzCast`, with
+Arrow's values and Spark's nullability. Spark declares such a cast nullable whatever its input,
+so CAST and TRY_CAST of a TIMESTAMP_NTZ to DATE, CAST of a DATE to TIMESTAMP_NTZ, and the
+implicit casts of the TO_DATE, DATE_ADD, DATE_SUB, ADD_MONTHS, DATEDIFF, TRUNC, DAY, DAYOFMONTH,
+DAYOFYEAR, MONTH, QUARTER, WEEKDAY and DAYOFWEEK arguments and of a DATE compared with a
+TIMESTAMP_NTZ are nullable: at every stage over a column, and until constant folding over a
+literal. They were NOT NULL for a NOT NULL input (#1003). TRY_CAST of a DATE to TIMESTAMP_NTZ
+cannot fail and keeps its input's nullability. UNIX_DATE accepts a TIMESTAMP_NTZ that Spark
+rejects (#1188), and TRUNC of a DATE before 1677 fails in DataFusion's nanosecond timestamps
+(#1087). The [cast references](tests/fixtures/date-ntz-casts/README.md) record the checks.
+
 Two DATE values subtract with `-` and TRY_SUBTRACT as Spark's `SubtractDates` does outside its
 legacy interval mode, with a local function, `SparkSubtractDates`: the result is the DAY
 interval between the dates, in microseconds, nullable only for a nullable operand. The day
