@@ -914,7 +914,11 @@ quoted and its string literals keep their text. Any other spelling behaves as in
   DISTINCT or ALL, or a FILTER, null treatment, WITHIN GROUP or OVER clause makes an ordinary
   call: TIMESTAMPDIFF, TIMEDIFF and TIMESTAMPADD then name no routine, as written, before their
   arguments resolve, and DATEDIFF, DATE_DIFF, DATEADD and DATE_ADD resolve their arguments and
-  then fail with `WRONG_NUM_ARGS`, naming the routine in lower case, for a third.
+  then fail with `WRONG_NUM_ARGS`, naming the routine in lower case, for any count but two.
+
+A positional argument after a named one fails in DAR's parser with
+`UNEXPECTED_POSITIONAL_ARGUMENT` before the routine is resolved (#1205), and a TIMESTAMPDIFF
+window call reports DAR's unknown window function instead of naming no routine (#1185).
 
 `unresolved_routine_error` in `function/common.rs` builds the `UNRESOLVED_ROUTINE` error for
 these names, TIMESTAMP_DIFF, TIMESTAMP_ADD and ARRAY_CONCAT. The
