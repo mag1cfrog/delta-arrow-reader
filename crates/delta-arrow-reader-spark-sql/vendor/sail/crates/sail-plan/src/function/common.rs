@@ -936,9 +936,13 @@ pub(crate) fn spark_comparison_widens_to_double(
                 || (right == &DataType::Float32 && left.is_signed_integer())))
 }
 
-/// Spark's implicit cast of `expr` from `from` to `to`: a cast between TIMESTAMP_NTZ and DATE is
-/// nullable whatever its input, as Spark declares it; any other is DataFusion's cast.
-pub(crate) fn spark_implicit_cast(expr: expr::Expr, from: &DataType, to: &DataType) -> expr::Expr {
+/// A cast of `expr` from `from` to `to` with Spark's nullability for the TIMESTAMP_NTZ and DATE
+/// pair, which Spark declares nullable whatever the input; any other cast is DataFusion's.
+pub(crate) fn cast_with_date_ntz_nullability(
+    expr: expr::Expr,
+    from: &DataType,
+    to: &DataType,
+) -> expr::Expr {
     if !SparkDateTimestampNtzCast::accepts(from, to) {
         cast(expr, to.clone())
     } else if to == &DataType::Date32 {
@@ -1007,7 +1011,7 @@ pub(crate) fn spark_binary_expr(
                 {
                     cast_local_timestamp_expr_to_ltz(value, source, timezone)
                 } else if source != &target {
-                    spark_implicit_cast(value, source, &target)
+                    cast_with_date_ntz_nullability(value, source, &target)
                 } else {
                     value
                 }

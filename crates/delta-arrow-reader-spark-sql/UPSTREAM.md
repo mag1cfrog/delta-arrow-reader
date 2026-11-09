@@ -637,14 +637,24 @@ record the checks.
 
 Casts between TIMESTAMP_NTZ and DATE use a local function, `SparkDateTimestampNtzCast`, with
 Arrow's values and Spark's nullability. Spark declares such a cast nullable whatever its input,
-so CAST and TRY_CAST of a TIMESTAMP_NTZ to DATE, CAST of a DATE to TIMESTAMP_NTZ, and the
-implicit casts of the TO_DATE, DATE_ADD, DATE_SUB, ADD_MONTHS, DATEDIFF, TRUNC, DAY, DAYOFMONTH,
-DAYOFYEAR, MONTH, QUARTER, WEEKDAY and DAYOFWEEK arguments and of a DATE compared with a
-TIMESTAMP_NTZ are nullable: at every stage over a column, and until constant folding over a
-literal. They were NOT NULL for a NOT NULL input (#1003). TRY_CAST of a DATE to TIMESTAMP_NTZ
-cannot fail and keeps its input's nullability. UNIX_DATE accepts a TIMESTAMP_NTZ that Spark
-rejects (#1188), and TRUNC of a DATE before 1677 fails in DataFusion's nanosecond timestamps
-(#1087). The [cast references](tests/fixtures/date-ntz-casts/README.md) record the checks.
+so these results are nullable at every stage over a column, and over a literal until constant
+folding:
+- CAST and TRY_CAST of a TIMESTAMP_NTZ to DATE, CAST of a DATE to TIMESTAMP_NTZ, DATE() and
+  TO_TIMESTAMP_NTZ of a DATE;
+- the implicit casts of the TO_DATE, DATE_ADD, DATE_SUB, ADD_MONTHS, DATEDIFF, TRUNC, DAY,
+  DAYOFMONTH, DAYOFYEAR, MONTH, QUARTER, WEEKDAY and DAYOFWEEK arguments and of the date fields
+  of EXTRACT, DATE_PART and DATEPART;
+- a DATE compared with a TIMESTAMP_NTZ, and a DATE beside a TIMESTAMP_NTZ in CASE, IF, COALESCE
+  and UNION.
+
+They were NOT NULL for a NOT NULL input (#1003). TRY_CAST of a DATE to TIMESTAMP_NTZ cannot
+fail and keeps its input's nullability. Values are unchanged, except that TRUNC reads a
+TIMESTAMP_NTZ's DATE, as Spark does, so a value before 1677 now fails for every unit as a
+DATE's does (#1087). Still open: a DATE in an IN list of TIMESTAMP_NTZ values keeps
+DataFusion's coercion (#1191); a constant over an input proven empty stays nullable after
+optimization (#1190); UNIX_DATE accepts a TIMESTAMP_NTZ that Spark rejects (#1188); TRUNC to a
+unit Spark does not support gives a DATE (#1192); and EXTRACT of DAYOFWEEK, DOW_ISO and
+YEAROFWEEK is unsupported (#1116). The [cast references](tests/fixtures/date-ntz-casts/README.md) record the checks.
 
 Two DATE values subtract with `-` and TRY_SUBTRACT as Spark's `SubtractDates` does outside its
 legacy interval mode, with a local function, `SparkSubtractDates`: the result is the DAY
