@@ -43,7 +43,7 @@ fn unit_spelling_references() -> TestResult<Vec<Value>> {
             |build| build.contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
         )
     );
-    assert_eq!(records.len() - 1, 412);
+    assert_eq!(records.len() - 1, 436);
     Ok(records)
 }
 

@@ -6,10 +6,11 @@ DATE_DIFF, TIMEDIFF, TIMESTAMPADD, DATEADD and three-argument DATE_ADD with keyw
 backquoted, string, double-quoted, parenthesized and unknown units, two-argument calls and
 upper-case names, over literals and columns, also beside a column named like a unit, and for
 backquoted names, DISTINCT, ALL, FILTER, IGNORE NULLS and OVER calls, adjacent, hex and
-lower-case string units and four arguments. Spark's grammar takes the unit only as a bare
-keyword in a plain call of a bare name; any other spelling makes an ordinary function call.
-Every query runs in both ANSI modes in UTC and America/Los_Angeles. Run from the crate root in
-the reference environment described in README.md; the output path must not exist.
+lower-case string units, fewer than two and four arguments, and named arguments. Spark's
+grammar takes the unit only as a bare keyword in a plain call of a bare name; any other
+spelling makes an ordinary function call. Every query runs in both ANSI modes in UTC and
+America/Los_Angeles. Run from the crate root in the reference environment described in
+README.md; the output path must not exist.
 """
 import argparse
 from datetime import datetime, timedelta, timezone
@@ -114,6 +115,15 @@ def definitions():
            f"SELECT timestampdiff('day', {PARTIAL_DAY}) AS r")
     yield ("literal_datediff_four_arguments",
            f"SELECT datediff(DAY, {PARTIAL_DAY}, {START}) AS r")
+    # Fewer than two arguments, and named arguments.
+    yield "column_datediff_one_argument", "SELECT k, datediff(s) AS r FROM inputs"
+    yield "literal_date_diff_no_arguments", "SELECT date_diff() AS r"
+    yield "column_dateadd_one_argument", "SELECT k, dateadd(s) AS r FROM inputs"
+    yield "column_date_add_one_argument", "SELECT k, date_add(s) AS r FROM inputs"
+    yield ("column_named_timestampdiff",
+           "SELECT k, timestampdiff(DAY, s, endTimestamp => e) AS r FROM inputs")
+    yield ("column_named_timestampadd",
+           "SELECT k, timestampadd(DAY, k, timestamp => s) AS r FROM inputs")
 
 
 def python_value(value, kind):
