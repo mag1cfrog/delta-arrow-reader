@@ -5,8 +5,9 @@ stages, with the innermost Java exception of a failure, for TRUNC of NOT NULL an
 columns, DATE literals and TIMESTAMP, TIMESTAMP_NTZ, STRING and INT arguments, with every unit
 spelling Spark supports in mixed case, unsupported, empty, padded and NULL units, constant unit
 expressions, INT, BINARY and ARRAY units, a volatile unit, a constant unit that fails to
-evaluate, and columns of units; constant unsupported units and unit columns beside malformed
-STRING dates; and dates beyond year 200000. Spark supports YEAR, YYYY, YY, QUARTER, MON, MONTH,
+evaluate, and columns of units; constant unsupported units, units the optimizer makes constant
+and unit columns beside malformed STRING dates; aggregates in the date; dates beyond year 200000
+and near the earliest DATE. Spark supports YEAR, YYYY, YY, QUARTER, MON, MONTH,
 MM and WEEK, in any letter case, and gives NULL for any other unit; the result is nullable.
 Every query runs in both ANSI modes in UTC and America/Los_Angeles. Run from the crate root in
 the reference environment described in README.md; the output path must not exist.
@@ -109,6 +110,25 @@ def definitions():
     for name, unit in [("mm", "'MM'"), ("week", "'WEEK'")]:
         yield f"column_far_date_{name}", \
             f"SELECT k, trunc(date_add(dr, 100000000), {unit}) AS r FROM inputs"
+    # Spark's INT arithmetic wraps before the earliest DATE. Its Dataset API cannot decode a DATE
+    # near the earliest one, which WEEK gives for k above 0.
+    for name, unit, where in [("week", "'WEEK'", " WHERE k = 0"), ("mm", "'MM'", ""),
+                              ("year", "'YEAR'", "")]:
+        yield f"column_earliest_date_{name}", \
+            f"SELECT k, trunc(date_sub(DATE '1970-01-01', 2147483647 - k), {unit}) AS r " \
+            f"FROM inputs{where}"
+    # The optimizer makes these units constant, so Spark does not read the date.
+    for name, unit in [("coalesce", "coalesce('DD', u)"),
+                       ("case", "CASE WHEN k IS NULL THEN 'MM' ELSE 'DD' END"),
+                       ("current_date", "CAST(current_date() AS STRING)")]:
+        yield f"column_malformed_string_{name}_unit", \
+            f"SELECT k, trunc(sb, {unit}) AS r FROM inputs"
+    # An aggregate in the date is computed whatever the unit.
+    for name, date, unit, where in [
+            ("dd", "max(dr)", "'DD'", ""), ("dd_where_false", "max(dr)", "'DD'", " WHERE false"),
+            ("null_unit", "max(sb)", "NULL", ""), ("mm", "max(dr)", "'MM'", ""),
+            ("coalesce_unit", "max(dr)", "coalesce('DD', max(u))", "")]:
+        yield f"aggregate_date_{name}", f"SELECT trunc({date}, {unit}) AS r FROM inputs{where}"
     # Each of the 256 rows reads its unit once, so none is NULL. Spark rejects a volatile
     # aggregate argument, so the subquery computes TRUNC.
     yield "volatile_unit", ("SELECT count(r) AS n FROM (SELECT trunc(a.dr, IF(rand() < 0.5, "

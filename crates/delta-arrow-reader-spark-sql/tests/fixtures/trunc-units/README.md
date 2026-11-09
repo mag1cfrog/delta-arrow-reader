@@ -1,6 +1,6 @@
 # TRUNC units
 
-`trunc-units-spark.jsonl` records 284 observations from Spark 4.2.0, revision
+`trunc-units-spark.jsonl` records 328 observations from Spark 4.2.0, revision
 `32f7299601108917fb01920a54e084595b7b3bf8`, Java 17.0.20.1 and Python 3.12.14 (#1192).
 The header stores the build properties, capture script hash, settings and the registered
 `inputs` table. Two captures were byte-identical.
@@ -13,7 +13,7 @@ Day; the times are at noon, so each date is the same in UTC and Los Angeles. The
 `sv` holds ` 2024-03-10 `, `2024-05`, `2024` and `2024-02-29T10:00:00`, which Spark reads as
 dates, and `sb` holds two dates and then `garbage` in the rows whose unit is `DD` or NULL.
 
-71 queries run in both ANSI modes in UTC and America/Los_Angeles:
+82 queries run in both ANSI modes in UTC and America/Los_Angeles:
 - TRUNC of `dr` and of a DATE literal with `'YEAR'`, `'yyyy'`, `'Yy'`, `'Quarter'`, `'MON'`,
   `'month'`, `'MM'`, `'WEEK'`, `'DD'`, `'DAY'`, `'HOUR'`, `'Q'`, `'invalid'`, `''`, `' MM'`,
   `NULL` and `CAST(NULL AS STRING)`;
@@ -29,6 +29,13 @@ dates, and `sb` holds two dates and then `garbage` in the rows whose unit is `DD
 - TRUNC of `dr` by `array('MM')`, by the BINARY `X'FF'`, which is not UTF-8, and by
   `CAST(CAST('x' AS INT) AS STRING)`, and of `date_add(dr, 100000000)`, beyond year 200000, with
   `'MM'` and `'WEEK'`;
+- TRUNC of `sb` by `coalesce('DD', u)`, `CASE WHEN k IS NULL THEN 'MM' ELSE 'DD' END` and
+  `CAST(current_date() AS STRING)`, which the optimizer makes constant;
+- TRUNC of `max(dr)` with `'DD'`, also over `WHERE false`, with `'MM'` and with
+  `coalesce('DD', max(u))`, and of `max(sb)` with `NULL`;
+- TRUNC of `date_sub(DATE '1970-01-01', 2147483647 - k)`, near the earliest DATE, with `'MM'`,
+  `'YEAR'` and, for `k = 0`, `'WEEK'`, since Spark's Dataset API cannot decode the DATEs WEEK
+  gives for the other rows;
 - TRUNC of the INT `k` with `'MM'`;
 - the count of TRUNC of `dr` by `IF(rand() < 0.5, 'MM', 'YEAR')` over 256 rows of a self join,
   computed in a subquery, since Spark rejects a volatile aggregate argument.
@@ -39,12 +46,15 @@ row, and each row reads its unit once, so the count is 256. It casts a TIMESTAMP
 or STRING argument to DATE first and a unit of another type to STRING, so `1` gives NULL and
 `X'4D4D'` is `MM` and `X'FF'` spells no unit; it rejects an INT argument and an ARRAY unit while
 analyzing. A constant unit it does not support, NULL included, gives NULL without reading the
-date, so `garbage` gives NULL there in both modes; a constant unit whose evaluation fails, the
-CAST of `x` to INT with ANSI enabled, fails while optimizing. Otherwise it evaluates the date
-for every row, so with ANSI enabled `sb` fails while collecting rows by `u` as with `'MM'`;
-without ANSI `garbage` gives NULL. Dates beyond year 200000 truncate like any other. The result
-is nullable at every stage over a column, and over a literal until constant folding, except
-that a result that is NULL for an unsupported unit stays nullable.
+date, also when the optimizer makes the unit constant, so `garbage` gives NULL there in both
+modes; an aggregate in the date is still computed, so such a query gives one row. A constant
+unit whose evaluation fails, the CAST of `x` to INT with ANSI enabled, fails while optimizing.
+Otherwise it evaluates the date for every row, so with ANSI enabled `sb` fails while collecting
+rows by `u` as with `'MM'`; without ANSI `garbage` gives NULL. Dates beyond year 200000 truncate
+like any other; near the earliest DATE, Spark's INT arithmetic wraps, so WEEK, MONTH and YEAR
+give DATEs near the latest one. The result is nullable at every stage over a column, and over a
+literal until constant folding, except that a result that is NULL for an unsupported unit stays
+nullable.
 
 Each record keeps the analyzed, optimized and executed schemas and values read from Spark's
 internal rows, collected through the Dataset API, or the failing stage and Spark's error.
