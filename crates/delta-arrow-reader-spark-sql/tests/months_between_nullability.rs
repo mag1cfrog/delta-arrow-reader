@@ -87,6 +87,12 @@ fn retained_value(case: &Value) -> Option<&'static RetainedValue> {
 /// NULL divides by zero, where Spark gives NULL without reading `roundOff`.
 const ROUND_OFF_ORDER_RECORD: &str = "column_nullable_date_failing_round_off";
 const ROUND_OFF_ORDER_ERROR: &str = "Divide by zero error";
+/// Spark's rows for that record: zero months, and NULL for the NULL argument.
+const ROUND_OFF_ORDER_SPARK_ROWS: [[Option<&str>; 2]; 3] = [
+    [Some("0"), Some("0000000000000000")],
+    [Some("1"), Some("0000000000000000")],
+    [Some("2"), None],
+];
 
 fn is_round_off_order_record(case: &Value) -> bool {
     case["id"] == ROUND_OFF_ORDER_RECORD && case["ansi"] == true
@@ -96,7 +102,9 @@ fn is_round_off_order_record(case: &Value) -> bool {
 /// DAR's error.
 fn expectation(case: &Value) -> TestResult<Value> {
     if is_round_off_order_record(case) {
-        if case["expected"]["status"] != "ok" {
+        if case["expected"]["status"] != "ok"
+            || case["expected"]["rows"] != json!(ROUND_OFF_ORDER_SPARK_ROWS)
+        {
             return Err(format!("expected Spark's rows: {case}").into());
         }
         let mut current = case.clone();

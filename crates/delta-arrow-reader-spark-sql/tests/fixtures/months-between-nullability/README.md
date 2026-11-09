@@ -22,22 +22,22 @@ epoch.
   `ron OR true`, and the count of distinct values over 2000 rows with the volatile `roundOff`
   `CASE WHEN rand() > 0.5 THEN true END`;
 - of `ts` and `dt` with the STRING `roundOff` `rs` and `'yes'`, the STRING `'on'` and `s`, which
-  are no BOOLEAN, the INT `1` and `CAST(NULL AS INT)`, and the DATE `dt`;
+  are not BOOLEAN spellings, the INT `1` and `CAST(NULL AS INT)`, and the DATE `dt`;
 - of `dtn` and `dt` with the `roundOff` `1 DIV (k - 2) > 0`, which divides by zero in the row
   where `dtn` is NULL.
 
-Spark casts both arguments to TIMESTAMP. Its result is NOT NULL at every stage for NOT NULL DATE,
-TIMESTAMP and TIMESTAMP_NTZ arguments and `roundOff`, in both ANSI modes. It is nullable for a
-nullable argument or `roundOff`, a NULL `roundOff` gives NULL, and a STRING argument makes it
-nullable, since Spark's cast of a STRING to TIMESTAMP is; over a STRING literal it is NOT NULL
-once constant folding replaces the cast. Spark evaluates the arguments before `roundOff`, so with
-ANSI enabled the failing CAST fails while collecting rows also beside a NULL `roundOff`, and
-reads `roundOff` once per row, so the volatile one gives one distinct value. It accepts a
+Spark casts both arguments to TIMESTAMP. Its result is NOT NULL at every stage for NOT NULL
+DATE, TIMESTAMP and TIMESTAMP_NTZ arguments and `roundOff`, in both ANSI modes. It is nullable
+for a nullable argument or `roundOff`, a NULL `roundOff` gives NULL, and a STRING argument makes
+it nullable, since Spark's cast of a STRING to TIMESTAMP is; over a STRING literal it is NOT
+NULL once constant folding replaces the cast. Spark evaluates the arguments before `roundOff`,
+so with ANSI enabled the failing CAST fails while collecting rows also beside a NULL `roundOff`,
+and reads `roundOff` once per row, so the volatile one gives one distinct value. It accepts a
 BOOLEAN or NULL `roundOff`, and in ANSI mode a STRING through its implicit cast, which is
-nullable, and fails with CAST_INVALID_INPUT for a STRING that is no BOOLEAN, `'on'` while
-optimizing and `s` while collecting rows; it rejects a STRING without ANSI, and the INT and DATE
-in both modes, while analyzing. It does not read `roundOff` beside a NULL argument, so the
-division gives a NULL row.
+nullable, and fails with CAST_INVALID_INPUT for a STRING that is not a BOOLEAN spelling, `'on'`
+while optimizing and `s` while collecting rows; it rejects a STRING without ANSI, and the INT
+and DATE in both modes, while analyzing. It does not read `roundOff` beside a NULL argument, so
+the division gives a NULL row.
 
 Each record keeps the analyzed, optimized and executed schemas and values read from Spark's
 internal rows, collected through the Dataset API. `ConvertToLocalRelation` is excluded.
