@@ -10,7 +10,7 @@ innermost Java exception. Two captures were byte-identical.
 and `d` that are NULL in the last row: the times Los Angeles skips and repeats on its DST days
 beside those days, the last microsecond before the epoch, and year 1 beside 9999-12-31.
 
-161 queries run in both ANSI modes in UTC and America/Los_Angeles. 49 cases run over the NOT
+161 queries run in both ANSI modes in UTC and America/Los_Angeles. 48 cases run over the NOT
 NULL columns, the nullable columns and literals:
 - CAST and TRY_CAST of a TIMESTAMP_NTZ to DATE and of a DATE to TIMESTAMP_NTZ, DATE() and
   TO_TIMESTAMP_NTZ;
