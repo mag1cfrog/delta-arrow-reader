@@ -1,9 +1,9 @@
 # Encoded STRING temporal casts
 
-`encoded-string-temporal-casts-spark.jsonl` records 288 observations from Spark 4.2.0, revision
-`32f7299601108917fb01920a54e084595b7b3bf8`, Java 17.0.20.1 and Python 3.12.14 (#1218). The
-header stores the build properties, capture script hash, settings and the registered `inputs`
-table. Two captures were byte-identical.
+`encoded-string-temporal-casts-spark.jsonl` records 372 observations from Spark 4.2.0, revision
+`32f7299601108917fb01920a54e084595b7b3bf8`, Java 17.0.20.1 and Python 3.12.14 (#1218, #1237).
+The header stores the build properties, capture script hash, settings and the registered
+`inputs` table. Two captures were byte-identical.
 
 `inputs` holds four rows of a NOT NULL INT key `k`; a NOT NULL STRING `sv` holding `2024-05-17`,
 ` 2024-01-02 `, `2024-03-10 02:30:00`, which falls in Los Angeles' DST gap, and
@@ -11,9 +11,11 @@ table. Two captures were byte-identical.
 `garbage`, `2024-13-01` and an empty string; and a nullable STRING `sn` holding `2024-05-17`,
 NULL, `2024-01-02T10:00:00` and NULL.
 
-72 queries run in both ANSI modes in UTC and America/Los_Angeles, over `sv`, `sb` and `sn`:
+93 queries run in both ANSI modes in UTC and America/Los_Angeles, over `sv`, `sb` and `sn`:
 - CAST and TRY_CAST to DATE, TIMESTAMP and TIMESTAMP_NTZ;
 - DATE_ADD and DATE_SUB with 1;
+- DATE_FORMAT, TO_TIMESTAMP with and without a format, TRY_TO_TIMESTAMP, TO_TIMESTAMP_NTZ,
+  UNIX_TIMESTAMP and TO_UNIX_TIMESTAMP with a format;
 - comparisons with a DATE by `=`, `<`, BETWEEN and `<=>`, with the DATE first, and in a WHERE
   clause, with a TIMESTAMP by `=`, and NULLIF with a DATE, TIMESTAMP and TIMESTAMP_NTZ;
 - DAYOFWEEK, WEEKDAY and WEEKOFYEAR;
@@ -34,10 +36,12 @@ dictionary-encoded STRING result counting as a STRING, metadata and typed rows a
 and 32, and nullability in the executed schema; the analyzed and optimized nullability is not
 compared (#1236). Where Spark fails, DAR must fail; the error condition, message and stage are
 not compared (#1236). A second test runs every record over dictionary-encoded, viewed and large
-copies of the STRING columns and requires the same results. One difference is retained: DAR does
-not trim the padding of ` 2024-01-02 ` before reading it as a TIMESTAMP or TIMESTAMP_NTZ, so it
-gives NULL there, and CAST, the comparison with a TIMESTAMP and NULLIF with one fail with ANSI
-enabled (#943, 24 records).
+copies of the STRING columns and requires the same results. Two differences are retained: DAR
+does not trim the padding of ` 2024-01-02 ` before reading it as a TIMESTAMP or TIMESTAMP_NTZ,
+so it gives NULL there, also through DATE_FORMAT and TO_TIMESTAMP, and CAST, the comparison with
+a TIMESTAMP, NULLIF with one and TO_TIMESTAMP fail with ANSI enabled (#943, 40 records); and
+with ANSI enabled DATE_FORMAT of a malformed STRING gives NULL where Spark fails (#1236, from
+#938, 2 records).
 
 Recapture from the crate root:
 
