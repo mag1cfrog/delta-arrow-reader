@@ -18,7 +18,7 @@ sha256sum -c SHA256SUMS
 git bundle verify source.bundle
 git clone source.bundle recovered
 git -C recovered fetch ../source.bundle 'refs/archive/*:refs/archive/*'
-git -C recovered switch --create resumed origin/fix/spark-udf-folding-opt-outs
+git -C recovered switch --create fix/resumed-spark-udf-folding-opt-outs origin/fix/spark-udf-folding-opt-outs
 mkdir restored-evidence
 tar -xzf evidence.tar.gz -C restored-evidence
 ```
