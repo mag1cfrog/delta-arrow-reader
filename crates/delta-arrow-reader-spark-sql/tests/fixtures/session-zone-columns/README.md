@@ -54,9 +54,10 @@ Spark has only one array encoding, so the same record applies. Three more tests 
 native DataFusion SQL keeps the column's annotation, and that predicates reach a
 filter-accepting scan as predicates on the stored column, in UTC and Los Angeles sessions.
 One checks a comparison with a TIMESTAMP literal. The other checks NULL tests, comparisons,
-BETWEEN, IN with and without a NULL item, `<=>`, and their negations, once more with a scan that
-refuses filters reading a cast, as the Delta provider does. Each predicate must reach the
-scan once, without the cast, and keep the rows of the registered instants it selects (#1096).
+BETWEEN, IN with and without a NULL item and beside HOUR, `<=>`, and their negations, for each
+annotation in both ANSI modes, also with a scan that refuses filters reading a cast, as the
+Delta provider does. Each predicate must reach the scan once, without the cast, and keep the
+rows of the registered instants it selects (#1096).
 
 Existing differences outside the session zone keep their Spark expectation in the
 fixture. The test replaces only the retained part with the current DAR result and checks

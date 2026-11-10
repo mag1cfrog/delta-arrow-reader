@@ -51,9 +51,11 @@ pub use sail_plan::config::PlanConfig as SparkSqlOptions;
 ///
 /// The builder retains the host's configuration, runtime and other rules. This
 /// replaces its query planner with one supporting native DataFusion plans and
-/// the retained Spark nodes. Without host optimizer rules, it also adds a rule
-/// for Spark queries after filter pushdown in DataFusion's default optimizer; a
-/// host that sets its own rules keeps exactly those. Call once before building
+/// the retained Spark nodes. When the builder has no optimizer of its own, it
+/// also adds a rule for Spark queries right after filter pushdown in DataFusion's
+/// default optimizer, ahead of rules added with `with_optimizer_rule`. An
+/// optimizer the host set, with `with_optimizer_rules` or by building from an
+/// existing state, is kept as it is, without that rule. Call once before building
 /// the session.
 pub fn configure_spark_sql(mut builder: SessionStateBuilder) -> SessionStateBuilder {
     if builder.optimizer().is_none() {

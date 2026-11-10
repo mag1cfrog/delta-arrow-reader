@@ -697,7 +697,7 @@ impl TableProvider for PruningTable {
             .iter()
             .map(|filter| {
                 Ok(
-                    if self.bare_columns_only && reads_a_relabeled_column(filter)? {
+                    if self.bare_columns_only && reads_a_column_through_a_cast(filter)? {
                         TableProviderFilterPushDown::Unsupported
                     } else {
                         TableProviderFilterPushDown::Inexact
@@ -782,16 +782,34 @@ async fn session_zone_filters_reach_the_scan_on_the_stored_column() -> TestResul
 }
 
 /// Whether `expr` reads a column through a cast, such as the session-zone relabel.
-fn reads_a_relabeled_column(expr: &Expr) -> datafusion::error::Result<bool> {
+fn reads_a_column_through_a_cast(expr: &Expr) -> datafusion::error::Result<bool> {
     expr.exists(|expr| {
         Ok(matches!(expr, Expr::Cast(cast) if matches!(cast.expr.as_ref(), Expr::Column(_))))
     })
 }
 
+/// Whether `expr` reads a column through a cast other than as a function argument, as HOUR
+/// reads the relabeled value.
+fn reads_a_cast_outside_a_function(expr: &Expr) -> datafusion::error::Result<bool> {
+    let mut found = false;
+    expr.apply(|expr| {
+        Ok(match expr {
+            Expr::ScalarFunction(_) => TreeNodeRecursion::Jump,
+            Expr::Cast(cast) if matches!(cast.expr.as_ref(), Expr::Column(_)) => {
+                found = true;
+                TreeNodeRecursion::Stop
+            }
+            _ => TreeNodeRecursion::Continue,
+        })
+    })?;
+    Ok(found)
+}
+
 /// #1096: NULL tests, comparisons, BETWEEN and IN over a TIMESTAMP column relabeled with the
 /// session zone, and their negations, reach the scan once as predicates on the stored column,
 /// so a Delta scan can prune with them, and keep their rows. They do so also when the scan
-/// refuses filters that read a cast, as the Delta provider does. In UTC no relabel is needed.
+/// refuses filters that read a cast, as the Delta provider does, for each annotation in both
+/// ANSI modes. A session in the column's own zone needs no relabel.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn relabeled_predicates_reach_the_scan_on_the_stored_column() -> TestResult {
     let records = session_zone_references()?;
@@ -802,16 +820,26 @@ async fn relabeled_predicates_reach_the_scan_on_the_stored_column() -> TestResul
         .iter()
         .find(|input| input["name"] == "zone_inputs")
         .ok_or("missing zone_inputs")?;
-    let batch = annotated_input(input, "UTC")?;
     let session = session_context(32);
-    session.register_table(
-        "pruned_inputs",
-        Arc::new(PruningTable::new(batch.clone(), false)?),
-    )?;
-    session.register_table(
-        "bare_column_inputs",
-        Arc::new(PruningTable::new(batch, true)?),
-    )?;
+    // Each annotation, read by a scan that accepts filters and by one that refuses filters
+    // that read a cast.
+    let mut tables = Vec::new();
+    for (index, annotation) in ANNOTATIONS.into_iter().enumerate() {
+        let batch = annotated_input(input, annotation)?;
+        for bare_columns_only in [false, true] {
+            let kind = if bare_columns_only {
+                "refusing"
+            } else {
+                "accepting"
+            };
+            let table = format!("{kind}_{index}");
+            session.register_table(
+                table.as_str(),
+                Arc::new(PruningTable::new(batch.clone(), bare_columns_only)?),
+            )?;
+            tables.push((table, annotation));
+        }
+    }
     // Two registered instants, 2024-01-01 07:30 UTC and 2024-03-10 10:00 UTC, the start of
     // daylight saving time in Los Angeles, written in each session zone.
     const FIRST: i64 = 1_704_094_200_000_000;
@@ -831,7 +859,7 @@ async fn relabeled_predicates_reach_the_scan_on_the_stored_column() -> TestResul
             "TIMESTAMP '{first}', TIMESTAMP '{second}', \
              TIMESTAMP '2000-01-01 00:00:00', TIMESTAMP '2001-01-01 00:00:00'"
         );
-        let predicates: [(String, Keeps); 14] = [
+        let predicates: [(String, Keeps); 15] = [
             ("ts IS NULL".into(), Box::new(|ts| Some(ts.is_none()))),
             ("ts IS NOT NULL".into(), Box::new(|ts| Some(ts.is_some()))),
             ("NOT (ts IS NULL)".into(), Box::new(|ts| Some(ts.is_some()))),
@@ -871,6 +899,11 @@ async fn relabeled_predicates_reach_the_scan_on_the_stored_column() -> TestResul
                 format!("ts <=> TIMESTAMP '{first}' OR ts <=> TIMESTAMP '{second}'"),
                 Box::new(|ts| Some(ts == Some(FIRST) || ts == Some(SECOND))),
             ),
+            // HOUR keeps the relabel, which no longer makes it shared with the IN list.
+            (
+                format!("ts IN ({four}) AND hour(ts) >= 0"),
+                Box::new(|ts| ts.map(|ts| ts == FIRST || ts == SECOND)),
+            ),
             (
                 format!("ts IN (TIMESTAMP '{first}', NULL)"),
                 Box::new(|ts| ts.and_then(|ts| (ts == FIRST).then_some(true))),
@@ -880,78 +913,76 @@ async fn relabeled_predicates_reach_the_scan_on_the_stored_column() -> TestResul
                 Box::new(|ts| Some(ts.is_none_or(|ts| ts > SECOND))),
             ),
         ];
-        for ((predicate, keeps), table) in predicates.iter().flat_map(|predicate| {
-            [
-                (predicate, "pruned_inputs"),
-                (predicate, "bare_column_inputs"),
-            ]
-        }) {
-            let case = json!({"ansi": true, "timezone": timezone});
-            let sql = format!("SELECT k FROM {table} WHERE {predicate}");
-            let query = plan_query(&session, &sql, &options(&case)?).await?;
-            let optimized = optimize(&session, &query.logical_plan)?;
-            let mut filters = Vec::new();
-            let mut filter_predicates = Vec::new();
-            let mut relabels = Vec::new();
-            optimized.apply(|node| {
-                match node {
-                    LogicalPlan::TableScan(scan) => filters.extend(scan.filters.iter().cloned()),
-                    LogicalPlan::Filter(filter) => filter_predicates.push(filter.predicate.clone()),
-                    _ => {}
-                }
-                for expr in node.expressions() {
-                    if reads_a_relabeled_column(&expr)? {
-                        relabels.push(expr);
+        for (predicate, keeps) in &predicates {
+            for ansi in [true, false] {
+                for (table, annotation) in &tables {
+                    let context =
+                        format!("{timezone} ansi={ansi} {annotation} {table} {predicate}");
+                    let case = json!({"ansi": ansi, "timezone": timezone});
+                    let sql = format!("SELECT k FROM {table} WHERE {predicate}");
+                    let query = plan_query(&session, &sql, &options(&case)?).await?;
+                    let optimized = optimize(&session, &query.logical_plan)?;
+                    let mut filters = Vec::new();
+                    let mut filter_predicates = Vec::new();
+                    let mut relabels = Vec::new();
+                    optimized.apply(|node| {
+                        match node {
+                            LogicalPlan::TableScan(scan) => {
+                                filters.extend(scan.filters.iter().cloned())
+                            }
+                            LogicalPlan::Filter(filter) => {
+                                filter_predicates.push(filter.predicate.clone())
+                            }
+                            _ => {}
+                        }
+                        for expr in node.expressions() {
+                            if reads_a_cast_outside_a_function(&expr)? {
+                                relabels.push(expr);
+                            }
+                        }
+                        Ok(TreeNodeRecursion::Continue)
+                    })?;
+                    assert!(!filters.is_empty(), "{context}: no filter reached the scan");
+                    for (position, filter) in filters.iter().enumerate() {
+                        assert!(
+                            !reads_a_cast_outside_a_function(filter)?,
+                            "{context}: {filter} reads the relabel\n{optimized}"
+                        );
+                        assert!(
+                            !filters[..position].contains(filter),
+                            "{context}: {filter} is pushed twice\n{optimized}"
+                        );
                     }
-                }
-                Ok(TreeNodeRecursion::Continue)
-            })?;
-            assert!(
-                !filters.is_empty(),
-                "{timezone} {table} {predicate}: no filter reached the scan"
-            );
-            for (position, filter) in filters.iter().enumerate() {
-                assert!(
-                    !reads_a_relabeled_column(filter)?,
-                    "{timezone} {table} {predicate}: {filter} reads the relabel\n{optimized}"
-                );
-                assert!(
-                    !filters[..position].contains(filter),
-                    "{timezone} {table} {predicate}: {filter} is pushed twice\n{optimized}"
-                );
-            }
-            // The filter that keeps the scan's rows reads the stored column too, also through
-            // no projection of the relabel.
-            assert_eq!(
-                filter_predicates.len(),
-                1,
-                "{timezone} {table} {predicate}\n{optimized}"
-            );
-            assert!(
-                relabels.is_empty(),
-                "{timezone} {table} {predicate}: the plan reads the relabel\n{optimized}"
-            );
-            let physical = query.create_physical_plan(&session).await?;
-            let mut rows = Vec::new();
-            for batch in collect(physical, session.task_ctx()).await? {
-                for row in 0..batch.num_rows() {
-                    rows.push(encode_value(batch.column(0).as_ref(), row)?);
+                    // The filter that keeps the scan's rows reads the stored column too, also
+                    // through no projection of the relabel.
+                    assert_eq!(filter_predicates.len(), 1, "{context}\n{optimized}");
+                    assert!(
+                        relabels.is_empty(),
+                        "{context}: the plan reads the relabel\n{optimized}"
+                    );
+                    let physical = query.create_physical_plan(&session).await?;
+                    let mut rows = Vec::new();
+                    for batch in collect(physical, session.task_ctx()).await? {
+                        for row in 0..batch.num_rows() {
+                            rows.push(encode_value(batch.column(0).as_ref(), row)?);
+                        }
+                    }
+                    rows.sort_by_key(Value::to_string);
+                    let mut expected = instants
+                        .iter()
+                        .filter(|(_, ts)| keeps(*ts) == Some(true))
+                        .map(|(key, _)| key.clone())
+                        .collect::<Vec<_>>();
+                    expected.sort_by_key(Value::to_string);
+                    assert_eq!(rows, expected, "{context}");
                 }
             }
-            rows.sort_by_key(Value::to_string);
-            let mut expected = instants
-                .iter()
-                .filter(|(_, ts)| keeps(*ts) == Some(true))
-                .map(|(key, _)| key.clone())
-                .collect::<Vec<_>>();
-            expected.sort_by_key(Value::to_string);
-            assert_eq!(rows, expected, "{timezone} {table} {predicate}");
         }
     }
     // Native DataFusion SQL keeps its own cast.
     let native = session
         .sql(
-            "SELECT k FROM pruned_inputs WHERE \
+            "SELECT k FROM accepting_0 WHERE \
              arrow_cast(ts, 'Timestamp(Microsecond, Some(\"America/Los_Angeles\"))') IS NULL",
         )
         .await?
@@ -964,7 +995,7 @@ async fn relabeled_predicates_reach_the_scan_on_the_stored_column() -> TestResul
         Ok(TreeNodeRecursion::Continue)
     })?;
     assert!(
-        matches!(filters.as_slice(), [filter] if reads_a_relabeled_column(filter)?),
+        matches!(filters.as_slice(), [filter] if reads_a_column_through_a_cast(filter)?),
         "native: {filters:?}\n{native}"
     );
     Ok(())

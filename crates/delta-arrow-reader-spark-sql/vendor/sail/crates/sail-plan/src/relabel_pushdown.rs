@@ -1,17 +1,19 @@
 // Local Spark session-zone relabel pushdown. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 //! A TIMESTAMP column whose type names another zone than the session's is read through a cast
 //! that relabels it with the session zone (#1012). The relabel keeps every instant, so a NULL
-//! test or a comparison of instants means the same over the stored column. A scan that prunes
+//! test, a comparison of instants or an IN list of instants means the same over the stored
+//! column. A scan that prunes
 //! only with bare columns, as the Delta provider does, needs the predicate on the stored column
 //! (#1096).
 //!
 //! DataFusion's filter pushdown moves a filter below the relabel, replacing the column with the
-//! cast. On the next pass its simplifier removes the cast from a comparison with a literal, but
-//! not from `IS NULL` or `IS NOT NULL`, and common subexpression elimination first moves a cast
-//! the filter reads twice, as in `BETWEEN`, into a projection where neither rule sees it. This
-//! rule runs right after filter pushdown and removes the relabel from NULL tests and from
-//! comparisons with TIMESTAMP literals, in filters and in the filters pushed to a scan, retagging
-//! the literals with the stored zone. Functions of the relabeled value, such as HOUR, keep it.
+//! cast. On the next pass its simplifier removes the cast from a comparison or IN list with
+//! literals, but not from `IS NULL` or `IS NOT NULL`, and common subexpression elimination first
+//! moves a cast
+//! the filter reads twice, as in `BETWEEN` or an IN list beside HOUR, into a projection where
+//! neither rule sees it. This rule runs right after filter pushdown and removes the relabel from
+//! NULL tests and from comparisons and IN lists with TIMESTAMP literals, in filters and in the
+//! filters pushed to a scan, retagging the literals with the stored zone. Functions of the relabeled value, such as HOUR, keep it.
 //! Native DataFusion SQL, planned without Spark's expression semantics, is unchanged.
 
 use std::sync::Arc;
@@ -21,7 +23,8 @@ use datafusion::optimizer::optimizer::{ApplyOrder, Optimizer};
 use datafusion::optimizer::{OptimizerConfig, OptimizerRule};
 use datafusion_common::tree_node::{Transformed, TreeNode};
 use datafusion_common::{DFSchema, DFSchemaRef, Result, ScalarValue};
-use datafusion_expr::logical_plan::{Filter, TableScan};
+use datafusion_expr::expr::InList;
+use datafusion_expr::logical_plan::Filter;
 use datafusion_expr::{BinaryExpr, Expr, ExprSchemable, LogicalPlan, Operator};
 
 use crate::expression_errors::SparkSqlExpressionSemantics;
@@ -91,7 +94,7 @@ impl OptimizerRule for UnwrapSessionZoneRelabel {
                     })
                     .collect::<Result<_>>()?;
                 Ok(Transformed::new_transformed(
-                    LogicalPlan::TableScan(TableScan { ..scan }),
+                    LogicalPlan::TableScan(scan),
                     transformed,
                 ))
             }
@@ -101,7 +104,8 @@ impl OptimizerRule for UnwrapSessionZoneRelabel {
 }
 
 /// `expr` with the relabel removed from each NULL test over a relabeled column and each
-/// comparison of one with a TIMESTAMP literal, and the literals retagged with the column's zone.
+/// comparison or IN list of one with TIMESTAMP literals, and the literals retagged with the
+/// column's zone.
 fn unwrap_relabels(expr: Expr, schema: &DFSchemaRef) -> Result<Transformed<Expr>> {
     expr.transform_up(|expr| {
         Ok(match expr {
@@ -134,6 +138,24 @@ fn unwrap_relabels(expr: Expr, schema: &DFSchemaRef) -> Result<Transformed<Expr>
                     _ => Transformed::no(Expr::BinaryExpr(BinaryExpr { left, op, right })),
                 }
             }
+            Expr::InList(in_list) => match stored_column(&in_list.expr, schema) {
+                Some(column) => {
+                    let list = in_list
+                        .list
+                        .iter()
+                        .map(|item| retagged(item, &column, schema))
+                        .collect::<Result<Option<Vec<_>>>>()?;
+                    match list {
+                        Some(list) => Transformed::yes(Expr::InList(InList::new(
+                            Box::new(column),
+                            list,
+                            in_list.negated,
+                        ))),
+                        None => Transformed::no(Expr::InList(in_list)),
+                    }
+                }
+                None => Transformed::no(Expr::InList(in_list)),
+            },
             expr => Transformed::no(expr),
         })
     })
@@ -154,8 +176,8 @@ fn is_instant_comparison(op: Operator) -> bool {
     )
 }
 
-/// The stored column under a relabel: a cast of a TIMESTAMP column to the same unit in another
-/// named zone.
+/// The stored column under a relabel: a cast of a zoned TIMESTAMP column to the same unit in
+/// another zone, named or a fixed offset. Arrow's cast keeps the stored values.
 fn stored_column(expr: &Expr, schema: &DFSchemaRef) -> Option<Expr> {
     let Expr::Cast(cast) = expr else {
         return None;
@@ -207,6 +229,7 @@ mod tests {
 
     use datafusion::arrow::datatypes::{DataType, Field, Schema, TimeUnit};
     use datafusion::optimizer::optimizer::Optimizer;
+    use datafusion::optimizer::simplify_expressions::SimplifyExpressions;
     use datafusion_common::{DFSchema, Result, ScalarValue};
     use datafusion_expr::{Expr, cast, col, lit};
 
@@ -265,6 +288,19 @@ mod tests {
                     .or(col("k").is_null())
             )
         );
+        assert_eq!(
+            rewritten(cast(col("t"), la()).in_list(
+                vec![
+                    instant("America/Los_Angeles"),
+                    null_instant("America/Los_Angeles")
+                ],
+                true,
+            ))?,
+            (
+                true,
+                col("t").in_list(vec![instant("UTC"), null_instant("UTC")], true)
+            )
+        );
         Ok(())
     }
 
@@ -291,9 +327,12 @@ mod tests {
         UnwrapSessionZoneRelabel::install(&mut optimizer);
         assert_eq!(names(&optimizer), expected);
 
-        let mut optimizer = Optimizer::with_rules(vec![]);
+        let mut optimizer = Optimizer::with_rules(vec![Arc::new(SimplifyExpressions::new())]);
         UnwrapSessionZoneRelabel::install(&mut optimizer);
-        assert_eq!(names(&optimizer), ["unwrap_session_zone_relabel"]);
+        assert_eq!(
+            names(&optimizer),
+            ["simplify_expressions", "unwrap_session_zone_relabel"]
+        );
     }
 
     #[test]
@@ -313,6 +352,16 @@ mod tests {
             ))),
             cast(col("t"), la()).eq(lit(ScalarValue::Null)),
             cast(col("t"), la()).eq(lit(1_i64)),
+            cast(col("t"), la()).in_list(
+                vec![
+                    lit(ScalarValue::TimestampMicrosecond(
+                        Some(1),
+                        Some("America/Los_Angeles".into()),
+                    )),
+                    cast(col("tn"), la()),
+                ],
+                false,
+            ),
         ] {
             assert_eq!(rewritten(expr.clone())?, (false, expr));
         }
