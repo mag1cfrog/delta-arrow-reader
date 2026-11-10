@@ -397,6 +397,7 @@ impl PlanResolver<'_> {
             .into_iter()
             .map(|named| {
                 let field_id = state.register_field_name(named.name.clone().one()?);
+                state.set_interval_qualifier(&field_id, named.interval_qualifier);
                 Ok(named.into_alias(field_id))
             })
             .collect::<PlanResult<Vec<_>>>()?;
@@ -914,6 +915,7 @@ impl PlanResolver<'_> {
             expr,
             metadata,
             expression_name,
+            interval_qualifier,
         } in grouping
         {
             let exprs = match expr {
@@ -930,6 +932,7 @@ impl PlanResolver<'_> {
                 expr,
                 metadata: metadata.clone(),
                 expression_name: expression_name.clone(),
+                interval_qualifier,
             }));
         }
         Ok(result)

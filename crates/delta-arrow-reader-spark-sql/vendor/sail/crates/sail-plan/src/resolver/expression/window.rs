@@ -30,6 +30,7 @@ use crate::function::{get_built_in_window_function, require_deterministic_scalar
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
 use crate::resolver::expression::sort::sort_order_options;
+use crate::resolver::interval_qualifier::{IntervalOperand, function_qualifier};
 use crate::resolver::state::PlanResolverState;
 
 struct PlannedRangeBoundary {
@@ -152,7 +153,7 @@ impl PlanResolver<'_> {
                 reject_calendar_interval_partition_key(name, &data_type)?;
             }
         }
-        let (name, window) = match window_function {
+        let (name, window, interval_qualifier) = match window_function {
             spec::Expr::UnresolvedFunction(spec::UnresolvedFunction {
                 function_name,
                 arguments,
@@ -178,9 +179,12 @@ impl PlanResolver<'_> {
                     ));
                 }
                 let canonical_function_name = function_name.to_ascii_lowercase();
-                let (argument_display_names, arguments) = self
-                    .resolve_expression_arguments(arguments, schema, state)
+                let (argument_display_names, arguments, interval_operands) = self
+                    .resolve_expression_arguments_with_qualifiers(arguments, schema, state)
                     .await?;
+                // A window function over an interval, as LAG or MAX, keeps its qualifier.
+                let interval_qualifier =
+                    function_qualifier(&canonical_function_name, &interval_operands);
                 // A window function reads a dictionary-encoded STRING argument as its STRING
                 // values (#1242).
                 let mut arguments = arguments
@@ -381,7 +385,11 @@ impl PlanResolver<'_> {
                 } else {
                     window
                 };
-                (name?, window)
+                let interval_qualifier = match IntervalOperand::of(&window, None, schema) {
+                    IntervalOperand::Interval { .. } => interval_qualifier,
+                    IntervalOperand::NotInterval => None,
+                };
+                (name?, window, interval_qualifier)
             }
             spec::Expr::CommonInlineUserDefinedFunction { .. } => {
                 return Err(PlanError::unsupported(
@@ -395,7 +403,7 @@ impl PlanResolver<'_> {
             }
         };
 
-        Ok(NamedExpr::new(vec![name], window))
+        Ok(NamedExpr::new(vec![name], window).with_interval_qualifier(interval_qualifier))
     }
 
     fn coerce_offset_window_default(

@@ -208,6 +208,7 @@ impl PlanResolver<'_> {
                 expr,
                 metadata,
                 expression_name,
+                interval_qualifier,
             } = e;
             match expr {
                 Expr::ScalarFunction(ScalarFunction { func, args }) => {
@@ -228,6 +229,7 @@ impl PlanResolver<'_> {
                             expr: func.call(args),
                             metadata,
                             expression_name,
+                            interval_qualifier,
                         });
                     }
                 }
@@ -237,6 +239,7 @@ impl PlanResolver<'_> {
                         expr,
                         metadata,
                         expression_name,
+                        interval_qualifier,
                     });
                 }
             };
@@ -265,7 +268,13 @@ impl PlanResolver<'_> {
                 if let Expr::Column(Column { name: field_id, .. }) = &e.expr {
                     state.get_field_info(field_id)?;
                 }
+                // A column passed through, as by `*`, keeps its field's qualifier.
+                let qualifier = e.interval_qualifier.or_else(|| match &e.expr {
+                    Expr::Column(column) => state.interval_qualifier(&column.name),
+                    _ => None,
+                });
                 let field_id = state.register_field_name(name);
+                state.set_interval_qualifier(&field_id, qualifier);
                 Ok(e.into_alias(field_id))
             })
             .collect()

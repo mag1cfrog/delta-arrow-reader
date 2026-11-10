@@ -9,6 +9,7 @@ use sail_common::spec;
 
 use crate::error::{PlanError, PlanResult};
 use crate::resolver::expression::NamedExpr;
+use crate::resolver::interval_qualifier::IntervalQualifier;
 
 /// The field information for fields in the logical plan.
 #[derive(Debug, Clone)]
@@ -20,6 +21,8 @@ pub(super) struct FieldInfo {
     /// A hidden field is helpful for filtering or sorting plans using columns
     /// of its child plans (e.g. a key column of the left/right plans in an outer join).
     hidden: bool,
+    /// The Spark qualifier of an interval field, where the resolver knows it (#1152).
+    interval_qualifier: Option<IntervalQualifier>,
 }
 
 impl FieldInfo {
@@ -105,6 +108,7 @@ impl PlanResolverState {
         let info = FieldInfo {
             name: name.into(),
             hidden,
+            interval_qualifier: None,
         };
         self.fields.insert(field_id.clone(), info);
         field_id
@@ -131,18 +135,39 @@ impl PlanResolverState {
         }
     }
 
+    /// Records the Spark qualifier of an interval field registered here.
+    pub fn set_interval_qualifier(&mut self, field_id: &str, qualifier: Option<IntervalQualifier>) {
+        if let Some(info) = self.fields.get_mut(field_id) {
+            info.interval_qualifier = qualifier;
+        }
+    }
+
+    /// The Spark qualifier of a registered interval field, where it is known.
+    pub fn interval_qualifier(&self, field_id: &str) -> Option<IntervalQualifier> {
+        self.fields
+            .get(field_id)
+            .and_then(|info| info.interval_qualifier)
+    }
+
     pub fn register_field(&mut self, field: impl AsRef<Field>) -> String {
         self.register_field_info(field.as_ref().name(), false)
     }
 
-    /// Registers each field and returns unique internal names to avoid column name collisions.
+    /// Registers each field of a scanned source and returns unique internal names to avoid
+    /// column name collisions. Spark reads an Arrow interval column as `DAY TO SECOND` or `YEAR
+    /// TO MONTH` (#1152).
     pub fn register_fields(
         &mut self,
         fields: impl IntoIterator<Item = impl AsRef<Field>>,
     ) -> Vec<String> {
         fields
             .into_iter()
-            .map(|field| self.register_field(field))
+            .map(|field| {
+                let field_id = self.register_field(&field);
+                let qualifier = IntervalQualifier::default_for_type(field.as_ref().data_type());
+                self.set_interval_qualifier(&field_id, qualifier);
+                field_id
+            })
             .collect()
     }
 

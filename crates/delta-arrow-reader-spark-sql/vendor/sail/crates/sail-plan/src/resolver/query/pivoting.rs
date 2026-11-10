@@ -198,6 +198,7 @@ impl PlanResolver<'_> {
                     expression_name: None,
                     expr,
                     metadata: vec![],
+                    interval_qualifier: None,
                 });
             }
         }
@@ -286,6 +287,7 @@ impl PlanResolver<'_> {
                 expression_name: None,
                 expr: expr::Expr::Column(column),
                 metadata: vec![],
+                interval_qualifier: None,
             })
             .collect())
     }
@@ -442,6 +444,7 @@ impl PlanResolver<'_> {
                 expression_name: None,
                 expr: expr.clone(),
                 metadata: vec![],
+                interval_qualifier: None,
             })
             .collect::<Vec<_>>();
 

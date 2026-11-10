@@ -49,8 +49,6 @@ enum RetainedDifference {
     /// #953: a CAST to STRING formats the DAY interval as DAY TO SECOND text, since Arrow's
     /// duration carries no qualifier.
     StringQualifier,
-    /// #1152: a CAST to BIGINT counts the seconds, where Spark counts the DAY interval's days.
-    IntegerUnit,
     /// #1182: a comparison with a YEAR TO MONTH interval coerces both to calendar intervals
     /// and gives false, where Spark rejects it during analysis.
     YearMonthComparison,
@@ -64,7 +62,6 @@ enum RetainedDifference {
 fn retained_difference(case: &Value) -> Option<RetainedDifference> {
     match case["id"].as_str()? {
         "column_cast_string" => Some(RetainedDifference::StringQualifier),
-        "column_cast_bigint" => Some(RetainedDifference::IntegerUnit),
         "column_equals_month" => Some(RetainedDifference::YearMonthComparison),
         "column_concat" => Some(RetainedDifference::ConcatText),
         "try_sum" => Some(RetainedDifference::TrySum),
@@ -114,10 +111,6 @@ fn current_expectation(
                     .ok_or_else(|| format!("expected Spark's DAY text: {text}"))?;
                 Ok(format!("INTERVAL '{days} 00:00:00' DAY TO SECOND"))
             })?;
-            current["expected"]["rows"] = json!(rows);
-        }
-        RetainedDifference::IntegerUnit => {
-            let rows = map_values(case, |days| Ok((days.parse::<i64>()? * 86_400).to_string()))?;
             current["expected"]["rows"] = json!(rows);
         }
         RetainedDifference::YearMonthComparison => {
@@ -511,7 +504,6 @@ async fn dates_subtract_like_spark() -> TestResult {
         retained,
         std::collections::BTreeMap::from([
             (RetainedDifference::StringQualifier, 4),
-            (RetainedDifference::IntegerUnit, 4),
             (RetainedDifference::YearMonthComparison, 4),
             (RetainedDifference::ConcatText, 4),
             (RetainedDifference::TrySum, 4),

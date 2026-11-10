@@ -41,10 +41,9 @@ internal rows. `ConvertToLocalRelation` is excluded.
 
 `date_interval_arithmetic.rs` compares names, type families with the session zone, metadata and
 typed rows at batch sizes 1 and 32, and nullability in the executed schema; the analyzed and
-optimized nullability is not compared (#1236). One difference is retained at DAR's exact
-current result: a day-time interval column carries no qualifier, so `d` plus the HOUR column
-of a subquery keeps DATE arithmetic and gives `d`, where Spark gives a TIMESTAMP (#1236, 4
-records).
+optimized nullability is not compared (#1236). A day-time interval column of a subquery keeps
+its qualifier, so `d` plus the HOUR column of a subquery gives a TIMESTAMP, as in Spark
+(#1152).
 
 Recapture from the crate root:
 

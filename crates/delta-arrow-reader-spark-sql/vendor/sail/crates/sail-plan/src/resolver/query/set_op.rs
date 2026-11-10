@@ -19,6 +19,7 @@ use crate::error::{PlanError, PlanResult};
 use crate::function::common::{FunctionContextInput, SparkComparisonFloat};
 use crate::function::result_coercion::coerce_set_operation_result_values;
 use crate::resolver::PlanResolver;
+use crate::resolver::interval_qualifier::{IntervalOperand, IntervalQualifier};
 use crate::resolver::state::PlanResolverState;
 
 mod constant_columns;
@@ -54,6 +55,9 @@ impl PlanResolver<'_> {
         } = op;
         let left = self.resolve_query_plan(*left, state).await?;
         let right = self.resolve_query_plan(*right, state).await?;
+        if !by_name {
+            widen_set_operation_interval_qualifiers(&left, &right, state);
+        }
         let (left, right) = if matches!(set_op_type, SetOpType::Union) {
             (left, right)
         } else {
@@ -208,6 +212,72 @@ impl PlanResolver<'_> {
                 }
             });
         Ok((left?, right?))
+    }
+}
+
+/// Spark widens each column's interval qualifier over both inputs of a set operation (#1152).
+/// The result keeps the left input's fields, which take the widened qualifier when the left
+/// query's own projection registered them, also through the earlier set operations of a chain.
+/// A left input that reads a common table expression directly, as `TABLE c`, shares the fields
+/// of every other reference to it, so it keeps them.
+fn widen_set_operation_interval_qualifiers(
+    left: &LogicalPlan,
+    right: &LogicalPlan,
+    state: &mut PlanResolverState,
+) {
+    let mut own_fields = left;
+    loop {
+        own_fields = match own_fields {
+            LogicalPlan::Limit(limit) => limit.input.as_ref(),
+            LogicalPlan::Sort(sort) => sort.input.as_ref(),
+            LogicalPlan::Filter(filter) => filter.input.as_ref(),
+            LogicalPlan::Distinct(distinct) => distinct.input().as_ref(),
+            LogicalPlan::Extension(extension) => {
+                match extension
+                    .node
+                    .as_any()
+                    .downcast_ref::<PendingSetOperation>()
+                {
+                    Some(set_operation) => set_operation.left.as_ref(),
+                    None => return,
+                }
+            }
+            // A projection that coercion added keeps its input's fields; one that a query
+            // resolved registered its own.
+            LogicalPlan::Projection(projection) => {
+                let input = projection.input.schema();
+                if projection
+                    .schema
+                    .fields()
+                    .iter()
+                    .any(|field| input.fields().iter().any(|own| own.name() == field.name()))
+                {
+                    projection.input.as_ref()
+                } else {
+                    break;
+                }
+            }
+            _ => return,
+        };
+    }
+    for (left_field, right_field) in left.schema().fields().iter().zip(right.schema().fields()) {
+        let mut operands = [IntervalOperand::NotInterval; 2];
+        for (operand, field) in operands.iter_mut().zip([left_field, right_field]) {
+            if let Some(default) = IntervalQualifier::default_for_type(field.data_type()) {
+                *operand = IntervalOperand::Interval {
+                    year_month: default.is_year_month(),
+                    qualifier: state.interval_qualifier(field.name()),
+                };
+            }
+        }
+        // An untyped NULL on the left takes the right input's qualifier.
+        if operands
+            .iter()
+            .any(|operand| matches!(operand, IntervalOperand::Interval { .. }))
+        {
+            let widened = IntervalQualifier::widen(operands);
+            state.set_interval_qualifier(left_field.name(), widened);
+        }
     }
 }
 
