@@ -1,0 +1,40 @@
+{
+  "verified_at_utc": "2026-11-10T02:31:43.036873+00:00",
+  "remote_backup_restore_verified": true,
+  "worktrees_removed": 25,
+  "remaining_worktrees": 1,
+  "historical_local_branches_removed": 133,
+  "remaining_local_branches": 16,
+  "recommended_implementation_branches_retained": 11,
+  "reproducer_branches_retained": 1,
+  "primary_modified_files_preserved": [
+    "README.md",
+    "crates/delta-arrow-reader-core/docs/public/index.md"
+  ],
+  "stashes_retained": 5,
+  "old_spark_cargo_target_bytes_removed": 116483100672,
+  "additional_generated_directories_removed": 17,
+  "old_native_binaries_removed": 8,
+  "unpacked_archived_evidence_removed": true,
+  "compressed_backups_retained": true,
+  "source_code_changes": false,
+  "behavior_tests_run": false,
+  "remote_feature_branches_modified": false,
+  "global_rust_toolchains_and_dependency_download_caches_removed": false,
+  "backup_restoration": {
+    "verified_at_utc": "2026-11-10T02:27:30.459947+00:00",
+    "downloaded_fresh_from_github": true,
+    "all_three_remote_checksums_verified": true,
+    "all_local_branch_heads_recovered": 149,
+    "all_worktrees_and_uncommitted_files_recovered": 26,
+    "stashes_recovered": 5,
+    "evidence_files_verified": 19362,
+    "git_connectivity_passed": true
+  },
+  "disk_space_measurement": {
+    "free_bytes_before_deletion": 479780896768,
+    "free_bytes_after_cleanup": 605843378176,
+    "increase_bytes": 126062481408,
+    "baseline": "After fresh remote asset downloads and the temporary recovery clone; the increase also includes deleting those temporary verification files."
+  }
+}

@@ -6,9 +6,13 @@ Stopped at the user's request on 2026-11-09. The goal was cleared. Further imple
 
 The unfinished #893 implementation is preserved at `63da7acb50c237fb878667e3846f35bdd8d2e532` on the selected `fix/893-udf-folding-opt-outs-wip` branch. It has not received final acceptance. The remaining review findings are an eager-argument error-order issue that needs reproduction and a new `clippy::unnecessary_lazy_evaluations` diagnostic. Integration with later staging changes is also unfinished. `STOPPED.json` records the checks that completed and the remaining scope.
 
-The archive contains all local Git references, recoverable snapshots of 26 worktrees, five stashes, and the collected source, observations, logs and review reports. Three worktrees had uncommitted changes; their snapshots and separate staged/worktree patches are included. Original working files, indexes and stashes were preserved. Rebuildable executables and cache directories are excluded from the evidence archive.
+The archive contains all local Git references, recoverable snapshots of 26 worktrees, five stashes, and the collected source, observations, logs and review reports. Three worktrees had uncommitted changes; their snapshots and separate staged/worktree patches are included. Original working files, indexes and stashes were preserved during capture; the later local cleanup is recorded below. Rebuildable executables and cache directories are excluded from the evidence archive.
 
 All 1,563 descendant sessions were confirmed archived, including 425 archived during shutdown. No project build or test process was running during the shutdown inspection.
+
+## Local cleanup
+
+Local cleanup on 2026-11-09 removed 25 archived worktrees, 133 historical local branches and the old build artifacts. The primary checkout, its two uncommitted documentation changes, the selected implementation and reproducer branches, and all five stashes remain locally. Removed source and evidence can be restored from the remote assets. [The cleanup record](handoff/LOCAL-CLEANUP.json) includes the fresh remote restoration checks and cleanup counts.
 
 ## Recover the work
 
