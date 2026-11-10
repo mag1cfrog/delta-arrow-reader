@@ -8,5 +8,6 @@ pub mod function;
 pub mod like_errors;
 pub mod physical_plan;
 pub mod projection_row_errors;
+pub mod relabel_pushdown;
 pub mod resolver;
 pub use error::PlanResult;

@@ -28,6 +28,7 @@ use datafusion::dataframe::DataFrame;
 use datafusion::error::{DataFusionError, Result};
 use datafusion::execution::SessionStateBuilder;
 use datafusion::logical_expr::LogicalPlan;
+use datafusion::optimizer::Optimizer;
 use datafusion::physical_optimizer::aggregate_statistics::PreserveAggregateStatisticsSchema;
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::prelude::SessionContext;
@@ -36,6 +37,7 @@ use sail_plan::expression_errors::{PrepareSparkExpressions, SparkSqlExpressionSe
 use sail_plan::like_errors::{PreserveSparkLikeErrors, set_spark_query_start_time};
 use sail_plan::physical_plan::SparkQueryPlanner;
 use sail_plan::projection_row_errors::CaptureSparkInputSortBoundaries;
+use sail_plan::relabel_pushdown::UnwrapSessionZoneRelabel;
 use sail_plan::resolver::PlanResolver;
 
 /// Interpretation of timestamp types without an explicit timezone qualifier.
@@ -49,8 +51,18 @@ pub use sail_plan::config::PlanConfig as SparkSqlOptions;
 ///
 /// The builder retains the host's configuration, runtime and other rules. This
 /// replaces its query planner with one supporting native DataFusion plans and
-/// the retained Spark nodes. Call once before building the session.
-pub fn configure_spark_sql(builder: SessionStateBuilder) -> SessionStateBuilder {
+/// the retained Spark nodes. When the builder has no optimizer of its own, it
+/// also adds a rule for Spark queries right after filter pushdown in DataFusion's
+/// default optimizer, ahead of rules added with `with_optimizer_rule`. An
+/// optimizer the host set, with `with_optimizer_rules` or by building from an
+/// existing state, is kept as it is, without that rule. Call once before building
+/// the session.
+pub fn configure_spark_sql(mut builder: SessionStateBuilder) -> SessionStateBuilder {
+    if builder.optimizer().is_none() {
+        let mut optimizer = Optimizer::new();
+        UnwrapSessionZoneRelabel::install(&mut optimizer);
+        *builder.optimizer() = Some(optimizer);
+    }
     builder
         .with_query_planner(Arc::new(SparkQueryPlanner))
         .with_analyzer_rule(Arc::new(PrepareSparkExpressions))
