@@ -1947,8 +1947,18 @@ cover all original and supplemental cases plus CASE and connected consumers.
 Spark numeric DATE RANGE bounds require INT day offsets. The resolver compares
 signed expression endpoints before DESC execution negation, while CURRENT ROW
 remains a special boundary distinct from numeric zero. It builds the complete
-Spark output name before normalizing the physical frame. Existing interval
-bounds keep their Interval or Duration representation and arithmetic.
+Spark output name before normalizing the physical frame. Other interval bounds
+keep their Interval or Duration representation and arithmetic.
+
+A DATE key moves by whole days, so the resolver reads a DAY interval offset over
+it as that many INT days, which then takes the numeric DATE path above and gives
+Spark's frame; it was read as a running sum (#947). An interval that is not a
+whole number of days fails with Spark's RANGE_FRAME_INVALID_TYPE. DAR keeps no
+interval qualifier on the offset, so a sub-day interval of whole days, such as
+INTERVAL 24 HOURS or INTERVAL '1 00' DAY TO HOUR, gives the one-day frame, where
+Spark rejects its type (#1236). The [DATE RANGE interval offset
+references](tests/fixtures/date-range-interval-offsets/README.md) record the
+checks.
 
 ANSI minimum-INT PRECEDING negation fails during resolution when endpoint
 comparison reaches that expression. A NULL lower endpoint can skip the upper

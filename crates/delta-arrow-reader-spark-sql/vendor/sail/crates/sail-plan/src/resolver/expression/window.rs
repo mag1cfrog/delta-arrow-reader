@@ -918,6 +918,11 @@ impl PlanResolver<'_> {
                     ));
                 }
                 let data_type = get_order_by_type()?;
+                let value = if data_type == DataType::Date32 {
+                    date_range_offset_days(value)?
+                } else {
+                    value
+                };
                 if value.is_null() {
                     let source_type = value.data_type();
                     let coerced_type =
@@ -1110,6 +1115,27 @@ fn spark_range_arithmetic_key_type(
                 | DataType::Decimal128(_, _)
         ))
     .then(|| key_type.clone()))
+}
+
+/// A DATE RANGE key moves by whole days: Spark adds a DAY interval offset to the DATE as its
+/// day count, as it does an INT offset, and rejects a sub-day offset (#947). DAR keeps no interval
+/// qualifier here, so a sub-day interval of whole days, such as 24 HOURS, counts its days too.
+fn date_range_offset_days(value: ScalarValue) -> PlanResult<ScalarValue> {
+    const MICROS_PER_DAY: i64 = 86_400_000_000;
+    let ScalarValue::DurationMicrosecond(Some(micros)) = value else {
+        return Ok(value);
+    };
+    if micros % MICROS_PER_DAY != 0 {
+        return Err(PlanError::invalid(
+            "[DATATYPE_MISMATCH.RANGE_FRAME_INVALID_TYPE] a DATE RANGE key requires an offset of whole days",
+        ));
+    }
+    let days = i32::try_from(micros / MICROS_PER_DAY).map_err(|_| {
+        PlanError::invalid(
+            "[DATATYPE_MISMATCH.RANGE_FRAME_INVALID_TYPE] a DATE RANGE offset exceeds the DATE range",
+        )
+    })?;
+    Ok(ScalarValue::Int32(Some(days)))
 }
 
 fn is_signed_integer_minimum(value: &ScalarValue) -> bool {
