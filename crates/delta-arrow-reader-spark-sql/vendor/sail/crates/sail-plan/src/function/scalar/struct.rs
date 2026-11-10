@@ -5,7 +5,7 @@ use datafusion_expr::{Expr, ScalarUDF, expr};
 use sail_function::scalar::struct_function::StructFunction;
 
 use crate::error::{PlanError, PlanResult};
-use crate::function::common::{ScalarFunction, ScalarFunctionInput};
+use crate::function::common::{ScalarFunction, ScalarFunctionInput, dictionary_string_values};
 
 fn r#struct(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let field_names: Vec<String> = input
@@ -25,9 +25,15 @@ fn r#struct(input: ScalarFunctionInput) -> PlanResult<Expr> {
             }
         })
         .collect::<PlanResult<_>>()?;
+    // A dictionary-encoded STRING field holds its STRING values, once the field is named.
+    let arguments = input
+        .arguments
+        .into_iter()
+        .map(|arg| dictionary_string_values(arg, input.function_context.schema))
+        .collect::<PlanResult<Vec<_>>>()?;
     Ok(Expr::ScalarFunction(expr::ScalarFunction {
         func: Arc::new(ScalarUDF::from(StructFunction::new(field_names))),
-        args: input.arguments,
+        args: arguments,
     }))
 }
 

@@ -15,7 +15,8 @@ use sail_sql_analyzer::expression::{
 use crate::error::{PlanError, PlanResult};
 use crate::formatter::SparkPlanFormatter;
 use crate::function::common::{
-    AggFunctionInput, FunctionContextInput, ScalarFunctionInput, unresolved_routine_error,
+    AggFunctionInput, FunctionContextInput, ScalarFunctionInput, dictionary_string_type,
+    unresolved_routine_error,
 };
 use crate::function::float_keys::normalize_spark_float_key;
 use crate::function::{
@@ -129,6 +130,15 @@ impl PlanResolver<'_> {
             if ignore_nulls.is_some() || filter.is_some() || order_by.is_some() {
                 return Err(PlanError::invalid("invalid scalar function clause"));
             }
+            let arguments =
+                if keeps_dictionary_strings(&canonical_function_name, &arguments, schema)? {
+                    arguments
+                } else {
+                    arguments
+                        .into_iter()
+                        .map(|arg| dictionary_string_argument(arg, schema))
+                        .collect()
+                };
             let input = ScalarFunctionInput {
                 arguments,
                 function_context: FunctionContextInput {
@@ -174,6 +184,11 @@ impl PlanResolver<'_> {
             } else {
                 arguments
             };
+            // An aggregate reads a dictionary-encoded STRING argument as its STRING values (#1242).
+            let arguments = arguments
+                .into_iter()
+                .map(|arg| dictionary_string_argument(arg, schema))
+                .collect();
             let input = AggFunctionInput {
                 arguments,
                 distinct: is_distinct,
@@ -544,5 +559,70 @@ fn extract_metadata_from_udf(
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect()),
         _ => Ok(vec![]),
+    }
+}
+
+/// The predicates over STRING values that keep a dictionary-encoded STRING argument, as Delta's
+/// provider gives a STRING partition column, so that the Delta scan can still prune by them.
+const STRING_PREDICATES: [&str; 21] = [
+    "=",
+    "==",
+    "!=",
+    "<>",
+    "<",
+    "<=",
+    ">",
+    ">=",
+    "<=>",
+    "equal_null",
+    "in",
+    "like",
+    "ilike",
+    "rlike",
+    "regexp",
+    "regexp_like",
+    "startswith",
+    "endswith",
+    "contains",
+    "isnull",
+    "isnotnull",
+];
+
+/// Whether a built-in function keeps its dictionary-encoded STRING arguments: a predicate whose
+/// arguments are all STRING values or NULL, or STRUCT, which names its fields after its bare
+/// column arguments and reads their values itself. Every other function reads such an argument as
+/// its STRING values, as Spark reads a STRING (#1242).
+fn keeps_dictionary_strings(
+    name: &str,
+    arguments: &[Expr],
+    schema: &DFSchemaRef,
+) -> PlanResult<bool> {
+    if name == "struct" {
+        return Ok(true);
+    }
+    if !STRING_PREDICATES.contains(&name) {
+        return Ok(false);
+    }
+    for argument in arguments {
+        let Ok(data_type) = argument.get_type(schema) else {
+            return Ok(false);
+        };
+        let data_type = dictionary_string_type(&data_type).unwrap_or(&data_type);
+        if !(data_type.is_string() || data_type.is_null()) {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+/// `arg` as its STRING values if it is a dictionary-encoded STRING; any other argument unchanged,
+/// also one without a type yet, such as a lambda or a wildcard.
+fn dictionary_string_argument(arg: Expr, schema: &DFSchemaRef) -> Expr {
+    match arg.get_type(schema) {
+        Ok(data_type) => match dictionary_string_type(&data_type) {
+            Some(values) => datafusion_expr::cast(arg, values.clone()),
+            None => arg,
+        },
+        Err(_) => arg,
     }
 }

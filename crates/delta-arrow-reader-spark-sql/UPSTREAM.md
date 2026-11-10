@@ -902,6 +902,16 @@ used Arrow's rules (#1237). The [encoded STRING cast
 references](tests/fixtures/encoded-string-temporal-casts/README.md) record the checks (#1218,
 #1237).
 
+Every built-in scalar, generator and aggregate function now reads a dictionary-encoded STRING
+argument as its STRING values, as Spark reads a STRING: the function resolver casts such an
+argument to its value type before the function plans it, so the function gives the values and
+result type of a plain STRING argument (#1242). Predicates whose arguments are all STRING values
+or NULL, comparisons, IN, LIKE and the NULL checks, keep the column itself, so that the Delta
+scan can still prune by a STRING partition column compared with a literal; STRUCT names its
+fields after the columns and then reads their values. The per-function conversions of #1218 and
+#1237 remain for CAST, CASE and internal calls. A test sweeps every built-in function over plain
+and dictionary-encoded STRING columns and requires the same results.
+
 TRY_TO_DATE plans TO_DATE with the parser's NULL-on-error mode in both ANSI modes, as Spark's
 does: a string it cannot parse, with or without a format, gives NULL, while an invalid pattern
 still fails. It was an unknown function. With a format, its result over a TIMESTAMP or DATE
