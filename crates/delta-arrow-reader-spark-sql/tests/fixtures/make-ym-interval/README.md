@@ -85,8 +85,7 @@ Five differences are retained, each at DAR's exact current result:
   defaulted months (4 records, each at all three stages);
 - #1166: MAKE_YM_INTERVAL of INT() over NOT NULL STRING values is NOT NULL, where Spark's is
   nullable, and IS NULL over it folds to false for a malformed value, where Spark gives true
-  outside ANSI and fails under ANSI. Over dictionary-encoded columns Arrow's cast also fails on
-  a malformed value in a row the filter removed (8 records);
+  outside ANSI and fails under ANSI (8 records);
 - #1151: TRY_ADD, TRY_SUBTRACT, TRY_MULTIPLY and TRY_DIVIDE over an overflowing
   MAKE_YM_INTERVAL fail with the overflow, and under ANSI TRY_ADD over a DOUBLE beyond INT fails
   with `CAST_OVERFLOW`, while optimizing a constant and while collecting rows otherwise, where
