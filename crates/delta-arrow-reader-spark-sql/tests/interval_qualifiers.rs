@@ -263,8 +263,11 @@ fn compare(case: &Value, observation: &Value) -> TestResult<Vec<&'static str>> {
     Ok(differences)
 }
 
-/// DAR's current rows for the RANGE offsets retained under #947: a running sum.
+/// DAR's current rows for a numeric RANGE offset over a TIMESTAMP key: a running sum.
 const CUMULATIVE_WINDOW_ROWS: [[&str; 2]; 4] = [["0", "2"], ["1", "5"], ["2", "5"], ["3", "10"]];
+/// DAR's current rows for a sub-day interval of whole days over a DATE key: the one-day frame,
+/// Spark's rows for `INTERVAL 1 DAY`.
+const ONE_DAY_WINDOW_ROWS: [[&str; 2]; 4] = [["0", "2"], ["1", "5"], ["2", "3"], ["3", "5"]];
 /// DAR's current error for each literal that Spark rejects at or past a storage limit,
 /// retained under #955. Spark fails at the same stage but names a condition that depends on
 /// the literal form, or raises a plain `java.lang.ArithmeticException` for multi-field
@@ -333,8 +336,12 @@ const NESTED_CAST_SOURCES: [(&str, &str); 4] = [
 /// Existing differences outside the qualifier-name contract, each with its owner.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum RetainedDifference {
-    /// #947: RANGE offsets are not typed against the ORDER BY key.
+    /// #1236: a numeric RANGE offset over a TIMESTAMP key gives a running sum, where Spark rejects
+    /// the offset type.
     RangeOffsetTyping,
+    /// #1236: a sub-day interval of whole days over a DATE key gives the one-day frame, where
+    /// Spark rejects the offset type (#947 types DAY offsets).
+    WholeDaySubDayOffset,
     /// #955: a literal at or past a storage limit fails without Spark's error condition.
     LimitErrorCondition,
     /// #979: ANSI division by a zero constant fails without Spark's `DIVIDE_BY_ZERO`.
@@ -352,10 +359,8 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
         "window" | "window_alias" if id.starts_with("range_numeric") => {
             Some(RetainedDifference::RangeOffsetTyping)
         }
-        "date_window"
-            if ["date_range_day", "date_range_hour", "date_range_day_hour"].contains(&id) =>
-        {
-            Some(RetainedDifference::RangeOffsetTyping)
+        "date_window" if ["date_range_hour", "date_range_day_hour"].contains(&id) => {
+            Some(RetainedDifference::WholeDaySubDayOffset)
         }
         "limit" if LIMIT_ERRORS.iter().any(|(limit, _)| id == *limit) => {
             Some(RetainedDifference::LimitErrorCondition)
@@ -380,6 +385,16 @@ fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResu
                 .ok_or("expected a record")?
                 .remove("spark_error_phase");
             current["expected"] = json!({"status": "ok", "rows": CUMULATIVE_WINDOW_ROWS});
+        }
+        RetainedDifference::WholeDaySubDayOffset => {
+            if case["expected"]["condition"] != "DATATYPE_MISMATCH.RANGE_FRAME_INVALID_TYPE" {
+                return Err(format!("expected Spark's RANGE_FRAME_INVALID_TYPE: {case}").into());
+            }
+            current
+                .as_object_mut()
+                .ok_or("expected a record")?
+                .remove("spark_error_phase");
+            current["expected"] = json!({"status": "ok", "rows": ONE_DAY_WINDOW_ROWS});
         }
         RetainedDifference::LimitErrorCondition => {
             let (_, error) = LIMIT_ERRORS
@@ -419,7 +434,8 @@ async fn interval_qualifiers_match_spark() -> TestResult {
     assert_eq!(
         retained.into_iter().collect::<Vec<_>>(),
         [
-            (RetainedDifference::RangeOffsetTyping, 10),
+            (RetainedDifference::RangeOffsetTyping, 4),
+            (RetainedDifference::WholeDaySubDayOffset, 4),
             (RetainedDifference::LimitErrorCondition, 54),
             (RetainedDifference::DivideByZeroCondition, 12),
             (RetainedDifference::NestedIntervalCast, 8),

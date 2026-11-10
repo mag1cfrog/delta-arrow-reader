@@ -433,6 +433,12 @@ fn new_spark_session(batch_size: usize) -> SessionContext {
     )
 }
 
+/// #947: a DAY interval offset over a DATE key gives Spark's frame, so these interval owner
+/// contexts compare with Spark. The other interval owners keep their frozen observations: a
+/// MONTH or YEAR offset, and, re-frozen under #1236, a sub-day offset of whole days, which gives
+/// the one-day frame where Spark rejects the offset type.
+const DAY_OFFSET_CONTEXTS: [&str; 3] = ["inputs_day", "empty_inputs_day", "null_inputs_day"];
+
 async fn replay_date_range_cases(original_consumers_only: bool) -> TestResult {
     let (manifest, records) = parse_date_range_fixture()?;
     let owner_controls: Vec<Value> = serde_json::from_str(include_str!(
@@ -474,11 +480,13 @@ async fn replay_date_range_cases(original_consumers_only: bool) -> TestResult {
                 });
                 let actual =
                     result.unwrap_or_else(|error| json!({"observer_error":error.to_string()}));
-                // Source tags describe the original capture; only interval owners remain pending.
+                // Source tags describe the original capture; only interval owners remain pending,
+                // except the DAY offsets #947 typed, which compare with Spark.
                 let source_ownership_tag = case["ownership"]
                     .as_str()
                     .ok_or("missing source ownership tag")?;
-                let remaining_owner = source_ownership_tag == "date_interval_owner";
+                let remaining_owner = source_ownership_tag == "date_interval_owner"
+                    && !DAY_OFFSET_CONTEXTS.contains(&case["id"].as_str().unwrap_or_default());
                 let observation = json!({
                     "corpus":source,"id":id,"ansi":ansi,"batch":batch_size,
                     "target_partitions":2,"provider_partitions":2,
@@ -515,11 +523,11 @@ async fn replay_date_range_cases(original_consumers_only: bool) -> TestResult {
     assert_eq!(completed.len(), expected_contexts);
     assert_eq!(
         primary_contexts,
-        if original_consumers_only { 108 } else { 1012 }
+        if original_consumers_only { 108 } else { 1024 }
     );
     assert_eq!(
         remaining_owner_contexts,
-        if original_consumers_only { 0 } else { 84 }
+        if original_consumers_only { 0 } else { 72 }
     );
     assert!(
         primary_differences.is_empty() && owner_differences.is_empty(),

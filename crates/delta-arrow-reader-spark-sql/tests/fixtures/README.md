@@ -4387,8 +4387,11 @@ matching order reuses it, while opposite DATE order requires a sort.
 observations: 28 explicit-NULL-offset contexts under #754 and 84 DATE interval
 contexts under #749/#947. This file and the source manifest's ownership labels
 and `primary_record_count` retain their capture-time meaning. The replay compares
-all 28 NULL-offset contexts strictly with Spark and requires the 84 active interval
-profiles to stay unchanged. The historical NULL native observations remain as
+all 28 NULL-offset contexts strictly with Spark. Since #947 types DAY offsets over a
+DATE key, the 12 DAY interval contexts compare with Spark too, and the other 72
+interval profiles must stay unchanged; the 16 with a sub-day interval of whole days
+were re-frozen by #947 with the one-day frame they now give, where Spark rejects the
+offset type (#1236). The historical NULL native observations remain as
 capture history, rather than current runtime expectations. Only raw row order for
 unordered SQL may be canonicalized; Fields, causes, phases and row multiplicity
 stay fixed.
