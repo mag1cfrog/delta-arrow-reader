@@ -562,19 +562,21 @@ Native DataFusion SQL keeps each column's own annotation. The
 [session-zone column references](tests/fixtures/session-zone-columns/README.md) cover
 these functions in UTC and Los Angeles over UTC, named-zone and fixed-offset annotations.
 
-DATE_TRUNC works on microseconds across the BIGINT range, like Spark's `truncTimestamp`
-(#1087). SECOND and finer units truncate the instant. MINUTE, HOUR and DAY truncate the local
-date-time in the session zone, like Java's `ZonedDateTime.truncatedTo`: a repeated local start
-keeps the instant's offset, and a skipped one moves forward by the skipped interval, so its
-result can follow a later instant's and no order is claimed. DataFusion truncated the UTC
-minute, which is seconds off where the offset has seconds, such as Los Angeles local mean time
-(-07:52:58) before 1883. WEEK, MONTH, QUARTER and YEAR truncate the local date as TRUNC does
-and take the start of that day in the zone, like `LocalDate.atStartOfDay`. DataFusion worked in
-nanoseconds, so it failed outside 1677 to 2262, as did MONTHS_BETWEEN, whose start of the local
-day is now Spark's `atStartOfDay`, and WEEKOFYEAR, which now reads the ISO week with
-`date_part` where `to_char` formatted nanoseconds. Zones parse as in Arrow, except that `EST`,
-`MST` and `HST` are Java's fixed offsets (#1029), and instants beyond Chrono's years take
-offsets from a nearer 400-year cycle, without DST after 2099 (#1052). The [local truncation
+DATE_TRUNC of a TIMESTAMP to a constant unit works on microseconds across the BIGINT range,
+like Spark's `truncTimestamp` (#1087); a DATE, TIMESTAMP_NTZ or STRING argument, or a unit
+column, keeps DataFusion's nanosecond truncation (#1236). SECOND and finer units truncate the
+instant. MINUTE, HOUR and DAY truncate the local date-time in the session zone, like Java's
+`ZonedDateTime.truncatedTo`: a repeated local start keeps the instant's offset, and a skipped
+one moves forward by the skipped interval, so its result can follow a later instant's and no
+order is claimed. DataFusion truncated the UTC minute, which is seconds off where the offset
+has seconds, such as Los Angeles local mean time (-07:52:58) before 1883. WEEK, MONTH, QUARTER
+and YEAR truncate the local date as TRUNC does and take the start of that day in the zone, like
+`LocalDate.atStartOfDay`. DataFusion worked in nanoseconds, so it failed outside 1677 to 2262,
+as did MONTHS_BETWEEN, whose start of the local day is now Spark's `atStartOfDay`, and
+WEEKOFYEAR, which now reads the ISO week with `date_part` where `to_char` formatted
+nanoseconds. Zones parse as in Arrow, except that `EST`, `MST` and `HST` are Java's fixed
+offsets (#1029), and instants beyond Chrono's years take offsets from a nearer 400-year cycle,
+without DST after 2099 (#1052). The [local truncation
 references](tests/fixtures/local-truncation/README.md) and the [TIMESTAMP calendar range
 references](tests/fixtures/timestamp-calendar-range/README.md) record the checks.
 

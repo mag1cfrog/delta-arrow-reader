@@ -119,7 +119,7 @@ pub(crate) enum SessionZone {
 }
 
 impl SessionZone {
-    pub(crate) fn parse(zone: &str) -> Option<Self> {
+    fn parse(zone: &str) -> Option<Self> {
         if let Ok(region) = Tz::from_str(zone) {
             return Some(Self::Region(region));
         }

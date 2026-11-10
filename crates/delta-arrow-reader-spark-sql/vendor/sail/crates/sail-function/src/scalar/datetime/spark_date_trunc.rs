@@ -26,9 +26,10 @@ enum TruncLevel {
     Microsecond,
     Millisecond,
     Second,
-    /// Java's `ZonedDateTime.truncatedTo` to a unit of this many microseconds: MINUTE, HOUR or
-    /// DAY.
-    Local(i128),
+    /// Java's `ZonedDateTime.truncatedTo` to MINUTE, HOUR or DAY, a unit this long.
+    Local {
+        unit_micros: i128,
+    },
     /// The first day of the local date's week, month, quarter or year, at its start.
     Date(TruncUnit),
 }
@@ -39,9 +40,15 @@ impl TruncLevel {
             "microsecond" => Self::Microsecond,
             "millisecond" => Self::Millisecond,
             "second" => Self::Second,
-            "minute" => Self::Local(MICROS_PER_MINUTE),
-            "hour" => Self::Local(MICROS_PER_HOUR),
-            "day" => Self::Local(i128::from(MICROS_PER_DAY)),
+            "minute" => Self::Local {
+                unit_micros: MICROS_PER_MINUTE,
+            },
+            "hour" => Self::Local {
+                unit_micros: MICROS_PER_HOUR,
+            },
+            "day" => Self::Local {
+                unit_micros: i128::from(MICROS_PER_DAY),
+            },
             other => Self::Date(TruncUnit::parse(other)?),
         })
     }
@@ -135,16 +142,23 @@ fn truncate_in_zone(
     level: TruncLevel,
     zone: &Arc<str>,
 ) -> Result<ColumnarValue> {
-    let (Some(parsed), Some(session)) = (TimestampZone::parse(zone), SessionZone::parse(zone))
-    else {
+    let Some(parsed) = TimestampZone::parse(zone) else {
         return exec_err!("invalid time zone {zone}");
+    };
+    // The same zone for the start of the day, with Java's fixed offsets for `EST`, `MST` and
+    // `HST`.
+    let session = match &parsed.kind {
+        ZoneKind::Region(region) => SessionZone::Region(*region),
+        ZoneKind::Fixed(offset) => SessionZone::Fixed(*offset),
     };
     let truncate = |micros: i64| {
         let truncated = match level {
             TruncLevel::Microsecond => Some(micros),
             TruncLevel::Millisecond => Some(micros - micros.rem_euclid(1_000)),
             TruncLevel::Second => Some(micros - micros.rem_euclid(1_000_000)),
-            TruncLevel::Local(unit) => truncated_to_local_unit(micros, &parsed, unit),
+            TruncLevel::Local { unit_micros } => {
+                truncated_to_local_unit(micros, &parsed, unit_micros)
+            }
             TruncLevel::Date(unit) => {
                 let day =
                     local_micros(micros, &parsed.arrow).div_euclid(i128::from(MICROS_PER_DAY));
@@ -182,41 +196,42 @@ fn truncate_in_zone(
     }
 }
 
-/// The instant Java's `truncatedTo` gives for `micros` with a unit of `unit` microseconds: the
+/// The instant Java's `truncatedTo` gives for `micros` with a unit `unit_micros` long: the
 /// start of its local minute, hour or day, keeping the instant's offset when that start repeats.
 /// When an offset change skips the start, the result moves forward by the skipped interval and
 /// can be later than `micros`. `None` beyond the BIGINT range.
-fn truncated_to_local_unit(micros: i64, zone: &TimestampZone, unit: i128) -> Option<i64> {
+fn truncated_to_local_unit(micros: i64, zone: &TimestampZone, unit_micros: i128) -> Option<i64> {
     let region = match &zone.kind {
         ZoneKind::Fixed(offset) => {
             let offset = i128::from(offset.local_minus_utc()) * 1_000_000;
             let local = i128::from(micros) + offset;
-            return i64::try_from(local.div_euclid(unit) * unit - offset).ok();
+            return i64::try_from(local.div_euclid(unit_micros) * unit_micros - offset).ok();
         }
         ZoneKind::Region(region) => region,
     };
-    match region_unit_start(micros, region, unit) {
+    match region_unit_start(micros, region, unit_micros) {
         Some(truncated) => Some(truncated),
         // Beyond the date library's years, for the instant or its local date-time, the offset
         // comes from a nearer 400-year cycle and does not change within the unit.
         None => {
             let local = local_micros(micros, &zone.arrow);
             let offset = local - i128::from(micros);
-            i64::try_from(local.div_euclid(unit) * unit - offset).ok()
+            i64::try_from(local.div_euclid(unit_micros) * unit_micros - offset).ok()
         }
     }
 }
 
 /// [`truncated_to_local_unit`] in a region, or `None` when the date library cannot represent
 /// the instant or its local date-time.
-fn region_unit_start(micros: i64, region: &Tz, unit: i128) -> Option<i64> {
+fn region_unit_start(micros: i64, region: &Tz, unit_micros: i128) -> Option<i64> {
     let utc = DateTime::from_timestamp_micros(micros)?.naive_utc();
     let offset = region.offset_from_utc_datetime(&utc).fix();
     let local = utc.checked_add_signed(TimeDelta::seconds(i64::from(offset.local_minus_utc())))?;
     let local_micros = i128::from(local.and_utc().timestamp_micros());
-    let start =
-        DateTime::from_timestamp_micros(i64::try_from(local_micros.div_euclid(unit) * unit).ok()?)?
-            .naive_utc();
+    let start = DateTime::from_timestamp_micros(
+        i64::try_from(local_micros.div_euclid(unit_micros) * unit_micros).ok()?,
+    )?
+    .naive_utc();
     let truncated = match region.from_local_datetime(&start) {
         LocalResult::Single(start) => start,
         LocalResult::Ambiguous(earlier, later) => {
@@ -264,6 +279,27 @@ mod tests {
             truncate("EST", -5_350_361_103_210_877),
             Some(-5_350_361_160_000_000)
         );
+    }
+
+    #[test]
+    fn date_units_start_the_day_at_java_fixed_offsets() -> Result<()> {
+        // Spark 4.2.0, session MST: 1967-07-15 12:00 UTC truncated to its month starts at
+        // 1967-07-01 00:00 at Java's -07:00, 07:00 UTC; Phoenix's 1967 DST would give 06:00 UTC.
+        let zone: Arc<str> = Arc::from("MST");
+        let truncated = truncate_in_zone(
+            &ColumnarValue::Scalar(ScalarValue::TimestampMicrosecond(
+                Some(-77_803_200_000_000),
+                Some(Arc::clone(&zone)),
+            )),
+            TruncLevel::Date(TruncUnit::Month),
+            &zone,
+        )?;
+        let ColumnarValue::Scalar(ScalarValue::TimestampMicrosecond(truncated, _)) = truncated
+        else {
+            return internal_err!("expected a TIMESTAMP");
+        };
+        assert_eq!(truncated, Some(-79_030_800_000_000));
+        Ok(())
     }
 
     #[test]
