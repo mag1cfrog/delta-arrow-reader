@@ -113,7 +113,7 @@ impl SparkDateToTimestamp {
 }
 
 /// A session zone: a region, with DST changes, or a fixed offset such as `+05:30`.
-enum SessionZone {
+pub(crate) enum SessionZone {
     Region(Tz),
     Fixed(FixedOffset),
 }
@@ -138,7 +138,7 @@ impl SessionZone {
 }
 
 /// The first instant of `day` in `zone`, beyond the BIGINT range for the extreme days.
-fn start_of_day(day: i32, zone: &SessionZone) -> Option<i128> {
+pub(crate) fn start_of_day(day: i32, zone: &SessionZone) -> Option<i128> {
     match zone {
         SessionZone::Fixed(offset) => Some(
             i128::from(day) * MICROS_PER_DAY - i128::from(offset.local_minus_utc()) * 1_000_000,

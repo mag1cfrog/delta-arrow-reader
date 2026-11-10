@@ -1822,9 +1822,20 @@ fn months_between(input: ScalarFunctionInput) -> PlanResult<Expr> {
             .eq(cast(dt, DataType::Date32))
     };
 
+    // The start of the local day, as Spark's `daysToMicros(microsToDays(micros, zone), zone)`,
+    // Java's `LocalDate.atStartOfDay`, without DataFusion's DAY truncation, which worked in
+    // nanoseconds and failed outside 1677 to 2262 (#1087).
+    let day_start = |dt: Expr| match dt.get_type(function_context.schema) {
+        Ok(DataType::Timestamp(TimeUnit::Microsecond, Some(zone))) => {
+            cast_local_timestamp_expr_to_ltz(cast(dt, DataType::Date32), &DataType::Date32, &zone)
+        }
+        Ok(DataType::Timestamp(unit, None)) => {
+            cast(cast(dt, DataType::Date32), DataType::Timestamp(unit, None))
+        }
+        _ => expr_fn::date_trunc(lit("DAY"), dt),
+    };
     let seconds_in_day = |dt: Expr, tu: TimeUnit| {
-        (cast(dt.clone(), DataType::Int64)
-            - cast(expr_fn::date_trunc(lit("DAY"), dt), DataType::Int64))
+        (cast(dt.clone(), DataType::Int64) - cast(day_start(dt), DataType::Int64))
             / lit(time_unit_to_multiplier(&tu))
     };
 
@@ -2270,10 +2281,9 @@ pub(super) fn list_built_in_datetime_functions() -> Vec<(&'static str, ScalarFun
         ),
         (
             "weekofyear",
-            F::custom(|input| {
-                let date = implicit_date_argument(input)?;
-                Ok(cast(expr_fn::to_char(date, lit("%V")), DataType::Int32))
-            }),
+            // The ISO week, read in microseconds: `to_char` formatted a TIMESTAMP in nanoseconds,
+            // which failed outside 1677 to 2262 (#1087).
+            F::custom(|input| Ok(integer_part(implicit_date_argument(input)?, "WEEK"))),
         ),
         ("window", F::custom(window)),
         ("window_time", F::custom(window_time)),

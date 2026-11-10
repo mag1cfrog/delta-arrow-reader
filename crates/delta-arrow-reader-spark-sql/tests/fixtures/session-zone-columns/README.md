@@ -61,8 +61,9 @@ each count:
 - #1029: 12 records in `Z`, `PST` and `GMT+08:00` sessions. Arrow cannot parse these
   zones, so a column keeps its own zone and gives the result of the same record in a
   session in that zone.
-- #1087: 36 DATE_TRUNC, MONTHS_BETWEEN and WEEKOFYEAR records fail while collecting rows,
-  because 0001-01-02 and 9999-12-31 lie outside Arrow's nanosecond range.
+- #1052: 2 DATE_TRUNC to QUARTER records in Los Angeles, whose 9999-12-31 row starts its
+  quarter at 9999-10-01 00:00, which Java reads in PDT and the date library, whose rules end
+  in 2099, in PST, an hour later.
 - #1090: 4 records of HOUR over GREATEST are nullable where Spark declares them required.
 - #1094: 4 TO_JSON records print microseconds where Spark prints milliseconds, and the
   local mean time offset without its seconds.
