@@ -673,8 +673,8 @@ They were NOT NULL for a NOT NULL input (#1003). TRY_CAST of a DATE to TIMESTAMP
 fail and keeps its input's nullability. Values are unchanged. Still open: Spark's
 optimizer rewrites a column compared with a literal without the cast, NOT NULL once optimized,
 which DAR does not do (#1197); a DATE in an IN list of TIMESTAMP_NTZ values keeps
-DataFusion's coercion (#1191); a constant over an input proven empty stays nullable after
-optimization (#1190); and EXTRACT of DAYOFWEEK, DOW_ISO and YEAROFWEEK is unsupported (#1116).
+DataFusion's coercion (#1191); and a constant over an input proven empty stays nullable after
+optimization (#1190). EXTRACT of DAYOFWEEK, DOW_ISO and YEAROFWEEK works since #1116.
 The [cast references](tests/fixtures/date-ntz-casts/README.md) record the checks.
 
 TRUNC uses a local function, `SparkTruncDate`, like Spark's `TruncDate`. It truncates to Spark's
@@ -821,9 +821,20 @@ DAYOFWEEK cast a TIMESTAMP_NTZ or NULL argument to DATE like Spark, and convert 
 Spark's STRING-to-DATE rules. Spaces, short months and days and years outside Arrow's
 nanosecond range now parse. An invalid string fails with `CAST_INVALID_INPUT` under ANSI or
 gives NULL; other temporal functions keep their STRING handling (#942). A NULL literal gives
-NULL, where it failed. Day-of-week fields of EXTRACT and DATE_PART, DAYNAME nullability and
-rejected argument types still differ (#1116). The
-[WEEKDAY references](tests/fixtures/weekday/README.md) record the checks.
+NULL, where it failed. DAYNAME nullability and rejected argument types still differ (#1236).
+The [WEEKDAY references](tests/fixtures/weekday/README.md) record the checks.
+
+EXTRACT, DATE_PART and DATEPART read Spark's day-of-week and week-year fields (#1116).
+DAYOFWEEK and DOW number Sunday 1 through Saturday 7, where DOW gave DataFusion's Sunday 0, and
+DAYOFWEEK_ISO, DOW_ISO and YEAROFWEEK, which failed as unsupported date parts, give
+DataFusion's ISO day of week, Monday 1 through Sunday 7, and its ISO week-numbering year. A
+date field reads a STRING, TIMESTAMP_NTZ or NULL source as the implicit DATE argument of
+WEEKDAY does: a STRING with Spark's STRING-to-DATE rules, where DataFusion read it as a
+nanosecond TIMESTAMP and failed beyond those years, and NULL as a NULL DATE, where it failed.
+Time fields of a STRING keep DataFusion's reading (#942). The fields DAR maps match their names
+exactly, ignoring case, as in Spark; other names go to DataFusion, which also accepts some
+Spark rejects, such as `isodow` or a quoted name (#1236). The [day-of-week field
+references](tests/fixtures/day-of-week-fields/README.md) record the checks.
 
 TIMESTAMP_SECONDS, TIMESTAMP_MILLIS and TIMESTAMP_MICROS annotate their result with the
 session time zone like any Spark TIMESTAMP, so HOUR, DATE_FORMAT and casts over it read the

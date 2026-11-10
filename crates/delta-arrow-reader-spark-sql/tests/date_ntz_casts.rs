@@ -58,20 +58,10 @@ enum RetainedDifference {
     /// #1191: a DATE in an IN list of TIMESTAMP_NTZ values uses DataFusion's coercion and is NOT
     /// NULL, where Spark's cast makes it nullable.
     InListNullability,
-    /// #1116: EXTRACT of DAYOFWEEK, DOW_ISO and YEAROFWEEK fails while collecting rows as an
-    /// unsupported date part.
-    UnsupportedExtractField,
     /// #1197: a column compared with a literal through the cast stays nullable after
     /// optimization, where Spark's optimizer rewrites the comparison without the cast.
     ComparisonWithLiteral,
 }
-
-/// The EXTRACT fields DAR's date part rejects, by record suffix.
-const UNSUPPORTED_EXTRACT_FIELDS: [(&str, &str); 3] = [
-    ("_extract_dayofweek", "DAYOFWEEK"),
-    ("_extract_dow_iso", "DOW_ISO"),
-    ("_extract_yearofweek", "YEAROFWEEK"),
-];
 
 fn retained_difference(case: &Value) -> Option<RetainedDifference> {
     let id = case["id"].as_str()?;
@@ -80,12 +70,6 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
         "required_date_in_timestamp_ntz" => RetainedDifference::InListNullability,
         "required_date_less_than_timestamp_ntz_literal"
         | "required_cast_to_date_equals_date_literal" => RetainedDifference::ComparisonWithLiteral,
-        id if UNSUPPORTED_EXTRACT_FIELDS
-            .iter()
-            .any(|(suffix, _)| id.ends_with(suffix)) =>
-        {
-            RetainedDifference::UnsupportedExtractField
-        }
         _ => return None,
     })
 }
@@ -105,7 +89,6 @@ fn set_nullable(current: &mut Value, stages: &[&str], nullable: bool) -> TestRes
 /// DAR's current result for a retained record.
 fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResult<Value> {
     let mut current = case.clone();
-    let id = case["id"].as_str().ok_or("missing id")?;
     match difference {
         RetainedDifference::EmptyInputNullability => {
             if case["schema_stages"]["optimized"]["fields"][0]["nullable"] != false {
@@ -118,22 +101,6 @@ fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResu
                 return Err(format!("expected Spark's nullable IN list: {case}").into());
             }
             set_nullable(&mut current, &["analyzed", "optimized", "executed"], false)?;
-        }
-        RetainedDifference::UnsupportedExtractField => {
-            if case["expected"]["status"] != "ok" {
-                return Err(format!("expected Spark's field values: {case}").into());
-            }
-            let field = UNSUPPORTED_EXTRACT_FIELDS
-                .iter()
-                .find_map(|(suffix, field)| id.ends_with(suffix).then_some(*field))
-                .ok_or("missing field")?;
-            current["expected"] = json!({"status": "error",
-                "dar_message": format!("Date part '{field}' not supported")});
-            current["spark_error_phase"] = json!("collect");
-            current["schema_stages"]
-                .as_object_mut()
-                .ok_or("missing schema stages")?
-                .remove("executed");
         }
         RetainedDifference::ComparisonWithLiteral => {
             let nullable = |stage: &str| {
@@ -482,7 +449,6 @@ async fn date_ntz_casts_match_spark() -> TestResult {
         std::collections::BTreeMap::from([
             (RetainedDifference::EmptyInputNullability, 4),
             (RetainedDifference::InListNullability, 4),
-            (RetainedDifference::UnsupportedExtractField, 36),
             (RetainedDifference::ComparisonWithLiteral, 8),
         ])
     );

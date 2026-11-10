@@ -345,18 +345,26 @@ fn integer_part(expr: Expr, part: &str) -> Expr {
     )
 }
 
-/// The implicit DATE argument of WEEKDAY, DAYOFWEEK and WEEKOFYEAR. Spark casts a STRING, also
-/// dictionary-encoded, TIMESTAMP_NTZ or NULL argument to DATE, with its STRING-to-DATE rules for
-/// a STRING, and a nullable cast for a TIMESTAMP_NTZ. DATE passes through, and a TIMESTAMP is read
-/// in its annotated zone, the session zone. Other types pass through unchecked, although Spark
-/// rejects them (#1116).
+/// The implicit DATE argument of WEEKDAY, DAYOFWEEK and WEEKOFYEAR.
 fn implicit_date_argument(input: ScalarFunctionInput) -> PlanResult<Expr> {
-    let argument = dictionary_string_values(input.arguments.one()?, input.function_context.schema)?;
-    Ok(match argument.get_type(input.function_context.schema)? {
-        DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => ScalarUDF::from(
-            SparkDate::new(!input.function_context.plan_config.ansi_mode),
-        )
-        .call(vec![argument]),
+    spark_date_argument(
+        input.arguments.one()?,
+        input.function_context.schema,
+        input.function_context.plan_config.ansi_mode,
+    )
+}
+
+/// `argument` as Spark's implicit DATE argument. Spark casts a STRING, also dictionary-encoded,
+/// TIMESTAMP_NTZ or NULL argument to DATE, with its STRING-to-DATE rules for a STRING, which fail
+/// under ANSI and give NULL otherwise, and a nullable cast for a TIMESTAMP_NTZ. DATE passes
+/// through, and a TIMESTAMP is read in its annotated zone, the session zone. Other types pass
+/// through unchecked, although Spark rejects them (#1236).
+fn spark_date_argument(argument: Expr, schema: &DFSchemaRef, ansi_mode: bool) -> PlanResult<Expr> {
+    let argument = dictionary_string_values(argument, schema)?;
+    Ok(match argument.get_type(schema)? {
+        DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => {
+            ScalarUDF::from(SparkDate::new(!ansi_mode)).call(vec![argument])
+        }
         source @ (DataType::Timestamp(_, None) | DataType::Null) => {
             cast_with_date_ntz_nullability(argument, &source, &DataType::Date32)
         }
@@ -1686,7 +1694,8 @@ fn date_part(part: Expr, date: Expr) -> Expr {
 }
 
 /// The fields Spark's EXTRACT, DATE_PART and DATEPART read from a DATE, to which it casts a
-/// TIMESTAMP_NTZ; the other fields read the TIMESTAMP_NTZ itself.
+/// STRING, TIMESTAMP_NTZ or NULL source as for any implicit DATE argument; the other fields read
+/// the source itself.
 const DATE_FIELDS: [&str; 23] = [
     "YEAR",
     "Y",
@@ -1713,27 +1722,53 @@ const DATE_FIELDS: [&str; 23] = [
     "DOY",
 ];
 
-/// EXTRACT, DATE_PART and DATEPART: a date field of a TIMESTAMP_NTZ reads it cast to DATE, a
-/// nullable cast, as Spark's does.
+/// The DataFusion date part that gives one of Spark's day-of-week or week-year fields, and the
+/// number to add to it: DAYOFWEEK numbers Sunday 1, where DataFusion's `dow` numbers it 0;
+/// DAYOFWEEK_ISO numbers Monday 1, as `isodow` does; YEAROFWEEK is the ISO week-numbering year,
+/// `isoyear` (#1116).
+fn datafusion_week_part(field: &str) -> Option<(&'static str, i32)> {
+    match field {
+        "DAYOFWEEK" | "DOW" => Some(("dow", 1)),
+        "DAYOFWEEK_ISO" | "DOW_ISO" => Some(("isodow", 0)),
+        "YEAROFWEEK" => Some(("isoyear", 0)),
+        _ => None,
+    }
+}
+
+/// EXTRACT, DATE_PART and DATEPART. Spark matches the field name exactly, ignoring case, without
+/// trimming it.
 fn extract_part(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let schema = input.function_context.schema;
+    let ansi_mode = input.function_context.plan_config.ansi_mode;
     let (part, source) = input.arguments.two()?;
-    let date_field = matches!(
-        &part,
+    let field = match &part {
         Expr::Literal(
             ScalarValue::Utf8(Some(field))
-                | ScalarValue::LargeUtf8(Some(field))
-                | ScalarValue::Utf8View(Some(field)),
+            | ScalarValue::LargeUtf8(Some(field))
+            | ScalarValue::Utf8View(Some(field)),
             _,
-        ) if DATE_FIELDS.contains(&field.trim().to_ascii_uppercase().as_str())
-    );
-    let source = match source.get_type(schema)? {
-        source_type @ DataType::Timestamp(_, None) if date_field => {
-            cast_with_date_ntz_nullability(source, &source_type, &DataType::Date32)
-        }
-        _ => source,
+        ) => Some(field.to_ascii_uppercase()),
+        _ => None,
     };
-    Ok(date_part(part, source))
+    let date_field = field
+        .as_deref()
+        .is_some_and(|field| DATE_FIELDS.contains(&field));
+    let source = if date_field {
+        spark_date_argument(source, schema, ansi_mode)?
+    } else {
+        source
+    };
+    Ok(match field.as_deref().and_then(datafusion_week_part) {
+        Some((week_part, offset)) => {
+            let value = date_part(lit(week_part), source);
+            if offset == 0 {
+                value
+            } else {
+                value + lit(offset)
+            }
+        }
+        None => date_part(part, source),
+    })
 }
 
 /// Spark's MONTHS_BETWEEN, whose nullability follows from its parts at every stage: NOT NULL for

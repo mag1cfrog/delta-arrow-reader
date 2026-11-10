@@ -46,11 +46,9 @@ internal rows, collected through the Dataset API. `ConvertToLocalRelation` is ex
 batch sizes 1 and 32. A failure must occur at Spark's stage with Spark's condition. A second
 test runs the DATE to TIMESTAMP_NTZ cast, TO_TIMESTAMP_NTZ, TO_TIMESTAMP and TRY_TO_TIMESTAMP
 column records over Date64 copies of the DATE columns, which Spark lacks, and requires Spark's
-results. Four differences are retained:
+results. Three differences are retained:
 - #1190: the constant cast over `WHERE false` stays nullable after optimization (4 records);
 - #1191: the DATE in an IN list of TIMESTAMP_NTZ values is NOT NULL (4 records);
-- #1116: EXTRACT of DAYOFWEEK, DOW_ISO and YEAROFWEEK fails while collecting rows as an
-  unsupported date part, pinned to text DAR's error must contain (36 records);
 - #1197: the comparisons with a literal stay nullable after optimization (8 records).
 
 Recapture from the crate root:
