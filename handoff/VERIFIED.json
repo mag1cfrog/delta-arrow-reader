@@ -1,0 +1,14 @@
+{
+  "verified_at_utc": "2026-11-10T00:36:20.304210+00:00",
+  "remote_branch_count": 90,
+  "all_remote_heads_equal_saved_source": true,
+  "issue_implementation_entry_branches": 15,
+  "issue_baseline_entry_branches": 1,
+  "stash_branches_exactly_include_tracked_and_untracked_files": 5,
+  "dirty_worktree_source_branches": 3,
+  "original_worktrees_and_stashes_unchanged": true,
+  "new_remote_branches_this_correction": 87,
+  "new_implementation_or_merges": false,
+  "new_tests_run": false,
+  "validation_meaning": "Git content/ref preservation only; no new behavior acceptance."
+}

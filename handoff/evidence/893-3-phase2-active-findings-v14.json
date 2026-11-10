@@ -1,0 +1,25 @@
+[
+  {
+    "id": "C1",
+    "severity": "P2",
+    "category": "correctness-required-error-order",
+    "head": "63da7acb50c237fb878667e3846f35bdd8d2e532",
+    "path": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/expression_errors.rs",
+    "line": 4302,
+    "related_lines": [
+      4299,
+      4303,
+      4313,
+      4316,
+      4317
+    ],
+    "title": "Keep eager arguments in their original input order",
+    "trigger": "Register an immutable NoFold ScalarUDFImpl with short_circuits=true, no native NULL metadata, and conditional_arguments(args)=Some((vec![&args[1], &args[0]], vec![])). This is a disjoint total partition satisfying the SDK docs. Use SELECT reverse_eager_arguments(1 DIV d, CAST(txt AS INT)) AS r FROM VALUES(0,'bad') AS t(d,txt), in Spark ANSI mode.",
+    "expected": "Both arguments are required. The native physical evaluator visits args[0] before args[1], so DivideByZero is the first error, before the invalid string cast; the NoFold owner kernel is not invoked.",
+    "observed_source_trace": "The local preparation branch prechecks the scalar call, sees permission=false, and enters check_expr with the admitted batch. The short_circuits fallback iterates eager_arguments as supplied (line 4302), so it checks args[1] first and propagates CAST_INVALID_INPUT before ever visiting 1 DIV d. Physical ScalarFunctionExpr::evaluate_legacy_arguments evaluates self.args.first() then self.args[1..] in original order (scalar_function.rs:386-392,441-446). The same supplied-list ordering appears in the higher-order fallback.",
+    "contract_source": "ScalarUDFImpl::conditional_arguments docs udf.rs:930-946 define eager/lazy membership, disjointness and total coverage, without an ordering constraint. Existing native physical argument evaluation and task-required first-error preservation establish original relative order.",
+    "smallest_fix": "Treat the returned vectors as a partition of original argument positions and check eager arguments in function.args order; retain false/value-suppressed traversal for conditional arguments. Apply the same relative-order rule to the paired higher-order branch.",
+    "verification": "Confirmed by source trace; this reviewer did not run an engine. Root should run the bounded valid Some-partition local-row scenario on base and final, recording full stages, Fields, counters and error chain.",
+    "assertion_gap": "Existing Some partitions are in input order; sdk4 exercises None. The current suite does not distinguish this fault."
+  }
+]

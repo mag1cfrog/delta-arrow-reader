@@ -1,5 +1,7 @@
 # Stopped Spark SQL work
 
+For issue-specific source branches and continuation notes, start with [HANDOFF.md](HANDOFF.md). The branches were published directly after the initial backup.
+
 Stopped at the user's request on 2026-11-09. The goal was cleared. Further implementation, repair, integration and merging require a new request.
 
 The unfinished #893 implementation is preserved at `63da7acb50c237fb878667e3846f35bdd8d2e532` on `fix/spark-udf-folding-opt-outs`. It has not received final acceptance. The remaining review findings are an eager-argument error-order issue that needs reproduction and a new `clippy::unnecessary_lazy_evaluations` diagnostic. Integration with later staging changes is also unfinished. `STOPPED.json` records the checks that completed and the remaining scope.
