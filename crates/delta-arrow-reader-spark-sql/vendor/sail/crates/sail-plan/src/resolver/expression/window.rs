@@ -22,9 +22,9 @@ use sail_function::scalar::spark_cast_numeric_to_integer::SparkCastNumericToInte
 use crate::error::{PlanError, PlanResult};
 use crate::formatter::SparkPlanFormatter;
 use crate::function::common::{
-    FunctionContextInput, WinFunctionInput, drop_inherited_column_metadata,
-    reject_calendar_interval_partition_key, reject_calendar_interval_sort_key,
-    without_inherited_column_metadata,
+    FunctionContextInput, WinFunctionInput, dictionary_string_argument,
+    drop_inherited_column_metadata, reject_calendar_interval_partition_key,
+    reject_calendar_interval_sort_key, without_inherited_column_metadata,
 };
 use crate::function::{get_built_in_window_function, require_deterministic_scalar_expression};
 use crate::resolver::PlanResolver;
@@ -174,9 +174,15 @@ impl PlanResolver<'_> {
                     ));
                 }
                 let canonical_function_name = function_name.to_ascii_lowercase();
-                let (argument_display_names, mut arguments) = self
+                let (argument_display_names, arguments) = self
                     .resolve_expression_arguments(arguments, schema, state)
                     .await?;
+                // A window function reads a dictionary-encoded STRING argument as its STRING
+                // values (#1242).
+                let mut arguments = arguments
+                    .into_iter()
+                    .map(|arg| dictionary_string_argument(arg, schema))
+                    .collect::<Vec<_>>();
                 let function = get_built_in_window_function(&canonical_function_name)?;
                 let required_units = match canonical_function_name.as_str() {
                     "row_number" | "rank" | "dense_rank" | "percent_rank" | "ntile" => {

@@ -55,8 +55,6 @@ enum RetainedDifference {
     /// #1166: DAR plans INT() of a STRING as Arrow's cast, declared NOT NULL for a NOT NULL
     /// STRING where Spark's cast is nullable, so MAKE_YM_INTERVAL over it is NOT NULL too. IS
     /// NULL over it folds to false, where Spark gives true outside ANSI and fails under ANSI.
-    /// Over a dictionary-encoded column, Arrow's cast converts every dictionary value, so a
-    /// malformed value fails even in rows the filter removed.
     IntFunctionCast,
     /// #1151: TRY_ADD, TRY_SUBTRACT, TRY_MULTIPLY and TRY_DIVIDE over an overflowing
     /// MAKE_YM_INTERVAL fail with its overflow, and under ANSI TRY_ADD over a failing argument
@@ -177,13 +175,9 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
     }
 }
 
-/// Replace only the retained part of Spark's expectation with DAR's current result, over
-/// dictionary-encoded STRING columns if `dictionary`.
-fn current_expectation(
-    case: &Value,
-    difference: RetainedDifference,
-    dictionary: bool,
-) -> TestResult<Value> {
+/// Replace only the retained part of Spark's expectation with DAR's current result, over plain and
+/// dictionary-encoded STRING columns alike.
+fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResult<Value> {
     let mut current = case.clone();
     let id = case["id"].as_str().ok_or("missing record id")?;
     match difference {
@@ -211,16 +205,6 @@ fn current_expectation(
                     return Err(format!("expected Spark's nullable interval: {case}").into());
                 }
                 field["nullable"] = json!(false);
-            }
-            if dictionary {
-                // The rows kept, 3 and -3, parse; ' 7 ' is in a removed row.
-                current["schema_stages"]
-                    .as_object_mut()
-                    .ok_or("missing schema stages")?
-                    .remove("executed");
-                current["expected"] = json!({"status": "error", "dar_message":
-                    "Arrow error: Cast error: Cannot cast string ' 7 ' to value of Int32 type"});
-                current["spark_error_phase"] = json!("collect");
             }
         }
         RetainedDifference::IntFunctionCast => {
@@ -641,7 +625,7 @@ async fn make_ym_interval_matches_spark() -> TestResult {
         register_inputs(&session, &records[0], batch_size, dictionary)?;
         for case in &records[1..] {
             let expectation = match retained_difference(case) {
-                Some(difference) => current_expectation(case, difference, dictionary)?,
+                Some(difference) => current_expectation(case, difference)?,
                 None => case.clone(),
             };
             let observation = observe(&session, case).await;
