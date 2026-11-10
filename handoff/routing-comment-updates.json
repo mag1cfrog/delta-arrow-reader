@@ -1,0 +1,114 @@
+[
+  {
+    "issue": 736,
+    "id": 6755466033,
+    "url": "https://github.com/mag1cfrog/delta-arrow-reader/issues/736#issuecomment-6755466033",
+    "recommended_for_implementation": false,
+    "branch": null
+  },
+  {
+    "issue": 748,
+    "id": 6755466453,
+    "url": "https://github.com/mag1cfrog/delta-arrow-reader/issues/748#issuecomment-6755466453",
+    "recommended_for_implementation": true,
+    "branch": "fix/748-nested-expression-names-wip"
+  },
+  {
+    "issue": 757,
+    "id": 6755466807,
+    "url": "https://github.com/mag1cfrog/delta-arrow-reader/issues/757#issuecomment-6755466807",
+    "recommended_for_implementation": true,
+    "branch": "fix/757-struct-expression-names-wip"
+  },
+  {
+    "issue": 762,
+    "id": 6755467148,
+    "url": "https://github.com/mag1cfrog/delta-arrow-reader/issues/762#issuecomment-6755467148",
+    "recommended_for_implementation": true,
+    "branch": "fix/762-qualified-column-precedence-wip"
+  },
+  {
+    "issue": 766,
+    "id": 6755467514,
+    "url": "https://github.com/mag1cfrog/delta-arrow-reader/issues/766#issuecomment-6755467514",
+    "recommended_for_implementation": false,
+    "branch": null
+  },
+  {
+    "issue": 767,
+    "id": 6755467896,
+    "url": "https://github.com/mag1cfrog/delta-arrow-reader/issues/767#issuecomment-6755467896",
+    "recommended_for_implementation": true,
+    "branch": "fix/767-using-key-metadata-wip"
+  },
+  {
+    "issue": 786,
+    "id": 6755468344,
+    "url": "https://github.com/mag1cfrog/delta-arrow-reader/issues/786#issuecomment-6755468344",
+    "recommended_for_implementation": true,
+    "branch": "fix/786-repeated-projection-identity-wip"
+  },
+  {
+    "issue": 790,
+    "id": 6755468731,
+    "url": "https://github.com/mag1cfrog/delta-arrow-reader/issues/790#issuecomment-6755468731",
+    "recommended_for_implementation": true,
+    "branch": "fix/790-scalar-subquery-names-wip"
+  },
+  {
+    "issue": 794,
+    "id": 6755469063,
+    "url": "https://github.com/mag1cfrog/delta-arrow-reader/issues/794#issuecomment-6755469063",
+    "recommended_for_implementation": false,
+    "branch": null
+  },
+  {
+    "issue": 826,
+    "id": 6755469497,
+    "url": "https://github.com/mag1cfrog/delta-arrow-reader/issues/826#issuecomment-6755469497",
+    "recommended_for_implementation": true,
+    "branch": "fix/826-duplicate-struct-casts-wip"
+  },
+  {
+    "issue": 827,
+    "id": 6755469982,
+    "url": "https://github.com/mag1cfrog/delta-arrow-reader/issues/827#issuecomment-6755469982",
+    "recommended_for_implementation": true,
+    "branch": "fix/827-array-struct-declarations-wip"
+  },
+  {
+    "issue": 832,
+    "id": 6755470440,
+    "url": "https://github.com/mag1cfrog/delta-arrow-reader/issues/832#issuecomment-6755470440",
+    "recommended_for_implementation": true,
+    "branch": "fix/832-union-left-metadata-wip"
+  },
+  {
+    "issue": 833,
+    "id": 6755470910,
+    "url": "https://github.com/mag1cfrog/delta-arrow-reader/issues/833#issuecomment-6755470910",
+    "recommended_for_implementation": false,
+    "branch": null
+  },
+  {
+    "issue": 870,
+    "id": 6755471304,
+    "url": "https://github.com/mag1cfrog/delta-arrow-reader/issues/870#issuecomment-6755471304",
+    "recommended_for_implementation": true,
+    "branch": "fix/870-required-case-conditions-wip"
+  },
+  {
+    "issue": 893,
+    "id": 6755471753,
+    "url": "https://github.com/mag1cfrog/delta-arrow-reader/issues/893#issuecomment-6755471753",
+    "recommended_for_implementation": true,
+    "branch": "fix/893-udf-folding-opt-outs-wip"
+  },
+  {
+    "issue": 1155,
+    "id": 6755472154,
+    "url": "https://github.com/mag1cfrog/delta-arrow-reader/issues/1155#issuecomment-6755472154",
+    "recommended_for_implementation": false,
+    "branch": "test/1155-literal-folding-baseline-wip"
+  }
+]

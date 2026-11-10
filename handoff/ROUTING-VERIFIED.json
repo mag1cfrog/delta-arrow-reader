@@ -29,5 +29,8 @@
     "reproducer_only": 1,
     "historical_implementation": 35
   },
-  "verification_scope": "Routing and Git ref preservation; no behavior tests or new readiness review."
+  "verification_scope": "Routing and Git ref preservation; no behavior tests or new readiness review.",
+  "existing_issue_comments_corrected": 16,
+  "source_code_changes": 0,
+  "behavior_tests_run": false
 }
