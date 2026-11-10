@@ -895,8 +895,12 @@ DATE_SUB read a dictionary-encoded STRING date the same way, where they rejected
 comparisons and NULLIF with a DATE or TIMESTAMP, DAYOFWEEK, WEEKDAY and WEEKOFYEAR, and
 COALESCE, IF and CASE beside a DATE or TIMESTAMP, where Arrow's rules applied. WEEKOFYEAR reads
 any STRING with Spark's STRING-to-DATE rules, as DAYOFWEEK does; it used DataFusion's
-conversion, which failed for a string view. The [encoded STRING cast
-references](tests/fixtures/encoded-string-temporal-casts/README.md) record the checks (#1218).
+conversion, which failed for a string view. DATE_FORMAT, TO_TIMESTAMP with its TRY and
+TIMESTAMP_NTZ forms, UNIX_TIMESTAMP and TO_UNIX_TIMESTAMP read a dictionary-encoded STRING as
+its values too, where DATE_FORMAT, UNIX_TIMESTAMP and TO_UNIX_TIMESTAMP failed and TO_TIMESTAMP
+used Arrow's rules (#1237). The [encoded STRING cast
+references](tests/fixtures/encoded-string-temporal-casts/README.md) record the checks (#1218,
+#1237).
 
 TRY_TO_DATE plans TO_DATE with the parser's NULL-on-error mode in both ANSI modes, as Spark's
 does: a string it cannot parse, with or without a format, gives NULL, while an invalid pattern

@@ -1112,7 +1112,14 @@ fn validate_unix_timestamp_format(format: &Expr, schema: &DFSchemaRef) -> PlanRe
     }
 }
 
-fn unix_timestamp(input: ScalarFunctionInput) -> PlanResult<Expr> {
+fn unix_timestamp(mut input: ScalarFunctionInput) -> PlanResult<Expr> {
+    // A dictionary-encoded STRING parses as its STRING values do.
+    let schema = input.function_context.schema;
+    input.arguments = input
+        .arguments
+        .into_iter()
+        .map(|arg| dictionary_string_values(arg, schema))
+        .collect::<PlanResult<Vec<_>>>()?;
     let timezone = input.function_context.plan_config.session_timezone.clone();
     let ansi_mode = input.function_context.plan_config.ansi_mode;
     if input.arguments.is_empty() {
@@ -1260,8 +1267,14 @@ fn timestamp_with_try(
     } else {
         Some(input.function_context.plan_config.session_timezone.clone())
     };
-    if input.arguments.len() == 1 {
-        let expr = input.arguments.one()?;
+    // A dictionary-encoded STRING parses as its STRING values do.
+    let arguments = input
+        .arguments
+        .iter()
+        .map(|arg| dictionary_string_values(arg.clone(), input.function_context.schema))
+        .collect::<PlanResult<Vec<_>>>()?;
+    if arguments.len() == 1 {
+        let expr = arguments.one()?;
         let expr_type = expr.get_type(input.function_context.schema)?;
         if matches!(
             expr_type,
@@ -1307,12 +1320,11 @@ fn timestamp_with_try(
                 Ok(cast(expr, data_type))
             }
         }
-    } else if input.arguments.len() == 2 {
+    } else if arguments.len() == 2 {
         let null = timestamp_null(&input, timestamp_ntz);
-        if input.arguments.iter().any(is_null_literal) {
+        if arguments.iter().any(is_null_literal) {
             return Ok(null);
         }
-        let arguments = input.arguments;
         Ok(cast(
             ScalarUDF::from(SparkTimestamp::try_new(
                 match &data_type {
@@ -2045,7 +2057,13 @@ pub(super) fn list_built_in_datetime_functions() -> Vec<(&'static str, ScalarFun
             F::custom(|input| match input.arguments.len() {
                 2 => {
                     let timezone = input.function_context.plan_config.session_timezone.clone();
-                    Ok(date_format_with_args(input.arguments, timezone.to_string()))
+                    // A dictionary-encoded STRING formats as its STRING values do.
+                    let arguments = input
+                        .arguments
+                        .into_iter()
+                        .map(|arg| dictionary_string_values(arg, input.function_context.schema))
+                        .collect::<PlanResult<Vec<_>>>()?;
+                    Ok(date_format_with_args(arguments, timezone.to_string()))
                 }
                 _ => Err(PlanError::invalid("date_format requires 2 arguments")),
             }),
