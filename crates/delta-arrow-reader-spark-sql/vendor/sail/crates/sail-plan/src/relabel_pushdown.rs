@@ -1,20 +1,19 @@
 // Local Spark session-zone relabel pushdown. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
-//! A TIMESTAMP column whose type names another zone than the session's is read through a cast
-//! that relabels it with the session zone (#1012). The relabel keeps every instant, so a NULL
-//! test, a comparison of instants or an IN list of instants means the same over the stored
-//! column. A scan that prunes
-//! only with bare columns, as the Delta provider does, needs the predicate on the stored column
-//! (#1096).
+//! A TIMESTAMP column whose type names another zone than the session's is read through a cast that
+//! relabels it with the session zone (#1012). The relabel keeps every instant, so a NULL test, a
+//! comparison of instants or an IN list of instants means the same over the stored column. A scan
+//! that prunes only with bare columns, as the Delta provider does, needs the predicate on the
+//! stored column (#1096).
 //!
 //! DataFusion's filter pushdown moves a filter below the relabel, replacing the column with the
 //! cast. On the next pass its simplifier removes the cast from a comparison or IN list with
 //! literals, but not from `IS NULL` or `IS NOT NULL`, and common subexpression elimination first
-//! moves a cast
-//! the filter reads twice, as in `BETWEEN` or an IN list beside HOUR, into a projection where
-//! neither rule sees it. This rule runs right after filter pushdown and removes the relabel from
-//! NULL tests and from comparisons and IN lists with TIMESTAMP literals, in filters and in the
-//! filters pushed to a scan, retagging the literals with the stored zone. Functions of the relabeled value, such as HOUR, keep it.
-//! Native DataFusion SQL, planned without Spark's expression semantics, is unchanged.
+//! moves a cast the filter reads twice, as in `BETWEEN` or an IN list beside HOUR, into a
+//! projection where neither rule sees it. This rule runs right after filter pushdown and removes
+//! the relabel from NULL tests and from comparisons and IN lists with TIMESTAMP literals, in
+//! filters and in the filters pushed to a scan, retagging the literals with the stored zone.
+//! Functions of the relabeled value, such as HOUR, keep it. Native DataFusion SQL, planned without
+//! Spark's expression semantics, is unchanged.
 
 use std::sync::Arc;
 
