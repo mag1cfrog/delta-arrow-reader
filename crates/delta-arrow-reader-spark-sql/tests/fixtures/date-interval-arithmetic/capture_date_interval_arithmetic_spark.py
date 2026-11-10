@@ -70,6 +70,7 @@ TIME_UNITS = [
     ("try_subtract_hour", "try_subtract(d, INTERVAL '2' HOUR)"),
     ("plus_ntz_difference",
      "d + (TIMESTAMP_NTZ '2020-01-01 03:00:00' - TIMESTAMP_NTZ '2020-01-01 00:00:00')"),
+    ("plus_ntz_minus_null", "d + (TIMESTAMP_NTZ '2020-01-01 03:00:00' - NULL)"),
     ("plus_negated_timestamp_difference",
      "d + -(TIMESTAMP '2020-01-02 03:00:00' - TIMESTAMP '2020-01-01 00:00:00')"),
     ("plus_timestamp_difference_plus_day",
@@ -105,6 +106,7 @@ DAYS = [
     ("try_subtract_day", "try_subtract(d, INTERVAL '1' DAY)"),
     ("plus_far_day", "d + (DATE '9999-12-31' - d)"),
     ("minus_far_day", "d - (d - DATE '0001-01-01')"),
+    ("plus_null_minus_day", "d + (NULL - INTERVAL '1' DAY)"),
     ("plus_if_day", "d + if(k > 3, INTERVAL '2' DAY, INTERVAL '3' DAY)"),
     ("plus_case_day", "d + CASE WHEN k > 3 THEN INTERVAL '2' DAY END"),
 ]
