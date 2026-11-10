@@ -145,14 +145,19 @@ fn if_expr(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
 }
 
 /// NVL2, which Spark rewrites to `IF(expr1 IS NOT NULL, expr2, expr3)`, with IF's result
-/// coercion; DataFusion's own coerced a DATE beside a TIMESTAMP_NTZ through nanoseconds and
-/// failed outside 1677 to 2262 (#1191).
+/// coercion for every type, where DataFusion's own coerced differently, such as a DATE beside a
+/// TIMESTAMP_NTZ through nanoseconds, which failed outside 1677 to 2262 (#1191). A result whose
+/// type is not known yet, such as GROUPING_ID() before the aggregation, keeps DataFusion's NVL2.
 fn nvl2(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let ScalarFunctionInput {
         arguments,
         function_context,
     } = input;
     let (value, then_expr, else_expr) = arguments.three()?;
+    let schema = function_context.schema;
+    if then_expr.get_type(schema).is_err() || else_expr.get_type(schema).is_err() {
+        return Ok(expr_fn::nvl2(value, then_expr, else_expr));
+    }
     if_expr(ScalarFunctionInput {
         arguments: vec![value.is_not_null(), then_expr, else_expr],
         function_context,

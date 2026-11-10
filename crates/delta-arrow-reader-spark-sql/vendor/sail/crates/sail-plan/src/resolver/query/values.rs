@@ -17,7 +17,7 @@ use crate::error::{PlanError, PlanResult};
 use crate::expression_errors::{is_locally_evaluable, prune_null_divisor};
 use crate::function::common::without_metadata_annotations;
 use crate::function::numeric_coercion::common_numeric_type;
-use crate::function::temporal_coercion::is_date_beside_timestamp_ntz;
+use crate::function::temporal_coercion::only_dates_and_timestamp_ntz;
 use crate::resolver::PlanResolver;
 use crate::resolver::state::PlanResolverState;
 
@@ -175,7 +175,7 @@ impl PlanResolver<'_> {
                 .iter()
                 .map(|row| row[column].get_type(schema))
                 .collect::<Result<Vec<_>, _>>()?;
-            if !is_date_beside_timestamp_ntz(&types) {
+            if !only_dates_and_timestamp_ntz(&types) {
                 continue;
             }
             for (row, source) in values.iter_mut().zip(types) {

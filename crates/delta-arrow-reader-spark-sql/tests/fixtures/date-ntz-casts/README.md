@@ -25,7 +25,7 @@ Over the columns, CASE and IF choose between a DATE and a TIMESTAMP_NTZ, and UNI
 them. TO_TIMESTAMP and TRY_TO_TIMESTAMP of the DATE columns and a literal run with the session
 timestamp type TIMESTAMP_NTZ; those records name it in `timestamp_type`. Five more queries
 record cases owned by other issues: a constant cast over `WHERE false`, a DATE in an IN list of
-TIMESTAMP_NTZ values, TRUNC to HOUR (#1192, now matching), a DATE column compared with a
+TIMESTAMP_NTZ values (#1191, now matching), TRUNC to HOUR (#1192, now matching), a DATE column compared with a
 TIMESTAMP_NTZ literal, and a TIMESTAMP_NTZ column cast to DATE compared with a DATE literal.
 
 Spark declares a cast between TIMESTAMP_NTZ and DATE nullable whatever its input

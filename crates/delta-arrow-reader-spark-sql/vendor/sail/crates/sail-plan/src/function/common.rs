@@ -33,7 +33,7 @@ use crate::function::comparison::{
     string_comparison_type, temporal_comparison_type,
 };
 use crate::function::temporal_coercion::{
-    cast_local_timestamp_expr_to_ltz, is_date_beside_timestamp_ntz,
+    cast_local_timestamp_expr_to_ltz, only_dates_and_timestamp_ntz,
 };
 
 /// Spark's `UNRESOLVED_ROUTINE` error for a routine named `function_name`, as written, on the
@@ -854,7 +854,7 @@ pub(crate) fn spark_in_list(
         .map(|operand| operand.get_type(schema))
         .collect::<Result<Vec<_>, _>>()?;
     reject_calendar_interval_ordering(&operand_types, "in", "DATATYPE_MISMATCH.DATA_DIFF_TYPES")?;
-    if is_date_beside_timestamp_ntz(&operand_types) {
+    if only_dates_and_timestamp_ntz(&operand_types) {
         let ntz = DataType::Timestamp(TimeUnit::Microsecond, None);
         let mut operands =
             std::iter::once(value)

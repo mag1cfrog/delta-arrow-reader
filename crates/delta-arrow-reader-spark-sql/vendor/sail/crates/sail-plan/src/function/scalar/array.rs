@@ -50,20 +50,23 @@ use crate::function::result_coercion::{
     same_positional_logical_type,
 };
 use crate::function::temporal_coercion::{
-    cast_local_timestamp_expr_to_ltz, is_date_beside_timestamp_ntz,
+    cast_local_timestamp_expr_to_ltz, only_dates_and_timestamp_ntz,
 };
 
-/// ARRAY. Spark combines a DATE beside a TIMESTAMP_NTZ, without a TIMESTAMP, as microsecond
-/// TIMESTAMP_NTZ elements, each DATE at its midnight through its nullable cast, where
-/// `SparkArray`'s coercion picks nanoseconds and fails outside 1677 to 2262 (#1191).
+/// ARRAY. Spark combines DATE and TIMESTAMP_NTZ elements, with only NULLs beside them, as
+/// microsecond TIMESTAMP_NTZ elements, each DATE at its midnight through its nullable cast, where
+/// `SparkArray`'s coercion picks nanoseconds and fails outside 1677 to 2262 (#1191). An argument
+/// whose type is not known yet, such as GROUPING_ID() before the aggregation, leaves the
+/// arguments to `SparkArray`.
 fn array(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let schema = input.function_context.schema;
     let types = input
         .arguments
         .iter()
         .map(|argument| argument.get_type(schema))
-        .collect::<Result<Vec<_>, _>>()?;
-    let arguments = if is_date_beside_timestamp_ntz(&types) {
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap_or_default();
+    let arguments = if only_dates_and_timestamp_ntz(&types) {
         let ntz = DataType::Timestamp(TimeUnit::Microsecond, None);
         input
             .arguments

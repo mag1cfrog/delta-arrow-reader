@@ -684,15 +684,16 @@ which DAR does not do (#1197); and a constant over an input proven empty stays n
 optimization (#1190). EXTRACT of DAYOFWEEK, DOW_ISO and YEAROFWEEK works since #1116.
 The [cast references](tests/fixtures/date-ntz-casts/README.md) record the checks.
 
-A DATE beside a TIMESTAMP_NTZ, without a TIMESTAMP, in ARRAY, VALUES or an IN list, combines as
-microsecond TIMESTAMP_NTZ values, each DATE at its midnight, like Spark (#1191). DataFusion's
-coercion picked nanosecond timestamps, which changed the type and failed outside 1677 to 2262.
-ARRAY and IN lists take Spark's nullable DATE cast; VALUES evaluates its cells, so a column is
-nullable only for a NULL cell, as in Spark. NVL2 is Spark's `IF(expr1 IS NOT NULL, expr2,
-expr3)` with IF's result coercion, where DataFusion's `nvl2` coerced through nanoseconds. Array
-functions and comparisons over an ARRAY<DATE> beside an ARRAY<TIMESTAMP_NTZ> still combine
-through nanoseconds: CONCAT fails while planning and ARRAY_UNION while collecting rows (#1236),
-and array equality is #1176. The
+DATE and TIMESTAMP_NTZ values, with only NULLs beside them, in ARRAY, VALUES or an IN list,
+combine as microsecond TIMESTAMP_NTZ values, each DATE at its midnight, like Spark (#1191).
+DataFusion's coercion picked nanosecond timestamps, which changed the type and failed outside
+1677 to 2262. ARRAY and IN lists take Spark's nullable DATE cast; VALUES evaluates its cells,
+so a column is nullable only for a NULL cell, as in Spark. NVL2 is Spark's `IF(expr1 IS NOT
+NULL, expr2, expr3)`, with IF's result coercion for every type, where DataFusion's `nvl2`
+coerced differently; a result whose type is not known yet, such as GROUPING_ID(), keeps
+DataFusion's NVL2. Nested values, such as arrays of arrays or of structs, and array functions
+and comparisons over an ARRAY<DATE> beside an ARRAY<TIMESTAMP_NTZ>, still combine through
+nanoseconds (#1236). The
 [DATE and TIMESTAMP_NTZ combination references](tests/fixtures/date-timestamp-ntz-combination/README.md)
 record the checks.
 
