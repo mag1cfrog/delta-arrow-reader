@@ -51,9 +51,6 @@ enum RetainedDifference {
     StringQualifier,
     /// #1152: a CAST to BIGINT counts the seconds, where Spark counts the DAY interval's days.
     IntegerUnit,
-    /// #952: a DATE plus a difference spanning years 1 to 9999 fails in Arrow's cast to a
-    /// nanosecond calendar interval while collecting rows, where Spark gives the DATE.
-    DateIntervalRange,
     /// #1182: a comparison with a YEAR TO MONTH interval coerces both to calendar intervals
     /// and gives false, where Spark rejects it during analysis.
     YearMonthComparison,
@@ -68,7 +65,6 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
     match case["id"].as_str()? {
         "column_cast_string" => Some(RetainedDifference::StringQualifier),
         "column_cast_bigint" => Some(RetainedDifference::IntegerUnit),
-        "column_plus_date_far" => Some(RetainedDifference::DateIntervalRange),
         "column_equals_month" => Some(RetainedDifference::YearMonthComparison),
         "column_concat" => Some(RetainedDifference::ConcatText),
         "try_sum" => Some(RetainedDifference::TrySum),
@@ -123,19 +119,6 @@ fn current_expectation(
         RetainedDifference::IntegerUnit => {
             let rows = map_values(case, |days| Ok((days.parse::<i64>()? * 86_400).to_string()))?;
             current["expected"]["rows"] = json!(rows);
-        }
-        RetainedDifference::DateIntervalRange => {
-            // Row 2 is 9999-12-31 minus 0001-01-01, added back to 0001-01-01.
-            if case["expected"]["rows"] != json!([["2", "2932896"]]) {
-                return Err(format!("expected Spark's DATE 9999-12-31: {case}").into());
-            }
-            current["expected"] = json!({"status": "error", "dar_message":
-                "Cannot cast to Interval(MonthDayNano). Overflowing on 315537811200000000"});
-            current["spark_error_phase"] = json!("collect");
-            current["schema_stages"]
-                .as_object_mut()
-                .ok_or("missing schema stages")?
-                .remove("executed");
         }
         RetainedDifference::YearMonthComparison => {
             if case["expected"]["condition"] != "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES"
@@ -529,7 +512,6 @@ async fn dates_subtract_like_spark() -> TestResult {
         std::collections::BTreeMap::from([
             (RetainedDifference::StringQualifier, 4),
             (RetainedDifference::IntegerUnit, 4),
-            (RetainedDifference::DateIntervalRange, 4),
             (RetainedDifference::YearMonthComparison, 4),
             (RetainedDifference::ConcatText, 4),
             (RetainedDifference::TrySum, 4),

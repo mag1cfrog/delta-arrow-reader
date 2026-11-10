@@ -589,10 +589,32 @@ TIMESTAMP_NTZ in UTC, reads a DATE or STRING in the session zone, and fails with
 `DATETIME_OVERFLOW` where Spark does. Other results beyond BIGINT fail with Java's
 `long overflow`. STRING plus a DAY TO SECOND interval and SEQUENCE end points use the same
 arithmetic. Local date-times beyond Chrono's years take offsets from a nearer 400-year cycle
-(without DST after 2099, #1052). TIMESTAMP_NTZ intervals, DATE arithmetic (#952) and native
-DataFusion SQL are unchanged. The
+(without DST after 2099, #1052). TIMESTAMP_NTZ intervals and native DataFusion SQL are
+unchanged. The
 [local day arithmetic references](tests/fixtures/local-day-arithmetic/README.md) record the
 checks.
+
+A DATE plus or minus a day-time interval, with `+`, `-`, TRY_ADD or TRY_SUBTRACT, follows the
+interval's end field like Spark (#952). Spark adds an interval ending at DAY with `date_add` of
+its day count and returns a DATE; it casts the DATE to TIMESTAMP at its midnight in the session
+zone for an interval with time units and returns a TIMESTAMP from the arithmetic above. DAR
+types every day-time interval as a microsecond duration, so the resolver reads the end field
+from the operand's SQL (an interval literal, a CAST to an interval qualifier, a negation, a sum
+or difference, a product or quotient by a number, IF, CASE, COALESCE, NVL, IFNULL, NVL2,
+NULLIF, GREATEST and LEAST over such intervals, ABS, SUM, MIN, MAX, FIRST, LAST, ANY_VALUE and
+AVG of one, also as window functions, and MAKE_DT_INTERVAL) or from the function that computed
+it (DATE subtraction ends at DAY; TIMESTAMP and TIMESTAMP_NTZ subtraction, MAKE_DT_INTERVAL and
+an interval scaled by a number at SECOND). A DATE beside an interval with time units is then
+read as a TIMESTAMP before the arithmetic is chosen. A DATE plus an untyped NULL, with `+` or
+TRY_ADD, which Spark reads as a DAY TO SECOND interval, gives a NULL TIMESTAMP, where planning
+failed. Every other interval moves the DATE by its whole days in INT arithmetic, where an Arrow
+cast to a nanosecond calendar interval dropped the time part and failed beyond about 292 years,
+and TRY_ADD and TRY_SUBTRACT failed while planning. An interval whose end field is read neither
+way, such as a subquery, CTE or view column, a scalar subquery, an array element or struct
+field, a lambda variable, LAG, LEAD, MAX_BY, MIN_BY or MEDIAN of one, or a conditional mixing a
+known interval with such an operand, keeps DATE arithmetic (#1236). The
+[DATE and interval arithmetic references](tests/fixtures/date-interval-arithmetic/README.md)
+record the checks.
 
 TIMESTAMPADD's `DATETIME_OVERFLOW` message names the full BIGINT quantity, the unit and the
 timestamp like Spark's. It now keeps the unit as written, where it was upper case, and reads a
@@ -701,8 +723,8 @@ NULL beside a DATE, on either side, is a NULL DATE. DataFusion returned a number
 interval scaling, comparison and other consumers saw a number, and TRY_SUBTRACT failed while
 planning. Arrow's microsecond duration carries no qualifier, so a CAST of the difference to
 STRING gives DAY TO SECOND text (#953) and a CAST to an integer counts seconds (#1152), where
-Spark uses the DAY unit; a DATE plus a difference beyond Arrow's nanosecond calendar intervals
-fails (#952). As for other day-time intervals, a comparison with a YEAR TO MONTH interval is
+Spark uses the DAY unit; a DATE plus a difference moves by its days (#952). As for other
+day-time intervals, a comparison with a YEAR TO MONTH interval is
 accepted where Spark rejects it (#1182), CONCAT writes Arrow's duration text, ISO 8601 for a
 column and `1 days 0 hours 0 mins 0.000000 secs` for a constant (#953), and TRY_SUM rejects it
 while planning (#1183). An Arrow Date64 operand subtracts like a DATE. The

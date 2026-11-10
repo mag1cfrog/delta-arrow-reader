@@ -24,6 +24,9 @@ use crate::function::{
 };
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
+use crate::resolver::expression::day_time_interval::{
+    cast_date_beside_time_interval, spec_day_time_end,
+};
 use crate::resolver::expression::lambda::is_spec_lambda_argument;
 use crate::resolver::state::PlanResolverState;
 
@@ -90,6 +93,16 @@ impl PlanResolver<'_> {
             Self::convert_mode_within_group(&canonical_function_name, arguments, order_by)?;
 
         let has_spec_lambda_argument = arguments.iter().any(is_spec_lambda_argument);
+        // A day-time interval's end field decides Spark's DATE arithmetic (#952); only its SQL
+        // keeps it, so read it before resolution.
+        let interval_ends = if matches!(
+            canonical_function_name.as_str(),
+            "+" | "-" | "try_add" | "try_subtract"
+        ) {
+            arguments.iter().map(spec_day_time_end).collect()
+        } else {
+            vec![]
+        };
 
         let (argument_display_names, arguments) = if canonical_function_name == "struct" {
             self.resolve_struct_arguments(arguments, schema, state)
@@ -122,6 +135,18 @@ impl PlanResolver<'_> {
                 .unwrap_or_default()
         } else {
             vec![]
+        };
+        // After `argument_types`, so that the call's name still reads a DATE operand.
+        let arguments = if interval_ends.is_empty() {
+            arguments
+        } else {
+            cast_date_beside_time_interval(
+                &canonical_function_name,
+                arguments,
+                &interval_ends,
+                schema,
+                &self.config.session_timezone,
+            )
         };
 
         // The native registry also contains DataFusion builtins. Keep Spark's
