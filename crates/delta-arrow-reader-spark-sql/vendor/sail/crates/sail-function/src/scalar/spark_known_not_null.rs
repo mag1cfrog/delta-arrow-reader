@@ -1,8 +1,9 @@
 // Local Spark nullability declaration. See the host crate's UPSTREAM.md.
 //! Like Spark's `KnownNotNull`: its argument unchanged, declared NOT NULL, for a Spark expression
-//! that is NOT NULL for NOT NULL inputs where DataFusion declares a step of it nullable, such as
-//! formatted TO_DATE of a NOT NULL TIMESTAMP in ANSI mode. A NULL value fails, since the
-//! declaration would make the batch invalid. Further arguments are inputs that Spark's expression
+//! that is NOT NULL for NOT NULL inputs where DataFusion declares a step of it nullable. A NULL
+//! value fails, since the declaration would make the batch invalid, so it suits no value a
+//! grouping set can make NULL; formatted TO_DATE, its first use, now keeps its argument's
+//! nullability instead (#1222). Further arguments are inputs that Spark's expression
 //! has and DAR's omits, as for `SparkKnownNullable`; they are not used.
 
 use std::sync::Arc;

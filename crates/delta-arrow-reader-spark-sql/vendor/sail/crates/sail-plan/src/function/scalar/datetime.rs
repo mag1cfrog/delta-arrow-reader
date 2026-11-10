@@ -990,7 +990,9 @@ fn computed_inputs(omitted: &Expr) -> PlanResult<Vec<Expr>> {
 
 /// `expr` declared with Spark's nullability, where DataFusion declares it otherwise. Unlike a
 /// `CASE WHEN true` wrapper, the declaration survives optimization over a column. Declaring NOT
-/// NULL over a value that can be NULL fails the query when such a value occurs.
+/// NULL over a value that can be NULL fails the query when such a value occurs, as a grouping set
+/// can make a NOT NULL key NULL; TO_DATE and UNIX_TIMESTAMP now give `expr` its own nullability
+/// instead (#1222), so no caller reaches that case.
 /// `omitted_input` is an input of Spark's expression that `expr` leaves out, such as a format
 /// Spark does not evaluate. Its columns, aggregates and window functions become unused inputs
 /// of the declaration, so they are computed as Spark computes them, and the declaration does
@@ -1081,18 +1083,17 @@ fn to_date_with_parser(input: ScalarFunctionInput, parser: DateParser) -> PlanRe
         // nullability, so a grouping set that makes the key NULL makes the result nullable
         // (#1222); `to_local_time` was declared nullable whatever its argument. Spark parses a
         // TIMESTAMP_NTZ with a format as the TIMESTAMP of the same microseconds, so its DATE is
-        // that instant's date in the session zone, not its wall-clock date.
+        // that instant's date in the session zone, not its wall-clock date. A session zone Arrow
+        // cannot parse, such as `Z` or `PST`, keeps the wall-clock date (#1029).
+        let session_timezone = &input.function_context.plan_config.session_timezone;
         let date = match &expr_type {
-            Ok(DataType::Timestamp(unit, None)) => Some(cast(
-                cast(expr.clone(), DataType::Int64),
-                DataType::Timestamp(
-                    *unit,
-                    Some(Arc::clone(
-                        &input.function_context.plan_config.session_timezone,
-                    )),
-                ),
-            )),
-            Ok(DataType::Timestamp(_, Some(_)) | DataType::Date32 | DataType::Date64) => {
+            Ok(DataType::Timestamp(unit, None)) if session_timezone.parse::<Tz>().is_ok() => {
+                Some(cast(
+                    cast(expr.clone(), DataType::Int64),
+                    DataType::Timestamp(*unit, Some(Arc::clone(session_timezone))),
+                ))
+            }
+            Ok(DataType::Timestamp(_, _) | DataType::Date32 | DataType::Date64) => {
                 Some(expr.clone())
             }
             _ => None,
