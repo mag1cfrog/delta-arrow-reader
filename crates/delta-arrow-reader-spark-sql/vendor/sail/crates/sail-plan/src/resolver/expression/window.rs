@@ -38,7 +38,7 @@ struct PlannedRangeBoundary {
     deferred_check: Option<expr::Expr>,
     /// For an offset expression, whether it is a DAY interval that a DATE key reads as days;
     /// `None` for CURRENT ROW, UNBOUNDED and value bounds.
-    day_interval_offset: Option<bool>,
+    reads_as_days: Option<bool>,
 }
 
 impl PlannedRangeBoundary {
@@ -47,7 +47,7 @@ impl PlannedRangeBoundary {
             display,
             frame_bound,
             deferred_check: None,
-            day_interval_offset: None,
+            reads_as_days: None,
         }
     }
 }
@@ -605,10 +605,10 @@ impl PlanResolver<'_> {
                 let upper = self
                     .resolve_window_boundary_value(upper, order_by, schema, state)
                     .await?;
-                // Both offsets share their type as written, before a DATE key reads a DAY
-                // interval as days.
+                // Spark rejects bounds of different types. A DAY offset that a DATE key reads
+                // as days fails beside an offset of any other type, as it did as an interval.
                 if let (Some(lower_day), Some(upper_day)) =
-                    (lower.day_interval_offset, upper.day_interval_offset)
+                    (lower.reads_as_days, upper.reads_as_days)
                     && lower_day != upper_day
                 {
                     return Err(PlanError::invalid(
@@ -932,9 +932,9 @@ impl PlanResolver<'_> {
                     ));
                 }
                 let data_type = get_order_by_type()?;
-                let day_interval_offset = data_type == DataType::Date32
+                let reads_as_days = data_type == DataType::Date32
                     && matches!(value, ScalarValue::DurationMicrosecond(_));
-                let value = if day_interval_offset {
+                let value = if reads_as_days {
                     date_range_offset_days(value)?
                 } else {
                     value
@@ -1019,7 +1019,7 @@ impl PlanResolver<'_> {
                         display,
                         frame_bound: WindowFrameBound::Following(value),
                         deferred_check,
-                        day_interval_offset: Some(false),
+                        reads_as_days: Some(false),
                     });
                 }
                 let deferred_check = (self.config.ansi_mode
@@ -1054,7 +1054,7 @@ impl PlanResolver<'_> {
                     display,
                     frame_bound: bound,
                     deferred_check,
-                    day_interval_offset: Some(day_interval_offset),
+                    reads_as_days: Some(reads_as_days),
                 })
             }
             spec::WindowFrameBoundary::Value(expr) => {

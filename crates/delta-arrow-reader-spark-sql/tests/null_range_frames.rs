@@ -1082,7 +1082,9 @@ async fn date_null_interval_bounds_keep_their_offset_types() -> TestResult {
             find_single_window_frame(&analyzed)
         };
 
-        // A NULL YEAR interval keeps its temporal representation and coercion.
+        // A NULL YEAR interval keeps its temporal representation and coercion, an unbounded
+        // sentinel; as a FOLLOWING bound its frame reaches the partition end where Spark's frame
+        // is empty (#1236).
         let query = plan_query(&session, &sql("YEAR", "CURRENT ROW"), &options).await?;
         for frame in [
             find_single_window_frame(&query.logical_plan)?,

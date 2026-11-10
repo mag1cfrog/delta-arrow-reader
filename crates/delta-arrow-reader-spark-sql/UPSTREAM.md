@@ -1992,8 +1992,10 @@ use `PrecedingNullOffset` and `FollowingNullOffset` comparison targets. Analyzer
 coercion preserves their admitted offset type. Native DataFusion
 `Preceding(typed NULL)` and `Following(typed NULL)` remain unbounded sentinels.
 DATE YEAR-MONTH interval NULL bounds keep their existing temporal representation
-and coercion; a NULL DAY interval over a DATE key is an INT NULL offset (#947). The SQL unparser retains an explicit typed NULL expression or
-returns the existing checked type-conversion error.
+and coercion, where Spark gives a NULL FOLLOWING bound an empty frame (#1236); a
+NULL DAY interval over a DATE key is an INT NULL offset (#947). The SQL unparser
+retains an explicit typed NULL expression or returns the existing checked
+type-conversion error.
 
 Sail assigns `RangeOffsetArithmetic::Spark` to admitted explicit NULL frames
 on signed integer, DATE, FLOAT/DOUBLE or Decimal128 keys, and to ordinary nonzero
