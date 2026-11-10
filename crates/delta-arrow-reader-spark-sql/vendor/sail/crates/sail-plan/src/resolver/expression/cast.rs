@@ -67,12 +67,12 @@ impl PlanResolver<'_> {
             _ => None,
         };
         let (named, named_input) = self
-            .resolve_expression_cast_to(expr, cast_to_type, is_try, schema, state)
+            .resolve_expression_cast_without_qualifier(expr, cast_to_type, is_try, schema, state)
             .await?;
         Ok((named.with_interval_qualifier(qualifier), named_input))
     }
 
-    async fn resolve_expression_cast_to(
+    async fn resolve_expression_cast_without_qualifier(
         &self,
         expr: spec::Expr,
         cast_to_type: spec::DataType,

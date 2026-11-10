@@ -44,7 +44,7 @@ fn interval_integral_cast_references() -> TestResult<Vec<Value>> {
             |build| build.contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
         )
     );
-    assert_eq!(records.len() - 1, 1796);
+    assert_eq!(records.len() - 1, 1812);
     Ok(records)
 }
 

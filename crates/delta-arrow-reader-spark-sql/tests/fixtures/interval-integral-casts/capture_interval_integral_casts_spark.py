@@ -293,6 +293,19 @@ def definitions():
         ("date_plus_array_span_plus_hour",
          "SELECT k, DATE '2024-01-01' + (array(s)[0] + INTERVAL '1' HOUR) AS r FROM spans"),
         ("date_plus_array_difference", f"SELECT k, d1 + array({DAY})[0] AS r FROM pairs"),
+        ("union_chain_timestamp_difference",
+         f"SELECT k, CAST(x AS BIGINT) AS r FROM (SELECT k, {DAY} AS x FROM pairs "
+         f"UNION ALL SELECT k + 10, {DAY} FROM pairs UNION ALL SELECT k + 20, t2 - t1 FROM pairs)"),
+        ("union_chain_hour",
+         "SELECT CAST(x AS INT) AS r FROM (SELECT INTERVAL '1' DAY AS x "
+         "UNION ALL SELECT INTERVAL '2' DAY UNION ALL SELECT INTERVAL '3' HOUR)"),
+        ("union_except_chain_hour",
+         "SELECT CAST(x AS INT) AS r FROM (SELECT INTERVAL '1' DAY AS x "
+         "UNION ALL SELECT INTERVAL '2' DAY EXCEPT SELECT INTERVAL '3' HOUR)"),
+        ("date_plus_union_chain_hour",
+         "SELECT k, d1 + x AS r FROM (SELECT k, d1, CAST(k AS INTERVAL DAY) AS x FROM pairs "
+         "UNION ALL SELECT k, d1, CAST(k AS INTERVAL DAY) FROM pairs "
+         "UNION ALL SELECT k, d1, CAST(k AS INTERVAL HOUR) FROM pairs)"),
     ]
     for name, sql in tracking:
         yield f"tracking_{name}", sql

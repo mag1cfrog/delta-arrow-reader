@@ -5,10 +5,11 @@
 //! resolved expression and each field: from the SQL of a literal or a CAST, from the function
 //! that computed the value, and from the columns of subqueries, VALUES and set operations.
 //! Spark casts an interval to a number as a count of the qualifier's end field, and adds a DAY
-//! interval to a DATE as days (#952). Where an interval's qualifier is unknown, as for an Arrow
-//! column, a cast reads it as the type Spark gives an Arrow column, `DAY TO SECOND` or `YEAR TO
-//! MONTH`, and a DATE keeps DATE arithmetic beside it. Widened beside one, a known qualifier
-//! still bounds the result's end field from below.
+//! interval to a DATE as days (#952). Spark reads an Arrow interval column as `DAY TO SECOND` or
+//! `YEAR TO MONTH`, and so does the resolver. Where a qualifier is unknown, as for an ARRAY
+//! element or a struct field, a cast reads it as that type, and a DATE keeps DATE arithmetic
+//! beside it. Widened beside one, a known qualifier still bounds the result's end field from
+//! below.
 
 use datafusion::arrow::datatypes::{DataType, IntervalUnit, TimeUnit};
 use datafusion_common::DFSchemaRef;
@@ -73,6 +74,7 @@ impl IntervalQualifier {
         })
     }
 
+    /// The start field; for an inexact qualifier, Spark's start field is unknown.
     pub(crate) fn start(self) -> IntervalFieldType {
         self.start
     }

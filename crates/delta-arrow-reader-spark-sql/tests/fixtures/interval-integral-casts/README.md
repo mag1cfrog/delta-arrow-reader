@@ -1,6 +1,6 @@
 # Interval casts to integral and DECIMAL types
 
-`interval-integral-casts-spark.jsonl` records 1796 observations from Spark 4.2.0, revision
+`interval-integral-casts-spark.jsonl` records 1812 observations from Spark 4.2.0, revision
 `32f7299601108917fb01920a54e084595b7b3bf8`, Java 17.0.20.1 and Python 3.12.14 (#1152). The
 header stores the build properties, capture script hash, settings and the registered tables:
 - `counts`: INT keys `k` and nullable INT counts `n`: zero, 3 and -3, the TINYINT and SMALLINT
@@ -16,7 +16,7 @@ header stores the build properties, capture script hash, settings and the regist
 Each failure keeps Spark's error condition and the class and message of its innermost Java
 exception. Two captures were byte-identical.
 
-449 queries run in both ANSI modes in UTC and America/Los_Angeles:
+453 queries run in both ANSI modes in UTC and America/Los_Angeles:
 - every year-month and day-time qualifier, built from `n` as a count of its end field, cast to
   TINYINT, SMALLINT, INT, BIGINT, DECIMAL, DECIMAL(20, 6) and DECIMAL(4, 1), and with TRY_CAST
   to TINYINT, SMALLINT, INT and DECIMAL(4, 1);
@@ -37,7 +37,9 @@ exception. Two captures were byte-identical.
   NULL on the left, a scalar subquery, MAX_BY, and a common table expression read directly by
   a set operation and again on its own; and DATE arithmetic with an HOUR or DAY column of a
   subquery or of `*`, with the `spans` column alone, plus an HOUR interval and in COALESCE, and
-  with an ARRAY element, alone and plus an HOUR interval, beside a CAST of that sum;
+  with an ARRAY element, alone and plus an HOUR interval, beside a CAST of that sum; and
+  chains of three set operations that end in an HOUR interval or a TIMESTAMP difference, with
+  UNION ALL and EXCEPT, cast and added to a DATE;
 - DOUBLE, FLOAT and BOOLEAN targets, which Spark rejects, and unaliased names.
 
 Spark counts the interval's end field: whole years or months, and whole days, hours, minutes or

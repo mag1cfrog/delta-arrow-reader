@@ -217,8 +217,9 @@ impl PlanResolver<'_> {
 
 /// Spark widens each column's interval qualifier over both inputs of a set operation (#1152).
 /// The result keeps the left input's fields, which take the widened qualifier when the left
-/// query's own projection registered them. A left input that reads a common table expression
-/// directly, as `TABLE c`, shares the fields of every other reference to it, so it keeps them.
+/// query's own projection registered them, also through the earlier set operations of a chain.
+/// A left input that reads a common table expression directly, as `TABLE c`, shares the fields
+/// of every other reference to it, so it keeps them.
 fn widen_set_operation_interval_qualifiers(
     left: &LogicalPlan,
     right: &LogicalPlan,
@@ -231,6 +232,16 @@ fn widen_set_operation_interval_qualifiers(
             LogicalPlan::Sort(sort) => sort.input.as_ref(),
             LogicalPlan::Filter(filter) => filter.input.as_ref(),
             LogicalPlan::Distinct(distinct) => distinct.input().as_ref(),
+            LogicalPlan::Extension(extension) => {
+                match extension
+                    .node
+                    .as_any()
+                    .downcast_ref::<PendingSetOperation>()
+                {
+                    Some(set_operation) => set_operation.left.as_ref(),
+                    None => return,
+                }
+            }
             LogicalPlan::Projection(_) => break,
             _ => return,
         };
