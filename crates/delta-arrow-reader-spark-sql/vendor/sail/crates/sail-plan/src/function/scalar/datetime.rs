@@ -1077,9 +1077,24 @@ fn to_date_with_parser(input: ScalarFunctionInput, parser: DateParser) -> PlanRe
             input.function_context.schema,
         )?;
         let expr_type = expr.get_type(input.function_context.schema);
+        // A cast reads a TIMESTAMP's local date in its annotated zone and keeps the argument's
+        // nullability, so a grouping set that makes the key NULL makes the result nullable
+        // (#1222); `to_local_time` was declared nullable whatever its argument. Spark parses a
+        // TIMESTAMP_NTZ with a format as the TIMESTAMP of the same microseconds, so its DATE is
+        // that instant's date in the session zone, not its wall-clock date.
         let date = match &expr_type {
-            Ok(DataType::Timestamp(_, _)) => Some(expr_fn::to_local_time(vec![expr.clone()])),
-            Ok(DataType::Date32 | DataType::Date64) => Some(expr.clone()),
+            Ok(DataType::Timestamp(unit, None)) => Some(cast(
+                cast(expr.clone(), DataType::Int64),
+                DataType::Timestamp(
+                    *unit,
+                    Some(Arc::clone(
+                        &input.function_context.plan_config.session_timezone,
+                    )),
+                ),
+            )),
+            Ok(DataType::Timestamp(_, Some(_)) | DataType::Date32 | DataType::Date64) => {
+                Some(expr.clone())
+            }
             _ => None,
         };
         if let Some(date) = date {
