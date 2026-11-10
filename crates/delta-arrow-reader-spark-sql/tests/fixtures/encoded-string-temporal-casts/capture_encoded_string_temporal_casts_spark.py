@@ -1,15 +1,17 @@
-"""Capture Spark's casts of STRING to DATE, TIMESTAMP and TIMESTAMP_NTZ (#1218).
+"""Capture Spark's casts of STRING to DATE, TIMESTAMP and TIMESTAMP_NTZ (#1218, #1237).
 
 Records analyzed, optimized and executed schemas, typed internal-row values and failing stages,
 with the innermost Java exception of a failure, for CAST and TRY_CAST of STRING columns to DATE,
-TIMESTAMP and TIMESTAMP_NTZ, for DATE_ADD and DATE_SUB of STRING dates, and for the implicit
-conversions of STRING beside a DATE or TIMESTAMP in comparisons, NULLIF, DAYOFWEEK, WEEKDAY,
-WEEKOFYEAR, COALESCE, IF and CASE: over a NOT NULL column of values Spark reads, padded, with a
-time, with a `T` separator and at a Los Angeles DST gap, a NOT NULL column with malformed values
-and a nullable column with NULLs. DAR's harness runs the same queries over dictionary-encoded,
-viewed and large copies of the columns. Every query runs in both ANSI modes in UTC and
-America/Los_Angeles. Run from the crate root in the reference environment described in
-README.md; the output path must not exist.
+TIMESTAMP and TIMESTAMP_NTZ, for DATE_ADD and DATE_SUB of STRING dates, for DATE_FORMAT,
+TO_TIMESTAMP with and without a format, TRY_TO_TIMESTAMP, TO_TIMESTAMP_NTZ, UNIX_TIMESTAMP and
+formatted TO_UNIX_TIMESTAMP of STRING arguments, and for the implicit conversions of STRING
+beside a DATE or TIMESTAMP in comparisons, NULLIF, DAYOFWEEK, WEEKDAY, WEEKOFYEAR, COALESCE, IF
+and CASE: over a NOT NULL column of values Spark reads, padded, with a time, with a `T`
+separator and at a Los Angeles DST gap, a NOT NULL column with malformed values and a nullable
+column with NULLs. DAR's harness runs the same queries over dictionary-encoded, viewed and large
+copies of the columns. Every query runs in both ANSI modes in UTC and America/Los_Angeles. Run
+from the crate root in the reference environment described in README.md; the output path must
+not exist.
 """
 import argparse
 from datetime import date, datetime, timedelta, timezone
@@ -72,6 +74,16 @@ def definitions():
                f"SELECT k FROM inputs WHERE {column} = DATE '2024-05-17'")
         for function in ["dayofweek", "weekday", "weekofyear"]:
             yield (f"{function}_{name}", f"SELECT k, {function}({column}) AS r FROM inputs")
+        # Spark reads the STRING as a TIMESTAMP in these functions (#1237).
+        for function_name, call in [
+                ("date_format", f"date_format({column}, 'yyyy-MM-dd HH:mm')"),
+                ("to_timestamp", f"to_timestamp({column})"),
+                ("to_timestamp_format", f"to_timestamp({column}, 'yyyy-MM-dd')"),
+                ("try_to_timestamp", f"try_to_timestamp({column})"),
+                ("to_timestamp_ntz", f"to_timestamp_ntz({column})"),
+                ("unix_timestamp", f"unix_timestamp({column})"),
+                ("to_unix_timestamp_format", f"to_unix_timestamp({column}, 'yyyy-MM-dd')")]:
+            yield (f"{function_name}_{name}", f"SELECT k, {call} AS r FROM inputs")
         for result_name, result in [
                 ("coalesce_date", f"coalesce({column}, DATE '2000-01-01')"),
                 ("if_date", f"IF(k > 1, {column}, DATE '2000-01-01')"),
