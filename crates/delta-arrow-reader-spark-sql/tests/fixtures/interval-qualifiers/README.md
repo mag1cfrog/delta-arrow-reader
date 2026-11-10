@@ -68,8 +68,10 @@ Existing differences outside the name contract keep their Spark expectations.
 The test checks the current DAR result for each:
 
 - #727: 12 unaliased RANGE windows keep the name `SUM(v)`.
-- #947: 10 RANGE frames with DATE interval or TIMESTAMP numeric offsets return a
-  running sum.
+- #1236: 4 RANGE frames with a numeric offset over a TIMESTAMP key return a running
+  sum, and 4 with a sub-day interval of whole days over a DATE key return the one-day
+  frame, where Spark rejects the offset type. Since #947, a DAY offset over a DATE key
+  gives Spark's frame.
 - #955: 54 literals that Spark rejects at or past a storage limit fail at
   Spark's stage without Spark's error condition. Spark raises a plain
   `java.lang.ArithmeticException` for the multi-field day-time ones, and rejects

@@ -1044,8 +1044,8 @@ fn null_offset_unparser_rejects_unsupported_payload_types() -> TestResult {
 }
 
 #[tokio::test]
-async fn date_null_interval_bounds_keep_legacy_representation_and_coercion() -> TestResult {
-    use arrow::datatypes::{DataType, IntervalUnit, TimeUnit};
+async fn date_null_interval_bounds_keep_their_offset_types() -> TestResult {
+    use arrow::datatypes::{DataType, IntervalUnit};
     use datafusion::logical_expr::WindowFrameBound;
     use datafusion::logical_expr::window_frame::RangeOffsetArithmetic;
     use datafusion::physical_optimizer::aggregate_statistics::PreserveAggregateStatisticsSchema;
@@ -1058,65 +1058,86 @@ async fn date_null_interval_bounds_keep_legacy_representation_and_coercion() -> 
     );
     spark_inputs::register_recorded_inputs(&session, &request["corpora"][2]["metadata"], 1)?;
     for ansi_mode in [true, false] {
-        for (qualifier, offset_type) in [
-            ("YEAR", DataType::Interval(IntervalUnit::YearMonth)),
-            ("DAY TO SECOND", DataType::Duration(TimeUnit::Microsecond)),
-        ] {
-            for upper in ["CURRENT ROW", "INTERVAL '1' DAY FOLLOWING"] {
-                let sql = format!(
-                    "SELECT COUNT(*) OVER (ORDER BY DATE_ADD(DATE '2020-01-01',k) \
-                    RANGE BETWEEN CAST(NULL AS INTERVAL {qualifier}) PRECEDING AND {upper}) AS n \
-                    FROM null_range_no_null_keys"
-                );
-                let query = plan_query(
-                    &session,
-                    &sql,
-                    &SparkSqlOptions {
-                        ansi_mode,
-                        ..SparkSqlOptions::default()
-                    },
-                )
-                .await?;
-                let resolved = find_single_window_frame(&query.logical_plan)?;
-                let WindowFrameBound::Preceding(value) = &resolved.start_bound else {
-                    return Err(
-                        "DATE interval NULL was retagged as an explicit numeric offset".into(),
-                    );
-                };
-                assert!(value.is_null());
-                assert_eq!(value.data_type(), offset_type);
-                assert!(resolved.start_bound.is_unbounded());
-                assert!(!resolved.has_null_offset());
-                assert_eq!(
-                    resolved.range_offset_arithmetic(),
-                    RangeOffsetArithmetic::DataFusion
-                );
+        let options = SparkSqlOptions {
+            ansi_mode,
+            ..SparkSqlOptions::default()
+        };
+        let sql = |qualifier: &str, upper: &str| {
+            format!(
+                "SELECT COUNT(*) OVER (ORDER BY DATE_ADD(DATE '2020-01-01',k) \
+                RANGE BETWEEN CAST(NULL AS INTERVAL {qualifier}) PRECEDING AND {upper}) AS n \
+                FROM null_range_no_null_keys"
+            )
+        };
+        let analyze = |plan: &datafusion::logical_expr::LogicalPlan| -> TestResult<_> {
+            let mut state = session.state();
+            let extensions = &mut state.config_mut().options_mut().extensions;
+            extensions.insert(SparkSqlExpressionSemantics::default());
+            extensions.insert(PreserveAggregateStatisticsSchema::default());
+            let analyzed = state.analyzer().execute_and_check(
+                plan.clone(),
+                state.config_options(),
+                |_, _| {},
+            )?;
+            find_single_window_frame(&analyzed)
+        };
 
-                let mut state = session.state();
-                let extensions = &mut state.config_mut().options_mut().extensions;
-                extensions.insert(SparkSqlExpressionSemantics::default());
-                extensions.insert(PreserveAggregateStatisticsSchema::default());
-                let analyzed = state.analyzer().execute_and_check(
-                    query.logical_plan.clone(),
-                    state.config_options(),
-                    |_, _| {},
-                )?;
-                let analyzed = find_single_window_frame(&analyzed)?;
-                let WindowFrameBound::Preceding(value) = &analyzed.start_bound else {
-                    return Err("analyzer changed the legacy interval bound kind".into());
-                };
-                assert!(value.is_null());
-                let expected_type = if upper == "CURRENT ROW" {
-                    offset_type.clone()
-                } else {
-                    DataType::Interval(IntervalUnit::MonthDayNano)
-                };
-                assert_eq!(value.data_type(), expected_type);
-                assert!(analyzed.start_bound.is_unbounded());
-                assert!(!analyzed.has_null_offset());
+        // A NULL YEAR interval keeps its temporal representation and coercion, an unbounded
+        // sentinel; as a FOLLOWING bound its frame reaches the partition end where Spark's frame
+        // is empty (#1236).
+        let query = plan_query(&session, &sql("YEAR", "CURRENT ROW"), &options).await?;
+        for frame in [
+            find_single_window_frame(&query.logical_plan)?,
+            analyze(&query.logical_plan)?,
+        ] {
+            let WindowFrameBound::Preceding(value) = &frame.start_bound else {
+                return Err("DATE YEAR interval NULL was retagged as a numeric offset".into());
+            };
+            assert!(value.is_null());
+            assert_eq!(
+                value.data_type(),
+                DataType::Interval(IntervalUnit::YearMonth)
+            );
+            assert!(frame.start_bound.is_unbounded());
+            assert!(!frame.has_null_offset());
+            assert_eq!(
+                frame.range_offset_arithmetic(),
+                RangeOffsetArithmetic::DataFusion
+            );
+        }
+
+        // Beside a DAY offset, a YEAR offset is a bound of another type, which Spark rejects.
+        let error = plan_query(
+            &session,
+            &sql("YEAR", "INTERVAL '1' DAY FOLLOWING"),
+            &options,
+        )
+        .await
+        .err()
+        .ok_or("a YEAR and a DAY bound must not plan")?;
+        assert!(
+            error
+                .to_string()
+                .contains("SPECIFIED_WINDOW_FRAME_DIFF_TYPES"),
+            "{error}"
+        );
+
+        // A NULL DAY interval is a NULL INT day offset over a DATE key (#947), as Spark adds
+        // a DAY interval to a DATE as its day count.
+        for upper in ["CURRENT ROW", "INTERVAL '1' DAY FOLLOWING"] {
+            let query = plan_query(&session, &sql("DAY", upper), &options).await?;
+            for frame in [
+                find_single_window_frame(&query.logical_plan)?,
+                analyze(&query.logical_plan)?,
+            ] {
                 assert_eq!(
-                    analyzed.range_offset_arithmetic(),
-                    RangeOffsetArithmetic::DataFusion
+                    frame.start_bound,
+                    WindowFrameBound::PrecedingNullOffset(DataType::Int32)
+                );
+                assert!(frame.has_null_offset());
+                assert_eq!(
+                    frame.range_offset_arithmetic(),
+                    RangeOffsetArithmetic::Spark { ansi_mode }
                 );
             }
         }

@@ -36,6 +36,9 @@ struct PlannedRangeBoundary {
     display: String,
     frame_bound: WindowFrameBound,
     deferred_check: Option<expr::Expr>,
+    /// For an offset expression, whether it is a DAY interval that a DATE key reads as days;
+    /// `None` for CURRENT ROW, UNBOUNDED and value bounds.
+    reads_as_days: Option<bool>,
 }
 
 impl PlannedRangeBoundary {
@@ -44,6 +47,7 @@ impl PlannedRangeBoundary {
             display,
             frame_bound,
             deferred_check: None,
+            reads_as_days: None,
         }
     }
 }
@@ -601,6 +605,16 @@ impl PlanResolver<'_> {
                 let upper = self
                     .resolve_window_boundary_value(upper, order_by, schema, state)
                     .await?;
+                // Spark rejects bounds of different types. A DAY offset that a DATE key reads
+                // as days fails beside an offset of any other type, as it did as an interval.
+                if let (Some(lower_day), Some(upper_day)) =
+                    (lower.reads_as_days, upper.reads_as_days)
+                    && lower_day != upper_day
+                {
+                    return Err(PlanError::invalid(
+                        "[DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_DIFF_TYPES] expression frame bounds require the same type",
+                    ));
+                }
                 deferred_checks = [lower.deferred_check, upper.deferred_check];
                 (
                     (lower.display, lower.frame_bound),
@@ -918,6 +932,13 @@ impl PlanResolver<'_> {
                     ));
                 }
                 let data_type = get_order_by_type()?;
+                let reads_as_days = data_type == DataType::Date32
+                    && matches!(value, ScalarValue::DurationMicrosecond(_));
+                let value = if reads_as_days {
+                    date_range_offset_days(value)?
+                } else {
+                    value
+                };
                 if value.is_null() {
                     let source_type = value.data_type();
                     let coerced_type =
@@ -998,6 +1019,7 @@ impl PlanResolver<'_> {
                         display,
                         frame_bound: WindowFrameBound::Following(value),
                         deferred_check,
+                        reads_as_days: Some(false),
                     });
                 }
                 let deferred_check = (self.config.ansi_mode
@@ -1032,6 +1054,7 @@ impl PlanResolver<'_> {
                     display,
                     frame_bound: bound,
                     deferred_check,
+                    reads_as_days: Some(reads_as_days),
                 })
             }
             spec::WindowFrameBoundary::Value(expr) => {
@@ -1110,6 +1133,31 @@ fn spark_range_arithmetic_key_type(
                 | DataType::Decimal128(_, _)
         ))
     .then(|| key_type.clone()))
+}
+
+/// A DATE RANGE key moves by whole days: Spark adds a DAY interval offset to the DATE as its
+/// day count, as it does an INT offset, and rejects a sub-day offset (#947). DAR keeps no interval
+/// qualifier here, so a sub-day interval of whole days, such as 24 HOURS, counts its days too.
+/// A NULL DAY interval reads as a NULL INT. Any other value, such as a YEAR-MONTH interval or an
+/// INT, is returned unchanged.
+fn date_range_offset_days(value: ScalarValue) -> PlanResult<ScalarValue> {
+    const MICROS_PER_DAY: i64 = 86_400_000_000;
+    let micros = match value {
+        ScalarValue::DurationMicrosecond(Some(micros)) => micros,
+        ScalarValue::DurationMicrosecond(None) => return Ok(ScalarValue::Int32(None)),
+        value => return Ok(value),
+    };
+    if micros % MICROS_PER_DAY != 0 {
+        return Err(PlanError::invalid(
+            "[DATATYPE_MISMATCH.RANGE_FRAME_INVALID_TYPE] a DATE RANGE key requires an offset of whole days",
+        ));
+    }
+    let days = i32::try_from(micros / MICROS_PER_DAY).map_err(|_| {
+        PlanError::invalid(
+            "[DATATYPE_MISMATCH.RANGE_FRAME_INVALID_TYPE] a DATE RANGE offset exceeds the DATE range",
+        )
+    })?;
+    Ok(ScalarValue::Int32(Some(days)))
 }
 
 fn is_signed_integer_minimum(value: &ScalarValue) -> bool {
