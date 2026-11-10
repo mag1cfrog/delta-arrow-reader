@@ -1713,27 +1713,52 @@ const DATE_FIELDS: [&str; 23] = [
     "DOY",
 ];
 
+/// DataFusion's date part and the number added to it for Spark's day-of-week and week-year
+/// fields: DAYOFWEEK numbers Sunday 1, where DataFusion's `dow` numbers it 0; DAYOFWEEK_ISO
+/// numbers Monday 1, as `isodow` does; YEAROFWEEK is the ISO week-numbering year, `isoyear`
+/// (#1116).
+fn spark_week_field(field: &str) -> Option<(&'static str, i32)> {
+    match field {
+        "DAYOFWEEK" | "DOW" => Some(("dow", 1)),
+        "DAYOFWEEK_ISO" | "DOW_ISO" => Some(("isodow", 0)),
+        "YEAROFWEEK" => Some(("isoyear", 0)),
+        _ => None,
+    }
+}
+
 /// EXTRACT, DATE_PART and DATEPART: a date field of a TIMESTAMP_NTZ reads it cast to DATE, a
-/// nullable cast, as Spark's does.
+/// nullable cast, and of a STRING reads it as a DATE, as Spark's do.
 fn extract_part(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let schema = input.function_context.schema;
+    let ansi_mode = input.function_context.plan_config.ansi_mode;
     let (part, source) = input.arguments.two()?;
-    let date_field = matches!(
-        &part,
+    let field = match &part {
         Expr::Literal(
             ScalarValue::Utf8(Some(field))
-                | ScalarValue::LargeUtf8(Some(field))
-                | ScalarValue::Utf8View(Some(field)),
+            | ScalarValue::LargeUtf8(Some(field))
+            | ScalarValue::Utf8View(Some(field)),
             _,
-        ) if DATE_FIELDS.contains(&field.trim().to_ascii_uppercase().as_str())
-    );
+        ) => Some(field.trim().to_ascii_uppercase()),
+        _ => None,
+    };
+    let date_field = field
+        .as_deref()
+        .is_some_and(|field| DATE_FIELDS.contains(&field));
     let source = match source.get_type(schema)? {
         source_type @ DataType::Timestamp(_, None) if date_field => {
             cast_with_date_ntz_nullability(source, &source_type, &DataType::Date32)
         }
+        // DataFusion read a STRING as a nanosecond TIMESTAMP, which failed beyond its years.
+        DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View if date_field => {
+            ScalarUDF::from(SparkDate::new(!ansi_mode)).call(vec![source])
+        }
         _ => source,
     };
-    Ok(date_part(part, source))
+    Ok(match field.as_deref().and_then(spark_week_field) {
+        Some((week_part, 0)) => date_part(lit(week_part), source),
+        Some((week_part, offset)) => date_part(lit(week_part), source) + lit(offset),
+        None => date_part(part, source),
+    })
 }
 
 /// Spark's MONTHS_BETWEEN, whose nullability follows from its parts at every stage: NOT NULL for
