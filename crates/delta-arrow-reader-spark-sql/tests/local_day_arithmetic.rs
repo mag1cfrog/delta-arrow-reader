@@ -53,9 +53,6 @@ enum RetainedDifference {
     /// 10000-03-31 15:59:59.999999 local time, which Java's recurring rules read in PDT and
     /// the date library, whose Los Angeles rules end in 2099, in PST, an hour later.
     RecurringDstAfter2099,
-    /// #952: DATE plus an HOUR or DAY TO HOUR interval stays a DATE, the DATE plus the
-    /// interval's whole days, where Spark gives a TIMESTAMP.
-    DateHourArithmetic,
 }
 
 /// Records that add a quarter to the `instants` column.
@@ -64,19 +61,12 @@ const QUARTER_RECORDS: [&str; 3] = [
     "column_timestampadd_quarter_column",
     "column_dateadd_quarter",
 ];
-/// DATE '2024-03-10' plus INTERVAL '1' HOUR and DATE '2024-03-09' plus INTERVAL '1 02' DAY
-/// TO HOUR.
-const DATE_HOUR_RECORDS: [&str; 2] = ["literal_date_plus_hour", "literal_date_plus_day_to_hour"];
-/// 2024-03-10, the DATE DAR gives for both DATE plus hour records.
-const MARCH_10_2024: &str = "19792";
 const MICROS_PER_HOUR: i64 = 3_600_000_000;
 
 fn retained_difference(case: &Value) -> Option<RetainedDifference> {
     let id = case["id"].as_str()?;
     if QUARTER_RECORDS.contains(&id) && case["timezone"] == "America/Los_Angeles" {
         Some(RetainedDifference::RecurringDstAfter2099)
-    } else if DATE_HOUR_RECORDS.contains(&id) {
-        Some(RetainedDifference::DateHourArithmetic)
     } else {
         None
     }
@@ -104,16 +94,6 @@ fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResu
             if changed != 1 {
                 return Err(format!("expected row 16 once: {case}").into());
             }
-        }
-        RetainedDifference::DateHourArithmetic => {
-            for stage in ["analyzed", "optimized", "executed"] {
-                let field = &mut current["schema_stages"][stage]["fields"][0];
-                if field["type"] != "timestamp" || field["nullable"] != false {
-                    return Err(format!("expected Spark's required TIMESTAMP: {case}").into());
-                }
-                field["type"] = json!("date");
-            }
-            current["expected"]["rows"] = json!([[MARCH_10_2024]]);
         }
     }
     Ok(current)
@@ -388,10 +368,7 @@ async fn timestamp_days_add_in_local_time_like_spark() -> TestResult {
     }
     assert_eq!(
         retained,
-        BTreeMap::from([
-            (RetainedDifference::RecurringDstAfter2099, 6),
-            (RetainedDifference::DateHourArithmetic, 12),
-        ])
+        BTreeMap::from([(RetainedDifference::RecurringDstAfter2099, 6),])
     );
     let mut differences = Vec::new();
     for batch_size in [1, 32] {

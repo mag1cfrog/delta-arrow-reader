@@ -10,7 +10,8 @@ use datafusion::optimizer::simplify_expressions::ExprSimplifier;
 use datafusion_common::{DFSchemaRef, ScalarValue};
 use datafusion_expr::simplify::SimplifyContextBuilder;
 use datafusion_expr::{
-    BinaryExpr, Expr, ExprSchemable, Operator, ScalarUDF, ScalarUDFImpl, cast, expr, lit, try_cast,
+    BinaryExpr, Expr, ExprSchemable, Operator, ScalarUDF, ScalarUDFImpl, binary_expr, cast, expr,
+    lit, try_cast,
 };
 use datafusion_spark::function::math::expr_fn as math_fn;
 use datafusion_spark::function::math::hex::SparkHex;
@@ -332,10 +333,10 @@ fn spark_plus(input: ScalarFunctionInput) -> PlanResult<Expr> {
                 function_context.plan_config.ansi_mode,
             )?,
             (Ok(DataType::Date32), Ok(DataType::Duration(TimeUnit::Microsecond))) => {
-                left + cast(right, DataType::Interval(IntervalUnit::MonthDayNano))
+                date_plus_interval_days(left, right, Operator::Plus)
             }
             (Ok(DataType::Duration(TimeUnit::Microsecond)), Ok(DataType::Date32)) => {
-                cast(left, DataType::Interval(IntervalUnit::MonthDayNano)) + right
+                date_plus_interval_days(right, left, Operator::Plus)
             }
             (Ok(left_type), Ok(DataType::Date32)) if left_type.is_numeric() => {
                 cast(left + cast(right, DataType::Int32), DataType::Date32)
@@ -366,6 +367,22 @@ fn spark_plus(input: ScalarFunctionInput) -> PlanResult<Expr> {
             (Err(_), _) | (_, Err(_)) => left + right,
         })
     }
+}
+
+/// `date` moved by `op`, plus or minus, by the whole days of the day-time interval `interval`,
+/// as Spark adds a DAY interval to a DATE with `date_add` of its day count (#952). The resolver
+/// reads a DATE beside an interval with time units as a TIMESTAMP first, so an interval here
+/// ends at DAY, or its end field is unknown and any time part truncates toward zero.
+fn date_plus_interval_days(date: Expr, interval: Expr, op: Operator) -> Expr {
+    const MICROS_PER_DAY: i64 = 86_400_000_000;
+    let days = cast(
+        cast(interval, DataType::Int64) / lit(MICROS_PER_DAY),
+        DataType::Int32,
+    );
+    cast(
+        binary_expr(cast(date, DataType::Int32), op, days),
+        DataType::Date32,
+    )
 }
 
 /// Whether `data_type` is a TIMESTAMP with a time zone, as DAR types Spark's TIMESTAMP.
@@ -559,6 +576,12 @@ fn try_add(input: ScalarFunctionInput) -> PlanResult<Expr> {
         (Ok(DataType::Null), Ok(DataType::Timestamp(TimeUnit::Microsecond, _))) => {
             add(right, null_interval(left))
         }
+        (Ok(DataType::Date32), Ok(DataType::Duration(TimeUnit::Microsecond))) => {
+            date_plus_interval_days(left, right, Operator::Plus)
+        }
+        (Ok(DataType::Duration(TimeUnit::Microsecond)), Ok(DataType::Date32)) => {
+            date_plus_interval_days(right, left, Operator::Plus)
+        }
         // Spark adds two untyped NULLs as DOUBLE values.
         (Ok(DataType::Null), Ok(DataType::Null)) => lit(ScalarValue::Float64(None)),
         _ => ScalarUDF::from(SparkTryAdd::new()).call(vec![left, right]),
@@ -628,6 +651,9 @@ fn try_subtract(input: ScalarFunctionInput) -> PlanResult<Expr> {
         (Ok(DataType::Null), Ok(start_type @ DataType::Timestamp(TimeUnit::Microsecond, _))) => {
             let end = cast(left, start_type.clone());
             difference(end, &start_type, right, &start_type)
+        }
+        (Ok(DataType::Date32), Ok(DataType::Duration(TimeUnit::Microsecond))) => {
+            date_plus_interval_days(left, right, Operator::Minus)
         }
         // Spark subtracts two untyped NULLs as DOUBLE values.
         (Ok(DataType::Null), Ok(DataType::Null)) => lit(ScalarValue::Float64(None)),
@@ -708,7 +734,7 @@ fn spark_minus(input: ScalarFunctionInput) -> PlanResult<Expr> {
                 ScalarUDF::from(SparkIntervalArithmetic::subtract()).call(vec![left, right])
             }
             (Ok(DataType::Date32), Ok(DataType::Duration(TimeUnit::Microsecond))) => {
-                left - cast(right, DataType::Interval(IntervalUnit::MonthDayNano))
+                date_plus_interval_days(left, right, Operator::Minus)
             }
             (Ok(DataType::Date32), Ok(right_type)) if right_type.is_numeric() => {
                 cast(cast(left, DataType::Int32) - right, DataType::Date32)

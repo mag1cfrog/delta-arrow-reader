@@ -17,6 +17,7 @@ use crate::resolver::state::PlanResolverState;
 
 mod attribute;
 mod cast;
+mod day_time_interval;
 mod function;
 mod grouping;
 mod lambda;
