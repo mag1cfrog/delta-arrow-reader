@@ -1,5 +1,5 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::mem;
 use std::sync::Arc;
 
@@ -27,11 +27,15 @@ use crate::resolver::tree::{
 pub(crate) struct WindowRewriter<'s> {
     plan: LogicalPlan,
     state: &'s mut PlanResolverState,
-    /// Cache of already-processed window functions keyed by schema name.
+    /// Cache of already-processed window functions keyed by expression.
     /// This deduplicates identical window function expressions that appear
     /// multiple times in the expression tree (e.g. when a division-by-zero
     /// guard wraps a window-function divisor in a CASE expression).
-    seen: HashMap<String, Expr>,
+    seen: HashMap<Expr, Expr>,
+    /// Window column names already used. Distinct windows can share a schema
+    /// name, such as a DAY and a MONTH RANGE frame over a DATE key that both
+    /// show `1 PRECEDING`; each keeps its own column.
+    columns: HashSet<String>,
     input_order_initialized: bool,
     stable_ordering: Option<Vec<SortExpr>>,
     stable_ordering_enforced: bool,
@@ -132,6 +136,7 @@ impl<'s> PlanRewriter<'s> for WindowRewriter<'s> {
             plan,
             state,
             seen: HashMap::new(),
+            columns: HashSet::new(),
             input_order_initialized: false,
             stable_ordering: None,
             stable_ordering_enforced: false,
@@ -165,7 +170,7 @@ impl TreeNodeRewriter for WindowRewriter<'_> {
                 let original = Expr::WindowFunction(function.clone());
                 let name = original.schema_name().to_string();
                 let seeded_rand = contains_seeded_rand(&original)?;
-                if seeded_rand && let Some(replacement) = self.seen.get(&name) {
+                if seeded_rand && let Some(replacement) = self.seen.get(&original) {
                     return Ok(Transformed::yes(replacement.clone()));
                 }
                 let requires_input_order =
@@ -248,20 +253,26 @@ impl TreeNodeRewriter for WindowRewriter<'_> {
                     }
                     self.stable_ordering = Some(desired);
                 }
+                if let Some(replacement) = self.seen.get(&original) {
+                    return Ok(Transformed::yes(replacement.clone()));
+                }
+                let column = if self.columns.contains(&name) {
+                    self.state.register_hidden_field_name(&name)
+                } else {
+                    name.clone()
+                };
                 let node = Expr::WindowFunction(function);
-                let node = if materialized_rand {
-                    node.alias(&name)
+                let node = if materialized_rand || column != name {
+                    node.alias(&column)
                 } else {
                     node
                 };
-                if let Some(replacement) = self.seen.get(&name) {
-                    return Ok(Transformed::yes(replacement.clone()));
-                }
                 let plan = mem::replace(&mut self.plan, empty_logical_plan());
                 self.plan = LogicalPlan::Window(Window::try_new(vec![node], Arc::new(plan))?);
                 let alias = self.state.register_field_name(&name);
-                let replacement = ident(name.clone()).alias(alias);
-                self.seen.insert(name, replacement.clone());
+                let replacement = ident(column.clone()).alias(alias);
+                self.columns.insert(column);
+                self.seen.insert(original, replacement.clone());
                 Ok(Transformed::yes(replacement))
             }
             _ => Ok(Transformed::no(node)),

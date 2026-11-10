@@ -1951,12 +1951,18 @@ Spark output name before normalizing the physical frame. Other interval bounds
 keep their Interval or Duration representation and arithmetic.
 
 A DATE key moves by whole days, so the resolver reads a DAY interval offset over
-it as that many INT days, which then takes the numeric DATE path above and gives
-Spark's frame; it was read as a running sum (#947). An interval that is not a
-whole number of days fails with Spark's RANGE_FRAME_INVALID_TYPE. DAR keeps no
-interval qualifier on the offset, so a sub-day interval of whole days, such as
-INTERVAL 24 HOURS or INTERVAL '1 00' DAY TO HOUR, gives the one-day frame, where
-Spark rejects its type (#1236). The [DATE RANGE interval offset
+it as that many INT days, and a NULL one as a NULL INT, which then takes the
+numeric DATE path above and gives Spark's frame; it was read as a running sum
+(#947). An interval that is not a whole number of days fails with Spark's
+RANGE_FRAME_INVALID_TYPE. The frame compares its two offset types as written,
+so a DAY offset beside an INT or MONTH offset still fails with
+SPECIFIED_WINDOW_FRAME_DIFF_TYPES. DAR keeps no interval qualifier on the
+offset, so a sub-day interval of whole days, such as INTERVAL 24 HOURS or
+INTERVAL '1 00' DAY TO HOUR, gives the one-day frame, and a NULL HOUR interval
+the NULL DAY frame, where Spark rejects its type (#1236). Since a DAY offset and
+a MONTH offset can then show the same frame, `1 PRECEDING`, the window rewriter
+merges only identical window expressions, and gives a distinct window with a
+taken name its own hidden column. The [DATE RANGE interval offset
 references](tests/fixtures/date-range-interval-offsets/README.md) record the
 checks.
 
@@ -1985,8 +1991,8 @@ Explicit NULL RANGE offsets on numeric keys, and INT NULL offsets on DATE keys,
 use `PrecedingNullOffset` and `FollowingNullOffset` comparison targets. Analyzer
 coercion preserves their admitted offset type. Native DataFusion
 `Preceding(typed NULL)` and `Following(typed NULL)` remain unbounded sentinels.
-DATE Interval/Duration NULL bounds keep their existing temporal representation
-and coercion. The SQL unparser retains an explicit typed NULL expression or
+DATE YEAR-MONTH interval NULL bounds keep their existing temporal representation
+and coercion; a NULL DAY interval over a DATE key is an INT NULL offset (#947). The SQL unparser retains an explicit typed NULL expression or
 returns the existing checked type-conversion error.
 
 Sail assigns `RangeOffsetArithmetic::Spark` to admitted explicit NULL frames

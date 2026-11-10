@@ -4371,9 +4371,9 @@ against `date-range-747-spark.jsonl`. A reference refresh must also update the
 owner controls' reference records, while preserving their native observations
 and the separate native control file.
 
-`date_range_frames.rs` requires 1012 primary comparisons at batch sizes 1 and 32
-with two target partitions, including 28 explicit-NULL-offset and 12 TIMESTAMP
-control contexts. It also replays the exact original query and frame consumers
+`date_range_frames.rs` requires 1024 primary comparisons at batch sizes 1 and 32
+with two target partitions, including 28 explicit-NULL-offset, 12 DAY interval
+(#947) and 12 TIMESTAMP control contexts. It also replays the exact original query and frame consumers
 separately in 108 contexts.
 All five schema stages retain complete names, types, nullability and metadata
 when available. Failures retain the condition, phase and available Fields;
