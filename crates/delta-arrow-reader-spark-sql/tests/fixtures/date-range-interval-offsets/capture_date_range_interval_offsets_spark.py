@@ -4,7 +4,10 @@ Records analyzed, optimized and executed schemas, typed internal-row values and 
 with the innermost Java exception of a failure, for SUM over RANGE frames ordered by a nullable
 DATE column, and by a DATE expression, with DAY interval offsets PRECEDING and FOLLOWING, on both
 sides, descending, zero, multi-day, with a partition and with a quoted day count; with sub-day
-interval offsets, which Spark rejects for a DATE key; and with a numeric offset for comparison.
+interval offsets, which Spark rejects for a DATE key; with a numeric offset for comparison; with
+a DAY offset beside an INT or a MONTH offset, which Spark rejects as bounds of different types;
+with a NULL DAY interval offset on either side, and a NULL DAY or HOUR offset alone; and with
+two windows of different offsets in one query.
 The dates have a gap, a NULL and the days of the Los Angeles DST change. Every query runs in
 both ANSI modes in UTC and America/Los_Angeles. Run from the crate root in the reference
 environment described in README.md; the output path must not exist.
@@ -58,6 +61,15 @@ def definitions():
         ("hours", "d", "INTERVAL 24 HOURS PRECEDING AND CURRENT ROW"),
         ("half_day", "d", "INTERVAL 12 HOURS PRECEDING AND CURRENT ROW"),
         ("day_hour", "d", "INTERVAL '1 00' DAY TO HOUR PRECEDING AND CURRENT ROW"),
+        ("int_day", "d", "1 PRECEDING AND INTERVAL 1 DAY FOLLOWING"),
+        ("day_int", "d", "INTERVAL 1 DAY PRECEDING AND 1 FOLLOWING"),
+        ("day_month", "d", "INTERVAL 1 DAY PRECEDING AND INTERVAL 1 MONTH FOLLOWING"),
+        ("null_day_preceding", "d",
+         "CAST(NULL AS INTERVAL DAY) PRECEDING AND INTERVAL 1 DAY FOLLOWING"),
+        ("null_day_following", "d",
+         "INTERVAL 1 DAY PRECEDING AND CAST(NULL AS INTERVAL DAY) FOLLOWING"),
+        ("null_day_current", "d", "CAST(NULL AS INTERVAL DAY) PRECEDING AND CURRENT ROW"),
+        ("null_hour_current", "d", "CAST(NULL AS INTERVAL HOUR) PRECEDING AND CURRENT ROW"),
     ]
     for name, key, frame in frames:
         yield (f"range_{name}",
@@ -65,6 +77,17 @@ def definitions():
     yield ("range_partitioned_day",
            "SELECT k, SUM(v) OVER (PARTITION BY k % 2 ORDER BY d "
            "RANGE BETWEEN INTERVAL 1 DAY PRECEDING AND CURRENT ROW) AS r FROM inputs")
+    pairs = [
+        ("day_month", "INTERVAL 1 DAY PRECEDING", "INTERVAL 1 MONTH PRECEDING", " AS a", " AS b"),
+        ("month_day", "INTERVAL 1 MONTH PRECEDING", "INTERVAL 1 DAY PRECEDING", " AS a", " AS b"),
+        ("int_month", "1 PRECEDING", "INTERVAL 1 MONTH PRECEDING", " AS a", " AS b"),
+        ("day_int_unaliased", "INTERVAL 1 DAY PRECEDING", "1 PRECEDING", "", ""),
+    ]
+    for name, first, second, first_alias, second_alias in pairs:
+        yield (f"windows_{name}",
+               f"SELECT k, SUM(v) OVER (ORDER BY d RANGE BETWEEN {first} AND CURRENT ROW)"
+               f"{first_alias}, SUM(v) OVER (ORDER BY d RANGE BETWEEN {second} AND CURRENT ROW)"
+               f"{second_alias} FROM inputs")
 
 
 def python_value(value, kind):

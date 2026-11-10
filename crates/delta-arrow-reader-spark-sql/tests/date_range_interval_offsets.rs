@@ -30,7 +30,7 @@ mod spark_results;
 use spark_results::{TestResult, validate_batch};
 
 /// The number of recorded observations.
-const RECORD_COUNT: usize = 56;
+const RECORD_COUNT: usize = 100;
 
 fn date_range_references() -> TestResult<Vec<Value>> {
     let records = include_str!(
@@ -217,22 +217,28 @@ fn optimize(session: &SessionContext, plan: &LogicalPlan) -> TestResult<LogicalP
 }
 
 /// #1236: DAR keeps no interval qualifier on a RANGE offset, so it reads `INTERVAL 24 HOURS` and
-/// `INTERVAL '1 00' DAY TO HOUR` over a DATE key as one day and returns the one-day frame, where
-/// Spark rejects a sub-day offset type with RANGE_FRAME_INVALID_TYPE.
-const WHOLE_DAY_SUB_DAY_RECORDS: [&str; 2] = ["range_hours", "range_day_hour"];
+/// `INTERVAL '1 00' DAY TO HOUR` over a DATE key as one day, and `CAST(NULL AS INTERVAL HOUR)` as
+/// a NULL DAY offset, where Spark rejects a sub-day offset type with RANGE_FRAME_INVALID_TYPE.
+/// Each record gives the frame of its DAY twin.
+const WHOLE_DAY_SUB_DAY_RECORDS: [(&str, &str); 3] = [
+    ("range_hours", "range_day_preceding"),
+    ("range_day_hour", "range_day_preceding"),
+    ("range_null_hour_current", "range_null_day_current"),
+];
 
-fn is_whole_day_sub_day_record(case: &Value) -> bool {
-    case["id"]
-        .as_str()
-        .is_some_and(|id| WHOLE_DAY_SUB_DAY_RECORDS.contains(&id))
+fn day_twin(case: &Value) -> Option<&'static str> {
+    WHOLE_DAY_SUB_DAY_RECORDS
+        .iter()
+        .find(|(id, _)| case["id"] == *id)
+        .map(|(_, twin)| *twin)
 }
 
-/// The expectation for a record: Spark's, or for a #1236 record DAR's one-day frame, Spark's rows
-/// for `INTERVAL 1 DAY` in the same session zone and mode.
+/// The expectation for a record: Spark's, or for a #1236 record Spark's rows for its DAY twin in
+/// the same session zone and mode.
 fn expectation(records: &[Value], case: &Value) -> TestResult<Value> {
-    if !is_whole_day_sub_day_record(case) {
+    let Some(twin) = day_twin(case) else {
         return Ok(case.clone());
-    }
+    };
     if case["expected"]["status"] != "error"
         || case["expected"]["condition"] != "DATATYPE_MISMATCH.RANGE_FRAME_INVALID_TYPE"
     {
@@ -241,11 +247,12 @@ fn expectation(records: &[Value], case: &Value) -> TestResult<Value> {
     let day = records[1..]
         .iter()
         .find(|day| {
-            day["id"] == "range_day_preceding"
-                && day["timezone"] == case["timezone"]
-                && day["ansi"] == case["ansi"]
+            day["id"] == twin && day["timezone"] == case["timezone"] && day["ansi"] == case["ansi"]
         })
-        .ok_or("missing the one-day record")?;
+        .ok_or("missing the DAY twin record")?;
+    if day["expected"]["status"] != "ok" {
+        return Err(format!("expected Spark's rows for the DAY twin: {day}").into());
+    }
     let mut current = case.clone();
     current["expected"] = day["expected"].clone();
     current["schema_stages"] = day["schema_stages"].clone();
@@ -372,11 +379,8 @@ async fn date_range_interval_offsets_match_spark() -> TestResult {
     let records = date_range_references()?;
     let cases = records[1..].iter().collect::<Vec<_>>();
     assert_eq!(
-        cases
-            .iter()
-            .filter(|case| is_whole_day_sub_day_record(case))
-            .count(),
-        8
+        cases.iter().filter(|case| day_twin(case).is_some()).count(),
+        12
     );
     assert_no_differences(&differences_over(&records, &cases).await?);
     Ok(())
