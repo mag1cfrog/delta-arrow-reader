@@ -41,7 +41,7 @@ use super::lambda::lambda_with_fresh_parameter;
 use crate::error::{PlanError, PlanResult};
 use crate::function::common::{
     NormalizeFloatArrayForSparkComparison, ScalarFunction, ScalarFunctionInput,
-    SparkComparisonFloat,
+    SparkComparisonFloat, cast_with_date_ntz_nullability,
 };
 use crate::function::float_keys::normalize_spark_float_array_comparison;
 use crate::function::numeric_coercion::common_numeric_type;
@@ -49,7 +49,38 @@ use crate::function::result_coercion::{
     cast_nested_value, common_array_element_type, nested_result_cast_input,
     same_positional_logical_type,
 };
-use crate::function::temporal_coercion::cast_local_timestamp_expr_to_ltz;
+use crate::function::temporal_coercion::{
+    cast_local_timestamp_expr_to_ltz, is_date_beside_timestamp_ntz,
+};
+
+/// ARRAY. Spark combines a DATE beside a TIMESTAMP_NTZ, without a TIMESTAMP, as microsecond
+/// TIMESTAMP_NTZ elements, each DATE at its midnight through its nullable cast, where
+/// `SparkArray`'s coercion picks nanoseconds and fails outside 1677 to 2262 (#1191).
+fn array(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
+    let schema = input.function_context.schema;
+    let types = input
+        .arguments
+        .iter()
+        .map(|argument| argument.get_type(schema))
+        .collect::<Result<Vec<_>, _>>()?;
+    let arguments = if is_date_beside_timestamp_ntz(&types) {
+        let ntz = DataType::Timestamp(TimeUnit::Microsecond, None);
+        input
+            .arguments
+            .into_iter()
+            .zip(&types)
+            .map(|(argument, source)| match source {
+                DataType::Date32 | DataType::Date64 => {
+                    cast_with_date_ntz_nullability(argument, source, &ntz)
+                }
+                _ => argument,
+            })
+            .collect()
+    } else {
+        input.arguments
+    };
+    Ok(ScalarUDF::from(SparkArray::new()).call(arguments))
+}
 
 fn array_size(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let value = input.arguments.one()?;
@@ -1130,7 +1161,7 @@ pub(super) fn list_built_in_array_functions() -> Vec<(&'static str, ScalarFuncti
     use crate::function::common::ScalarFunctionBuilder as F;
 
     vec![
-        ("array", F::udf(SparkArray::new())),
+        ("array", F::custom(array)),
         ("array_append", F::custom(array_append)),
         ("array_compact", F::custom(array_compact)),
         ("array_contains", F::custom(array_contains)),

@@ -144,6 +144,21 @@ fn if_expr(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     }))
 }
 
+/// NVL2, which Spark rewrites to `IF(expr1 IS NOT NULL, expr2, expr3)`, with IF's result
+/// coercion; DataFusion's own coerced a DATE beside a TIMESTAMP_NTZ through nanoseconds and
+/// failed outside 1677 to 2262 (#1191).
+fn nvl2(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
+    let ScalarFunctionInput {
+        arguments,
+        function_context,
+    } = input;
+    let (value, then_expr, else_expr) = arguments.three()?;
+    if_expr(ScalarFunctionInput {
+        arguments: vec![value.is_not_null(), then_expr, else_expr],
+        function_context,
+    })
+}
+
 fn coalesce(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let ScalarFunctionInput {
         arguments,
@@ -203,7 +218,7 @@ pub(super) fn list_built_in_conditional_functions() -> Vec<(&'static str, Scalar
         ),
         ("nullifzero", F::custom(nullifzero)),
         ("nvl", F::custom(ifnull)),
-        ("nvl2", F::ternary(expr_fn::nvl2)),
+        ("nvl2", F::custom(nvl2)),
         ("zeroifnull", F::custom(zeroifnull)),
         ("when", F::custom(case)),
         ("case", F::custom(case)),

@@ -674,16 +674,27 @@ so these results are nullable over a column, and over a literal until constant f
 - the implicit casts of the TO_DATE, DATE_ADD, DATE_SUB, ADD_MONTHS, DATEDIFF, DAY, DAYOFMONTH,
   DAYOFYEAR, MONTH, QUARTER, WEEKDAY and DAYOFWEEK arguments and of the date fields of EXTRACT,
   DATE_PART and DATEPART;
-- a DATE compared with a TIMESTAMP_NTZ, and a DATE beside a TIMESTAMP_NTZ in CASE, IF, COALESCE
-  and UNION.
+- a DATE compared with a TIMESTAMP_NTZ, and a DATE beside a TIMESTAMP_NTZ in CASE, IF, NVL2,
+  COALESCE, UNION, ARRAY and IN lists.
 
 They were NOT NULL for a NOT NULL input (#1003). TRY_CAST of a DATE to TIMESTAMP_NTZ cannot
 fail and keeps its input's nullability. Values are unchanged. Still open: Spark's
 optimizer rewrites a column compared with a literal without the cast, NOT NULL once optimized,
-which DAR does not do (#1197); a DATE in an IN list of TIMESTAMP_NTZ values keeps
-DataFusion's coercion (#1191); and a constant over an input proven empty stays nullable after
+which DAR does not do (#1197); and a constant over an input proven empty stays nullable after
 optimization (#1190). EXTRACT of DAYOFWEEK, DOW_ISO and YEAROFWEEK works since #1116.
 The [cast references](tests/fixtures/date-ntz-casts/README.md) record the checks.
+
+A DATE beside a TIMESTAMP_NTZ, without a TIMESTAMP, in ARRAY, VALUES or an IN list, combines as
+microsecond TIMESTAMP_NTZ values, each DATE at its midnight, like Spark (#1191). DataFusion's
+coercion picked nanosecond timestamps, which changed the type and failed outside 1677 to 2262.
+ARRAY and IN lists take Spark's nullable DATE cast; VALUES evaluates its cells, so a column is
+nullable only for a NULL cell, as in Spark. NVL2 is Spark's `IF(expr1 IS NOT NULL, expr2,
+expr3)` with IF's result coercion, where DataFusion's `nvl2` coerced through nanoseconds. Array
+functions and comparisons over an ARRAY<DATE> beside an ARRAY<TIMESTAMP_NTZ> still combine
+through nanoseconds: CONCAT fails while planning and ARRAY_UNION while collecting rows (#1236),
+and array equality is #1176. The
+[DATE and TIMESTAMP_NTZ combination references](tests/fixtures/date-timestamp-ntz-combination/README.md)
+record the checks.
 
 TRUNC uses a local function, `SparkTruncDate`, like Spark's `TruncDate`. It truncates to Spark's
 units only, YEAR, YYYY, YY, QUARTER, MON, MONTH, MM and WEEK in any letter case, and gives NULL

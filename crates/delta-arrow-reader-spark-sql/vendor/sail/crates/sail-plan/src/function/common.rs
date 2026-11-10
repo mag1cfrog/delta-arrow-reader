@@ -32,7 +32,9 @@ use crate::function::comparison::{
     comparison_string_type, nanosecond_comparison_cast, string_comparison_cast,
     string_comparison_type, temporal_comparison_type,
 };
-use crate::function::temporal_coercion::cast_local_timestamp_expr_to_ltz;
+use crate::function::temporal_coercion::{
+    cast_local_timestamp_expr_to_ltz, is_date_beside_timestamp_ntz,
+};
 
 /// Spark's `UNRESOLVED_ROUTINE` error for a routine named `function_name`, as written, on the
 /// session's search path.
@@ -852,6 +854,25 @@ pub(crate) fn spark_in_list(
         .map(|operand| operand.get_type(schema))
         .collect::<Result<Vec<_>, _>>()?;
     reject_calendar_interval_ordering(&operand_types, "in", "DATATYPE_MISMATCH.DATA_DIFF_TYPES")?;
+    if is_date_beside_timestamp_ntz(&operand_types) {
+        let ntz = DataType::Timestamp(TimeUnit::Microsecond, None);
+        let mut operands =
+            std::iter::once(value)
+                .chain(list)
+                .zip(&operand_types)
+                .map(|(operand, source)| match source {
+                    source if source == &ntz => operand,
+                    source => cast_with_date_ntz_nullability(operand, source, &ntz),
+                });
+        let value = operands
+            .next()
+            .ok_or_else(|| PlanError::invalid("missing IN operand"))?;
+        return Ok(expr::Expr::InList(expr::InList::new(
+            Box::new(value),
+            operands.collect(),
+            negated,
+        )));
+    }
     let mut input = expr::InList::new(Box::new(value), list, negated);
     let (mut decimal, mut floating, mut double, mut single, mut integer) =
         (false, false, false, false, false);
