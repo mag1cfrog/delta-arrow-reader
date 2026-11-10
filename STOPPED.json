@@ -1,0 +1,36 @@
+{
+  "status": "stopped_at_user_request",
+  "goal": "cleared_by_user",
+  "created_at_utc": "2026-11-10T00:04:34.325887+00:00",
+  "product_head": "63da7acb50c237fb878667e3846f35bdd8d2e532",
+  "product_branch": "fix/spark-udf-folding-opt-outs",
+  "product_base": "2d68cdc21b7be7bc706c005a8dde8ad85f1cde08",
+  "last_observed_staging": "9809ee117069908138442a4d6fe2094c466a6cb5",
+  "no_merge_or_new_implementation_authorized_by_this_archive": true,
+  "remaining893": [
+    "Source-traced eager conditional-argument ordering issue C1 needs independent reproduction and repair.",
+    "New clippy::unnecessary_lazy_evaluations finding at expression_errors.rs4251 remains unfixed.",
+    "Integration with staging changes after2d68 remains unperformed.",
+    "Final lint baseline comparison and acceptance are incomplete."
+  ],
+  "actual_checks": {
+    "workspace": "2223 passed,0 failed,3 ignored",
+    "focused": "33 passed,0 failed",
+    "native_CASE": "38 passed,0 failed",
+    "host_strict_clippy": "passed",
+    "fmt": "passed",
+    "full_vendor_strict_clippy": "exit101; includes new diagnostic",
+    "frozen_observations": 940,
+    "case_source_target_observations": 16
+  },
+  "next_previously_planned": 711,
+  "known_separate_open_work": [
+    "#1155 literal-only folding routes",
+    "#1007 broader CASE volatility",
+    "#525/#511 remaining staged compatibility and integration work"
+  ],
+  "children_total": 1563,
+  "children_newly_archived": 425,
+  "background_project_engines": "none found during shutdown inspection",
+  "original_worktrees_and_stashes": "preserved in place; recoverable snapshots created without changing their indexes"
+}

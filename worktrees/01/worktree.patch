@@ -1,0 +1,10 @@
+diff --git a/Cargo.toml b/Cargo.toml
+index 567c95e8da892972358249261a97a1fbf4c5ada3..b63e4149b237fc336af30752fd92be263237af08 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -1,4 +1,5 @@
+ [workspace]
++exclude = ["experiments/spark-sql", "experiments/spark-sql/vendor/sail"]
+ members = [
+     "crates/delta-arrow-reader-core",
+     "crates/delta-arrow-reader-cli",

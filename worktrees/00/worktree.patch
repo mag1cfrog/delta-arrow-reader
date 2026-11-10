@@ -1,0 +1,103 @@
+diff --git a/README.md b/README.md
+index 45e7e787b55486a75714b004e0f45dfb06a5f66c..1c7591913a140bfb5ee8c3c631307d07964d8c15 100644
+--- a/README.md
++++ b/README.md
+@@ -17,13 +17,13 @@
+   <a href="https://github.com/mag1cfrog/delta-arrow-reader/actions/workflows/docs.yml?query=branch%3Amain%20event%3Apush"><img alt="Documentation build and deployment" src="https://img.shields.io/github/actions/workflow/status/mag1cfrog/delta-arrow-reader/docs.yml?branch=main&amp;event=push&amp;style=flat-square&amp;label=docs"></a>
+ </p>
+ 
+-Delta Arrow Reader is a fast, memory-efficient Delta Lake reader.
++Delta Arrow Reader reads Delta Lake tables from Python, Rust, or the command line.
+ 
+ - **Get results faster.** Spend less time downloading and processing data your
+   query doesn't need.
+ - **Use less memory.** Process results as they arrive, without keeping the whole
+   result in RAM.
+-- **Skip the cluster setup.** Read and filter Delta tables in your own
++- **Skip the cluster setup.** Read and filter Delta tables in your terminal or
+   application, without running Spark.
+ 
+ **Faster than delta-rs, DuckDB, Polars, and single-machine Spark** in all eight
+@@ -41,6 +41,32 @@ times for the first complete query after table initialization, excluding startup
+ 
+ ## Get started
+ 
++### CLI
++
++Preview rows as JSON, run SQL to filter, group, or join tables, and save results
++as Arrow or JSON. Queries run locally.
++
++With [uv](https://docs.astral.sh/uv/getting-started/installation/) installed,
++run the CLI from PyPI without adding it to your project:
++
++```bash
++uvx --no-build delta-arrow-reader@latest preview /path/to/delta-table --column id --limit 3
++```
++
++Replace the path with a Delta table directory and `id` with a column name.
++This prints up to three values as JSON, including the column's type.
++Continue with the [CLI quickstart](https://mag1cfrog.github.io/delta-arrow-reader/cli-quickstart/)
++or [SQL examples](https://mag1cfrog.github.io/delta-arrow-reader/cli-workflows/).
++See [installation](https://mag1cfrog.github.io/delta-arrow-reader/installation/#cli-binaries-and-container-images)
++for supported platforms, a persistent command, standalone `dar` binaries, and containers.
++
++For [Unity Catalog tables](https://mag1cfrog.github.io/delta-arrow-reader/unity-catalog/),
++reuse a working profile from the Databricks CLI installed on your `PATH`.
++Read tables by their `uc://catalog.schema.table` names and run SQL locally,
++without a Databricks cluster or SQL warehouse. The metastore must allow external
++data access, and your identity needs table read permissions plus `EXTERNAL USE SCHEMA`.
++The guide covers setup and supported tables.
++
+ ### Python
+ 
+ Install from PyPI (Python 3.10 or later):
+@@ -90,12 +116,5 @@ Save this as `src/main.rs`, replace the table path, and run `cargo run`.
+ or [query with SQL](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/).
+ See the [Rust API reference](https://docs.rs/delta-arrow-reader) for types and methods.
+ 
+-### CLI
+-
+-The Python package includes the `delta-arrow-reader` command. You can also
+-[install a standalone `dar` binary or container](https://mag1cfrog.github.io/delta-arrow-reader/installation/#cli-binaries-and-container-images).
+-The [CLI](https://mag1cfrog.github.io/delta-arrow-reader/cli-quickstart/) returns snapshot
+-metadata as JSON and rows as an Arrow IPC stream.
+-
+ For development and benchmark setup, see the
+ [repository documentation](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/docs/README.md).
+diff --git a/crates/delta-arrow-reader-core/docs/public/index.md b/crates/delta-arrow-reader-core/docs/public/index.md
+index 4aefb54d975b3318160af4297d5afddd46b9b7dd..57ec71744f5976697dce79bf60ddc8d584259e45 100644
+--- a/crates/delta-arrow-reader-core/docs/public/index.md
++++ b/crates/delta-arrow-reader-core/docs/public/index.md
+@@ -12,9 +12,29 @@ in Apache Arrow format, ready to use in your application.
+ 
+ The reader works with existing Delta tables. It does not write tables or manage
+ transactions. Queries run on your machine or in your application's environment,
+-without a Spark or Databricks cluster. Cloud reads use storage credentials,
+-which the CLI can obtain through [Unity Catalog](unity-catalog.md) using your
+-existing Databricks profile.
++without a Spark or Databricks cluster.
++
++## Try the command line
++
++Preview rows as JSON, run SQL to filter, group, or join tables, and save results
++as Arrow or JSON. With [uv](https://docs.astral.sh/uv/getting-started/installation/)
++installed, run the CLI from PyPI without adding it to your project:
++
++```bash
++uvx --no-build delta-arrow-reader@latest preview /path/to/delta-table --column id --limit 3
++```
++
++Replace the path with a Delta table directory and `id` with a column name.
++This prints up to three values as JSON, including the column's type.
++Continue with the [CLI quickstart](cli-quickstart.md) or
++[SQL examples](cli-workflows.md). For supported platforms and other ways to
++install the command, see [installation](installation.md#cli-binaries-and-container-images).
++
++For [Unity Catalog tables](unity-catalog.md), reuse a working profile from the
++Databricks CLI installed on your `PATH`. Use `uc://catalog.schema.table` names;
++reads and SQL run locally. The metastore must allow external data access, and
++your identity needs table read permissions plus `EXTERNAL USE SCHEMA`.
++The guide covers setup and supported tables.
+ 
+ ## Start here
+ 

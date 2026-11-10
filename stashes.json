@@ -1,0 +1,27 @@
+[
+  {
+    "original_index": 0,
+    "commit": "72c65717cbccdee2f95456e0a81f118b2429cd86",
+    "snapshot_ref": "refs/archive/stopped-2026-11-09/stash-0"
+  },
+  {
+    "original_index": 1,
+    "commit": "6567126aa0467896b3e0cbc3d7fe417e944b2f87",
+    "snapshot_ref": "refs/archive/stopped-2026-11-09/stash-1"
+  },
+  {
+    "original_index": 2,
+    "commit": "51a2ca0bf8d87fd5160d10cb4adcb28c9dc65959",
+    "snapshot_ref": "refs/archive/stopped-2026-11-09/stash-2"
+  },
+  {
+    "original_index": 3,
+    "commit": "52e68dc9a88445e7298cedb9abf766231816cb09",
+    "snapshot_ref": "refs/archive/stopped-2026-11-09/stash-3"
+  },
+  {
+    "original_index": 4,
+    "commit": "e4d37f86e5eebc485af702f702f3ff13b43cf8c3",
+    "snapshot_ref": "refs/archive/stopped-2026-11-09/stash-4"
+  }
+]

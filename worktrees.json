@@ -1,0 +1,236 @@
+[
+  {
+    "path": "/home/hanbo/repo/delta-arrow-reader",
+    "head": "4c7ecc7cca90960a5f970c32efc85a1e5a49ee9f",
+    "branch": "refs/heads/docs/cli-entry-examples",
+    "status_hex": "204d20524541444d452e6d6400204d206372617465732f64656c74612d6172726f772d7265616465722d636f72652f646f63732f7075626c69632f696e6465782e6d6400",
+    "dirty": true,
+    "snapshot_commit": "403069f2ca41640727d32580f47689e175620042",
+    "snapshot_ref": "refs/archive/stopped-2026-11-09/worktree-00"
+  },
+  {
+    "path": "/home/hanbo/repo/delta-arrow-reader-sail-feasibility",
+    "head": "39884a559afc10b1d6c255197471d7eeb05760df",
+    "branch": "refs/heads/experiment/sail-sql-feasibility",
+    "status_hex": "204d20436172676f2e746f6d6c003f3f206578706572696d656e74732f00",
+    "dirty": true,
+    "snapshot_commit": "309cd00a0286a9507f23863e42a6e482c10728e9",
+    "snapshot_ref": "refs/archive/stopped-2026-11-09/worktree-01"
+  },
+  {
+    "path": "/home/hanbo/repo/delta-arrow-reader-spark-alias-followup",
+    "head": "667d534dad0ae9515da26ead7f18705e9ee7445e",
+    "branch": "refs/heads/fix/spark-abs-result-fields",
+    "status_hex": "",
+    "dirty": false,
+    "snapshot_commit": "667d534dad0ae9515da26ead7f18705e9ee7445e",
+    "snapshot_ref": "refs/archive/stopped-2026-11-09/worktree-02"
+  },
+  {
+    "path": "/home/hanbo/repo/delta-arrow-reader-spark-array-struct-declarations",
+    "head": "95ef3425ebe5f45559df506eea408f405640b906",
+    "branch": "refs/heads/fix/spark-array-result-fields",
+    "status_hex": "",
+    "dirty": false,
+    "snapshot_commit": "95ef3425ebe5f45559df506eea408f405640b906",
+    "snapshot_ref": "refs/archive/stopped-2026-11-09/worktree-03"
+  },
+  {
+    "path": "/home/hanbo/repo/delta-arrow-reader-spark-case-nested-fields",
+    "head": "7ef2152d604e2eedffeb3b93ebdf5ff004c23310",
+    "branch": "refs/heads/fix/spark-case-nested-result-fields",
+    "status_hex": "204d206372617465732f64656c74612d6172726f772d7265616465722d737061726b2d73716c2f76656e646f722f7361696c2f6372617465732f7361696c2d706c616e2f7372632f65787072657373696f6e5f6572726f72732e727300",
+    "dirty": true,
+    "snapshot_commit": "22a0d4b6ea9ff5dc69dda4a74910a39433a6e099",
+    "snapshot_ref": "refs/archive/stopped-2026-11-09/worktree-04"
+  },
+  {
+    "path": "/home/hanbo/repo/delta-arrow-reader-spark-conditional-integration",
+    "head": "7b8a5cf022543560263f2882df35a5a0b7736ec0",
+    "branch": "refs/heads/test/spark-conditional-integration",
+    "status_hex": "",
+    "dirty": false,
+    "snapshot_commit": "7b8a5cf022543560263f2882df35a5a0b7736ec0",
+    "snapshot_ref": "refs/archive/stopped-2026-11-09/worktree-05"
+  },
+  {
+    "path": "/home/hanbo/repo/delta-arrow-reader-spark-correlated-metadata-stages",
+    "head": "e3fc6ca709333d1076582a1809fa5c50caff189e",
+    "branch": "refs/heads/fix/spark-correlated-scalar-metadata",
+    "status_hex": "",
+    "dirty": false,
+    "snapshot_commit": "e3fc6ca709333d1076582a1809fa5c50caff189e",
+    "snapshot_ref": "refs/archive/stopped-2026-11-09/worktree-06"
+  },
+  {
+    "path": "/home/hanbo/repo/delta-arrow-reader-spark-duplicate-struct-casts",
+    "head": "fd93346644f2216c3af3e77b5f99d4447dc19523",
+    "branch": "refs/heads/fix/spark-duplicate-struct-casts",
+    "status_hex": "",
+    "dirty": false,
+    "snapshot_commit": "fd93346644f2216c3af3e77b5f99d4447dc19523",
+    "snapshot_ref": "refs/archive/stopped-2026-11-09/worktree-07"
+  },
+  {
+    "path": "/home/hanbo/repo/delta-arrow-reader-spark-generated-alias-metadata",
+    "head": "1df41b7a1b4eaad3843b9f14fc6d12c68bed2e1c",
+    "branch": "refs/heads/fix/spark-generated-alias-integration",
+    "status_hex": "",
+    "dirty": false,
+    "snapshot_commit": "1df41b7a1b4eaad3843b9f14fc6d12c68bed2e1c",
+    "snapshot_ref": "refs/archive/stopped-2026-11-09/worktree-08"
+  },
+  {
+    "path": "/home/hanbo/repo/delta-arrow-reader-spark-interval-qualifiers",
+    "head": "c54d99c351cd8281f554977075dd01e73f5c25fa",
+    "branch": "refs/heads/fix/spark-interval-qualifiers",
+    "status_hex": "",
+    "dirty": false,
+    "snapshot_commit": "c54d99c351cd8281f554977075dd01e73f5c25fa",
+    "snapshot_ref": "refs/archive/stopped-2026-11-09/worktree-09"
+  },
+  {
+    "path": "/home/hanbo/repo/delta-arrow-reader-spark-map-constructor-nullability",
+    "head": "ecc867bb4e874c17629cbcfc324bdd6af33345f1",
+    "branch": "refs/heads/fix/spark-map-constructor-nullability",
+    "status_hex": "",
+    "dirty": false,
+    "snapshot_commit": "ecc867bb4e874c17629cbcfc324bdd6af33345f1",
+    "snapshot_ref": "refs/archive/stopped-2026-11-09/worktree-10"
+  },
+  {
+    "path": "/home/hanbo/repo/delta-arrow-reader-spark-map-lambda-nullability",
+    "head": "1f2535cfdde784db9df39c0c2cc4fe5e636f707e",
+    "branch": "refs/heads/fix/spark-folded-map-lambda-nullability",
+    "status_hex": "",
+    "dirty": false,
+    "snapshot_commit": "1f2535cfdde784db9df39c0c2cc4fe5e636f707e",
+    "snapshot_ref": "refs/archive/stopped-2026-11-09/worktree-11"
+  },
+  {
+    "path": "/home/hanbo/repo/delta-arrow-reader-spark-named-struct-fields",
+    "head": "4eb1d55831097289d1596c7c1fd28d79641e91b3",
+    "branch": "refs/heads/fix/spark-named-struct-fields",
+    "status_hex": "",
+    "dirty": false,
+    "snapshot_commit": "4eb1d55831097289d1596c7c1fd28d79641e91b3",
+    "snapshot_ref": "refs/archive/stopped-2026-11-09/worktree-12"
+  },
+  {
+    "path": "/home/hanbo/repo/delta-arrow-reader-spark-nested-conditional-coercion",
+    "head": "2277ea772f2d5fb1d973c7c3188d587352b49735",
+    "branch": "refs/heads/fix/spark-union-generated-metadata",
+    "status_hex": "",
+    "dirty": false,
+    "snapshot_commit": "2277ea772f2d5fb1d973c7c3188d587352b49735",
+    "snapshot_ref": "refs/archive/stopped-2026-11-09/worktree-13"
+  },
+  {
+    "path": "/home/hanbo/repo/delta-arrow-reader-spark-nested-conditionals-delivery",
+    "head": "5b0db880fcf53270794cd89b73ef8d1ebd6bae46",
+    "branch": "refs/heads/fix/spark-nested-conditional-results",
+    "status_hex": "",
+    "dirty": false,
+    "snapshot_commit": "5b0db880fcf53270794cd89b73ef8d1ebd6bae46",
+    "snapshot_ref": "refs/archive/stopped-2026-11-09/worktree-14"
+  },
+  {
+    "path": "/home/hanbo/repo/delta-arrow-reader-spark-nested-lambda-captures",
+    "head": "e4de0b0f052a7b76ccfc4156247c13434932ba73",
+    "branch": "refs/heads/fix/spark-nested-lambda-captures",
+    "status_hex": "",
+    "dirty": false,
+    "snapshot_commit": "e4de0b0f052a7b76ccfc4156247c13434932ba73",
+    "snapshot_ref": "refs/archive/stopped-2026-11-09/worktree-15"
+  },
+  {
+    "path": "/home/hanbo/repo/delta-arrow-reader-spark-pivot-source-alias",
+    "head": "796f6d63d0a3d574087110cf04c123fb969dc7f7",
+    "branch": "refs/heads/fix/spark-pivot-source-alias",
+    "status_hex": "",
+    "dirty": false,
+    "snapshot_commit": "796f6d63d0a3d574087110cf04c123fb969dc7f7",
+    "snapshot_ref": "refs/archive/stopped-2026-11-09/worktree-16"
+  },
+  {
+    "path": "/home/hanbo/repo/delta-arrow-reader-spark-qualified-column-precedence",
+    "head": "9a8e05d7ce80ce552ac99fbed7e655277bef8c61",
+    "branch": "refs/heads/fix/spark-qualified-column-precedence",
+    "status_hex": "",
+    "dirty": false,
+    "snapshot_commit": "9a8e05d7ce80ce552ac99fbed7e655277bef8c61",
+    "snapshot_ref": "refs/archive/stopped-2026-11-09/worktree-17"
+  },
+  {
+    "path": "/home/hanbo/repo/delta-arrow-reader-spark-repeated-projection-identity",
+    "head": "99e68f9171bfa243dd694b6a8db30dbf4074bf2d",
+    "branch": "refs/heads/fix/spark-repeated-projection-identity",
+    "status_hex": "",
+    "dirty": false,
+    "snapshot_commit": "99e68f9171bfa243dd694b6a8db30dbf4074bf2d",
+    "snapshot_ref": "refs/archive/stopped-2026-11-09/worktree-18"
+  },
+  {
+    "path": "/home/hanbo/repo/delta-arrow-reader-spark-scalar-subquery-names",
+    "head": "963f5d625619622ea7609129005d48f4a850daf2",
+    "branch": "refs/heads/fix/spark-scalar-subquery-names",
+    "status_hex": "",
+    "dirty": false,
+    "snapshot_commit": "963f5d625619622ea7609129005d48f4a850daf2",
+    "snapshot_ref": "refs/archive/stopped-2026-11-09/worktree-19"
+  },
+  {
+    "path": "/home/hanbo/repo/delta-arrow-reader-spark-sql",
+    "head": "63da7acb50c237fb878667e3846f35bdd8d2e532",
+    "branch": null,
+    "status_hex": "",
+    "dirty": false,
+    "snapshot_commit": "63da7acb50c237fb878667e3846f35bdd8d2e532",
+    "snapshot_ref": "refs/archive/stopped-2026-11-09/worktree-20"
+  },
+  {
+    "path": "/home/hanbo/repo/delta-arrow-reader-spark-struct-expression-names",
+    "head": "077af718ed738273d5b8e016ebdbb4bd12a0ea39",
+    "branch": "refs/heads/fix/spark-struct-expression-names",
+    "status_hex": "",
+    "dirty": false,
+    "snapshot_commit": "077af718ed738273d5b8e016ebdbb4bd12a0ea39",
+    "snapshot_ref": "refs/archive/stopped-2026-11-09/worktree-21"
+  },
+  {
+    "path": "/home/hanbo/repo/delta-arrow-reader-spark-struct-metadata-integration",
+    "head": "5bce7951cf8665b9a6d44c1c57d36a8425fc83af",
+    "branch": "refs/heads/fix/spark-struct-metadata-integration",
+    "status_hex": "",
+    "dirty": false,
+    "snapshot_commit": "5bce7951cf8665b9a6d44c1c57d36a8425fc83af",
+    "snapshot_ref": "refs/archive/stopped-2026-11-09/worktree-22"
+  },
+  {
+    "path": "/home/hanbo/repo/delta-arrow-reader-spark-udf-folding-opt-outs",
+    "head": "63da7acb50c237fb878667e3846f35bdd8d2e532",
+    "branch": "refs/heads/fix/spark-udf-folding-opt-outs",
+    "status_hex": "",
+    "dirty": false,
+    "snapshot_commit": "63da7acb50c237fb878667e3846f35bdd8d2e532",
+    "snapshot_ref": "refs/archive/stopped-2026-11-09/worktree-23"
+  },
+  {
+    "path": "/home/hanbo/repo/delta-arrow-reader-spark-using-key-metadata",
+    "head": "cf3bee14df732573f0bc9bf6ce7332a8afb08693",
+    "branch": "refs/heads/fix/spark-using-key-metadata",
+    "status_hex": "",
+    "dirty": false,
+    "snapshot_commit": "cf3bee14df732573f0bc9bf6ce7332a8afb08693",
+    "snapshot_ref": "refs/archive/stopped-2026-11-09/worktree-24"
+  },
+  {
+    "path": "/home/hanbo/repo/delta-arrow-reader-spark-year-month-scaling",
+    "head": "4b9f67d6a3f503144b05605352a892a79318b456",
+    "branch": "refs/heads/fix/spark-year-month-scaling",
+    "status_hex": "",
+    "dirty": false,
+    "snapshot_commit": "4b9f67d6a3f503144b05605352a892a79318b456",
+    "snapshot_ref": "refs/archive/stopped-2026-11-09/worktree-25"
+  }
+]

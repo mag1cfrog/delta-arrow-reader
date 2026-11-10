@@ -1,0 +1,13 @@
+{
+  "evidence_regular_files_verified": 19362,
+  "source_bundle_verified": true,
+  "all_archive_parts_verified": true,
+  "snapshot_worktrees_verified": 26,
+  "dirty_worktrees_verified": 3,
+  "stashes_verified_unchanged": 5,
+  "embedded_repositories": 0,
+  "status": "archive_verified; unfinished_code_not_accepted",
+  "core_public_index_sha256_verified_unchanged": "2bdf214c097e8ade1b1241e468c9355ba0727889431629ed912c250c010bb002",
+  "storage": "Git source/index branches plus unpublished GitHub draft assets",
+  "project_engines_confirmed_running": 0
+}
