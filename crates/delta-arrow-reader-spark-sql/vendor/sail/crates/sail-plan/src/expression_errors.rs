@@ -1342,6 +1342,33 @@ impl Prepare {
                 Ok(Transformed::no(node))
             })?
             .data;
+        if spark_comparison_errors {
+            plan.apply(|node| {
+                node.apply_expressions(|expr| {
+                    let literal_when_cast = expr.exists(|expr| {
+                        Ok(matches!(expr, Expr::Case(case) if case.is_spark_searched()
+                            && case.when_then_expr.iter().any(|(when, _)| {
+                                matches!(when.as_ref(), Expr::ScalarFunction(f)
+                                    if f.func.inner().is::<SparkCastStringToBoolean>()
+                                        && matches!(f.args.as_slice(), [Expr::Literal(_, _)]))
+                            })))
+                    })?;
+                    if literal_when_cast {
+                        let schema = match node {
+                            LogicalPlan::TableScan(scan) => Arc::new(DFSchema::try_from_qualified_schema(
+                                scan.table_name.clone(), &scan.source.schema(),
+                            )?),
+                            _ => Arc::new(datafusion_expr::utils::merge_schema(&node.inputs())),
+                        };
+                        // Nonlocal pruning keeps NULL and lazy parents ahead of required WHEN errors.
+                        let prepared = self.precheck_expression(expr.clone(), &schema, false)?;
+                        self.check_expr(&prepared, true)?;
+                    }
+                    Ok(TreeNodeRecursion::Continue)
+                })?;
+                Ok(TreeNodeRecursion::Continue)
+            })?;
+        }
         if !self.has_null_sensitive_comparison {
             return Ok(plan);
         }
@@ -1688,23 +1715,6 @@ impl Prepare {
             .collect::<Result<Vec<_>>>()?;
         let input = inputs.first().and_then(|p| p.as_ref());
         let batch = match plan {
-            // Spark's one-row relation needs the same early cast checks as local VALUES.
-            LogicalPlan::EmptyRelation(empty)
-                if empty.produce_one_row
-                    && empty.schema.fields().is_empty()
-                    && self.props.config_options.as_ref().is_some_and(|options| {
-                        options
-                            .extensions
-                            .get::<SparkSqlExpressionSemantics>()
-                            .is_some()
-                    }) =>
-            {
-                RecordBatch::try_new_with_options(
-                    Arc::clone(empty.schema.inner()),
-                    vec![],
-                    &RecordBatchOptions::new().with_row_count(Some(1)),
-                )?
-            }
             LogicalPlan::Values(values) if !values.values.is_empty() => {
                 if !values.values.iter().flatten().try_fold(true, |valid, e| {
                     Ok::<_, datafusion_common::DataFusionError>(valid && row_expression(e, false)?)
