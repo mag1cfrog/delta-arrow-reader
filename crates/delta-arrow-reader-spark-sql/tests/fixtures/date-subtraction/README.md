@@ -47,11 +47,11 @@ internal rows, collected through the Dataset API. `ConvertToLocalRelation` is ex
 batch sizes 1 and 32. Every Spark day-time qualifier is Arrow's microsecond duration. A failure
 must occur at Spark's stage with Spark's condition, or Java's exact arithmetic message. A
 second test runs seven `-`, TRY_SUBTRACT and division records over Date64 copies of the
-`inputs` and `required` DATE columns, which Spark lacks, and requires Spark's results. Five
-differences are retained, each at DAR's exact current result:
+`inputs` and `required` DATE columns, which Spark lacks, and requires Spark's results. A CAST
+of the difference to BIGINT counts its days, as Spark does (#1152). Four differences are
+retained, each at DAR's exact current result:
 - #953: a CAST of the difference to STRING gives DAY TO SECOND text, `INTERVAL '1 00:00:00' DAY
   TO SECOND` where Spark gives `INTERVAL '1' DAY` (4 records);
-- #1152: a CAST of the difference to BIGINT counts seconds, where Spark counts days (4 records);
 - #1182: a comparison of the difference with a YEAR TO MONTH interval gives false, or NULL for
   a NULL operand, where Spark rejects it during analysis (4 records);
 - #953: CONCAT writes the difference as Arrow's ISO 8601 duration, `d=PT86400S`, where Spark

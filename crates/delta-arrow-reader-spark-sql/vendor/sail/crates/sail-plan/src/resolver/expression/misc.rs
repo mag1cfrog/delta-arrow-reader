@@ -90,6 +90,7 @@ impl PlanResolver<'_> {
             expr,
             metadata: inner_metadata,
             expression_name,
+            interval_qualifier,
         } = named_expr;
         if name.is_empty() {
             return Ok(NamedExpr {
@@ -97,6 +98,7 @@ impl PlanResolver<'_> {
                 expression_name,
                 expr,
                 metadata: metadata.unwrap_or(inner_metadata),
+                interval_qualifier,
             });
         }
         let metadata = metadata.unwrap_or(inner_metadata);
@@ -111,7 +113,7 @@ impl PlanResolver<'_> {
         } else {
             expr
         };
-        Ok(NamedExpr::new(name, expr))
+        Ok(NamedExpr::new(name, expr).with_interval_qualifier(interval_qualifier))
     }
 
     pub(super) async fn resolve_expression_placeholder(

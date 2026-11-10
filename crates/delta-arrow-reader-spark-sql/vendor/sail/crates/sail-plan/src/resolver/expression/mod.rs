@@ -13,6 +13,7 @@ use sail_function::scalar::multi_expr::MultiExpr;
 use crate::error::{PlanError, PlanResult};
 use crate::function::common::{drop_inherited_column_metadata, set_result_metadata};
 use crate::resolver::PlanResolver;
+use crate::resolver::interval_qualifier::{IntervalOperand, IntervalQualifier};
 use crate::resolver::state::PlanResolverState;
 
 mod attribute;
@@ -41,6 +42,8 @@ pub(super) struct NamedExpr {
     pub expression_name: Option<String>,
     pub expr: expr::Expr,
     pub metadata: Vec<(String, String)>,
+    /// The Spark qualifier of an interval value, where the resolver knows it (#1152).
+    pub interval_qualifier: Option<IntervalQualifier>,
 }
 
 impl NamedExpr {
@@ -72,6 +75,7 @@ impl NamedExpr {
             expression_name: None,
             expr,
             metadata,
+            interval_qualifier: None,
         }
     }
 
@@ -85,6 +89,7 @@ impl NamedExpr {
                     .metadata
                     .map(|x| x.to_hashmap().into_iter().collect())
                     .unwrap_or(vec![]),
+                interval_qualifier: None,
             }),
             _ => Err(PlanError::invalid(
                 "alias expected to create named expression",
@@ -111,11 +116,50 @@ impl NamedExpr {
         self
     }
 
+    pub fn with_interval_qualifier(mut self, qualifier: Option<IntervalQualifier>) -> Self {
+        self.interval_qualifier = qualifier;
+        self
+    }
+
     pub fn expression_name(&self) -> PlanResult<String> {
         match &self.expression_name {
             Some(name) => Ok(name.clone()),
             None => Ok(self.name.clone().one()?),
         }
+    }
+}
+
+/// The qualifier an interval literal writes, as `INTERVAL '3' DAY`.
+fn literal_interval_qualifier(literal: &spec::Literal) -> Option<IntervalQualifier> {
+    match literal {
+        spec::Literal::DurationMicrosecond {
+            start_field,
+            end_field,
+            ..
+        }
+        | spec::Literal::IntervalYearMonth {
+            start_field,
+            end_field,
+            ..
+        } => IntervalQualifier::new(*start_field, *end_field),
+        _ => None,
+    }
+}
+
+/// The qualifier recorded for the field a resolved column reads.
+fn column_interval_qualifier(
+    expr: &expr::Expr,
+    state: &PlanResolverState,
+) -> Option<IntervalQualifier> {
+    let mut expr = expr;
+    while let expr::Expr::Alias(alias) = expr {
+        expr = alias.expr.as_ref();
+    }
+    match expr {
+        expr::Expr::Column(column) | expr::Expr::OuterReferenceColumn(_, column) => {
+            state.interval_qualifier(&column.name)
+        }
+        _ => None,
     }
 }
 
@@ -169,12 +213,21 @@ impl PlanResolver<'_> {
             | Expr::UnresolvedStar {
                 plan_id: Some(_), ..
             } => Err(PlanError::unsupported("DataFrame plan IDs")),
-            Expr::Literal(literal) => self.resolve_expression_literal(literal, state),
+            Expr::Literal(literal) => {
+                let qualifier = literal_interval_qualifier(&literal);
+                self.resolve_expression_literal(literal, state)
+                    .map(|named| named.with_interval_qualifier(qualifier))
+            }
             Expr::UnresolvedAttribute {
                 name,
                 plan_id: None,
                 is_metadata_column,
-            } => self.resolve_expression_attribute(name, is_metadata_column, schema, state),
+            } => self
+                .resolve_expression_attribute(name, is_metadata_column, schema, state)
+                .map(|named| {
+                    let qualifier = column_interval_qualifier(&named.expr, state);
+                    named.with_interval_qualifier(qualifier)
+                }),
             // Outside the call that reads it as a unit, a unit keyword is a column name, as Spark
             // reads a bare word there.
             Expr::DatetimeUnitKeyword(unit) => self.resolve_expression_attribute(
@@ -208,10 +261,19 @@ impl PlanResolver<'_> {
                 cast_to_type,
                 rename: _,
                 is_try,
-            } => self
-                .resolve_expression_cast(*expr, cast_to_type, is_try, schema, state)
-                .await
-                .map(|(named, _)| named),
+            } => {
+                let qualifier = match &cast_to_type {
+                    spec::DataType::Interval {
+                        interval_unit: spec::IntervalUnit::YearMonth | spec::IntervalUnit::DayTime,
+                        start_field,
+                        end_field,
+                    } => IntervalQualifier::new(*start_field, *end_field),
+                    _ => None,
+                };
+                self.resolve_expression_cast(*expr, cast_to_type, is_try, schema, state)
+                    .await
+                    .map(|(named, _)| named.with_interval_qualifier(qualifier))
+            }
             Expr::UnresolvedRegex { .. } | Expr::UpdateFields { .. } => {
                 Err(PlanError::unsupported("DataFrame column expressions"))
             }
@@ -494,19 +556,38 @@ impl PlanResolver<'_> {
         schema: &DFSchemaRef,
         state: &mut PlanResolverState,
     ) -> PlanResult<(Vec<String>, Vec<expr::Expr>)> {
+        let (names, exprs, _) = self
+            .resolve_expression_arguments_with_qualifiers(expressions, schema, state)
+            .await?;
+        Ok((names, exprs))
+    }
+
+    /// [`Self::resolve_expression_arguments`], with each argument's interval qualifier.
+    pub(super) async fn resolve_expression_arguments_with_qualifiers(
+        &self,
+        expressions: Vec<spec::Expr>,
+        schema: &DFSchemaRef,
+        state: &mut PlanResolverState,
+    ) -> PlanResult<(Vec<String>, Vec<expr::Expr>, Vec<IntervalOperand>)> {
         let mut scope = state.enter_config_scope();
         let state = scope.state();
         state.config_mut().include_cast_in_expression_name = true;
         let mut names: Vec<String> = Vec::with_capacity(expressions.len());
         let mut exprs: Vec<expr::Expr> = Vec::with_capacity(expressions.len());
+        let mut operands: Vec<IntervalOperand> = Vec::with_capacity(expressions.len());
         for expression in expressions {
             let named = self
                 .resolve_named_expression(expression, schema, state)
                 .await?;
             names.push(named.expression_name()?);
+            operands.push(IntervalOperand::of(
+                &named.expr,
+                named.interval_qualifier,
+                schema,
+            ));
             exprs.push(named.expr);
         }
-        Ok((names, exprs))
+        Ok((names, exprs, operands))
     }
 }
 
@@ -718,6 +799,7 @@ mod tests {
                     None
                 ))),
                 metadata: Default::default(),
+                interval_qualifier: None,
             }
         );
 
@@ -784,6 +866,7 @@ mod tests {
                     metadata: None,
                 }),
                 metadata: Default::default(),
+                interval_qualifier: None,
             },
         );
 

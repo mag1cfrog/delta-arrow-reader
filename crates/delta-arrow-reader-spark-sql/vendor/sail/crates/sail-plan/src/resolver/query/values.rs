@@ -19,6 +19,7 @@ use crate::function::common::without_metadata_annotations;
 use crate::function::numeric_coercion::common_numeric_type;
 use crate::function::temporal_coercion::only_dates_and_timestamp_ntz;
 use crate::resolver::PlanResolver;
+use crate::resolver::interval_qualifier::{IntervalOperand, IntervalQualifier};
 use crate::resolver::state::PlanResolverState;
 
 impl PlanResolver<'_> {
@@ -28,11 +29,25 @@ impl PlanResolver<'_> {
         state: &mut PlanResolverState,
     ) -> PlanResult<LogicalPlan> {
         let schema = Arc::new(DFSchema::empty());
+        // Spark widens each column's interval qualifier over its rows (#1152).
+        let mut column_operands: Vec<Vec<IntervalOperand>> = vec![];
         let values: Vec<Vec<Expr>> = async {
             let mut results: Vec<Vec<Expr>> = Vec::with_capacity(values.len());
             for value in values {
-                let value = self.resolve_expressions(value, &schema, state).await?;
-                results.push(value);
+                let mut row = Vec::with_capacity(value.len());
+                for (column, cell) in value.into_iter().enumerate() {
+                    let named = self.resolve_named_expression(cell, &schema, state).await?;
+                    if column_operands.len() <= column {
+                        column_operands.push(vec![]);
+                    }
+                    column_operands[column].push(IntervalOperand::of(
+                        &named.expr,
+                        named.interval_qualifier,
+                        &schema,
+                    ));
+                    row.push(named.expr);
+                }
+                results.push(row);
             }
             // Column coercion indexes rows before the native builder validates their widths.
             let columns = results.first().map_or(0, Vec::len);
@@ -125,7 +140,12 @@ impl PlanResolver<'_> {
             .into_iter()
             .enumerate()
             .map(|(i, col)| {
-                Expr::Column(col).alias(state.register_field_name(format!("col{}", i + 1)))
+                let field_id = state.register_field_name(format!("col{}", i + 1));
+                let qualifier = column_operands
+                    .get(i)
+                    .and_then(|operands| IntervalQualifier::widen(operands.iter().copied()));
+                state.set_interval_qualifier(&field_id, qualifier);
+                Expr::Column(col).alias(field_id)
             })
             .collect::<Vec<_>>();
         Ok(LogicalPlan::Projection(Projection::try_new(

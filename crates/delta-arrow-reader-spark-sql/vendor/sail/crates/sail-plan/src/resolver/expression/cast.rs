@@ -10,11 +10,13 @@ use datafusion_expr::{ExprSchemable, ScalarUDF, cast, expr, lit, try_cast};
 use sail_common::spec;
 use sail_common::utils::datetime::time_unit_to_multiplier;
 use sail_common_datafusion::variant::is_variant_storage_field;
+use sail_function::scalar::datetime::interval_text::interval_fields_text;
 use sail_function::scalar::datetime::spark_date::SparkDate;
 use sail_function::scalar::datetime::spark_date_timestamp_ntz_cast::SparkDateTimestampNtzCast;
 use sail_function::scalar::datetime::spark_interval::{
     SparkCalendarInterval, SparkDayTimeInterval, SparkYearMonthInterval,
 };
+use sail_function::scalar::datetime::spark_interval_to_number::SparkIntervalToNumber;
 use sail_function::scalar::datetime::spark_interval_truncate::SparkIntervalTruncate;
 use sail_function::scalar::datetime::spark_number_to_interval::SparkNumberToInterval;
 use sail_function::scalar::datetime::spark_timestamp::SparkTimestamp;
@@ -43,6 +45,7 @@ use crate::function::temporal_coercion::{
 };
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
+use crate::resolver::interval_qualifier::IntervalQualifier;
 use crate::resolver::state::PlanResolverState;
 
 impl PlanResolver<'_> {
@@ -165,7 +168,42 @@ impl PlanResolver<'_> {
         } else {
             named.name
         };
+        let source_qualifier = named.interval_qualifier;
         let expr = named.expr;
+        // Spark casts an interval to a number as a count of its qualifier's end field, and
+        // rejects floating and BOOLEAN targets (#1152). An unknown qualifier is the type Spark
+        // gives an Arrow column.
+        if let Some(default) = IntervalQualifier::of_type(&expr_type) {
+            let qualifier = source_qualifier.unwrap_or(default);
+            match &cast_to_type {
+                DataType::Int8
+                | DataType::Int16
+                | DataType::Int32
+                | DataType::Int64
+                | DataType::Decimal128(..) => {
+                    let expr = ScalarUDF::from(SparkIntervalToNumber::try_new(
+                        qualifier.start(),
+                        qualifier.end(),
+                        cast_to_type,
+                        is_try,
+                    )?)
+                    .call(vec![expr]);
+                    return Ok((
+                        NamedExpr::new(name, drop_inherited_column_metadata(expr)),
+                        named_input,
+                    ));
+                }
+                DataType::Float16 | DataType::Float32 | DataType::Float64 | DataType::Boolean => {
+                    return Err(PlanError::analysis(format!(
+                        "[DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION] Cannot resolve \"{}\" due to data type mismatch: cannot cast \"INTERVAL {}\" to \"{}\". SQLSTATE: 42K09",
+                        cast_text(expression_name.unwrap_or_default()),
+                        interval_fields_text(qualifier.start(), qualifier.end()),
+                        data_type_string.to_ascii_uppercase(),
+                    )));
+                }
+                _ => {}
+            }
+        }
         // Equal Arrow types mean the source is an interval of the target's family; numeric,
         // string and NULL sources keep their conversions below.
         if let Some(unit_length) = truncating_unit_length

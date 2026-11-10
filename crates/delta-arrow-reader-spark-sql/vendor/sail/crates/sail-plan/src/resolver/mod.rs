@@ -7,6 +7,7 @@ use crate::config::PlanConfig;
 
 mod data_type;
 mod expression;
+mod interval_qualifier;
 mod literal;
 pub mod plan;
 mod query;

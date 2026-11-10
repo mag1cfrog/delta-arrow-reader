@@ -9,6 +9,7 @@ use sail_common::spec;
 
 use crate::error::{PlanError, PlanResult};
 use crate::resolver::expression::NamedExpr;
+use crate::resolver::interval_qualifier::IntervalQualifier;
 
 /// The field information for fields in the logical plan.
 #[derive(Debug, Clone)]
@@ -20,6 +21,8 @@ pub(super) struct FieldInfo {
     /// A hidden field is helpful for filtering or sorting plans using columns
     /// of its child plans (e.g. a key column of the left/right plans in an outer join).
     hidden: bool,
+    /// The Spark qualifier of an interval field, where the resolver knows it (#1152).
+    interval_qualifier: Option<IntervalQualifier>,
 }
 
 impl FieldInfo {
@@ -29,6 +32,10 @@ impl FieldInfo {
 
     pub fn is_hidden(&self) -> bool {
         self.hidden
+    }
+
+    pub fn interval_qualifier(&self) -> Option<IntervalQualifier> {
+        self.interval_qualifier
     }
 }
 
@@ -105,6 +112,7 @@ impl PlanResolverState {
         let info = FieldInfo {
             name: name.into(),
             hidden,
+            interval_qualifier: None,
         };
         self.fields.insert(field_id.clone(), info);
         field_id
@@ -129,6 +137,20 @@ impl PlanResolverState {
         if let Some(info) = self.fields.get_mut(field_id) {
             info.name = name.into();
         }
+    }
+
+    /// Records the Spark qualifier of an interval field registered here.
+    pub fn set_interval_qualifier(&mut self, field_id: &str, qualifier: Option<IntervalQualifier>) {
+        if let Some(info) = self.fields.get_mut(field_id) {
+            info.interval_qualifier = qualifier;
+        }
+    }
+
+    /// The Spark qualifier of a registered interval field, where it is known.
+    pub fn interval_qualifier(&self, field_id: &str) -> Option<IntervalQualifier> {
+        self.fields
+            .get(field_id)
+            .and_then(|info| info.interval_qualifier)
     }
 
     pub fn register_field(&mut self, field: impl AsRef<Field>) -> String {

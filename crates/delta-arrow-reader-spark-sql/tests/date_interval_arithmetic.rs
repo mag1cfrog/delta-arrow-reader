@@ -45,30 +45,6 @@ fn arithmetic_references() -> TestResult<Vec<Value>> {
     Ok(records)
 }
 
-/// #1236: a DATE plus a day-time interval column of a subquery keeps DATE arithmetic, since the
-/// column carries no qualifier, so `d` plus an HOUR column gives `d` where Spark gives the
-/// TIMESTAMP two hours after its midnight.
-const INTERVAL_COLUMN_RECORD: &str = "subquery_hour_column";
-
-/// DAR's current result for the #1236 record: each row's DATE, typed DATE at every stage.
-fn interval_column_expectation(case: &Value, metadata: &Value) -> TestResult<Value> {
-    let mut current = case.clone();
-    for stage in ["analyzed", "optimized", "executed"] {
-        let field = &mut current["schema_stages"][stage]["fields"][1];
-        if field["name"] != "r" || field["type"] != "timestamp" {
-            return Err(format!("expected Spark's TIMESTAMP r: {case}").into());
-        }
-        field["type"] = json!("date");
-    }
-    let mut rows = metadata["inputs"][0]["rows"]
-        .as_array()
-        .ok_or("missing input rows")?
-        .clone();
-    rows.sort_by_key(|row| row.to_string());
-    current["expected"]["rows"] = json!(rows);
-    Ok(current)
-}
-
 fn spark_family(spark_type: &Value) -> TestResult<Value> {
     if spark_type["type"] == "array" {
         return Ok(json!({"array": spark_family(&spark_type["elementType"])?,
@@ -331,29 +307,19 @@ fn register_inputs(session: &SessionContext, metadata: &Value, batch_size: usize
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn dates_and_day_time_intervals_add_like_spark() -> TestResult {
     let records = arithmetic_references()?;
-    let retained = records[1..]
-        .iter()
-        .filter(|case| case["id"] == INTERVAL_COLUMN_RECORD)
-        .count();
-    assert_eq!(retained, 4);
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
         let session = session_context(batch_size);
         register_inputs(&session, &records[0], batch_size)?;
         for case in &records[1..] {
-            let expectation = if case["id"] == INTERVAL_COLUMN_RECORD {
-                interval_column_expectation(case, &records[0])?
-            } else {
-                case.clone()
-            };
             let observation = observe(&session, case).await;
-            let differing = differing_parts(&expectation, &observation)?;
+            let differing = differing_parts(case, &observation)?;
             if !differing.is_empty() {
                 differences.push(json!({
                     "id": case["id"], "timezone": case["timezone"], "ansi": case["ansi"],
                     "batch": batch_size, "differing": differing,
-                    "expected": expectation["expected"],
-                    "schema_stages": expectation["schema_stages"],
+                    "expected": case["expected"],
+                    "schema_stages": case["schema_stages"],
                     "observed": observation,
                 }));
             }

@@ -397,6 +397,7 @@ impl PlanResolver<'_> {
             .into_iter()
             .map(|named| {
                 let field_id = state.register_field_name(named.name.clone().one()?);
+                state.set_interval_qualifier(&field_id, named.interval_qualifier);
                 Ok(named.into_alias(field_id))
             })
             .collect::<PlanResult<Vec<_>>>()?;
@@ -914,8 +915,12 @@ impl PlanResolver<'_> {
             expr,
             metadata,
             expression_name,
+            interval_qualifier,
         } in grouping
         {
+            // A key of a grouping set has its own qualifier, which is not tracked.
+            let interval_qualifier =
+                interval_qualifier.filter(|_| !matches!(expr, Expr::GroupingSet(_)));
             let exprs = match expr {
                 Expr::GroupingSet(g) => g.distinct_expr().into_iter().cloned().collect(),
                 expr => vec![expr],
@@ -930,6 +935,7 @@ impl PlanResolver<'_> {
                 expr,
                 metadata: metadata.clone(),
                 expression_name: expression_name.clone(),
+                interval_qualifier,
             }));
         }
         Ok(result)

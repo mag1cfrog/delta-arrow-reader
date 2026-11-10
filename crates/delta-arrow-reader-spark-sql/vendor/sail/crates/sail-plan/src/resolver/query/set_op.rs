@@ -19,6 +19,7 @@ use crate::error::{PlanError, PlanResult};
 use crate::function::common::{FunctionContextInput, SparkComparisonFloat};
 use crate::function::result_coercion::coerce_set_operation_result_values;
 use crate::resolver::PlanResolver;
+use crate::resolver::interval_qualifier::{IntervalOperand, IntervalQualifier};
 use crate::resolver::state::PlanResolverState;
 
 mod constant_columns;
@@ -54,6 +55,9 @@ impl PlanResolver<'_> {
         } = op;
         let left = self.resolve_query_plan(*left, state).await?;
         let right = self.resolve_query_plan(*right, state).await?;
+        if !by_name {
+            widen_set_operation_interval_qualifiers(&left, &right, state);
+        }
         let (left, right) = if matches!(set_op_type, SetOpType::Union) {
             (left, right)
         } else {
@@ -208,6 +212,31 @@ impl PlanResolver<'_> {
                 }
             });
         Ok((left?, right?))
+    }
+}
+
+/// Spark widens each column's interval qualifier over both inputs of a set operation (#1152).
+/// The result keeps the left input's fields, which the left query's own projection registered,
+/// so they take the widened qualifier.
+fn widen_set_operation_interval_qualifiers(
+    left: &LogicalPlan,
+    right: &LogicalPlan,
+    state: &mut PlanResolverState,
+) {
+    for (left_field, right_field) in left.schema().fields().iter().zip(right.schema().fields()) {
+        let mut operands = [IntervalOperand::NotInterval; 2];
+        for (operand, field) in operands.iter_mut().zip([left_field, right_field]) {
+            if let Some(default) = IntervalQualifier::of_type(field.data_type()) {
+                *operand = IntervalOperand::Interval {
+                    year_month: default.is_year_month(),
+                    qualifier: state.interval_qualifier(field.name()),
+                };
+            }
+        }
+        if matches!(operands[0], IntervalOperand::Interval { .. }) {
+            let widened = IntervalQualifier::widen(operands);
+            state.set_interval_qualifier(left_field.name(), widened);
+        }
     }
 }
 

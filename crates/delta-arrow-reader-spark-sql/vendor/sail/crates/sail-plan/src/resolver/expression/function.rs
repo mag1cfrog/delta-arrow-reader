@@ -24,10 +24,11 @@ use crate::function::{
 };
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
-use crate::resolver::expression::day_time_interval::{
-    cast_date_beside_time_interval, spec_day_time_end,
-};
+use crate::resolver::expression::day_time_interval::cast_date_beside_time_interval;
 use crate::resolver::expression::lambda::is_spec_lambda_argument;
+use crate::resolver::interval_qualifier::{
+    IntervalOperand, function_qualifier, resolved_qualifier,
+};
 use crate::resolver::state::PlanResolverState;
 
 impl PlanResolver<'_> {
@@ -93,30 +94,28 @@ impl PlanResolver<'_> {
             Self::convert_mode_within_group(&canonical_function_name, arguments, order_by)?;
 
         let has_spec_lambda_argument = arguments.iter().any(is_spec_lambda_argument);
-        // A day-time interval's end field decides Spark's DATE arithmetic (#952); only its SQL
-        // keeps it, so read it before resolution.
-        let interval_ends = if matches!(
-            canonical_function_name.as_str(),
-            "+" | "-" | "try_add" | "try_subtract"
-        ) {
-            arguments.iter().map(spec_day_time_end).collect()
-        } else {
-            vec![]
-        };
 
-        let (argument_display_names, arguments) = if canonical_function_name == "struct" {
-            self.resolve_struct_arguments(arguments, schema, state)
-                .await?
+        // Each argument's interval qualifier decides the qualifier of an interval result, and
+        // a day-time interval's end field decides Spark's DATE arithmetic (#952, #1152).
+        let (argument_display_names, arguments, interval_operands) = if canonical_function_name
+            == "struct"
+        {
+            let (names, arguments) = self
+                .resolve_struct_arguments(arguments, schema, state)
+                .await?;
+            (names, arguments, vec![])
         } else if has_spec_lambda_argument && is_higher_order_function(&canonical_function_name) {
-            self.resolve_higher_order_function_arguments(
-                &canonical_function_name,
-                arguments,
-                schema,
-                state,
-            )
-            .await?
+            let (names, arguments) = self
+                .resolve_higher_order_function_arguments(
+                    &canonical_function_name,
+                    arguments,
+                    schema,
+                    state,
+                )
+                .await?;
+            (names, arguments, vec![])
         } else {
-            self.resolve_expression_arguments(arguments, schema, state)
+            self.resolve_expression_arguments_with_qualifiers(arguments, schema, state)
                 .await?
         };
         if let Some(error) = arity_error {
@@ -137,16 +136,19 @@ impl PlanResolver<'_> {
             vec![]
         };
         // After `argument_types`, so that the call's name still reads a DATE operand.
-        let arguments = if interval_ends.is_empty() {
-            arguments
-        } else {
+        let arguments = if matches!(
+            canonical_function_name.as_str(),
+            "+" | "-" | "try_add" | "try_subtract"
+        ) {
             cast_date_beside_time_interval(
                 &canonical_function_name,
                 arguments,
-                &interval_ends,
+                &interval_operands,
                 schema,
                 &self.config.session_timezone,
             )
+        } else {
+            arguments
         };
 
         // The native registry also contains DataFusion builtins. Keep Spark's
@@ -303,10 +305,20 @@ impl PlanResolver<'_> {
             vec![]
         };
 
+        // Spark's qualifier of an interval result, from the function or what computed it.
+        let interval_qualifier = match IntervalOperand::of(&func, None, schema) {
+            IntervalOperand::Interval { .. } => {
+                function_qualifier(&canonical_function_name, &interval_operands)
+                    .or_else(|| resolved_qualifier(&func, schema))
+            }
+            IntervalOperand::NotInterval => None,
+        };
+
+        let named = NamedExpr::new(vec![name], func).with_interval_qualifier(interval_qualifier);
         if !metadata.is_empty() {
-            Ok(NamedExpr::new(vec![name], func).with_metadata(metadata))
+            Ok(named.with_metadata(metadata))
         } else {
-            Ok(NamedExpr::new(vec![name], func))
+            Ok(named)
         }
     }
 

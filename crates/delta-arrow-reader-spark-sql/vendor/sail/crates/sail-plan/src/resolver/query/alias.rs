@@ -33,7 +33,12 @@ impl PlanResolver<'_> {
                 .columns()
                 .into_iter()
                 .zip(columns)
-                .map(|(col, name)| Expr::Column(col.clone()).alias(state.register_field_name(name)))
+                .map(|(col, name)| {
+                    let qualifier = state.interval_qualifier(col.name());
+                    let field_id = state.register_field_name(name);
+                    state.set_interval_qualifier(&field_id, qualifier);
+                    Expr::Column(col.clone()).alias(field_id)
+                })
                 .collect();
             LogicalPlan::Projection(Projection::try_new(expr, Arc::new(input))?)
         };
