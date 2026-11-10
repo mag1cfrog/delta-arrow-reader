@@ -1,6 +1,6 @@
 # Issue-by-issue code handoff
 
-The unfinished code is available as ordinary remote Git branches. Start with an issue row below; downloading the backup bundle is optional.
+The unfinished code is available as ordinary remote Git branches. Start with an issue row below; downloading the backup bundle is optional. The 16 listed issues also have a handoff comment linking their remote branch and these notes.
 
 This publication preserved existing source and did not resume implementation, tests or merging. Staging observed during inventory: `714c949ade6d16a49e0d0a7a8f47fb9571e68f30`.
 
