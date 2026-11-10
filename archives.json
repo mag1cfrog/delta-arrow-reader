@@ -8,5 +8,13 @@
     "name": "evidence.tar.gz",
     "bytes": 220367869,
     "sha256": "9dd29d09a35d49ac17e5d2dce9a2879f659f56a214b8286b93b005db8f0f4dd4"
+  },
+  {
+    "name": "stash-snapshots.bundle",
+    "bytes": 31589,
+    "sha256": "c6df8bd021ffe57bdfed91228d3a93af059622798e3c1583182cc06a98544891",
+    "requires": [
+      "source.bundle"
+    ]
   }
 ]

@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "prepared_at_utc": "2026-11-10T02:08:46.080249+00:00",
+  "publication": "The archive index update and all 78 remote deletions are one atomic Git push, with expected-commit leases for every changed ref.",
+  "retained_implementation_branches": 11,
+  "retained_reproducer_branches": 1,
+  "removed_remote_branches": 78,
+  "archived_code_restoration": {
+    "verified_at_utc": "2026-11-10T02:06:56.911546+00:00",
+    "restored_only_from_archive_files": true,
+    "heads_and_trees_verified": 90,
+    "deletion_candidate_heads_and_trees_verified": 78,
+    "source_bundle_verified": true,
+    "supplemental_bundle_verified": true,
+    "connectivity_passed": true,
+    "temporary_clone_removed": true,
+    "behavior_tests_run": false
+  },
+  "remote_assets": {
+    "draft_id": 439793164,
+    "published": false,
+    "assets": [
+      {
+        "name": "evidence.tar.gz",
+        "size": 220367869,
+        "digest": "sha256:9dd29d09a35d49ac17e5d2dce9a2879f659f56a214b8286b93b005db8f0f4dd4",
+        "state": "uploaded"
+      },
+      {
+        "name": "source.bundle",
+        "size": 282612056,
+        "digest": "sha256:77d8de088085f894d7033649d521b5acbb2c2ad13715bd05f46031233fc65bfd",
+        "state": "uploaded"
+      },
+      {
+        "name": "stash-snapshots.bundle",
+        "size": 31589,
+        "digest": "sha256:c6df8bd021ffe57bdfed91228d3a93af059622798e3c1583182cc06a98544891",
+        "state": "uploaded"
+      }
+    ]
+  },
+  "source_code_changes": false,
+  "behavior_tests_run": false,
+  "original_worktrees_and_stashes_preserved": true,
+  "exact_branch_and_commit_inventory": "branches.json",
+  "archive_files_and_checksums": "../archives.json",
+  "unrelated_remote_branches_preserved": [
+    "feat/spark-sql-extraction",
+    "feat/spark-sql-staging",
+    "main",
+    "release-plz-2026-10-31T01-14-32Z",
+    "test/771-large-like-boundary-handoff"
+  ]
+}

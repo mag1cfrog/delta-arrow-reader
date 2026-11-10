@@ -1,8 +1,8 @@
 # Recommended issue continuations
 
-Use only the implementation table below when assigning saved implementation work. It has 11 selected branches, one for each listed issue. All other published branches are classified in [HISTORY.md](HISTORY.md).
+Use only the implementation table below when assigning saved implementation work. It has 11 selected branches, one for each listed issue. Historical branch names are classified in [HISTORY.md](HISTORY.md).
 
-The selected branches contain unfinished work on historical bases. They are not merge approvals or fresh validation on current staging. No source branch was moved, rewritten or deleted to make this list.
+The selected branches contain unfinished work on historical bases. They are not merge approvals or fresh validation on current staging. Only these 11 implementation branches and the #1155 reproducer remain as remote source branches from this handoff. The other 78 names are archived in [HISTORY.md](HISTORY.md); their exact commits are recoverable from the archive assets.
 
 ## Implementation branches
 
@@ -50,8 +50,8 @@ Start newly assigned work for these issues from current staging. Do not select a
 
 - [HISTORY.md](HISTORY.md): every non-selected branch, labeled as historical implementation, historical validation, validation plumbing, recovery snapshot, or withdrawn alias.
 - [Machine-readable routing](handoff/routing.json): the same issue choices, including explicit nulls for absent independent implementations.
-- [Exact branch inventory](handoff/branches.json): all preserved refs and their SHA values.
+- [Exact branch inventory](handoff/branches.json): saved commits, SHA values and current remote availability.
 - [Verification](handoff/ROUTING-VERIFIED.json): selection and remote-ref checks.
 - [Archive recovery](README.md): complete source and evidence backups.
 
-The original issue comments and individual notes are updated to use this selection. Historical branches are retained for recovery. This organization does not resume implementation or merging.
+The original issue comments and individual notes are updated to use this selection. Historical code is retained in the recovery assets; its remote branches have been removed. This organization does not resume implementation or merging.

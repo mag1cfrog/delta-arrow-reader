@@ -1,9 +1,9 @@
 {
-  "schema_version": 2,
-  "updated_at_utc": "2026-11-10T00:50:31.521607+00:00",
+  "schema_version": 3,
+  "updated_at_utc": "2026-11-10T02:08:46.080249+00:00",
   "recommended_implementation_count": 11,
   "reproducer_only_count": 1,
-  "policy": "Exactly one selected continuation per implementation issue. A null branch means no independent implementation is recommended. No source ref was moved or deleted.",
+  "policy": "Exactly one selected continuation per implementation issue. Twelve source branches remain: eleven implementations and one reproducer. Seventy-eight historical/reference branches are removed remotely; their exact commits are recoverable from the archive assets. A null branch means no independent implementation is recommended.",
   "issues": [
     {
       "issue": 711,
@@ -21,7 +21,9 @@
       "branch": null,
       "reference_branch": "fix/736-nested-constructor-declarations-wip",
       "explanation": "The old alias points to the aggregate-statistics schema experiment, not an issue-specific constructor-nullability implementation. No dedicated #736 implementation was identified in the saved work. Start new assigned work from current staging.",
-      "note_url": "handoff/issues/736.md"
+      "note_url": "handoff/issues/736.md",
+      "reference_availability": "archive_only",
+      "reference_commit": "671536e5a0ebbbf4bb9e8481b64f4f73a3db8581"
     },
     {
       "issue": 748,
@@ -57,7 +59,9 @@
       "branch": null,
       "reference_branch": "fix/766-named-struct-fields-wip",
       "explanation": "The snapshot is the older NAMED_STRUCT source used for the narrower #810/#812 repair. A separate implementation for the remaining #766 scope was not established. Start new assigned work from current staging.",
-      "note_url": "handoff/issues/766.md"
+      "note_url": "handoff/issues/766.md",
+      "reference_availability": "archive_only",
+      "reference_commit": "4eb1d55831097289d1596c7c1fd28d79641e91b3"
     },
     {
       "issue": 767,
@@ -93,7 +97,8 @@
       "branch": null,
       "reference_branch": "fix/832-union-left-metadata-wip",
       "explanation": "No independent #794 implementation was preserved. The saved UNION prototype is owned by the #832 continuation entry. Keep #794 separate when extracting its changes.",
-      "note_url": "handoff/issues/794.md"
+      "note_url": "handoff/issues/794.md",
+      "reference_availability": "remote_branch"
     },
     {
       "issue": 826,
@@ -129,7 +134,8 @@
       "branch": null,
       "reference_branch": "fix/832-union-left-metadata-wip",
       "explanation": "No independent #833 implementation was preserved. The saved UNION prototype is owned by the #832 continuation entry. The implicit-cast metadata repair is not claimed implemented.",
-      "note_url": "handoff/issues/833.md"
+      "note_url": "handoff/issues/833.md",
+      "reference_availability": "remote_branch"
     },
     {
       "issue": 870,
@@ -156,7 +162,8 @@
       "branch": null,
       "reference_branch": "fix/893-udf-folding-opt-outs-wip",
       "explanation": "No separate branch covers the full volatile CASE inference scope. The NoFold subset in #893 must not be presented as completion of #1007.",
-      "note_url": "handoff/issues/1007.md"
+      "note_url": "handoff/issues/1007.md",
+      "reference_availability": "remote_branch"
     },
     {
       "issue": 1155,
@@ -165,7 +172,8 @@
       "branch": "test/1155-literal-folding-baseline-wip",
       "reference_branch": "test/1155-literal-folding-baseline-wip",
       "explanation": "This branch contains literal-only folding baseline/reproducer source. It is not an implementation continuation branch.",
-      "note_url": "handoff/issues/1155.md"
+      "note_url": "handoff/issues/1155.md",
+      "reference_availability": "remote_branch"
     }
   ]
 }
