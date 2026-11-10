@@ -14,7 +14,9 @@ use sail_function::scalar::spark_cast_string_to_integer::{
 use sail_function::scalar::spark_to_string::SparkToUtf8;
 
 use crate::error::{PlanError, PlanResult};
-use crate::function::common::{FunctionContextInput, cast_with_date_ntz_nullability};
+use crate::function::common::{
+    FunctionContextInput, cast_with_date_ntz_nullability, dictionary_string_type,
+};
 use crate::function::numeric_coercion::common_numeric_type;
 use crate::function::temporal_coercion::{cast_local_timestamp_expr_to_ltz, common_temporal_type};
 
@@ -87,10 +89,21 @@ fn coerce_values(
     set_op_type: Option<&SetOpType>,
     nested_declarations: NestedDeclarations,
 ) -> PlanResult<Vec<expr::Expr>> {
-    let data_types = arguments
+    let mut arguments = arguments;
+    let mut data_types = arguments
         .iter()
         .map(|arg| arg.get_type(function_context.schema))
         .collect::<Result<Vec<_>, _>>()?;
+    // A dictionary-encoded STRING beside a DATE or TIMESTAMP takes the STRING rules, as its
+    // values do.
+    if data_types.iter().any(is_temporal_type) {
+        for (arg, data_type) in arguments.iter_mut().zip(data_types.iter_mut()) {
+            if let Some(values) = dictionary_string_type(data_type).cloned() {
+                *arg = cast(arg.clone(), values.clone());
+                *data_type = values;
+            }
+        }
+    }
     if data_types.iter().any(is_nested_result_type) {
         return nested::coerce_nested_result_values(
             arguments,

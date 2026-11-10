@@ -3,6 +3,7 @@
 
 use std::sync::Arc;
 
+use crate::function::common::dictionary_string_type;
 use crate::function::temporal_coercion::common_temporal_type;
 use arrow::datatypes::{DataType, TimeUnit};
 use datafusion_common::{Result, plan_err};
@@ -54,6 +55,20 @@ pub(crate) fn nanosecond_comparison_cast(
     Some(ScalarUDF::from(
         timestamp::SparkTimestampComparisonValue::new(local_timezone),
     ))
+}
+
+/// The STRING values of a dictionary-encoded STRING compared with a DATE or TIMESTAMP, as a
+/// Delta STRING partition column can be; Spark compares it as a STRING.
+pub(crate) fn temporal_comparison_string_type(
+    data_type: &DataType,
+    other: &DataType,
+) -> Option<DataType> {
+    matches!(
+        other,
+        DataType::Date32 | DataType::Timestamp(TimeUnit::Microsecond, _)
+    )
+    .then(|| dictionary_string_type(data_type).cloned())
+    .flatten()
 }
 
 pub(crate) fn string_comparison_type(
