@@ -828,9 +828,11 @@ EXTRACT, DATE_PART and DATEPART read Spark's day-of-week and week-year fields (#
 DAYOFWEEK and DOW number Sunday 1 through Saturday 7, where DOW gave DataFusion's Sunday 0, and
 DAYOFWEEK_ISO, DOW_ISO and YEAROFWEEK, which failed as unsupported date parts, give
 DataFusion's ISO day of week, Monday 1 through Sunday 7, and its ISO week-numbering year. A
-date field of a STRING reads it with Spark's STRING-to-DATE rules, as WEEKDAY does, where
-DataFusion read it as a nanosecond TIMESTAMP and failed beyond those years. DAR trims a padded
-field name, which Spark rejects (#1236). The [day-of-week field
+date field reads a STRING, TIMESTAMP_NTZ or NULL source as the implicit DATE argument of
+WEEKDAY does: a STRING with Spark's STRING-to-DATE rules, where DataFusion read it as a
+nanosecond TIMESTAMP and failed beyond those years, and NULL as a NULL DATE, where it failed.
+Time fields of a STRING keep DataFusion's reading (#942). Field names match exactly, ignoring
+case, as in Spark. The [day-of-week field
 references](tests/fixtures/day-of-week-fields/README.md) record the checks.
 
 TIMESTAMP_SECONDS, TIMESTAMP_MILLIS and TIMESTAMP_MICROS annotate their result with the
