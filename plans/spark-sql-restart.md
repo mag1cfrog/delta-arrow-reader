@@ -5,6 +5,30 @@ is not a supported-feature reference and is not part of the documentation site.
 Keep implementation evidence and unfinished work here until the relevant slice
 has been reviewed. Publish the final support contract separately.
 
+## Acceptance since 2026-11-10
+
+The maintainer replaced the acceptance for every compatibility category after a
+triage of all open issues. This section overrides older text in this file where
+the two differ, including the working rule that asks to distinguish logical and
+physical nullability, failure causes and execution stages.
+
+- Required: Spark's values and executed result types on valid input, in both
+  ANSI modes.
+- Not required: nullable flags in analyzed or optimized plans, error names, text
+  and stages, which of several failing rows is reported, result field metadata,
+  and rejecting queries that Spark rejects.
+- A fix issue exists only where DAR returns a wrong value, fails, crashes or
+  loses file pruning on valid input that a real query could contain. The ordered
+  fix queue is at the top of #167; dates and timestamps have their own order at
+  the top of #175.
+- Differences that DAR records instead of repairing are in #1236 (dates and
+  timestamps), #1238 (strings and binary values) and #1248 (all other
+  categories). A new difference found in review becomes one line there, not a
+  new issue.
+- #142 and #156 remain open as coverage sweeps of ordinary queries.
+- C06 is complete. The Linux worker is stopped; its saved branches are indexed
+  in `HANDOFF.md` on the `chore/archive-spark-work-2026-11-09` branch.
+
 ## Current delivery status
 
 The latest accepted source is `e5c8368580fe010cb2c3f99223ce7ccadb213a32` after
