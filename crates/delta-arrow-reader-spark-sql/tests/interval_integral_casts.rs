@@ -44,7 +44,7 @@ fn interval_integral_cast_references() -> TestResult<Vec<Value>> {
             |build| build.contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
         )
     );
-    assert_eq!(records.len() - 1, 1812);
+    assert_eq!(records.len() - 1, 1816);
     Ok(records)
 }
 
@@ -64,7 +64,7 @@ enum RetainedDifference {
     /// #1236: a set operation whose left input reads a common table expression directly keeps
     /// that expression's qualifier, which its other references share, so `TABLE c UNION ALL
     /// SELECT INTERVAL '1' HOUR` over a DAY interval counts days: 3 and 0 where Spark counts
-    /// hours, 72 and 1.
+    /// hours, 72 and 1. Other references to the expression keep its qualifier.
     SharedCteSetOperation,
 }
 
@@ -82,7 +82,10 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
         Some(RetainedDifference::NullableGreatest)
     } else if matches!(id, "column_array_element" | "column_explode") {
         Some(RetainedDifference::NestedQualifier)
-    } else if id == "tracking_shared_cte_set_operations" {
+    } else if matches!(
+        id,
+        "tracking_shared_cte_set_operations" | "tracking_shared_cte_coerced_chain"
+    ) {
         Some(RetainedDifference::SharedCteSetOperation)
     } else {
         None
@@ -123,10 +126,18 @@ fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResu
             current["schema_stages"]["executed"]["fields"][0]["nullable"] = json!(true);
         }
         RetainedDifference::SharedCteSetOperation => {
-            if case["expected"]["rows"] != json!([["1"], ["3"], ["72"]]) {
+            let (spark, dar) = if case["id"] == "tracking_shared_cte_coerced_chain" {
+                (
+                    json!([["1"], ["24"], ["3"], ["72"]]),
+                    json!([["0"], ["1"], ["3"], ["3"]]),
+                )
+            } else {
+                (json!([["1"], ["3"], ["72"]]), json!([["0"], ["3"], ["3"]]))
+            };
+            if case["expected"]["rows"] != spark {
                 return Err(format!("expected Spark's hours: {case}").into());
             }
-            current["expected"]["rows"] = json!([["0"], ["3"], ["3"]]);
+            current["expected"]["rows"] = dar;
         }
         RetainedDifference::NestedQualifier => {
             // 3652058 days in seconds overflow INT.
@@ -408,7 +419,7 @@ async fn interval_integral_casts_match_spark() -> TestResult {
             (RetainedDifference::StringToQualifier, 12),
             (RetainedDifference::NullableGreatest, 16),
             (RetainedDifference::NestedQualifier, 8),
-            (RetainedDifference::SharedCteSetOperation, 4),
+            (RetainedDifference::SharedCteSetOperation, 8),
         ])
     );
     let mut differences = Vec::new();

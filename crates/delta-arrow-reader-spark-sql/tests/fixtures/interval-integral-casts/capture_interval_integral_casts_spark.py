@@ -302,6 +302,10 @@ def definitions():
         ("union_except_chain_hour",
          "SELECT CAST(x AS INT) AS r FROM (SELECT INTERVAL '1' DAY AS x "
          "UNION ALL SELECT INTERVAL '2' DAY EXCEPT SELECT INTERVAL '3' HOUR)"),
+        ("shared_cte_coerced_chain",
+         "WITH c AS (SELECT INTERVAL '3' DAY AS i, 1 AS n) SELECT CAST(i AS INT) AS r FROM "
+         "(TABLE c UNION ALL SELECT INTERVAL '1' DAY, CAST(2 AS BIGINT) UNION ALL "
+         "SELECT INTERVAL '1' HOUR, 3) UNION ALL SELECT CAST(i AS INT) FROM c"),
         ("date_plus_union_chain_hour",
          "SELECT k, d1 + x AS r FROM (SELECT k, d1, CAST(k AS INTERVAL DAY) AS x FROM pairs "
          "UNION ALL SELECT k, d1, CAST(k AS INTERVAL DAY) FROM pairs "

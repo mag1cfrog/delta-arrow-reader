@@ -330,8 +330,8 @@ Spark gives it, `DAY TO SECOND` or `YEAR TO MONTH`. The qualifier is unknown for
 element, a struct field or a lambda variable, and a cast reads an unknown qualifier as that
 type. Widened beside one, a known qualifier still bounds the result's end field from below,
 which DATE arithmetic reads. A set operation whose left input reads a common table expression
-directly, as `TABLE c`, and UNION BY NAME keep the left input's qualifier without widening it
-(#1236).
+directly, as `TABLE c`, also through the projection that type coercion adds, and UNION BY NAME
+keep the left input's qualifier without widening it (#1236).
 
 CAST and TRY_CAST of an interval to TINYINT, SMALLINT, INT, BIGINT or DECIMAL use a local function,
 `SparkIntervalToNumber`, which counts the qualifier's end field as Spark does: whole years or

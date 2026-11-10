@@ -242,7 +242,21 @@ fn widen_set_operation_interval_qualifiers(
                     None => return,
                 }
             }
-            LogicalPlan::Projection(_) => break,
+            // A projection that coercion added keeps its input's fields; one that a query
+            // resolved registered its own.
+            LogicalPlan::Projection(projection) => {
+                let input = projection.input.schema();
+                if projection
+                    .schema
+                    .fields()
+                    .iter()
+                    .any(|field| input.fields().iter().any(|own| own.name() == field.name()))
+                {
+                    projection.input.as_ref()
+                } else {
+                    break;
+                }
+            }
             _ => return,
         };
     }
