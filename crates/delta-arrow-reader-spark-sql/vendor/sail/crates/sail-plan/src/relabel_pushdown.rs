@@ -31,6 +31,7 @@ pub struct UnwrapSessionZoneRelabel;
 
 impl UnwrapSessionZoneRelabel {
     /// Add the rule to `optimizer` right after filter pushdown, or last without it.
+    /// `configure_spark_sql` adds it to DataFusion's default optimizer.
     pub fn install(optimizer: &mut Optimizer) {
         let position = optimizer
             .rules
@@ -205,10 +206,11 @@ mod tests {
     use std::sync::Arc;
 
     use datafusion::arrow::datatypes::{DataType, Field, Schema, TimeUnit};
+    use datafusion::optimizer::optimizer::Optimizer;
     use datafusion_common::{DFSchema, Result, ScalarValue};
     use datafusion_expr::{Expr, cast, col, lit};
 
-    use super::unwrap_relabels;
+    use super::{UnwrapSessionZoneRelabel, unwrap_relabels};
 
     fn zoned(unit: TimeUnit, zone: Option<&str>) -> DataType {
         DataType::Timestamp(unit, zone.map(Into::into))
@@ -264,6 +266,34 @@ mod tests {
             )
         );
         Ok(())
+    }
+
+    #[test]
+    fn the_rule_follows_filter_pushdown_or_comes_last() {
+        let names = |optimizer: &Optimizer| {
+            optimizer
+                .rules
+                .iter()
+                .map(|rule| rule.name().to_owned())
+                .collect::<Vec<_>>()
+        };
+        let mut optimizer = Optimizer::new();
+        let mut expected = names(&optimizer);
+        let position = expected
+            .iter()
+            .position(|name| name == "push_down_filter")
+            .map(|position| position + 1);
+        assert!(position.is_some_and(|position| position < expected.len()));
+        expected.insert(
+            position.unwrap_or_default(),
+            "unwrap_session_zone_relabel".into(),
+        );
+        UnwrapSessionZoneRelabel::install(&mut optimizer);
+        assert_eq!(names(&optimizer), expected);
+
+        let mut optimizer = Optimizer::with_rules(vec![]);
+        UnwrapSessionZoneRelabel::install(&mut optimizer);
+        assert_eq!(names(&optimizer), ["unwrap_session_zone_relabel"]);
     }
 
     #[test]

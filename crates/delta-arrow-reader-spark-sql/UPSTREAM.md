@@ -561,11 +561,12 @@ when it moves a filter below the projection. Its simplifier removes the cast fro
 with a literal on the next pass, but not from `IS NULL` or `IS NOT NULL`, and common
 subexpression elimination first moves a cast that a filter reads twice, as in `BETWEEN`, into
 a projection. `unwrap_session_zone_relabel` (`sail-plan/src/relabel_pushdown.rs`), which
-`configure_spark_sql` places right after filter pushdown, removes the cast from NULL tests
-and from comparisons with TIMESTAMP literals, in filters and in the filters pushed to a scan,
-and retags the literals with the stored zone. Only the annotation changes, so each predicate
-keeps its rows. Functions of the relabeled value, such as HOUR, keep the cast, and only Spark
-queries use the rule.
+`configure_spark_sql` places right after filter pushdown in DataFusion's default optimizer,
+removes the cast from NULL tests and from comparisons with TIMESTAMP literals, in filters and
+in the filters pushed to a scan, and retags the literals with the stored zone. Only the
+annotation changes, so each predicate keeps its rows. Functions of the relabeled value, such
+as HOUR, keep the cast, and only Spark queries use the rule. A host that sets its own
+optimizer rules keeps exactly those, without this rule.
 Native DataFusion SQL keeps each column's own annotation. The
 [session-zone column references](tests/fixtures/session-zone-columns/README.md) cover
 these functions in UTC and Los Angeles over UTC, named-zone and fixed-offset annotations.
