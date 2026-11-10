@@ -4,7 +4,7 @@
     {
       "branch": "fix/736-nested-constructor-declarations-wip",
       "head": "671536e5a0ebbbf4bb9e8481b64f4f73a3db8581",
-      "kind": "issue_handoff",
+      "kind": "withdrawn_handoff_alias",
       "issues": [
         736
       ],
@@ -15,12 +15,16 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/736-nested-constructor-declarations-wip",
       "issue_states": {
         "736": "OPEN"
-      }
+      },
+      "original_kind": "issue_handoff",
+      "recommended_for_implementation": false,
+      "recommended_issue": null,
+      "classification_reason": "The old alias points to the aggregate-statistics schema experiment, not an issue-specific constructor-nullability implementation. No dedicated #736 implementation was identified in the saved work. Start new assigned work from current staging."
     },
     {
       "branch": "fix/748-nested-expression-names-wip",
       "head": "1d21bb090833880621484d60cd96357e02ccbdf5",
-      "kind": "issue_handoff",
+      "kind": "recommended_implementation_source",
       "issues": [
         748
       ],
@@ -31,12 +35,16 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/748-nested-expression-names-wip",
       "issue_states": {
         "748": "OPEN"
-      }
+      },
+      "original_kind": "issue_handoff",
+      "recommended_for_implementation": true,
+      "recommended_issue": 748,
+      "continuation_status": "implementation WIP"
     },
     {
       "branch": "fix/757-struct-expression-names-wip",
       "head": "077af718ed738273d5b8e016ebdbb4bd12a0ea39",
-      "kind": "issue_handoff",
+      "kind": "recommended_implementation_source",
       "issues": [
         757
       ],
@@ -47,12 +55,16 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/757-struct-expression-names-wip",
       "issue_states": {
         "757": "OPEN"
-      }
+      },
+      "original_kind": "issue_handoff",
+      "recommended_for_implementation": true,
+      "recommended_issue": 757,
+      "continuation_status": "implementation WIP"
     },
     {
       "branch": "fix/762-qualified-column-precedence-wip",
       "head": "9a8e05d7ce80ce552ac99fbed7e655277bef8c61",
-      "kind": "issue_handoff",
+      "kind": "recommended_implementation_source",
       "issues": [
         762
       ],
@@ -63,12 +75,16 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/762-qualified-column-precedence-wip",
       "issue_states": {
         "762": "OPEN"
-      }
+      },
+      "original_kind": "issue_handoff",
+      "recommended_for_implementation": true,
+      "recommended_issue": 762,
+      "continuation_status": "implementation WIP"
     },
     {
       "branch": "fix/766-named-struct-fields-wip",
       "head": "4eb1d55831097289d1596c7c1fd28d79641e91b3",
-      "kind": "issue_handoff",
+      "kind": "withdrawn_handoff_alias",
       "issues": [
         766
       ],
@@ -79,12 +95,16 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/766-named-struct-fields-wip",
       "issue_states": {
         "766": "OPEN"
-      }
+      },
+      "original_kind": "issue_handoff",
+      "recommended_for_implementation": false,
+      "recommended_issue": null,
+      "classification_reason": "The snapshot is the older NAMED_STRUCT source used for the narrower #810/#812 repair. A separate implementation for the remaining #766 scope was not established. Start new assigned work from current staging."
     },
     {
       "branch": "fix/767-using-key-metadata-wip",
       "head": "cf3bee14df732573f0bc9bf6ce7332a8afb08693",
-      "kind": "issue_handoff",
+      "kind": "recommended_implementation_source",
       "issues": [
         767
       ],
@@ -95,12 +115,16 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/767-using-key-metadata-wip",
       "issue_states": {
         "767": "OPEN"
-      }
+      },
+      "original_kind": "issue_handoff",
+      "recommended_for_implementation": true,
+      "recommended_issue": 767,
+      "continuation_status": "implementation WIP"
     },
     {
       "branch": "fix/786-repeated-projection-identity-wip",
       "head": "99e68f9171bfa243dd694b6a8db30dbf4074bf2d",
-      "kind": "issue_handoff",
+      "kind": "recommended_implementation_source",
       "issues": [
         786
       ],
@@ -111,12 +135,16 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/786-repeated-projection-identity-wip",
       "issue_states": {
         "786": "OPEN"
-      }
+      },
+      "original_kind": "issue_handoff",
+      "recommended_for_implementation": true,
+      "recommended_issue": 786,
+      "continuation_status": "implementation WIP"
     },
     {
       "branch": "fix/790-scalar-subquery-names-wip",
       "head": "963f5d625619622ea7609129005d48f4a850daf2",
-      "kind": "issue_handoff",
+      "kind": "recommended_implementation_source",
       "issues": [
         790
       ],
@@ -127,12 +155,16 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/790-scalar-subquery-names-wip",
       "issue_states": {
         "790": "OPEN"
-      }
+      },
+      "original_kind": "issue_handoff",
+      "recommended_for_implementation": true,
+      "recommended_issue": 790,
+      "continuation_status": "implementation WIP"
     },
     {
       "branch": "fix/794-union-output-metadata-wip",
       "head": "2277ea772f2d5fb1d973c7c3188d587352b49735",
-      "kind": "issue_handoff",
+      "kind": "withdrawn_handoff_alias",
       "issues": [
         794
       ],
@@ -143,12 +175,16 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/794-union-output-metadata-wip",
       "issue_states": {
         "794": "OPEN"
-      }
+      },
+      "original_kind": "issue_handoff",
+      "recommended_for_implementation": false,
+      "recommended_issue": null,
+      "classification_reason": "No independent #794 implementation was preserved. The saved UNION prototype is owned by the #832 continuation entry. Keep #794 separate when extracting its changes."
     },
     {
       "branch": "fix/826-duplicate-struct-casts-wip",
       "head": "fd93346644f2216c3af3e77b5f99d4447dc19523",
-      "kind": "issue_handoff",
+      "kind": "recommended_implementation_source",
       "issues": [
         826
       ],
@@ -159,12 +195,16 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/826-duplicate-struct-casts-wip",
       "issue_states": {
         "826": "OPEN"
-      }
+      },
+      "original_kind": "issue_handoff",
+      "recommended_for_implementation": true,
+      "recommended_issue": 826,
+      "continuation_status": "implementation WIP"
     },
     {
       "branch": "fix/827-array-struct-declarations-wip",
       "head": "cd4f7dcbdf8d69c125be4652b417a1a5745a89f0",
-      "kind": "issue_handoff",
+      "kind": "recommended_implementation_source",
       "issues": [
         827
       ],
@@ -175,12 +215,16 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/827-array-struct-declarations-wip",
       "issue_states": {
         "827": "OPEN"
-      }
+      },
+      "original_kind": "issue_handoff",
+      "recommended_for_implementation": true,
+      "recommended_issue": 827,
+      "continuation_status": "implementation WIP"
     },
     {
       "branch": "fix/832-union-left-metadata-wip",
       "head": "2277ea772f2d5fb1d973c7c3188d587352b49735",
-      "kind": "issue_handoff",
+      "kind": "recommended_implementation_source",
       "issues": [
         832
       ],
@@ -191,12 +235,16 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/832-union-left-metadata-wip",
       "issue_states": {
         "832": "OPEN"
-      }
+      },
+      "original_kind": "issue_handoff",
+      "recommended_for_implementation": true,
+      "recommended_issue": 832,
+      "continuation_status": "shared prototype, not isolated"
     },
     {
       "branch": "fix/833-set-operation-cast-metadata-wip",
       "head": "2277ea772f2d5fb1d973c7c3188d587352b49735",
-      "kind": "issue_handoff",
+      "kind": "withdrawn_handoff_alias",
       "issues": [
         833
       ],
@@ -207,12 +255,16 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/833-set-operation-cast-metadata-wip",
       "issue_states": {
         "833": "OPEN"
-      }
+      },
+      "original_kind": "issue_handoff",
+      "recommended_for_implementation": false,
+      "recommended_issue": null,
+      "classification_reason": "No independent #833 implementation was preserved. The saved UNION prototype is owned by the #832 continuation entry. The implicit-cast metadata repair is not claimed implemented."
     },
     {
       "branch": "fix/870-required-case-conditions-wip",
       "head": "22a0d4b6ea9ff5dc69dda4a74910a39433a6e099",
-      "kind": "issue_handoff",
+      "kind": "recommended_implementation_source",
       "issues": [
         870
       ],
@@ -223,12 +275,16 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/870-required-case-conditions-wip",
       "issue_states": {
         "870": "OPEN"
-      }
+      },
+      "original_kind": "issue_handoff",
+      "recommended_for_implementation": true,
+      "recommended_issue": 870,
+      "continuation_status": "unvalidated implementation attempt"
     },
     {
       "branch": "fix/893-udf-folding-opt-outs-wip",
       "head": "63da7acb50c237fb878667e3846f35bdd8d2e532",
-      "kind": "issue_handoff",
+      "kind": "recommended_implementation_source",
       "issues": [
         893
       ],
@@ -239,12 +295,16 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/893-udf-folding-opt-outs-wip",
       "issue_states": {
         "893": "OPEN"
-      }
+      },
+      "original_kind": "issue_handoff",
+      "recommended_for_implementation": true,
+      "recommended_issue": 893,
+      "continuation_status": "reviewed WIP, findings unresolved"
     },
     {
       "branch": "fix/828-recursive-coercion-stash-latest-wip",
       "head": "20e362ac1852eb10aa0b3119b3b7b59554dea4ac",
-      "kind": "materialized_stash",
+      "kind": "recovery_snapshot",
       "issues": [
         828
       ],
@@ -257,12 +317,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/828-recursive-coercion-stash-latest-wip",
       "issue_states": {
         "828": "CLOSED"
-      }
+      },
+      "original_kind": "materialized_stash",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "fix/828-recursive-coercion-stash-before-rebase-wip",
       "head": "6cbd6a96e040140ffc7d0ad3351b24781872aa14",
-      "kind": "materialized_stash",
+      "kind": "recovery_snapshot",
       "issues": [
         828
       ],
@@ -275,12 +338,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/828-recursive-coercion-stash-before-rebase-wip",
       "issue_states": {
         "828": "CLOSED"
-      }
+      },
+      "original_kind": "materialized_stash",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "test/726-floating-window-coverage-stash-wip",
       "head": "6a66d571bdf5c505098534bf175eb08719da2b07",
-      "kind": "materialized_stash",
+      "kind": "recovery_snapshot",
       "issues": [
         726
       ],
@@ -293,12 +359,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/test/726-floating-window-coverage-stash-wip",
       "issue_states": {
         "726": "CLOSED"
-      }
+      },
+      "original_kind": "materialized_stash",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "test/171-aggregate-window-coverage-stash-wip",
       "head": "5db02bfb2a5403437f6d0789a89441fe07565f62",
-      "kind": "materialized_stash",
+      "kind": "recovery_snapshot",
       "issues": [
         171
       ],
@@ -311,12 +380,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/test/171-aggregate-window-coverage-stash-wip",
       "issue_states": {
         "171": "OPEN"
-      }
+      },
+      "original_kind": "materialized_stash",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "docs/528-schema-error-header-stash-wip",
       "head": "a547ed3e2e4c7d5f45ffb66d49c9225a3cc31782",
-      "kind": "materialized_stash",
+      "kind": "recovery_snapshot",
       "issues": [
         528
       ],
@@ -329,12 +401,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/docs/528-schema-error-header-stash-wip",
       "issue_states": {
         "528": "CLOSED"
-      }
+      },
+      "original_kind": "materialized_stash",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "docs/525-cli-entry-examples-wip",
       "head": "403069f2ca41640727d32580f47689e175620042",
-      "kind": "dirty_worktree_snapshot",
+      "kind": "recovery_snapshot",
       "issues": [
         525
       ],
@@ -344,12 +419,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/docs/525-cli-entry-examples-wip",
       "issue_states": {
         "525": "OPEN"
-      }
+      },
+      "original_kind": "dirty_worktree_snapshot",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "experiment/113-sail-feasibility-wip",
       "head": "309cd00a0286a9507f23863e42a6e482c10728e9",
-      "kind": "dirty_worktree_snapshot",
+      "kind": "recovery_snapshot",
       "issues": [
         113
       ],
@@ -359,12 +437,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/experiment/113-sail-feasibility-wip",
       "issue_states": {
         "113": "OPEN"
-      }
+      },
+      "original_kind": "dirty_worktree_snapshot",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "fix/721-nested-case-uncommitted-wip",
       "head": "22a0d4b6ea9ff5dc69dda4a74910a39433a6e099",
-      "kind": "dirty_worktree_snapshot",
+      "kind": "recovery_snapshot",
       "issues": [
         721
       ],
@@ -374,12 +455,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/721-nested-case-uncommitted-wip",
       "issue_states": {
         "721": "CLOSED"
-      }
+      },
+      "original_kind": "dirty_worktree_snapshot",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "test/893-handoff-observations",
       "head": "7b12b827261ba8daff6a93b3923ca5b303624bf1",
-      "kind": "frozen_940_observation_source",
+      "kind": "validation_only",
       "issues": [
         893
       ],
@@ -388,12 +472,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/test/893-handoff-observations",
       "issue_states": {
         "893": "OPEN"
-      }
+      },
+      "original_kind": "frozen_940_observation_source",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "test/893-case-source-target-observations",
       "head": "40f0dd2c69259e2288b2f718e3b5d3ba6d486ac4",
-      "kind": "all_16_stage_observation_source",
+      "kind": "validation_only",
       "issues": [
         893
       ],
@@ -402,12 +489,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/test/893-case-source-target-observations",
       "issue_states": {
         "893": "OPEN"
-      }
+      },
+      "original_kind": "all_16_stage_observation_source",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "test/893-native-case-factory",
       "head": "28451975ea83a40b668a14aa56b56e188170bf3c",
-      "kind": "private_native_CASE_factory",
+      "kind": "validation_only",
       "issues": [
         893
       ],
@@ -416,12 +506,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/test/893-native-case-factory",
       "issue_states": {
         "893": "OPEN"
-      }
+      },
+      "original_kind": "private_native_CASE_factory",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "test/spark-case-nested-fields-pre-staging-rebase",
       "head": "62a29f88fa747860e66185748342ee0ca8ae3043",
-      "kind": "historical_validation_branch",
+      "kind": "historical_validation",
       "issues": [
         721
       ],
@@ -429,12 +522,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/test/spark-case-nested-fields-pre-staging-rebase",
       "issue_states": {
         "721": "CLOSED"
-      }
+      },
+      "original_kind": "historical_validation_branch",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "test/spark-conditional-integration",
       "head": "7b8a5cf022543560263f2882df35a5a0b7736ec0",
-      "kind": "historical_validation_branch",
+      "kind": "historical_validation",
       "issues": [
         721,
         828,
@@ -450,12 +546,15 @@
         "836": "CLOSED",
         "840": "CLOSED",
         "843": "CLOSED"
-      }
+      },
+      "original_kind": "historical_validation_branch",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "test/spark-date-day-final",
       "head": "b2738d267271db314bcbaf3b21fa60dcf752d387",
-      "kind": "historical_validation_branch",
+      "kind": "historical_validation",
       "issues": [
         756
       ],
@@ -463,12 +562,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/test/spark-date-day-final",
       "issue_states": {
         "756": "CLOSED"
-      }
+      },
+      "original_kind": "historical_validation_branch",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "test/spark-date-day-repaired",
       "head": "3642fc3ef756586ba97a357f856ff8f25cfae3df",
-      "kind": "historical_validation_branch",
+      "kind": "historical_validation",
       "issues": [
         756
       ],
@@ -476,12 +578,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/test/spark-date-day-repaired",
       "issue_states": {
         "756": "CLOSED"
-      }
+      },
+      "original_kind": "historical_validation_branch",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "test/spark-date-range-consumer-ready",
       "head": "27b103ebe75103a15a7d394434cdc0e23b1a28f1",
-      "kind": "historical_validation_branch",
+      "kind": "historical_validation",
       "issues": [
         747
       ],
@@ -489,12 +594,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/test/spark-date-range-consumer-ready",
       "issue_states": {
         "747": "CLOSED"
-      }
+      },
+      "original_kind": "historical_validation_branch",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "test/spark-date-range-validation",
       "head": "c48d855d1cdaa3bf0fa8c503622e955b5a8560ab",
-      "kind": "historical_validation_branch",
+      "kind": "historical_validation",
       "issues": [
         747
       ],
@@ -502,12 +610,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/test/spark-date-range-validation",
       "issue_states": {
         "747": "CLOSED"
-      }
+      },
+      "original_kind": "historical_validation_branch",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "test/spark-equivalent-window-validation",
       "head": "470c560ac65fbf58e6fd07bd995cb86d4394bdec",
-      "kind": "historical_validation_branch",
+      "kind": "historical_validation",
       "issues": [
         745
       ],
@@ -515,12 +626,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/test/spark-equivalent-window-validation",
       "issue_states": {
         "745": "CLOSED"
-      }
+      },
+      "original_kind": "historical_validation_branch",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "test/spark-extrema-final-validation",
       "head": "db9012761cc90d481c93972e00df0278b47a51aa",
-      "kind": "historical_validation_branch",
+      "kind": "historical_validation",
       "issues": [
         730
       ],
@@ -528,12 +642,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/test/spark-extrema-final-validation",
       "issue_states": {
         "730": "CLOSED"
-      }
+      },
+      "original_kind": "historical_validation_branch",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "test/spark-extrema-integrated-final",
       "head": "28e623d8426b708c616d09b0a3fd59c502e85a04",
-      "kind": "historical_validation_branch",
+      "kind": "historical_validation",
       "issues": [
         730
       ],
@@ -541,12 +658,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/test/spark-extrema-integrated-final",
       "issue_states": {
         "730": "CLOSED"
-      }
+      },
+      "original_kind": "historical_validation_branch",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "test/spark-extrema-merge-check",
       "head": "47ed86f60a9da9ffc4dfb4e711b24fb4a56d39a3",
-      "kind": "historical_validation_branch",
+      "kind": "historical_validation",
       "issues": [
         730
       ],
@@ -554,12 +674,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/test/spark-extrema-merge-check",
       "issue_states": {
         "730": "CLOSED"
-      }
+      },
+      "original_kind": "historical_validation_branch",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "test/spark-generated-alias-baseline-repaired",
       "head": "54c0095bdf6a0d00028ecccf7fecd140d10ba764",
-      "kind": "historical_validation_branch",
+      "kind": "historical_validation",
       "issues": [
         710
       ],
@@ -567,12 +690,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/test/spark-generated-alias-baseline-repaired",
       "issue_states": {
         "710": "CLOSED"
-      }
+      },
+      "original_kind": "historical_validation_branch",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "test/spark-native-constant-validation",
       "head": "8ed5ab8316434a554bf9507a0f884be629519edb",
-      "kind": "historical_validation_branch",
+      "kind": "historical_validation",
       "issues": [
         731,
         861
@@ -582,12 +708,15 @@
       "issue_states": {
         "731": "CLOSED",
         "861": "OPEN"
-      }
+      },
+      "original_kind": "historical_validation_branch",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "test/spark-nested-coalesce-control-red",
       "head": "48a8975cdac2fed8cbf5851e626c9fce005d8b83",
-      "kind": "historical_validation_branch",
+      "kind": "historical_validation",
       "issues": [
         828
       ],
@@ -595,12 +724,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/test/spark-nested-coalesce-control-red",
       "issue_states": {
         "828": "CLOSED"
-      }
+      },
+      "original_kind": "historical_validation_branch",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "test/spark-nested-conditional-observer-red",
       "head": "c0346877b72723378cfe4379c3838b8dd10957b1",
-      "kind": "historical_validation_branch",
+      "kind": "historical_validation",
       "issues": [
         828
       ],
@@ -608,12 +740,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/test/spark-nested-conditional-observer-red",
       "issue_states": {
         "828": "CLOSED"
-      }
+      },
+      "original_kind": "historical_validation_branch",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "test/spark-nested-conditional-pre-staging-rebase",
       "head": "608451387d4251c92a3f715f21b9b7b793d81caa",
-      "kind": "historical_validation_branch",
+      "kind": "historical_validation",
       "issues": [
         828
       ],
@@ -621,12 +756,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/test/spark-nested-conditional-pre-staging-rebase",
       "issue_states": {
         "828": "CLOSED"
-      }
+      },
+      "original_kind": "historical_validation_branch",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "test/spark-nested-label-candidate",
       "head": "fc22234a15af98efd542b77d6927cc5d36523222",
-      "kind": "historical_validation_branch",
+      "kind": "historical_validation",
       "issues": [
         736,
         748
@@ -636,12 +774,15 @@
       "issue_states": {
         "736": "OPEN",
         "748": "OPEN"
-      }
+      },
+      "original_kind": "historical_validation_branch",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "test/spark-nested-label-final",
       "head": "1d21bb090833880621484d60cd96357e02ccbdf5",
-      "kind": "historical_validation_branch",
+      "kind": "historical_validation",
       "issues": [
         748
       ],
@@ -649,12 +790,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/test/spark-nested-label-final",
       "issue_states": {
         "748": "OPEN"
-      }
+      },
+      "original_kind": "historical_validation_branch",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "test/spark-nested-label-validated",
       "head": "29ec989508a114326263ed395889958433b74ed5",
-      "kind": "historical_validation_branch",
+      "kind": "historical_validation",
       "issues": [
         748
       ],
@@ -662,12 +806,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/test/spark-nested-label-validated",
       "issue_states": {
         "748": "OPEN"
-      }
+      },
+      "original_kind": "historical_validation_branch",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "test/spark-pivot-alias-final",
       "head": "63cbbf38e6702b2f31428bf26dde85b4eb9a7a7b",
-      "kind": "historical_validation_branch",
+      "kind": "historical_validation",
       "issues": [
         744
       ],
@@ -675,12 +822,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/test/spark-pivot-alias-final",
       "issue_states": {
         "744": "CLOSED"
-      }
+      },
+      "original_kind": "historical_validation_branch",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "test/spark-qualified-precedence-candidate",
       "head": "e51cb0854112be796f131a329ed5c6b6cac4f49b",
-      "kind": "historical_validation_branch",
+      "kind": "historical_validation",
       "issues": [
         762
       ],
@@ -688,12 +838,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/test/spark-qualified-precedence-candidate",
       "issue_states": {
         "762": "OPEN"
-      }
+      },
+      "original_kind": "historical_validation_branch",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "test/spark-recursive-admission-integration",
       "head": "ecb5d33bcca3311842eb0f6ef4d77dd15a51b815",
-      "kind": "historical_validation_branch",
+      "kind": "historical_validation",
       "issues": [
         828
       ],
@@ -701,12 +854,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/test/spark-recursive-admission-integration",
       "issue_states": {
         "828": "CLOSED"
-      }
+      },
+      "original_kind": "historical_validation_branch",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "test/spark-scalar-float-final",
       "head": "4a47583d15f314e54778b73ff75306e3d95a3e31",
-      "kind": "historical_validation_branch",
+      "kind": "historical_validation",
       "issues": [
         752
       ],
@@ -714,12 +870,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/test/spark-scalar-float-final",
       "issue_states": {
         "752": "CLOSED"
-      }
+      },
+      "original_kind": "historical_validation_branch",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "test/spark-scalar-float-validation",
       "head": "7e26e7ba6ac7065481d49c81fd91c2b6bbf3c499",
-      "kind": "historical_validation_branch",
+      "kind": "historical_validation",
       "issues": [
         752
       ],
@@ -727,12 +886,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/test/spark-scalar-float-validation",
       "issue_states": {
         "752": "CLOSED"
-      }
+      },
+      "original_kind": "historical_validation_branch",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "test/spark-single-row-candidate",
       "head": "11f31bd2748691f59e42094a8703eb906a4ca736",
-      "kind": "historical_validation_branch",
+      "kind": "historical_validation",
       "issues": [
         763
       ],
@@ -740,12 +902,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/test/spark-single-row-candidate",
       "issue_states": {
         "763": "CLOSED"
-      }
+      },
+      "original_kind": "historical_validation_branch",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "test/spark-statistics-schema-validation",
       "head": "671536e5a0ebbbf4bb9e8481b64f4f73a3db8581",
-      "kind": "historical_validation_branch",
+      "kind": "historical_validation",
       "issues": [
         736
       ],
@@ -753,12 +918,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/test/spark-statistics-schema-validation",
       "issue_states": {
         "736": "OPEN"
-      }
+      },
+      "original_kind": "historical_validation_branch",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "test/spark-string-array-c06-observation",
       "head": "f8b1ffb324fa294f25f4d2636d8461d33c02b231",
-      "kind": "historical_validation_branch",
+      "kind": "historical_validation",
       "issues": [
         174,
         788,
@@ -770,12 +938,15 @@
         "174": "CLOSED",
         "788": "CLOSED",
         "1022": "CLOSED"
-      }
+      },
+      "original_kind": "historical_validation_branch",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "test/spark-window-completion-validation",
       "head": "44803ea8b649c7656de0c246c7ce5adcafd1b487",
-      "kind": "historical_validation_branch",
+      "kind": "historical_validation",
       "issues": [
         727
       ],
@@ -783,12 +954,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/test/spark-window-completion-validation",
       "issue_states": {
         "727": "CLOSED"
-      }
+      },
+      "original_kind": "historical_validation_branch",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "test/spark-window-cse-validation",
       "head": "3b416c26bc45691730e4071581d88064781f09b0",
-      "kind": "historical_validation_branch",
+      "kind": "historical_validation",
       "issues": [
         745
       ],
@@ -796,12 +970,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/test/spark-window-cse-validation",
       "issue_states": {
         "745": "CLOSED"
-      }
+      },
+      "original_kind": "historical_validation_branch",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "test/1155-literal-folding-baseline-wip",
       "head": "be828718369f80cab138f28f00250a4894476007",
-      "kind": "issue_baseline_observer",
+      "kind": "reproducer_only",
       "issues": [
         1155
       ],
@@ -810,12 +987,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/test/1155-literal-folding-baseline-wip",
       "issue_states": {
         "1155": "OPEN"
-      }
+      },
+      "original_kind": "issue_baseline_observer",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "fix/spark-abs-result-fields",
       "head": "667d534dad0ae9515da26ead7f18705e9ee7445e",
-      "kind": "original_implementation_reference",
+      "kind": "historical_implementation",
       "issues": [
         834,
         719,
@@ -827,12 +1007,15 @@
         "834": "CLOSED",
         "719": "CLOSED",
         "841": "CLOSED"
-      }
+      },
+      "original_kind": "original_implementation_reference",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "fix/spark-alias-contract-followup",
       "head": "fd1fd9adc9ddd8eef6632c3951277eaf3ae9f235",
-      "kind": "original_implementation_reference",
+      "kind": "historical_implementation",
       "issues": [
         710
       ],
@@ -840,12 +1023,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/spark-alias-contract-followup",
       "issue_states": {
         "710": "CLOSED"
-      }
+      },
+      "original_kind": "original_implementation_reference",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "fix/spark-array-result-fields",
       "head": "95ef3425ebe5f45559df506eea408f405640b906",
-      "kind": "original_implementation_reference",
+      "kind": "historical_implementation",
       "issues": [
         835,
         836,
@@ -861,12 +1047,15 @@
         "837": "CLOSED",
         "840": "CLOSED",
         "843": "CLOSED"
-      }
+      },
+      "original_kind": "original_implementation_reference",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "fix/spark-array-struct-declarations",
       "head": "cd4f7dcbdf8d69c125be4652b417a1a5745a89f0",
-      "kind": "original_implementation_reference",
+      "kind": "historical_implementation",
       "issues": [
         827
       ],
@@ -874,12 +1063,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/spark-array-struct-declarations",
       "issue_states": {
         "827": "OPEN"
-      }
+      },
+      "original_kind": "original_implementation_reference",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "fix/spark-case-alias-metadata",
       "head": "e852c014bcbd799fae4ff8fad15f4474ee3e5665",
-      "kind": "original_implementation_reference",
+      "kind": "historical_implementation",
       "issues": [
         721
       ],
@@ -887,12 +1079,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/spark-case-alias-metadata",
       "issue_states": {
         "721": "CLOSED"
-      }
+      },
+      "original_kind": "original_implementation_reference",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "fix/spark-case-alias-test-boundary",
       "head": "d4d97968a22017f79dad903d7c8d05be89b4d56d",
-      "kind": "original_implementation_reference",
+      "kind": "historical_implementation",
       "issues": [
         721
       ],
@@ -900,12 +1095,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/spark-case-alias-test-boundary",
       "issue_states": {
         "721": "CLOSED"
-      }
+      },
+      "original_kind": "original_implementation_reference",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "fix/spark-case-mixed-declarations",
       "head": "1d9f59e4c36e1df231b1b3c1f2c13ea95551131d",
-      "kind": "original_implementation_reference",
+      "kind": "historical_implementation",
       "issues": [
         721,
         869
@@ -915,12 +1113,15 @@
       "issue_states": {
         "721": "CLOSED",
         "869": "CLOSED"
-      }
+      },
+      "original_kind": "original_implementation_reference",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "fix/spark-case-nested-result-fields",
       "head": "7ef2152d604e2eedffeb3b93ebdf5ff004c23310",
-      "kind": "original_implementation_reference",
+      "kind": "historical_implementation",
       "issues": [
         721,
         870
@@ -930,12 +1131,15 @@
       "issue_states": {
         "721": "CLOSED",
         "870": "OPEN"
-      }
+      },
+      "original_kind": "original_implementation_reference",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "fix/spark-case-nullability",
       "head": "0ff82ea097e9e173cee4cb14f773a07884a9e80f",
-      "kind": "original_implementation_reference",
+      "kind": "historical_implementation",
       "issues": [
         721
       ],
@@ -943,12 +1147,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/spark-case-nullability",
       "issue_states": {
         "721": "CLOSED"
-      }
+      },
+      "original_kind": "original_implementation_reference",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "fix/spark-correlated-metadata-pre815",
       "head": "b6eb29250422cf80e0aa89e16be30bbc604eeb03",
-      "kind": "original_implementation_reference",
+      "kind": "historical_implementation",
       "issues": [
         818
       ],
@@ -956,12 +1163,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/spark-correlated-metadata-pre815",
       "issue_states": {
         "818": "CLOSED"
-      }
+      },
+      "original_kind": "original_implementation_reference",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "fix/spark-correlated-scalar-metadata",
       "head": "e3fc6ca709333d1076582a1809fa5c50caff189e",
-      "kind": "original_implementation_reference",
+      "kind": "historical_implementation",
       "issues": [
         818
       ],
@@ -969,12 +1179,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/spark-correlated-scalar-metadata",
       "issue_states": {
         "818": "CLOSED"
-      }
+      },
+      "original_kind": "original_implementation_reference",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "fix/spark-duplicate-struct-casts",
       "head": "fd93346644f2216c3af3e77b5f99d4447dc19523",
-      "kind": "original_implementation_reference",
+      "kind": "historical_implementation",
       "issues": [
         826
       ],
@@ -982,12 +1195,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/spark-duplicate-struct-casts",
       "issue_states": {
         "826": "OPEN"
-      }
+      },
+      "original_kind": "original_implementation_reference",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "fix/spark-folded-map-lambda-nullability",
       "head": "1f2535cfdde784db9df39c0c2cc4fe5e636f707e",
-      "kind": "original_implementation_reference",
+      "kind": "historical_implementation",
       "issues": [
         816
       ],
@@ -995,12 +1211,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/spark-folded-map-lambda-nullability",
       "issue_states": {
         "816": "CLOSED"
-      }
+      },
+      "original_kind": "original_implementation_reference",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "fix/spark-generated-alias-before-div-integration",
       "head": "f552fa1884ff50e7dbf6531fc8732dc09569ab45",
-      "kind": "original_implementation_reference",
+      "kind": "historical_implementation",
       "issues": [
         710
       ],
@@ -1008,12 +1227,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/spark-generated-alias-before-div-integration",
       "issue_states": {
         "710": "CLOSED"
-      }
+      },
+      "original_kind": "original_implementation_reference",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "fix/spark-generated-alias-integration",
       "head": "1df41b7a1b4eaad3843b9f14fc6d12c68bed2e1c",
-      "kind": "original_implementation_reference",
+      "kind": "historical_implementation",
       "issues": [
         710
       ],
@@ -1021,12 +1243,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/spark-generated-alias-integration",
       "issue_states": {
         "710": "CLOSED"
-      }
+      },
+      "original_kind": "original_implementation_reference",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "fix/spark-generated-alias-metadata",
       "head": "f41f703e56025fba19149d1465490636ec0c2114",
-      "kind": "original_implementation_reference",
+      "kind": "historical_implementation",
       "issues": [
         710
       ],
@@ -1034,12 +1259,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/spark-generated-alias-metadata",
       "issue_states": {
         "710": "CLOSED"
-      }
+      },
+      "original_kind": "original_implementation_reference",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "fix/spark-interval-qualifiers",
       "head": "c54d99c351cd8281f554977075dd01e73f5c25fa",
-      "kind": "original_implementation_reference",
+      "kind": "historical_implementation",
       "issues": [
         749,
         782
@@ -1049,12 +1277,15 @@
       "issue_states": {
         "749": "CLOSED",
         "782": "CLOSED"
-      }
+      },
+      "original_kind": "original_implementation_reference",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "fix/spark-map-constructor-nullability",
       "head": "ecc867bb4e874c17629cbcfc324bdd6af33345f1",
-      "kind": "original_implementation_reference",
+      "kind": "historical_implementation",
       "issues": [
         824
       ],
@@ -1062,12 +1293,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/spark-map-constructor-nullability",
       "issue_states": {
         "824": "CLOSED"
-      }
+      },
+      "original_kind": "original_implementation_reference",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "fix/spark-named-struct-fields",
       "head": "4eb1d55831097289d1596c7c1fd28d79641e91b3",
-      "kind": "original_implementation_reference",
+      "kind": "historical_implementation",
       "issues": [
         766,
         810
@@ -1077,12 +1311,15 @@
       "issue_states": {
         "766": "OPEN",
         "810": "CLOSED"
-      }
+      },
+      "original_kind": "original_implementation_reference",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "fix/spark-nested-conditional-coercion",
       "head": "76f01c22a1bbe5f7718154698fbc3e06df68687f",
-      "kind": "original_implementation_reference",
+      "kind": "historical_implementation",
       "issues": [
         828
       ],
@@ -1090,12 +1327,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/spark-nested-conditional-coercion",
       "issue_states": {
         "828": "CLOSED"
-      }
+      },
+      "original_kind": "original_implementation_reference",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "fix/spark-nested-conditional-results",
       "head": "5b0db880fcf53270794cd89b73ef8d1ebd6bae46",
-      "kind": "original_implementation_reference",
+      "kind": "historical_implementation",
       "issues": [
         828
       ],
@@ -1103,12 +1343,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/spark-nested-conditional-results",
       "issue_states": {
         "828": "CLOSED"
-      }
+      },
+      "original_kind": "original_implementation_reference",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "fix/spark-nested-lambda-captures",
       "head": "e4de0b0f052a7b76ccfc4156247c13434932ba73",
-      "kind": "original_implementation_reference",
+      "kind": "historical_implementation",
       "issues": [
         821,
         829
@@ -1118,12 +1361,15 @@
       "issue_states": {
         "821": "CLOSED",
         "829": "OPEN"
-      }
+      },
+      "original_kind": "original_implementation_reference",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "fix/spark-pivot-source-alias",
       "head": "796f6d63d0a3d574087110cf04c123fb969dc7f7",
-      "kind": "original_implementation_reference",
+      "kind": "historical_implementation",
       "issues": [
         744
       ],
@@ -1131,12 +1377,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/spark-pivot-source-alias",
       "issue_states": {
         "744": "CLOSED"
-      }
+      },
+      "original_kind": "original_implementation_reference",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "fix/spark-qualified-column-precedence",
       "head": "9a8e05d7ce80ce552ac99fbed7e655277bef8c61",
-      "kind": "original_implementation_reference",
+      "kind": "historical_implementation",
       "issues": [
         762
       ],
@@ -1144,12 +1393,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/spark-qualified-column-precedence",
       "issue_states": {
         "762": "OPEN"
-      }
+      },
+      "original_kind": "original_implementation_reference",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "fix/spark-repeated-projection-identity",
       "head": "99e68f9171bfa243dd694b6a8db30dbf4074bf2d",
-      "kind": "original_implementation_reference",
+      "kind": "historical_implementation",
       "issues": [
         786
       ],
@@ -1157,12 +1409,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/spark-repeated-projection-identity",
       "issue_states": {
         "786": "OPEN"
-      }
+      },
+      "original_kind": "original_implementation_reference",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "fix/spark-scalar-subquery-names",
       "head": "963f5d625619622ea7609129005d48f4a850daf2",
-      "kind": "original_implementation_reference",
+      "kind": "historical_implementation",
       "issues": [
         790
       ],
@@ -1170,12 +1425,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/spark-scalar-subquery-names",
       "issue_states": {
         "790": "OPEN"
-      }
+      },
+      "original_kind": "original_implementation_reference",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "fix/spark-size-result-nullability",
       "head": "2c44e160a89286650dc029d096736b5cce28f2b5",
-      "kind": "original_implementation_reference",
+      "kind": "historical_implementation",
       "issues": [
         822
       ],
@@ -1183,12 +1441,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/spark-size-result-nullability",
       "issue_states": {
         "822": "CLOSED"
-      }
+      },
+      "original_kind": "original_implementation_reference",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "fix/spark-struct-expression-names",
       "head": "077af718ed738273d5b8e016ebdbb4bd12a0ea39",
-      "kind": "original_implementation_reference",
+      "kind": "historical_implementation",
       "issues": [
         757
       ],
@@ -1196,12 +1457,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/spark-struct-expression-names",
       "issue_states": {
         "757": "OPEN"
-      }
+      },
+      "original_kind": "original_implementation_reference",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "fix/spark-struct-metadata-integration",
       "head": "5bce7951cf8665b9a6d44c1c57d36a8425fc83af",
-      "kind": "original_implementation_reference",
+      "kind": "historical_implementation",
       "issues": [
         757,
         710
@@ -1211,12 +1475,15 @@
       "issue_states": {
         "757": "OPEN",
         "710": "CLOSED"
-      }
+      },
+      "original_kind": "original_implementation_reference",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "fix/spark-struct-metadata-integration-pre803",
       "head": "8eaa5e1677c549a6fdaf8bdd46144b036ca88a27",
-      "kind": "original_implementation_reference",
+      "kind": "historical_implementation",
       "issues": [
         757,
         710
@@ -1226,12 +1493,15 @@
       "issue_states": {
         "757": "OPEN",
         "710": "CLOSED"
-      }
+      },
+      "original_kind": "original_implementation_reference",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "fix/spark-udf-folding-opt-outs",
       "head": "63da7acb50c237fb878667e3846f35bdd8d2e532",
-      "kind": "original_implementation_reference",
+      "kind": "historical_implementation",
       "issues": [
         893
       ],
@@ -1239,12 +1509,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/spark-udf-folding-opt-outs",
       "issue_states": {
         "893": "OPEN"
-      }
+      },
+      "original_kind": "original_implementation_reference",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "fix/spark-union-generated-metadata",
       "head": "2277ea772f2d5fb1d973c7c3188d587352b49735",
-      "kind": "original_implementation_reference",
+      "kind": "historical_implementation",
       "issues": [
         794,
         832,
@@ -1256,12 +1529,15 @@
         "794": "OPEN",
         "832": "OPEN",
         "833": "OPEN"
-      }
+      },
+      "original_kind": "original_implementation_reference",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "fix/spark-using-key-metadata",
       "head": "cf3bee14df732573f0bc9bf6ce7332a8afb08693",
-      "kind": "original_implementation_reference",
+      "kind": "historical_implementation",
       "issues": [
         767
       ],
@@ -1269,12 +1545,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/spark-using-key-metadata",
       "issue_states": {
         "767": "OPEN"
-      }
+      },
+      "original_kind": "original_implementation_reference",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "fix/spark-year-month-scaling",
       "head": "4b9f67d6a3f503144b05605352a892a79318b456",
-      "kind": "original_implementation_reference",
+      "kind": "historical_implementation",
       "issues": [
         781
       ],
@@ -1282,12 +1561,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/fix/spark-year-month-scaling",
       "issue_states": {
         "781": "CLOSED"
-      }
+      },
+      "original_kind": "original_implementation_reference",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     },
     {
       "branch": "feat/spark-sql-crate",
       "head": "1263c89473083922fdbaa8c508797e4965243b41",
-      "kind": "original_implementation_reference",
+      "kind": "historical_implementation",
       "issues": [
         165
       ],
@@ -1295,8 +1577,15 @@
       "url": "https://github.com/mag1cfrog/delta-arrow-reader/tree/feat/spark-sql-crate",
       "issue_states": {
         "165": "CLOSED"
-      }
+      },
+      "original_kind": "original_implementation_reference",
+      "recommended_for_implementation": false,
+      "recommended_issue": null
     }
   ],
-  "implementation_or_validation_acceptance_changed": false
+  "implementation_or_validation_acceptance_changed": false,
+  "schema_version": 2,
+  "classification_updated_at_utc": "2026-11-10T00:50:31.521607+00:00",
+  "recommended_implementation_branches": 11,
+  "other_branches": 79
 }

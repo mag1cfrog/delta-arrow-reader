@@ -1,6 +1,6 @@
 # Stopped Spark SQL work
 
-For issue-specific source branches and continuation notes, start with [HANDOFF.md](HANDOFF.md). The branches were published directly after the initial backup.
+Use [HANDOFF.md](HANDOFF.md) to select an implementation continuation. It contains exactly one selected source per resumable issue. [HISTORY.md](HISTORY.md) classifies all other branch names; they are reference and recovery material.
 
 Stopped at the user's request on 2026-11-09. The goal was cleared. Further implementation, repair, integration and merging require a new request.
 

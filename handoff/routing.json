@@ -1,0 +1,171 @@
+{
+  "schema_version": 2,
+  "updated_at_utc": "2026-11-10T00:50:31.521607+00:00",
+  "recommended_implementation_count": 11,
+  "reproducer_only_count": 1,
+  "policy": "Exactly one selected continuation per implementation issue. A null branch means no independent implementation is recommended. No source ref was moved or deleted.",
+  "issues": [
+    {
+      "issue": 711,
+      "recommended_for_implementation": false,
+      "status": "not started",
+      "branch": null,
+      "reference_branch": null,
+      "explanation": "This was the next planned issue. No implementation branch was created.",
+      "note_url": "handoff/issues/711.md"
+    },
+    {
+      "issue": 736,
+      "recommended_for_implementation": false,
+      "status": "historical experiment only",
+      "branch": null,
+      "reference_branch": "fix/736-nested-constructor-declarations-wip",
+      "explanation": "The old alias points to the aggregate-statistics schema experiment, not an issue-specific constructor-nullability implementation. No dedicated #736 implementation was identified in the saved work. Start new assigned work from current staging.",
+      "note_url": "handoff/issues/736.md"
+    },
+    {
+      "issue": 748,
+      "status": "implementation WIP",
+      "recommended_for_implementation": true,
+      "branch": "fix/748-nested-expression-names-wip",
+      "head": "1d21bb090833880621484d60cd96357e02ccbdf5",
+      "next_step": "Continue the field-path naming implementation and its ordinary projection/window controls on current staging.",
+      "note_url": "handoff/issues/748.md"
+    },
+    {
+      "issue": 757,
+      "status": "implementation WIP",
+      "recommended_for_implementation": true,
+      "branch": "fix/757-struct-expression-names-wip",
+      "head": "077af718ed738273d5b8e016ebdbb4bd12a0ea39",
+      "next_step": "Continue the STRUCT naming implementation. Compose it with the current generated-alias metadata rules; the older composition branch is reference material.",
+      "note_url": "handoff/issues/757.md"
+    },
+    {
+      "issue": 762,
+      "status": "implementation WIP",
+      "recommended_for_implementation": true,
+      "branch": "fix/762-qualified-column-precedence-wip",
+      "head": "9a8e05d7ce80ce552ac99fbed7e655277bef8c61",
+      "next_step": "Continue the qualifier-tier implementation and retain its extraction/wildcard controls.",
+      "note_url": "handoff/issues/762.md"
+    },
+    {
+      "issue": 766,
+      "recommended_for_implementation": false,
+      "status": "historical accepted sub-repair only",
+      "branch": null,
+      "reference_branch": "fix/766-named-struct-fields-wip",
+      "explanation": "The snapshot is the older NAMED_STRUCT source used for the narrower #810/#812 repair. A separate implementation for the remaining #766 scope was not established. Start new assigned work from current staging.",
+      "note_url": "handoff/issues/766.md"
+    },
+    {
+      "issue": 767,
+      "status": "implementation WIP",
+      "recommended_for_implementation": true,
+      "branch": "fix/767-using-key-metadata-wip",
+      "head": "cf3bee14df732573f0bc9bf6ce7332a8afb08693",
+      "next_step": "Continue the hidden USING identity/metadata implementation and its replay boundaries.",
+      "note_url": "handoff/issues/767.md"
+    },
+    {
+      "issue": 786,
+      "status": "implementation WIP",
+      "recommended_for_implementation": true,
+      "branch": "fix/786-repeated-projection-identity-wip",
+      "head": "99e68f9171bfa243dd694b6a8db30dbf4074bf2d",
+      "next_step": "Continue the projection identity implementation; keep separate UNION metadata acceptance under its own issues.",
+      "note_url": "handoff/issues/786.md"
+    },
+    {
+      "issue": 790,
+      "status": "implementation WIP",
+      "recommended_for_implementation": true,
+      "branch": "fix/790-scalar-subquery-names-wip",
+      "head": "963f5d625619622ea7609129005d48f4a850daf2",
+      "next_step": "Continue scalar-subquery naming after lowering and rebasing; retain hidden-sort and error-stage controls.",
+      "note_url": "handoff/issues/790.md"
+    },
+    {
+      "issue": 794,
+      "recommended_for_implementation": false,
+      "status": "shared reference only",
+      "branch": null,
+      "reference_branch": "fix/832-union-left-metadata-wip",
+      "explanation": "No independent #794 implementation was preserved. The saved UNION prototype is owned by the #832 continuation entry. Keep #794 separate when extracting its changes.",
+      "note_url": "handoff/issues/794.md"
+    },
+    {
+      "issue": 826,
+      "status": "implementation WIP",
+      "recommended_for_implementation": true,
+      "branch": "fix/826-duplicate-struct-casts-wip",
+      "head": "fd93346644f2216c3af3e77b5f99d4447dc19523",
+      "next_step": "Continue position-preserving duplicate-field widening and its failure controls.",
+      "note_url": "handoff/issues/826.md"
+    },
+    {
+      "issue": 827,
+      "status": "implementation WIP",
+      "recommended_for_implementation": true,
+      "branch": "fix/827-array-struct-declarations-wip",
+      "head": "cd4f7dcbdf8d69c125be4652b417a1a5745a89f0",
+      "next_step": "Continue constructor argument/declaration alignment and reconcile shared coercion prerequisites with current staging.",
+      "note_url": "handoff/issues/827.md"
+    },
+    {
+      "issue": 832,
+      "status": "shared prototype, not isolated",
+      "recommended_for_implementation": true,
+      "branch": "fix/832-union-left-metadata-wip",
+      "head": "2277ea772f2d5fb1d973c7c3188d587352b49735",
+      "next_step": "This is the shared UNION prototype. First isolate the left-metadata change for #832. #794/#833 have no independent implementation in the saved work.",
+      "note_url": "handoff/issues/832.md"
+    },
+    {
+      "issue": 833,
+      "recommended_for_implementation": false,
+      "status": "shared reference only",
+      "branch": null,
+      "reference_branch": "fix/832-union-left-metadata-wip",
+      "explanation": "No independent #833 implementation was preserved. The saved UNION prototype is owned by the #832 continuation entry. The implicit-cast metadata repair is not claimed implemented.",
+      "note_url": "handoff/issues/833.md"
+    },
+    {
+      "issue": 870,
+      "status": "unvalidated implementation attempt",
+      "recommended_for_implementation": true,
+      "branch": "fix/870-required-case-conditions-wip",
+      "head": "22a0d4b6ea9ff5dc69dda4a74910a39433a6e099",
+      "next_step": "This is an unvalidated saved CASE preparation attempt. First reproduce the original CASE and IF timing cases and assess the parked change.",
+      "note_url": "handoff/issues/870.md"
+    },
+    {
+      "issue": 893,
+      "status": "reviewed WIP, findings unresolved",
+      "recommended_for_implementation": true,
+      "branch": "fix/893-udf-folding-opt-outs-wip",
+      "head": "63da7acb50c237fb878667e3846f35bdd8d2e532",
+      "next_step": "Resolve the eager-argument ordering finding and the new strict vendor lint, then integrate and validate against current staging.",
+      "note_url": "handoff/issues/893.md"
+    },
+    {
+      "issue": 1007,
+      "recommended_for_implementation": false,
+      "status": "no independent implementation branch",
+      "branch": null,
+      "reference_branch": "fix/893-udf-folding-opt-outs-wip",
+      "explanation": "No separate branch covers the full volatile CASE inference scope. The NoFold subset in #893 must not be presented as completion of #1007.",
+      "note_url": "handoff/issues/1007.md"
+    },
+    {
+      "issue": 1155,
+      "recommended_for_implementation": false,
+      "status": "reproducer only",
+      "branch": "test/1155-literal-folding-baseline-wip",
+      "reference_branch": "test/1155-literal-folding-baseline-wip",
+      "explanation": "This branch contains literal-only folding baseline/reproducer source. It is not an implementation continuation branch.",
+      "note_url": "handoff/issues/1155.md"
+    }
+  ]
+}

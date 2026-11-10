@@ -1,0 +1,33 @@
+{
+  "verified_at_utc": "2026-11-10T00:52:10.901255+00:00",
+  "recommended_implementation_branches": 11,
+  "selected_issue_ids": [
+    748,
+    757,
+    762,
+    767,
+    786,
+    790,
+    826,
+    827,
+    832,
+    870,
+    893
+  ],
+  "one_selected_branch_per_issue": true,
+  "selected_heads_unique": true,
+  "reproducer_only": 1,
+  "historical_or_reference_only": 78,
+  "all_90_remote_source_heads_unchanged": true,
+  "source_refs_moved_or_deleted": 0,
+  "classification_counts": {
+    "withdrawn_handoff_alias": 4,
+    "recommended_implementation_source": 11,
+    "recovery_snapshot": 8,
+    "validation_only": 3,
+    "historical_validation": 28,
+    "reproducer_only": 1,
+    "historical_implementation": 35
+  },
+  "verification_scope": "Routing and Git ref preservation; no behavior tests or new readiness review."
+}
