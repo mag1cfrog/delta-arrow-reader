@@ -77,6 +77,7 @@ TIME_UNITS = [
      "d + ((TIMESTAMP '2020-01-02 03:00:00' - TIMESTAMP '2020-01-01 00:00:00') "
      "+ INTERVAL '1' DAY)"),
     ("plus_if_hour", "d + if(k > 3, INTERVAL '2' HOUR, INTERVAL '3' HOUR)"),
+    ("plus_if_product", "d + if(k > 3, INTERVAL '1' DAY * 2, INTERVAL '1' DAY)"),
     ("plus_case_day_or_hour",
      "d + CASE WHEN k > 3 THEN INTERVAL '2' HOUR ELSE INTERVAL '1' DAY END"),
     ("plus_coalesce_hour", "d + coalesce(INTERVAL '2' HOUR, INTERVAL '3' HOUR)"),
