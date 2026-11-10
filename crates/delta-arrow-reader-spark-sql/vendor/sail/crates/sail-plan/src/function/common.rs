@@ -29,8 +29,8 @@ use crate::config::PlanConfig;
 use crate::error::{IntoPlanResult, PlanError, PlanResult};
 use crate::formatter::SparkPlanFormatter;
 use crate::function::comparison::{
-    nanosecond_comparison_cast, string_comparison_cast, string_comparison_type,
-    temporal_comparison_string_type, temporal_comparison_type,
+    comparison_string_type, nanosecond_comparison_cast, string_comparison_cast,
+    string_comparison_type, temporal_comparison_type,
 };
 use crate::function::temporal_coercion::cast_local_timestamp_expr_to_ltz;
 
@@ -970,6 +970,19 @@ pub(crate) fn dictionary_string_values(
     })
 }
 
+/// `arg` as its STRING values if it is a dictionary-encoded STRING; any other argument unchanged,
+/// also one whose type is not known yet, such as GROUPING_ID() before the aggregation gives it its
+/// grouping keys (#1242).
+pub(crate) fn dictionary_string_argument(arg: expr::Expr, schema: &DFSchemaRef) -> expr::Expr {
+    match arg.get_type(schema) {
+        Ok(data_type) => match dictionary_string_type(&data_type) {
+            Some(values) => cast(arg, values.clone()),
+            None => arg,
+        },
+        Err(_) => arg,
+    }
+}
+
 /// A cast of `expr` from `from` to `to` with Spark's nullability for the TIMESTAMP_NTZ and DATE
 /// pair, which Spark declares nullable whatever the input; any other cast is DataFusion's.
 pub(crate) fn cast_with_date_ntz_nullability(
@@ -1055,12 +1068,12 @@ pub(crate) fn spark_binary_expr(
             left_type = target.clone();
             right_type = target;
         }
-        // A dictionary-encoded STRING compares with a DATE or TIMESTAMP as its values do.
-        if let Some(values) = temporal_comparison_string_type(&left_type, &right_type) {
+        // A dictionary-encoded STRING compares with a value of another type as its values do.
+        if let Some(values) = comparison_string_type(&left_type, &right_type) {
             left = cast(left, values.clone());
             left_type = values;
         }
-        if let Some(values) = temporal_comparison_string_type(&right_type, &left_type) {
+        if let Some(values) = comparison_string_type(&right_type, &left_type) {
             right = cast(right, values.clone());
             right_type = values;
         }

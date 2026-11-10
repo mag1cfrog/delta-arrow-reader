@@ -243,12 +243,9 @@ impl PlanResolver<'_> {
         let expr_type = expr_field.data_type().clone();
         let expr_is_variant = is_variant_storage_field(expr_field.as_ref());
         // A dictionary-encoded STRING, as Delta's provider gives a STRING partition column, casts
-        // to a DATE or TIMESTAMP as its STRING values do.
+        // as its STRING values do (#1218, #1242).
         if let Some(values) = dictionary_string_type(&expr_type)
-            && matches!(
-                cast_to_type,
-                DataType::Date32 | DataType::Timestamp(TimeUnit::Microsecond, _)
-            )
+            && !matches!(cast_to_type, DataType::Dictionary(_, _))
         {
             let values = cast(expr, values.clone());
             return self.cast_resolved_expression(values, cast_to_type, is_try, schema);

@@ -57,18 +57,14 @@ pub(crate) fn nanosecond_comparison_cast(
     ))
 }
 
-/// The STRING values of a dictionary-encoded STRING compared with a DATE or TIMESTAMP, as a
-/// Delta STRING partition column can be; Spark compares it as a STRING.
-pub(crate) fn temporal_comparison_string_type(
-    data_type: &DataType,
-    other: &DataType,
-) -> Option<DataType> {
-    matches!(
-        other,
-        DataType::Date32 | DataType::Timestamp(TimeUnit::Microsecond, _)
-    )
-    .then(|| dictionary_string_type(data_type).cloned())
-    .flatten()
+/// The STRING values of a dictionary-encoded STRING compared with a value of another type, as a
+/// Delta STRING partition column can be; Spark reads it as a STRING. Beside a STRING or NULL it
+/// stays dictionary-encoded, so that the Delta scan can prune by the comparison (#1242).
+pub(crate) fn comparison_string_type(data_type: &DataType, other: &DataType) -> Option<DataType> {
+    let other = dictionary_string_type(other).unwrap_or(other);
+    (!other.is_string() && !other.is_null())
+        .then(|| dictionary_string_type(data_type).cloned())
+        .flatten()
 }
 
 pub(crate) fn string_comparison_type(

@@ -15,8 +15,8 @@ use sail_sql_analyzer::expression::{
 use crate::error::{PlanError, PlanResult};
 use crate::formatter::SparkPlanFormatter;
 use crate::function::common::{
-    AggFunctionInput, FunctionContextInput, ScalarFunctionInput, dictionary_string_type,
-    unresolved_routine_error,
+    AggFunctionInput, FunctionContextInput, ScalarFunctionInput, dictionary_string_argument,
+    dictionary_string_type, unresolved_routine_error,
 };
 use crate::function::float_keys::normalize_spark_float_key;
 use crate::function::{
@@ -613,16 +613,4 @@ fn keeps_dictionary_strings(
         }
     }
     Ok(true)
-}
-
-/// `arg` as its STRING values if it is a dictionary-encoded STRING; any other argument unchanged,
-/// also one without a type yet, such as a lambda or a wildcard.
-fn dictionary_string_argument(arg: Expr, schema: &DFSchemaRef) -> Expr {
-    match arg.get_type(schema) {
-        Ok(data_type) => match dictionary_string_type(&data_type) {
-            Some(values) => datafusion_expr::cast(arg, values.clone()),
-            None => arg,
-        },
-        Err(_) => arg,
-    }
 }
