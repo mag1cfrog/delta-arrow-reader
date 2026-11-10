@@ -54,9 +54,10 @@ impl DayTimeEnd {
 
 /// The end field of `expr` where its SQL writes it, read only when `expr` resolves to a
 /// day-time interval: an interval literal, a CAST to an interval qualifier, a negation, a sum
-/// or difference of such intervals, a conditional over them, ABS and the aggregates that keep
-/// their argument's type. Spark types an interval scaled by a number, MAKE_DT_INTERVAL and AVG
-/// as `DAY TO SECOND`. `None` where the SQL does not say, such as for a column.
+/// or difference of such intervals, IF, CASE, COALESCE, NVL, IFNULL, NVL2, NULLIF, GREATEST and
+/// LEAST over them, and ABS, SUM, MIN, MAX, FIRST, LAST and ANY_VALUE of one, which keep its
+/// type. Spark types MAKE_DT_INTERVAL and AVG as `DAY TO SECOND`. `None` where the SQL does not
+/// say, such as for a column; an interval scaled by a number is read once resolved.
 pub(super) fn spec_day_time_end(expr: &spec::Expr) -> Option<DayTimeEnd> {
     match expr {
         spec::Expr::Literal(spec::Literal::DurationMicrosecond {
@@ -101,8 +102,7 @@ pub(super) fn spec_day_time_end(expr: &spec::Expr) -> Option<DayTimeEnd> {
                     | "last_value" | "any_value",
                     [value, ..],
                 ) => spec_day_time_end(value),
-                ("*" | "/" | "try_multiply" | "try_divide", [_, _])
-                | ("avg" | "mean" | "make_dt_interval", _) => Some(DayTimeEnd::Time),
+                ("avg" | "mean" | "make_dt_interval", _) => Some(DayTimeEnd::Time),
                 _ => None,
             }
         }
@@ -117,20 +117,31 @@ pub(super) fn spec_day_time_end(expr: &spec::Expr) -> Option<DayTimeEnd> {
 /// fixes it: Spark subtracts two DATE values as a DAY interval, and two TIMESTAMP or
 /// TIMESTAMP_NTZ values, MAKE_DT_INTERVAL and an interval scaled by a number as `DAY TO SECOND`.
 /// `None` otherwise, such as for a literal, whose qualifier only its SQL keeps, or a column.
-pub(super) fn resolved_day_time_end(expr: &expr::Expr) -> Option<DayTimeEnd> {
+pub(super) fn resolved_day_time_end(expr: &expr::Expr, schema: &DFSchemaRef) -> Option<DayTimeEnd> {
     let expr = match without_inherited_column_metadata(expr) {
         expr::Expr::Alias(alias) => alias.expr.as_ref(),
         expr => expr,
     };
     let expr = without_inherited_column_metadata(expr);
     // DATE, TIMESTAMP and interval subtractions are Spark functions here, so a native
-    // subtraction that gives a day-time interval subtracts two TIMESTAMP_NTZ values.
+    // subtraction with a TIMESTAMP_NTZ operand, beside another or an untyped NULL, gives a
+    // `DAY TO SECOND` interval. One with an interval beside an untyped NULL has its type.
     if let expr::Expr::BinaryExpr(BinaryExpr {
+        left,
         op: Operator::Minus,
-        ..
+        right,
     }) = expr
     {
-        return Some(DayTimeEnd::Time);
+        let timestamp = |operand: &expr::Expr| {
+            operand
+                .get_type(schema)
+                .is_ok_and(|data_type| matches!(data_type, DataType::Timestamp(_, _)))
+        };
+        return if timestamp(left) || timestamp(right) {
+            Some(DayTimeEnd::Time)
+        } else {
+            DayTimeEnd::widen([left, right].map(|operand| resolved_day_time_end(operand, schema)))
+        };
     }
     let expr::Expr::ScalarFunction(function) = expr else {
         return None;
@@ -146,11 +157,11 @@ pub(super) fn resolved_day_time_end(expr: &expr::Expr) -> Option<DayTimeEnd> {
     } else if inner.is::<SparkIntervalNegate>()
         && let [operand] = function.args.as_slice()
     {
-        resolved_day_time_end(operand)
+        resolved_day_time_end(operand, schema)
     } else if inner.is::<SparkIntervalArithmetic>()
         && let [left, right] = function.args.as_slice()
     {
-        DayTimeEnd::widen([left, right].map(resolved_day_time_end))
+        DayTimeEnd::widen([left, right].map(|operand| resolved_day_time_end(operand, schema)))
     } else {
         None
     }
@@ -190,7 +201,7 @@ pub(super) fn cast_date_beside_time_interval(
         .get(interval_index)
         .copied()
         .flatten()
-        .or_else(|| resolved_day_time_end(&arguments[interval_index]));
+        .or_else(|| resolved_day_time_end(&arguments[interval_index], schema));
     if end == Some(DayTimeEnd::Time) {
         let date = arguments[date_index].clone();
         arguments[date_index] = cast_local_timestamp_expr_to_ltz(date, &DataType::Date32, timezone);
