@@ -831,8 +831,9 @@ DataFusion's ISO day of week, Monday 1 through Sunday 7, and its ISO week-number
 date field reads a STRING, TIMESTAMP_NTZ or NULL source as the implicit DATE argument of
 WEEKDAY does: a STRING with Spark's STRING-to-DATE rules, where DataFusion read it as a
 nanosecond TIMESTAMP and failed beyond those years, and NULL as a NULL DATE, where it failed.
-Time fields of a STRING keep DataFusion's reading (#942). Field names match exactly, ignoring
-case, as in Spark. The [day-of-week field
+Time fields of a STRING keep DataFusion's reading (#942). The fields DAR maps match their names
+exactly, ignoring case, as in Spark; other names go to DataFusion, which also accepts some
+Spark rejects, such as `isodow` or a quoted name (#1236). The [day-of-week field
 references](tests/fixtures/day-of-week-fields/README.md) record the checks.
 
 TIMESTAMP_SECONDS, TIMESTAMP_MILLIS and TIMESTAMP_MICROS annotate their result with the
