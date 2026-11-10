@@ -70,7 +70,11 @@ def definitions():
             ("not_in", "dr NOT IN (tn)"),
             ("in_null", "tn IN (dr, NULL)"),
             ("in_literal", "dr IN (TIMESTAMP_NTZ '2024-01-02 00:00:00')"),
+            # A TIMESTAMP beside them leaves the list to the session-zone coercion.
+            ("in_timestamp", "dr IN (tn, TIMESTAMP '2024-01-02 00:00:00')"),
             ("nvl2", "nvl2(k, dr, tn)"),
+            # NVL2 takes IF's result coercion for every type.
+            ("nvl2_decimal_double", "nvl2(dr, CAST(k AS DECIMAL(5, 2)), CAST(k AS DOUBLE))"),
             ("concat_arrays", "concat(array(dr), array(tn))"),
             ("array_union", "array_union(array(dr), array(tn))"),
             ("array_equals", "array(dr) = array(tn)"),
@@ -90,6 +94,11 @@ def definitions():
            "SELECT a, b FROM VALUES (1, DATE '0001-01-01'), (2, TIMESTAMP_NTZ '9999-12-31 00:00:00') "
            "AS v(a, b)")
     yield "union_all", "SELECT dr AS r FROM inputs UNION ALL SELECT tn AS r FROM inputs"
+    # An argument typed only once the aggregation gives it its grouping keys.
+    yield ("grouping_id_array",
+           "SELECT k, array(grouping_id(), 1) AS r FROM inputs GROUP BY CUBE(k)")
+    yield ("grouping_id_nvl2",
+           "SELECT k, nvl2(k, grouping_id(), 0) AS r FROM inputs GROUP BY CUBE(k)")
 
 
 def double_bits(value):

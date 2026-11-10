@@ -28,10 +28,10 @@ internal rows. `ConvertToLocalRelation` is excluded.
 
 `date_timestamp_ntz_combination.rs` compares names, type families, metadata and typed rows at
 batch sizes 1 and 32, and nullability in the executed schema; the analyzed and optimized
-nullability is not compared (#1236). A panic counts as a failure of its query. Three records
-are retained as failures: an ARRAY<DATE> beside an ARRAY<TIMESTAMP_NTZ> still combines through
-nanosecond timestamps, so CONCAT fails while planning and ARRAY_UNION while collecting rows
-(#1236), and their equality fails while collecting rows (#1176), 12 records.
+nullability is not compared (#1236). A panic counts as a failure of its query. Three queries
+are retained as failures (#1236, 12 records): an ARRAY<DATE> beside an ARRAY<TIMESTAMP_NTZ>
+still combines through nanosecond timestamps, so CONCAT fails while planning, and ARRAY_UNION
+and equality fail while collecting rows.
 
 Recapture from the crate root:
 

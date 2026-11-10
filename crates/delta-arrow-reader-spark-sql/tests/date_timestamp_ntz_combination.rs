@@ -42,24 +42,24 @@ fn combination_references() -> TestResult<Vec<Value>> {
             |build| build.contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
         )
     );
-    assert_eq!(records.len() - 1, 88);
+    assert_eq!(records.len() - 1, 104);
     Ok(records)
 }
 
-/// An ARRAY<DATE> beside an ARRAY<TIMESTAMP_NTZ> in an array function still combines through
-/// nanosecond timestamps and fails where Spark combines them as TIMESTAMP_NTZ: CONCAT while
-/// planning, ARRAY_UNION while collecting rows (#1236), and their equality while collecting rows
-/// (#1176). The years 1 and 9999 overflow the nanosecond cast, a panic in a debug build.
-const ARRAY_FUNCTION_RECORDS: [&str; 3] = [
+/// #1236: an ARRAY<DATE> beside an ARRAY<TIMESTAMP_NTZ> in an array function or comparison still
+/// combines through nanosecond timestamps and fails where Spark combines them as TIMESTAMP_NTZ:
+/// CONCAT while planning, and ARRAY_UNION and equality while collecting rows, where years 1 and
+/// 9999 overflow the nanosecond cast, a panic in a debug build.
+const RETAINED_FAILURES: [&str; 3] = [
     "column_concat_arrays",
     "column_array_union",
     "column_array_equals",
 ];
 
-/// The expectation for a record: Spark's, or a failure for an [`ARRAY_FUNCTION_RECORDS`] one.
+/// The expectation for a record: Spark's, or a failure for a [`RETAINED_FAILURES`] one.
 fn expectation(case: &Value) -> TestResult<Value> {
     let mut current = case.clone();
-    if ARRAY_FUNCTION_RECORDS.iter().any(|id| case["id"] == *id) {
+    if RETAINED_FAILURES.iter().any(|id| case["id"] == *id) {
         if case["expected"]["status"] != "ok" {
             return Err(format!("expected Spark's result: {case}").into());
         }
@@ -346,7 +346,7 @@ async fn dates_and_timestamp_ntz_values_combine_like_spark() -> TestResult {
     let records = combination_references()?;
     let retained = records[1..]
         .iter()
-        .filter(|case| ARRAY_FUNCTION_RECORDS.iter().any(|id| case["id"] == *id))
+        .filter(|case| RETAINED_FAILURES.iter().any(|id| case["id"] == *id))
         .count();
     assert_eq!(retained, 12);
     let mut differences = Vec::new();
