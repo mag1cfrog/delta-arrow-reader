@@ -3,6 +3,7 @@ use std::fmt::Debug;
 
 use async_recursion::async_recursion;
 use datafusion_common::DFSchemaRef;
+use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion};
 use datafusion_expr::expr;
 use datafusion_functions::core::getfield::GetFieldFunc;
 use sail_common::spec;
@@ -146,6 +147,30 @@ fn literal_interval_qualifier(literal: &spec::Literal) -> Option<IntervalQualifi
     }
 }
 
+/// The qualifier recorded for the field a resolved scalar subquery returns.
+fn scalar_subquery_interval_qualifier(
+    expr: &expr::Expr,
+    state: &PlanResolverState,
+) -> Option<IntervalQualifier> {
+    let mut field = None;
+    expr.apply(|expr| {
+        Ok(match expr {
+            expr::Expr::ScalarSubquery(subquery) => {
+                field = subquery
+                    .subquery
+                    .schema()
+                    .fields()
+                    .first()
+                    .map(|field| field.name().clone());
+                TreeNodeRecursion::Stop
+            }
+            _ => TreeNodeRecursion::Continue,
+        })
+    })
+    .ok()?;
+    state.interval_qualifier(&field?)
+}
+
 /// The qualifier recorded for the field a resolved column reads.
 fn column_interval_qualifier(
     expr: &expr::Expr,
@@ -261,19 +286,10 @@ impl PlanResolver<'_> {
                 cast_to_type,
                 rename: _,
                 is_try,
-            } => {
-                let qualifier = match &cast_to_type {
-                    spec::DataType::Interval {
-                        interval_unit: spec::IntervalUnit::YearMonth | spec::IntervalUnit::DayTime,
-                        start_field,
-                        end_field,
-                    } => IntervalQualifier::new(*start_field, *end_field),
-                    _ => None,
-                };
-                self.resolve_expression_cast(*expr, cast_to_type, is_try, schema, state)
-                    .await
-                    .map(|(named, _)| named.with_interval_qualifier(qualifier))
-            }
+            } => self
+                .resolve_expression_cast(*expr, cast_to_type, is_try, schema, state)
+                .await
+                .map(|(named, _)| named),
             Expr::UnresolvedRegex { .. } | Expr::UpdateFields { .. } => {
                 Err(PlanError::unsupported("DataFrame column expressions"))
             }
@@ -348,10 +364,13 @@ impl PlanResolver<'_> {
                 self.resolve_expression_in_subquery(*expr, *subquery, negated, schema, state)
                     .await
             }
-            Expr::ScalarSubquery { subquery } => {
-                self.resolve_expression_scalar_subquery(*subquery, schema, state)
-                    .await
-            }
+            Expr::ScalarSubquery { subquery } => self
+                .resolve_expression_scalar_subquery(*subquery, schema, state)
+                .await
+                .map(|named| {
+                    let qualifier = scalar_subquery_interval_qualifier(&named.expr, state);
+                    named.with_interval_qualifier(qualifier)
+                }),
             Expr::Exists { subquery, negated } => {
                 self.resolve_expression_exists(*subquery, negated, schema, state)
                     .await

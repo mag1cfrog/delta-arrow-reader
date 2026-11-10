@@ -918,9 +918,6 @@ impl PlanResolver<'_> {
             interval_qualifier,
         } in grouping
         {
-            // A key of a grouping set has its own qualifier, which is not tracked.
-            let interval_qualifier =
-                interval_qualifier.filter(|_| !matches!(expr, Expr::GroupingSet(_)));
             let exprs = match expr {
                 Expr::GroupingSet(g) => g.distinct_expr().into_iter().cloned().collect(),
                 expr => vec![expr],

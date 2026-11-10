@@ -107,7 +107,7 @@ impl SparkIntervalToNumber {
         interval_literal_text(&value, self.start, self.end)
     }
 
-    fn overflow(&self, stored: i64) -> Result<DataFusionError> {
+    fn overflow_error(&self, stored: i64) -> Result<DataFusionError> {
         let target = match self.target {
             DataType::Int8 => "TINYINT",
             DataType::Int16 => "SMALLINT",
@@ -156,7 +156,7 @@ impl SparkIntervalToNumber {
         (unscaled.abs() < 10_i128.checked_pow(u32::from(precision))?).then_some(unscaled)
     }
 
-    fn decimal_out_of_range(&self, stored: i64, precision: u8, scale: i8) -> DataFusionError {
+    fn decimal_out_of_range_error(&self, stored: i64, precision: u8, scale: i8) -> DataFusionError {
         let (count, count_scale) = self.count(stored);
         let digits = count.unsigned_abs().to_string();
         let text = if count_scale == 0 {
@@ -195,7 +195,9 @@ impl SparkIntervalToNumber {
                     Some(value) => match self.decimal(value, precision, scale) {
                         Some(unscaled) => Some(unscaled),
                         None if self.is_try => None,
-                        None => return Err(self.decimal_out_of_range(value, precision, scale)),
+                        None => {
+                            return Err(self.decimal_out_of_range_error(value, precision, scale));
+                        }
                     },
                 });
             }
@@ -210,7 +212,7 @@ impl SparkIntervalToNumber {
                 Some(value) => match self.integral(value) {
                     Some(count) => Some(count),
                     None if self.is_try => None,
-                    None => return Err(self.overflow(value)?),
+                    None => return Err(self.overflow_error(value)?),
                 },
             });
         }

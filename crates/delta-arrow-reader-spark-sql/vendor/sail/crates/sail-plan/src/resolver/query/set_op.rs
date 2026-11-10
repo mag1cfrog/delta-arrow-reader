@@ -216,24 +216,40 @@ impl PlanResolver<'_> {
 }
 
 /// Spark widens each column's interval qualifier over both inputs of a set operation (#1152).
-/// The result keeps the left input's fields, which the left query's own projection registered,
-/// so they take the widened qualifier.
+/// The result keeps the left input's fields, which take the widened qualifier when the left
+/// query's own projection registered them. A left input that reads a common table expression
+/// directly, as `TABLE c`, shares the fields of every other reference to it, so it keeps them.
 fn widen_set_operation_interval_qualifiers(
     left: &LogicalPlan,
     right: &LogicalPlan,
     state: &mut PlanResolverState,
 ) {
+    let mut own_fields = left;
+    loop {
+        own_fields = match own_fields {
+            LogicalPlan::Limit(limit) => limit.input.as_ref(),
+            LogicalPlan::Sort(sort) => sort.input.as_ref(),
+            LogicalPlan::Filter(filter) => filter.input.as_ref(),
+            LogicalPlan::Distinct(distinct) => distinct.input().as_ref(),
+            LogicalPlan::Projection(_) => break,
+            _ => return,
+        };
+    }
     for (left_field, right_field) in left.schema().fields().iter().zip(right.schema().fields()) {
         let mut operands = [IntervalOperand::NotInterval; 2];
         for (operand, field) in operands.iter_mut().zip([left_field, right_field]) {
-            if let Some(default) = IntervalQualifier::of_type(field.data_type()) {
+            if let Some(default) = IntervalQualifier::default_for_type(field.data_type()) {
                 *operand = IntervalOperand::Interval {
                     year_month: default.is_year_month(),
                     qualifier: state.interval_qualifier(field.name()),
                 };
             }
         }
-        if matches!(operands[0], IntervalOperand::Interval { .. }) {
+        // An untyped NULL on the left takes the right input's qualifier.
+        if operands
+            .iter()
+            .any(|operand| matches!(operand, IntervalOperand::Interval { .. }))
+        {
             let widened = IntervalQualifier::widen(operands);
             state.set_interval_qualifier(left_field.name(), widened);
         }

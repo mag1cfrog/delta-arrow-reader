@@ -5,13 +5,14 @@
 //! resolved expression and each field: from the SQL of a literal or a CAST, from the function
 //! that computed the value, and from the columns of subqueries, VALUES and set operations.
 //! Spark casts an interval to a number as a count of the qualifier's end field, and adds a DAY
-//! interval to a DATE as days (#952). An unknown qualifier is read as the type Spark gives an
-//! Arrow column: `DAY TO SECOND` or `YEAR TO MONTH`.
+//! interval to a DATE as days (#952). Where an interval's qualifier is unknown, as for an Arrow
+//! column, a cast reads it as the type Spark gives an Arrow column, `DAY TO SECOND` or `YEAR TO
+//! MONTH`, and a DATE keeps DATE arithmetic beside it. Widened beside one, a known qualifier
+//! still bounds the result's end field from below.
 
 use datafusion::arrow::datatypes::{DataType, IntervalUnit, TimeUnit};
 use datafusion_common::DFSchemaRef;
 use datafusion_expr::{BinaryExpr, ExprSchemable, Operator, expr};
-use datafusion_spark::function::datetime::make_dt_interval::SparkMakeDtInterval;
 use sail_common::spec::IntervalFieldType;
 use sail_function::scalar::datetime::spark_subtract_dates::SparkSubtractDates;
 use sail_function::scalar::datetime::spark_subtract_timestamps::SparkSubtractTimestamps;
@@ -23,6 +24,10 @@ use crate::function::common::without_inherited_column_metadata;
 pub(crate) struct IntervalQualifier {
     start: IntervalFieldType,
     end: IntervalFieldType,
+    /// Whether the fields are Spark's. An inexact qualifier comes from widening beside an
+    /// interval whose qualifier is unknown: Spark's end field is then `end` or a later one,
+    /// and its start field is unknown.
+    exact: bool,
 }
 
 /// What a value contributes to the qualifier of an expression over it: nothing when it is not
@@ -41,14 +46,17 @@ impl IntervalQualifier {
     pub(crate) const DAY: Self = Self {
         start: IntervalFieldType::Day,
         end: IntervalFieldType::Day,
+        exact: true,
     };
     pub(crate) const DAY_TO_SECOND: Self = Self {
         start: IntervalFieldType::Day,
         end: IntervalFieldType::Second,
+        exact: true,
     };
     pub(crate) const YEAR_TO_MONTH: Self = Self {
         start: IntervalFieldType::Year,
         end: IntervalFieldType::Month,
+        exact: true,
     };
 
     /// The qualifier from `start` to `end`, or of the one field given, as the SQL writes it.
@@ -58,16 +66,24 @@ impl IntervalQualifier {
     ) -> Option<Self> {
         let start = start.or(end)?;
         let end = end.unwrap_or(start);
-        (start <= end && is_year_month_field(start) == is_year_month_field(end))
-            .then_some(Self { start, end })
+        (start <= end && is_year_month_field(start) == is_year_month_field(end)).then_some(Self {
+            start,
+            end,
+            exact: true,
+        })
     }
 
     pub(crate) fn start(self) -> IntervalFieldType {
         self.start
     }
 
+    /// The end field, or for an inexact qualifier the earliest end field Spark's can have.
     pub(crate) fn end(self) -> IntervalFieldType {
         self.end
+    }
+
+    pub(crate) fn is_exact(self) -> bool {
+        self.exact
     }
 
     pub(crate) fn is_year_month(self) -> bool {
@@ -76,7 +92,7 @@ impl IntervalQualifier {
 
     /// The qualifier Spark gives an interval of `data_type` it cannot say more about, as an
     /// Arrow column, a scaled interval or an average.
-    pub(crate) fn of_type(data_type: &DataType) -> Option<Self> {
+    pub(crate) fn default_for_type(data_type: &DataType) -> Option<Self> {
         match data_type {
             DataType::Interval(IntervalUnit::YearMonth) => Some(Self::YEAR_TO_MONTH),
             DataType::Duration(TimeUnit::Microsecond) => Some(Self::DAY_TO_SECOND),
@@ -94,25 +110,34 @@ impl IntervalQualifier {
 
     /// The qualifier of intervals combined into one, as a sum, a difference, the branches of a
     /// conditional or the rows of a set operation: Spark widens it from the earliest start to
-    /// the latest end. Values that are not intervals do not take part; an interval whose
-    /// qualifier is unknown makes the result unknown.
+    /// the latest end. Values that are not intervals do not take part. Beside an interval whose
+    /// qualifier is unknown, the result is inexact: its end is the latest known end, which
+    /// Spark's can only follow.
     pub(crate) fn widen(operands: impl IntoIterator<Item = IntervalOperand>) -> Option<Self> {
         let mut widened: Option<Self> = None;
+        let mut exact = true;
         for operand in operands {
             let IntervalOperand::Interval { qualifier, .. } = operand else {
                 continue;
             };
-            let qualifier = qualifier?;
+            let Some(qualifier) = qualifier else {
+                exact = false;
+                continue;
+            };
             widened = Some(match widened {
                 None => qualifier,
                 Some(current) if current.is_year_month() == qualifier.is_year_month() => Self {
                     start: current.start.min(qualifier.start),
                     end: current.end.max(qualifier.end),
+                    exact: current.exact && qualifier.exact,
                 },
                 Some(_) => return None,
             });
         }
-        widened
+        widened.map(|widened| Self {
+            exact: widened.exact && exact,
+            ..widened
+        })
     }
 }
 
@@ -131,7 +156,7 @@ impl IntervalOperand {
             .get_type(schema)
             .ok()
             .as_ref()
-            .and_then(IntervalQualifier::of_type)
+            .and_then(IntervalQualifier::default_for_type)
         {
             Some(default) => Self::Interval {
                 year_month: default.is_year_month(),
@@ -187,7 +212,7 @@ pub(crate) fn function_qualifier(
         ),
         (
             "nullif" | "sum" | "try_sum" | "min" | "max" | "first" | "first_value" | "last"
-            | "last_value" | "any_value" | "lag" | "lead" | "nth_value",
+            | "last_value" | "any_value" | "lag" | "lead" | "nth_value" | "max_by" | "min_by",
             [value, ..],
         ) => value.qualifier(),
         ("*" | "/" | "try_multiply" | "try_divide", [_, _]) | ("avg" | "mean" | "try_avg", _) => {
@@ -199,9 +224,9 @@ pub(crate) fn function_qualifier(
     }
 }
 
-/// The qualifier of a resolved day-time interval `expr` where the function that computed it
-/// fixes it whatever its SQL: Spark subtracts two DATE values as a DAY interval, and two
-/// TIMESTAMP or TIMESTAMP_NTZ values and MAKE_DT_INTERVAL as `DAY TO SECOND`.
+/// The qualifier of a resolved day-time interval `expr` that a subtraction computed, whatever
+/// the function's name: Spark subtracts two DATE values as a DAY interval, and two TIMESTAMP or
+/// TIMESTAMP_NTZ values as `DAY TO SECOND`.
 pub(crate) fn resolved_qualifier(
     expr: &expr::Expr,
     schema: &DFSchemaRef,
@@ -233,7 +258,7 @@ pub(crate) fn resolved_qualifier(
     let inner = function.func.inner();
     if inner.is::<SparkSubtractDates>() {
         Some(IntervalQualifier::DAY)
-    } else if inner.is::<SparkSubtractTimestamps>() || inner.is::<SparkMakeDtInterval>() {
+    } else if inner.is::<SparkSubtractTimestamps>() {
         Some(IntervalQualifier::DAY_TO_SECOND)
     } else {
         None
@@ -276,16 +301,28 @@ mod tests {
             ]),
             Some(qualifier(Day, Minute))
         );
+        // Beside an unknown qualifier, the widened end is only a lower bound.
+        let unknown = IntervalOperand::Interval {
+            year_month: false,
+            qualifier: None,
+        };
+        let widened = IntervalQualifier::widen([interval(Day, Hour), unknown]);
         assert_eq!(
-            IntervalQualifier::widen([
-                interval(Day, Day),
-                IntervalOperand::Interval {
-                    year_month: false,
-                    qualifier: None
-                }
-            ]),
-            None
+            widened.map(|widened| (widened.end(), widened.is_exact())),
+            Some((Hour, false))
         );
+        let widened = IntervalQualifier::widen([
+            IntervalOperand::Interval {
+                year_month: false,
+                qualifier: widened,
+            },
+            interval(Minute, Minute),
+        ]);
+        assert_eq!(
+            widened.map(|widened| (widened.end(), widened.is_exact())),
+            Some((Minute, false))
+        );
+        assert_eq!(IntervalQualifier::widen([unknown]), None);
         assert_eq!(
             IntervalQualifier::widen([interval(Year, Year), interval(Day, Day)]),
             None

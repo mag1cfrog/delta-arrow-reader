@@ -8,7 +8,8 @@ use std::sync::Arc;
 
 use arrow::array::{Array, AsArray};
 use arrow::datatypes::{
-    DataType, Decimal128Type, Fields, Int8Type, Int16Type, Int32Type, Int64Type,
+    DataType, Date32Type, Decimal128Type, Fields, Int8Type, Int16Type, Int32Type, Int64Type,
+    TimeUnit, TimestampMicrosecondType,
 };
 use arrow::record_batch::RecordBatch;
 use datafusion::datasource::MemTable;
@@ -43,7 +44,7 @@ fn interval_integral_cast_references() -> TestResult<Vec<Value>> {
             |build| build.contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
         )
     );
-    assert_eq!(records.len() - 1, 1728);
+    assert_eq!(records.len() - 1, 1796);
     Ok(records)
 }
 
@@ -60,6 +61,11 @@ enum RetainedDifference {
     /// counts seconds: `array(d2 - d1)[0]` overflows INT, and an exploded DAY gives 86400, and
     /// is nullable.
     NestedQualifier,
+    /// #1236: a set operation whose left input reads a common table expression directly keeps
+    /// that expression's qualifier, which its other references share, so `TABLE c UNION ALL
+    /// SELECT INTERVAL '1' HOUR` over a DAY interval counts days: 3 and 0 where Spark counts
+    /// hours, 72 and 1.
+    SharedCteSetOperation,
 }
 
 fn retained_difference(case: &Value) -> Option<RetainedDifference> {
@@ -76,6 +82,8 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
         Some(RetainedDifference::NullableGreatest)
     } else if matches!(id, "column_array_element" | "column_explode") {
         Some(RetainedDifference::NestedQualifier)
+    } else if id == "tracking_shared_cte_set_operations" {
+        Some(RetainedDifference::SharedCteSetOperation)
     } else {
         None
     }
@@ -114,6 +122,12 @@ fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResu
             current["expected"]["rows"] = json!(rows);
             current["schema_stages"]["executed"]["fields"][0]["nullable"] = json!(true);
         }
+        RetainedDifference::SharedCteSetOperation => {
+            if case["expected"]["rows"] != json!([["1"], ["3"], ["72"]]) {
+                return Err(format!("expected Spark's hours: {case}").into());
+            }
+            current["expected"]["rows"] = json!([["0"], ["3"], ["3"]]);
+        }
         RetainedDifference::NestedQualifier => {
             // 3652058 days in seconds overflow INT.
             current["schema_stages"] = json!({"analyzed": case["schema_stages"]["analyzed"],
@@ -134,6 +148,8 @@ fn spark_family(spark_type: &Value) -> TestResult<Value> {
         "short" => "int16".to_owned(),
         "integer" => "int32".to_owned(),
         "long" => "int64".to_owned(),
+        "date" => "date".to_owned(),
+        "timestamp" => "timestamp".to_owned(),
         decimal if decimal.starts_with("decimal(") => decimal.replace(' ', ""),
         other => return Err(format!("unexpected Spark type {other}").into()),
     }))
@@ -146,6 +162,8 @@ fn dar_family(data_type: &DataType) -> Value {
         DataType::Int32 => "int32".to_owned(),
         DataType::Int64 => "int64".to_owned(),
         DataType::Decimal128(precision, scale) => format!("decimal({precision},{scale})"),
+        DataType::Date32 => "date".to_owned(),
+        DataType::Timestamp(TimeUnit::Microsecond, Some(_)) => "timestamp".to_owned(),
         other => format!("unexpected {other}"),
     })
 }
@@ -210,6 +228,13 @@ fn encode_value(column: &dyn Array, row: usize) -> TestResult<Value> {
         DataType::Int16 => json!(column.as_primitive::<Int16Type>().value(row).to_string()),
         DataType::Int32 => json!(column.as_primitive::<Int32Type>().value(row).to_string()),
         DataType::Int64 => json!(column.as_primitive::<Int64Type>().value(row).to_string()),
+        DataType::Date32 => json!(column.as_primitive::<Date32Type>().value(row).to_string()),
+        DataType::Timestamp(TimeUnit::Microsecond, Some(_)) => json!(
+            column
+                .as_primitive::<TimestampMicrosecondType>()
+                .value(row)
+                .to_string()
+        ),
         DataType::Decimal128(_, scale) => json!(decimal_text(
             column.as_primitive::<Decimal128Type>().value(row),
             *scale
@@ -383,6 +408,7 @@ async fn interval_integral_casts_match_spark() -> TestResult {
             (RetainedDifference::StringToQualifier, 12),
             (RetainedDifference::NullableGreatest, 16),
             (RetainedDifference::NestedQualifier, 8),
+            (RetainedDifference::SharedCteSetOperation, 4),
         ])
     );
     let mut differences = Vec::new();

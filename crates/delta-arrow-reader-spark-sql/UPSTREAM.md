@@ -320,13 +320,16 @@ registered field (`resolver/interval_qualifier.rs`, #1152): from the SQL of a li
 interval, and from TIMESTAMP and TIMESTAMP_NTZ subtraction, MAKE_DT_INTERVAL and
 MAKE_YM_INTERVAL, an interval scaled by a number and AVG, which are `DAY TO SECOND` or `YEAR TO
 MONTH`; from a negation, ABS, NULLIF and the aggregate and window functions that return their
-argument's values, such as SUM, MIN, MAX, FIRST, LAST, LAG and LEAD, which keep it; from a sum or
-difference and from IF, CASE, COALESCE, NVL, IFNULL, NVL2, GREATEST and LEAST, which widen it from
-the earliest start field to the latest end field; and from the columns of projections,
-aggregates, subqueries, common table expressions and views, VALUES rows and set operations,
-which widen it over their inputs. An untyped NULL takes no part. The qualifier is not stored in
-any schema. Where it is unknown, as for an Arrow column, a scalar subquery, an ARRAY element or
-a struct field, it is the type Spark gives an Arrow column, `DAY TO SECOND` or `YEAR TO MONTH`.
+argument's values, such as SUM, MIN, MAX, MAX_BY, FIRST, LAST, LAG and LEAD, which keep it; from a
+sum or difference and from IF, CASE, COALESCE, NVL, IFNULL, NVL2, GREATEST and LEAST, which widen
+it from the earliest start field to the latest end field; and from the columns of projections,
+including `*`, aggregates, subqueries, common table expressions, scalar subqueries, VALUES rows
+and set operations, which widen it over their inputs. An untyped NULL takes no part. The
+qualifier is not stored in any schema. It is unknown for an Arrow column, an ARRAY element, a
+struct field, a set operation whose left input reads a common table expression directly, which
+keeps that expression's qualifiers, and UNION BY NAME. A cast reads an unknown qualifier as the
+type Spark gives an Arrow column, `DAY TO SECOND` or `YEAR TO MONTH`. Widened beside one, a known
+qualifier still bounds the result's end field from below, which DATE arithmetic reads.
 
 CAST and TRY_CAST of an interval to TINYINT, SMALLINT, INT, BIGINT or DECIMAL use a local function,
 `SparkIntervalToNumber`, which counts the qualifier's end field as Spark does: whole years or
@@ -655,9 +658,9 @@ TRY_ADD, which Spark reads as a DAY TO SECOND interval, gives a NULL TIMESTAMP, 
 failed. Every other interval moves the DATE by its whole days in INT arithmetic, where an Arrow
 cast to a nanosecond calendar interval dropped the time part and failed beyond about 292 years,
 and TRY_ADD and TRY_SUBTRACT failed while planning. An interval whose qualifier is unknown, such
-as an Arrow column, a scalar subquery, an array element or struct field, a lambda variable,
-MAX_BY, MIN_BY or MEDIAN of one, or a conditional mixing a known interval with such an operand,
-keeps DATE arithmetic (#1236). The
+as an Arrow column, an array element or struct field, a lambda variable, or MEDIAN of one, keeps
+DATE arithmetic (#1236), unless it is widened beside a known interval with time units, which
+gives a TIMESTAMP. The
 [DATE and interval arithmetic references](tests/fixtures/date-interval-arithmetic/README.md)
 record the checks.
 

@@ -33,10 +33,6 @@ impl FieldInfo {
     pub fn is_hidden(&self) -> bool {
         self.hidden
     }
-
-    pub fn interval_qualifier(&self) -> Option<IntervalQualifier> {
-        self.interval_qualifier
-    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -157,14 +153,21 @@ impl PlanResolverState {
         self.register_field_info(field.as_ref().name(), false)
     }
 
-    /// Registers each field and returns unique internal names to avoid column name collisions.
+    /// Registers each field of a scanned source and returns unique internal names to avoid
+    /// column name collisions. Spark reads an Arrow interval column as `DAY TO SECOND` or `YEAR
+    /// TO MONTH` (#1152).
     pub fn register_fields(
         &mut self,
         fields: impl IntoIterator<Item = impl AsRef<Field>>,
     ) -> Vec<String> {
         fields
             .into_iter()
-            .map(|field| self.register_field(field))
+            .map(|field| {
+                let field_id = self.register_field(&field);
+                let qualifier = IntervalQualifier::default_for_type(field.as_ref().data_type());
+                self.set_interval_qualifier(&field_id, qualifier);
+                field_id
+            })
             .collect()
     }
 

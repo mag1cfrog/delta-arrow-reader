@@ -49,7 +49,30 @@ use crate::resolver::interval_qualifier::IntervalQualifier;
 use crate::resolver::state::PlanResolverState;
 
 impl PlanResolver<'_> {
+    /// A CAST, with the qualifier of an interval target (#1152).
     pub(super) async fn resolve_expression_cast(
+        &self,
+        expr: spec::Expr,
+        cast_to_type: spec::DataType,
+        is_try: bool,
+        schema: &DFSchemaRef,
+        state: &mut PlanResolverState,
+    ) -> PlanResult<(NamedExpr, bool)> {
+        let qualifier = match &cast_to_type {
+            spec::DataType::Interval {
+                interval_unit: spec::IntervalUnit::YearMonth | spec::IntervalUnit::DayTime,
+                start_field,
+                end_field,
+            } => IntervalQualifier::new(*start_field, *end_field),
+            _ => None,
+        };
+        let (named, named_input) = self
+            .resolve_expression_cast_to(expr, cast_to_type, is_try, schema, state)
+            .await?;
+        Ok((named.with_interval_qualifier(qualifier), named_input))
+    }
+
+    async fn resolve_expression_cast_to(
         &self,
         expr: spec::Expr,
         cast_to_type: spec::DataType,
@@ -173,8 +196,10 @@ impl PlanResolver<'_> {
         // Spark casts an interval to a number as a count of its qualifier's end field, and
         // rejects floating and BOOLEAN targets (#1152). An unknown qualifier is the type Spark
         // gives an Arrow column.
-        if let Some(default) = IntervalQualifier::of_type(&expr_type) {
-            let qualifier = source_qualifier.unwrap_or(default);
+        if let Some(default) = IntervalQualifier::default_for_type(&expr_type) {
+            let qualifier = source_qualifier
+                .filter(|qualifier| qualifier.is_exact())
+                .unwrap_or(default);
             match &cast_to_type {
                 DataType::Int8
                 | DataType::Int16

@@ -6,8 +6,9 @@ qualifier to TINYINT, SMALLINT, INT, BIGINT and DECIMAL: values built from numbe
 fractional seconds, limits and overflow, NULL, DATE and TIMESTAMP differences, MAKE_DT_INTERVAL
 and MAKE_YM_INTERVAL, a DAY TO SECOND column, interval arithmetic, negation, conditionals and
 aggregates, and columns of subqueries, common table expressions, VALUES and UNION, with FLOAT,
-DOUBLE and BOOLEAN targets, which Spark rejects, and unaliased generated names. Every query runs
-in both ANSI modes in UTC and America/Los_Angeles. Run from the crate root in the reference
+DOUBLE and BOOLEAN targets, which Spark rejects, and unaliased generated names; and DATE
+arithmetic whose interval qualifier is tracked through those columns or widened beside a DAY TO
+SECOND column. Every query runs in both ANSI modes in UTC and America/Los_Angeles. Run from the crate root in the reference
 environment described in README.md; the output path must not exist.
 """
 import argparse
@@ -254,6 +255,47 @@ def definitions():
     ]
     for name, sql in columns:
         yield f"column_{name}", sql
+    # Qualifiers through stars, unaliased casts, untyped NULLs, scalar subqueries, MAX_BY and a
+    # common table expression read by two set operations, and DATE arithmetic that reads them.
+    tracking = [
+        ("star_cte",
+         f"WITH a AS (SELECT k, {DAY} AS x FROM pairs), b AS (SELECT * FROM a) "
+         "SELECT k, CAST(x AS INT) AS r FROM b"),
+        ("qualified_star",
+         f"SELECT k, CAST(x AS INT) AS r FROM (SELECT a.* FROM (SELECT k, {DAY} AS x FROM pairs) "
+         "AS a)"),
+        ("unaliased_cast_column",
+         "SELECT k, CAST(c AS INT) AS r FROM "
+         "(SELECT k, CAST(n AS INTERVAL HOUR) FROM counts) AS s(k, c)"),
+        ("union_null_day",
+         "SELECT CAST(x AS INT) AS r FROM (SELECT NULL AS x UNION ALL SELECT INTERVAL '2' DAY)"),
+        ("scalar_subquery_max", f"SELECT CAST((SELECT max({DAY}) FROM pairs) AS INT) AS r"),
+        ("max_by", f"SELECT CAST(max_by({DAY}, -k) AS INT) AS r FROM pairs"),
+        ("shared_cte_set_operations",
+         "WITH c AS (SELECT INTERVAL '3' DAY AS i) SELECT CAST(i AS INT) AS r FROM "
+         "(TABLE c UNION ALL SELECT INTERVAL '1' HOUR) UNION ALL SELECT CAST(i AS INT) FROM c"),
+        ("date_plus_span_plus_hour",
+         "SELECT k, DATE '2024-01-01' + (s + INTERVAL '1' HOUR) AS r FROM spans"),
+        ("date_plus_coalesce_span_hour",
+         "SELECT k, DATE '2024-01-01' + coalesce(s, INTERVAL '1' HOUR) AS r FROM spans"),
+        ("date_plus_subquery_hour",
+         "SELECT k, d1 + x AS r FROM (SELECT k, d1, CAST(k AS INTERVAL HOUR) AS x FROM pairs)"),
+        ("date_plus_subquery_day",
+         "SELECT k, d1 + x AS r FROM (SELECT k, d1, CAST(k AS INTERVAL DAY) AS x FROM pairs)"),
+        ("date_plus_star_difference",
+         f"SELECT k, d1 + x AS r FROM (SELECT * FROM (SELECT k, d1, {DAY} AS x FROM pairs))"),
+        ("date_plus_star_difference_plus_hour",
+         f"SELECT k, d1 + (x + INTERVAL '1' HOUR) AS r FROM "
+         f"(SELECT *, {DAY} AS x FROM pairs)"),
+        ("date_plus_span", "SELECT k, DATE '2024-01-01' + s AS r FROM spans"),
+        ("cast_array_span_plus_hour",
+         "SELECT k, CAST(array(s)[0] + INTERVAL '1' HOUR AS INT) AS r FROM spans"),
+        ("date_plus_array_span_plus_hour",
+         "SELECT k, DATE '2024-01-01' + (array(s)[0] + INTERVAL '1' HOUR) AS r FROM spans"),
+        ("date_plus_array_difference", f"SELECT k, d1 + array({DAY})[0] AS r FROM pairs"),
+    ]
+    for name, sql in tracking:
+        yield f"tracking_{name}", sql
     # Spark rejects FLOAT, DOUBLE and BOOLEAN targets.
     for name, source in [("day", "CAST(n AS INTERVAL DAY)"), ("year", "CAST(n AS INTERVAL YEAR)")]:
         for target in ["DOUBLE", "FLOAT", "BOOLEAN"]:
