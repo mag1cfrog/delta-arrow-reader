@@ -56,8 +56,8 @@ impl DayTimeEnd {
 /// day-time interval: an interval literal, a CAST to an interval qualifier, a negation, a sum
 /// or difference of such intervals, IF, CASE, COALESCE, NVL, IFNULL, NVL2, NULLIF, GREATEST and
 /// LEAST over them, and ABS, SUM, MIN, MAX, FIRST, LAST and ANY_VALUE of one, which keep its
-/// type. Spark types MAKE_DT_INTERVAL and AVG as `DAY TO SECOND`. `None` where the SQL does not
-/// say, such as for a column; an interval scaled by a number is read once resolved.
+/// type. Spark types an interval scaled by a number, MAKE_DT_INTERVAL and AVG as `DAY TO
+/// SECOND`. `None` where the SQL does not say, such as for a column.
 pub(super) fn spec_day_time_end(expr: &spec::Expr) -> Option<DayTimeEnd> {
     match expr {
         spec::Expr::Literal(spec::Literal::DurationMicrosecond {
@@ -102,7 +102,8 @@ pub(super) fn spec_day_time_end(expr: &spec::Expr) -> Option<DayTimeEnd> {
                     | "last_value" | "any_value",
                     [value, ..],
                 ) => spec_day_time_end(value),
-                ("avg" | "mean" | "make_dt_interval", _) => Some(DayTimeEnd::Time),
+                ("*" | "/" | "try_multiply" | "try_divide", [_, _])
+                | ("avg" | "mean" | "make_dt_interval", _) => Some(DayTimeEnd::Time),
                 _ => None,
             }
         }

@@ -600,19 +600,19 @@ its day count and returns a DATE; it casts the DATE to TIMESTAMP at its midnight
 zone for an interval with time units and returns a TIMESTAMP from the arithmetic above. DAR
 types every day-time interval as a microsecond duration, so the resolver reads the end field
 from the operand's SQL (an interval literal, a CAST to an interval qualifier, a negation, a sum
-or difference, IF, CASE, COALESCE, NVL, IFNULL, NVL2, NULLIF, GREATEST and LEAST over such
-intervals, ABS, SUM, MIN, MAX, FIRST, LAST, ANY_VALUE and AVG of one, also as window functions,
-and MAKE_DT_INTERVAL) or from the function that computed it (DATE subtraction ends at DAY;
-TIMESTAMP and TIMESTAMP_NTZ subtraction, MAKE_DT_INTERVAL and an interval scaled by a number at
-SECOND). A DATE beside an interval with time units is then read as a TIMESTAMP before the
-arithmetic is chosen. A DATE plus an untyped NULL, with `+` or TRY_ADD, which Spark reads as a
-DAY TO SECOND interval, gives a NULL TIMESTAMP, where planning failed. Every other interval
-moves the DATE by its whole days in INT arithmetic, where an Arrow cast to a nanosecond
-calendar interval dropped the time part and failed beyond about 292 years, and TRY_ADD and
-TRY_SUBTRACT failed while planning. An interval whose end field is read neither way, such as a
-subquery, CTE or view column, a scalar subquery, an array element or struct field, a lambda
-variable, LAG, LEAD, MAX_BY, MIN_BY or MEDIAN of one, or a conditional mixing a known interval
-with such an operand, keeps DATE arithmetic (#1236). The
+or difference, a product or quotient by a number, IF, CASE, COALESCE, NVL, IFNULL, NVL2,
+NULLIF, GREATEST and LEAST over such intervals, ABS, SUM, MIN, MAX, FIRST, LAST, ANY_VALUE and
+AVG of one, also as window functions, and MAKE_DT_INTERVAL) or from the function that computed
+it (DATE subtraction ends at DAY; TIMESTAMP and TIMESTAMP_NTZ subtraction, MAKE_DT_INTERVAL and
+an interval scaled by a number at SECOND). A DATE beside an interval with time units is then
+read as a TIMESTAMP before the arithmetic is chosen. A DATE plus an untyped NULL, with `+` or
+TRY_ADD, which Spark reads as a DAY TO SECOND interval, gives a NULL TIMESTAMP, where planning
+failed. Every other interval moves the DATE by its whole days in INT arithmetic, where an Arrow
+cast to a nanosecond calendar interval dropped the time part and failed beyond about 292 years,
+and TRY_ADD and TRY_SUBTRACT failed while planning. An interval whose end field is read neither
+way, such as a subquery, CTE or view column, a scalar subquery, an array element or struct
+field, a lambda variable, LAG, LEAD, MAX_BY, MIN_BY or MEDIAN of one, or a conditional mixing a
+known interval with such an operand, keeps DATE arithmetic (#1236). The
 [DATE and interval arithmetic references](tests/fixtures/date-interval-arithmetic/README.md)
 record the checks.
 
