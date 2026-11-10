@@ -41,16 +41,16 @@ fn arithmetic_references() -> TestResult<Vec<Value>> {
             |build| build.contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
         )
     );
-    assert_eq!(records.len() - 1, 168);
+    assert_eq!(records.len() - 1, 244);
     Ok(records)
 }
 
-/// #1250: a DATE plus a day-time interval column of a subquery keeps DATE arithmetic, since the
+/// #1236: a DATE plus a day-time interval column of a subquery keeps DATE arithmetic, since the
 /// column carries no qualifier, so `d` plus an HOUR column gives `d` where Spark gives the
 /// TIMESTAMP two hours after its midnight.
 const INTERVAL_COLUMN_RECORD: &str = "subquery_hour_column";
 
-/// DAR's current result for the #1250 record: each row's DATE, typed DATE at every stage.
+/// DAR's current result for the #1236 record: each row's DATE, typed DATE at every stage.
 fn interval_column_expectation(case: &Value, metadata: &Value) -> TestResult<Value> {
     let mut current = case.clone();
     for stage in ["analyzed", "optimized", "executed"] {

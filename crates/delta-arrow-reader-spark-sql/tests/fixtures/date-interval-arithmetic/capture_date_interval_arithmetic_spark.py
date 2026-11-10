@@ -5,7 +5,8 @@ stages, with the innermost Java exception of a failure, for `+`, `-`, TRY_ADD an
 of a DATE and an interval. Spark adds a DAY interval to a DATE with `date_add` and returns a
 DATE, and adds a day-time interval with time units to the DATE cast to TIMESTAMP and returns a
 TIMESTAMP. The intervals are literals of every day-time qualifier, casts, negations, sums,
-products, MAKE_DT_INTERVAL and DATE and TIMESTAMP differences, NULL, and subquery columns; the
+products, MAKE_DT_INTERVAL, DATE, TIMESTAMP and TIMESTAMP_NTZ differences, conditionals, ABS,
+aggregates and a window over intervals, typed and untyped NULL, and subquery columns; the
 DATE values include month ends, a leap day, the Los Angeles DST change days, years 1 and 9999
 and NULL. Every query runs in both ANSI modes in UTC and America/Los_Angeles. Run from the
 crate root in the reference environment described in README.md; the output path must not
@@ -67,6 +68,26 @@ TIME_UNITS = [
     ("try_add_hour", "try_add(d, INTERVAL '2' HOUR)"),
     ("try_add_hour_first", "try_add(INTERVAL '2' HOUR, d)"),
     ("try_subtract_hour", "try_subtract(d, INTERVAL '2' HOUR)"),
+    ("plus_ntz_difference",
+     "d + (TIMESTAMP_NTZ '2020-01-01 03:00:00' - TIMESTAMP_NTZ '2020-01-01 00:00:00')"),
+    ("plus_negated_timestamp_difference",
+     "d + -(TIMESTAMP '2020-01-02 03:00:00' - TIMESTAMP '2020-01-01 00:00:00')"),
+    ("plus_timestamp_difference_plus_day",
+     "d + ((TIMESTAMP '2020-01-02 03:00:00' - TIMESTAMP '2020-01-01 00:00:00') "
+     "+ INTERVAL '1' DAY)"),
+    ("plus_if_hour", "d + if(k > 3, INTERVAL '2' HOUR, INTERVAL '3' HOUR)"),
+    ("plus_case_day_or_hour",
+     "d + CASE WHEN k > 3 THEN INTERVAL '2' HOUR ELSE INTERVAL '1' DAY END"),
+    ("plus_coalesce_hour", "d + coalesce(INTERVAL '2' HOUR, INTERVAL '3' HOUR)"),
+    ("plus_nullif_hour", "d + nullif(INTERVAL '2' HOUR, INTERVAL '3' HOUR)"),
+    ("plus_greatest_day_hour", "d + greatest(INTERVAL '2' HOUR, INTERVAL '1' DAY)"),
+    ("plus_abs_hour", "d + abs(INTERVAL '-2' HOUR)"),
+    ("plus_window_max_hour", "d + max(INTERVAL '2' HOUR) OVER ()"),
+    # Spark reads an untyped NULL beside a DATE as a DAY TO SECOND interval.
+    ("plus_null", "d + NULL"),
+    ("null_plus", "NULL + d"),
+    ("try_add_null", "try_add(d, NULL)"),
+    ("try_add_null_first", "try_add(NULL, d)"),
 ]
 
 # A DAY interval: Spark returns a DATE.
@@ -84,6 +105,8 @@ DAYS = [
     ("try_subtract_day", "try_subtract(d, INTERVAL '1' DAY)"),
     ("plus_far_day", "d + (DATE '9999-12-31' - d)"),
     ("minus_far_day", "d - (d - DATE '0001-01-01')"),
+    ("plus_if_day", "d + if(k > 3, INTERVAL '2' DAY, INTERVAL '3' DAY)"),
+    ("plus_case_day", "d + CASE WHEN k > 3 THEN INTERVAL '2' DAY END"),
 ]
 
 # Year-month intervals, which keep `DATE` arithmetic.
@@ -100,6 +123,12 @@ def definitions():
     for name, interval in [("hour", "INTERVAL '2' HOUR"), ("day", "INTERVAL '2' DAY")]:
         yield (f"subquery_{name}_column",
                f"SELECT k, d + i AS r FROM (SELECT k, d, {interval} AS i FROM inputs)")
+    # Aggregates of intervals: MAX and SUM keep the qualifier, AVG is `DAY TO SECOND`.
+    yield ("grouped_plus_max_hour",
+           "SELECT k, d + max(INTERVAL '2' HOUR) AS r FROM inputs GROUP BY k, d")
+    for name, aggregate in [("avg", "avg"), ("sum", "sum")]:
+        yield (f"aggregate_plus_{name}_day",
+               f"SELECT DATE '2020-01-01' + {aggregate}(INTERVAL '1' DAY) AS r FROM inputs")
     yield "literal_plus_hour", "SELECT DATE '2020-03-08' + INTERVAL '2' HOUR AS r"
     yield "literal_plus_day", "SELECT DATE '2020-01-31' + INTERVAL '1' DAY AS r"
     yield "literal_minus_hour", "SELECT DATE '2020-11-01' - INTERVAL '2' HOUR AS r"
