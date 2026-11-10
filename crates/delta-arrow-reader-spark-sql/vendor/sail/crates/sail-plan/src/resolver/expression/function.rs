@@ -25,7 +25,7 @@ use crate::function::{
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
 use crate::resolver::expression::day_time_interval::{
-    date_operands_for_time_units, spec_day_time_end,
+    cast_date_beside_time_interval, spec_day_time_end,
 };
 use crate::resolver::expression::lambda::is_spec_lambda_argument;
 use crate::resolver::state::PlanResolverState;
@@ -136,11 +136,11 @@ impl PlanResolver<'_> {
         } else {
             vec![]
         };
-        // After the operand types that name the call.
+        // After `argument_types`, so that the call's name still reads a DATE operand.
         let arguments = if interval_ends.is_empty() {
             arguments
         } else {
-            date_operands_for_time_units(
+            cast_date_beside_time_interval(
                 &canonical_function_name,
                 arguments,
                 &interval_ends,

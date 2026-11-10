@@ -600,13 +600,17 @@ its day count and returns a DATE; it casts the DATE to TIMESTAMP at its midnight
 zone for an interval with time units and returns a TIMESTAMP from the arithmetic above. DAR
 types every day-time interval as a microsecond duration, so the resolver reads the end field
 from the operand's SQL (an interval literal, a CAST to an interval qualifier, a negation, a
-sum, a product, MAKE_DT_INTERVAL) or from the function that computed it (DATE subtraction
-ends at DAY; TIMESTAMP subtraction and MAKE_DT_INTERVAL at SECOND). A DATE beside an interval
-with time units is then read as a TIMESTAMP before the arithmetic is chosen. Every other
-interval moves the DATE by its whole days in INT arithmetic, where an Arrow cast to a
-nanosecond calendar interval dropped the time part and failed beyond about 292 years, and
-TRY_ADD and TRY_SUBTRACT failed while planning. An interval column carries no qualifier, so a
-DATE beside one keeps DATE arithmetic (#1250). The
+sum, a product, a conditional, GREATEST, LEAST, ABS, an aggregate or window function over such
+intervals, MAKE_DT_INTERVAL) or from the function that computed it (DATE subtraction ends at
+DAY; TIMESTAMP and TIMESTAMP_NTZ subtraction and MAKE_DT_INTERVAL at SECOND). A DATE beside an
+interval with time units is then read as a TIMESTAMP before the arithmetic is chosen, and a
+DATE beside an untyped NULL, which Spark reads as a DAY TO SECOND interval, gives a NULL
+TIMESTAMP, where planning failed. Every other interval moves the DATE by its whole days in INT
+arithmetic, where an Arrow cast to a nanosecond calendar interval dropped the time part and
+failed beyond about 292 years, and TRY_ADD and TRY_SUBTRACT failed while planning. An interval
+whose SQL does not show its end field, such as a subquery, CTE or view column, a scalar
+subquery, an array element or struct field, or a lambda variable, keeps DATE arithmetic
+(#1236). The
 [DATE and interval arithmetic references](tests/fixtures/date-interval-arithmetic/README.md)
 record the checks.
 

@@ -8,12 +8,11 @@ use std::sync::Arc;
 
 use datafusion::arrow::datatypes::{DataType, TimeUnit};
 use datafusion_common::DFSchemaRef;
-use datafusion_expr::{ExprSchemable, expr};
+use datafusion_expr::{BinaryExpr, ExprSchemable, Operator, expr};
 use datafusion_spark::function::datetime::make_dt_interval::SparkMakeDtInterval;
 use sail_common::spec;
 use sail_function::scalar::datetime::spark_subtract_dates::SparkSubtractDates;
 use sail_function::scalar::datetime::spark_subtract_timestamps::SparkSubtractTimestamps;
-use sail_function::scalar::math::spark_div::SparkIntervalDiv;
 use sail_function::scalar::math::spark_interval_arithmetic::SparkIntervalArithmetic;
 use sail_function::scalar::math::spark_interval_negate::SparkIntervalNegate;
 use sail_function::scalar::math::spark_interval_scale::SparkIntervalScale;
@@ -37,21 +36,27 @@ impl DayTimeEnd {
         }
     }
 
-    /// The end of a sum or difference of two intervals: Spark widens the qualifier, so it ends
-    /// at a time unit if either does, and at DAY only if both do.
-    fn widen(left: Option<Self>, right: Option<Self>) -> Option<Self> {
-        match (left, right) {
-            (Some(Self::Time), _) | (_, Some(Self::Time)) => Some(Self::Time),
-            (Some(Self::Day), Some(Self::Day)) => Some(Self::Day),
-            _ => None,
+    /// The end of intervals combined into one, as a sum, a difference or the branches of a
+    /// conditional: Spark widens the qualifier, so it ends at a time unit if any does, and at
+    /// DAY only if all do.
+    fn widen(ends: impl IntoIterator<Item = Option<Self>>) -> Option<Self> {
+        let mut all_day = Some(Self::Day);
+        for end in ends {
+            match end {
+                Some(Self::Time) => return Some(Self::Time),
+                Some(Self::Day) => {}
+                None => all_day = None,
+            }
         }
+        all_day
     }
 }
 
 /// The end field of `expr` where its SQL writes it, read only when `expr` resolves to a
 /// day-time interval: an interval literal, a CAST to an interval qualifier, a negation, a sum
-/// or difference of such intervals, an interval scaled by a number, which Spark types as
-/// `DAY TO SECOND`, and MAKE_DT_INTERVAL. `None` where the SQL does not say.
+/// or difference of such intervals, a conditional over them, ABS and the aggregates that keep
+/// their argument's type. Spark types an interval scaled by a number, MAKE_DT_INTERVAL and AVG
+/// as `DAY TO SECOND`. `None` where the SQL does not say, such as for a column.
 pub(super) fn spec_day_time_end(expr: &spec::Expr) -> Option<DayTimeEnd> {
     match expr {
         spec::Expr::Literal(spec::Literal::DurationMicrosecond {
@@ -73,30 +78,61 @@ pub(super) fn spec_day_time_end(expr: &spec::Expr) -> Option<DayTimeEnd> {
                 return None;
             };
             let name = name.as_ref().to_ascii_lowercase();
-            match (name.as_str(), function.arguments.as_slice()) {
+            let arguments = function.arguments.as_slice();
+            match (name.as_str(), arguments) {
                 ("-" | "+" | "negative" | "positive", [operand]) => spec_day_time_end(operand),
-                ("-" | "+" | "try_add" | "try_subtract", [left, right]) => {
-                    DayTimeEnd::widen(spec_day_time_end(left), spec_day_time_end(right))
+                ("-" | "+" | "try_add" | "try_subtract", [_, _])
+                | ("coalesce" | "nvl" | "ifnull" | "greatest" | "least", _) => {
+                    DayTimeEnd::widen(arguments.iter().map(spec_day_time_end))
                 }
-                ("*" | "/" | "try_multiply" | "try_divide", [_, _]) => Some(DayTimeEnd::Time),
-                ("make_dt_interval", _) => Some(DayTimeEnd::Time),
+                ("if" | "nvl2", [_, then, otherwise]) => {
+                    DayTimeEnd::widen([then, otherwise].map(spec_day_time_end))
+                }
+                // CASE: each condition precedes its result, and an ELSE result comes last.
+                ("when", _) => DayTimeEnd::widen(
+                    arguments
+                        .iter()
+                        .enumerate()
+                        .filter(|(index, _)| index % 2 == 1 || *index + 1 == arguments.len())
+                        .map(|(_, result)| spec_day_time_end(result)),
+                ),
+                (
+                    "nullif" | "abs" | "sum" | "min" | "max" | "first" | "first_value" | "last"
+                    | "last_value" | "any_value",
+                    [value, ..],
+                ) => spec_day_time_end(value),
+                ("*" | "/" | "try_multiply" | "try_divide", [_, _])
+                | ("avg" | "mean" | "make_dt_interval", _) => Some(DayTimeEnd::Time),
                 _ => None,
             }
         }
+        spec::Expr::Window {
+            window_function, ..
+        } => spec_day_time_end(window_function),
         _ => None,
     }
 }
 
 /// The end field of a resolved day-time interval `expr` where the function that computed it
-/// fixes it: Spark subtracts two DATE values as a DAY interval, and two TIMESTAMP values,
-/// MAKE_DT_INTERVAL and an interval scaled by a number as `DAY TO SECOND`. `None` otherwise,
-/// such as for a literal, whose qualifier only its SQL keeps, or a column.
+/// fixes it: Spark subtracts two DATE values as a DAY interval, and two TIMESTAMP or
+/// TIMESTAMP_NTZ values, MAKE_DT_INTERVAL and an interval scaled by a number as `DAY TO SECOND`.
+/// `None` otherwise, such as for a literal, whose qualifier only its SQL keeps, or a column.
 pub(super) fn resolved_day_time_end(expr: &expr::Expr) -> Option<DayTimeEnd> {
     let expr = match without_inherited_column_metadata(expr) {
         expr::Expr::Alias(alias) => alias.expr.as_ref(),
         expr => expr,
     };
-    let expr::Expr::ScalarFunction(function) = without_inherited_column_metadata(expr) else {
+    let expr = without_inherited_column_metadata(expr);
+    // DATE, TIMESTAMP and interval subtractions are Spark functions here, so a native
+    // subtraction that gives a day-time interval subtracts two TIMESTAMP_NTZ values.
+    if let expr::Expr::BinaryExpr(BinaryExpr {
+        op: Operator::Minus,
+        ..
+    }) = expr
+    {
+        return Some(DayTimeEnd::Time);
+    }
+    let expr::Expr::ScalarFunction(function) = expr else {
         return None;
     };
     let inner = function.func.inner();
@@ -105,7 +141,6 @@ pub(super) fn resolved_day_time_end(expr: &expr::Expr) -> Option<DayTimeEnd> {
     } else if inner.is::<SparkSubtractTimestamps>()
         || inner.is::<SparkMakeDtInterval>()
         || inner.is::<SparkIntervalScale>()
-        || inner.is::<SparkIntervalDiv>()
     {
         Some(DayTimeEnd::Time)
     } else if inner.is::<SparkIntervalNegate>()
@@ -115,7 +150,7 @@ pub(super) fn resolved_day_time_end(expr: &expr::Expr) -> Option<DayTimeEnd> {
     } else if inner.is::<SparkIntervalArithmetic>()
         && let [left, right] = function.args.as_slice()
     {
-        DayTimeEnd::widen(resolved_day_time_end(left), resolved_day_time_end(right))
+        DayTimeEnd::widen([left, right].map(resolved_day_time_end))
     } else {
         None
     }
@@ -126,7 +161,7 @@ pub(super) fn resolved_day_time_end(expr: &expr::Expr) -> Option<DayTimeEnd> {
 /// Spark casts it before adding the interval (#952). `spec_ends` holds each argument's end field
 /// from its SQL. A DATE beside an interval ending at DAY, or one whose end field is unknown,
 /// keeps DATE arithmetic.
-pub(super) fn date_operands_for_time_units(
+pub(super) fn cast_date_beside_time_interval(
     function: &str,
     mut arguments: Vec<expr::Expr>,
     spec_ends: &[Option<DayTimeEnd>],

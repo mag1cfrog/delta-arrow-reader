@@ -312,6 +312,18 @@ fn spark_plus(input: ScalarFunctionInput) -> PlanResult<Expr> {
             (Ok(DataType::Null), Ok(DataType::Timestamp(..))) => {
                 cast(left, DataType::Duration(TimeUnit::Microsecond)) + right
             }
+            (Ok(DataType::Date32), Ok(DataType::Null)) => date_plus_null_interval(
+                left,
+                right,
+                SparkTimestampAddInterval::add(),
+                &function_context.plan_config.session_timezone,
+            ),
+            (Ok(DataType::Null), Ok(DataType::Date32)) => date_plus_null_interval(
+                right,
+                left,
+                SparkTimestampAddInterval::add(),
+                &function_context.plan_config.session_timezone,
+            ),
             (
                 Ok(string_type @ (DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View)),
                 Ok(DataType::Duration(TimeUnit::Microsecond)),
@@ -333,10 +345,10 @@ fn spark_plus(input: ScalarFunctionInput) -> PlanResult<Expr> {
                 function_context.plan_config.ansi_mode,
             )?,
             (Ok(DataType::Date32), Ok(DataType::Duration(TimeUnit::Microsecond))) => {
-                date_plus_interval_days(left, right, Operator::Plus)
+                shift_date_by_interval_days(left, right, Operator::Plus)
             }
             (Ok(DataType::Duration(TimeUnit::Microsecond)), Ok(DataType::Date32)) => {
-                date_plus_interval_days(right, left, Operator::Plus)
+                shift_date_by_interval_days(right, left, Operator::Plus)
             }
             (Ok(left_type), Ok(DataType::Date32)) if left_type.is_numeric() => {
                 cast(left + cast(right, DataType::Int32), DataType::Date32)
@@ -373,7 +385,7 @@ fn spark_plus(input: ScalarFunctionInput) -> PlanResult<Expr> {
 /// as Spark adds a DAY interval to a DATE with `date_add` of its day count (#952). The resolver
 /// reads a DATE beside an interval with time units as a TIMESTAMP first, so an interval here
 /// ends at DAY, or its end field is unknown and any time part truncates toward zero.
-fn date_plus_interval_days(date: Expr, interval: Expr, op: Operator) -> Expr {
+fn shift_date_by_interval_days(date: Expr, interval: Expr, op: Operator) -> Expr {
     const MICROS_PER_DAY: i64 = 86_400_000_000;
     let days = cast(
         cast(interval, DataType::Int64) / lit(MICROS_PER_DAY),
@@ -383,6 +395,21 @@ fn date_plus_interval_days(date: Expr, interval: Expr, op: Operator) -> Expr {
         binary_expr(cast(date, DataType::Int32), op, days),
         DataType::Date32,
     )
+}
+
+/// `date` plus the untyped NULL `null` with `addition`: Spark reads the NULL as a DAY TO SECOND
+/// interval and the DATE as a TIMESTAMP at its midnight in `timezone`, so the sum is a NULL
+/// TIMESTAMP (#952).
+fn date_plus_null_interval(
+    date: Expr,
+    null: Expr,
+    addition: SparkTimestampAddInterval,
+    timezone: &Arc<str>,
+) -> Expr {
+    ScalarUDF::from(addition).call(vec![
+        cast_local_timestamp_expr_to_ltz(date, &DataType::Date32, timezone),
+        cast(null, DataType::Duration(TimeUnit::Microsecond)),
+    ])
 }
 
 /// Whether `data_type` is a TIMESTAMP with a time zone, as DAR types Spark's TIMESTAMP.
@@ -576,11 +603,23 @@ fn try_add(input: ScalarFunctionInput) -> PlanResult<Expr> {
         (Ok(DataType::Null), Ok(DataType::Timestamp(TimeUnit::Microsecond, _))) => {
             add(right, null_interval(left))
         }
+        (Ok(DataType::Date32), Ok(DataType::Null)) => date_plus_null_interval(
+            left,
+            right,
+            SparkTimestampAddInterval::try_add(),
+            &function_context.plan_config.session_timezone,
+        ),
+        (Ok(DataType::Null), Ok(DataType::Date32)) => date_plus_null_interval(
+            right,
+            left,
+            SparkTimestampAddInterval::try_add(),
+            &function_context.plan_config.session_timezone,
+        ),
         (Ok(DataType::Date32), Ok(DataType::Duration(TimeUnit::Microsecond))) => {
-            date_plus_interval_days(left, right, Operator::Plus)
+            shift_date_by_interval_days(left, right, Operator::Plus)
         }
         (Ok(DataType::Duration(TimeUnit::Microsecond)), Ok(DataType::Date32)) => {
-            date_plus_interval_days(right, left, Operator::Plus)
+            shift_date_by_interval_days(right, left, Operator::Plus)
         }
         // Spark adds two untyped NULLs as DOUBLE values.
         (Ok(DataType::Null), Ok(DataType::Null)) => lit(ScalarValue::Float64(None)),
@@ -653,7 +692,7 @@ fn try_subtract(input: ScalarFunctionInput) -> PlanResult<Expr> {
             difference(end, &start_type, right, &start_type)
         }
         (Ok(DataType::Date32), Ok(DataType::Duration(TimeUnit::Microsecond))) => {
-            date_plus_interval_days(left, right, Operator::Minus)
+            shift_date_by_interval_days(left, right, Operator::Minus)
         }
         // Spark subtracts two untyped NULLs as DOUBLE values.
         (Ok(DataType::Null), Ok(DataType::Null)) => lit(ScalarValue::Float64(None)),
@@ -734,7 +773,7 @@ fn spark_minus(input: ScalarFunctionInput) -> PlanResult<Expr> {
                 ScalarUDF::from(SparkIntervalArithmetic::subtract()).call(vec![left, right])
             }
             (Ok(DataType::Date32), Ok(DataType::Duration(TimeUnit::Microsecond))) => {
-                date_plus_interval_days(left, right, Operator::Minus)
+                shift_date_by_interval_days(left, right, Operator::Minus)
             }
             (Ok(DataType::Date32), Ok(right_type)) if right_type.is_numeric() => {
                 cast(cast(left, DataType::Int32) - right, DataType::Date32)
