@@ -271,11 +271,12 @@ fn differing_parts(case: &Value, observation: &Value) -> TestResult<Vec<&'static
 /// Differences outside the session zone, each owned by an issue.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum RetainedDifference {
-    /// #1087: calendar functions fail on 0001-01-02 and 9999-12-31, outside Arrow's
-    /// nanosecond range, which fails the whole query.
-    NanosecondRange,
     /// #1090: GREATEST is nullable where Spark declares it required.
     NullableGreatest,
+    /// #1052: in Los Angeles, row 10, 9999-12-31, truncated to its quarter starts at
+    /// 9999-10-01 00:00 local time, which Java's recurring rules read in PDT and the date
+    /// library, whose Los Angeles rules end in 2099, in PST, an hour later.
+    RecurringDstAfter2099,
     /// #1029: in a session zone Spark accepts but Arrow cannot parse, such as `PST`, a
     /// column keeps its own zone, so DAR evaluates it as a session in that zone would.
     UnparsedSessionZone,
@@ -287,19 +288,6 @@ enum RetainedDifference {
 /// Session zones Spark accepts that Arrow cannot parse.
 const UNPARSED_ZONES: [&str; 3] = ["Z", "PST", "GMT+08:00"];
 
-/// Records that fail on the nanosecond range, and the message each fails with.
-const NANOSECOND_RANGE_FAILURES: [(&str, &str); 9] = [
-    ("date_trunc_year", "out of range"),
-    ("date_trunc_quarter", "out of range"),
-    ("date_trunc_month", "out of range"),
-    ("date_trunc_week", "out of range"),
-    ("date_trunc_day", "out of range"),
-    ("date_trunc_hour", "out of range"),
-    ("struct_date_trunc", "out of range"),
-    ("months_between", "out of range"),
-    ("weekofyear", "Arithmetic overflow"),
-];
-
 fn retained_difference(case: &Value) -> Option<RetainedDifference> {
     let id = case["id"].as_str()?;
     let timezone = case["timezone"].as_str()?;
@@ -307,11 +295,8 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
         Some(RetainedDifference::UnparsedSessionZone)
     } else if id == "to_json" {
         Some(RetainedDifference::JsonTimestampText)
-    } else if NANOSECOND_RANGE_FAILURES
-        .iter()
-        .any(|(range_id, _)| *range_id == id)
-    {
-        Some(RetainedDifference::NanosecondRange)
+    } else if id == "date_trunc_quarter" && timezone == "America/Los_Angeles" {
+        Some(RetainedDifference::RecurringDstAfter2099)
     } else if id == "greatest_hour" {
         Some(RetainedDifference::NullableGreatest)
     } else {
@@ -397,18 +382,21 @@ fn current_expectation(
                 row[1] = json!(text.replace("-07:52:58", "-07:52"));
             }
         }
-        RetainedDifference::NanosecondRange => {
-            let message = NANOSECOND_RANGE_FAILURES
-                .iter()
-                .find(|(id, _)| case["id"] == *id)
-                .map(|(_, message)| *message)
-                .ok_or("missing range failure")?;
-            current["expected"] = json!({"status": "error", "dar_message": message});
-            current["spark_error_phase"] = json!("collect");
-            current["schema_stages"]
-                .as_object_mut()
-                .ok_or("missing schema stages")?
-                .remove("executed");
+        RetainedDifference::RecurringDstAfter2099 => {
+            let mut changed = 0;
+            for row in current["expected"]["rows"]
+                .as_array_mut()
+                .ok_or("missing rows")?
+            {
+                if row[0] == "10" {
+                    let spark = row[1].as_str().ok_or("missing result")?.parse::<i64>()?;
+                    row[1] = json!((spark + 3_600_000_000).to_string());
+                    changed += 1;
+                }
+            }
+            if changed != 1 {
+                return Err(format!("expected row 10 once: {case}").into());
+            }
         }
         RetainedDifference::NullableGreatest => {
             for stage in ["analyzed", "optimized", "executed"] {
@@ -605,8 +593,8 @@ async fn timestamp_columns_follow_the_session_zone_like_spark() -> TestResult {
     assert_eq!(
         retained,
         BTreeMap::from([
-            (RetainedDifference::NanosecondRange, 36),
             (RetainedDifference::NullableGreatest, 4),
+            (RetainedDifference::RecurringDstAfter2099, 2),
             (RetainedDifference::UnparsedSessionZone, 12),
             (RetainedDifference::JsonTimestampText, 4),
         ])

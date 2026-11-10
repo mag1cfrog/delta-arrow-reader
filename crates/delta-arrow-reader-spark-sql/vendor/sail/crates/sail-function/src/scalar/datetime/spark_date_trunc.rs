@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use chrono::{DateTime, LocalResult, Offset, TimeDelta, TimeZone, Timelike};
+use chrono::{DateTime, LocalResult, Offset, TimeDelta, TimeZone};
 use chrono_tz::{GapInfo, Tz};
 use datafusion::arrow::array::types::TimestampMicrosecondType;
 use datafusion::arrow::array::{AsArray, TimestampMicrosecondArray};
@@ -12,9 +12,40 @@ use datafusion_expr::{
 };
 use datafusion_functions::datetime::date_trunc::DateTruncFunc;
 
-use crate::scalar::datetime::local_time::{TimestampZone, ZoneKind, local_micros};
+use crate::scalar::datetime::local_time::{MICROS_PER_DAY, TimestampZone, ZoneKind, local_micros};
+use crate::scalar::datetime::spark_date_to_timestamp::{SessionZone, start_of_day};
+use crate::scalar::datetime::spark_trunc_date::TruncUnit;
 
 const MICROS_PER_MINUTE: i128 = 60_000_000;
+const MICROS_PER_HOUR: i128 = 3_600_000_000;
+
+/// A unit Spark's DATE_TRUNC supports, as `date_trunc` spells it once the plan has mapped
+/// Spark's other spellings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TruncLevel {
+    Microsecond,
+    Millisecond,
+    Second,
+    /// Java's `ZonedDateTime.truncatedTo` to a unit of this many microseconds: MINUTE, HOUR or
+    /// DAY.
+    Local(i128),
+    /// The first day of the local date's week, month, quarter or year, at its start.
+    Date(TruncUnit),
+}
+
+impl TruncLevel {
+    fn parse(unit: &str) -> Option<Self> {
+        Some(match unit.to_ascii_lowercase().as_str() {
+            "microsecond" => Self::Microsecond,
+            "millisecond" => Self::Millisecond,
+            "second" => Self::Second,
+            "minute" => Self::Local(MICROS_PER_MINUTE),
+            "hour" => Self::Local(MICROS_PER_HOUR),
+            "day" => Self::Local(i128::from(MICROS_PER_DAY)),
+            other => Self::Date(TruncUnit::parse(other)?),
+        })
+    }
+}
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkDateTrunc {
@@ -59,13 +90,10 @@ impl ScalarUDFImpl for SparkDateTrunc {
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
         if let [ColumnarValue::Scalar(unit), timestamp] = args.args.as_slice()
-            && unit
-                .try_as_str()
-                .flatten()
-                .is_some_and(|unit| unit.eq_ignore_ascii_case("minute"))
+            && let Some(level) = unit.try_as_str().flatten().and_then(TruncLevel::parse)
             && let DataType::Timestamp(TimeUnit::Microsecond, Some(zone)) = timestamp.data_type()
         {
-            return truncate_to_local_minutes(timestamp, &zone);
+            return truncate_in_zone(timestamp, level, &zone);
         }
         self.inner.invoke_with_args(args)
     }
@@ -74,14 +102,18 @@ impl ScalarUDFImpl for SparkDateTrunc {
         self.inner.aliases()
     }
 
-    // A MINUTE truncation that moves past a skipped interval can end later than the
-    // truncation of a later instant, so only other known units keep the input's order.
+    // A truncation in the local date-time that moves past a skipped interval can end later
+    // than the truncation of a later instant, and a local date can go back across a repeated
+    // interval, so only SECOND and finer units keep the input's order.
     fn output_ordering(&self, input: &[ExprProperties]) -> Result<SortProperties> {
         let unit = input
             .first()
-            .and_then(|unit| unit.range.lower().try_as_str().flatten());
+            .and_then(|unit| unit.range.lower().try_as_str().flatten())
+            .and_then(TruncLevel::parse);
         match unit {
-            Some(unit) if !unit.eq_ignore_ascii_case("minute") => self.inner.output_ordering(input),
+            Some(TruncLevel::Microsecond | TruncLevel::Millisecond | TruncLevel::Second) => {
+                self.inner.output_ordering(input)
+            }
             _ => Ok(SortProperties::Unordered),
         }
     }
@@ -91,16 +123,44 @@ impl ScalarUDFImpl for SparkDateTrunc {
     }
 }
 
-/// Spark's DATE_TRUNC to MINUTE in `zone`: Java's `ZonedDateTime.truncatedTo(MINUTES)`, which
-/// truncates the local date-time. DataFusion truncates the UTC minute, which differs where the
-/// offset has seconds, such as local mean time -07:52:58 in Los Angeles before 1883.
-fn truncate_to_local_minutes(timestamps: &ColumnarValue, zone: &Arc<str>) -> Result<ColumnarValue> {
-    let Some(parsed) = TimestampZone::parse(zone) else {
+/// Spark's DATE_TRUNC in `zone`, as `DateTimeUtils.truncTimestamp` computes it on microseconds
+/// across the BIGINT range. SECOND and finer units truncate the instant. MINUTE, HOUR and DAY
+/// truncate the local date-time like Java's `ZonedDateTime.truncatedTo`; DataFusion truncated
+/// the UTC minute, which differs where the offset has seconds, such as local mean time -07:52:58
+/// in Los Angeles before 1883. WEEK, MONTH, QUARTER and YEAR truncate the local date and take its
+/// start in the zone, like `LocalDate.atStartOfDay`. DataFusion worked in nanoseconds, so it
+/// failed outside 1677 to 2262 (#1087).
+fn truncate_in_zone(
+    timestamps: &ColumnarValue,
+    level: TruncLevel,
+    zone: &Arc<str>,
+) -> Result<ColumnarValue> {
+    let (Some(parsed), Some(session)) = (TimestampZone::parse(zone), SessionZone::parse(zone))
+    else {
         return exec_err!("invalid time zone {zone}");
     };
-    let truncate = |micros: i64| match truncated_to_local_minute(micros, &parsed) {
-        Some(truncated) => Ok(truncated),
-        None => exec_err!("long overflow"),
+    let truncate = |micros: i64| {
+        let truncated = match level {
+            TruncLevel::Microsecond => Some(micros),
+            TruncLevel::Millisecond => Some(micros - micros.rem_euclid(1_000)),
+            TruncLevel::Second => Some(micros - micros.rem_euclid(1_000_000)),
+            TruncLevel::Local(unit) => truncated_to_local_unit(micros, &parsed, unit),
+            TruncLevel::Date(unit) => {
+                let day =
+                    local_micros(micros, &parsed.arrow).div_euclid(i128::from(MICROS_PER_DAY));
+                let day = i32::try_from(day).ok();
+                match day.map(|day| unit.truncate(day)).transpose()? {
+                    Some(first) => {
+                        start_of_day(first, &session).and_then(|s| i64::try_from(s).ok())
+                    }
+                    None => None,
+                }
+            }
+        };
+        match truncated {
+            Some(truncated) => Ok(truncated),
+            None => exec_err!("long overflow"),
+        }
     };
     match timestamps {
         ColumnarValue::Scalar(ScalarValue::TimestampMicrosecond(micros, _)) => {
@@ -122,39 +182,41 @@ fn truncate_to_local_minutes(timestamps: &ColumnarValue, zone: &Arc<str>) -> Res
     }
 }
 
-/// The instant Java's `truncatedTo(MINUTES)` gives for `micros`: the start of its local
-/// minute, keeping the instant's offset when that minute repeats. When an offset change skips
-/// the minute's start, the result moves forward by the skipped interval and can be later than
-/// `micros`. `None` beyond the BIGINT range.
-fn truncated_to_local_minute(micros: i64, zone: &TimestampZone) -> Option<i64> {
+/// The instant Java's `truncatedTo` gives for `micros` with a unit of `unit` microseconds: the
+/// start of its local minute, hour or day, keeping the instant's offset when that start repeats.
+/// When an offset change skips the start, the result moves forward by the skipped interval and
+/// can be later than `micros`. `None` beyond the BIGINT range.
+fn truncated_to_local_unit(micros: i64, zone: &TimestampZone, unit: i128) -> Option<i64> {
     let region = match &zone.kind {
         ZoneKind::Fixed(offset) => {
             let offset = i128::from(offset.local_minus_utc()) * 1_000_000;
             let local = i128::from(micros) + offset;
-            return i64::try_from(local.div_euclid(MICROS_PER_MINUTE) * MICROS_PER_MINUTE - offset)
-                .ok();
+            return i64::try_from(local.div_euclid(unit) * unit - offset).ok();
         }
         ZoneKind::Region(region) => region,
     };
-    match region_minute_start(micros, region) {
+    match region_unit_start(micros, region, unit) {
         Some(truncated) => Some(truncated),
         // Beyond the date library's years, for the instant or its local date-time, the offset
-        // comes from a nearer 400-year cycle and does not change within the minute.
+        // comes from a nearer 400-year cycle and does not change within the unit.
         None => {
             let local = local_micros(micros, &zone.arrow);
             let offset = local - i128::from(micros);
-            i64::try_from(local.div_euclid(MICROS_PER_MINUTE) * MICROS_PER_MINUTE - offset).ok()
+            i64::try_from(local.div_euclid(unit) * unit - offset).ok()
         }
     }
 }
 
-/// [`truncated_to_local_minute`] in a region, or `None` when the date library cannot
-/// represent the instant or its local date-time.
-fn region_minute_start(micros: i64, region: &Tz) -> Option<i64> {
+/// [`truncated_to_local_unit`] in a region, or `None` when the date library cannot represent
+/// the instant or its local date-time.
+fn region_unit_start(micros: i64, region: &Tz, unit: i128) -> Option<i64> {
     let utc = DateTime::from_timestamp_micros(micros)?.naive_utc();
     let offset = region.offset_from_utc_datetime(&utc).fix();
     let local = utc.checked_add_signed(TimeDelta::seconds(i64::from(offset.local_minus_utc())))?;
-    let start = local.with_second(0)?.with_nanosecond(0)?;
+    let local_micros = i128::from(local.and_utc().timestamp_micros());
+    let start =
+        DateTime::from_timestamp_micros(i64::try_from(local_micros.div_euclid(unit) * unit).ok()?)?
+            .naive_utc();
     let truncated = match region.from_local_datetime(&start) {
         LocalResult::Single(start) => start,
         LocalResult::Ambiguous(earlier, later) => {
@@ -178,7 +240,7 @@ mod tests {
     use super::*;
 
     fn truncate(zone: &str, micros: i64) -> Option<i64> {
-        truncated_to_local_minute(micros, &TimestampZone::parse(zone)?)
+        truncated_to_local_unit(micros, &TimestampZone::parse(zone)?, MICROS_PER_MINUTE)
     }
 
     #[test]
