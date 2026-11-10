@@ -58,9 +58,6 @@ enum RetainedDifference {
     /// #1194: an INT, BOOLEAN, untyped NULL with a format or ARRAY argument is cast to DATE or
     /// fails, where Spark converts it to STRING or rejects it during analysis.
     NonStringArgument,
-    /// #1195: with a format outside UTC, a TIMESTAMP_NTZ gives its own DATE, where Spark gives the
-    /// session-zone DATE of the instant whose UTC time reads as that value.
-    FormattedTimestampNtzZone,
 }
 
 /// DAR's parser messages for the strings `s` holds that TO_DATE cannot parse with a format.
@@ -71,18 +68,12 @@ const PARSER_MESSAGES: [&str; 2] = [
 
 fn retained_difference(case: &Value) -> Option<RetainedDifference> {
     let ansi = case["ansi"].as_bool()?;
-    let utc = case["timezone"] == "UTC";
     Some(match case["id"].as_str()? {
         "nullable_to_date_string_format" if ansi => RetainedDifference::ParserMessage,
         "literal_try_to_date_int"
         | "literal_try_to_date_boolean"
         | "literal_try_to_date_null_format"
         | "literal_try_to_date_array" => RetainedDifference::NonStringArgument,
-        "column_try_to_date_timestamp_ntz_format" | "literal_try_to_date_timestamp_ntz_format"
-            if !utc =>
-        {
-            RetainedDifference::FormattedTimestampNtzZone
-        }
         _ => return None,
     })
 }
@@ -119,7 +110,7 @@ fn fail_at(current: &mut Value, phase: &str, message: &str) -> TestResult {
 }
 
 /// The expectation for a record: Spark's, or DAR's current result for a retained record.
-fn expectation(case: &Value, metadata: &Value) -> TestResult<Value> {
+fn expectation(case: &Value) -> TestResult<Value> {
     let Some(difference) = retained_difference(case) else {
         return Ok(case.clone());
     };
@@ -159,32 +150,6 @@ fn expectation(case: &Value, metadata: &Value) -> TestResult<Value> {
             }
             _ => return Err(format!("expected Spark's converted argument: {case}").into()),
         },
-        RetainedDifference::FormattedTimestampNtzZone => {
-            // Each TIMESTAMP_NTZ value's own day: `tn` is column 4 of `inputs`, and the literal
-            // is TIMESTAMP_NTZ '2024-01-03 03:00:00'.
-            let rows = if case["id"] == "literal_try_to_date_timestamp_ntz_format" {
-                json!([["19725"]])
-            } else {
-                let mut rows = metadata["inputs"][0]["rows"]
-                    .as_array()
-                    .ok_or("missing inputs rows")?
-                    .iter()
-                    .map(|row| {
-                        let micros = row[4].as_str().ok_or("missing tn")?.parse::<i64>()?;
-                        Ok(json!([
-                            row[0],
-                            micros.div_euclid(86_400_000_000).to_string()
-                        ]))
-                    })
-                    .collect::<TestResult<Vec<_>>>()?;
-                rows.sort_by_key(Value::to_string);
-                json!(rows)
-            };
-            if !spark_ok || case["expected"]["rows"] == rows {
-                return Err(format!("expected Spark's session-zone dates: {case}").into());
-            }
-            current["expected"] = json!({"status": "ok", "rows": rows});
-        }
     }
     Ok(current)
 }
@@ -516,7 +481,7 @@ async fn encoded_arguments_parse_like_their_spark_types() -> TestResult {
             let session = session_context(batch_size);
             register_encoded_inputs(&session, &records[0], batch_size, encoding)?;
             for case in &cases {
-                let expectation = expectation(case, &records[0])?;
+                let expectation = expectation(case)?;
                 let observation = observe(&session, case).await;
                 let differing = differing_parts(&expectation, &observation)?;
                 if !differing.is_empty() {
@@ -556,7 +521,6 @@ async fn try_to_date_matches_spark() -> TestResult {
         std::collections::BTreeMap::from([
             (RetainedDifference::ParserMessage, 2),
             (RetainedDifference::NonStringArgument, 16),
-            (RetainedDifference::FormattedTimestampNtzZone, 4),
         ])
     );
     let mut differences = Vec::new();
@@ -564,7 +528,7 @@ async fn try_to_date_matches_spark() -> TestResult {
         let session = session_context(batch_size);
         register_inputs(&session, &records[0], batch_size)?;
         for case in &records[1..] {
-            let expectation = expectation(case, &records[0])?;
+            let expectation = expectation(case)?;
             let observation = observe(&session, case).await;
             let differing = differing_parts(&expectation, &observation)?;
             if !differing.is_empty() {

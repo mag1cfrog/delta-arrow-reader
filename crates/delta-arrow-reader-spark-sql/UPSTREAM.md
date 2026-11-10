@@ -977,16 +977,22 @@ differences:
 - DAR's invalid-pattern messages (#1010) and parser messages (#1057);
 - strings beyond the date library's range (#1011);
 - an ignored parsed offset (#1015);
-- arguments of other types cast to DATE or failing, where Spark converts them to STRING (#1194);
-- a TIMESTAMP_NTZ with a format read as its own DATE outside UTC (#1195).
+- arguments of other types cast to DATE or failing, where Spark converts them to STRING (#1194).
 
 With a format over a DATE, TIMESTAMP or TIMESTAMP_NTZ, TO_DATE ignores the format, as Spark's
 does, and declares Spark's nullability at every stage: nullable outside ANSI mode, and in ANSI
 mode for a nullable argument or format, over a column, and over a literal until constant
-folding. Where DataFusion declares the result otherwise, `SparkKnownNullable` or
-`SparkKnownNotNull`, after Spark's `KnownNullable` and `KnownNotNull`, declares it; DataFusion's
-`to_local_time` is nullable even for a NOT NULL TIMESTAMP. It used a `CASE WHEN true`
-declaration, which the optimizer removed over a column (#1196). UNIX_TIMESTAMP and
+folding. Where DataFusion declares the result NOT NULL and Spark nullable, `SparkKnownNullable`,
+after Spark's `KnownNullable`, declares it, and `SparkWithInputs` carries an ignored format's
+inputs while keeping the result's own nullability. It used a
+`CASE WHEN true` declaration, which the optimizer removed over a column (#1196). TO_DATE casts
+the argument to DATE, which keeps its nullability, so a grouping set that makes a NOT NULL key
+NULL in its subtotal rows makes the result nullable, as in Spark; it used DataFusion's
+`to_local_time`, nullable whatever its argument, which `SparkKnownNotNull` declared NOT NULL and
+then failed on those rows (#1222). A TIMESTAMP_NTZ is read as the TIMESTAMP of the same
+microseconds, so its DATE is that instant's date in the session zone, as Spark parses it, where
+DAR gave its wall-clock date (#1195); a session zone Arrow cannot parse, such as `Z` or `PST`,
+keeps the wall-clock date (#1029). UNIX_TIMESTAMP and
 TO_UNIX_TIMESTAMP with a format over these arguments declare their results the same way, and
 give the declaration the ignored format's columns, aggregates and window functions as unused
 inputs. Spark computes those inputs although it does not evaluate the format, so an aggregate in
