@@ -115,6 +115,24 @@ pub(crate) fn cast_local_timestamp_value_to_ltz(
         .cast_to(&timestamp_ltz, None)
 }
 
+/// Whether `data_types` hold a DATE and a TIMESTAMP_NTZ, and otherwise only DATE, TIMESTAMP_NTZ
+/// or NULL types. Spark combines such values as microsecond TIMESTAMP_NTZ values, each DATE at its
+/// midnight, where DataFusion's coercion picks nanoseconds and fails outside 1677 to 2262 (#1191).
+pub(crate) fn only_dates_and_timestamp_ntz(data_types: &[DataType]) -> bool {
+    data_types
+        .iter()
+        .any(|data_type| matches!(data_type, DataType::Date32 | DataType::Date64))
+        && data_types
+            .iter()
+            .any(|data_type| matches!(data_type, DataType::Timestamp(_, None)))
+        && data_types.iter().all(|data_type| {
+            matches!(
+                data_type,
+                DataType::Date32 | DataType::Date64 | DataType::Timestamp(_, None) | DataType::Null
+            )
+        })
+}
+
 pub(crate) fn common_temporal_type(
     data_types: &[DataType],
     session_timezone: &Arc<str>,

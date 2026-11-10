@@ -55,9 +55,6 @@ enum RetainedDifference {
     /// #1190: a constant over an input proven empty keeps its analyzed nullability after
     /// optimization, where Spark folds it first.
     EmptyInputNullability,
-    /// #1191: a DATE in an IN list of TIMESTAMP_NTZ values uses DataFusion's coercion and is NOT
-    /// NULL, where Spark's cast makes it nullable.
-    InListNullability,
     /// #1197: a column compared with a literal through the cast stays nullable after
     /// optimization, where Spark's optimizer rewrites the comparison without the cast.
     ComparisonWithLiteral,
@@ -67,7 +64,6 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
     let id = case["id"].as_str()?;
     Some(match id {
         "literal_cast_to_date_where_false" => RetainedDifference::EmptyInputNullability,
-        "required_date_in_timestamp_ntz" => RetainedDifference::InListNullability,
         "required_date_less_than_timestamp_ntz_literal"
         | "required_cast_to_date_equals_date_literal" => RetainedDifference::ComparisonWithLiteral,
         _ => return None,
@@ -95,12 +91,6 @@ fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResu
                 return Err(format!("expected Spark's folded NOT NULL constant: {case}").into());
             }
             set_nullable(&mut current, &["optimized", "executed"], true)?;
-        }
-        RetainedDifference::InListNullability => {
-            if case["schema_stages"]["analyzed"]["fields"][1]["nullable"] != true {
-                return Err(format!("expected Spark's nullable IN list: {case}").into());
-            }
-            set_nullable(&mut current, &["analyzed", "optimized", "executed"], false)?;
         }
         RetainedDifference::ComparisonWithLiteral => {
             let nullable = |stage: &str| {
@@ -448,7 +438,6 @@ async fn date_ntz_casts_match_spark() -> TestResult {
         retained,
         std::collections::BTreeMap::from([
             (RetainedDifference::EmptyInputNullability, 4),
-            (RetainedDifference::InListNullability, 4),
             (RetainedDifference::ComparisonWithLiteral, 8),
         ])
     );
