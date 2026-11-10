@@ -662,13 +662,27 @@ async fn native_sql_keeps_the_column_zone() -> TestResult {
     Ok(())
 }
 
-/// A table that accepts every filter as inexact, as a pruning Delta scan does.
+/// A table that accepts filters as inexact, as a pruning Delta scan does, and ignores them.
 #[derive(Debug)]
-struct PruningTable(MemTable);
+struct PruningTable {
+    table: MemTable,
+    /// Refuse filters that read a column through a cast, as the Delta provider refuses
+    /// filters it cannot translate; otherwise accept every filter.
+    bare_columns_only: bool,
+}
+
+impl PruningTable {
+    fn new(batch: RecordBatch, bare_columns_only: bool) -> TestResult<Self> {
+        Ok(Self {
+            table: MemTable::try_new(batch.schema(), vec![vec![batch]])?,
+            bare_columns_only,
+        })
+    }
+}
 
 impl TableProvider for PruningTable {
     fn schema(&self) -> SchemaRef {
-        self.0.schema()
+        self.table.schema()
     }
 
     fn table_type(&self) -> TableType {
@@ -679,7 +693,18 @@ impl TableProvider for PruningTable {
         &self,
         filters: &[&Expr],
     ) -> datafusion::error::Result<Vec<TableProviderFilterPushDown>> {
-        Ok(vec![TableProviderFilterPushDown::Inexact; filters.len()])
+        filters
+            .iter()
+            .map(|filter| {
+                Ok(
+                    if self.bare_columns_only && reads_a_relabeled_column(filter)? {
+                        TableProviderFilterPushDown::Unsupported
+                    } else {
+                        TableProviderFilterPushDown::Inexact
+                    },
+                )
+            })
+            .collect()
     }
 
     // The trait's `async_trait` signature, written out because the crate's tests do not
@@ -704,7 +729,7 @@ impl TableProvider for PruningTable {
         'life3: 'async_trait,
         Self: 'async_trait,
     {
-        self.0.scan(state, projection, &[], limit)
+        self.table.scan(state, projection, &[], limit)
     }
 }
 
@@ -721,13 +746,7 @@ async fn session_zone_filters_reach_the_scan_on_the_stored_column() -> TestResul
         .ok_or("missing zone_inputs")?;
     let batch = annotated_input(input, "UTC")?;
     let session = session_context(32);
-    session.register_table(
-        "pruned_inputs",
-        Arc::new(PruningTable(MemTable::try_new(
-            batch.schema(),
-            vec![vec![batch]],
-        )?)),
-    )?;
+    session.register_table("pruned_inputs", Arc::new(PruningTable::new(batch, false)?))?;
     // 2024-01-02 00:00 is 1704153600 seconds after the epoch in UTC and 08:00 UTC in
     // Los Angeles.
     for (timezone, seconds) in [
@@ -759,5 +778,194 @@ async fn session_zone_filters_reach_the_scan_on_the_stored_column() -> TestResul
         };
         assert!(stored_column_filter, "{timezone}: {filters:?}\n{optimized}");
     }
+    Ok(())
+}
+
+/// Whether `expr` reads a column through a cast, such as the session-zone relabel.
+fn reads_a_relabeled_column(expr: &Expr) -> datafusion::error::Result<bool> {
+    expr.exists(|expr| {
+        Ok(matches!(expr, Expr::Cast(cast) if matches!(cast.expr.as_ref(), Expr::Column(_))))
+    })
+}
+
+/// #1096: NULL tests, comparisons, BETWEEN and IN over a TIMESTAMP column relabeled with the
+/// session zone, and their negations, reach the scan once as predicates on the stored column,
+/// so a Delta scan can prune with them, and keep their rows. They do so also when the scan
+/// refuses filters that read a cast, as the Delta provider does. In UTC no relabel is needed.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn relabeled_predicates_reach_the_scan_on_the_stored_column() -> TestResult {
+    let records = session_zone_references()?;
+    let instants = registered_instants(&records[0])?;
+    let input = records[0]["inputs"]
+        .as_array()
+        .ok_or("missing inputs")?
+        .iter()
+        .find(|input| input["name"] == "zone_inputs")
+        .ok_or("missing zone_inputs")?;
+    let batch = annotated_input(input, "UTC")?;
+    let session = session_context(32);
+    session.register_table(
+        "pruned_inputs",
+        Arc::new(PruningTable::new(batch.clone(), false)?),
+    )?;
+    session.register_table(
+        "bare_column_inputs",
+        Arc::new(PruningTable::new(batch, true)?),
+    )?;
+    // Two registered instants, 2024-01-01 07:30 UTC and 2024-03-10 10:00 UTC, the start of
+    // daylight saving time in Los Angeles, written in each session zone.
+    const FIRST: i64 = 1_704_094_200_000_000;
+    const SECOND: i64 = 1_710_064_800_000_000;
+    for (timezone, first, second) in [
+        ("UTC", "2024-01-01 07:30:00", "2024-03-10 10:00:00"),
+        (
+            "America/Los_Angeles",
+            "2023-12-31 23:30:00",
+            "2024-03-10 03:00:00",
+        ),
+    ] {
+        type Keeps = Box<dyn Fn(Option<i64>) -> Option<bool>>;
+        // DataFusion rewrites an IN list of up to three items as equalities; a longer list
+        // stays an IN list.
+        let four = format!(
+            "TIMESTAMP '{first}', TIMESTAMP '{second}', \
+             TIMESTAMP '2000-01-01 00:00:00', TIMESTAMP '2001-01-01 00:00:00'"
+        );
+        let predicates: [(String, Keeps); 14] = [
+            ("ts IS NULL".into(), Box::new(|ts| Some(ts.is_none()))),
+            ("ts IS NOT NULL".into(), Box::new(|ts| Some(ts.is_some()))),
+            ("NOT (ts IS NULL)".into(), Box::new(|ts| Some(ts.is_some()))),
+            (
+                format!("ts = TIMESTAMP '{first}'"),
+                Box::new(|ts| ts.map(|ts| ts == FIRST)),
+            ),
+            (
+                format!("TIMESTAMP '{first}' > ts"),
+                Box::new(|ts| ts.map(|ts| ts < FIRST)),
+            ),
+            (
+                format!("ts BETWEEN TIMESTAMP '{first}' AND TIMESTAMP '{second}'"),
+                Box::new(|ts| ts.map(|ts| (FIRST..=SECOND).contains(&ts))),
+            ),
+            (
+                format!("ts NOT BETWEEN TIMESTAMP '{first}' AND TIMESTAMP '{second}'"),
+                Box::new(|ts| ts.map(|ts| !(FIRST..=SECOND).contains(&ts))),
+            ),
+            (
+                format!("ts IN (TIMESTAMP '{first}', TIMESTAMP '{second}')"),
+                Box::new(|ts| ts.map(|ts| ts == FIRST || ts == SECOND)),
+            ),
+            (
+                format!("ts NOT IN (TIMESTAMP '{first}', TIMESTAMP '{second}')"),
+                Box::new(|ts| ts.map(|ts| ts != FIRST && ts != SECOND)),
+            ),
+            (
+                format!("ts IN ({four})"),
+                Box::new(|ts| ts.map(|ts| ts == FIRST || ts == SECOND)),
+            ),
+            (
+                format!("ts NOT IN ({four})"),
+                Box::new(|ts| ts.map(|ts| ts != FIRST && ts != SECOND)),
+            ),
+            (
+                format!("ts <=> TIMESTAMP '{first}' OR ts <=> TIMESTAMP '{second}'"),
+                Box::new(|ts| Some(ts == Some(FIRST) || ts == Some(SECOND))),
+            ),
+            (
+                format!("ts IN (TIMESTAMP '{first}', NULL)"),
+                Box::new(|ts| ts.and_then(|ts| (ts == FIRST).then_some(true))),
+            ),
+            (
+                format!("ts > TIMESTAMP '{second}' OR ts IS NULL"),
+                Box::new(|ts| Some(ts.is_none_or(|ts| ts > SECOND))),
+            ),
+        ];
+        for ((predicate, keeps), table) in predicates.iter().flat_map(|predicate| {
+            [
+                (predicate, "pruned_inputs"),
+                (predicate, "bare_column_inputs"),
+            ]
+        }) {
+            let case = json!({"ansi": true, "timezone": timezone});
+            let sql = format!("SELECT k FROM {table} WHERE {predicate}");
+            let query = plan_query(&session, &sql, &options(&case)?).await?;
+            let optimized = optimize(&session, &query.logical_plan)?;
+            let mut filters = Vec::new();
+            let mut filter_predicates = Vec::new();
+            let mut relabels = Vec::new();
+            optimized.apply(|node| {
+                match node {
+                    LogicalPlan::TableScan(scan) => filters.extend(scan.filters.iter().cloned()),
+                    LogicalPlan::Filter(filter) => filter_predicates.push(filter.predicate.clone()),
+                    _ => {}
+                }
+                for expr in node.expressions() {
+                    if reads_a_relabeled_column(&expr)? {
+                        relabels.push(expr);
+                    }
+                }
+                Ok(TreeNodeRecursion::Continue)
+            })?;
+            assert!(
+                !filters.is_empty(),
+                "{timezone} {table} {predicate}: no filter reached the scan"
+            );
+            for (position, filter) in filters.iter().enumerate() {
+                assert!(
+                    !reads_a_relabeled_column(filter)?,
+                    "{timezone} {table} {predicate}: {filter} reads the relabel\n{optimized}"
+                );
+                assert!(
+                    !filters[..position].contains(filter),
+                    "{timezone} {table} {predicate}: {filter} is pushed twice\n{optimized}"
+                );
+            }
+            // The filter that keeps the scan's rows reads the stored column too, also through
+            // no projection of the relabel.
+            assert_eq!(
+                filter_predicates.len(),
+                1,
+                "{timezone} {table} {predicate}\n{optimized}"
+            );
+            assert!(
+                relabels.is_empty(),
+                "{timezone} {table} {predicate}: the plan reads the relabel\n{optimized}"
+            );
+            let physical = query.create_physical_plan(&session).await?;
+            let mut rows = Vec::new();
+            for batch in collect(physical, session.task_ctx()).await? {
+                for row in 0..batch.num_rows() {
+                    rows.push(encode_value(batch.column(0).as_ref(), row)?);
+                }
+            }
+            rows.sort_by_key(Value::to_string);
+            let mut expected = instants
+                .iter()
+                .filter(|(_, ts)| keeps(*ts) == Some(true))
+                .map(|(key, _)| key.clone())
+                .collect::<Vec<_>>();
+            expected.sort_by_key(Value::to_string);
+            assert_eq!(rows, expected, "{timezone} {table} {predicate}");
+        }
+    }
+    // Native DataFusion SQL keeps its own cast.
+    let native = session
+        .sql(
+            "SELECT k FROM pruned_inputs WHERE \
+             arrow_cast(ts, 'Timestamp(Microsecond, Some(\"America/Los_Angeles\"))') IS NULL",
+        )
+        .await?
+        .into_optimized_plan()?;
+    let mut filters = Vec::new();
+    native.apply(|node| {
+        if let LogicalPlan::TableScan(scan) = node {
+            filters.extend(scan.filters.iter().cloned());
+        }
+        Ok(TreeNodeRecursion::Continue)
+    })?;
+    assert!(
+        matches!(filters.as_slice(), [filter] if reads_a_relabeled_column(filter)?),
+        "native: {filters:?}\n{native}"
+    );
     Ok(())
 }

@@ -28,6 +28,7 @@ use datafusion::dataframe::DataFrame;
 use datafusion::error::{DataFusionError, Result};
 use datafusion::execution::SessionStateBuilder;
 use datafusion::logical_expr::LogicalPlan;
+use datafusion::optimizer::Optimizer;
 use datafusion::physical_optimizer::aggregate_statistics::PreserveAggregateStatisticsSchema;
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::prelude::SessionContext;
@@ -36,6 +37,7 @@ use sail_plan::expression_errors::{PrepareSparkExpressions, SparkSqlExpressionSe
 use sail_plan::like_errors::{PreserveSparkLikeErrors, set_spark_query_start_time};
 use sail_plan::physical_plan::SparkQueryPlanner;
 use sail_plan::projection_row_errors::CaptureSparkInputSortBoundaries;
+use sail_plan::relabel_pushdown::UnwrapSessionZoneRelabel;
 use sail_plan::resolver::PlanResolver;
 
 /// Interpretation of timestamp types without an explicit timezone qualifier.
@@ -49,8 +51,11 @@ pub use sail_plan::config::PlanConfig as SparkSqlOptions;
 ///
 /// The builder retains the host's configuration, runtime and other rules. This
 /// replaces its query planner with one supporting native DataFusion plans and
-/// the retained Spark nodes. Call once before building the session.
-pub fn configure_spark_sql(builder: SessionStateBuilder) -> SessionStateBuilder {
+/// the retained Spark nodes. It also adds an optimizer rule for Spark queries
+/// after filter pushdown in the host's optimizer, or DataFusion's default one.
+/// Call once before building the session.
+pub fn configure_spark_sql(mut builder: SessionStateBuilder) -> SessionStateBuilder {
+    UnwrapSessionZoneRelabel::install(builder.optimizer().get_or_insert_with(Optimizer::new));
     builder
         .with_query_planner(Arc::new(SparkQueryPlanner))
         .with_analyzer_rule(Arc::new(PrepareSparkExpressions))

@@ -50,10 +50,13 @@ with `Asia/Kathmandu` and with `+05:45`. For each annotation it compares names, 
 families, nullability, metadata and typed rows at batch sizes 1 and 32, in each record's
 session time zone. A TIMESTAMP result must be annotated with the session zone. The 12
 records that read the array also run over large-list and fixed-size-list copies of it;
-Spark has only one array encoding, so the same record applies. Two more tests check that
-native DataFusion SQL keeps the column's annotation, and that a comparison with a
-TIMESTAMP literal reaches a filter-accepting scan as a predicate on the stored column, in
-UTC and Los Angeles sessions.
+Spark has only one array encoding, so the same record applies. Three more tests check that
+native DataFusion SQL keeps the column's annotation, and that predicates reach a
+filter-accepting scan as predicates on the stored column, in UTC and Los Angeles sessions.
+One checks a comparison with a TIMESTAMP literal. The other checks NULL tests, comparisons,
+BETWEEN, IN with and without a NULL item, `<=>`, and their negations, once more with a scan that
+refuses filters reading a cast, as the Delta provider does. Each predicate must reach the
+scan once, without the cast, and keep the rows of the registered instants it selects (#1096).
 
 Existing differences outside the session zone keep their Spark expectation in the
 fixture. The test replaces only the retained part with the current DAR result and checks
