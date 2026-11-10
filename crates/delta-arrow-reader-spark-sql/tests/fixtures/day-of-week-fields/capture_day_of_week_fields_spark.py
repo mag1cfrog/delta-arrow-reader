@@ -5,8 +5,9 @@ stages, with the innermost Java exception of a failure, for the DAYOFWEEK, DOW, 
 DOW_ISO and YEAROFWEEK fields, with DAY, WEEK, DOY, DAYOFWEEK() and WEEKDAY() as controls. The
 sources are nullable DATE, TIMESTAMP, TIMESTAMP_NTZ and STRING columns and literals: Sundays
 and Mondays at ISO year boundaries, a Los Angeles DST change day, years 1 and 9999, the epoch,
-a TIMESTAMP whose local day differs between UTC and Los Angeles, and NULL, and STRING values
-that are not dates. Every query runs in
+a TIMESTAMP whose local day differs between UTC and Los Angeles, and NULL, STRING values that
+are not dates, and HOUR and MINUTE of a STRING and DOW and YEAR of NULL as controls. Every
+query runs in
 both ANSI modes in UTC and America/Los_Angeles. Run from the crate root in the reference
 environment described in README.md; the output path must not exist.
 """
@@ -88,6 +89,13 @@ def definitions():
     yield "literal_dow_invalid_string", "SELECT extract(DOW FROM 'not a date') AS r"
     yield ("extract_dow_invalid_string_column",
            "SELECT k, extract(DOW FROM concat(s, 'x')) AS r FROM inputs")
+    # Time fields of a STRING read it as a TIMESTAMP, not a DATE.
+    for field in ["HOUR", "MINUTE"]:
+        yield (f"literal_{field.lower()}_string",
+               f"SELECT extract({field} FROM '1970-01-01 10:20:00') AS r")
+    # A NULL source of a date field is a NULL INT.
+    for field in ["DOW", "YEAR"]:
+        yield f"literal_{field.lower()}_null", f"SELECT extract({field} FROM NULL) AS r"
     # A padded, mixed-case field name.
     yield "date_part_padded_dow", "SELECT k, date_part(' Dow ', d) AS r FROM inputs"
 

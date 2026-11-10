@@ -40,32 +40,8 @@ fn field_references() -> TestResult<Vec<Value>> {
             |build| build.contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
         )
     );
-    assert_eq!(records.len() - 1, 348);
+    assert_eq!(records.len() - 1, 364);
     Ok(records)
-}
-
-/// #1236: DAR trims a padded field name, so `date_part(' Dow ', d)` gives the DOW field, where
-/// Spark rejects the field with INVALID_EXTRACT_FIELD.
-const PADDED_FIELD_RECORD: &str = "date_part_padded_dow";
-
-/// DAR's current result for the #1236 record: Spark's rows and fields for `date_part('dow', d)`
-/// in the same session zone and mode.
-fn padded_field_expectation(records: &[Value], case: &Value) -> TestResult<Value> {
-    if case["expected"]["condition"] != "INVALID_EXTRACT_FIELD" {
-        return Err(format!("expected Spark's INVALID_EXTRACT_FIELD: {case}").into());
-    }
-    let twin = records[1..]
-        .iter()
-        .find(|twin| {
-            twin["id"] == "date_part_dow_d"
-                && twin["timezone"] == case["timezone"]
-                && twin["ansi"] == case["ansi"]
-        })
-        .ok_or("missing the unpadded record")?;
-    let mut current = case.clone();
-    current["expected"] = twin["expected"].clone();
-    current["schema_stages"] = twin["schema_stages"].clone();
-    Ok(current)
 }
 
 fn spark_family(spark_type: &Value) -> TestResult<Value> {
@@ -330,29 +306,19 @@ fn register_inputs(session: &SessionContext, metadata: &Value, batch_size: usize
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn day_of_week_fields_match_spark() -> TestResult {
     let records = field_references()?;
-    let retained = records[1..]
-        .iter()
-        .filter(|case| case["id"] == PADDED_FIELD_RECORD)
-        .count();
-    assert_eq!(retained, 4);
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
         let session = session_context(batch_size);
         register_inputs(&session, &records[0], batch_size)?;
         for case in &records[1..] {
-            let expectation = if case["id"] == PADDED_FIELD_RECORD {
-                padded_field_expectation(&records, case)?
-            } else {
-                case.clone()
-            };
             let observation = observe(&session, case).await;
-            let differing = differing_parts(&expectation, &observation)?;
+            let differing = differing_parts(case, &observation)?;
             if !differing.is_empty() {
                 differences.push(json!({
                     "id": case["id"], "timezone": case["timezone"], "ansi": case["ansi"],
                     "batch": batch_size, "differing": differing,
-                    "expected": expectation["expected"],
-                    "schema_stages": expectation["schema_stages"],
+                    "expected": case["expected"],
+                    "schema_stages": case["schema_stages"],
                     "observed": observation,
                 }));
             }
