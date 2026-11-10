@@ -85,6 +85,33 @@ const AGGREGATES: [&str; 22] = [
     "count_min_sketch(s, 0.1D, 0.9D, 1)",
 ];
 
+/// Conversions written as expressions rather than function calls, and window functions.
+const EXPRESSIONS: [&str; 23] = [
+    "CAST(s AS INT)",
+    "CAST(s AS BIGINT)",
+    "CAST(s AS DOUBLE)",
+    "CAST(s AS DECIMAL(10, 2))",
+    "CAST(t AS BOOLEAN)",
+    "CAST(s AS DATE)",
+    "CAST(s AS TIMESTAMP)",
+    "CAST(s AS BINARY)",
+    "CAST(s AS STRING)",
+    "TRY_CAST(s AS INT)",
+    "s::int",
+    "s BETWEEN 1 AND 20",
+    "s IS DISTINCT FROM 12",
+    "s IS NOT DISTINCT FROM 'a,b,c'",
+    "collect_list(s) OVER (ORDER BY n)",
+    "max(s) OVER (ORDER BY n)",
+    "lag(s) OVER (ORDER BY n)",
+    "lead(s, 1, 'x') OVER (ORDER BY n)",
+    "first_value(s) OVER (ORDER BY n)",
+    "nth_value(s, 2) OVER (ORDER BY n)",
+    "count(s) OVER (PARTITION BY s ORDER BY n)",
+    "CASE s WHEN 'a,b,c' THEN 1 ELSE 0 END",
+    "CASE WHEN n > 4 THEN s ELSE t END",
+];
+
 /// Comparisons and predicates over the bare column, which must keep it bare for pruning.
 const PREDICATES: [&str; 10] = [
     "s = 'a,b,c'",
@@ -199,7 +226,7 @@ async fn execute(
 }
 
 /// The calls the sweep makes: each identifier-named built-in scalar and generator function with
-/// each argument shape, each predicate and each aggregate.
+/// each argument shape, each predicate, each aggregate and each other expression.
 fn calls() -> Vec<String> {
     let names = BUILT_IN_SCALAR_FUNCTIONS
         .keys()
@@ -212,6 +239,7 @@ fn calls() -> Vec<String> {
         .collect::<Vec<_>>();
     calls.extend(PREDICATES.iter().map(|predicate| predicate.to_string()));
     calls.extend(AGGREGATES.iter().map(|aggregate| aggregate.to_string()));
+    calls.extend(EXPRESSIONS.iter().map(|expression| expression.to_string()));
     calls
 }
 
