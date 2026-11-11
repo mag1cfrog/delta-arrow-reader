@@ -56,9 +56,9 @@ times for the first complete query after table initialization, excluding startup
 - **Self-describing.** `dar capabilities` explains commands, options, and schemas
   without reading a table.
 
-The same properties make DAR easy to hand to a coding agent. See
-[automation](https://mag1cfrog.github.io/delta-arrow-reader/cli-automation/) and
-[fixing a failed command](https://mag1cfrog.github.io/delta-arrow-reader/cli-recovery/).
+See [automation](https://mag1cfrog.github.io/delta-arrow-reader/cli-automation/)
+and [fixing a failed command](https://mag1cfrog.github.io/delta-arrow-reader/cli-recovery/)
+for details.
 
 ## Get started
 
