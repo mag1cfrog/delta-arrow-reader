@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## [0.9.3](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.9.2...v0.9.3) - 2026-11-11
+
+### Documentation
+
+- lead the README with the Databricks login and scripting story ([#1260](https://github.com/mag1cfrog/delta-arrow-reader/pull/1260))
+
+### Fixed
+
+- retain actionable SQL planning diagnostics ([#597](https://github.com/mag1cfrog/delta-arrow-reader/pull/597))
+
 ## [0.9.2](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.9.1...v0.9.2) - 2026-10-30
 
 ### Added
