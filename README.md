@@ -17,17 +17,22 @@
   <a href="https://github.com/mag1cfrog/delta-arrow-reader/actions/workflows/docs.yml?query=branch%3Amain%20event%3Apush"><img alt="Documentation build and deployment" src="https://img.shields.io/github/actions/workflow/status/mag1cfrog/delta-arrow-reader/docs.yml?branch=main&amp;event=push&amp;style=flat-square&amp;label=docs"></a>
 </p>
 
-Delta Arrow Reader reads Delta Lake tables from your terminal, Python, or Rust.
+> **No warehouse. No storage keys. Just your Databricks login.**
 
-> **Bring your Databricks login.**
->
-> DAR uses your own Databricks CLI login to read tables and run SQL locally.
-> No separate credentials to configure. No warehouse, no Spark.
+```bash
+dar preview uc://main.sales.orders --databricks-profile work --limit 3
+```
+
+Delta Arrow Reader reads Delta Lake tables from your terminal, Python, or Rust.
+With a Databricks CLI login, it reads Unity Catalog tables and runs SQL on your
+own machine.
 
 - **Get results faster.** Spend less time downloading and processing data your
   query doesn't need.
 - **Use less memory.** Process results as they arrive, without keeping the whole
   result in RAM.
+- **Script it with confidence.** Typed JSON out, bounded output, and errors that
+  say what to fix.
 
 **Faster than delta-rs, DuckDB, Polars, and single-machine Spark** in all eight
 of our [filtered-read benchmarks](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/selective-read-results/),
@@ -41,6 +46,19 @@ times for the first complete query after table initialization, excluding startup
 </picture>
 
 <sub>Showing four cases using deletion vectors to mark deleted rows. <a href="https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/selective-read-results/">Full results</a> include all eight cases, with and without deletion vectors.</sub>
+
+## Predictable from scripts
+
+- **Typed, bounded output.** `preview` and `query` print typed JSON, capped at
+  8 KiB and stopped at a deadline unless you raise the limits.
+- **Errors that say what to fix.** `--diagnostics=json` returns one record with
+  a `code`, a `recovery` hint, and the failing argument or field.
+- **Self-describing.** `dar capabilities` explains commands, options, and schemas
+  without reading a table.
+
+The same properties make DAR easy to hand to a coding agent. See
+[automation](https://mag1cfrog.github.io/delta-arrow-reader/cli-automation/) and
+[fixing a failed command](https://mag1cfrog.github.io/delta-arrow-reader/cli-recovery/).
 
 ## Get started
 
