@@ -17,9 +17,11 @@ use datafusion_expr::{
 use crate::function::common::{
     SparkComparisonFloat, literal_value_without_evaluation, without_metadata_annotations,
 };
+use crate::function::result_coercion::is_constructor_declaration_cast;
 
-// Spark NormalizeFloatingNumbers distributes through constructors and conditionals;
-// other ARRAY values require a nonfoldable ArrayTransform before comparison.
+// Spark NormalizeFloatingNumbers distributes through constructors and conditionals.
+// Constructor casts that only align declarations keep that behavior. Other ARRAY
+// values require a nonfoldable ArrayTransform before comparison.
 pub(crate) fn normalize_spark_float_array_comparison(
     expression: Expr,
     schema: &DFSchema,
@@ -53,7 +55,8 @@ pub(crate) fn normalize_spark_float_array_comparison(
                 || function
                     .func
                     .inner()
-                    .is::<datafusion::functions::core::coalesce::CoalesceFunc>() =>
+                    .is::<datafusion::functions::core::coalesce::CoalesceFunc>()
+                || is_constructor_declaration_cast(&function) =>
         {
             function.args = function
                 .args
