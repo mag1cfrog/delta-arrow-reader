@@ -328,6 +328,24 @@
       "ansi_modes": [
         false
       ]
+    },
+    {
+      "id": "array_float_cast_to_tinyint_valid",
+      "sql": "SELECT id,LAG(ARRAY(CAST(v AS TINYINT)),1,ARRAY(CAST(d + 100 AS DOUBLE))) OVER (ORDER BY id) AS x FROM offset_scalar ORDER BY id"
+    },
+    {
+      "id": "array_float_cast_to_tinyint_legacy_wrap",
+      "sql": "SELECT id,LAG(ARRAY(CAST(v AS TINYINT)),1,ARRAY(CAST(d - 1000 AS DOUBLE))) OVER (ORDER BY id) AS x FROM offset_scalar ORDER BY id",
+      "ansi_modes": [
+        false
+      ]
+    },
+    {
+      "id": "struct_default_uses_argument_positions",
+      "sql": "SELECT id,LAG(NAMED_STRUCT('a',r,'b',d),1,NAMED_STRUCT('b',r,'a',d)) OVER (ORDER BY id) AS x FROM offset_scalar ORDER BY id",
+      "ansi_modes": [
+        true
+      ]
     }
   ]
 }
