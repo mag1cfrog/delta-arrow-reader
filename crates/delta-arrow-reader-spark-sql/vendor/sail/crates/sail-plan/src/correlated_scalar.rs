@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use datafusion::arrow::datatypes::DataType;
@@ -103,18 +104,42 @@ fn lower_expression(
 }
 
 fn scalar_value_input(mut value: Expr, mut input: &LogicalPlan) -> Result<(Expr, &LogicalPlan)> {
-    // Follow one selected column through leading projections and aliases.
-    // The first computed expression still runs exactly once for a scalar row.
-    while let Expr::Column(column) = &value {
+    // Rebuild the selected expression through leading projections and aliases.
+    // Leave a shared volatile output in its projection so it still runs once.
+    loop {
         match input {
             LogicalPlan::Projection(project) => {
-                let index = project.schema.index_of_column(column)?;
-                value = project.expr[index].clone().unalias();
+                let mut volatile = BTreeSet::new();
+                let mut shared_volatile = false;
+                let rewritten = value
+                    .clone()
+                    .transform_up(|expr| {
+                        let Expr::Column(column) = &expr else {
+                            return Ok(Transformed::no(expr));
+                        };
+                        let index = project.schema.index_of_column(column)?;
+                        let source = &project.expr[index];
+                        shared_volatile |= source.is_volatile() && !volatile.insert(index);
+                        Ok(Transformed::yes(source.clone().unalias()))
+                    })?
+                    .data;
+                if shared_volatile {
+                    break;
+                }
+                value = rewritten;
                 input = &project.input;
             }
             LogicalPlan::SubqueryAlias(alias) => {
-                let index = alias.schema.index_of_column(column)?;
-                value = Expr::Column(alias.input.schema().qualified_field(index).into());
+                value = value
+                    .transform_up(|expr| {
+                        let Expr::Column(column) = &expr else {
+                            return Ok(Transformed::no(expr));
+                        };
+                        let index = alias.schema.index_of_column(column)?;
+                        let column = alias.input.schema().qualified_field(index).into();
+                        Ok(Transformed::yes(Expr::Column(column)))
+                    })?
+                    .data;
                 input = &alias.input;
             }
             _ => break,
@@ -125,23 +150,54 @@ fn scalar_value_input(mut value: Expr, mut input: &LogicalPlan) -> Result<(Expr,
 
 enum InnerRows<'a> {
     Plain,
-    Aggregate(&'a Aggregate),
+    Aggregate(&'a Aggregate, Option<&'a Expr>),
     Limit(&'a Limit, Option<&'a Sort>),
 }
 
-fn split_inner_rows(input: &LogicalPlan) -> Result<(InnerRows<'_>, &LogicalPlan)> {
+fn split_inner_rows(value: Expr, input: &LogicalPlan) -> Result<(Expr, InnerRows<'_>, &LogicalPlan)> {
     Ok(match input {
         LogicalPlan::Aggregate(aggregate) if can_lower_aggregate(aggregate) => {
-            (InnerRows::Aggregate(aggregate), &aggregate.input)
+            (value, InnerRows::Aggregate(aggregate, None), &aggregate.input)
         }
-        LogicalPlan::Limit(limit) if can_lower_limit(limit)? => match limit.input.as_ref() {
-            LogicalPlan::Sort(sort) => {
-                (InnerRows::Limit(limit, Some(sort)), &sort.input)
+        LogicalPlan::Filter(filter)
+            if let LogicalPlan::Aggregate(aggregate) = filter.input.as_ref()
+                && can_lower_aggregate(aggregate) =>
+        {
+            (
+                value,
+                InnerRows::Aggregate(aggregate, Some(&filter.predicate)),
+                &aggregate.input,
+            )
+        }
+        LogicalPlan::Limit(limit) if can_lower_limit(limit) => {
+            // ORDER BY can have a projection that hides its sort keys.
+            let (selected, input) = scalar_value_input(value.clone(), &limit.input)?;
+            match input {
+                LogicalPlan::Sort(sort) if !selected.is_volatile() => {
+                    (selected, InnerRows::Limit(limit, Some(sort)), &sort.input)
+                }
+                _ => (value, InnerRows::Limit(limit, None), &limit.input),
             }
-            input => (InnerRows::Limit(limit, None), input),
-        },
-        _ => (InnerRows::Plain, input),
+        }
+        _ => (value, InnerRows::Plain, input),
     })
+}
+
+fn filter_match_marker(plan: LogicalPlan, marker: &Column, predicate: Expr) -> Result<LogicalPlan> {
+    let null = lit(ScalarValue::Boolean(None));
+    let retained = when(Expr::Column(marker.clone()).is_null(), null.clone())
+        .when(predicate, lit(true))
+        .otherwise(null)?
+        .alias_qualified(marker.relation.clone(), &marker.name);
+    let columns = plan.schema().columns().into_iter().map(|column| {
+        if &column == marker {
+            retained.clone()
+        } else {
+            Expr::Column(column)
+        }
+    });
+    let columns = columns.collect::<Vec<_>>();
+    LogicalPlanBuilder::from(plan).project(columns)?.build()
 }
 
 fn lower_scalar(
@@ -166,9 +222,22 @@ fn lower_scalar(
     }
     let output = Expr::Column(schema.qualified_field(0).into());
     let (value, input) = scalar_value_input(output, &subquery.subquery)?;
-    let (rows, input) = split_inner_rows(input)?;
+    let (value, rows, input) = split_inner_rows(value, input)?;
+    if let InnerRows::Aggregate(aggregate, None) = rows
+        && aggregate.group_expr.is_empty()
+    {
+        // Keep DataFusion's existing global aggregate decorrelation when it can
+        // group on the extracted join keys before joining to the outer rows.
+        let mut native = PullUpCorrelatedExpr::new();
+        if subquery.subquery.as_ref().clone().rewrite(&mut native).is_ok()
+            && native.can_pull_up
+            && native.pulled_up_scalar_agg
+        {
+            return Ok(None);
+        }
+    }
     let scalar_input = match rows {
-        InnerRows::Aggregate(aggregate) => Arc::clone(&aggregate.schema),
+        InnerRows::Aggregate(aggregate, _) => Arc::clone(&aggregate.schema),
         _ => Arc::clone(input.schema()),
     };
     if input.exists(|node| {
@@ -233,8 +302,8 @@ fn lower_scalar(
         .build()?;
     let rows = match rows {
         InnerRows::Plain => joined,
-        InnerRows::Aggregate(aggregate) => {
-            aggregate_inner_rows(joined, aggregate, &row_id, &match_marker, &outer_columns)?
+        InnerRows::Aggregate(aggregate, having) => {
+            aggregate_inner_rows(joined, aggregate, having, &row_id, &match_marker, &outer_columns)?
         }
         InnerRows::Limit(limit, sort) => limit_inner_rows(joined, limit, sort, &row_id, &match_marker)?,
     };

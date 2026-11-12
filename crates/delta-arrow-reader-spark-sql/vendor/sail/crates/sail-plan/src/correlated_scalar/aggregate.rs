@@ -18,6 +18,7 @@ pub(super) fn can_lower_aggregate(aggregate: &Aggregate) -> bool {
 pub(super) fn aggregate_inner_rows(
     joined: LogicalPlan,
     aggregate: &Aggregate,
+    having: Option<&Expr>,
     row_id: &Column,
     matched: &Column,
     outer_columns: &[Column],
@@ -90,10 +91,17 @@ pub(super) fn aggregate_inner_rows(
         .map(Expr::Column)
         .chain([marker])
         .collect();
-    Ok(LogicalPlan::Projection(Projection::try_new(
+    let rows = LogicalPlan::Projection(Projection::try_new(
         projection,
         Arc::new(LogicalPlan::Aggregate(grouped)),
-    )?))
+    )?);
+    if let Some(having) = having {
+        // HAVING can reject the aggregate row. Retain it with a NULL marker
+        // so the scalar still has an outer row to return NULL for.
+        super::filter_match_marker(rows, matched, strip_outer_reference(having.clone()))
+    } else {
+        Ok(rows)
+    }
 }
 
 // DataFusion evaluates aggregate arguments and keys before applying FILTER.
