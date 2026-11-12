@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use datafusion::arrow::datatypes::DataType;
 use datafusion::common::tree_node::{Transformed, TreeNodeRewriter};
-use datafusion::common::{Column, Result, UnnestOptions};
+use datafusion::common::{Column, RecursionUnnestOption, Result, UnnestOptions};
 use datafusion::functions::core::expr_ext::FieldAccessor;
 use datafusion::logical_expr::builder::unnest_with_options;
 use datafusion::logical_expr::{Expr, ExprSchemable, LogicalPlan, Projection, ScalarUDF};
@@ -12,11 +12,11 @@ use datafusion_expr::expr::ScalarFunction;
 use datafusion_expr::{ident, lit, when};
 use datafusion_functions_nested::expr_fn as nested_fn;
 use either::Either;
-use sail_common::spec::{SAIL_MAP_KEY_FIELD_NAME, SAIL_MAP_VALUE_FIELD_NAME};
 use sail_common_datafusion::utils::items::ItemTaker;
 use sail_function::scalar::array::spark_array_item_with_position::ArrayItemWithPosition;
 use sail_function::scalar::array_struct_field::ArrayStructField;
 use sail_function::scalar::explode::{Explode, ExplodeKind};
+use sail_function::scalar::map::map_entries::SparkMapEntries;
 use sail_function::scalar::multi_expr::MultiExpr;
 
 use crate::resolver::state::PlanResolverState;
@@ -89,7 +89,25 @@ impl TreeNodeRewriter for ExplodeRewriter<'_> {
         let data_type = ExplodeDataType::try_from_expr(&arg, self.plan.schema())?;
         let arg = match data_type {
             ExplodeDataType::List => arg,
-            ExplodeDataType::Map => nested_fn::map_entries(arg),
+            ExplodeDataType::Map => ScalarUDF::from(SparkMapEntries::new()).call(vec![arg]),
+        };
+        let mut projections = self
+            .plan
+            .schema()
+            .columns()
+            .into_iter()
+            .map(Expr::Column)
+            .collect::<Vec<_>>();
+        let mut plan = mem::replace(&mut self.plan, empty_logical_plan());
+        let arg = if preserve_nulls && !is_inline && arg.is_volatile() {
+            // The outer CASE must check and return the same collection value.
+            let field = self.state.register_hidden_field_name("");
+            let mut materialized = projections.clone();
+            materialized.push(arg.alias(&field));
+            plan = LogicalPlan::Projection(Projection::try_new(materialized, Arc::new(plan))?);
+            ident(field)
+        } else {
+            arg
         };
         let arg = match preserve_nulls {
             true => when(nested_fn::array_empty(arg.clone()).is_false(), arg).end()?,
@@ -100,14 +118,14 @@ impl TreeNodeRewriter for ExplodeRewriter<'_> {
             false => arg,
         };
 
-        let name = self.state.register_field_name("");
+        let output_name = self.state.register_field_name("");
         let mut inline_projections = vec![];
         let out = match (data_type, with_position, is_inline) {
-            (ExplodeDataType::List, false, false) => vec![ident(&name).alias("col")],
+            (ExplodeDataType::List, false, false) => vec![ident(&output_name).alias("col")],
             (ExplodeDataType::List, true, false) => {
                 vec![
-                    ident(&name).field("pos").alias("pos"),
-                    ident(&name).field("col").alias("col"),
+                    ident(&output_name).field("pos").alias("pos"),
+                    ident(&output_name).field("col").alias("col"),
                 ]
             }
             (ExplodeDataType::List, _, true) => match return_type {
@@ -129,48 +147,46 @@ impl TreeNodeRewriter for ExplodeRewriter<'_> {
                     "inline/inline_outer expects List<Struct> as argument, got {wrong_type:?}"
                 ),
             }?,
-            (ExplodeDataType::Map, false, _) => {
-                vec![
-                    ident(&name).field(SAIL_MAP_KEY_FIELD_NAME).alias("key"),
-                    ident(&name).field(SAIL_MAP_VALUE_FIELD_NAME).alias("value"),
-                ]
+            (ExplodeDataType::Map, with_position, _) => {
+                let DataType::Struct(fields) = return_type else {
+                    return plan_err!("map entries must be structs");
+                };
+                let [key, value] = fields.as_ref() else {
+                    return plan_err!("map entries must have key and value fields");
+                };
+                let mut entry = ident(&output_name);
+                let mut out = vec![];
+                if with_position {
+                    out.push(entry.clone().field("pos").alias("pos"));
+                    entry = entry.field("col");
+                }
+                out.push(entry.clone().field(key.name().as_str()).alias("key"));
+                out.push(entry.field(value.name().as_str()).alias("value"));
+                out
             }
-            (ExplodeDataType::Map, true, _) => vec![
-                ident(&name).field("pos").alias("pos"),
-                ident(&name)
-                    .field("col")
-                    .field(SAIL_MAP_KEY_FIELD_NAME)
-                    .alias("key"),
-                ident(&name)
-                    .field("col")
-                    .field(SAIL_MAP_VALUE_FIELD_NAME)
-                    .alias("value"),
-            ],
         };
 
-        let mut projections = self
-            .plan
-            .schema()
-            .columns()
-            .into_iter()
-            .map(Expr::Column)
-            .collect::<Vec<_>>();
-        let columns_to_unnest = if inline_projections.is_empty() {
-            projections.push(arg.alias(&name));
-            vec![Column::from_name(&name)]
+        let (columns_to_unnest, recursions) = if inline_projections.is_empty() {
+            let input_name = self.state.register_field_name("");
+            projections.push(arg.alias(&input_name));
+            let input_column = Column::from_name(&input_name);
+            // A distinct output name keeps field access on the unnested value
+            // from being pushed below UNNEST, where the column is still a list.
+            let recursion = RecursionUnnestOption {
+                input_column: input_column.clone(),
+                output_column: Column::from_name(&output_name),
+                depth: 1,
+            };
+            (vec![input_column], vec![recursion])
         } else {
             let columns = inline_projections
                 .iter()
                 .map(|(_, column)| column.clone())
                 .collect::<Vec<_>>();
             projections.extend(inline_projections.into_iter().map(|(expr, _)| expr));
-            columns
+            (columns, vec![])
         };
 
-        let plan = mem::replace(&mut self.plan, empty_logical_plan());
-        // TODO: If specific columns need to be unnested multiple times (e. g at different depth), declare them here.
-        //  Any unnested columns not being mentioned inside this option will be unnested with depth = 1.
-        let recursions = vec![];
         self.plan = unnest_with_options(
             LogicalPlan::Projection(Projection::try_new(projections, Arc::new(plan))?),
             columns_to_unnest,
