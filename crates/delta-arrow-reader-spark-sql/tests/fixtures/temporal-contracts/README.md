@@ -33,8 +33,8 @@ session zones:
   `hour` and `unix_micros` over the registered columns and over literals at the
   same boundaries.
 
-STRING literals quote with backslash escapes. Doubled quotes are read differently
-by the staged frontend (#1009) and are outside these references.
+The queries in this fixture use backslash escapes for quotes inside SQL string
+literals.
 
 The capture excludes `ConvertToLocalRelation`, so column expressions run during
 execution rather than optimization. Rows come from Spark's internal rows: DATE

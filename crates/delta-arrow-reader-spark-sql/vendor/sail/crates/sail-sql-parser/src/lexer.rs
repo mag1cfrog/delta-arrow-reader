@@ -130,25 +130,25 @@ where
         })
 }
 
-fn escape_string<'a, I, E, P, S>(text: P, style: S) -> impl Parser<'a, I, (Token<'a>, I::Span), E>
+fn escaped_string_token<'a, I, E, P, S>(
+    text_with_prefix: P,
+    style: S,
+) -> impl Parser<'a, I, (Token<'a>, I::Span), E>
 where
     I: Input<'a, Token = char> + ValueInput<'a> + SliceInput<'a, Slice = &'a str>,
     E: ParserExtra<'a, I> + 'a,
-    P: Parser<'a, I, (), E>,
+    P: Parser<'a, I, Option<char>, E>,
     S: Fn(Option<char>) -> StringStyle + 'static,
 {
-    string_prefix(|c| c.is_ascii_alphabetic())
-        .or_not()
-        .then_ignore(text)
-        .map_with(move |prefix, e| {
-            (
-                Token::String {
-                    raw: e.slice(),
-                    style: style(prefix),
-                },
-                e.span(),
-            )
-        })
+    text_with_prefix.map_with(move |prefix, e| {
+        (
+            Token::String {
+                raw: e.slice(),
+                style: style(prefix),
+            },
+            e.span(),
+        )
+    })
 }
 
 fn backtick_quoted_string<'a, I, E>() -> impl Parser<'a, I, (Token<'a>, I::Span), E>
@@ -260,12 +260,19 @@ where
     } else {
         |d: char| backslash_escape_text(d).boxed()
     };
+    let prefix = || string_prefix(|c| c.is_ascii_alphabetic());
+    // Requiring a prefix on the second branch prevents rescanning an unterminated quote run.
+    let single_quoted = dual_quote_escape_text('\'')
+        .to(None)
+        .or(prefix().then_ignore(text('\'')).map(Some));
 
     let string = choice((
         raw_string('\'', |prefix| StringStyle::SingleQuoted { prefix }),
         raw_string('"', |prefix| StringStyle::DoubleQuoted { prefix }),
-        escape_string(text('\''), |prefix| StringStyle::SingleQuoted { prefix }),
-        escape_string(text('"'), |prefix| StringStyle::DoubleQuoted { prefix }),
+        escaped_string_token(single_quoted, |prefix| StringStyle::SingleQuoted { prefix }),
+        escaped_string_token(prefix().or_not().then_ignore(text('"')), |prefix| {
+            StringStyle::DoubleQuoted { prefix }
+        }),
         unicode_escape_string('\'', StringStyle::UnicodeSingleQuoted { escape: None }),
         unicode_escape_string('"', StringStyle::UnicodeDoubleQuoted { escape: None }),
         backtick_quoted_string(),
@@ -279,12 +286,16 @@ where
             raw_string("\"\"\"", |prefix| StringStyle::TripleDoubleQuoted {
                 prefix,
             }),
-            escape_string(backslash_escape_text("'''"), |prefix| {
-                StringStyle::TripleSingleQuoted { prefix }
-            }),
-            escape_string(backslash_escape_text("\"\"\""), |prefix| {
-                StringStyle::TripleDoubleQuoted { prefix }
-            }),
+            escaped_string_token(
+                prefix().or_not().then_ignore(backslash_escape_text("'''")),
+                |prefix| StringStyle::TripleSingleQuoted { prefix },
+            ),
+            escaped_string_token(
+                prefix()
+                    .or_not()
+                    .then_ignore(backslash_escape_text("\"\"\"")),
+                |prefix| StringStyle::TripleDoubleQuoted { prefix },
+            ),
             string,
         ))
         .boxed()
