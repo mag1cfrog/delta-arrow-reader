@@ -306,6 +306,17 @@
     {
       "id": "mixed_dynamic_literal_siblings",
       "sql": "SELECT id, LAG(r,1,d) OVER w AS dynamic_lag, LEAD(r,1,-1) IGNORE NULLS OVER w AS literal_lead FROM offset_scalar WINDOW w AS (ORDER BY id) ORDER BY id"
+    },
+    {
+      "id": "array_cast_to_tinyint_valid",
+      "sql": "SELECT id, LAG(ARRAY(CAST(r AS TINYINT)),1,ARRAY(d + 100)) OVER (ORDER BY id) AS x FROM offset_scalar ORDER BY id"
+    },
+    {
+      "id": "array_cast_to_tinyint_legacy_wrap",
+      "sql": "SELECT id, LAG(ARRAY(CAST(r AS TINYINT)),1,ARRAY(d - 1000)) OVER (ORDER BY id) AS x FROM offset_scalar ORDER BY id",
+      "ansi_modes": [
+        false
+      ]
     }
   ]
 }

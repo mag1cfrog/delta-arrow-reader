@@ -224,6 +224,8 @@ fn executed_data_type(data_type: &Value) -> Option<Value> {
         Some("struct") => {
             Some(json!({"type":"struct","fields":executed_field_names_and_types(data_type)?}))
         }
+        Some("array") => Some(json!({"type":"array",
+            "elementType":executed_data_type(&data_type["elementType"])?})),
         Some("map") => Some(json!({"type":"map",
             "keyType":executed_data_type(&data_type["keyType"])?,
             "valueType":executed_data_type(&data_type["valueType"])?})),
@@ -245,12 +247,19 @@ async fn row_dependent_offset_defaults_match_spark() -> TestResult {
     assert_eq!(manifest["timezone"], "UTC");
     assert_eq!(manifest["ansi_modes"], json!([false, true]));
     let cases = manifest["cases"].as_array().ok_or("missing cases")?;
-    assert_eq!(cases.len(), 12);
+    assert_eq!(cases.len(), 14);
     let mut planned = BTreeMap::new();
     for case in cases {
         let id = case["id"].as_str().ok_or("missing case ID")?;
         let sql = case["sql"].as_str().ok_or("missing SQL")?;
-        for ansi in [false, true] {
+        let modes = case
+            .get("ansi_modes")
+            .unwrap_or(&manifest["ansi_modes"])
+            .as_array()
+            .ok_or("missing ANSI modes")?;
+        assert!(!modes.is_empty(), "missing ANSI modes for {id}");
+        for mode in modes {
+            let ansi = mode.as_bool().ok_or("expected an ANSI boolean")?;
             assert!(planned.insert((id, ansi), sql).is_none(), "duplicate {id}");
         }
     }
@@ -273,7 +282,7 @@ async fn row_dependent_offset_defaults_match_spark() -> TestResult {
                 .ok_or("missing Spark executed fields")?,
         );
     }
-    assert_eq!(references.len(), 24);
+    assert_eq!(references.len(), 27);
     assert!(planned.is_empty(), "missing Spark references: {planned:?}");
 
     let mut differences = Vec::new();
