@@ -16,24 +16,24 @@ use datafusion_expr::{
 };
 
 pub(super) fn spark_lag_udwf() -> Arc<WindowUDF> {
-    with_spark_offset_fields(lag_udwf())
+    spark_offset_window(lag_udwf())
 }
 
 pub(super) fn spark_lead_udwf() -> Arc<WindowUDF> {
-    with_spark_offset_fields(lead_udwf())
+    spark_offset_window(lead_udwf())
 }
 
-fn with_spark_offset_fields(native: Arc<WindowUDF>) -> Arc<WindowUDF> {
-    Arc::new(WindowUDF::from(SparkOffsetWindowFieldAdapter { native }))
+fn spark_offset_window(native: Arc<WindowUDF>) -> Arc<WindowUDF> {
+    Arc::new(WindowUDF::from(SparkOffsetWindow { native }))
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-struct SparkOffsetWindowFieldAdapter {
+struct SparkOffsetWindow {
     native: Arc<WindowUDF>,
 }
 
 #[warn(clippy::missing_trait_methods)]
-impl WindowUDFImpl for SparkOffsetWindowFieldAdapter {
+impl WindowUDFImpl for SparkOffsetWindow {
     fn name(&self) -> &str {
         self.native.name()
     }
@@ -132,9 +132,7 @@ impl WindowUDFImpl for SparkOffsetWindowFieldAdapter {
 
     fn reverse_expr(&self) -> ReversedUDWF {
         match self.native.reverse_expr() {
-            ReversedUDWF::Reversed(native) => {
-                ReversedUDWF::Reversed(with_spark_offset_fields(native))
-            }
+            ReversedUDWF::Reversed(native) => ReversedUDWF::Reversed(spark_offset_window(native)),
             other => other,
         }
     }
@@ -188,7 +186,8 @@ impl PartitionEvaluator for RowDefaultEvaluator {
             return Ok(default);
         }
 
-        // ponytail: index one full window partition. Add streaming lookahead if large windows need it.
+        // ponytail: DataFusion buffers a physical partition, then we index each window group.
+        // Use bounded lookahead if dynamic defaults need streaming execution.
         let eligible = if self.ignore_nulls {
             payload
                 .logical_nulls()
