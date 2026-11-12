@@ -11,6 +11,7 @@ use datafusion_functions_nested::expr_fn::{array_element, array_length, map_extr
 use sail_common::spec::{self, DEFAULT_COLUMN_VALUE_PLACEHOLDER_ID};
 use sail_common_datafusion::literal::LiteralEvaluator;
 use sail_common_datafusion::utils::items::ItemTaker;
+use sail_function::scalar::array::spark_array_subscript::SparkArraySubscript;
 use sail_function::scalar::misc::raise_error::RaiseError;
 use sail_function::scalar::table_input::TableInput;
 
@@ -224,7 +225,23 @@ impl PlanResolver<'_> {
             return Ok(NamedExpr::new(vec![result_name], result_expr));
         }
 
-        // For other types (List, Struct), extraction must be a literal.
+        if data_type.is_list() && !matches!(extraction, spec::Expr::Literal(_)) {
+            let index = self
+                .resolve_named_expression(extraction, schema, state)
+                .await?;
+            let index_type = index.expr.get_type(schema)?;
+            if !index_type.is_signed_integer() && !index_type.is_null() {
+                return Err(PlanError::analysis(format!(
+                    "array index must be an integer, got {index_type}"
+                )));
+            }
+            let name = format!("{name}[{}]", index.expression_name()?);
+            let expr = ScalarUDF::from(SparkArraySubscript::new(self.config.ansi_mode))
+                .call(vec![expr, cast(index.expr, DataType::Int64)]);
+            return Ok(NamedExpr::new(vec![name], expr));
+        }
+
+        // Keep literal array subscripts and struct fields on their existing path.
         // An UnresolvedAttribute from dot notation (e.g. `a.b`) is treated as a
         // literal field name so that the spec can keep the attribute unresolved.
         let extraction = match extraction {

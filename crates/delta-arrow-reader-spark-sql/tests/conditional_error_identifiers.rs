@@ -151,6 +151,14 @@ async fn conditional_error_identifiers_and_internal_guards() -> TestResult {
                     "batch":batch_size, "observation":comparison,
                 })
             );
+            if case["id"] == "internal_index" {
+                if !matches_array_index_outcome(case, &comparison) {
+                    differences.push(format!(
+                        "batch={batch_size}, expected={case}, actual={comparison}"
+                    ));
+                }
+                continue;
+            }
             match preserves_inherited_diagnostic(case, &comparison, batch_size) {
                 Ok(true) => continue,
                 Ok(false) => {}
@@ -188,6 +196,25 @@ async fn conditional_error_identifiers_and_internal_guards() -> TestResult {
     Ok(())
 }
 
+fn matches_array_index_outcome(case: &Value, actual: &Value) -> bool {
+    if case["expected"]["condition"] == "INVALID_ARRAY_INDEX" {
+        return actual["error"].as_str().is_some_and(|error| {
+            error.contains("out of bounds") && !error.contains("[USER_RAISED_EXCEPTION]")
+        });
+    }
+    let expected_fields = case["schema_stages"]["executed"]["fields"].as_array();
+    let actual_fields = actual["physical_schema"]["fields"].as_array();
+    actual["rows_match"] == true
+        && expected_fields
+            .zip(actual_fields)
+            .is_some_and(|(expected, actual)| {
+                expected.len() == actual.len()
+                    && expected.iter().zip(actual).all(|(expected, actual)| {
+                        expected["name"] == actual["name"] && expected["type"] == actual["type"]
+                    })
+            })
+}
+
 fn register_ordered_null_first_messages(session: &SessionContext) -> TestResult {
     use std::sync::Arc;
 
@@ -209,7 +236,7 @@ fn register_ordered_null_first_messages(session: &SessionContext) -> TestResult 
     Ok(())
 }
 
-// #863-#865 preserve internal diagnostics separately from raw Spark comparisons.
+// Preserve inherited division, element_at, and array_insert diagnostics.
 fn preserves_inherited_diagnostic(case: &Value, actual: &Value, batch: usize) -> TestResult<bool> {
     // #862 keeps the existing condition-before-result validation order.
     if case["id"] == "invalid_condition_before_results" {
@@ -227,7 +254,7 @@ fn preserves_inherited_diagnostic(case: &Value, actual: &Value, batch: usize) ->
     }
     if !matches!(
         case["id"].as_str(),
-        Some("internal_division" | "internal_index" | "internal_element" | "internal_insert")
+        Some("internal_division" | "internal_element" | "internal_insert")
     ) {
         return Ok(false);
     }
