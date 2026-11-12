@@ -454,3 +454,114 @@ async fn correlated_windows_preserve_values_types_and_cardinality() -> TestResul
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }
+
+#[tokio::test]
+async fn nested_live_scalars_preserve_values_types_and_cardinality() -> TestResult {
+    let references = records(include_str!(
+        "fixtures/correlated-scalar-nested/spark-results.jsonl"
+    ))?;
+    assert_eq!(references[0]["spark_version"], "4.2.0");
+    assert_eq!(references.len() - 1, 50);
+    let mut seen = BTreeSet::new();
+    for case in &references[1..] {
+        assert!(seen.insert((case["id"].to_string(), case["ansi"].as_bool())));
+        if case["id"] == "issue_two_live_levels" {
+            assert_eq!(case["rows"], json!([["0", null], ["1", "20"], ["2", "30"]]));
+            assert_eq!(
+                executed_fields(&case["schema"]),
+                Some(vec![
+                    (&json!("k"), &json!("integer")),
+                    (&json!("r"), &json!("integer"))
+                ])
+            );
+        }
+    }
+    for input in references[0]["inputs"].as_array().ok_or("missing inputs")? {
+        let batch = spark_inputs::decode_recorded_batch(input)?;
+        spark_results::validate_batch(batch.schema().as_ref(), &batch)?;
+    }
+    let mut differences = Vec::new();
+    for batch in [1, 32] {
+        let session = session(batch);
+        spark_inputs::register_recorded_inputs(&session, &references[0], batch)?;
+        for case in &references[1..] {
+            let result: TestResult<Value> = async {
+                if case["id"] == "nested_filter_after_local_filter" {
+                    use datafusion::common::tree_node::TreeNode;
+                    use datafusion::logical_expr::{LogicalPlan, col, lit};
+
+                    let query = plan_query(
+                        &session,
+                        case["sql"].as_str().ok_or("missing SQL")?,
+                        &SparkSqlOptions {
+                            ansi_mode: case["ansi"].as_bool().ok_or("missing ANSI")?,
+                            ..SparkSqlOptions::default()
+                        },
+                    )
+                    .await?;
+                    let mut state = session.state();
+                    state.config_mut().options_mut().extensions.insert(
+                        sail_plan::expression_errors::SparkSqlExpressionSemantics::default(),
+                    );
+                    let optimized = state.optimize(&query.logical_plan)?;
+                    let source_filter = optimized.exists(|node| {
+                        let LogicalPlan::Filter(filter) = node else {
+                            return Ok(false);
+                        };
+                        Ok(filter.predicate == col("ordinary.v").gt_eq(lit(20_i32))
+                            && matches!(filter.input.as_ref(), LogicalPlan::TableScan(scan)
+                                    if scan.table_name.table() == "ordinary"))
+                    })?;
+                    assert!(
+                        source_filter,
+                        "local filter must reach the source before nested scalar evaluation"
+                    );
+                }
+                if case["cardinality_error"] == true {
+                    let query = plan_query(
+                        &session,
+                        case["sql"].as_str().ok_or("missing SQL")?,
+                        &SparkSqlOptions {
+                            ansi_mode: case["ansi"].as_bool().ok_or("missing ANSI")?,
+                            ..SparkSqlOptions::default()
+                        },
+                    )
+                    .await?;
+                    let physical = query.create_physical_plan(&session).await?;
+                    let result =
+                        datafusion::physical_plan::collect(physical, session.task_ctx()).await;
+                    let error = result.err().ok_or("scalar cardinality guard did not run")?;
+                    assert!(
+                        error
+                            .to_string()
+                            .contains("Scalar subquery returned more than one row")
+                    );
+                    return Ok(json!({"cardinality_error":true}));
+                }
+                spark_results::capture_executed_query_result(&session, case).await
+            }
+            .await;
+            let mut actual = result.unwrap_or_else(|error| json!({"error":error.to_string()}));
+            spark_results::remove_nullability_and_metadata(&mut actual);
+            let mut expected = if case["cardinality_error"] == true {
+                json!({"cardinality_error":true})
+            } else {
+                json!({"rows":case["rows"],"schema":case["schema"]})
+            };
+            spark_results::remove_nullability_and_metadata(&mut expected);
+            println!(
+                "CORRELATED_NESTED {}",
+                json!({"id":case["id"],"ansi":case["ansi"],
+                    "batch":batch,"matches":actual==expected,"actual":actual})
+            );
+            if actual != expected {
+                differences.push(format!(
+                    "{} ANSI={} batch={batch}: {actual}",
+                    case["id"], case["ansi"]
+                ));
+            }
+        }
+    }
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+    Ok(())
+}

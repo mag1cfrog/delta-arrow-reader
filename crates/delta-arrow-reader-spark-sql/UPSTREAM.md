@@ -477,6 +477,14 @@ decorrelate on their join keys keep its native path. The
 [correlated scalar references](tests/fixtures/README.md#correlated-scalars-over-inner-rows)
 cover these cases and the existing one-row rewrite.
 
+Nested live scalars run after their parent has bound its correlated rows, before
+the parent groups the scalar result. Each level keeps its own row identifier and
+runtime cardinality check. The parent's match marker prevents nonexistent rows
+from evaluating a nested scalar, including null-safe matches. Scalars in row
+projections and filters use the same order of evaluation. Scalar-free AND terms
+stay at the source so they can prune reads and reject rows before a nested
+scalar runs. OR predicates remain intact.
+
 Correlated UNION ALL lowers branch projections, aliases and filters into one
 join. Private source columns and a branch tag keep each branch's predicates and
 output values separate. Local source filters remain below the union, and all

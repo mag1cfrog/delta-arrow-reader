@@ -497,55 +497,61 @@ async fn correlated_scalar_planning_does_not_read_registered_providers() -> Test
     use arrow::array::{ArrayRef, AsArray, Int32Array};
     use arrow::datatypes::Int32Type;
 
-    let sql = "SELECT o.k,(SELECT i.k FROM correlated_reads i WHERE i.k=o.k) AS r \
-               FROM VALUES (7),(8) o(k) ORDER BY o.k";
-    for ansi_mode in [true, false] {
-        let session = session(1);
-        let reads = Arc::new(AtomicUsize::new(0));
-        let batch = RecordBatch::try_from_iter([(
-            "k",
-            Arc::new(Int32Array::from(vec![7, 9])) as ArrayRef,
-        )])?;
-        session.register_table(
-            "correlated_reads",
-            Arc::new(StreamingTable::try_new(
-                batch.schema(),
-                vec![Arc::new(ObservedPartition {
-                    batch,
-                    reads: Arc::clone(&reads),
-                })],
-            )?),
-        )?;
-        let resolved = plan_query(
-            &session,
-            sql,
-            &SparkSqlOptions {
-                ansi_mode,
-                ..SparkSqlOptions::default()
-            },
-        )
-        .await;
-        let after_resolve = reads.load(Ordering::SeqCst);
-        assert_eq!(after_resolve, 0, "resolve ANSI={ansi_mode}");
-        let physical = resolved?.create_physical_plan(&session).await;
-        let after_physical = reads.load(Ordering::SeqCst);
-        assert_eq!(after_physical, 0, "physical planning ANSI={ansi_mode}");
-        let batches = collect(physical?, session.task_ctx()).await?;
-        let after_collect = reads.load(Ordering::SeqCst);
-        assert!(after_collect > 0, "collection ANSI={ansi_mode}");
-        let mut rows = Vec::new();
-        for batch in batches {
-            assert_eq!(batch.num_columns(), 2);
-            let outer = batch.column(0).as_primitive::<Int32Type>();
-            let scalar = batch.column(1).as_primitive::<Int32Type>();
-            rows.extend(outer.iter().zip(scalar.iter()));
-        }
-        assert_eq!(rows, [(Some(7), Some(7)), (Some(8), None)]);
-        eprintln!(
-            "CORRELATED_SCALAR_NO_READ {}",
-            json!({"sql":sql,"ansi":ansi_mode,"after_resolve":after_resolve,
+    for sql in [
+        "SELECT o.k,(SELECT i.k FROM correlated_reads i WHERE i.k=o.k) AS r \
+         FROM VALUES (7),(8) o(k) ORDER BY o.k",
+        "SELECT o.k,(SELECT (SELECT j.k FROM correlated_reads j WHERE j.k=i.k) \
+         FROM correlated_reads i WHERE i.k=o.k) AS r \
+         FROM VALUES (7),(8) o(k) ORDER BY o.k",
+    ] {
+        for ansi_mode in [true, false] {
+            let session = session(1);
+            let reads = Arc::new(AtomicUsize::new(0));
+            let batch = RecordBatch::try_from_iter([(
+                "k",
+                Arc::new(Int32Array::from(vec![7, 9])) as ArrayRef,
+            )])?;
+            session.register_table(
+                "correlated_reads",
+                Arc::new(StreamingTable::try_new(
+                    batch.schema(),
+                    vec![Arc::new(ObservedPartition {
+                        batch,
+                        reads: Arc::clone(&reads),
+                    })],
+                )?),
+            )?;
+            let resolved = plan_query(
+                &session,
+                sql,
+                &SparkSqlOptions {
+                    ansi_mode,
+                    ..SparkSqlOptions::default()
+                },
+            )
+            .await;
+            let after_resolve = reads.load(Ordering::SeqCst);
+            assert_eq!(after_resolve, 0, "resolve ANSI={ansi_mode}");
+            let physical = resolved?.create_physical_plan(&session).await;
+            let after_physical = reads.load(Ordering::SeqCst);
+            assert_eq!(after_physical, 0, "physical planning ANSI={ansi_mode}");
+            let batches = collect(physical?, session.task_ctx()).await?;
+            let after_collect = reads.load(Ordering::SeqCst);
+            assert!(after_collect > 0, "collection ANSI={ansi_mode}");
+            let mut rows = Vec::new();
+            for batch in batches {
+                assert_eq!(batch.num_columns(), 2);
+                let outer = batch.column(0).as_primitive::<Int32Type>();
+                let scalar = batch.column(1).as_primitive::<Int32Type>();
+                rows.extend(outer.iter().zip(scalar.iter()));
+            }
+            assert_eq!(rows, [(Some(7), Some(7)), (Some(8), None)]);
+            eprintln!(
+                "CORRELATED_SCALAR_NO_READ {}",
+                json!({"sql":sql,"ansi":ansi_mode,"after_resolve":after_resolve,
                 "after_physical":after_physical,"after_collect":after_collect,"rows":rows})
-        );
+            );
+        }
     }
     Ok(())
 }
