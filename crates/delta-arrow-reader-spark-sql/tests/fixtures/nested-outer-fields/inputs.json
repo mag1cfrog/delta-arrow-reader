@@ -572,6 +572,12 @@
       "input": "struct_mixed",
       "sql": "SELECT id, (SELECT COUNT(*) FROM VALUES (-3), (3), (3) i(k) WHERE i.k = q.nested.item) AS r FROM struct_mixed q ORDER BY id",
       "ordered": true
+    },
+    {
+      "id": "plain_outer_in_inner_filter",
+      "input": "struct_mixed",
+      "sql": "SELECT q.id, (SELECT count(*) FROM VALUES (-2),(2),(2) i(k) WHERE i.k=q.v) AS r FROM struct_mixed q ORDER BY q.id",
+      "ordered": true
     }
   ]
 }

@@ -47,7 +47,7 @@ fn references(manifest: &Value) -> TestResult<Vec<Value>> {
     assert_eq!(manifest["timezone"], "UTC");
     assert_eq!(manifest["ansi_modes"], json!([false, true]));
     let cases = manifest["cases"].as_array().ok_or("missing cases")?;
-    assert_eq!(cases.len(), 8);
+    assert_eq!(cases.len(), 9);
     let mut planned = BTreeMap::new();
     for case in cases {
         let id = case["id"].as_str().ok_or("missing planned case ID")?;

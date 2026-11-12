@@ -3,9 +3,10 @@ use std::sync::Arc;
 
 use arrow::datatypes::{DataType, Field, FieldRef, Fields};
 use datafusion_common::{Column, DFSchemaRef, ScalarValue, TableReference};
-use datafusion_expr::expr::{LambdaVariable, ScalarFunction};
+use datafusion_expr::expr::{Case, LambdaVariable, ScalarFunction};
 use datafusion_expr::{ExprSchemable, ScalarUDF, col, expr, lit};
 use datafusion_functions::core::get_field;
+use datafusion_functions::core::getfield::GetFieldFunc;
 use sail_common::spec;
 use sail_function::scalar::array_struct_field::ArrayStructField;
 
@@ -179,6 +180,11 @@ impl PlanResolver<'_> {
             true,
             &mut expression_name,
         )?;
+        let expr = if is_outer && !inner.is_empty() {
+            Self::guard_outer_nested_nulls(expr, schema)?
+        } else {
+            expr
+        };
         let projection_name = inner.last().unwrap_or(name).as_ref().to_string();
         let named = NamedExpr::new(vec![projection_name], expr);
         Ok(Some(if inner.is_empty() {
@@ -186,6 +192,35 @@ impl PlanResolver<'_> {
         } else {
             named.with_expression_name(expression_name)
         }))
+    }
+
+    fn guard_outer_nested_nulls(expr: expr::Expr, schema: &DFSchemaRef) -> PlanResult<expr::Expr> {
+        // Arrow can retain child values under a NULL parent. Test each parent
+        // before reading deeper children from the extraction.
+        let mut guards = Vec::new();
+        let mut access = &expr;
+        while let expr::Expr::ScalarFunction(function) = access
+            && let Some(base) = function.args.first()
+        {
+            if function.func.inner().is::<GetFieldFunc>() && base.nullable(schema)? {
+                guards.push(base.clone().is_null());
+            }
+            access = base;
+        }
+        if guards.is_empty() {
+            return Ok(expr);
+        }
+        let null = lit(ScalarValue::try_new_null(&expr.get_type(schema)?)?);
+        let when_then = guards
+            .into_iter()
+            .rev()
+            .map(|guard| (Box::new(guard), Box::new(null.clone())))
+            .collect();
+        Ok(expr::Expr::Case(Case::new(
+            None,
+            when_then,
+            Some(Box::new(expr)),
+        )))
     }
 
     fn resolve_aggregate_field(
