@@ -7,10 +7,8 @@ use datafusion_expr::expr::ScalarFunction;
 use datafusion_expr::registry::FunctionRegistry;
 use datafusion_expr::{EmptyRelation, Expr, ExprSchemable, LogicalPlan, expr};
 use datafusion_functions_nested::concat::ArrayConcat;
-use datafusion_functions::core::getfield::GetFieldFunc;
 use sail_common::spec;
 use sail_common_datafusion::utils::items::ItemTaker;
-use sail_function::scalar::array_struct_field::ArrayStructField;
 use sail_function::scalar::multi_expr::MultiExpr;
 use sail_sql_analyzer::expression::{
     DATETIME_UNIT_FUNCTIONS_WITH_ROUTINE, DATETIME_UNIT_FUNCTIONS_WITHOUT_ROUTINE,
@@ -454,20 +452,14 @@ impl PlanResolver<'_> {
         let mut exprs: Vec<expr::Expr> = vec![];
 
         for (argument_index, expression) in expressions.into_iter().enumerate() {
-            let is_dotted_attribute = matches!(
-                &expression,
-                spec::Expr::UnresolvedAttribute { name, .. } if name.parts().len() > 1
-            );
-            let identifier_argument = matches!(&expression, spec::Expr::IdentifierClause { .. });
-            let field_name = match &expression {
+            let is_identifier_argument = matches!(&expression, spec::Expr::IdentifierClause { .. });
+            // Spark chooses child names before field reads and NULL guards are lowered.
+            let inferred_child_name = match &expression {
                 spec::Expr::UnresolvedAttribute { name, .. } => {
                     name.parts().last().map(|name| name.as_ref().to_string())
                 }
                 spec::Expr::UnresolvedExtractValue { extraction, .. } => {
                     match extraction.as_ref() {
-                        spec::Expr::UnresolvedAttribute { name, .. } => {
-                            name.parts().last().map(|name| name.as_ref().to_string())
-                        }
                         spec::Expr::Literal(spec::Literal::Utf8 { value }) => value.clone(),
                         _ => None,
                     }
@@ -572,23 +564,17 @@ impl PlanResolver<'_> {
                             .or(expression_name)
                             .unwrap_or_else(|| projection_name.clone()),
                     );
-                    let expr = if let Some(field_name) = field_name
-                        && matches!(&other, Expr::ScalarFunction(ScalarFunction { func, .. })
-                            if func.inner().is::<GetFieldFunc>() || func.inner().is::<ArrayStructField>())
+                    let expr = if let Some(name) = inferred_child_name
+                        && !matches!(other, Expr::Column(_) | Expr::OuterReferenceColumn(..))
                     {
-                        other.alias(field_name)
-                    } else if identifier_argument
+                        other.alias(name)
+                    } else if is_identifier_argument
                         || !matches!(
                             &other,
                             Expr::Column(_) | Expr::OuterReferenceColumn(_, _) | Expr::Alias(_)
                         )
                     {
                         other.alias(format!("col{}", argument_index + 1))
-                    } else if is_dotted_attribute
-                        && !matches!(other, Expr::OuterReferenceColumn(..))
-                        && other.contains_outer()
-                    {
-                        other.alias(projection_name)
                     } else {
                         other
                     };

@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 import sys
 from pyspark.sql import SparkSession, types
-from capture_floating_group_keys_spark import capture_query
+from capture_struct_expression_names_spark import capture_struct_query
 
 REFERENCE = Path(__file__).with_name("struct-expression-names-spark.jsonl")
 
@@ -31,7 +31,7 @@ def main():
             ]:
                 sql = f"SELECT {expression} AS s FROM struct_empty q"
                 records.append({"id": name, "input": "struct_empty", "ansi": ansi,
-                                "sql": sql, "expected": capture_query(spark, sql)})
+                                "sql": sql, "expected": capture_struct_query(spark, sql)})
         assert len(records) == 5
         with output.open("x") as destination:
             destination.write("".join(json.dumps(record, separators=(",", ":")) + "\n" for record in records))

@@ -7,7 +7,8 @@ import sys
 
 from pyspark.sql import SparkSession, types
 
-from capture_floating_group_keys_spark import capture_query, encode
+from capture_floating_group_keys_spark import encode
+from capture_struct_expression_names_spark import capture_struct_query
 
 
 def queries(table):
@@ -70,7 +71,7 @@ def main():
                 definitions = list(queries(table))
                 for name, sql in definitions:
                     records.append({"id": name, "input": table, "ansi": ansi, "sql": sql,
-                                    "expected": capture_query(spark, sql)})
+                                    "expected": capture_struct_query(spark, sql)})
         assert len(records) == 49
         assert len({(record["id"], record["input"], record["ansi"])
                     for record in records[1:]}) == 48

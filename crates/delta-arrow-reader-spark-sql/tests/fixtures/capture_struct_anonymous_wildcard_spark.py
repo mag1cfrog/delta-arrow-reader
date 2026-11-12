@@ -9,13 +9,13 @@ from zipfile import ZipFile
 import pyspark
 from pyspark.sql import SparkSession, types
 
-from capture_floating_group_keys_spark import capture_query
+from capture_struct_expression_names_spark import capture_struct_query
 
 REFERENCE = Path(__file__).with_name("struct-expression-names-spark.jsonl")
 
 
 def main():
-    output = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).with_name("review-757-ordinary-wildcard-spark-v1.jsonl")
+    output = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).with_name("struct-anonymous-wildcard-spark.jsonl")
     assert not output.exists(), output
     reference = json.loads(REFERENCE.read_text().splitlines()[0])
     provider = next(value for value in reference["inputs"] if value["name"] == "struct_empty")
@@ -24,7 +24,7 @@ def main():
     with ZipFile(jar) as archive:
         build = archive.read("spark-version-info.properties").decode()
     os.environ["PYSPARK_PYTHON"] = sys.executable
-    spark = (SparkSession.builder.master("local[1]").appName("dar-struct-ordinary-wildcard-review")
+    spark = (SparkSession.builder.master("local[1]").appName("dar-struct-anonymous-wildcard")
              .config("spark.ui.enabled", "false").config("spark.sql.shuffle.partitions", "1")
              .config("spark.sql.session.timeZone", "UTC").getOrCreate())
     try:
@@ -43,7 +43,7 @@ def main():
             ]:
                 sql = f"SELECT {expression} AS s FROM struct_empty q"
                 records.append({"id": name, "input": "struct_empty", "ansi": ansi,
-                                "sql": sql, "expected": capture_query(spark, sql)})
+                                "sql": sql, "expected": capture_struct_query(spark, sql)})
         assert len(records) == 9
         assert len({(case["id"], case["input"], case["ansi"]) for case in records[1:]}) == 8
         with output.open("x") as destination:

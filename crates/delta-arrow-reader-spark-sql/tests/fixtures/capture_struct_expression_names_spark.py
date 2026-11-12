@@ -1,4 +1,4 @@
-"""Capture exact STRUCT child names, labels and metadata with Spark 4.2.0."""
+"""Capture STRUCT child names, values and executed types with Spark 4.2.0."""
 
 import json
 import os
@@ -10,10 +10,24 @@ from pyspark.sql import SparkSession, types
 from capture_floating_group_keys_spark import capture_query, encode
 
 
+def capture_struct_query(spark, sql):
+    try:
+        frame = spark.sql(sql)
+    except Exception:
+        return capture_query(spark, sql)
+    rows = [encode(row, frame.schema) for row in frame.collect()]
+    rows.sort(key=lambda row: json.dumps(row, separators=(",", ":")))
+    schema = json.loads(frame._jdf.queryExecution().executedPlan().schema().json())
+    return {"schema": schema, "rows": rows}
+
+
 def queries(table):
     source = f"FROM {table} q"
     for name, expression in [
         ("inferred", "STRUCT(nested.item) AS s"),
+        ("json_nested", "TO_JSON(STRUCT(nested.item)) AS result"),
+        ("json_quoted", "TO_JSON(STRUCT(quoted.`a.b`, quoted.`sp ace`)) AS result"),
+        ("json_explicit", "TO_JSON(STRUCT(nested.item AS renamed)) AS result"),
         ("qualified_deep", "STRUCT(q.nested.item, q.nested.inner.leaf) AS s"),
         ("case", "STRUCT(NESTED.ITEM, NESTED.INNER.LEAF) AS s"),
         ("quoted", "STRUCT(quoted.`a.b`, quoted.`sp ace`, quoted.`back``tick`) AS s"),
@@ -26,6 +40,10 @@ def queries(table):
         ("constructed_child", "STRUCT((STRUCT(v AS item)).item) AS s"),
         ("whole_record", "STRUCT(nested) AS s"),
         ("wildcard", "STRUCT(q.*) AS s"),
+        ("wildcard_then_literal", "STRUCT(nested.*, 1) AS s"),
+        ("wildcard_then_computed", "STRUCT(q.*, ABS(v)) AS s"),
+        ("wildcard_then_identifier", "STRUCT(nested.*, IDENTIFIER('v')) AS s"),
+        ("correlated", "(SELECT STRUCT(q.nested.item)) AS s"),
         ("nested_wildcard", "STRUCT(nested.*) AS s"),
         ("empty_constructor", "STRUCT() AS s"),
         ("generated", "STRUCT(nested.item), STRUCT(q.nested.inner.leaf), STRUCT(nested.item AS renamed), STRUCT(v AS item), STRUCT(quoted.`a.b` AS `dot.alias`), STRUCT(ABS(v) AS computed), STRUCT(1, NULL)"),
@@ -90,10 +108,10 @@ def main():
                     definitions.append((name, f"SELECT `{label}` FROM ({inner}) q"))
                 for name, sql in definitions:
                     records.append({"id": name, "input": table, "ansi": ansi, "sql": sql,
-                                    "expected": capture_query(spark, sql)})
-        assert len(records) == 151
+                                    "expected": capture_struct_query(spark, sql)})
+        assert len(records) == 193
         assert len({(record["id"], record["input"], record["ansi"])
-                    for record in records[1:]}) == 150
+                    for record in records[1:]}) == 192
         assert all("schema" in record["expected"] for record in records[1:])
         with output.open("x") as destination:
             destination.write("".join(json.dumps(record, separators=(",", ":")) + "\n" for record in records))
