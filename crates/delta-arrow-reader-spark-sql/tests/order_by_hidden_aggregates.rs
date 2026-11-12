@@ -27,6 +27,7 @@ const SPARK_REJECTIONS: &[&str] = &[
     "distinct_global_hidden_probe",
     "ungrouped_column_with_aggregate_probe",
     "group_order_alias_collision",
+    "group_window_hidden_aggregate",
 ];
 
 fn config(batch_size: usize) -> SessionConfig {

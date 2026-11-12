@@ -207,7 +207,7 @@ impl PlanResolverState {
         }
     }
 
-    pub fn get_sort_output(&self, schema: &DFSchemaRef) -> Option<DFSchemaRef> {
+    pub fn sort_select_schema(&self, schema: &DFSchemaRef) -> Option<DFSchemaRef> {
         match &self.aggregate_state {
             // A subquery using a different schema has its own local names.
             AggregateState::Sort { output, merged } if Arc::ptr_eq(merged, schema) => {

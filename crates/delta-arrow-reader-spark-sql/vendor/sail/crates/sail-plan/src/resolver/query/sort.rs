@@ -112,7 +112,7 @@ impl PlanResolver<'_> {
             .data()?)
     }
 
-    /// Rebase the sort using SELECT aliases and the current query's aggregate outputs.
+    /// Add aggregates used only by ORDER BY, then rebase the sort to the available outputs.
     fn rebase_query_sort_orders(sorts: Vec<Sort>, plan: &mut LogicalPlan) -> PlanResult<Vec<Sort>> {
         let LogicalPlan::Projection(Projection { input, expr, .. }) = plan else {
             return Ok(sorts);
@@ -306,6 +306,10 @@ impl PlanResolver<'_> {
             .transform_down(|e| {
                 if let Some(expr) = find(&e) {
                     return Ok(Transformed::yes(expr));
+                }
+                // Aggregate arguments still use the input schema.
+                if matches!(e, Expr::AggregateFunction(_)) {
+                    return Ok(Transformed::new(e, false, TreeNodeRecursion::Jump));
                 }
                 Ok(Transformed::no(e))
             })

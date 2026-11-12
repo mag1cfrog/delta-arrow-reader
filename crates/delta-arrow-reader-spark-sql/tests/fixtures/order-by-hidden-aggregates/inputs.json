@@ -252,6 +252,31 @@
       "id": "global_having_literal",
       "sql": "SELECT 1 AS r FROM inputs HAVING TRUE ORDER BY MAX(f)",
       "purpose": "HAVING establishes global aggregation without a selected aggregate."
+    },
+    {
+      "id": "group_sort_aggregate_of_selected_key",
+      "scope": "parity",
+      "sql": "SELECT k FROM inputs GROUP BY k ORDER BY MAX(k) DESC NULLS LAST, k"
+    },
+    {
+      "id": "group_sort_aggregate_of_aliased_key",
+      "scope": "parity",
+      "sql": "SELECT k AS group_key FROM inputs GROUP BY k ORDER BY MAX(k) DESC NULLS LAST, group_key"
+    },
+    {
+      "id": "grouping_sets_hidden_aggregate",
+      "scope": "parity",
+      "sql": "SELECT k, GROUPING_ID(k) AS g FROM inputs GROUP BY GROUPING SETS ((k), ()) ORDER BY GROUPING_ID(k), MAX(f), k"
+    },
+    {
+      "id": "group_window_hidden_aggregate",
+      "scope": "parity",
+      "sql": "SELECT k, ROW_NUMBER() OVER (ORDER BY k NULLS LAST) AS rn FROM inputs GROUP BY k ORDER BY MAX(f), k"
+    },
+    {
+      "id": "group_hidden_aggregate_ordinal_fetch",
+      "scope": "parity",
+      "sql": "SELECT k FROM inputs GROUP BY k ORDER BY MAX(f), 1 LIMIT 3 OFFSET 1"
     }
   ]
 }
