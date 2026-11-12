@@ -37,6 +37,14 @@ resolver's column order, including USING keys. COUNT(*) and COUNT(DISTINCT *)
 keep their aggregate-specific handling. Nested struct stars reuse the existing
 multi-expression lowering rather than reaching scalar evaluation as one value.
 
+Spark physical planning aligns result metadata after logical optimization.
+Copied result annotations on aliases are removed while retaining Arrow extension
+metadata. UNION input fields retain compatible metadata from the resolved UNION
+and their Arrow type extensions; only conflicting annotations need value-forwarding
+metadata wrappers. The original provider fields and value buffers are unchanged.
+Metadata UDFs and literals keep their own physically realized annotations. Native
+DataFusion queries do not enter this Spark-specific rewrite.
+
 ## Dependency forks
 
 Fifteen dependencies have local source overrides in this crate's Cargo.toml:

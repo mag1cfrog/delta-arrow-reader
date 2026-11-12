@@ -25,6 +25,28 @@ To recapture with `pyspark==4.2.0` and Java 21, choose a new output path:
 TZ=UTC python current-time-expressions/capture_spark.py /tmp/current-time-spark.jsonl
 ```
 
+## STRUCT UNION planning
+
+`union-struct-planning/spark-results.jsonl` captures Spark 4.2.0 values and executed
+types for UNION and UNION ALL with explicit and generated aliases, positional
+STRUCT fields, nested values, NULLs, duplicates, empty inputs and outer consumers.
+Generated outputs are also grouped and aggregated, including scalar outputs and
+plans whose UNION disappears during optimization. Registered STRUCT columns cover
+matching, conflicting and one-sided source metadata, positional field renames and
+Arrow extension annotations. It includes scalar controls and the query used by the
+real-Delta file-pruning test.
+The comparison ignores schema nullability and result metadata, while retaining
+nested field names and primitive types. Dedicated controls also check Arrow
+extension type annotations. The pre-existing optimizer-dependent child
+label of an eliminated empty branch is recorded in #1248; empty-input controls here
+use matching child names.
+
+From this directory, recapture with `pyspark==4.2.0` and Java 21:
+
+```sh
+TZ=UTC python union-struct-planning/capture_spark.py /tmp/union-struct-planning.jsonl
+```
+
 ## Function argument stars
 
 `function-star-arguments/spark-results.jsonl` records Spark 4.2.0 values and

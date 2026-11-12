@@ -10,9 +10,9 @@ use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_plan::projection::ProjectionExec;
 use datafusion::physical_plan::sorts::sort::SortExec;
 use datafusion::physical_planner::{DefaultPhysicalPlanner, ExtensionPlanner, PhysicalPlanner};
-use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion};
-use datafusion_common::{DataFusionError, Result, internal_err};
-use datafusion_expr::{LogicalPlan, UserDefinedLogicalNode};
+use datafusion_common::tree_node::{Transformed, TreeNode, TreeNodeRecursion};
+use datafusion_common::{DFSchema, DataFusionError, Result, internal_err};
+use datafusion_expr::{Expr, LogicalPlan, LogicalPlanBuilder, Union, UserDefinedLogicalNode};
 use sail_logical_plan::monotonic_id::MonotonicIdNode;
 use sail_logical_plan::sort::{RequiredSortNode, SortWithinPartitionsNode};
 use sail_logical_plan::spark_partition_id::SparkPartitionIdNode;
@@ -25,6 +25,7 @@ use self::signed_range_window::{
 use self::spark_partition_id::SparkPartitionIdExec;
 use crate::declaration_inputs::drop_declaration_inputs;
 use crate::expression_errors::SparkSqlExpressionSemantics;
+use crate::function::common::{is_arrow_extension_metadata_key, set_result_metadata};
 use crate::function::scalar::{apply_unpivot_runtime_nullability, lower_runtime_concat};
 use crate::projection_row_errors::{ProjectionRowErrorNode, admit_prefix_producers};
 
@@ -64,12 +65,12 @@ impl QueryPlanner for SparkQueryPlanner {
             }
             Ok(TreeNodeRecursion::Continue)
         })?;
-        let runtime_plan = if session_state
+        let spark_semantics = session_state
             .config_options()
             .extensions
             .get::<SparkSqlExpressionSemantics>()
-            .is_some()
-        {
+            .is_some();
+        let runtime_plan = if spark_semantics {
             Cow::Owned(lower_signed_range_windows(admit_prefix_producers(
                 logical_plan
                     .clone()
@@ -96,12 +97,96 @@ impl QueryPlanner for SparkQueryPlanner {
             Cow::Borrowed(logical_plan)
         };
         let runtime_plan = drop_declaration_inputs(runtime_plan.into_owned(), session_state)?;
+        let runtime_plan = if spark_semantics {
+            align_result_metadata_for_execution(runtime_plan)?
+        } else {
+            runtime_plan
+        };
         let physical =
             DefaultPhysicalPlanner::with_extension_planners(vec![Arc::new(SparkExtensionPlanner)])
                 .create_physical_plan(&runtime_plan, &state)
                 .await?;
         seeded_rand::bind_seeded_rand_streams(physical)
     }
+}
+
+fn align_result_metadata_for_execution(plan: LogicalPlan) -> Result<LogicalPlan> {
+    // Annotate after logical optimization so logical field pruning sees the original expressions.
+    Ok(plan
+        .transform_up_with_subqueries(|node| {
+            let node = node
+                .map_expressions(|expression| {
+                    expression.transform_up(remove_alias_result_metadata)
+                })?
+                .data;
+            let node = if let LogicalPlan::Union(union) = node {
+                let union = Union::try_new(union.inputs)?;
+                let union_schema = Arc::clone(&union.schema);
+                let inputs = union
+                    .inputs
+                    .into_iter()
+                    .map(|input| align_union_input_metadata(input, &union_schema))
+                    .collect::<Result<Vec<_>>>()?;
+                LogicalPlan::Union(Union::try_new(inputs)?)
+            } else {
+                node.recompute_schema()?
+            };
+            Ok(Transformed::yes(node))
+        })?
+        .data)
+}
+
+fn remove_alias_result_metadata(mut expression: Expr) -> Result<Transformed<Expr>> {
+    // Nonliteral physical aliases do not apply their copied result metadata.
+    if let Expr::Alias(alias) = &mut expression
+        && let Some(metadata) = &mut alias.metadata
+    {
+        let mut retained = metadata.to_hashmap();
+        retained.retain(|key, _| is_arrow_extension_metadata_key(key));
+        if retained.len() != metadata.len() {
+            *metadata = retained.into();
+            return Ok(Transformed::yes(expression));
+        }
+    }
+    Ok(Transformed::no(expression))
+}
+
+fn align_union_input_metadata(
+    input: Arc<LogicalPlan>,
+    union_schema: &DFSchema,
+) -> Result<Arc<LogicalPlan>> {
+    let mut changed = false;
+    let columns = input
+        .schema()
+        .iter()
+        .zip(union_schema.fields())
+        .map(|((qualifier, field), target)| {
+            let column = Expr::from((qualifier, field));
+            let mut metadata = field.metadata().clone();
+            metadata.retain(|key, value| {
+                is_arrow_extension_metadata_key(key) || target.metadata().get(key) == Some(value)
+            });
+            if metadata == *field.metadata() {
+                column
+            } else {
+                changed = true;
+                set_result_metadata(column, metadata.clone().into_iter().collect())
+                    .alias_qualified_with_metadata(
+                        qualifier.cloned(),
+                        field.name(),
+                        Some(metadata.into()),
+                    )
+            }
+        })
+        .collect::<Vec<_>>();
+    if !changed {
+        return Ok(input);
+    }
+    Ok(Arc::new(
+        LogicalPlanBuilder::from(input.as_ref().clone())
+            .project(columns)?
+            .build()?,
+    ))
 }
 
 // Keep callers on SparkQueryPlanner so required-order safeguards also apply.
@@ -215,5 +300,43 @@ impl ExtensionPlanner for SparkExtensionPlanner {
             return Ok(None);
         };
         Ok(Some(plan))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use arrow::datatypes::{DataType, Field, Schema};
+    use datafusion_expr::EmptyRelation;
+
+    use super::*;
+
+    #[test]
+    fn arrow_extension_metadata_keeps_the_input_plan() -> Result<()> {
+        let plan_with_metadata = |metadata: HashMap<String, String>| -> Result<Arc<LogicalPlan>> {
+            let schema = Schema::new(vec![
+                Field::new(
+                    "r",
+                    DataType::Struct(vec![Field::new("x", DataType::Int32, false)].into()),
+                    false,
+                )
+                .with_metadata(metadata),
+            ]);
+            Ok(Arc::new(LogicalPlan::EmptyRelation(EmptyRelation {
+                produce_one_row: false,
+                schema: Arc::new(DFSchema::try_from(schema)?),
+            })))
+        };
+        let source = plan_with_metadata(HashMap::from([
+            ("ARROW:extension:name".into(), "dar.struct".into()),
+            ("ARROW:extension:metadata".into(), "{}".into()),
+        ]))?;
+        let other = plan_with_metadata(HashMap::from([("owner".into(), "right".into())]))?;
+        let union = Union::try_new(vec![source.clone(), other])?;
+        assert!(union.schema.field(0).metadata().is_empty());
+        let aligned = align_union_input_metadata(source.clone(), &union.schema)?;
+        assert_eq!(aligned.as_ref(), source.as_ref());
+        Ok(())
     }
 }
