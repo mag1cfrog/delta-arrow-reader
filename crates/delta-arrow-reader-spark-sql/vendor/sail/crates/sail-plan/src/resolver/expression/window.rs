@@ -26,6 +26,7 @@ use crate::function::common::{
     drop_inherited_column_metadata, reject_calendar_interval_partition_key,
     reject_calendar_interval_sort_key, without_inherited_column_metadata,
 };
+use crate::function::result_coercion::{coerce_if_result_values, same_positional_logical_type};
 use crate::function::{get_built_in_window_function, require_deterministic_scalar_expression};
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
@@ -420,6 +421,27 @@ impl PlanResolver<'_> {
         };
         let payload_type = payload.get_type(schema)?;
         let default_type = default.get_type(schema)?;
+        if payload_type != default_type
+            && payload_type.is_nested()
+            && default_type.is_nested()
+            && same_positional_logical_type(&payload_type, &default_type)
+            && (default.any_column_refs()
+                || default.is_volatile()
+                || default.contains_outer()
+                || default.contains_scalar_subquery())
+        {
+            // A selected default can have NULL children even when the payload declares them required.
+            // Use a declaration that can represent either value in Arrow.
+            let context = FunctionContextInput {
+                argument_display_names: &[],
+                plan_config: &self.config,
+                session_context: self.ctx,
+                schema,
+            };
+            (*payload, *default) =
+                coerce_if_result_values(vec![payload.clone(), default.clone()], &context)?.two()?;
+            return Ok(drop_inherited_column_metadata(window));
+        }
         if payload_type.is_null()
             || default_type.is_null()
             || payload_type.is_nested()

@@ -166,13 +166,6 @@ fn load_reference_fixtures(
         );
         match control["kind"].as_str() {
             Some("rows") => assert_eq!(case["status"], "ok"),
-            Some("default_error") => {
-                assert_eq!(case["status"], "ok");
-                assert!(matches!(
-                    control["id"].as_str(),
-                    Some("lag_column_default_controls" | "lead_column_default_controls")
-                ));
-            }
             Some("diagnostic" | "untyped_null") => assert_eq!(case["status"], "error"),
             _ => return Err("unknown retained kind".into()),
         }
@@ -211,15 +204,7 @@ fn matches_retained_native_profile(
         reference_case["schema_stages"]
             .get(*stage)
             .is_none_or(|expected_schema| {
-                if retained_control["kind"] == "default_error"
-                    && matches!(*stage, "executed_before_collect" | "executed")
-                {
-                    native_observation
-                        .get(*native_field_key)
-                        .is_some_and(Value::is_null)
-                } else {
-                    native_observation.get(*native_field_key) == Some(expected_schema)
-                }
+                native_observation.get(*native_field_key) == Some(expected_schema)
             })
     });
     Ok(reference_fields_match && native_observation == expected_native_observation)
@@ -326,7 +311,10 @@ async fn row_dependent_offset_defaults_match_spark() -> TestResult {
                 "spark":case,"actual":actual});
             eprintln!("ROW_DEPENDENT_OFFSET_DEFAULTS {observation}");
             if !matches {
-                differences.push(format!("{} ANSI={} batch={batch}", case["id"], case["ansi"]));
+                differences.push(format!(
+                    "{} ANSI={} batch={batch}",
+                    case["id"], case["ansi"]
+                ));
             }
         }
     }
@@ -355,8 +343,8 @@ async fn offset_window_fields_match_spark_at_each_stage() -> TestResult {
             include_str!("fixtures/offset-window-fields-1044-spark.jsonl"),
             include_str!("fixtures/offset-window-fields-1044-retained.json"),
             188,
-            120,
-            68,
+            128,
+            60,
         ),
         (
             include_str!("fixtures/offset-window-default-coercion-1044-cases.json"),
@@ -625,7 +613,10 @@ async fn spark_offset_planning_keeps_native_fields_and_required_defaults_unchang
         for function in ["LAG", "LEAD"] {
             let sql = format!("SELECT {function}(r,2,d) OVER (ORDER BY id) FROM offset_scalar");
             let expected = capture_native_query_observation(&native, &sql).await?;
-            assert_eq!(expected["phase"], "create_physical_plan", "{sql}: {expected}");
+            assert_eq!(
+                expected["phase"], "create_physical_plan",
+                "{sql}: {expected}"
+            );
             assert!(expected["error"].is_string(), "{sql}: {expected}");
             let actual = capture_native_query_observation(&configured, &sql).await?;
             assert_eq!(actual, expected, "batch={batch} {sql}");
