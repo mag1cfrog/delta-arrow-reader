@@ -26,6 +26,9 @@ use crate::function::common::{
     drop_inherited_column_metadata, reject_calendar_interval_partition_key,
     reject_calendar_interval_sort_key, without_inherited_column_metadata,
 };
+use crate::function::result_coercion::{
+    align_offset_window_arguments, offset_default_numeric_cast,
+};
 use crate::function::{get_built_in_window_function, require_deterministic_scalar_expression};
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
@@ -420,6 +423,30 @@ impl PlanResolver<'_> {
         };
         let payload_type = payload.get_type(schema)?;
         let default_type = default.get_type(schema)?;
+        let row_dependent = payload_type != default_type
+            && (default.any_column_refs()
+                || default.is_volatile()
+                || default.contains_outer()
+                || default.contains_scalar_subquery());
+        if row_dependent && payload_type.is_nested() && default_type.is_nested() {
+            // A selected default can have NULL children even when the payload declares them required.
+            // Use a declaration that can represent either value in Arrow.
+            let context = FunctionContextInput {
+                argument_display_names: &[],
+                plan_config: &self.config,
+                session_context: self.ctx,
+                schema,
+            };
+            if let Some(arguments) = align_offset_window_arguments(
+                [payload.clone(), default.clone()],
+                [payload_type, default_type],
+                &context,
+            )? {
+                (*payload, *default) = arguments.two()?;
+                return Ok(drop_inherited_column_metadata(window));
+            }
+            return Ok(expression);
+        }
         if payload_type.is_null()
             || default_type.is_null()
             || payload_type.is_nested()
@@ -429,7 +456,14 @@ impl PlanResolver<'_> {
         {
             return Ok(expression);
         }
-        *default = self.cast_resolved_expression(default.clone(), payload_type, false, schema)?;
+        *default = if row_dependent
+            && let Some(cast) =
+                offset_default_numeric_cast(&default_type, &payload_type, self.config.ansi_mode)?
+        {
+            cast.call(vec![default.clone()])
+        } else {
+            self.cast_resolved_expression(default.clone(), payload_type, false, schema)?
+        };
         Ok(drop_inherited_column_metadata(window))
     }
 

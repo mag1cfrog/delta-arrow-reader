@@ -46,7 +46,8 @@ use sail_function::scalar::spark_decimal_cast::decimal_cast_can_overflow;
 
 use super::{
     NestedDeclarations, cast_result_value, common_numeric_type, common_result_type_with_strings,
-    common_temporal_type, is_string_type, is_temporal_type,
+    common_temporal_type, is_string_type, is_temporal_type, offset_default_numeric_cast,
+    offset_default_uses_numeric_cast,
 };
 use crate::error::{PlanError, PlanResult};
 use crate::function::common::{
@@ -80,7 +81,7 @@ pub(crate) fn is_nested_result_type(data_type: &DataType) -> bool {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-// Positional rename is reserved for UNION inputs whose leaf types already match.
+// UNION and ANSI offset defaults can match STRUCT children by position.
 enum StructFieldNames {
     RequireMatching,
     AllowPositionalRename,
@@ -91,6 +92,7 @@ enum CommonTypePolicy {
     WiderResult,
     TightestArrayElement,
     Constructor,
+    OffsetWindow,
 }
 
 fn contains_struct(data_type: &DataType) -> bool {
@@ -122,27 +124,76 @@ pub(crate) fn align_struct_constructor_arguments(
         return Ok(arguments);
     }
 
+    align_constructor_declarations(arguments, &types, context)?.ok_or_else(|| {
+        PlanError::invalid(format!("Incompatible STRUCT constructor types: {types:?}"))
+    })
+}
+
+pub(crate) fn align_offset_window_arguments(
+    arguments: [expr::Expr; 2],
+    types: [DataType; 2],
+    context: &FunctionContextInput<'_>,
+) -> PlanResult<Option<Vec<expr::Expr>>> {
+    let [payload, default] = &types;
+    let field_names = if context.plan_config.ansi_mode {
+        StructFieldNames::AllowPositionalRename
+    } else {
+        StructFieldNames::RequireMatching
+    };
+    let Some(target) = common_type(
+        payload,
+        default,
+        context,
+        field_names,
+        CommonTypePolicy::OffsetWindow,
+    )?
+    else {
+        return Ok(None);
+    };
+    cast_nested_arguments(
+        arguments,
+        &types,
+        &target,
+        context,
+        CastPolicy::OffsetWindow,
+    )
+    .map(Some)
+}
+
+fn align_constructor_declarations(
+    arguments: Vec<expr::Expr>,
+    types: &[DataType],
+    context: &FunctionContextInput<'_>,
+) -> PlanResult<Option<Vec<expr::Expr>>> {
     let mut target = DataType::Null;
-    for source in &types {
-        target = common_type(
+    for source in types {
+        let Some(common) = common_type(
             &target,
             source,
             context,
             StructFieldNames::RequireMatching,
             CommonTypePolicy::Constructor,
         )?
-        .ok_or_else(|| {
-            PlanError::invalid(format!("Incompatible STRUCT constructor types: {types:?}"))
-        })?;
+        else {
+            return Ok(None);
+        };
+        target = common;
     }
-    // Arrow concatenation needs exactly the same child fields even if folding
-    // refines the declaration of an argument that already has the target type.
+    cast_nested_arguments(arguments, types, &target, context, CastPolicy::Constructor).map(Some)
+}
+
+// Arrow kernels need exactly the same child fields even if folding refines a declaration.
+fn cast_nested_arguments(
+    arguments: impl IntoIterator<Item = expr::Expr>,
+    types: &[DataType],
+    target: &DataType,
+    context: &FunctionContextInput<'_>,
+    policy: CastPolicy,
+) -> PlanResult<Vec<expr::Expr>> {
     arguments
         .into_iter()
-        .zip(&types)
-        .map(|(argument, source)| {
-            cast_nested_value_impl(argument, source, &target, context, CastPolicy::Constructor)
-        })
+        .zip(types)
+        .map(|(argument, source)| cast_nested_value_impl(argument, source, target, context, policy))
         .collect()
 }
 
@@ -282,6 +333,12 @@ fn common_type(
     struct_field_names: StructFieldNames,
     policy: CommonTypePolicy,
 ) -> PlanResult<Option<DataType>> {
+    if policy == CommonTypePolicy::OffsetWindow
+        && left != right
+        && (left.is_null() || right.is_null())
+    {
+        return Ok(None);
+    }
     if left == right || right == &DataType::Null {
         return Ok(Some(left.clone()));
     }
@@ -303,8 +360,11 @@ fn common_type(
             || right_field.is_nullable()
             || cast_adds_nulls(left_field.data_type(), &target)
             || cast_adds_nulls(right_field.data_type(), &target);
-        let field = if policy == CommonTypePolicy::Constructor {
-            // Keep the Arrow element field when merging constructor inputs.
+        let field = if matches!(
+            policy,
+            CommonTypePolicy::Constructor | CommonTypePolicy::OffsetWindow
+        ) {
+            // Keep the Arrow element field when aligning nested arguments.
             Arc::new(
                 left_field
                     .as_ref()
@@ -354,9 +414,11 @@ fn common_type(
         }
         return Ok(Some(DataType::Struct(fields.into())));
     }
-    if policy == CommonTypePolicy::Constructor
-        && let (DataType::Map(left, left_sorted), DataType::Map(right, right_sorted)) =
-            (left, right)
+    if matches!(
+        policy,
+        CommonTypePolicy::Constructor | CommonTypePolicy::OffsetWindow
+    ) && let (DataType::Map(left, left_sorted), DataType::Map(right, right_sorted)) =
+        (left, right)
     {
         let (Some((left_key, left_value)), Some((right_key, right_value))) =
             (map_entry_fields(left), map_entry_fields(right))
@@ -411,6 +473,20 @@ fn common_type(
     if is_nested_result_type(left) || is_nested_result_type(right) {
         return Ok(None);
     }
+    if policy == CommonTypePolicy::OffsetWindow {
+        // The default converts to the payload's SQL type. Preserve the existing
+        // reconciliation of alternate Arrow string and binary representations.
+        if (left.is_signed_integer() && right.is_signed_integer())
+            || offset_default_uses_numeric_cast(right, left)
+        {
+            return Ok(Some(left.clone()));
+        }
+        if !(is_string_type(left) && is_string_type(right)
+            || is_binary_type(left) && is_binary_type(right))
+        {
+            return Ok(None);
+        }
+    }
     if policy == CommonTypePolicy::TightestArrayElement {
         return Ok(tightest_array_leaf_type(left, right, context));
     }
@@ -446,7 +522,7 @@ fn same_value_type(source: &DataType, target: &DataType, policy: CastPolicy) -> 
                     && same_value_type(source.data_type(), target.data_type(), policy)
             });
     }
-    if policy == CastPolicy::Constructor
+    if policy != CastPolicy::General
         && let (DataType::Map(source, source_sorted), DataType::Map(target, target_sorted)) =
             (source, target)
     {
@@ -634,6 +710,7 @@ pub(crate) fn prune_coalesce_declaration_cast(
 enum CastPolicy {
     General,
     Constructor,
+    OffsetWindow,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -676,7 +753,7 @@ impl ResultCast {
         }
         let elements = match (source, target) {
             (DataType::Map(source, _), DataType::Map(target, _))
-                if policy == CastPolicy::Constructor =>
+                if policy != CastPolicy::General =>
             {
                 Some((source, target))
             }
@@ -714,7 +791,14 @@ impl ResultCast {
             vec![Field::new("value", source.clone(), true)].into(),
             Default::default(),
         )?;
-        let expression = cast_result_value(col("value"), source, target)?;
+        let expression = if policy == CastPolicy::OffsetWindow
+            && let Some(cast) =
+                offset_default_numeric_cast(source, target, context.plan_config.ansi_mode)?
+        {
+            cast.call(vec![col("value")])
+        } else {
+            cast_result_value(col("value"), source, target)?
+        };
         Ok(Self::Leaf(
             context
                 .session_context

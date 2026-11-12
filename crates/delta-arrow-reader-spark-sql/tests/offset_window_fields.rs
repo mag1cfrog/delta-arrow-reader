@@ -1,10 +1,12 @@
 //! Offset-window Fields match Spark; separately owned native gaps retain exact profiles.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+use std::panic::AssertUnwindSafe;
 
 use datafusion::execution::SessionStateBuilder;
 use datafusion::prelude::{SessionConfig, SessionContext};
 use delta_arrow_reader_spark_sql::configure_spark_sql;
+use futures_util::FutureExt;
 use serde_json::{Value, json};
 
 #[path = "support/spark_inputs.rs"]
@@ -13,8 +15,8 @@ mod spark_inputs;
 mod spark_results;
 use spark_results::{
     STAGES, TestResult, capture_native_query_observation, case_identity,
-    compare_exact_spark_query_stages_with_optimized, native_result_matches_spark_reference,
-    validate_spark_reference_result,
+    compare_exact_spark_query_stages, compare_exact_spark_query_stages_with_optimized,
+    native_result_matches_spark_reference, validate_spark_reference_result,
 };
 
 fn new_test_session(batch_size: usize, enable_spark_sql: bool) -> SessionContext {
@@ -164,13 +166,6 @@ fn load_reference_fixtures(
         );
         match control["kind"].as_str() {
             Some("rows") => assert_eq!(case["status"], "ok"),
-            Some("default_error") => {
-                assert_eq!(case["status"], "ok");
-                assert!(matches!(
-                    control["id"].as_str(),
-                    Some("lag_column_default_controls" | "lead_column_default_controls")
-                ));
-            }
             Some("diagnostic" | "untyped_null") => assert_eq!(case["status"], "error"),
             _ => return Err("unknown retained kind".into()),
         }
@@ -209,18 +204,143 @@ fn matches_retained_native_profile(
         reference_case["schema_stages"]
             .get(*stage)
             .is_none_or(|expected_schema| {
-                if retained_control["kind"] == "default_error"
-                    && matches!(*stage, "executed_before_collect" | "executed")
-                {
-                    native_observation
-                        .get(*native_field_key)
-                        .is_some_and(Value::is_null)
-                } else {
-                    native_observation.get(*native_field_key) == Some(expected_schema)
-                }
+                native_observation.get(*native_field_key) == Some(expected_schema)
             })
     });
     Ok(reference_fields_match && native_observation == expected_native_observation)
+}
+
+// #1118 compares executed names and types without nested nullability or metadata.
+fn executed_field_names_and_types(schema: &Value) -> Option<Vec<(&str, Value)>> {
+    schema["fields"]
+        .as_array()?
+        .iter()
+        .map(|field| Some((field["name"].as_str()?, executed_data_type(&field["type"])?)))
+        .collect()
+}
+
+fn executed_data_type(data_type: &Value) -> Option<Value> {
+    match data_type["type"].as_str() {
+        Some("struct") => {
+            Some(json!({"type":"struct","fields":executed_field_names_and_types(data_type)?}))
+        }
+        Some("array") => Some(json!({"type":"array",
+            "elementType":executed_data_type(&data_type["elementType"])?})),
+        Some("map") => Some(json!({"type":"map",
+            "keyType":executed_data_type(&data_type["keyType"])?,
+            "valueType":executed_data_type(&data_type["valueType"])?})),
+        _ => data_type.as_str().map(Value::from),
+    }
+}
+
+#[tokio::test]
+async fn row_dependent_offset_defaults_match_spark() -> TestResult {
+    let manifest: Value = serde_json::from_str(include_str!(
+        "fixtures/row-dependent-offset-defaults/inputs.json"
+    ))?;
+    assert_eq!(manifest["issue"], 1118);
+    assert_eq!(manifest["spark_version"], "4.2.0");
+    assert_eq!(
+        manifest["spark_revision"],
+        "32f7299601108917fb01920a54e084595b7b3bf8"
+    );
+    assert_eq!(manifest["timezone"], "UTC");
+    assert_eq!(manifest["ansi_modes"], json!([false, true]));
+    let cases = manifest["cases"].as_array().ok_or("missing cases")?;
+    assert_eq!(cases.len(), 19);
+    let mut planned = BTreeMap::new();
+    for case in cases {
+        let id = case["id"].as_str().ok_or("missing case ID")?;
+        let sql = case["sql"].as_str().ok_or("missing SQL")?;
+        let modes = case
+            .get("ansi_modes")
+            .unwrap_or(&manifest["ansi_modes"])
+            .as_array()
+            .ok_or("missing ANSI modes")?;
+        assert!(!modes.is_empty(), "missing ANSI modes for {id}");
+        for mode in modes {
+            let ansi = mode.as_bool().ok_or("expected an ANSI boolean")?;
+            assert!(planned.insert((id, ansi), sql).is_none(), "duplicate {id}");
+        }
+    }
+    let references = include_str!("fixtures/row-dependent-offset-defaults/spark-results.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut expected_fields = Vec::new();
+    for case in &references {
+        let id = case["id"].as_str().ok_or("missing reference ID")?;
+        let ansi = case["ansi"].as_bool().ok_or("missing ANSI mode")?;
+        let sql = planned
+            .remove(&(id, ansi))
+            .ok_or_else(|| format!("unexpected Spark reference {id} ANSI={ansi}"))?;
+        assert_eq!(case["sql"], sql, "{id} ANSI={ansi}");
+        assert_eq!(case["status"], "ok", "{id} ANSI={ansi}");
+        assert!(case["rows"].is_array(), "missing Spark rows for {id}");
+        expected_fields.push(
+            executed_field_names_and_types(&case["physical_schema"])
+                .ok_or("missing Spark executed fields")?,
+        );
+    }
+    assert_eq!(references.len(), 34);
+    assert!(planned.is_empty(), "missing Spark references: {planned:?}");
+
+    let mut differences = Vec::new();
+    for batch in [1, 32] {
+        let session = new_test_session(batch, true);
+        spark_inputs::register_recorded_inputs(
+            &session,
+            &json!({"inputs":manifest["registered_inputs"]}),
+            batch,
+        )?;
+        for (case, expected_fields) in references.iter().zip(&expected_fields) {
+            let query = json!({"sql":case["sql"],"ansi":case["ansi"],"ordered":true,
+                "expected":{"rows":case["rows"]}});
+            let actual = match AssertUnwindSafe(compare_exact_spark_query_stages(&session, &query))
+                .catch_unwind()
+                .await
+            {
+                Ok(Ok(mut observation)) => {
+                    observation["status"] = json!(if observation["error"].is_null() {
+                        "ok"
+                    } else {
+                        "error"
+                    });
+                    observation
+                }
+                Ok(Err(error)) => json!({"status":"error","error":error.to_string()}),
+                Err(panic) => {
+                    let message = panic
+                        .downcast_ref::<String>()
+                        .map(String::as_str)
+                        .or_else(|| panic.downcast_ref::<&str>().copied());
+                    json!({"status":"panic","panic":message})
+                }
+            };
+            let fields_match = executed_field_names_and_types(&actual["physical_schema"])
+                .is_some_and(|fields| &fields == expected_fields);
+            let rows_match = actual["rows_raw"] == case["rows"];
+            let matches = actual["status"] == "ok" && fields_match && rows_match;
+            let observation = json!({"id":case["id"],"sql":case["sql"],"ansi":case["ansi"],
+                "batch":batch,"matches":matches,"fields_match":fields_match,"rows_match":rows_match,
+                "spark":case,"actual":actual});
+            eprintln!("ROW_DEPENDENT_OFFSET_DEFAULTS {observation}");
+            if !matches {
+                differences.push(format!(
+                    "{} ANSI={} batch={batch}",
+                    case["id"], case["ansi"]
+                ));
+            }
+        }
+    }
+    assert!(
+        differences.is_empty(),
+        "{} of {} offset default contexts differ:\n{}",
+        differences.len(),
+        references.len() * 2,
+        differences.join("\n")
+    );
+    Ok(())
 }
 
 #[tokio::test]
@@ -238,8 +358,8 @@ async fn offset_window_fields_match_spark_at_each_stage() -> TestResult {
             include_str!("fixtures/offset-window-fields-1044-spark.jsonl"),
             include_str!("fixtures/offset-window-fields-1044-retained.json"),
             188,
-            120,
-            68,
+            128,
+            60,
         ),
         (
             include_str!("fixtures/offset-window-default-coercion-1044-cases.json"),
@@ -504,6 +624,17 @@ async fn spark_offset_planning_keeps_native_fields_and_required_defaults_unchang
                     "batch={batch} after_spark={after_spark} {sql}"
                 );
             }
+        }
+        for function in ["LAG", "LEAD"] {
+            let sql = format!("SELECT {function}(r,2,d) OVER (ORDER BY id) FROM offset_scalar");
+            let expected = capture_native_query_observation(&native, &sql).await?;
+            assert_eq!(
+                expected["phase"], "create_physical_plan",
+                "{sql}: {expected}"
+            );
+            assert!(expected["error"].is_string(), "{sql}: {expected}");
+            let actual = capture_native_query_observation(&configured, &sql).await?;
+            assert_eq!(actual, expected, "batch={batch} {sql}");
         }
     }
     Ok(())

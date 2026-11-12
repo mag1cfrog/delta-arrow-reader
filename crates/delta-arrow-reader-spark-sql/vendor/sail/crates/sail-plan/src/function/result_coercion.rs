@@ -6,6 +6,7 @@ use datafusion_expr::{ExprSchemable, ScalarUDF, cast, expr};
 use sail_common::spec::SetOpType;
 use sail_function::scalar::datetime::spark_date::SparkDate;
 use sail_function::scalar::datetime::spark_timestamp::SparkTimestamp;
+use sail_function::scalar::spark_cast_numeric_to_integer::SparkCastNumericToInteger;
 use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
 use sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat;
 use sail_function::scalar::spark_cast_string_to_integer::{
@@ -22,10 +23,32 @@ use crate::function::temporal_coercion::{cast_local_timestamp_expr_to_ltz, commo
 
 mod nested;
 pub(crate) use nested::{
-    align_struct_constructor_arguments, cast_nested_value, common_array_element_type,
-    has_coalesce_declaration_cast, is_constructor_declaration_cast, is_nested_result_type,
-    nested_result_cast_input, prune_coalesce_declaration_cast, same_positional_logical_type,
+    align_offset_window_arguments, align_struct_constructor_arguments, cast_nested_value,
+    common_array_element_type, has_coalesce_declaration_cast, is_constructor_declaration_cast,
+    is_nested_result_type, nested_result_cast_input, prune_coalesce_declaration_cast,
+    same_positional_logical_type,
 };
+
+fn offset_default_uses_numeric_cast(source: &DataType, target: &DataType) -> bool {
+    target.is_signed_integer()
+        && (matches!(source, DataType::Float32 | DataType::Float64)
+            || (source.is_signed_integer() && source.primitive_width() > target.primitive_width()))
+}
+
+pub(crate) fn offset_default_numeric_cast(
+    source: &DataType,
+    target: &DataType,
+    ansi_mode: bool,
+) -> PlanResult<Option<ScalarUDF>> {
+    if !offset_default_uses_numeric_cast(source, target) {
+        return Ok(None);
+    }
+    Ok(Some(ScalarUDF::from(SparkCastNumericToInteger::try_new(
+        target.clone(),
+        ansi_mode,
+        false,
+    )?)))
+}
 
 #[derive(PartialEq, Eq)]
 enum NestedDeclarations {

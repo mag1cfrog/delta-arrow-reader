@@ -1,9 +1,11 @@
 use std::sync::Arc;
 
-use arrow::compute::SortOptions;
+use arrow::array::ArrayRef;
+use arrow::compute::{SortOptions, cast, interleave};
 use arrow::datatypes::{DataType, FieldRef};
 use datafusion::functions_window::lead_lag::{lag_udwf, lead_udwf};
 use datafusion::physical_expr::PhysicalExpr;
+use datafusion::physical_expr::expressions::Literal;
 use datafusion_common::Result;
 use datafusion_expr::function::{
     ExpressionArgs, PartitionEvaluatorArgs, WindowFunctionSimplification, WindowUDFFieldArgs,
@@ -14,24 +16,24 @@ use datafusion_expr::{
 };
 
 pub(super) fn spark_lag_udwf() -> Arc<WindowUDF> {
-    with_spark_offset_fields(lag_udwf())
+    spark_offset_window(lag_udwf())
 }
 
 pub(super) fn spark_lead_udwf() -> Arc<WindowUDF> {
-    with_spark_offset_fields(lead_udwf())
+    spark_offset_window(lead_udwf())
 }
 
-fn with_spark_offset_fields(native: Arc<WindowUDF>) -> Arc<WindowUDF> {
-    Arc::new(WindowUDF::from(SparkOffsetWindowFieldAdapter { native }))
+fn spark_offset_window(native: Arc<WindowUDF>) -> Arc<WindowUDF> {
+    Arc::new(WindowUDF::from(SparkOffsetWindow { native }))
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-struct SparkOffsetWindowFieldAdapter {
+struct SparkOffsetWindow {
     native: Arc<WindowUDF>,
 }
 
 #[warn(clippy::missing_trait_methods)]
-impl WindowUDFImpl for SparkOffsetWindowFieldAdapter {
+impl WindowUDFImpl for SparkOffsetWindow {
     fn name(&self) -> &str {
         self.native.name()
     }
@@ -45,6 +47,9 @@ impl WindowUDFImpl for SparkOffsetWindowFieldAdapter {
     }
 
     fn expressions(&self, args: ExpressionArgs) -> Vec<Arc<dyn PhysicalExpr>> {
+        if let Some([payload, _, default]) = row_default_args(args.input_exprs()) {
+            return vec![Arc::clone(payload), Arc::clone(default)];
+        }
         self.native.expressions(args)
     }
 
@@ -52,7 +57,35 @@ impl WindowUDFImpl for SparkOffsetWindowFieldAdapter {
         &self,
         args: PartitionEvaluatorArgs,
     ) -> Result<Box<dyn PartitionEvaluator>> {
-        self.native.partition_evaluator_factory(args)
+        let Some([_, offset, _]) = row_default_args(args.input_exprs()) else {
+            return self.native.partition_evaluator_factory(args);
+        };
+        let Some(offset) = offset.downcast_ref::<Literal>().map(Literal::value) else {
+            return datafusion_common::not_impl_err!(
+                "There is only support Literal types for field at idx: 1 in Window Function"
+            );
+        };
+        let offset: i64 = if offset.is_null() {
+            0
+        } else if offset.data_type().is_integer() {
+            offset.cast_to(&DataType::Int64)?.try_into()?
+        } else {
+            return datafusion_common::exec_err!("Expected an integer value");
+        };
+        // The native evaluator uses positive shifts for earlier rows. Reversal flips that direction.
+        let shift = if (self.native.name() == "lag") != args.is_reversed() {
+            offset
+        } else {
+            offset.wrapping_neg()
+        };
+        let result = self
+            .native
+            .field(WindowUDFFieldArgs::new(args.input_fields(), self.name()))?;
+        Ok(Box::new(RowDefaultEvaluator {
+            shift,
+            ignore_nulls: args.ignore_nulls(),
+            data_type: result.data_type().clone(),
+        }))
     }
 
     fn simplify(&self) -> Option<WindowFunctionSimplification> {
@@ -99,9 +132,7 @@ impl WindowUDFImpl for SparkOffsetWindowFieldAdapter {
 
     fn reverse_expr(&self) -> ReversedUDWF {
         match self.native.reverse_expr() {
-            ReversedUDWF::Reversed(native) => {
-                ReversedUDWF::Reversed(with_spark_offset_fields(native))
-            }
+            ReversedUDWF::Reversed(native) => ReversedUDWF::Reversed(spark_offset_window(native)),
             other => other,
         }
     }
@@ -112,6 +143,84 @@ impl WindowUDFImpl for SparkOffsetWindowFieldAdapter {
 
     fn limit_effect(&self, args: &[Arc<dyn PhysicalExpr>]) -> LimitEffect {
         self.native.inner().limit_effect(args)
+    }
+}
+
+fn row_default_args(args: &[Arc<dyn PhysicalExpr>]) -> Option<[&Arc<dyn PhysicalExpr>; 3]> {
+    let [payload, offset, default] = args else {
+        return None;
+    };
+    default
+        .downcast_ref::<Literal>()
+        .is_none()
+        .then_some([payload, offset, default])
+}
+
+#[derive(Debug)]
+struct RowDefaultEvaluator {
+    shift: i64,
+    ignore_nulls: bool,
+    data_type: DataType,
+}
+
+impl PartitionEvaluator for RowDefaultEvaluator {
+    fn evaluate_all(&mut self, values: &[ArrayRef], num_rows: usize) -> Result<ArrayRef> {
+        let [payload, default] = values else {
+            return datafusion_common::internal_err!("Expected payload and default arrays");
+        };
+        // Interleave requires matching Arrow declarations, including nested child fields.
+        let align_type = |value: &ArrayRef| -> Result<ArrayRef> {
+            if value.data_type() == &self.data_type {
+                Ok(Arc::clone(value))
+            } else {
+                Ok(cast(value.as_ref(), &self.data_type)?)
+            }
+        };
+        let payload = align_type(payload)?;
+        if self.shift == 0 {
+            return Ok(payload);
+        }
+        let default = align_type(default)?;
+        let distance = usize::try_from(self.shift.unsigned_abs()).unwrap_or(usize::MAX);
+        if distance >= num_rows {
+            return Ok(default);
+        }
+
+        // ponytail: DataFusion buffers a physical partition, then we index each window group.
+        // Use bounded lookahead if dynamic defaults need streaming execution.
+        let eligible = if self.ignore_nulls {
+            payload
+                .logical_nulls()
+                .filter(|nulls| nulls.null_count() > 0)
+                .map(|nulls| {
+                    let rows = nulls.valid_indices().collect::<Vec<_>>();
+                    (nulls, rows)
+                })
+        } else {
+            None
+        };
+        let looking_back = self.shift > 0;
+        let mut valid_before = 0_usize;
+        let indices = (0..num_rows)
+            .map(|row| {
+                let target = if let Some((nulls, rows)) = &eligible {
+                    let valid_through = valid_before + usize::from(nulls.is_valid(row));
+                    let position = if looking_back {
+                        valid_before.checked_sub(distance)
+                    } else {
+                        valid_through.checked_add(distance - 1)
+                    };
+                    valid_before = valid_through;
+                    position.and_then(|index| rows.get(index).copied())
+                } else if looking_back {
+                    row.checked_sub(distance)
+                } else {
+                    row.checked_add(distance).filter(|&index| index < num_rows)
+                };
+                target.map_or((1, row), |index| (0, index))
+            })
+            .collect::<Vec<_>>();
+        Ok(interleave(&[payload.as_ref(), default.as_ref()], &indices)?)
     }
 }
 
@@ -226,7 +335,10 @@ mod tests {
 
     #[test]
     fn offset_window_keeps_native_refinement_evaluation_and_limits() -> Result<()> {
-        let schema = Schema::new(vec![Field::new("payload", DataType::Int32, true)]);
+        let schema = Schema::new(vec![
+            Field::new("payload", DataType::Int32, true),
+            Field::new("default", DataType::Int32, false),
+        ]);
         let values: Vec<ArrayRef> = vec![Arc::new(Int32Array::from(vec![
             Some(10),
             None,
@@ -307,30 +419,45 @@ mod tests {
                 actual[0].return_field(&schema)?,
                 expected[0].return_field(&schema)?
             );
-            let mut invalid_default = args.clone();
-            invalid_default[2] = Arc::new(Column::new("payload", 0));
-            let fields = invalid_default
+            let row_default = [
+                Arc::new(Column::new("payload", 0)) as Arc<dyn PhysicalExpr>,
+                Arc::clone(&args[1]),
+                Arc::new(Column::new("default", 1)),
+            ];
+            let fields = row_default
                 .iter()
                 .map(|argument| argument.return_field(&schema))
                 .collect::<Result<Vec<_>>>()?;
-            let actual = spark.partition_evaluator_factory(PartitionEvaluatorArgs::new(
-                &invalid_default,
+            let native_result = native.partition_evaluator_factory(PartitionEvaluatorArgs::new(
+                &row_default,
                 &fields,
                 false,
                 false,
             ));
-            let expected = native.partition_evaluator_factory(PartitionEvaluatorArgs::new(
-                &invalid_default,
-                &fields,
-                false,
-                false,
-            ));
-            assert!(actual.is_err());
-            assert!(expected.is_err());
+            assert!(native_result.is_err());
+            let row_values = [
+                Arc::clone(&values[0]),
+                Arc::new(Int32Array::from(vec![-1, -2, -3, -4])) as ArrayRef,
+            ];
             assert_eq!(
-                actual.err().map(|error| error.to_string()),
-                expected.err().map(|error| error.to_string())
+                spark
+                    .expressions(ExpressionArgs::new(&row_default, &fields))
+                    .len(),
+                2
             );
+            for reversed in [false, true] {
+                let mut evaluator = spark.partition_evaluator_factory(
+                    PartitionEvaluatorArgs::new(&row_default, &fields, reversed, false),
+                )?;
+                let expected: ArrayRef =
+                    Arc::new(Int32Array::from(if (spark.name() == "lag") != reversed {
+                        vec![Some(-1), Some(10), None, Some(30)]
+                    } else {
+                        vec![None, Some(30), Some(40), Some(-4)]
+                    }));
+                let actual = evaluator.evaluate_all(&row_values, 4)?;
+                assert_eq!(actual.as_ref(), expected.as_ref());
+            }
         }
         Ok(())
     }

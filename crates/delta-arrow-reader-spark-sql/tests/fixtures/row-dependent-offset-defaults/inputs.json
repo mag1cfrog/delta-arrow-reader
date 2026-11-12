@@ -1,0 +1,351 @@
+{
+  "issue": 1118,
+  "baseline": {
+    "commit": "dbc02cfce14eeda40141966f9031b569d478cb2d",
+    "tree": "b97a54538ac5e4379f2946aac6160396486ca1ba"
+  },
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "ansi_modes": [
+    false,
+    true
+  ],
+  "timezone": "UTC",
+  "input_provenance": {
+    "path": "crates/delta-arrow-reader-spark-sql/tests/fixtures/offset-window-fields-1044-cases.json",
+    "sha256": "42c2f1e601bd081d8ff23db96815e3faffc67283829b353d1a44a009f307d9a8"
+  },
+  "registered_inputs": [
+    {
+      "name": "offset_scalar",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "id",
+              "role": "total-order"
+            }
+          },
+          {
+            "name": "g",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "g",
+              "role": "partition"
+            }
+          },
+          {
+            "name": "r",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "r",
+              "role": "required-payload"
+            }
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {
+              "source": "v",
+              "role": "nullable-payload"
+            }
+          },
+          {
+            "name": "d",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "d",
+              "role": "required-default"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "0",
+          "10",
+          null,
+          "-101"
+        ],
+        [
+          "1",
+          "0",
+          "20",
+          "10",
+          "-102"
+        ],
+        [
+          "2",
+          "0",
+          "30",
+          null,
+          "-103"
+        ],
+        [
+          "3",
+          "0",
+          "40",
+          "20",
+          "-104"
+        ],
+        [
+          "4",
+          "1",
+          "50",
+          null,
+          "-105"
+        ],
+        [
+          "5",
+          "1",
+          "60",
+          "30",
+          "-106"
+        ],
+        [
+          "6",
+          "1",
+          "70",
+          "40",
+          "-107"
+        ],
+        [
+          "7",
+          "1",
+          "80",
+          null,
+          "-108"
+        ]
+      ]
+    },
+    {
+      "name": "null_offset_scalar",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "id",
+              "role": "total-order"
+            }
+          },
+          {
+            "name": "g",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "g",
+              "role": "partition"
+            }
+          },
+          {
+            "name": "r",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "r",
+              "role": "required-payload"
+            }
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {
+              "source": "v",
+              "role": "nullable-payload"
+            }
+          },
+          {
+            "name": "d",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "d",
+              "role": "required-default"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "0",
+          "10",
+          null,
+          "-101"
+        ],
+        [
+          "1",
+          "0",
+          "20",
+          null,
+          "-102"
+        ],
+        [
+          "2",
+          "1",
+          "30",
+          null,
+          "-103"
+        ]
+      ]
+    },
+    {
+      "name": "empty_offset_scalar",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "id",
+              "role": "total-order"
+            }
+          },
+          {
+            "name": "g",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "g",
+              "role": "partition"
+            }
+          },
+          {
+            "name": "r",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "r",
+              "role": "required-payload"
+            }
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {
+              "source": "v",
+              "role": "nullable-payload"
+            }
+          },
+          {
+            "name": "d",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "d",
+              "role": "required-default"
+            }
+          }
+        ]
+      },
+      "rows": []
+    }
+  ],
+  "cases": [
+    {
+      "id": "partitioned_respect_column_and_case",
+      "sql": "SELECT id, g, LAG(v, 1, d) RESPECT NULLS OVER w AS lag_column, LEAD(v, 1, d) OVER w AS lead_column, LAG(v, 2, CASE WHEN v IS NULL THEN d - 1000 ELSE CAST(NULL AS INT) END) OVER w AS lag_case, LEAD(v, 2, CASE WHEN v IS NULL THEN d - 1000 ELSE CAST(NULL AS INT) END) OVER w AS lead_case FROM offset_scalar WINDOW w AS (PARTITION BY g ORDER BY id) ORDER BY id"
+    },
+    {
+      "id": "partitioned_signed_null_treatment",
+      "sql": "SELECT id, g, LAG(v, -2, d) RESPECT NULLS OVER w AS lag_negative_respect, LAG(v, -2, d) IGNORE NULLS OVER w AS lag_negative_ignore, LAG(v, 0, d) RESPECT NULLS OVER w AS lag_zero_respect, LAG(v, 0, d) IGNORE NULLS OVER w AS lag_zero_ignore, LAG(v, 2, d) RESPECT NULLS OVER w AS lag_positive_respect, LAG(v, 2, d) IGNORE NULLS OVER w AS lag_positive_ignore, LEAD(v, -2, d) RESPECT NULLS OVER w AS lead_negative_respect, LEAD(v, -2, d) IGNORE NULLS OVER w AS lead_negative_ignore, LEAD(v, 0, d) RESPECT NULLS OVER w AS lead_zero_respect, LEAD(v, 0, d) IGNORE NULLS OVER w AS lead_zero_ignore, LEAD(v, 2, d) RESPECT NULLS OVER w AS lead_positive_respect, LEAD(v, 2, d) IGNORE NULLS OVER w AS lead_positive_ignore FROM offset_scalar WINDOW w AS (PARTITION BY g ORDER BY id) ORDER BY id"
+    },
+    {
+      "id": "all_null_partitions",
+      "sql": "SELECT id, g, LAG(v, 2, d) IGNORE NULLS OVER w AS lag_default, LEAD(v, -2, d) IGNORE NULLS OVER w AS lead_default, LEAD(v, 0, d) IGNORE NULLS OVER w AS lead_current FROM null_offset_scalar WINDOW w AS (PARTITION BY g ORDER BY id) ORDER BY id"
+    },
+    {
+      "id": "empty_partitions",
+      "sql": "SELECT id, g, LAG(v, 2, d) IGNORE NULLS OVER w AS lag_default, LEAD(v, -2, CASE WHEN v IS NULL THEN d - 1000 ELSE CAST(NULL AS INT) END) OVER w AS lead_case FROM empty_offset_scalar WINDOW w AS (PARTITION BY g ORDER BY id) ORDER BY id"
+    },
+    {
+      "id": "coerced_numeric_widths",
+      "sql": "SELECT id, g, LAG(CAST(v AS TINYINT), 1, CAST(d + 100 AS BIGINT)) OVER w AS lag_tinyint, LEAD(CAST(v AS SMALLINT), 1, d) OVER w AS lead_smallint, LAG(v, 1, CAST(d AS TINYINT)) OVER w AS lag_integer, LEAD(CAST(v AS BIGINT), 1, CAST(d AS BIGINT) - 2147483648L) OVER w AS lead_bigint, LAG(CAST(v AS DECIMAL(8, 2)), 1, CAST(d AS DECIMAL(12, 2))) OVER w AS lag_decimal FROM offset_scalar WINDOW w AS (PARTITION BY g ORDER BY id) ORDER BY id"
+    },
+    {
+      "id": "lead_ignore_nulls_gap",
+      "sql": "WITH s AS (SELECT id, d, CASE WHEN id IN (0, 4) THEN CAST(NULL AS INT) ELSE r END AS x FROM offset_scalar WHERE id < 6) SELECT id, LEAD(x, 2, d) IGNORE NULLS OVER w AS lead_gap, LAG(x, -2, d) IGNORE NULLS OVER w AS lag_gap FROM s WINDOW w AS (ORDER BY id) ORDER BY id"
+    },
+    {
+      "id": "nested_nullable_payload_child",
+      "sql": "SELECT id, g, LAG(NAMED_STRUCT('x', v), 1, NAMED_STRUCT('x', d)) OVER w AS lag_struct, LEAD(NAMED_STRUCT('x', v), 1, NAMED_STRUCT('x', d)) IGNORE NULLS OVER w AS lead_struct FROM offset_scalar WINDOW w AS (PARTITION BY g ORDER BY id) ORDER BY id"
+    },
+    {
+      "id": "nested_nullable_default_child",
+      "sql": "SELECT id, g, LAG(NAMED_STRUCT('x', d), 1, NAMED_STRUCT('x', v)) OVER w AS lag_struct, LEAD(NAMED_STRUCT('x', d), 1, NAMED_STRUCT('x', v)) IGNORE NULLS OVER w AS lead_struct FROM offset_scalar WINDOW w AS (PARTITION BY g ORDER BY id) ORDER BY id"
+    },
+    {
+      "id": "typed_null_payload",
+      "sql": "SELECT id, g, LAG(CAST(NULL AS SMALLINT), 1, CAST(d AS SMALLINT)) RESPECT NULLS OVER w AS lag_null, LEAD(CAST(NULL AS SMALLINT), 1, CAST(d AS SMALLINT)) IGNORE NULLS OVER w AS lead_null FROM offset_scalar WINDOW w AS (PARTITION BY g ORDER BY id) ORDER BY id"
+    },
+    {
+      "id": "dynamic_map_defaults",
+      "sql": "SELECT id, g, LAG(MAP('x', d), 1, MAP('x', v)) OVER w AS lag_nullable_default, LAG(MAP('x', v), 1, MAP('x', d)) OVER w AS lag_nullable_payload FROM offset_scalar WINDOW w AS (PARTITION BY g ORDER BY id) ORDER BY id"
+    },
+    {
+      "id": "lead_ignore_nulls_gap_limit",
+      "sql": "WITH s AS (SELECT id, d, CASE WHEN id IN (0, 4) THEN CAST(NULL AS INT) ELSE r END AS x FROM offset_scalar WHERE id < 6) SELECT id, LEAD(x, 2, d) IGNORE NULLS OVER w AS lead_gap, LAG(x, -2, d) IGNORE NULLS OVER w AS lag_gap FROM s WINDOW w AS (ORDER BY id) ORDER BY id LIMIT 3"
+    },
+    {
+      "id": "mixed_dynamic_literal_siblings",
+      "sql": "SELECT id, LAG(r,1,d) OVER w AS dynamic_lag, LEAD(r,1,-1) IGNORE NULLS OVER w AS literal_lead FROM offset_scalar WINDOW w AS (ORDER BY id) ORDER BY id"
+    },
+    {
+      "id": "array_cast_to_tinyint_valid",
+      "sql": "SELECT id, LAG(ARRAY(CAST(r AS TINYINT)),1,ARRAY(d + 100)) OVER (ORDER BY id) AS x FROM offset_scalar ORDER BY id"
+    },
+    {
+      "id": "array_cast_to_tinyint_legacy_wrap",
+      "sql": "SELECT id, LAG(ARRAY(CAST(r AS TINYINT)),1,ARRAY(d - 1000)) OVER (ORDER BY id) AS x FROM offset_scalar ORDER BY id",
+      "ansi_modes": [
+        false
+      ]
+    },
+    {
+      "id": "scalar_cast_to_tinyint_valid",
+      "sql": "SELECT id,LAG(CAST(r AS TINYINT),1,d + 100) OVER (ORDER BY id) AS x FROM offset_scalar ORDER BY id"
+    },
+    {
+      "id": "scalar_cast_to_tinyint_legacy_wrap",
+      "sql": "SELECT id,LAG(CAST(r AS TINYINT),1,d - 1000) OVER (ORDER BY id) AS x FROM offset_scalar ORDER BY id",
+      "ansi_modes": [
+        false
+      ]
+    },
+    {
+      "id": "array_float_cast_to_tinyint_valid",
+      "sql": "SELECT id,LAG(ARRAY(CAST(v AS TINYINT)),1,ARRAY(CAST(d + 100 AS DOUBLE))) OVER (ORDER BY id) AS x FROM offset_scalar ORDER BY id"
+    },
+    {
+      "id": "array_float_cast_to_tinyint_legacy_wrap",
+      "sql": "SELECT id,LAG(ARRAY(CAST(v AS TINYINT)),1,ARRAY(CAST(d - 1000 AS DOUBLE))) OVER (ORDER BY id) AS x FROM offset_scalar ORDER BY id",
+      "ansi_modes": [
+        false
+      ]
+    },
+    {
+      "id": "struct_default_uses_argument_positions",
+      "sql": "SELECT id,LAG(NAMED_STRUCT('a',r,'b',d),1,NAMED_STRUCT('b',r,'a',d)) OVER (ORDER BY id) AS x FROM offset_scalar ORDER BY id",
+      "ansi_modes": [
+        true
+      ]
+    }
+  ]
+}
