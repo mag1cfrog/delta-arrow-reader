@@ -217,7 +217,7 @@ fn lower_scalar(
     if matches!(input, LogicalPlan::EmptyRelation(empty) if empty.produce_one_row) {
         return Ok(None);
     }
-    let Some(rows) = split_correlated_rows(input)? else {
+    let Some(rows) = split_correlated_rows(input, aliases)? else {
         return Ok(None);
     };
     let scalar_input = input.schema();

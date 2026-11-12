@@ -5,7 +5,7 @@ use std::panic::AssertUnwindSafe;
 
 use datafusion::execution::SessionStateBuilder;
 use datafusion::prelude::{SessionConfig, SessionContext};
-use delta_arrow_reader_spark_sql::configure_spark_sql;
+use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
 use futures_util::FutureExt;
 use serde_json::{Value, json};
 
@@ -295,5 +295,69 @@ async fn correlated_scalar_execution_matches_spark() -> TestResult {
         differences.len(),
         differences.join("\n")
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn correlated_union_all_preserves_values_types_and_cardinality() -> TestResult {
+    let references = records(include_str!(
+        "fixtures/correlated-scalar-union/spark-results.jsonl"
+    ))?;
+    assert_eq!(references[0]["spark_version"], "4.2.0");
+    assert_eq!(references.len() - 1, 36);
+    for input in references[0]["inputs"].as_array().ok_or("missing inputs")? {
+        let batch = spark_inputs::decode_recorded_batch(input)?;
+        spark_results::validate_batch(batch.schema().as_ref(), &batch)?;
+    }
+    let mut differences = Vec::new();
+    for batch in [1, 32] {
+        let session = session(batch);
+        spark_inputs::register_recorded_inputs(&session, &references[0], batch)?;
+        for case in &references[1..] {
+            if case["cardinality_error"] == true {
+                let query = plan_query(
+                    &session,
+                    case["sql"].as_str().ok_or("missing SQL")?,
+                    &SparkSqlOptions {
+                        ansi_mode: case["ansi"].as_bool().ok_or("missing ANSI")?,
+                        ..SparkSqlOptions::default()
+                    },
+                )
+                .await?;
+                let physical = query.create_physical_plan(&session).await?;
+                let result = datafusion::physical_plan::collect(physical, session.task_ctx()).await;
+                let error = result.err().ok_or("scalar cardinality guard did not run")?;
+                assert!(
+                    error
+                        .to_string()
+                        .contains("Scalar subquery returned more than one row")
+                );
+                println!(
+                    "CORRELATED_UNION {}",
+                    json!({"id":case["id"],"ansi":case["ansi"],"batch":batch,
+                        "actual":{"execution_error":error.to_string()}})
+                );
+                continue;
+            }
+            let result = spark_results::capture_executed_query_result(&session, case).await;
+            let actual = match result {
+                Ok(mut actual) => {
+                    spark_results::remove_nullability_and_metadata(&mut actual);
+                    actual
+                }
+                Err(error) => json!({"error":error.to_string()}),
+            };
+            println!(
+                "CORRELATED_UNION {}",
+                json!({"id":case["id"],"ansi":case["ansi"],"batch":batch,"actual":actual})
+            );
+            let mut expected = json!({"rows":case["rows"],"schema":case["schema"]});
+            spark_results::remove_nullability_and_metadata(&mut expected);
+            if actual != expected {
+                differences.push(format!("{case} batch={batch}: {actual}"));
+            }
+        }
+    }
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }

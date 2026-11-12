@@ -1,13 +1,14 @@
 use std::sync::Arc;
 
 use datafusion::optimizer::decorrelate::PullUpCorrelatedExpr;
+use datafusion_common::alias::AliasGenerator;
 use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode, TreeNodeRecursion};
-use datafusion_common::{Column, DFSchema, Result};
+use datafusion_common::{Column, DFSchema, Result, ScalarValue, internal_err};
 use datafusion_expr::expr_rewriter::strip_outer_reference;
-use datafusion_expr::utils::{conjunction, split_conjunction};
+use datafusion_expr::utils::{conjunction, disjunction, split_conjunction};
 use datafusion_expr::{
     Aggregate, Distinct, Expr, Filter, JoinType, Limit, LogicalPlan, LogicalPlanBuilder, Operator,
-    Projection, Sort, SubqueryAlias, lit, when,
+    Projection, Sort, SubqueryAlias, Union, lit, when,
 };
 
 use super::aggregate::{aggregate_inner_rows, can_lower_aggregate, distinct_inner_rows};
@@ -27,9 +28,13 @@ pub(super) enum RowStep<'a> {
     Aggregate(&'a Aggregate),
     Distinct(&'a Arc<LogicalPlan>),
     Limit(&'a Limit, Option<&'a Sort>),
+    UnionOutput(Vec<Expr>, &'a DFSchema),
 }
 
-pub(super) fn split_correlated_rows(mut input: &LogicalPlan) -> Result<Option<CorrelatedRows<'_>>> {
+pub(super) fn split_correlated_rows<'a>(
+    mut input: &'a LogicalPlan,
+    aliases: &AliasGenerator,
+) -> Result<Option<CorrelatedRows<'a>>> {
     let mut steps = Vec::new();
     loop {
         if can_pull_up(input)? {
@@ -70,6 +75,7 @@ pub(super) fn split_correlated_rows(mut input: &LogicalPlan) -> Result<Option<Co
                 input
             }
             LogicalPlan::Limit(limit) if can_lower_limit(limit) => split_limit(limit, &mut steps),
+            LogicalPlan::Union(union) => return split_union_rows(union, steps, aliases),
             LogicalPlan::Sort(sort)
                 if sort.fetch.is_none()
                     && steps.iter().all(|step| {
@@ -85,6 +91,147 @@ pub(super) fn split_correlated_rows(mut input: &LogicalPlan) -> Result<Option<Co
             _ => return Ok(None),
         };
     }
+}
+
+fn split_union_rows<'a>(
+    union: &'a Union,
+    mut steps: Vec<RowStep<'a>>,
+    aliases: &AliasGenerator,
+) -> Result<Option<CorrelatedRows<'a>>> {
+    let mut branches = Vec::new();
+    for input in &union.inputs {
+        let Some(rows) = split_correlated_rows(input, aliases)? else {
+            return Ok(None);
+        };
+        if !rows.input.all_out_ref_exprs().is_empty() {
+            return Ok(None);
+        }
+        branches.push(rows);
+    }
+
+    // Branches keep private columns because their join keys and predicates can differ.
+    let sources = branches
+        .iter()
+        .flat_map(|branch| {
+            branch.input.schema().fields().iter().map(|field| {
+                (
+                    Column::new_unqualified(aliases.next("__spark_scalar_union")),
+                    field.data_type().clone(),
+                )
+            })
+        })
+        .collect::<Vec<_>>();
+    let tag = Column::new_unqualified(aliases.next("__spark_scalar_branch"));
+    let mut inputs = Vec::new();
+    let mut filters = Vec::new();
+    let mut output = union
+        .schema
+        .fields()
+        .iter()
+        .map(|field| Ok(lit(ScalarValue::try_new_null(field.data_type())?)))
+        .collect::<Result<Vec<_>>>()?;
+    let mut offset = 0;
+    for (index, branch) in branches.into_iter().enumerate() {
+        let mut schema = branch.input.schema().as_ref();
+        let columns = schema.columns();
+        let mut values = sources[offset..offset + columns.len()]
+            .iter()
+            .map(|(column, _)| Expr::Column(column.clone()))
+            .collect::<Vec<_>>();
+        let mut filter = inline_union_columns(branch.join_filter, schema, &values)?;
+        for step in branch.steps.into_iter().rev() {
+            // Keep a computed volatile value materialized before another consumer.
+            if values.iter().any(Expr::is_volatile) && !matches!(step, RowStep::Alias(_)) {
+                return Ok(None);
+            }
+            match step {
+                RowStep::Project(project) => {
+                    values = project
+                        .expr
+                        .iter()
+                        .map(|expr| inline_union_columns(expr.clone().unalias(), schema, &values))
+                        .collect::<Result<_>>()?;
+                    schema = &project.schema;
+                }
+                RowStep::Alias(alias) => {
+                    values = alias
+                        .input
+                        .schema()
+                        .columns()
+                        .iter()
+                        .map(|column| Ok(values[schema.index_of_column(column)?].clone()))
+                        .collect::<Result<_>>()?;
+                    schema = &alias.schema;
+                }
+                RowStep::Filter(predicate) => {
+                    filter = filter.and(strip_outer_reference(inline_union_columns(
+                        predicate.clone(),
+                        schema,
+                        &values,
+                    )?));
+                }
+                RowStep::UnionOutput(expr, output_schema) => {
+                    values = expr
+                        .into_iter()
+                        .map(|expr| inline_union_columns(expr, schema, &values))
+                        .collect::<Result<_>>()?;
+                    schema = output_schema;
+                }
+                _ => return Ok(None),
+            }
+        }
+        let is_branch = Expr::Column(tag.clone()).eq(lit(index as u64));
+        filters.push(is_branch.clone().and(filter));
+        let branch_output = union.inputs[index].schema();
+        if branch_output.fields().len() != output.len() {
+            return internal_err!("correlated UNION inputs must have the same number of columns");
+        }
+        for (output, column) in output.iter_mut().zip(branch_output.columns()) {
+            let value = values[schema.index_of_column(&column)?].clone();
+            *output = when(is_branch.clone(), strip_outer_reference(value))
+                .otherwise(std::mem::take(output))?;
+        }
+        let padded = sources
+            .iter()
+            .enumerate()
+            .map(|(position, (name, data_type))| {
+                let value = if (offset..offset + columns.len()).contains(&position) {
+                    Expr::Column(columns[position - offset].clone())
+                } else {
+                    lit(ScalarValue::try_new_null(data_type)?)
+                };
+                Ok(value.alias(&name.name))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        inputs.push(Arc::new(
+            LogicalPlanBuilder::from(branch.input)
+                .project(
+                    padded
+                        .into_iter()
+                        .chain([lit(index as u64).alias(&tag.name)]),
+                )?
+                .build()?,
+        ));
+        offset += columns.len();
+    }
+    steps.push(RowStep::UnionOutput(output, &union.schema));
+    Ok(Some(CorrelatedRows {
+        input: LogicalPlan::Union(Union::try_new(inputs)?),
+        join_filter: disjunction(filters).unwrap_or_else(|| lit(false)),
+        steps,
+    }))
+}
+
+fn inline_union_columns(expr: Expr, schema: &DFSchema, values: &[Expr]) -> Result<Expr> {
+    expr.transform_up(|expr| {
+        if let Expr::Column(column) = &expr
+            && let Ok(index) = schema.index_of_column(column)
+        {
+            return Ok(Transformed::yes(values[index].clone()));
+        }
+        Ok(Transformed::no(expr))
+    })
+    .data()
 }
 
 pub(super) fn move_correlated_inner_join_predicates(plan: LogicalPlan) -> Result<LogicalPlan> {
@@ -231,6 +378,9 @@ pub(super) fn apply_row_steps(
                 distinct_inner_rows(plan, input, row_id, marker, outer_columns)?
             }
             RowStep::Limit(limit, sort) => limit_inner_rows(plan, limit, sort, row_id, marker)?,
+            RowStep::UnionOutput(expr, schema) => {
+                project_inner_rows(plan, expr, schema, row_id, marker, outer_columns)?
+            }
         };
     }
     Ok(plan)

@@ -1576,6 +1576,24 @@ replay uses the original SQL with a fresh capture of the executed types. The
 native scalar tests and the observed provider in `inline_values_evaluation`
 check the native route and that Spark planning reads no rows.
 
+`correlated-scalar-union/spark-results.jsonl` adds 36 Spark 4.2.0 observations in
+both ANSI modes. Registered INT columns cover separate branch predicates,
+multiple union columns and branches, duplicate outer and inner rows, NULL and
+no-match results, and aggregates with bag semantics. DISTINCT and LIMIT consume
+the union per outer row. An outer RAND() value checks that branches share one
+outer evaluation. Cardinality cases require successful planning before an error
+during collection. The replay compares rows and executed types after removing
+nullability and metadata, and fully validates the Arrow inputs and results.
+
+From the Spark crate directory, use the pinned Python/Java setup and a fresh
+output path to recapture:
+
+```sh
+correlated_union_capture=$(mktemp -d)
+python tests/fixtures/correlated-scalar-union/capture_spark.py "$correlated_union_capture/spark-results.jsonl"
+cargo test --locked --workspace --test correlated_scalar_execution
+```
+
 ## Global aggregate argument admission
 
 `global-aggregate-admission-spark.jsonl` records 498 independent Spark 4.2.0

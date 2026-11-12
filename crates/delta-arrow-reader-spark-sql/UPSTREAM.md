@@ -471,6 +471,16 @@ grouping, DISTINCT and literal LIMIT compose per outer row. Global aggregates
 that DataFusion can decorrelate on their join keys keep its native path. The
 [correlated scalar references](tests/fixtures/README.md#correlated-scalars-over-inner-rows)
 cover these cases and the existing one-row rewrite.
+
+Correlated UNION ALL lowers branch projections, aliases and filters into one
+join. Private source columns and a branch tag keep each branch's predicates and
+output values separate. Local source filters remain below the union, and all
+branches share the outer evaluation and row identifier. Grouping, DISTINCT and
+LIMIT above the union use the same per-row steps and runtime scalar guard. The
+rewrite leaves the scalar subquery in its original plan if a branch needs an
+unsupported correlated operation or would substitute a computed volatile value
+into another consumer.
+
 Spark scalar results clear inherited user metadata in public fields. Their
 private metadata boundary ends only after the existing guarded one-row
 substitution, allowing executed fields to inherit the inner source metadata or
