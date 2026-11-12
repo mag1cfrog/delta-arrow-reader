@@ -5,6 +5,34 @@ including its unresolved Spark differences. `import_accepted_runtime.py`
 reconstructs it from the source archive named in `accepted-runtime.json`.
 Importing the fixture does not run Spark or certify compatibility.
 
+## Unknown column diagnostics
+
+`unknown-columns/spark-results.jsonl` records 23 unknown-column scenarios and 13
+successful controls in both ANSI modes. Spark supplies the requested identifier;
+valid analyzed queries supply scoped column names, with lambda parameters taken
+from their declarations. The tests require readable names and available columns,
+without matching Spark's suggestion ranking or full error text.
+
+Eight native-replay planning-error snapshots use the current readable names and
+concrete sort causes. Their planning-error status is preserved. The compressed
+historical capture and every successful value/type expectation remain unchanged.
+
+Projections, filters, JOINs, GROUP BY/HAVING aliases, nested and correlated queries,
+lambdas and quoted names cover the resolver's active scopes. An unused CTE checks
+that names outside the query scope stay out of the diagnostic. JOIN USING reports
+only the failing side's columns. Sort retries check whether an earlier missing
+reference now binds, preserving concrete type errors and later missing names.
+Two additional Spark-rejected type probes check that known sort inputs are not
+reported missing; DAR admission of those queries is allowed. Successful controls
+compare complete values and executed types at batch sizes 1 and 32, including
+hidden sort inputs, USING and NATURAL JOIN.
+
+From this directory, recapture with `pyspark==4.2.0` and Java 21:
+
+```sh
+TZ=UTC python unknown-columns/capture_spark.py /tmp/unknown-columns.jsonl
+```
+
 ## Current-time expressions
 
 `current-time-expressions/spark-results.jsonl` records Spark 4.2.0 values and

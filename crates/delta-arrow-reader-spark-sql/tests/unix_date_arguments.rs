@@ -184,11 +184,9 @@ fn expected_error_texts(case: &Value) -> Option<Vec<String>> {
     Some(texts)
 }
 
-/// #1185: a rejected argument in a sort key reports DAR's dump of the sort expression, without
-/// Spark's condition, as for DATEDIFF there.
+/// A rejected argument in a sort key retains the concrete DATE type requirement.
 const SORT_KEY_RECORDS: [&str; 2] = ["column_order_by_string", "column_sort_by_string"];
-const SORT_KEY_TEXT: &str = "invalid argument: sort expression: SortOrder { child: \
-    UnresolvedFunction(UnresolvedFunction { function_name: ObjectName([Identifier(\"unix_date\")])";
+const SORT_KEY_TEXT: &str = "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] `unix_date`: The first parameter requires the \"DATE\" type";
 
 /// The expectation for a record: Spark's, or for a #1185 record DAR's error text at Spark's
 /// stage.

@@ -194,13 +194,15 @@ async fn verify_nested_lambda_query_contracts(
                             }
                             Some("invalid_free_variable") => {
                                 case["expected"]["condition"] == "UNRESOLVED_COLUMN.WITH_SUGGESTION"
-                                    && error.contains("Identifier(\"missing\")")
+                                    && error.contains("attribute `missing`")
                                     && error.contains("missing from the schema")
+                                    && error.contains("available columns:")
                             }
                             Some("invalid_qualified_variable") => {
                                 case["expected"]["condition"] == "UNRESOLVED_COLUMN.WITH_SUGGESTION"
-                                    && error.contains("Identifier(\"q\"), Identifier(\"x\")")
+                                    && error.contains("attribute `q`.`x`")
                                     && error.contains("missing from the schema")
+                                    && error.contains("available columns:")
                             }
                             _ => false,
                         };

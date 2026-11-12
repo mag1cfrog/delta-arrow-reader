@@ -138,8 +138,16 @@ fn matches_planning_error(error: &DataFusionError, id: &str, condition: &str) ->
     let DataFusionError::External(source) = error else {
         return false;
     };
-    let Some(PlanError::AnalysisError(message)) = source.downcast_ref::<PlanError>() else {
-        return false;
+    let message = match source.downcast_ref::<PlanError>() {
+        Some(PlanError::UnknownColumn { message, .. })
+            if condition.starts_with("UNRESOLVED_COLUMN") =>
+        {
+            message
+        }
+        Some(PlanError::AnalysisError(message)) if !condition.starts_with("UNRESOLVED_COLUMN") => {
+            message
+        }
+        _ => return false,
     };
     match condition {
         "FIELD_NOT_FOUND"
@@ -199,11 +207,11 @@ fn matches_planning_error(error: &DataFusionError, id: &str, condition: &str) ->
                 .join(", ");
             message == &format!("ambiguous attribute: ObjectName([{name}])")
         }
-        "UNRESOLVED_COLUMN.WITH_SUGGESTION" => {
-            id == "missing_qualifier"
-                && message
-                    == "attribute ObjectName([Identifier(\"missing\"), Identifier(\"id\")]) is missing from the schema: cannot resolve attribute"
-        }
+        "UNRESOLVED_COLUMN.WITH_SUGGESTION" => id == "missing_qualifier"
+            && message.starts_with(
+                "attribute `missing`.`id` is missing from the schema: cannot resolve attribute ",
+            )
+            && message.contains("available columns:"),
         _ => false,
     }
 }

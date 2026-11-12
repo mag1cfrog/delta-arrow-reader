@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use async_recursion::async_recursion;
 use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode, TreeNodeRecursion};
-use datafusion_common::{Column, DFSchema};
+use datafusion_common::{Column, DFSchema, DFSchemaRef};
 use datafusion_expr::expr::{Alias, Sort};
 use datafusion_expr::utils::{exprlist_to_fields, find_aggregate_exprs};
 use datafusion_expr::{
@@ -376,7 +376,7 @@ impl PlanResolver<'_> {
             .await;
         match sort_expr {
             Ok(sort_expr) => Ok(sort_expr),
-            Err(_) => {
+            Err(mut resolution_error) => {
                 if allow_mixed_aggregate_inputs
                     && !matches!(sort.child.as_ref(), spec::Expr::Literal(_))
                     && let LogicalPlan::Projection(projection) = plan
@@ -389,7 +389,7 @@ impl PlanResolver<'_> {
                         output: Arc::clone(&projection.schema),
                         merged: Arc::clone(&merged),
                     });
-                    if let Ok(resolved) = self
+                    match self
                         .resolve_sort_order_allowing_calendar_intervals(
                             sort.clone(),
                             false,
@@ -397,24 +397,66 @@ impl PlanResolver<'_> {
                             scope.state(),
                         )
                         .await
-                        && !find_aggregate_exprs([&resolved.expr]).is_empty()
                     {
-                        return Ok(resolved);
+                        Ok(resolved) if !find_aggregate_exprs([&resolved.expr]).is_empty() => {
+                            return Ok(resolved);
+                        }
+                        Err(error) => {
+                            resolution_error = self.choose_sort_error(
+                                resolution_error,
+                                error,
+                                &merged,
+                                scope.state(),
+                            );
+                        }
+                        _ => {}
                     }
                 }
                 let mut sorts = Vec::with_capacity(plan.inputs().len());
                 for input_plan in plan.inputs() {
-                    let sort_expr = self
+                    match self
                         .resolve_query_sort_order_by_plan(input_plan, sort, false, state)
-                        .await?;
-                    sorts.push(sort_expr);
+                        .await
+                    {
+                        Ok(sort_expr) => sorts.push(sort_expr),
+                        Err(error) => {
+                            return Err(self.choose_sort_error(
+                                resolution_error,
+                                error,
+                                input_plan.schema(),
+                                state,
+                            ));
+                        }
+                    }
                 }
                 if sorts.len() != 1 {
-                    Err(PlanError::invalid(format!("sort expression: {sort:?}")))
+                    Err(resolution_error)
                 } else {
                     Ok(sorts.one()?)
                 }
             }
+        }
+    }
+
+    fn choose_sort_error(
+        &self,
+        original: PlanError,
+        fallback: PlanError,
+        fallback_schema: &DFSchemaRef,
+        state: &mut PlanResolverState,
+    ) -> PlanError {
+        let PlanError::UnknownColumn { name, .. } = &original else {
+            return original;
+        };
+        // Keep retries that got past the earlier missing reference.
+        if !matches!(fallback, PlanError::UnknownColumn { .. })
+            || self
+                .resolve_expression_attribute(name.clone(), false, fallback_schema, state)
+                .is_ok()
+        {
+            fallback
+        } else {
+            original
         }
     }
 }

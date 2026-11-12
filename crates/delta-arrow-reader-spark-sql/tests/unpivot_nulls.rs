@@ -155,7 +155,7 @@ fn unpivot_error_matches(case: &Value, actual: &Value) -> bool {
                 && parameters
                     == &json!({"objectName":"`missing`","proposal":"`id`, `g`, `k`, `p`, `v`"}) =>
         {
-            "External error: analysis error: attribute ObjectName([Identifier(\"missing\")]) is missing from the schema: cannot resolve attribute"
+            "External error: analysis error: attribute `missing` is missing from the schema: cannot resolve attribute [UNRESOLVED_COLUMN.WITH_SUGGESTION]; available columns: [`empty_inputs`.`g`, `empty_inputs`.`id`, `empty_inputs`.`k`, `empty_inputs`.`p`, `empty_inputs`.`v`]"
         }
         (Some("unpivot_incompatible_types_empty"), Some("UNPIVOT_VALUE_DATA_TYPE_MISMATCH"))
             if case["sql"]
@@ -305,7 +305,7 @@ fn unpivot_errors_require_the_recorded_cause_phase_and_no_fields() -> TestResult
     for case in errors {
         let error = match case["id"].as_str() {
             Some("unpivot_missing_column_empty") => {
-                "External error: analysis error: attribute ObjectName([Identifier(\"missing\")]) is missing from the schema: cannot resolve attribute"
+                "External error: analysis error: attribute `missing` is missing from the schema: cannot resolve attribute [UNRESOLVED_COLUMN.WITH_SUGGESTION]; available columns: [`empty_inputs`.`g`, `empty_inputs`.`id`, `empty_inputs`.`k`, `empty_inputs`.`p`, `empty_inputs`.`v`]"
             }
             Some("unpivot_incompatible_types_empty") => {
                 "External error: analysis error: [UNPIVOT_VALUE_DATA_TYPE_MISMATCH] Unpivot value columns must share a least common type, some types do not: Int32, Boolean"

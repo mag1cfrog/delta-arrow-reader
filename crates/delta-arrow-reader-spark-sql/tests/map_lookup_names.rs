@@ -44,6 +44,37 @@ const NATIVE_CONTROLS: [(&str, &str); 4] = [
 ];
 
 fn matches_retained_map_observation(case: &Value, observed: &Value, retained: &Value) -> bool {
+    if matches!(
+        case["id"].as_str(),
+        Some("unresolved_dynamic_key" | "qualified_lambda_parameter")
+    ) {
+        let Some(name) = case["spark_error_details"]["message_parameters"]["objectName"].as_str()
+        else {
+            return false;
+        };
+        let Some(error) = observed["error"].as_str() else {
+            return false;
+        };
+        if !error.starts_with(&format!(
+            "External error: analysis error: attribute {name} is missing from the schema: cannot resolve attribute "
+        )) || !error.contains("available columns:")
+            || error.contains("ObjectName(") || error.contains("Identifier(")
+            || observed["optimized_error"] != error {
+            return false;
+        }
+        let mut observed = observed.clone();
+        // Error text and its comparison flags change; schemas, rows and phase stay exact.
+        for key in [
+            "error",
+            "optimized_error",
+            "error_matches",
+            "optimized_matches",
+            "matches",
+        ] {
+            observed[key] = retained[key].clone();
+        }
+        return observed == *retained;
+    }
     if observed == retained {
         return true;
     }
@@ -139,6 +170,57 @@ fn retained_array_carrier_keeps_the_complete_observation_strict() {
         &generic_observed,
         &generic_retained
     ));
+}
+
+#[test]
+fn unknown_column_diagnostics_preserve_the_remaining_observation() -> TestResult {
+    let control = RETAINED
+        .lines()
+        .skip(1)
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .find(|record| record["id"] == "qualified_lambda_parameter")
+        .ok_or("missing retained unknown-column observation")?;
+    let case = &control["reference"];
+    let retained = &control["retained_observation"];
+    let name = case["spark_error_details"]["message_parameters"]["objectName"]
+        .as_str()
+        .ok_or("missing requested name")?;
+    let message = format!(
+        "External error: analysis error: attribute {name} is missing from the schema: cannot resolve attribute [UNRESOLVED_COLUMN.WITH_SUGGESTION]; available columns: [`q`.`key`, `x`]"
+    );
+    let mut updated = retained.clone();
+    updated["error"] = json!(message);
+    updated["optimized_error"] = json!(message);
+    for key in ["error_matches", "optimized_matches", "matches"] {
+        updated[key] = json!(true);
+    }
+    assert!(matches_retained_map_observation(case, &updated, retained));
+    for wrong_message in [
+        message.replace(name, "`unrelated`"),
+        message.replace("available columns:", "opaque context:"),
+        message.replace("[`q`.`key`, `x`]", "[ObjectName([Identifier(\"x\")])]"),
+    ] {
+        let mut changed = updated.clone();
+        changed["error"] = json!(wrong_message);
+        changed["optimized_error"] = json!(wrong_message);
+        assert!(!matches_retained_map_observation(case, &changed, retained));
+    }
+    for (field, wrong) in [
+        ("optimized_error", json!("unrelated error")),
+        ("native_phase", json!("collect")),
+        ("rows", json!([["unexpected"]])),
+        ("physical_schema", json!({"fields":[]})),
+    ] {
+        let mut changed = updated.clone();
+        changed[field] = wrong;
+        assert!(
+            !matches_retained_map_observation(case, &changed, retained),
+            "accepted wrong {field}"
+        );
+    }
+    Ok(())
 }
 
 #[tokio::test]
