@@ -54,6 +54,9 @@ use sail_function::scalar::math::spark_uniform::SparkUniform;
 use sail_function::scalar::misc::raise_error::RaiseError;
 use sail_function::scalar::spark_cast_numeric_to_integer::SparkCastNumericToInteger;
 use sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat;
+use sail_function::scalar::spark_cast_string_to_integer::{
+    SparkCastStringToInteger, StringIntegerCastMode,
+};
 use sail_function::scalar::spark_decimal_cast::{DecimalCastMode, SparkDecimalCast};
 use sail_function::scalar::spark_to_string::{SparkToLargeUtf8, SparkToUtf8, SparkToUtf8View};
 
@@ -62,8 +65,8 @@ pub(crate) use super::integer_divide::SparkIntegerDivide;
 use crate::error::{PlanError, PlanResult};
 use crate::expression_errors::is_locally_evaluable;
 use crate::function::common::{
-    FunctionContextInput, ScalarFunction, ScalarFunctionInput, reject_calendar_interval_ordering,
-    without_metadata_annotations,
+    FunctionContextInput, ScalarFunction, ScalarFunctionInput, dictionary_string_type,
+    reject_calendar_interval_ordering, without_metadata_annotations,
 };
 use crate::function::result_coercion::{coerce_to_temporal, is_temporal_type};
 use crate::function::scalar::datetime::replan_make_interval_for_try;
@@ -143,6 +146,48 @@ fn add_day_time_interval_to_string(
     }
 }
 
+// Spark promotes a STRING and its numeric peer to BIGINT for ANSI integral
+// arithmetic and to DOUBLE otherwise. Division still returns DOUBLE.
+fn promote_string_numeric_operands(
+    left: Expr,
+    right: Expr,
+    left_type: &DataType,
+    right_type: &DataType,
+    ansi_mode: bool,
+) -> PlanResult<(Expr, Expr, Option<DataType>)> {
+    let (string, number, number_type, string_first) =
+        if left_type.is_string() && right_type.is_numeric() {
+            (left, right, right_type, true)
+        } else if right_type.is_string() && left_type.is_numeric() {
+            (right, left, left_type, false)
+        } else {
+            return Ok((left, right, None));
+        };
+    let (string, target) = if ansi_mode && number_type.is_signed_integer() {
+        let target = DataType::Int64;
+        let string =
+            SparkCastStringToInteger::try_new(target.clone(), StringIntegerCastMode::Ansi)?
+                .into_expr(string);
+        (string, target)
+    } else {
+        let target = DataType::Float64;
+        let string = ScalarUDF::from(SparkCastStringToFloat::try_new(target.clone(), !ansi_mode)?)
+            .call(vec![string]);
+        (string, target)
+    };
+    let number = if number_type == &target {
+        number
+    } else {
+        cast(number, target.clone())
+    };
+    let (left, right) = if string_first {
+        (string, number)
+    } else {
+        (number, string)
+    };
+    Ok((left, right, Some(target)))
+}
+
 // Reuse division's Decimal/floating and integer-literal coercion rules.
 // ANSI FLOAT/integer pairs also use DOUBLE. Literal casts fold before execution.
 fn coerce_spark_arithmetic_operands(
@@ -181,23 +226,34 @@ fn spark_arithmetic(
     op: Operator,
     ansi_mode: bool,
     schema: &DFSchemaRef,
-) -> Expr {
-    if ansi_mode
-        && (left_type.is_signed_integer() || *left_type == DataType::Null)
-        && (right_type.is_signed_integer() || *right_type == DataType::Null)
-        && (left_type.is_signed_integer() || right_type.is_signed_integer())
-    {
-        ScalarUDF::from(SparkCheckedArithmetic::new(op)).call(vec![left, right])
-    } else if is_decimal_type(left_type) || is_decimal_type(right_type) {
-        let (left, right) = coerce_decimal_peer_operand(left, right, schema);
-        spark_decimal_arithmetic(left, right, op, schema, ansi_mode)
+) -> PlanResult<Expr> {
+    let (left, right, promoted) =
+        promote_string_numeric_operands(left, right, left_type, right_type, ansi_mode)?;
+    let (left_type, right_type) = if let Some(target) = promoted.as_ref() {
+        (target, target)
     } else {
-        Expr::BinaryExpr(datafusion_expr::BinaryExpr::new(
-            Box::new(left),
-            op,
-            Box::new(right),
-        ))
-    }
+        (left_type, right_type)
+    };
+    let (left, right) =
+        coerce_spark_arithmetic_operands(left, right, left_type, right_type, ansi_mode);
+    Ok(
+        if ansi_mode
+            && (left_type.is_signed_integer() || *left_type == DataType::Null)
+            && (right_type.is_signed_integer() || *right_type == DataType::Null)
+            && (left_type.is_signed_integer() || right_type.is_signed_integer())
+        {
+            ScalarUDF::from(SparkCheckedArithmetic::new(op)).call(vec![left, right])
+        } else if is_decimal_type(left_type) || is_decimal_type(right_type) {
+            let (left, right) = coerce_decimal_peer_operand(left, right, schema);
+            spark_decimal_arithmetic(left, right, op, schema, ansi_mode)
+        } else {
+            Expr::BinaryExpr(datafusion_expr::BinaryExpr::new(
+                Box::new(left),
+                op,
+                Box::new(right),
+            ))
+        },
+    )
 }
 
 // Spark keeps the exact intermediate value, then rounds HALF_UP to its
@@ -259,12 +315,12 @@ fn spark_decimal_arithmetic(
     }
 }
 
-/// Arguments:
-///   - left: A numeric, STRING, DATE, TIMESTAMP, or INTERVAL expression.
-///   - right: If left is a numeric right must be numeric expression, or an INTERVAL otherwise.
+/// Add numbers or supported pairs of STRING, DATE, TIMESTAMP, and INTERVAL
+/// operands. A STRING beside a number uses [the shared promotion](promote_string_numeric_operands)
+/// in either operand order.
 ///
 /// Returns:
-///   - If left is a numeric, the common maximum type of the arguments.
+///   - For two numbers, the common numeric type.
 ///   - If one expression is a STRING and the other is a day-time interval, the result is a STRING.
 ///   - If left is a DATE and right is a day-time interval the result is a TIMESTAMP.
 ///   - If both expressions are interval they must be of the same class.
@@ -358,24 +414,15 @@ fn spark_plus(input: ScalarFunctionInput) -> PlanResult<Expr> {
             }
             // TODO: In case getting the type fails, we don't want to fail the query.
             //  Future work is needed here, ideally we create something like `Operator::SparkPlus`.
-            (Ok(left_type), Ok(right_type)) => {
-                let (left, right) = coerce_spark_arithmetic_operands(
-                    left,
-                    right,
-                    &left_type,
-                    &right_type,
-                    function_context.plan_config.ansi_mode,
-                );
-                spark_arithmetic(
-                    left,
-                    right,
-                    &left_type,
-                    &right_type,
-                    Operator::Plus,
-                    function_context.plan_config.ansi_mode,
-                    function_context.schema,
-                )
-            }
+            (Ok(left_type), Ok(right_type)) => spark_arithmetic(
+                left,
+                right,
+                &left_type,
+                &right_type,
+                Operator::Plus,
+                function_context.plan_config.ansi_mode,
+                function_context.schema,
+            )?,
             (Err(_), _) | (_, Err(_)) => left + right,
         })
     }
@@ -700,25 +747,18 @@ fn try_subtract(input: ScalarFunctionInput) -> PlanResult<Expr> {
     })
 }
 
-/// Arguments:
-///   - left: A numeric, DATE, TIMESTAMP, or INTERVAL expression.
-///   - right: The accepted type depends on the type of expr:
-///     - If left is a numeric right must be numeric expression.
-///     - If left is a year-month or day-time interval, right must be the same class.
-///     - Otherwise right must be a DATE or TIMESTAMP.
+/// Subtract numbers or supported pairs of DATE, TIMESTAMP, and INTERVAL
+/// operands. A STRING can pair with a number in either order.
 ///
 /// Returns:
-///   - If left is a numeric, the result is common maximum type of the arguments.
+///   - A number and a STRING use the promoted numeric type.
+///   - For two numbers, the common numeric type.
 ///   - If left is a DATE and right is a day-time interval the result is a TIMESTAMP.
 ///   - If left is a TIMESTAMP and right is an interval the result is a TIMESTAMP.
 ///   - If left and right are DATEs the result is an INTERVAL DAYS.
 ///   - If left or right are TIMESTAMP the result is an INTERVAL DAY TO SECOND.
 ///   - If both expressions are interval they must be of the same class.
 ///   - Otherwise, the result type matches left.
-///
-/// All of the above conditions should be handled by the DataFusion.
-/// If there is a discrepancy in parity, check the link below and adjust Sail's logic accordingly:
-///   https://github.com/apache/datafusion/blob/a28f2834c6969a0c0eb26165031f8baa1e1156a5/datafusion/expr-common/src/type_coercion/binary.rs#L194
 fn spark_minus(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let ScalarFunctionInput {
         arguments,
@@ -780,44 +820,29 @@ fn spark_minus(input: ScalarFunctionInput) -> PlanResult<Expr> {
             }
             // TODO: In case getting the type fails, we don't want to fail the query.
             //  Future work is needed here, ideally we create something like `Operator::SparkMinus`.
-            (Ok(left_type), Ok(right_type)) => {
-                let (left, right) = coerce_spark_arithmetic_operands(
-                    left,
-                    right,
-                    &left_type,
-                    &right_type,
-                    function_context.plan_config.ansi_mode,
-                );
-                spark_arithmetic(
-                    left,
-                    right,
-                    &left_type,
-                    &right_type,
-                    Operator::Minus,
-                    function_context.plan_config.ansi_mode,
-                    function_context.schema,
-                )
-            }
+            (Ok(left_type), Ok(right_type)) => spark_arithmetic(
+                left,
+                right,
+                &left_type,
+                &right_type,
+                Operator::Minus,
+                function_context.plan_config.ansi_mode,
+                function_context.schema,
+            )?,
             (Err(_), _) | (_, Err(_)) => left - right,
         })
     }
 }
 
-/// Arguments:
-///   - left: A numeric or INTERVAL expression.
-///   - right: A numeric expression or INTERVAL expression.
-///
-/// You may not specify an INTERVAL for both arguments.
+/// Multiply two numbers or scale an INTERVAL by a number. A STRING can pair
+/// with a number in either order.
 ///
 /// Returns:
+///   - A number and a STRING use the promoted numeric type.
 ///   - If both left and right are DECIMAL, the result is DECIMAL.
 ///   - If left or right is an INTERVAL, the result is of the same type.
 ///   - If both left and right are integral numeric types, the result is the larger of the two types.
 ///   - In all other cases the result is a DOUBLE.
-///
-/// All of the above conditions should be handled by the DataFusion.
-/// If there is a discrepancy in parity, check the link below and adjust Sail's logic accordingly:
-///   https://github.com/apache/datafusion/blob/a28f2834c6969a0c0eb26165031f8baa1e1156a5/datafusion/expr-common/src/type_coercion/binary.rs#L194
 fn spark_multiply(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let ScalarFunctionInput {
         arguments,
@@ -857,24 +882,15 @@ fn spark_multiply(input: ScalarFunctionInput) -> PlanResult<Expr> {
         }
         // TODO: In case getting the type fails, we don't want to fail the query.
         //  Future work is needed here, ideally we create something like `Operator::SparkMultiply`.
-        (Ok(left_type), Ok(right_type)) => {
-            let (left, right) = coerce_spark_arithmetic_operands(
-                left,
-                right,
-                &left_type,
-                &right_type,
-                function_context.plan_config.ansi_mode,
-            );
-            spark_arithmetic(
-                left,
-                right,
-                &left_type,
-                &right_type,
-                Operator::Multiply,
-                function_context.plan_config.ansi_mode,
-                function_context.schema,
-            )
-        }
+        (Ok(left_type), Ok(right_type)) => spark_arithmetic(
+            left,
+            right,
+            &left_type,
+            &right_type,
+            Operator::Multiply,
+            function_context.plan_config.ansi_mode,
+            function_context.schema,
+        )?,
         (Err(_), _) | (_, Err(_)) => left * right,
     })
 }
@@ -1645,7 +1661,7 @@ fn checked_divide_masks_and_scalar_positions() -> datafusion_common::Result<()> 
 }
 
 // Spark promotes strings before operator-specific division/remainder coercion.
-// Explicit CAST and other arithmetic keep their own coercion rules.
+// DIV and pairs without a numeric peer retain their existing rules.
 fn coerce_string_div_rem_operands(
     left: Expr,
     right: Expr,
@@ -1669,6 +1685,13 @@ fn coerce_string_div_rem_operands(
     } else {
         DataType::Float64
     };
+    // The existing ANSI BIGINT cast already uses Spark's strict integer
+    // syntax. DOUBLE needs Spark's parser for hexadecimal and suffix forms.
+    if !integral && peer.is_numeric() && target == DataType::Float64 {
+        let (left, right, _) =
+            promote_string_numeric_operands(left, right, &left_type, &right_type, ansi)?;
+        return Ok((left, right));
+    }
     let wrong_type =
         ansi && (peer.is_string() || peer.is_null()) || integral && target == DataType::Float64;
     if wrong_type {
@@ -1876,14 +1899,22 @@ fn spark_divide(input: ScalarFunctionInput) -> PlanResult<Expr> {
     Ok(div_expr)
 }
 
+// The resolver decodes dictionary STRING columns before a numeric cast reads them.
+fn is_dictionary_string_decode(expr: &Expr, schema: &DFSchemaRef) -> bool {
+    let Expr::Cast(decode) = without_metadata_annotations(expr) else {
+        return false;
+    };
+    matches!(without_metadata_annotations(&decode.expr), Expr::Column(_))
+        && decode
+            .expr
+            .get_type(schema)
+            .is_ok_and(|source| dictionary_string_type(&source) == Some(decode.field.data_type()))
+}
+
 // Spark evaluates the divisor first when converting local VALUES. Restrict
 // the added check to strict string/numeric-column casts, including integer widening.
 // Non-ANSI DIV lowers its divisor through NULLIF and does not match this shape.
 pub(crate) fn column_cast(expr: &Expr, schema: &DFSchemaRef) -> bool {
-    use sail_function::scalar::spark_cast_string_to_integer::{
-        SparkCastStringToInteger, StringIntegerCastMode,
-    };
-
     match without_metadata_annotations(expr) {
         Expr::Cast(cast) if cast.field.data_type().is_numeric() => {
             // Preserve the same local-column boundary after the CAST resolver
@@ -1900,6 +1931,9 @@ pub(crate) fn column_cast(expr: &Expr, schema: &DFSchemaRef) -> bool {
                             if trim.bytes().eq(0_u8..=32)
                                 || trim.bytes().eq((0_u8..=32).chain([127]))) =>
                 {
+                    if is_dictionary_string_decode(&f.args[0], schema) {
+                        return true;
+                    }
                     &f.args[0]
                 }
                 expr => expr,
@@ -1919,13 +1953,19 @@ pub(crate) fn column_cast(expr: &Expr, schema: &DFSchemaRef) -> bool {
                 || f.func.inner().downcast_ref::<SparkCastNumericToInteger>()
                     .is_some_and(|cast| !cast.is_try()) =>
         {
-            matches!(f.args.as_slice(), [expr] if matches!(without_metadata_annotations(expr), Expr::Column(_)) || column_cast(expr, schema))
+            matches!(f.args.as_slice(), [input]
+                if matches!(without_metadata_annotations(input), Expr::Column(_))
+                    || column_cast(input, schema)
+                    || (f.func.inner().is::<SparkCastStringToInteger>()
+                        && is_dictionary_string_decode(input, schema)))
+        }
+        Expr::ScalarFunction(f) if f.func.inner().is::<SparkCastStringToFloat>() => {
+            matches!(f.args.as_slice(), [input]
+                if matches!(without_metadata_annotations(input), Expr::Column(_))
+                    || is_dictionary_string_decode(input, schema))
         }
         Expr::ScalarFunction(f)
-            if f.func
-                .inner()
-                .is::<sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat>(
-            ) || f.func.inner().is::<sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal>() =>
+            if f.func.inner().is::<sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal>() =>
         {
             matches!(f.args.as_slice(), [expr] if matches!(without_metadata_annotations(expr), Expr::Column(_)))
         }
@@ -4002,7 +4042,7 @@ async fn string_modulo_reuses_spark_coercion_and_null_ordering() -> PlanResult<(
                             result
                                 .unwrap_err()
                                 .to_string()
-                                .contains("Cannot cast string 'bad'"),
+                                .contains("Cannot cast string"),
                             "{sql}"
                         );
                     } else {

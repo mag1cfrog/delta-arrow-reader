@@ -17,7 +17,7 @@ use datafusion_expr::expr::{AggregateFunction, AggregateFunctionParams};
 use datafusion_expr::simplify::SimplifyContext;
 use datafusion_expr::utils::{find_aggregate_exprs, find_window_exprs};
 use datafusion_expr::{
-    AggregateUDF, BinaryExpr, ExprSchemable, Operator, ScalarUDF, cast, expr, lit, try_cast, when,
+    AggregateUDF, BinaryExpr, ExprSchemable, Operator, ScalarUDF, cast, expr, lit, when,
 };
 use datafusion_spark::function::aggregate::try_sum::SparkTrySum;
 use lazy_static::lazy_static;
@@ -44,6 +44,7 @@ use sail_function::aggregate::theta_sketch::{
 };
 use sail_function::aggregate::try_avg::TryAvgFunction;
 use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
+use sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat;
 use sail_function::scalar::struct_function::StructFunction;
 use sail_logical_plan::monotonic_id::{MonotonicIdNode, MonotonicIdPurpose};
 use sail_logical_plan::spark_partition_id::SparkPartitionIdNode;
@@ -52,15 +53,19 @@ use crate::error::{PlanError, PlanResult};
 use crate::function::collection_result::RequireNonNullCollectionElements;
 use crate::function::common::without_metadata_annotations;
 use crate::function::common::{
-    AggFunction, AggFunctionInput, FunctionContextInput, count_min_sketch_args,
-    get_arguments_and_null_treatment, get_null_treatment, hll_args_with_default_lg,
-    hll_union_args_with_default_allow_different_lg, theta_args_with_default_lg,
+    AggFunction, AggFunctionBuilder, AggFunctionInput, FunctionContextInput, count_min_sketch_args,
+    dictionary_string_argument, get_arguments_and_null_treatment, get_null_treatment,
+    hll_args_with_default_lg, hll_union_args_with_default_allow_different_lg,
+    theta_args_with_default_lg,
 };
 use crate::function::transform_count_star_wildcard_expr;
 
 lazy_static! {
     static ref BUILT_IN_AGGREGATE_FUNCTIONS: HashMap<&'static str, AggFunction> =
-        HashMap::from_iter(list_built_in_aggregate_functions());
+        list_built_in_aggregate_functions()
+            .into_iter()
+            .map(|(name, function)| (name, with_string_numeric_coercion(name, function)))
+            .collect();
 }
 
 fn avg(input: AggFunctionInput) -> PlanResult<expr::Expr> {
@@ -97,12 +102,6 @@ fn spark_sum(input: AggFunctionInput) -> PlanResult<expr::Expr> {
     } = input;
     let supports_linear_rewrite =
         !distinct && ignore_nulls.is_none() && filter.is_none() && order_by.is_empty();
-    let arguments = coerce_string_sum_arguments(
-        arguments,
-        filter.as_deref(),
-        function_context.schema.as_ref(),
-        function_context.plan_config.ansi_mode,
-    )?;
     let arguments = if supports_linear_rewrite {
         arguments
             .into_iter()
@@ -126,36 +125,84 @@ fn spark_sum(input: AggFunctionInput) -> PlanResult<expr::Expr> {
     }))
 }
 
-pub(super) fn coerce_string_sum_arguments(
-    arguments: Vec<expr::Expr>,
+pub(super) fn string_numeric_argument_count(name: &str) -> usize {
+    // Percentiles coerce the value expression, leaving fraction and tuning arguments alone.
+    match name {
+        "avg" | "mean" | "sum" | "std" | "stddev" | "stddev_pop" | "stddev_samp" | "variance"
+        | "var_pop" | "var_samp" | "skewness" | "kurtosis" | "median" | "percentile"
+        | "approx_percentile" | "percentile_approx" => 1,
+        "corr" | "covar_pop" | "covar_samp" | "regr_avgx" | "regr_avgy" | "regr_count"
+        | "regr_intercept" | "regr_r2" | "regr_slope" | "regr_sxx" | "regr_sxy" | "regr_syy" => 2,
+        _ => 0,
+    }
+}
+
+fn with_string_numeric_coercion(name: &'static str, function: AggFunction) -> AggFunction {
+    let numeric_arguments = string_numeric_argument_count(name);
+    if numeric_arguments == 0 {
+        return function;
+    }
+    AggFunctionBuilder::custom(move |mut input| {
+        let coerced_string = coerce_string_numeric_arguments(
+            &mut input.arguments,
+            numeric_arguments,
+            input.filter.as_deref(),
+            &input.function_context,
+        )?;
+        let result = function(input)?;
+        if name == "regr_count" && coerced_string {
+            Ok(cast(result, DataType::Int64))
+        } else {
+            Ok(result)
+        }
+    })
+}
+
+pub(super) fn coerce_string_numeric_arguments(
+    arguments: &mut [expr::Expr],
+    numeric_arguments: usize,
+    filter: Option<&expr::Expr>,
+    context: &FunctionContextInput<'_>,
+) -> PlanResult<bool> {
+    let mut coerced_string = false;
+    for argument in arguments.iter_mut().take(numeric_arguments) {
+        coerced_string |= coerce_string_numeric_argument(
+            argument,
+            filter,
+            context.schema,
+            context.plan_config.ansi_mode,
+        )?;
+    }
+    Ok(coerced_string)
+}
+
+fn coerce_string_numeric_argument(
+    argument: &mut expr::Expr,
     filter: Option<&expr::Expr>,
     schema: &DFSchema,
     ansi_mode: bool,
-) -> PlanResult<Vec<expr::Expr>> {
-    arguments
-        .into_iter()
-        .map(|argument| {
-            let argument_type = argument.get_type(schema)?;
-            match argument_type {
-                DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => {
-                    if ansi_mode {
-                        let argument = if let Some(filter) = filter {
-                            // Grouped aggregates evaluate arguments before FILTER, so mask
-                            // excluded rows before applying the fallible ANSI cast.
-                            let null_value = ScalarValue::try_from(&argument_type)?;
-                            when(filter.clone(), argument).otherwise(lit(null_value))?
-                        } else {
-                            argument
-                        };
-                        Ok(cast(argument, DataType::Float64))
-                    } else {
-                        Ok(try_cast(argument, DataType::Float64))
-                    }
-                }
-                _ => Ok(argument),
-            }
-        })
-        .collect()
+) -> PlanResult<bool> {
+    let Ok(argument_type) = argument.get_type(schema) else {
+        return Ok(false);
+    };
+    if !argument_type.is_string() {
+        return Ok(false);
+    }
+
+    let value = if ansi_mode && let Some(filter) = filter {
+        // Grouped aggregates evaluate arguments before FILTER. Mask excluded rows
+        // before applying the fallible ANSI cast.
+        let null_value = ScalarValue::try_from(&argument_type)?;
+        when(filter.clone(), argument.clone()).otherwise(lit(null_value))?
+    } else {
+        argument.clone()
+    };
+    *argument = ScalarUDF::from(SparkCastStringToFloat::try_new(
+        DataType::Float64,
+        !ansi_mode,
+    )?)
+    .call(vec![value]);
+    Ok(true)
 }
 
 fn widen_safe_linear_sum_argument(
@@ -362,49 +409,38 @@ fn schema_of_variant_agg(input: AggFunctionInput) -> PlanResult<expr::Expr> {
     }))
 }
 
-/// Builds a percentile_cont aggregate expression from WITHIN GROUP syntax.
-///
-/// DataFusion's percentile_cont expects args = [column, percentile], but Spark's
-/// SQL syntax `percentile_cont(0.5) WITHIN GROUP (ORDER BY col)` puts the column
-/// in order_by and the percentile in arguments. This function combines them.
 fn percentile_cont(input: AggFunctionInput) -> PlanResult<expr::Expr> {
-    // Extract the single column expression from ORDER BY (error if multiple)
-    let sort = input.order_by.clone().one()?;
-    let column = sort.expr;
-
-    // Get the percentile value from arguments
-    let percentile = input.arguments.one()?;
-
-    // Combine: [column, percentile] as DataFusion expects
-    let args = vec![column, percentile];
-
-    Ok(expr::Expr::AggregateFunction(AggregateFunction {
-        func: percentile_cont::percentile_cont_udaf(),
-        params: AggregateFunctionParams {
-            args,
-            distinct: input.distinct,
-            filter: input.filter,
-            order_by: input.order_by,
-            null_treatment: get_null_treatment(input.ignore_nulls),
-        },
-    }))
+    ordered_set_percentile(input, percentile_cont::percentile_cont_udaf())
 }
 
-/// Builds a percentile_disc aggregate expression from WITHIN GROUP syntax.
 fn percentile_disc(input: AggFunctionInput) -> PlanResult<expr::Expr> {
-    let sort = input.order_by.clone().one()?;
-    let column = sort.expr;
-    let percentile = input.arguments.one()?;
-    let args = vec![column, percentile];
     let ansi_mode = input.function_context.plan_config.ansi_mode;
+    ordered_set_percentile(input, percentile_disc_udaf(ansi_mode))
+}
 
+fn ordered_set_percentile(
+    input: AggFunctionInput,
+    func: Arc<AggregateUDF>,
+) -> PlanResult<expr::Expr> {
+    let mut sort = input.order_by.one()?;
+    let percentile = input.arguments.one()?;
+    let context = input.function_context;
+    sort.expr = dictionary_string_argument(sort.expr, context.schema);
+    coerce_string_numeric_argument(
+        &mut sort.expr,
+        input.filter.as_deref(),
+        context.schema,
+        context.plan_config.ansi_mode,
+    )?;
+
+    // DataFusion expects the WITHIN GROUP value as the first aggregate argument too.
     Ok(expr::Expr::AggregateFunction(AggregateFunction {
-        func: percentile_disc_udaf(ansi_mode),
+        func,
         params: AggregateFunctionParams {
-            args,
+            args: vec![sort.expr.clone(), percentile],
             distinct: input.distinct,
             filter: input.filter,
-            order_by: input.order_by,
+            order_by: vec![sort],
             null_treatment: get_null_treatment(input.ignore_nulls),
         },
     }))
@@ -1296,19 +1332,20 @@ mod tests {
     }
 
     #[test]
-    fn string_sum_uses_mode_specific_cast_for_all_string_types() -> PlanResult<()> {
+    fn numeric_aggregate_casts_all_string_types() -> PlanResult<()> {
         for data_type in [DataType::Utf8, DataType::LargeUtf8, DataType::Utf8View] {
             let schema = sum_test_schema(data_type)?;
-            let ansi_arguments =
-                coerce_string_sum_arguments(vec![col("value")], None, schema.as_ref(), true)?;
-            assert_eq!(ansi_arguments, vec![cast(col("value"), DataType::Float64)]);
-
-            let legacy_arguments =
-                coerce_string_sum_arguments(vec![col("value")], None, schema.as_ref(), false)?;
-            assert_eq!(
-                legacy_arguments,
-                vec![try_cast(col("value"), DataType::Float64)]
-            );
+            for ansi_mode in [false, true] {
+                let mut argument = col("value");
+                assert!(coerce_string_numeric_argument(
+                    &mut argument,
+                    None,
+                    schema.as_ref(),
+                    ansi_mode,
+                )?);
+                let parser = SparkCastStringToFloat::try_new(DataType::Float64, !ansi_mode)?;
+                assert_eq!(argument, ScalarUDF::from(parser).call(vec![col("value")]));
+            }
         }
         Ok(())
     }
@@ -1320,7 +1357,8 @@ mod tests {
         let plan_config = Arc::new(PlanConfig::default());
         let session_context = SessionContext::new();
         let filter = col("included");
-        let expression = spark_sum(AggFunctionInput {
+        let sum = get_built_in_aggregate_function("sum")?;
+        let expression = sum(AggFunctionInput {
             arguments: vec![col("value")],
             distinct: true,
             ignore_nulls: None,
@@ -1341,9 +1379,10 @@ mod tests {
         };
         let masked_argument =
             when(filter.clone(), col("value")).otherwise(lit(ScalarValue::Utf8(None)))?;
+        let parser = SparkCastStringToFloat::try_new(DataType::Float64, false)?;
         assert_eq!(
             sum.params.args,
-            vec![cast(masked_argument, DataType::Float64)]
+            vec![ScalarUDF::from(parser).call(vec![masked_argument])]
         );
         assert_eq!(sum.params.filter, Some(Box::new(filter)));
         assert!(sum.params.distinct);

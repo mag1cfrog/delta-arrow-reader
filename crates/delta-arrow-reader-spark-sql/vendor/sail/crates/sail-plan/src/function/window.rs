@@ -43,8 +43,8 @@ use sail_function::window::spark_ntile_udwf;
 
 use crate::error::{PlanError, PlanResult};
 use crate::function::aggregate::{
-    coalesce_to_empty_array, coerce_count_if_predicate, coerce_string_sum_arguments,
-    filtered_count_if_is_constant_zero,
+    coalesce_to_empty_array, coerce_count_if_predicate, coerce_string_numeric_arguments,
+    filtered_count_if_is_constant_zero, string_numeric_argument_count,
 };
 use crate::function::common::{
     WinFunction, WinFunctionInput, count_min_sketch_args, drop_inherited_column_metadata,
@@ -60,7 +60,10 @@ mod offset;
 
 lazy_static! {
     static ref BUILT_IN_WINDOW_FUNCTIONS: HashMap<&'static str, WinFunction> =
-        HashMap::from_iter(list_built_in_window_functions());
+        list_built_in_window_functions()
+            .into_iter()
+            .map(|(name, function)| (name, with_string_numeric_coercion(name, function)))
+            .collect();
 }
 
 fn extrema(input: WinFunctionInput, is_max: bool) -> PlanResult<expr::Expr> {
@@ -148,35 +151,25 @@ fn avg(input: WinFunctionInput) -> PlanResult<expr::Expr> {
     })))
 }
 
-fn spark_sum(input: WinFunctionInput) -> PlanResult<expr::Expr> {
-    let WinFunctionInput {
-        arguments,
-        partition_by,
-        order_by,
-        window_frame,
-        ignore_nulls,
-        distinct,
-        filter,
-        function_context,
-    } = input;
-    let arguments = coerce_string_sum_arguments(
-        arguments,
-        None,
-        function_context.schema.as_ref(),
-        function_context.plan_config.ansi_mode,
-    )?;
-    Ok(expr::Expr::WindowFunction(Box::new(expr::WindowFunction {
-        fun: WindowFunctionDefinition::AggregateUDF(sum::sum_udaf()),
-        params: WindowFunctionParams {
-            args: arguments,
-            partition_by,
-            order_by,
-            window_frame,
-            filter,
-            null_treatment: get_null_treatment(ignore_nulls),
-            distinct,
-        },
-    })))
+fn with_string_numeric_coercion(name: &'static str, function: WinFunction) -> WinFunction {
+    let numeric_arguments = string_numeric_argument_count(name);
+    if numeric_arguments == 0 {
+        return function;
+    }
+    Arc::new(move |mut input| {
+        let coerced_string = coerce_string_numeric_arguments(
+            &mut input.arguments,
+            numeric_arguments,
+            None,
+            &input.function_context,
+        )?;
+        let result = function(input)?;
+        if name == "regr_count" && coerced_string {
+            Ok(cast(result, DataType::Int64))
+        } else {
+            Ok(result)
+        }
+    })
 }
 
 fn first_value(input: WinFunctionInput) -> PlanResult<expr::Expr> {
@@ -804,7 +797,7 @@ fn list_built_in_window_functions() -> Vec<(&'static str, WinFunction)> {
         ("stddev_pop", F::aggregate(stddev::stddev_pop_udaf)),
         ("stddev_samp", F::aggregate(stddev::stddev_udaf)),
         ("string_agg", F::custom(listagg)),
-        ("sum", F::custom(spark_sum)),
+        ("sum", F::aggregate(sum::sum_udaf)),
         (
             "try_avg",
             F::aggregate(|| Arc::new(AggregateUDF::from(TryAvgFunction::new()))),
@@ -853,7 +846,8 @@ mod tests {
     use arrow::datatypes::Schema;
     use datafusion::prelude::SessionContext;
     use datafusion_common::DFSchema;
-    use datafusion_expr::{ExprSchemable, WindowFrame, col, try_cast};
+    use datafusion_expr::{ExprSchemable, ScalarUDF, WindowFrame, col};
+    use sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat;
 
     use super::*;
     use crate::config::PlanConfig;
@@ -899,11 +893,8 @@ mod tests {
             let expr::Expr::WindowFunction(sum) = expression else {
                 return Err(PlanError::internal("expected window SUM expression"));
             };
-            let expected_argument = if ansi_mode {
-                cast(col("value"), DataType::Float64)
-            } else {
-                try_cast(col("value"), DataType::Float64)
-            };
+            let parser = SparkCastStringToFloat::try_new(DataType::Float64, !ansi_mode)?;
+            let expected_argument = ScalarUDF::from(parser).call(vec![col("value")]);
             assert_eq!(sum.params.args, vec![expected_argument]);
             assert_eq!(sum.params.partition_by, partition_by);
             assert_eq!(sum.params.order_by, order_by);

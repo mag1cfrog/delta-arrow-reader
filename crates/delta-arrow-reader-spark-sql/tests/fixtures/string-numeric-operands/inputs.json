@@ -1,0 +1,1719 @@
+{
+  "issue": "https://github.com/mag1cfrog/delta-arrow-reader/issues/1244",
+  "baseline": {
+    "commit": "dbe64179c96b3b2bbdb2ee2355ecf18e80288650",
+    "tree": "ad278d89935280fca494ea566051323e2000b699"
+  },
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "ansi_modes": [
+    false,
+    true
+  ],
+  "registered_inputs": [
+    {
+      "name": "inputs",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "n",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "12"
+        ],
+        [
+          "1",
+          "7"
+        ]
+      ]
+    },
+    {
+      "name": "arithmetic_inputs",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "n",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "i",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "l",
+            "type": "long",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "d",
+            "type": "double",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "m",
+            "type": "decimal(12,2)",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "12",
+          "3",
+          "4",
+          "4004000000000000",
+          "1.25"
+        ],
+        [
+          "1",
+          "-7",
+          "-2",
+          "-3",
+          "bff4000000000000",
+          "2.25"
+        ],
+        [
+          "2",
+          null,
+          "3",
+          "4",
+          "4004000000000000",
+          "1.25"
+        ],
+        [
+          "3",
+          "9",
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "4",
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "5",
+          "9007199254740993",
+          "2",
+          "3",
+          "4004000000000000",
+          "1.25"
+        ]
+      ]
+    },
+    {
+      "name": "arithmetic_bad",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "n",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "i",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "l",
+            "type": "long",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "d",
+            "type": "double",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "m",
+            "type": "decimal(12,2)",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "12",
+          "3",
+          "4",
+          "4004000000000000",
+          "1.25"
+        ],
+        [
+          "1",
+          "-7",
+          "-2",
+          "-3",
+          "bff4000000000000",
+          "2.25"
+        ],
+        [
+          "2",
+          null,
+          "3",
+          "4",
+          "4004000000000000",
+          "1.25"
+        ],
+        [
+          "6",
+          "not-a-number",
+          "3",
+          "4",
+          "4004000000000000",
+          "1.25"
+        ]
+      ]
+    },
+    {
+      "name": "arithmetic_spellings",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "n",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "d",
+            "type": "double",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "0x1.8p2",
+          "4004000000000000"
+        ],
+        [
+          "1",
+          "1.25D",
+          "4004000000000000"
+        ],
+        [
+          "2",
+          "  +2.5  ",
+          "4004000000000000"
+        ],
+        [
+          "3",
+          "1.25e1",
+          "4004000000000000"
+        ]
+      ]
+    },
+    {
+      "name": "aggregate_inputs",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "n",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "d",
+            "type": "double",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "-2.5",
+          "c014000000000000"
+        ],
+        [
+          "1",
+          "1.5",
+          "4008000000000000"
+        ],
+        [
+          "2",
+          "5.5",
+          "4026000000000000"
+        ],
+        [
+          "3",
+          null,
+          "4010000000000000"
+        ],
+        [
+          "4",
+          "01.50",
+          null
+        ]
+      ]
+    },
+    {
+      "name": "aggregate_bad",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "n",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "d",
+            "type": "double",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "-2.5",
+          "c014000000000000"
+        ],
+        [
+          "1",
+          "1.5",
+          "4008000000000000"
+        ],
+        [
+          "2",
+          "5.5",
+          "4026000000000000"
+        ],
+        [
+          "3",
+          null,
+          "4010000000000000"
+        ],
+        [
+          "4",
+          "01.50",
+          null
+        ],
+        [
+          "5",
+          "not-a-number",
+          "4010000000000000"
+        ]
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "reported_arithmetic",
+      "sql": "SELECT k, n + 1 AS r FROM inputs"
+    },
+    {
+      "id": "reported_average",
+      "sql": "SELECT avg(n) AS r FROM inputs"
+    },
+    {
+      "id": "arithmetic_columns",
+      "sql": "SELECT id, n + i AS s_add_i, i + n AS i_add_s, n - i AS s_sub_i, i - n AS i_sub_s, n * i AS s_mul_i, i * n AS i_mul_s, n / i AS s_div_i, i / n AS i_div_s, n % i AS s_rem_i, i % n AS i_rem_s, n + l AS s_add_l, l + n AS l_add_s, n - l AS s_sub_l, l - n AS l_sub_s, n * l AS s_mul_l, l * n AS l_mul_s, n / l AS s_div_l, l / n AS l_div_s, n % l AS s_rem_l, l % n AS l_rem_s, n + d AS s_add_d, d + n AS d_add_s, n - d AS s_sub_d, d - n AS d_sub_s, n * d AS s_mul_d, d * n AS d_mul_s, n / d AS s_div_d, d / n AS d_div_s, n % d AS s_rem_d, d % n AS d_rem_s, n + m AS s_add_m, m + n AS m_add_s, n - m AS s_sub_m, m - n AS m_sub_s, n * m AS s_mul_m, m * n AS m_mul_s, n / m AS s_div_m, m / n AS m_div_s, n % m AS s_rem_m, m % n AS m_rem_s FROM arithmetic_inputs ORDER BY id"
+    },
+    {
+      "id": "arithmetic_string_column",
+      "sql": "SELECT id, n + 3 AS s_add_i, 3 + n AS i_add_s, n - 3 AS s_sub_i, 3 - n AS i_sub_s, n * 3 AS s_mul_i, 3 * n AS i_mul_s, n / 3 AS s_div_i, 3 / n AS i_div_s, n % 3 AS s_rem_i, 3 % n AS i_rem_s, n + CAST(4 AS BIGINT) AS s_add_l, CAST(4 AS BIGINT) + n AS l_add_s, n - CAST(4 AS BIGINT) AS s_sub_l, CAST(4 AS BIGINT) - n AS l_sub_s, n * CAST(4 AS BIGINT) AS s_mul_l, CAST(4 AS BIGINT) * n AS l_mul_s, n / CAST(4 AS BIGINT) AS s_div_l, CAST(4 AS BIGINT) / n AS l_div_s, n % CAST(4 AS BIGINT) AS s_rem_l, CAST(4 AS BIGINT) % n AS l_rem_s, n + CAST(2.5 AS DOUBLE) AS s_add_d, CAST(2.5 AS DOUBLE) + n AS d_add_s, n - CAST(2.5 AS DOUBLE) AS s_sub_d, CAST(2.5 AS DOUBLE) - n AS d_sub_s, n * CAST(2.5 AS DOUBLE) AS s_mul_d, CAST(2.5 AS DOUBLE) * n AS d_mul_s, n / CAST(2.5 AS DOUBLE) AS s_div_d, CAST(2.5 AS DOUBLE) / n AS d_div_s, n % CAST(2.5 AS DOUBLE) AS s_rem_d, CAST(2.5 AS DOUBLE) % n AS d_rem_s, n + CAST(1.25 AS DECIMAL(12, 2)) AS s_add_m, CAST(1.25 AS DECIMAL(12, 2)) + n AS m_add_s, n - CAST(1.25 AS DECIMAL(12, 2)) AS s_sub_m, CAST(1.25 AS DECIMAL(12, 2)) - n AS m_sub_s, n * CAST(1.25 AS DECIMAL(12, 2)) AS s_mul_m, CAST(1.25 AS DECIMAL(12, 2)) * n AS m_mul_s, n / CAST(1.25 AS DECIMAL(12, 2)) AS s_div_m, CAST(1.25 AS DECIMAL(12, 2)) / n AS m_div_s, n % CAST(1.25 AS DECIMAL(12, 2)) AS s_rem_m, CAST(1.25 AS DECIMAL(12, 2)) % n AS m_rem_s FROM arithmetic_inputs ORDER BY id"
+    },
+    {
+      "id": "arithmetic_number_column",
+      "sql": "SELECT id, '12' + i AS s_add_i, i + '12' AS i_add_s, '12' - i AS s_sub_i, i - '12' AS i_sub_s, '12' * i AS s_mul_i, i * '12' AS i_mul_s, '12' / i AS s_div_i, i / '12' AS i_div_s, '12' % i AS s_rem_i, i % '12' AS i_rem_s, '12' + l AS s_add_l, l + '12' AS l_add_s, '12' - l AS s_sub_l, l - '12' AS l_sub_s, '12' * l AS s_mul_l, l * '12' AS l_mul_s, '12' / l AS s_div_l, l / '12' AS l_div_s, '12' % l AS s_rem_l, l % '12' AS l_rem_s, '12' + d AS s_add_d, d + '12' AS d_add_s, '12' - d AS s_sub_d, d - '12' AS d_sub_s, '12' * d AS s_mul_d, d * '12' AS d_mul_s, '12' / d AS s_div_d, d / '12' AS d_div_s, '12' % d AS s_rem_d, d % '12' AS d_rem_s, '12' + m AS s_add_m, m + '12' AS m_add_s, '12' - m AS s_sub_m, m - '12' AS m_sub_s, '12' * m AS s_mul_m, m * '12' AS m_mul_s, '12' / m AS s_div_m, m / '12' AS m_div_s, '12' % m AS s_rem_m, m % '12' AS m_rem_s FROM arithmetic_inputs ORDER BY id"
+    },
+    {
+      "id": "arithmetic_literals",
+      "sql": "SELECT '12' + 3 AS s_add_i, 3 + '12' AS i_add_s, '12' - 3 AS s_sub_i, 3 - '12' AS i_sub_s, '12' * 3 AS s_mul_i, 3 * '12' AS i_mul_s, '12' / 3 AS s_div_i, 3 / '12' AS i_div_s, '12' % 3 AS s_rem_i, 3 % '12' AS i_rem_s, '12' + CAST(4 AS BIGINT) AS s_add_l, CAST(4 AS BIGINT) + '12' AS l_add_s, '12' - CAST(4 AS BIGINT) AS s_sub_l, CAST(4 AS BIGINT) - '12' AS l_sub_s, '12' * CAST(4 AS BIGINT) AS s_mul_l, CAST(4 AS BIGINT) * '12' AS l_mul_s, '12' / CAST(4 AS BIGINT) AS s_div_l, CAST(4 AS BIGINT) / '12' AS l_div_s, '12' % CAST(4 AS BIGINT) AS s_rem_l, CAST(4 AS BIGINT) % '12' AS l_rem_s, '12' + CAST(2.5 AS DOUBLE) AS s_add_d, CAST(2.5 AS DOUBLE) + '12' AS d_add_s, '12' - CAST(2.5 AS DOUBLE) AS s_sub_d, CAST(2.5 AS DOUBLE) - '12' AS d_sub_s, '12' * CAST(2.5 AS DOUBLE) AS s_mul_d, CAST(2.5 AS DOUBLE) * '12' AS d_mul_s, '12' / CAST(2.5 AS DOUBLE) AS s_div_d, CAST(2.5 AS DOUBLE) / '12' AS d_div_s, '12' % CAST(2.5 AS DOUBLE) AS s_rem_d, CAST(2.5 AS DOUBLE) % '12' AS d_rem_s, '12' + CAST(1.25 AS DECIMAL(12, 2)) AS s_add_m, CAST(1.25 AS DECIMAL(12, 2)) + '12' AS m_add_s, '12' - CAST(1.25 AS DECIMAL(12, 2)) AS s_sub_m, CAST(1.25 AS DECIMAL(12, 2)) - '12' AS m_sub_s, '12' * CAST(1.25 AS DECIMAL(12, 2)) AS s_mul_m, CAST(1.25 AS DECIMAL(12, 2)) * '12' AS m_mul_s, '12' / CAST(1.25 AS DECIMAL(12, 2)) AS s_div_m, CAST(1.25 AS DECIMAL(12, 2)) / '12' AS m_div_s, '12' % CAST(1.25 AS DECIMAL(12, 2)) AS s_rem_m, CAST(1.25 AS DECIMAL(12, 2)) % '12' AS m_rem_s"
+    },
+    {
+      "id": "arithmetic_null_string_literal",
+      "sql": "SELECT CAST(NULL AS STRING) + 3 AS s_add_i, 3 + CAST(NULL AS STRING) AS i_add_s, CAST(NULL AS STRING) - 3 AS s_sub_i, 3 - CAST(NULL AS STRING) AS i_sub_s, CAST(NULL AS STRING) * 3 AS s_mul_i, 3 * CAST(NULL AS STRING) AS i_mul_s, CAST(NULL AS STRING) / 3 AS s_div_i, 3 / CAST(NULL AS STRING) AS i_div_s, CAST(NULL AS STRING) % 3 AS s_rem_i, 3 % CAST(NULL AS STRING) AS i_rem_s, CAST(NULL AS STRING) + CAST(4 AS BIGINT) AS s_add_l, CAST(4 AS BIGINT) + CAST(NULL AS STRING) AS l_add_s, CAST(NULL AS STRING) - CAST(4 AS BIGINT) AS s_sub_l, CAST(4 AS BIGINT) - CAST(NULL AS STRING) AS l_sub_s, CAST(NULL AS STRING) * CAST(4 AS BIGINT) AS s_mul_l, CAST(4 AS BIGINT) * CAST(NULL AS STRING) AS l_mul_s, CAST(NULL AS STRING) / CAST(4 AS BIGINT) AS s_div_l, CAST(4 AS BIGINT) / CAST(NULL AS STRING) AS l_div_s, CAST(NULL AS STRING) % CAST(4 AS BIGINT) AS s_rem_l, CAST(4 AS BIGINT) % CAST(NULL AS STRING) AS l_rem_s, CAST(NULL AS STRING) + CAST(2.5 AS DOUBLE) AS s_add_d, CAST(2.5 AS DOUBLE) + CAST(NULL AS STRING) AS d_add_s, CAST(NULL AS STRING) - CAST(2.5 AS DOUBLE) AS s_sub_d, CAST(2.5 AS DOUBLE) - CAST(NULL AS STRING) AS d_sub_s, CAST(NULL AS STRING) * CAST(2.5 AS DOUBLE) AS s_mul_d, CAST(2.5 AS DOUBLE) * CAST(NULL AS STRING) AS d_mul_s, CAST(NULL AS STRING) / CAST(2.5 AS DOUBLE) AS s_div_d, CAST(2.5 AS DOUBLE) / CAST(NULL AS STRING) AS d_div_s, CAST(NULL AS STRING) % CAST(2.5 AS DOUBLE) AS s_rem_d, CAST(2.5 AS DOUBLE) % CAST(NULL AS STRING) AS d_rem_s, CAST(NULL AS STRING) + CAST(1.25 AS DECIMAL(12, 2)) AS s_add_m, CAST(1.25 AS DECIMAL(12, 2)) + CAST(NULL AS STRING) AS m_add_s, CAST(NULL AS STRING) - CAST(1.25 AS DECIMAL(12, 2)) AS s_sub_m, CAST(1.25 AS DECIMAL(12, 2)) - CAST(NULL AS STRING) AS m_sub_s, CAST(NULL AS STRING) * CAST(1.25 AS DECIMAL(12, 2)) AS s_mul_m, CAST(1.25 AS DECIMAL(12, 2)) * CAST(NULL AS STRING) AS m_mul_s, CAST(NULL AS STRING) / CAST(1.25 AS DECIMAL(12, 2)) AS s_div_m, CAST(1.25 AS DECIMAL(12, 2)) / CAST(NULL AS STRING) AS m_div_s, CAST(NULL AS STRING) % CAST(1.25 AS DECIMAL(12, 2)) AS s_rem_m, CAST(1.25 AS DECIMAL(12, 2)) % CAST(NULL AS STRING) AS m_rem_s"
+    },
+    {
+      "id": "arithmetic_null_number_literal",
+      "sql": "SELECT '12' + CAST(NULL AS INT) AS s_add_i, CAST(NULL AS INT) + '12' AS i_add_s, '12' - CAST(NULL AS INT) AS s_sub_i, CAST(NULL AS INT) - '12' AS i_sub_s, '12' * CAST(NULL AS INT) AS s_mul_i, CAST(NULL AS INT) * '12' AS i_mul_s, '12' / CAST(NULL AS INT) AS s_div_i, CAST(NULL AS INT) / '12' AS i_div_s, '12' % CAST(NULL AS INT) AS s_rem_i, CAST(NULL AS INT) % '12' AS i_rem_s, '12' + CAST(NULL AS BIGINT) AS s_add_l, CAST(NULL AS BIGINT) + '12' AS l_add_s, '12' - CAST(NULL AS BIGINT) AS s_sub_l, CAST(NULL AS BIGINT) - '12' AS l_sub_s, '12' * CAST(NULL AS BIGINT) AS s_mul_l, CAST(NULL AS BIGINT) * '12' AS l_mul_s, '12' / CAST(NULL AS BIGINT) AS s_div_l, CAST(NULL AS BIGINT) / '12' AS l_div_s, '12' % CAST(NULL AS BIGINT) AS s_rem_l, CAST(NULL AS BIGINT) % '12' AS l_rem_s, '12' + CAST(NULL AS DOUBLE) AS s_add_d, CAST(NULL AS DOUBLE) + '12' AS d_add_s, '12' - CAST(NULL AS DOUBLE) AS s_sub_d, CAST(NULL AS DOUBLE) - '12' AS d_sub_s, '12' * CAST(NULL AS DOUBLE) AS s_mul_d, CAST(NULL AS DOUBLE) * '12' AS d_mul_s, '12' / CAST(NULL AS DOUBLE) AS s_div_d, CAST(NULL AS DOUBLE) / '12' AS d_div_s, '12' % CAST(NULL AS DOUBLE) AS s_rem_d, CAST(NULL AS DOUBLE) % '12' AS d_rem_s, '12' + CAST(NULL AS DECIMAL(12, 2)) AS s_add_m, CAST(NULL AS DECIMAL(12, 2)) + '12' AS m_add_s, '12' - CAST(NULL AS DECIMAL(12, 2)) AS s_sub_m, CAST(NULL AS DECIMAL(12, 2)) - '12' AS m_sub_s, '12' * CAST(NULL AS DECIMAL(12, 2)) AS s_mul_m, CAST(NULL AS DECIMAL(12, 2)) * '12' AS m_mul_s, '12' / CAST(NULL AS DECIMAL(12, 2)) AS s_div_m, CAST(NULL AS DECIMAL(12, 2)) / '12' AS m_div_s, '12' % CAST(NULL AS DECIMAL(12, 2)) AS s_rem_m, CAST(NULL AS DECIMAL(12, 2)) % '12' AS m_rem_s"
+    },
+    {
+      "id": "arithmetic_fractional_d",
+      "sql": "SELECT '-2.5' + CAST(2.5 AS DOUBLE) AS s_add_d, CAST(2.5 AS DOUBLE) + '-2.5' AS d_add_s, '-2.5' - CAST(2.5 AS DOUBLE) AS s_sub_d, CAST(2.5 AS DOUBLE) - '-2.5' AS d_sub_s, '-2.5' * CAST(2.5 AS DOUBLE) AS s_mul_d, CAST(2.5 AS DOUBLE) * '-2.5' AS d_mul_s, '-2.5' / CAST(2.5 AS DOUBLE) AS s_div_d, CAST(2.5 AS DOUBLE) / '-2.5' AS d_div_s, '-2.5' % CAST(2.5 AS DOUBLE) AS s_rem_d, CAST(2.5 AS DOUBLE) % '-2.5' AS d_rem_s"
+    },
+    {
+      "id": "arithmetic_fractional_m",
+      "sql": "SELECT '-2.5' + CAST(1.25 AS DECIMAL(12, 2)) AS s_add_m, CAST(1.25 AS DECIMAL(12, 2)) + '-2.5' AS m_add_s, '-2.5' - CAST(1.25 AS DECIMAL(12, 2)) AS s_sub_m, CAST(1.25 AS DECIMAL(12, 2)) - '-2.5' AS m_sub_s, '-2.5' * CAST(1.25 AS DECIMAL(12, 2)) AS s_mul_m, CAST(1.25 AS DECIMAL(12, 2)) * '-2.5' AS m_mul_s, '-2.5' / CAST(1.25 AS DECIMAL(12, 2)) AS s_div_m, CAST(1.25 AS DECIMAL(12, 2)) / '-2.5' AS m_div_s, '-2.5' % CAST(1.25 AS DECIMAL(12, 2)) AS s_rem_m, CAST(1.25 AS DECIMAL(12, 2)) % '-2.5' AS m_rem_s"
+    },
+    {
+      "id": "arithmetic_double_spellings",
+      "sql": "SELECT id, n + d AS s_add_d, d + n AS d_add_s, n - d AS s_sub_d, d - n AS d_sub_s, n * d AS s_mul_d, d * n AS d_mul_s, n / d AS s_div_d, d / n AS d_div_s, n % d AS s_rem_d, d % n AS d_rem_s FROM arithmetic_spellings ORDER BY id"
+    },
+    {
+      "id": "arithmetic_malformed_column",
+      "sql": "SELECT id, n + i AS s_add_i, i + n AS i_add_s, n - i AS s_sub_i, i - n AS i_sub_s, n * i AS s_mul_i, i * n AS i_mul_s, n / i AS s_div_i, i / n AS i_div_s, n % i AS s_rem_i, i % n AS i_rem_s, n + l AS s_add_l, l + n AS l_add_s, n - l AS s_sub_l, l - n AS l_sub_s, n * l AS s_mul_l, l * n AS l_mul_s, n / l AS s_div_l, l / n AS l_div_s, n % l AS s_rem_l, l % n AS l_rem_s, n + d AS s_add_d, d + n AS d_add_s, n - d AS s_sub_d, d - n AS d_sub_s, n * d AS s_mul_d, d * n AS d_mul_s, n / d AS s_div_d, d / n AS d_div_s, n % d AS s_rem_d, d % n AS d_rem_s, n + m AS s_add_m, m + n AS m_add_s, n - m AS s_sub_m, m - n AS m_sub_s, n * m AS s_mul_m, m * n AS m_mul_s, n / m AS s_div_m, m / n AS m_div_s, n % m AS s_rem_m, m % n AS m_rem_s FROM arithmetic_bad ORDER BY id",
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literals",
+      "sql": "SELECT 'not-a-number' + 3 AS s_add_i, 3 + 'not-a-number' AS i_add_s, 'not-a-number' - 3 AS s_sub_i, 3 - 'not-a-number' AS i_sub_s, 'not-a-number' * 3 AS s_mul_i, 3 * 'not-a-number' AS i_mul_s, 'not-a-number' / 3 AS s_div_i, 3 / 'not-a-number' AS i_div_s, 'not-a-number' % 3 AS s_rem_i, 3 % 'not-a-number' AS i_rem_s, 'not-a-number' + CAST(4 AS BIGINT) AS s_add_l, CAST(4 AS BIGINT) + 'not-a-number' AS l_add_s, 'not-a-number' - CAST(4 AS BIGINT) AS s_sub_l, CAST(4 AS BIGINT) - 'not-a-number' AS l_sub_s, 'not-a-number' * CAST(4 AS BIGINT) AS s_mul_l, CAST(4 AS BIGINT) * 'not-a-number' AS l_mul_s, 'not-a-number' / CAST(4 AS BIGINT) AS s_div_l, CAST(4 AS BIGINT) / 'not-a-number' AS l_div_s, 'not-a-number' % CAST(4 AS BIGINT) AS s_rem_l, CAST(4 AS BIGINT) % 'not-a-number' AS l_rem_s, 'not-a-number' + CAST(2.5 AS DOUBLE) AS s_add_d, CAST(2.5 AS DOUBLE) + 'not-a-number' AS d_add_s, 'not-a-number' - CAST(2.5 AS DOUBLE) AS s_sub_d, CAST(2.5 AS DOUBLE) - 'not-a-number' AS d_sub_s, 'not-a-number' * CAST(2.5 AS DOUBLE) AS s_mul_d, CAST(2.5 AS DOUBLE) * 'not-a-number' AS d_mul_s, 'not-a-number' / CAST(2.5 AS DOUBLE) AS s_div_d, CAST(2.5 AS DOUBLE) / 'not-a-number' AS d_div_s, 'not-a-number' % CAST(2.5 AS DOUBLE) AS s_rem_d, CAST(2.5 AS DOUBLE) % 'not-a-number' AS d_rem_s, 'not-a-number' + CAST(1.25 AS DECIMAL(12, 2)) AS s_add_m, CAST(1.25 AS DECIMAL(12, 2)) + 'not-a-number' AS m_add_s, 'not-a-number' - CAST(1.25 AS DECIMAL(12, 2)) AS s_sub_m, CAST(1.25 AS DECIMAL(12, 2)) - 'not-a-number' AS m_sub_s, 'not-a-number' * CAST(1.25 AS DECIMAL(12, 2)) AS s_mul_m, CAST(1.25 AS DECIMAL(12, 2)) * 'not-a-number' AS m_mul_s, 'not-a-number' / CAST(1.25 AS DECIMAL(12, 2)) AS s_div_m, CAST(1.25 AS DECIMAL(12, 2)) / 'not-a-number' AS m_div_s, 'not-a-number' % CAST(1.25 AS DECIMAL(12, 2)) AS s_rem_m, CAST(1.25 AS DECIMAL(12, 2)) % 'not-a-number' AS m_rem_s",
+      "ansi_modes": [
+        false
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_s_add_i",
+      "sql": "SELECT 'not-a-number' + 3 AS s_add_i",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_i_add_s",
+      "sql": "SELECT 3 + 'not-a-number' AS i_add_s",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_s_sub_i",
+      "sql": "SELECT 'not-a-number' - 3 AS s_sub_i",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_i_sub_s",
+      "sql": "SELECT 3 - 'not-a-number' AS i_sub_s",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_s_mul_i",
+      "sql": "SELECT 'not-a-number' * 3 AS s_mul_i",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_i_mul_s",
+      "sql": "SELECT 3 * 'not-a-number' AS i_mul_s",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_s_div_i",
+      "sql": "SELECT 'not-a-number' / 3 AS s_div_i",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_i_div_s",
+      "sql": "SELECT 3 / 'not-a-number' AS i_div_s",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_s_rem_i",
+      "sql": "SELECT 'not-a-number' % 3 AS s_rem_i",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_i_rem_s",
+      "sql": "SELECT 3 % 'not-a-number' AS i_rem_s",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_s_add_l",
+      "sql": "SELECT 'not-a-number' + CAST(4 AS BIGINT) AS s_add_l",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_l_add_s",
+      "sql": "SELECT CAST(4 AS BIGINT) + 'not-a-number' AS l_add_s",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_s_sub_l",
+      "sql": "SELECT 'not-a-number' - CAST(4 AS BIGINT) AS s_sub_l",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_l_sub_s",
+      "sql": "SELECT CAST(4 AS BIGINT) - 'not-a-number' AS l_sub_s",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_s_mul_l",
+      "sql": "SELECT 'not-a-number' * CAST(4 AS BIGINT) AS s_mul_l",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_l_mul_s",
+      "sql": "SELECT CAST(4 AS BIGINT) * 'not-a-number' AS l_mul_s",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_s_div_l",
+      "sql": "SELECT 'not-a-number' / CAST(4 AS BIGINT) AS s_div_l",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_l_div_s",
+      "sql": "SELECT CAST(4 AS BIGINT) / 'not-a-number' AS l_div_s",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_s_rem_l",
+      "sql": "SELECT 'not-a-number' % CAST(4 AS BIGINT) AS s_rem_l",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_l_rem_s",
+      "sql": "SELECT CAST(4 AS BIGINT) % 'not-a-number' AS l_rem_s",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_s_add_d",
+      "sql": "SELECT 'not-a-number' + CAST(2.5 AS DOUBLE) AS s_add_d",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_d_add_s",
+      "sql": "SELECT CAST(2.5 AS DOUBLE) + 'not-a-number' AS d_add_s",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_s_sub_d",
+      "sql": "SELECT 'not-a-number' - CAST(2.5 AS DOUBLE) AS s_sub_d",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_d_sub_s",
+      "sql": "SELECT CAST(2.5 AS DOUBLE) - 'not-a-number' AS d_sub_s",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_s_mul_d",
+      "sql": "SELECT 'not-a-number' * CAST(2.5 AS DOUBLE) AS s_mul_d",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_d_mul_s",
+      "sql": "SELECT CAST(2.5 AS DOUBLE) * 'not-a-number' AS d_mul_s",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_s_div_d",
+      "sql": "SELECT 'not-a-number' / CAST(2.5 AS DOUBLE) AS s_div_d",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_d_div_s",
+      "sql": "SELECT CAST(2.5 AS DOUBLE) / 'not-a-number' AS d_div_s",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_s_rem_d",
+      "sql": "SELECT 'not-a-number' % CAST(2.5 AS DOUBLE) AS s_rem_d",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_d_rem_s",
+      "sql": "SELECT CAST(2.5 AS DOUBLE) % 'not-a-number' AS d_rem_s",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_s_add_m",
+      "sql": "SELECT 'not-a-number' + CAST(1.25 AS DECIMAL(12, 2)) AS s_add_m",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_m_add_s",
+      "sql": "SELECT CAST(1.25 AS DECIMAL(12, 2)) + 'not-a-number' AS m_add_s",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_s_sub_m",
+      "sql": "SELECT 'not-a-number' - CAST(1.25 AS DECIMAL(12, 2)) AS s_sub_m",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_m_sub_s",
+      "sql": "SELECT CAST(1.25 AS DECIMAL(12, 2)) - 'not-a-number' AS m_sub_s",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_s_mul_m",
+      "sql": "SELECT 'not-a-number' * CAST(1.25 AS DECIMAL(12, 2)) AS s_mul_m",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_m_mul_s",
+      "sql": "SELECT CAST(1.25 AS DECIMAL(12, 2)) * 'not-a-number' AS m_mul_s",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_s_div_m",
+      "sql": "SELECT 'not-a-number' / CAST(1.25 AS DECIMAL(12, 2)) AS s_div_m",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_m_div_s",
+      "sql": "SELECT CAST(1.25 AS DECIMAL(12, 2)) / 'not-a-number' AS m_div_s",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_s_rem_m",
+      "sql": "SELECT 'not-a-number' % CAST(1.25 AS DECIMAL(12, 2)) AS s_rem_m",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_literal_m_rem_s",
+      "sql": "SELECT CAST(1.25 AS DECIMAL(12, 2)) % 'not-a-number' AS m_rem_s",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null",
+      "sql": "SELECT 'not-a-number' + CAST(NULL AS INT) AS s_add_i, CAST(NULL AS INT) + 'not-a-number' AS i_add_s, 'not-a-number' - CAST(NULL AS INT) AS s_sub_i, CAST(NULL AS INT) - 'not-a-number' AS i_sub_s, 'not-a-number' * CAST(NULL AS INT) AS s_mul_i, CAST(NULL AS INT) * 'not-a-number' AS i_mul_s, 'not-a-number' / CAST(NULL AS INT) AS s_div_i, CAST(NULL AS INT) / 'not-a-number' AS i_div_s, 'not-a-number' % CAST(NULL AS INT) AS s_rem_i, CAST(NULL AS INT) % 'not-a-number' AS i_rem_s, 'not-a-number' + CAST(NULL AS BIGINT) AS s_add_l, CAST(NULL AS BIGINT) + 'not-a-number' AS l_add_s, 'not-a-number' - CAST(NULL AS BIGINT) AS s_sub_l, CAST(NULL AS BIGINT) - 'not-a-number' AS l_sub_s, 'not-a-number' * CAST(NULL AS BIGINT) AS s_mul_l, CAST(NULL AS BIGINT) * 'not-a-number' AS l_mul_s, 'not-a-number' / CAST(NULL AS BIGINT) AS s_div_l, CAST(NULL AS BIGINT) / 'not-a-number' AS l_div_s, 'not-a-number' % CAST(NULL AS BIGINT) AS s_rem_l, CAST(NULL AS BIGINT) % 'not-a-number' AS l_rem_s, 'not-a-number' + CAST(NULL AS DOUBLE) AS s_add_d, CAST(NULL AS DOUBLE) + 'not-a-number' AS d_add_s, 'not-a-number' - CAST(NULL AS DOUBLE) AS s_sub_d, CAST(NULL AS DOUBLE) - 'not-a-number' AS d_sub_s, 'not-a-number' * CAST(NULL AS DOUBLE) AS s_mul_d, CAST(NULL AS DOUBLE) * 'not-a-number' AS d_mul_s, 'not-a-number' / CAST(NULL AS DOUBLE) AS s_div_d, CAST(NULL AS DOUBLE) / 'not-a-number' AS d_div_s, 'not-a-number' % CAST(NULL AS DOUBLE) AS s_rem_d, CAST(NULL AS DOUBLE) % 'not-a-number' AS d_rem_s, 'not-a-number' + CAST(NULL AS DECIMAL(12, 2)) AS s_add_m, CAST(NULL AS DECIMAL(12, 2)) + 'not-a-number' AS m_add_s, 'not-a-number' - CAST(NULL AS DECIMAL(12, 2)) AS s_sub_m, CAST(NULL AS DECIMAL(12, 2)) - 'not-a-number' AS m_sub_s, 'not-a-number' * CAST(NULL AS DECIMAL(12, 2)) AS s_mul_m, CAST(NULL AS DECIMAL(12, 2)) * 'not-a-number' AS m_mul_s, 'not-a-number' / CAST(NULL AS DECIMAL(12, 2)) AS s_div_m, CAST(NULL AS DECIMAL(12, 2)) / 'not-a-number' AS m_div_s, 'not-a-number' % CAST(NULL AS DECIMAL(12, 2)) AS s_rem_m, CAST(NULL AS DECIMAL(12, 2)) % 'not-a-number' AS m_rem_s",
+      "ansi_modes": [
+        false
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_s_add_i",
+      "sql": "SELECT 'not-a-number' + CAST(NULL AS INT) AS s_add_i",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_i_add_s",
+      "sql": "SELECT CAST(NULL AS INT) + 'not-a-number' AS i_add_s",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_s_sub_i",
+      "sql": "SELECT 'not-a-number' - CAST(NULL AS INT) AS s_sub_i",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_i_sub_s",
+      "sql": "SELECT CAST(NULL AS INT) - 'not-a-number' AS i_sub_s",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_s_mul_i",
+      "sql": "SELECT 'not-a-number' * CAST(NULL AS INT) AS s_mul_i",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_i_mul_s",
+      "sql": "SELECT CAST(NULL AS INT) * 'not-a-number' AS i_mul_s",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_s_div_i",
+      "sql": "SELECT 'not-a-number' / CAST(NULL AS INT) AS s_div_i",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_i_div_s",
+      "sql": "SELECT CAST(NULL AS INT) / 'not-a-number' AS i_div_s",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_s_rem_i",
+      "sql": "SELECT 'not-a-number' % CAST(NULL AS INT) AS s_rem_i",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_i_rem_s",
+      "sql": "SELECT CAST(NULL AS INT) % 'not-a-number' AS i_rem_s",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_s_add_l",
+      "sql": "SELECT 'not-a-number' + CAST(NULL AS BIGINT) AS s_add_l",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_l_add_s",
+      "sql": "SELECT CAST(NULL AS BIGINT) + 'not-a-number' AS l_add_s",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_s_sub_l",
+      "sql": "SELECT 'not-a-number' - CAST(NULL AS BIGINT) AS s_sub_l",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_l_sub_s",
+      "sql": "SELECT CAST(NULL AS BIGINT) - 'not-a-number' AS l_sub_s",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_s_mul_l",
+      "sql": "SELECT 'not-a-number' * CAST(NULL AS BIGINT) AS s_mul_l",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_l_mul_s",
+      "sql": "SELECT CAST(NULL AS BIGINT) * 'not-a-number' AS l_mul_s",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_s_div_l",
+      "sql": "SELECT 'not-a-number' / CAST(NULL AS BIGINT) AS s_div_l",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_l_div_s",
+      "sql": "SELECT CAST(NULL AS BIGINT) / 'not-a-number' AS l_div_s",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_s_rem_l",
+      "sql": "SELECT 'not-a-number' % CAST(NULL AS BIGINT) AS s_rem_l",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_l_rem_s",
+      "sql": "SELECT CAST(NULL AS BIGINT) % 'not-a-number' AS l_rem_s",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_s_add_d",
+      "sql": "SELECT 'not-a-number' + CAST(NULL AS DOUBLE) AS s_add_d",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_d_add_s",
+      "sql": "SELECT CAST(NULL AS DOUBLE) + 'not-a-number' AS d_add_s",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_s_sub_d",
+      "sql": "SELECT 'not-a-number' - CAST(NULL AS DOUBLE) AS s_sub_d",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_d_sub_s",
+      "sql": "SELECT CAST(NULL AS DOUBLE) - 'not-a-number' AS d_sub_s",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_s_mul_d",
+      "sql": "SELECT 'not-a-number' * CAST(NULL AS DOUBLE) AS s_mul_d",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_d_mul_s",
+      "sql": "SELECT CAST(NULL AS DOUBLE) * 'not-a-number' AS d_mul_s",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_s_div_d",
+      "sql": "SELECT 'not-a-number' / CAST(NULL AS DOUBLE) AS s_div_d",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_d_div_s",
+      "sql": "SELECT CAST(NULL AS DOUBLE) / 'not-a-number' AS d_div_s",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_s_rem_d",
+      "sql": "SELECT 'not-a-number' % CAST(NULL AS DOUBLE) AS s_rem_d",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_d_rem_s",
+      "sql": "SELECT CAST(NULL AS DOUBLE) % 'not-a-number' AS d_rem_s",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_s_add_m",
+      "sql": "SELECT 'not-a-number' + CAST(NULL AS DECIMAL(12, 2)) AS s_add_m",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_m_add_s",
+      "sql": "SELECT CAST(NULL AS DECIMAL(12, 2)) + 'not-a-number' AS m_add_s",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_s_sub_m",
+      "sql": "SELECT 'not-a-number' - CAST(NULL AS DECIMAL(12, 2)) AS s_sub_m",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_m_sub_s",
+      "sql": "SELECT CAST(NULL AS DECIMAL(12, 2)) - 'not-a-number' AS m_sub_s",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_s_mul_m",
+      "sql": "SELECT 'not-a-number' * CAST(NULL AS DECIMAL(12, 2)) AS s_mul_m",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_m_mul_s",
+      "sql": "SELECT CAST(NULL AS DECIMAL(12, 2)) * 'not-a-number' AS m_mul_s",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_s_div_m",
+      "sql": "SELECT 'not-a-number' / CAST(NULL AS DECIMAL(12, 2)) AS s_div_m",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_m_div_s",
+      "sql": "SELECT CAST(NULL AS DECIMAL(12, 2)) / 'not-a-number' AS m_div_s",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_s_rem_m",
+      "sql": "SELECT 'not-a-number' % CAST(NULL AS DECIMAL(12, 2)) AS s_rem_m",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "arithmetic_malformed_with_null_m_rem_s",
+      "sql": "SELECT CAST(NULL AS DECIMAL(12, 2)) % 'not-a-number' AS m_rem_s",
+      "ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_numeric",
+      "sql": "SELECT AVG(n) AS avg_r, MEAN(n) AS mean_r, SUM(n) AS sum_r, STD(n) AS std_r, STDDEV(n) AS stddev_r, STDDEV_POP(n) AS stddev_pop_r, STDDEV_SAMP(n) AS stddev_samp_r, VARIANCE(n) AS variance_r, VAR_POP(n) AS var_pop_r, VAR_SAMP(n) AS var_samp_r, SKEWNESS(n) AS skewness_r, KURTOSIS(n) AS kurtosis_r, COUNT(n) AS counted, MIN(n) AS lexical_min, MAX(n) AS lexical_max FROM aggregate_inputs"
+    },
+    {
+      "id": "aggregate_numeric_all_null",
+      "sql": "SELECT AVG(n) AS avg_r, MEAN(n) AS mean_r, SUM(n) AS sum_r, STD(n) AS std_r, STDDEV(n) AS stddev_r, STDDEV_POP(n) AS stddev_pop_r, STDDEV_SAMP(n) AS stddev_samp_r, VARIANCE(n) AS variance_r, VAR_POP(n) AS var_pop_r, VAR_SAMP(n) AS var_samp_r, SKEWNESS(n) AS skewness_r, KURTOSIS(n) AS kurtosis_r FROM aggregate_inputs WHERE id = 3"
+    },
+    {
+      "id": "aggregate_numeric_empty",
+      "sql": "SELECT AVG(n) AS avg_r, MEAN(n) AS mean_r, SUM(n) AS sum_r, STD(n) AS std_r, STDDEV(n) AS stddev_r, STDDEV_POP(n) AS stddev_pop_r, STDDEV_SAMP(n) AS stddev_samp_r, VARIANCE(n) AS variance_r, VAR_POP(n) AS var_pop_r, VAR_SAMP(n) AS var_samp_r, SKEWNESS(n) AS skewness_r, KURTOSIS(n) AS kurtosis_r FROM aggregate_inputs WHERE id < 0"
+    },
+    {
+      "id": "aggregate_distinct",
+      "sql": "SELECT AVG(DISTINCT n) AS avg_r, SUM(DISTINCT n) AS sum_r FROM aggregate_inputs"
+    },
+    {
+      "id": "aggregate_numeric_filtered",
+      "sql": "SELECT AVG(n) FILTER (WHERE id < 5) AS avg_r, SUM(n) FILTER (WHERE id < 5) AS sum_r FROM aggregate_bad",
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_pairs",
+      "sql": "SELECT CORR(n, d) AS corr_left, CORR(d, n) AS corr_right, CORR(n, n) AS corr_both, COVAR_POP(n, d) AS covar_pop_left, COVAR_POP(d, n) AS covar_pop_right, COVAR_POP(n, n) AS covar_pop_both, COVAR_SAMP(n, d) AS covar_samp_left, COVAR_SAMP(d, n) AS covar_samp_right, COVAR_SAMP(n, n) AS covar_samp_both, REGR_AVGX(n, d) AS regr_avgx_left, REGR_AVGX(d, n) AS regr_avgx_right, REGR_AVGX(n, n) AS regr_avgx_both, REGR_AVGY(n, d) AS regr_avgy_left, REGR_AVGY(d, n) AS regr_avgy_right, REGR_AVGY(n, n) AS regr_avgy_both, REGR_INTERCEPT(n, d) AS regr_intercept_left, REGR_INTERCEPT(d, n) AS regr_intercept_right, REGR_INTERCEPT(n, n) AS regr_intercept_both, REGR_R2(n, d) AS regr_r2_left, REGR_R2(d, n) AS regr_r2_right, REGR_R2(n, n) AS regr_r2_both, REGR_SLOPE(n, d) AS regr_slope_left, REGR_SLOPE(d, n) AS regr_slope_right, REGR_SLOPE(n, n) AS regr_slope_both, REGR_SXX(n, d) AS regr_sxx_left, REGR_SXX(d, n) AS regr_sxx_right, REGR_SXX(n, n) AS regr_sxx_both, REGR_SXY(n, d) AS regr_sxy_left, REGR_SXY(d, n) AS regr_sxy_right, REGR_SXY(n, n) AS regr_sxy_both, REGR_SYY(n, d) AS regr_syy_left, REGR_SYY(d, n) AS regr_syy_right, REGR_SYY(n, n) AS regr_syy_both FROM aggregate_inputs"
+    },
+    {
+      "id": "aggregate_numeric_malformed",
+      "sql": "SELECT AVG(n) AS avg_r, MEAN(n) AS mean_r, SUM(n) AS sum_r, STD(n) AS std_r, STDDEV(n) AS stddev_r, STDDEV_POP(n) AS stddev_pop_r, STDDEV_SAMP(n) AS stddev_samp_r, VARIANCE(n) AS variance_r, VAR_POP(n) AS var_pop_r, VAR_SAMP(n) AS var_samp_r, SKEWNESS(n) AS skewness_r, KURTOSIS(n) AS kurtosis_r FROM aggregate_bad",
+      "ansi_modes": [
+        false
+      ]
+    },
+    {
+      "id": "aggregate_pairs_malformed",
+      "sql": "SELECT CORR(n, d) AS corr_left, CORR(d, n) AS corr_right, CORR(n, n) AS corr_both, COVAR_POP(n, d) AS covar_pop_left, COVAR_POP(d, n) AS covar_pop_right, COVAR_POP(n, n) AS covar_pop_both, COVAR_SAMP(n, d) AS covar_samp_left, COVAR_SAMP(d, n) AS covar_samp_right, COVAR_SAMP(n, n) AS covar_samp_both, REGR_AVGX(n, d) AS regr_avgx_left, REGR_AVGX(d, n) AS regr_avgx_right, REGR_AVGX(n, n) AS regr_avgx_both, REGR_AVGY(n, d) AS regr_avgy_left, REGR_AVGY(d, n) AS regr_avgy_right, REGR_AVGY(n, n) AS regr_avgy_both, REGR_INTERCEPT(n, d) AS regr_intercept_left, REGR_INTERCEPT(d, n) AS regr_intercept_right, REGR_INTERCEPT(n, n) AS regr_intercept_both, REGR_R2(n, d) AS regr_r2_left, REGR_R2(d, n) AS regr_r2_right, REGR_R2(n, n) AS regr_r2_both, REGR_SLOPE(n, d) AS regr_slope_left, REGR_SLOPE(d, n) AS regr_slope_right, REGR_SLOPE(n, n) AS regr_slope_both, REGR_SXX(n, d) AS regr_sxx_left, REGR_SXX(d, n) AS regr_sxx_right, REGR_SXX(n, n) AS regr_sxx_both, REGR_SXY(n, d) AS regr_sxy_left, REGR_SXY(d, n) AS regr_sxy_right, REGR_SXY(n, n) AS regr_sxy_both, REGR_SYY(n, d) AS regr_syy_left, REGR_SYY(d, n) AS regr_syy_right, REGR_SYY(n, n) AS regr_syy_both FROM aggregate_bad",
+      "ansi_modes": [
+        false
+      ]
+    },
+    {
+      "id": "aggregate_malformed_avg_r",
+      "sql": "SELECT AVG(n) AS avg_r FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_mean_r",
+      "sql": "SELECT MEAN(n) AS mean_r FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_sum_r",
+      "sql": "SELECT SUM(n) AS sum_r FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_product_r",
+      "sql": "SELECT PRODUCT(n) AS product_r FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_std_r",
+      "sql": "SELECT STD(n) AS std_r FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_stddev_r",
+      "sql": "SELECT STDDEV(n) AS stddev_r FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_stddev_pop_r",
+      "sql": "SELECT STDDEV_POP(n) AS stddev_pop_r FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_stddev_samp_r",
+      "sql": "SELECT STDDEV_SAMP(n) AS stddev_samp_r FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_variance_r",
+      "sql": "SELECT VARIANCE(n) AS variance_r FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_var_pop_r",
+      "sql": "SELECT VAR_POP(n) AS var_pop_r FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_var_samp_r",
+      "sql": "SELECT VAR_SAMP(n) AS var_samp_r FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_skewness_r",
+      "sql": "SELECT SKEWNESS(n) AS skewness_r FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_kurtosis_r",
+      "sql": "SELECT KURTOSIS(n) AS kurtosis_r FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_corr_left",
+      "sql": "SELECT CORR(n, d) AS corr_left FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_corr_right",
+      "sql": "SELECT CORR(d, n) AS corr_right FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_corr_both",
+      "sql": "SELECT CORR(n, n) AS corr_both FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_covar_pop_left",
+      "sql": "SELECT COVAR_POP(n, d) AS covar_pop_left FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_covar_pop_right",
+      "sql": "SELECT COVAR_POP(d, n) AS covar_pop_right FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_covar_pop_both",
+      "sql": "SELECT COVAR_POP(n, n) AS covar_pop_both FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_covar_samp_left",
+      "sql": "SELECT COVAR_SAMP(n, d) AS covar_samp_left FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_covar_samp_right",
+      "sql": "SELECT COVAR_SAMP(d, n) AS covar_samp_right FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_covar_samp_both",
+      "sql": "SELECT COVAR_SAMP(n, n) AS covar_samp_both FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_regr_avgx_left",
+      "sql": "SELECT REGR_AVGX(n, d) AS regr_avgx_left FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_regr_avgx_right",
+      "sql": "SELECT REGR_AVGX(d, n) AS regr_avgx_right FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_regr_avgx_both",
+      "sql": "SELECT REGR_AVGX(n, n) AS regr_avgx_both FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_regr_avgy_left",
+      "sql": "SELECT REGR_AVGY(n, d) AS regr_avgy_left FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_regr_avgy_right",
+      "sql": "SELECT REGR_AVGY(d, n) AS regr_avgy_right FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_regr_avgy_both",
+      "sql": "SELECT REGR_AVGY(n, n) AS regr_avgy_both FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_regr_intercept_left",
+      "sql": "SELECT REGR_INTERCEPT(n, d) AS regr_intercept_left FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_regr_intercept_right",
+      "sql": "SELECT REGR_INTERCEPT(d, n) AS regr_intercept_right FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_regr_intercept_both",
+      "sql": "SELECT REGR_INTERCEPT(n, n) AS regr_intercept_both FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_regr_r2_left",
+      "sql": "SELECT REGR_R2(n, d) AS regr_r2_left FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_regr_r2_right",
+      "sql": "SELECT REGR_R2(d, n) AS regr_r2_right FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_regr_r2_both",
+      "sql": "SELECT REGR_R2(n, n) AS regr_r2_both FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_regr_slope_left",
+      "sql": "SELECT REGR_SLOPE(n, d) AS regr_slope_left FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_regr_slope_right",
+      "sql": "SELECT REGR_SLOPE(d, n) AS regr_slope_right FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_regr_slope_both",
+      "sql": "SELECT REGR_SLOPE(n, n) AS regr_slope_both FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_regr_sxx_left",
+      "sql": "SELECT REGR_SXX(n, d) AS regr_sxx_left FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_regr_sxx_right",
+      "sql": "SELECT REGR_SXX(d, n) AS regr_sxx_right FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_regr_sxx_both",
+      "sql": "SELECT REGR_SXX(n, n) AS regr_sxx_both FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_regr_sxy_left",
+      "sql": "SELECT REGR_SXY(n, d) AS regr_sxy_left FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_regr_sxy_right",
+      "sql": "SELECT REGR_SXY(d, n) AS regr_sxy_right FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_regr_sxy_both",
+      "sql": "SELECT REGR_SXY(n, n) AS regr_sxy_both FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_regr_syy_left",
+      "sql": "SELECT REGR_SYY(n, d) AS regr_syy_left FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_regr_syy_right",
+      "sql": "SELECT REGR_SYY(d, n) AS regr_syy_right FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_malformed_regr_syy_both",
+      "sql": "SELECT REGR_SYY(n, n) AS regr_syy_both FROM aggregate_bad",
+      "ansi_modes": [
+        true
+      ],
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_regr_count",
+      "sql": "SELECT REGR_COUNT(n, d) AS r FROM aggregate_inputs"
+    },
+    {
+      "id": "aggregate_regr_count_malformed",
+      "sql": "SELECT REGR_COUNT(n, d) AS r FROM aggregate_bad",
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_median",
+      "sql": "SELECT MEDIAN(n) AS r FROM aggregate_inputs"
+    },
+    {
+      "id": "aggregate_median_malformed",
+      "sql": "SELECT MEDIAN(n) AS r FROM aggregate_bad",
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_percentile",
+      "sql": "SELECT PERCENTILE(n, 0.5) AS r FROM aggregate_inputs"
+    },
+    {
+      "id": "aggregate_percentile_malformed",
+      "sql": "SELECT PERCENTILE(n, 0.5) AS r FROM aggregate_bad",
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_approx_percentile",
+      "sql": "SELECT APPROX_PERCENTILE(n, 0.5) AS r FROM aggregate_inputs"
+    },
+    {
+      "id": "aggregate_approx_percentile_malformed",
+      "sql": "SELECT APPROX_PERCENTILE(n, 0.5) AS r FROM aggregate_bad",
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_percentile_approx",
+      "sql": "SELECT PERCENTILE_APPROX(n, 0.5) AS r FROM aggregate_inputs"
+    },
+    {
+      "id": "aggregate_percentile_approx_malformed",
+      "sql": "SELECT PERCENTILE_APPROX(n, 0.5) AS r FROM aggregate_bad",
+      "error_ansi_modes": [
+        true
+      ]
+    },
+    {
+      "id": "aggregate_product",
+      "sql": "SELECT PRODUCT(n) AS r FROM aggregate_inputs",
+      "error_ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "aggregate_valid_filter",
+      "sql": "SELECT AVG(n) FILTER (WHERE id < 4) AS avg_r, SUM(n) FILTER (WHERE id < 4) AS sum_r FROM aggregate_inputs"
+    },
+    {
+      "id": "aggregate_malformed_where",
+      "sql": "SELECT AVG(n) AS avg_r, SUM(n) AS sum_r FROM aggregate_bad WHERE id < 5"
+    },
+    {
+      "id": "aggregate_window_avg_sum",
+      "sql": "SELECT id, AVG(n) OVER () AS avg_r, SUM(n) OVER () AS sum_r FROM aggregate_inputs ORDER BY id"
+    },
+    {
+      "id": "window_numeric_statistics",
+      "sql": "SELECT id, STDDEV(n) OVER () AS std_r, VAR_POP(n) OVER () AS var_r, CORR(n,d) OVER () AS corr_r, REGR_COUNT(n,d) OVER () AS count_r FROM aggregate_inputs ORDER BY id"
+    },
+    {
+      "id": "window_numeric_percentiles",
+      "sql": "SELECT id, MEDIAN(n) OVER () AS median_r, PERCENTILE(n, 0.5) OVER () AS pct_r, APPROX_PERCENTILE(n, 0.5) OVER () AS approx_r FROM aggregate_inputs ORDER BY id"
+    },
+    {
+      "id": "arithmetic_malformed_column_with_null",
+      "sql": "SELECT id, CAST(NULL AS INT) + n AS add_r, n / CAST(NULL AS INT) AS div_r, n % CAST(NULL AS DOUBLE) AS rem_r FROM arithmetic_bad ORDER BY id"
+    },
+    {
+      "id": "ordered_set_percentile_cont",
+      "sql": "SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY n) AS r FROM aggregate_inputs"
+    },
+    {
+      "id": "ordered_set_percentile_disc",
+      "sql": "SELECT PERCENTILE_DISC(0.5) WITHIN GROUP (ORDER BY n) AS r FROM aggregate_inputs"
+    }
+  ]
+}
