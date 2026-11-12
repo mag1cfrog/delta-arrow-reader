@@ -10,12 +10,9 @@ use datafusion_common::config::ConfigOptions;
 use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode};
 use datafusion_common::{Column, Result, ScalarValue};
 use datafusion_expr::expr_rewriter::{NamePreserver, replace_col, strip_outer_reference};
-use datafusion_expr::logical_plan::{
-    Aggregate, Extension, JoinType, Limit, Projection, Sort, Subquery,
-};
-use datafusion_expr::utils::{conjunction, split_conjunction};
+use datafusion_expr::logical_plan::{Extension, JoinType, Projection, Subquery};
 use datafusion_expr::{
-    Expr, ExprFunctionExt, LogicalPlan, LogicalPlanBuilder, Operator, ScalarUDF, cast, lit, when,
+    Expr, ExprFunctionExt, LogicalPlan, LogicalPlanBuilder, ScalarUDF, cast, lit, when,
 };
 use sail_function::scalar::misc::raise_error::RaiseError;
 use sail_logical_plan::monotonic_id::{MonotonicIdNode, MonotonicIdPurpose};
@@ -24,11 +21,10 @@ use crate::expression_errors::SparkSqlExpressionSemantics;
 
 mod aggregate;
 mod limit;
+mod rows;
 
-use aggregate::{
-    aggregate_inner_rows, can_lower_aggregate, lift_correlated_scalar_aggregate_inputs,
-};
-use limit::{can_lower_limit, limit_inner_rows};
+use aggregate::lift_correlated_scalar_aggregate_inputs;
+use rows::{apply_row_steps, has_correlated_self_equality, split_correlated_rows};
 
 /// Lower Spark scalar queries over real inner rows before DataFusion validates them.
 #[derive(Debug)]
@@ -152,46 +148,6 @@ fn scalar_value_input(mut value: Expr, mut input: &LogicalPlan) -> Result<(Expr,
     Ok((value, input))
 }
 
-enum InnerRows<'a> {
-    Plain,
-    Aggregate(&'a Aggregate, Option<&'a Expr>),
-    Limit(&'a Limit, Option<&'a Sort>),
-}
-
-fn split_inner_rows(
-    value: Expr,
-    input: &LogicalPlan,
-) -> Result<(Expr, InnerRows<'_>, &LogicalPlan)> {
-    Ok(match input {
-        LogicalPlan::Aggregate(aggregate) if can_lower_aggregate(aggregate) => (
-            value,
-            InnerRows::Aggregate(aggregate, None),
-            &aggregate.input,
-        ),
-        LogicalPlan::Filter(filter)
-            if let LogicalPlan::Aggregate(aggregate) = filter.input.as_ref()
-                && can_lower_aggregate(aggregate) =>
-        {
-            (
-                value,
-                InnerRows::Aggregate(aggregate, Some(&filter.predicate)),
-                &aggregate.input,
-            )
-        }
-        LogicalPlan::Limit(limit) if can_lower_limit(limit) => {
-            // ORDER BY can have a projection that hides its sort keys.
-            let (selected, input) = scalar_value_input(value.clone(), &limit.input)?;
-            match input {
-                LogicalPlan::Sort(sort) if !selected.is_volatile() => {
-                    (selected, InnerRows::Limit(limit, Some(sort)), &sort.input)
-                }
-                _ => (value, InnerRows::Limit(limit, None), &limit.input),
-            }
-        }
-        _ => (value, InnerRows::Plain, input),
-    })
-}
-
 fn filter_match_marker(plan: LogicalPlan, marker: &Column, predicate: Expr) -> Result<LogicalPlan> {
     let null = lit(ScalarValue::Boolean(None));
     let retained = when(Expr::Column(marker.clone()).is_null(), null.clone())
@@ -231,69 +187,34 @@ fn lower_scalar(
     }
     let output = Expr::Column(schema.qualified_field(0).into());
     let (value, input) = scalar_value_input(output, &subquery.subquery)?;
-    let (value, rows, input) = split_inner_rows(value, input)?;
-    if let InnerRows::Aggregate(aggregate, None) = rows
-        && aggregate.group_expr.is_empty()
+    if matches!(input, LogicalPlan::Aggregate(aggregate) if aggregate.group_expr.is_empty())
+        && !has_correlated_self_equality(input)?
     {
         // Keep DataFusion's existing global aggregate decorrelation when it can
         // group on the extracted join keys before joining to the outer rows.
         let mut native = PullUpCorrelatedExpr::new();
-        if subquery
-            .subquery
-            .as_ref()
-            .clone()
-            .rewrite(&mut native)
-            .is_ok()
+        if subquery.subquery.as_ref().clone().rewrite(&mut native).is_ok()
             && native.can_pull_up
             && native.pulled_up_scalar_agg
         {
             return Ok(None);
         }
     }
-    let scalar_input = match rows {
-        InnerRows::Aggregate(aggregate, _) => Arc::clone(&aggregate.schema),
-        _ => Arc::clone(input.schema()),
+    if matches!(input, LogicalPlan::EmptyRelation(empty) if empty.produce_one_row) {
+        return Ok(None);
+    }
+    let Some(rows) = split_correlated_rows(input)? else {
+        return Ok(None);
     };
-    if input.exists(|node| {
-        Ok(match node {
-            LogicalPlan::Projection(_)
-            | LogicalPlan::SubqueryAlias(_)
-            | LogicalPlan::TableScan(_)
-            | LogicalPlan::Values(_) => false,
-            // A self-contained inner join can produce the rows to be counted.
-            LogicalPlan::Join(join) => {
-                join.join_type != JoinType::Inner || !node.all_out_ref_exprs().is_empty()
-            }
-            LogicalPlan::EmptyRelation(empty) => empty.produce_one_row,
-            // DataFusion's pull-up discards self-equalities, even on NULL.
-            LogicalPlan::Filter(filter) => {
-                split_conjunction(&filter.predicate)
-                    .into_iter()
-                    .any(|predicate| {
-                        matches!(predicate, Expr::BinaryExpr(binary)
-                    if binary.op == Operator::Eq && binary.left == binary.right
-                        && predicate.contains_outer())
-                    })
-            }
-            _ => true,
-        })
-    })? {
-        return Ok(None);
-    }
+    let scalar_input = input.schema();
 
-    // Count matching rows before evaluating the result projection, which can depend
-    // on the outer row and must only run when the subquery returns a row.
+    // Evaluate the selected value only when the subquery returns a row.
     let value = strip_outer_reference(value);
-    let mut pull_up = PullUpCorrelatedExpr::new();
-    let inner = input.clone().rewrite(&mut pull_up).data()?;
-    if !pull_up.can_pull_up {
-        return Ok(None);
-    }
 
     let row_id = Column::new_unqualified(aliases.next("__spark_scalar_row"));
     let match_marker = Column::new_unqualified(aliases.next("__spark_scalar_match"));
     let outer_columns = outer.schema().columns();
-    let inner_columns = inner.schema().columns();
+    let inner_columns = rows.input.schema().columns();
     let left = LogicalPlan::Extension(Extension {
         node: Arc::new(MonotonicIdNode::try_new(
             Arc::clone(outer),
@@ -301,7 +222,7 @@ fn lower_scalar(
             MonotonicIdPurpose::ScalarCorrelation,
         )?),
     });
-    let right = LogicalPlanBuilder::from(inner)
+    let right = LogicalPlanBuilder::from(rows.input)
         .project(
             inner_columns
                 .into_iter()
@@ -309,25 +230,10 @@ fn lower_scalar(
                 .chain([lit(true).alias(&match_marker.name)]),
         )?
         .build()?;
-    // A scalar can reference the outer row only in its result projection.
-    let join_filter = conjunction(pull_up.join_filters).unwrap_or_else(|| lit(true));
     let joined = LogicalPlanBuilder::from(left)
-        .join_on(right, JoinType::Left, [join_filter])?
+        .join_on(right, JoinType::Left, [rows.join_filter])?
         .build()?;
-    let rows = match rows {
-        InnerRows::Plain => joined,
-        InnerRows::Aggregate(aggregate, having) => aggregate_inner_rows(
-            joined,
-            aggregate,
-            having,
-            &row_id,
-            &match_marker,
-            &outer_columns,
-        )?,
-        InnerRows::Limit(limit, sort) => {
-            limit_inner_rows(joined, limit, sort, &row_id, &match_marker)?
-        }
-    };
+    let rows = apply_row_steps(joined, rows.steps, &row_id, &match_marker, &outer_columns)?;
 
     let match_count = Column::new_unqualified(aliases.next("__spark_scalar_count"));
     let mut referenced = value.column_refs().into_iter().collect::<Vec<_>>();

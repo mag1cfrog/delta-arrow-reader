@@ -430,11 +430,13 @@ retain overflow error conditions and constant-error stages under #896.
 For Spark queries, deterministic correlated scalar projections and aliases over
 a guaranteed one-row relation reuse the existing expression substitution even
 without a CAST elsewhere in the query. This path does not evaluate rows during
-planning or enable additional cast/predicate preparation. Real inner relations
-use a left join and count scalar rows per outer row. An empty scalar result
+planning or enable additional cast/predicate preparation. The real-inner path
+pulls correlated predicates from scans and joins with independent inputs. It
+uses a left join and counts scalar rows per outer row. An empty scalar result
 returns a typed NULL. Multiple scalar rows raise during execution, including
-when the consumer is an untaken CASE branch. Grouping, HAVING and literal
-LIMIT apply per outer row. Global aggregates that DataFusion can decorrelate
+when the consumer is an untaken CASE branch. Projections, aliases, filters,
+grouping, DISTINCT and literal LIMIT compose per outer row. Global aggregates
+that DataFusion can decorrelate
 on their join keys keep its native path. The
 [correlated scalar references](tests/fixtures/README.md#correlated-scalars-over-inner-rows)
 cover these cases and the existing one-row rewrite.

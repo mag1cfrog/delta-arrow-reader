@@ -4,7 +4,9 @@ use datafusion::arrow::datatypes::DataType;
 use datafusion::functions_window::expr_fn::row_number;
 use datafusion_common::{Column, Result, ScalarValue, internal_err};
 use datafusion_expr::expr_rewriter::strip_outer_reference;
-use datafusion_expr::{Expr, ExprFunctionExt, Limit, LogicalPlan, Sort, Window, lit, when};
+use datafusion_expr::{
+    Expr, ExprFunctionExt, Limit, LogicalPlan, LogicalPlanBuilder, Sort, Window, lit, when,
+};
 
 use super::filter_match_marker;
 
@@ -56,6 +58,7 @@ pub(super) fn limit_inner_rows(
     if end <= skip {
         return filter_match_marker(joined, matched, lit(false));
     }
+    let columns = joined.schema().columns();
     let position = Column::new_unqualified(format!("{}_position", row_id.name));
     let mut order = sort.map(|sort| sort.expr.clone()).unwrap_or_default();
     for sort in &mut order {
@@ -65,6 +68,8 @@ pub(super) fn limit_inner_rows(
             key => when(Expr::Column(matched.clone()).is_not_null(), key).end()?,
         };
     }
+    // Earlier row exclusions remain in the input to preserve the outer group.
+    order.insert(0, Expr::Column(matched.clone()).is_null().sort(true, false));
     let numbered = row_number()
         .partition_by(vec![Expr::Column(row_id.clone())])
         .order_by(order)
@@ -74,9 +79,12 @@ pub(super) fn limit_inner_rows(
 
     // Keep even out-of-range rows so each outer row still has a group.
     let position = Expr::Column(position);
-    filter_match_marker(
+    let retained = filter_match_marker(
         ranked,
         matched,
         position.clone().gt(lit(skip)).and(position.lt_eq(lit(end))),
-    )
+    )?;
+    LogicalPlanBuilder::from(retained)
+        .project(columns.into_iter().map(Expr::Column))?
+        .build()
 }

@@ -27,6 +27,8 @@ const LEGACY_VALID_RESULTS: &str =
     include_str!("fixtures/correlated-scalar-execution/legacy-valid-results.jsonl");
 const ARCHIVE_REVIEW_RESULTS: &str =
     include_str!("fixtures/correlated-scalar-execution/archive-review-results.jsonl");
+const OPERATOR_COMPOSITION_RESULTS: &str =
+    include_str!("fixtures/correlated-scalar-execution/operator-composition-results.jsonl");
 const ROUNDING: &str =
     include_str!("fixtures/correlated-scalar-execution/frozen-rounding-spark.jsonl");
 const SINGLE_ROW: &str = include_str!("fixtures/single-row-correlated-spark.jsonl");
@@ -169,7 +171,12 @@ async fn correlated_scalar_execution_matches_spark() -> TestResult {
     let review = fresh_references(&review_manifest, REVIEW_RESULTS, REVIEW_FAILURES, 9)?;
     let legacy_valid = records(LEGACY_VALID_RESULTS)?;
     let archive_review = records(ARCHIVE_REVIEW_RESULTS)?;
-    for (references, count) in [(&legacy_valid, 48), (&archive_review, 17)] {
+    let operator_composition = records(OPERATOR_COMPOSITION_RESULTS)?;
+    for (references, count) in [
+        (&legacy_valid, 48),
+        (&archive_review, 17),
+        (&operator_composition, 22),
+    ] {
         let ids: BTreeSet<_> = references
             .iter()
             .map(|case| (case["id"].as_str(), case["ansi"].as_bool()))
@@ -238,13 +245,14 @@ async fn correlated_scalar_execution_matches_spark() -> TestResult {
             ("review", review.iter().collect()),
             ("legacy_valid", legacy_valid.iter().collect()),
             ("archive_review", archive_review.iter().collect()),
+            ("operator_composition", operator_composition.iter().collect()),
             ("frozen_rounding", rounding.iter().collect()),
             ("historical_single_row", historical_controls.clone()),
             ("historical_inner_relation", historical_correlated.clone()),
         ] {
             for case in cases {
                 let (expected, schema) = match corpus {
-                    "fresh" | "review" | "legacy_valid" | "archive_review" => (
+                    "fresh" | "review" | "legacy_valid" | "archive_review" | "operator_composition" => (
                         if case["status"] == "ok" {
                             json!({"rows":case["rows"]})
                         } else {

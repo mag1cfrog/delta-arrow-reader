@@ -3,9 +3,10 @@ use std::sync::Arc;
 use datafusion::functions_aggregate::expr_fn::first_value;
 use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode};
 use datafusion_common::{Column, Result, internal_err};
+use datafusion_expr::expr::NullTreatment;
 use datafusion_expr::expr_rewriter::{NamePreserver, SavedName, strip_outer_reference};
 use datafusion_expr::utils::grouping_set_to_exprlist;
-use datafusion_expr::{Aggregate, Expr, LogicalPlan, Projection, lit, when};
+use datafusion_expr::{Aggregate, Expr, ExprFunctionExt, LogicalPlan, Projection, lit, when};
 
 pub(super) fn can_lower_aggregate(aggregate: &Aggregate) -> bool {
     // A grouping set can create multiple groups from an unmatched row.
@@ -18,7 +19,6 @@ pub(super) fn can_lower_aggregate(aggregate: &Aggregate) -> bool {
 pub(super) fn aggregate_inner_rows(
     joined: LogicalPlan,
     aggregate: &Aggregate,
-    having: Option<&Expr>,
     row_id: &Column,
     matched: &Column,
     outer_columns: &[Column],
@@ -77,12 +77,15 @@ pub(super) fn aggregate_inner_rows(
             .map(|column| keep_name(first_value(Expr::Column(column.clone()), vec![]), column)),
     );
 
-    // A global aggregate returns one scalar row even on empty input. For a
-    // grouped aggregate, the caller discards the unmatched row by its marker.
+    // A global aggregate returns one row even on empty input. A group exists
+    // only if it contains a live row, even if a rejected row shares its key.
     let marker = if group_count == 0 {
         keep_name(lit(true), matched)
     } else {
-        results.push(keep_name(first_value(marker.clone(), vec![]), matched));
+        let live_marker = first_value(marker.clone(), vec![])
+            .null_treatment(NullTreatment::IgnoreNulls)
+            .build()?;
+        results.push(keep_name(live_marker, matched));
         marker
     };
     let grouped = Aggregate::try_new(Arc::new(joined), groups, results)?;
@@ -93,17 +96,22 @@ pub(super) fn aggregate_inner_rows(
         .map(Expr::Column)
         .chain([marker])
         .collect();
-    let rows = LogicalPlan::Projection(Projection::try_new(
+    Ok(LogicalPlan::Projection(Projection::try_new(
         projection,
         Arc::new(LogicalPlan::Aggregate(grouped)),
-    )?);
-    if let Some(having) = having {
-        // HAVING can reject the aggregate row. Retain it with a NULL marker
-        // so the scalar still has an outer row to return NULL for.
-        super::filter_match_marker(rows, matched, strip_outer_reference(having.clone()))
-    } else {
-        Ok(rows)
-    }
+    )?))
+}
+
+pub(super) fn distinct_inner_rows(
+    joined: LogicalPlan,
+    input: &Arc<LogicalPlan>,
+    row_id: &Column,
+    marker: &Column,
+    outer_columns: &[Column],
+) -> Result<LogicalPlan> {
+    let groups = input.schema().columns().into_iter().map(Expr::Column).collect();
+    let distinct = Aggregate::try_new(Arc::clone(input), groups, vec![])?;
+    aggregate_inner_rows(joined, &distinct, row_id, marker, outer_columns)
 }
 
 // DataFusion evaluates aggregate arguments and keys before applying FILTER.
