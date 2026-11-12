@@ -1,0 +1,351 @@
+{
+  "issue": "https://github.com/mag1cfrog/delta-arrow-reader/issues/1161",
+  "baseline": {
+    "commit": "3966ec3e29b2716fd17f0fdeb74adb54b4951b21",
+    "tree": "c022ff5817aa848938dd5e2db0466450faeed842"
+  },
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "ansi_modes": [
+    false,
+    true
+  ],
+  "registered_inputs": [
+    {
+      "name": "ordinary",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "1",
+          "10"
+        ],
+        [
+          "1",
+          "20"
+        ],
+        [
+          "2",
+          "30"
+        ]
+      ]
+    },
+    {
+      "name": "nullable_measures",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "1",
+          null
+        ],
+        [
+          "1",
+          "10"
+        ],
+        [
+          "2",
+          null
+        ]
+      ]
+    },
+    {
+      "name": "grouped_measures",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "g",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "adjustment",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "10",
+          "1",
+          "10",
+          "1"
+        ],
+        [
+          "10",
+          "1",
+          "20",
+          "-2"
+        ],
+        [
+          "10",
+          "2",
+          "30",
+          "3"
+        ],
+        [
+          "20",
+          "1",
+          "7",
+          "4"
+        ]
+      ]
+    },
+    {
+      "name": "duplicate_measures",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "1",
+          "10"
+        ],
+        [
+          "1",
+          "10"
+        ],
+        [
+          "1",
+          "20"
+        ],
+        [
+          "2",
+          "10"
+        ]
+      ]
+    },
+    {
+      "name": "pivot_filter_inputs",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "f",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "1",
+          "10",
+          "1"
+        ],
+        [
+          "1",
+          "20",
+          "0"
+        ],
+        [
+          "2",
+          "30",
+          "1"
+        ]
+      ]
+    },
+    {
+      "name": "pivot_multi_inputs",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "n",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "1",
+          null,
+          "10"
+        ],
+        [
+          "1",
+          "2",
+          "20"
+        ],
+        [
+          "2",
+          "3",
+          "30"
+        ]
+      ]
+    }
+  ],
+  "inline_inputs": [
+    {
+      "id": "inline_ordinary_values",
+      "sql": "SELECT * FROM VALUES (1, 10), (1, 20), (2, 30) AS t(k, v)"
+    }
+  ],
+  "cases": [
+    {
+      "id": "schema_control",
+      "sql": "SELECT 1 AS control;"
+    },
+    {
+      "id": "global_count_nonnull_measure",
+      "sql": "SELECT * FROM ordinary PIVOT (count(v) FOR k IN (1 AS one, 2 AS two));"
+    },
+    {
+      "id": "global_count_inline_values",
+      "sql": "SELECT * FROM (SELECT * FROM VALUES (1, 10), (1, 20), (2, 30) AS t(k, v)) PIVOT (count(v) FOR k IN (1 AS one, 2 AS two));"
+    },
+    {
+      "id": "global_count_nonnull_expression",
+      "sql": "SELECT * FROM ordinary PIVOT (count(v + 1) FOR k IN (1 AS one, 2 AS two));"
+    },
+    {
+      "id": "global_count_nullable_measure",
+      "sql": "SELECT * FROM nullable_measures PIVOT (count(v) FOR k IN (1 AS one, 2 AS two));"
+    },
+    {
+      "id": "grouped_sum_measure",
+      "sql": "SELECT * FROM (SELECT g, k, v FROM grouped_measures) PIVOT (sum(v) FOR k IN (1 AS one, 2 AS two)) ORDER BY g;"
+    },
+    {
+      "id": "count_pivot_key_keeps_other_columns",
+      "sql": "SELECT * FROM (SELECT g, k, v FROM grouped_measures) PIVOT (count(k) FOR k IN (1 AS one, 2 AS two)) ORDER BY g, v;"
+    },
+    {
+      "id": "count_star_keeps_other_columns",
+      "sql": "SELECT * FROM (SELECT g, k, v FROM grouped_measures) PIVOT (count(*) FOR k IN (1 AS one, 2 AS two)) ORDER BY g, v;"
+    },
+    {
+      "id": "multiple_aggregates_keep_only_unused_group",
+      "sql": "SELECT * FROM grouped_measures PIVOT (sum(v + abs(adjustment)) AS total, max(adjustment) AS peak, count(k) AS key_count FOR k IN (1 AS one, 2 AS two)) ORDER BY g;"
+    },
+    {
+      "id": "qualified_aggregate_measure",
+      "sql": "SELECT * FROM ordinary AS t PIVOT (sum(t.v) FOR k IN (1 AS one, 2 AS two));"
+    },
+    {
+      "id": "global_count_distinct_measure",
+      "sql": "SELECT * FROM duplicate_measures PIVOT (count(DISTINCT v) FOR k IN (1 AS one, 2 AS two));"
+    },
+    {
+      "id": "unnamed_pivot_values",
+      "sql": "SELECT * FROM ordinary PIVOT (sum(v) FOR k IN (1, 2));"
+    },
+    {
+      "id": "count_with_filter_reference",
+      "sql": "SELECT * FROM pivot_filter_inputs s PIVOT (COUNT(s.v) FILTER (WHERE s.f <> 0) FOR k IN (1 AS one, 2 AS two));",
+      "order": "multiset"
+    },
+    {
+      "id": "count_if_false_filter_reference",
+      "sql": "SELECT * FROM (SELECT k, f FROM pivot_filter_inputs) s PIVOT (COUNT_IF(s.f <> 0) FILTER (WHERE FALSE) FOR k IN (1 AS one, 2 AS two));",
+      "order": "multiset"
+    },
+    {
+      "id": "count_required_and_nullable_arguments",
+      "sql": "SELECT * FROM pivot_multi_inputs PIVOT (COUNT(v, n) FOR k IN (1 AS one, 2 AS two));",
+      "order": "multiset"
+    },
+    {
+      "id": "nested_pivot_grouping",
+      "sql": "SELECT * FROM (SELECT * FROM (SELECT g, k, v FROM VALUES (0, 1, 10), (0, 1, 20), (0, 2, 30), (1, 1, 40) AS t(g, k, v)) PIVOT (COUNT(v) FOR k IN (1 AS one))) PIVOT (COUNT(one) FOR g IN (0 AS zero, 1 AS one));",
+      "order": "multiset"
+    },
+    {
+      "id": "nested_pivot_inside_aggregate_argument",
+      "order": "multiset",
+      "sql": "SELECT * FROM ordinary PIVOT (SUM((SELECT one FROM (SELECT * FROM ordinary PIVOT (COUNT(v) FOR k IN (1 AS one))))) AS inner_total, COUNT(v) AS n FOR k IN (1 AS one, 2 AS two));"
+    },
+    {
+      "id": "correlated_measure_inside_pivot_aggregate",
+      "order": "multiset",
+      "sql": "SELECT * FROM ordinary t PIVOT (SUM((SELECT MAX(u.v) FROM ordinary u WHERE u.v = t.v)) FOR k IN (1 AS one, 2 AS two));"
+    }
+  ]
+}
