@@ -45,6 +45,11 @@ metadata wrappers. The original provider fields and value buffers are unchanged.
 Metadata UDFs and literals keep their own physically realized annotations. Native
 DataFusion queries do not enter this Spark-specific rewrite.
 
+MAP_VALUES uses DataFusion's existing implementation, which forwards the map's
+value field and buffers into an array. It no longer casts the input and result
+to restore array-element nullability; that restoration could reject valid STRUCT
+values as an unsupported narrowing cast.
+
 ## Dependency forks
 
 Fifteen dependencies have local source overrides in this crate's Cargo.toml:

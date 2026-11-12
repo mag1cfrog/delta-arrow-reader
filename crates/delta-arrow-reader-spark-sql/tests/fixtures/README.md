@@ -25,6 +25,23 @@ To recapture with `pyspark==4.2.0` and Java 21, choose a new output path:
 TZ=UTC python current-time-expressions/capture_spark.py /tmp/current-time-spark.jsonl
 ```
 
+## MAP_VALUES over STRUCT values
+
+`map-values-structs/spark-results.jsonl` records Spark 4.2.0 values and executed
+types for registered MAP columns and MAP constructors, in both ANSI modes.
+Required and nullable STRUCT and integer values cover NULL maps, NULL values,
+NULL STRUCT children, empty maps, duplicate values and empty providers. Scalar
+subqueries, COALESCE, SIZE, ELEMENT_AT and hidden ORDER BY exercise consumers.
+Ordered queries compare row sequence; the others compare complete row multisets.
+Nullability annotations and result metadata are excluded from type comparison.
+
+The capture records each source map through MAP_ENTRIES so the replay retains
+its entry order. With `pyspark==4.2.0` and Java 21, from this directory:
+
+```sh
+TZ=UTC python map-values-structs/capture_spark.py /tmp/map-values-structs.jsonl
+```
+
 ## STRUCT UNION planning
 
 `union-struct-planning/spark-results.jsonl` captures Spark 4.2.0 values and executed

@@ -1,9 +1,7 @@
-use std::sync::Arc;
-
-use datafusion::arrow::datatypes::{DataType, FieldRef, Fields};
+use datafusion::arrow::datatypes::DataType;
 use datafusion::functions_nested::expr_fn;
 use datafusion_common::ScalarValue;
-use datafusion_expr::{ExprSchemable, ScalarUDF, cast, expr, lit};
+use datafusion_expr::{ExprSchemable, ScalarUDF, expr, lit};
 use sail_common_datafusion::utils::items::ItemTaker;
 use sail_function::scalar::map::map_entries::SparkMapEntries;
 use sail_function::scalar::map::map_from::{SparkMapFromArrays, SparkMapFromEntries};
@@ -95,28 +93,6 @@ fn map_entries(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     Ok(ScalarUDF::from(SparkMapEntries::new()).call(vec![map]))
 }
 
-fn map_values(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
-    let schema = input.function_context.schema;
-    let map = input.arguments.one()?;
-    let value_contains_null = map_value_contains_null(&map.get_type(schema.as_ref())?);
-    let map = cast_map_value_nullability(map, schema, true)?;
-    let expr = expr_fn::map_values(map);
-    cast_list_value_nullability(expr, schema, value_contains_null)
-}
-
-fn map_value_contains_null(data_type: &DataType) -> bool {
-    let DataType::Map(entries, _) = data_type else {
-        return true;
-    };
-    let DataType::Struct(fields) = entries.data_type() else {
-        return true;
-    };
-    fields
-        .get(1)
-        .map(|field| field.is_nullable())
-        .unwrap_or(true)
-}
-
 fn map_entries_value_contains_null(data_type: &DataType) -> bool {
     let (DataType::List(field) | DataType::LargeList(field)) = data_type else {
         return true;
@@ -128,60 +104,6 @@ fn map_entries_value_contains_null(data_type: &DataType) -> bool {
         .get(1)
         .map(|field| field.is_nullable())
         .unwrap_or(true)
-}
-
-fn cast_list_value_nullability(
-    expr: expr::Expr,
-    schema: &datafusion_common::DFSchemaRef,
-    nullable: bool,
-) -> PlanResult<expr::Expr> {
-    let data_type = expr.get_type(schema.as_ref())?;
-    let target_type = match data_type {
-        DataType::List(field) if field.is_nullable() != nullable => {
-            DataType::List(with_nullable(&field, nullable))
-        }
-        DataType::LargeList(field) if field.is_nullable() != nullable => {
-            DataType::LargeList(with_nullable(&field, nullable))
-        }
-        _ => return Ok(expr),
-    };
-    Ok(cast(expr, target_type))
-}
-
-fn cast_map_value_nullability(
-    expr: expr::Expr,
-    schema: &datafusion_common::DFSchemaRef,
-    value_contains_null: bool,
-) -> PlanResult<expr::Expr> {
-    let data_type = expr.get_type(schema.as_ref())?;
-    let DataType::Map(entries_field, keys_sorted) = data_type else {
-        return Ok(expr);
-    };
-    let DataType::Struct(fields) = entries_field.data_type() else {
-        return Ok(expr);
-    };
-    let fields_vec = fields.iter().collect::<Vec<_>>();
-    let [key_field, value_field] = fields_vec.as_slice() else {
-        return Ok(expr);
-    };
-    if value_field.is_nullable() == value_contains_null {
-        return Ok(expr);
-    }
-    let fields = Fields::from(vec![
-        (*key_field).clone(),
-        with_nullable(value_field, value_contains_null),
-    ]);
-    let entries_field = Arc::new(
-        entries_field
-            .as_ref()
-            .clone()
-            .with_data_type(DataType::Struct(fields)),
-    );
-    Ok(cast(expr, DataType::Map(entries_field, keys_sorted)))
-}
-
-fn with_nullable(field: &FieldRef, nullable: bool) -> FieldRef {
-    Arc::new(field.as_ref().clone().with_nullable(nullable))
 }
 
 fn map_concat(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
@@ -268,7 +190,7 @@ pub(super) fn list_built_in_map_functions() -> Vec<(&'static str, ScalarFunction
         ("map_from_arrays", F::custom(map_from_arrays)),
         ("map_from_entries", F::custom(map_from_entries)),
         ("map_keys", F::unary(expr_fn::map_keys)),
-        ("map_values", F::custom(map_values)),
+        ("map_values", F::unary(expr_fn::map_values)),
         ("str_to_map", F::custom(str_to_map)),
     ]
 }
