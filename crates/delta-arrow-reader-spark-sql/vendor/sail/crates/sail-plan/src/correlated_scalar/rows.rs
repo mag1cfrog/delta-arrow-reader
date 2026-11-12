@@ -264,6 +264,27 @@ fn inline_union_columns(expr: Expr, schema: &DFSchema, values: &[Expr]) -> Resul
     .data()
 }
 
+pub(super) fn split_scalar_filter_predicates(plan: LogicalPlan) -> Result<LogicalPlan> {
+    plan.transform_up_with_subqueries(|node| {
+        let mut filter = match node {
+            LogicalPlan::Filter(filter) if filter.predicate.contains_scalar_subquery() => filter,
+            node => return Ok(Transformed::no(node)),
+        };
+        let (scalar, source): (Vec<_>, Vec<_>) = split_conjunction(&filter.predicate)
+            .into_iter()
+            .cloned()
+            .partition(Expr::contains_scalar_subquery);
+        let (Some(scalar), Some(source)) = (conjunction(scalar), conjunction(source)) else {
+            return Ok(Transformed::no(LogicalPlan::Filter(filter)));
+        };
+        // Source filters must reject rows before nested scalar evaluation and retain pruning.
+        filter.predicate = scalar;
+        filter.input = Arc::new(LogicalPlan::Filter(Filter::try_new(source, filter.input)?));
+        Ok(Transformed::yes(LogicalPlan::Filter(filter)))
+    })
+    .data()
+}
+
 pub(super) fn move_correlated_inner_join_predicates(plan: LogicalPlan) -> Result<LogicalPlan> {
     plan.transform_up(|node| {
         let LogicalPlan::Join(mut join) = node else {
@@ -295,6 +316,14 @@ pub(super) fn move_correlated_inner_join_predicates(plan: LogicalPlan) -> Result
 fn can_pull_up(plan: &LogicalPlan) -> Result<bool> {
     let mut supported = true;
     plan.apply(|node| {
+        if node
+            .expressions()
+            .iter()
+            .any(Expr::contains_scalar_subquery)
+        {
+            supported = false;
+            return Ok(TreeNodeRecursion::Stop);
+        }
         Ok(match node {
             LogicalPlan::Filter(_) | LogicalPlan::SubqueryAlias(_) => TreeNodeRecursion::Continue,
             LogicalPlan::Projection(_) if !node.contains_outer_reference() => {

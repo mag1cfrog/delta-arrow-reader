@@ -1600,6 +1600,20 @@ rows. Multirow scalars must plan successfully before failing during collection.
 The replay uses the same
 executed-type and Arrow validation checks as the union cases.
 
+`correlated-scalar-nested/spark-results.jsonl` adds 50 Spark 4.2.0 observations in
+both ANSI modes. Two and three live scalar levels bind their nearest scope,
+including reused alias spellings, computed values, sibling scalars and filters.
+Duplicate outer rows and inner counts retain bag semantics. NULL and no-match
+cases distinguish an absent parent row from an empty nested result; null-safe
+nested matches cannot evaluate on an absent parent. A propagated RAND() value
+checks that the nested scalar shares its outer evaluation. Each of the three
+levels has a cardinality case that must plan and create its physical plan before
+failing during collection. The replay compares complete rows and executed types
+and validates the Arrow inputs and results. Filter cases cover reordered AND
+terms, scalar-free and mixed OR predicates, and sibling scalars. A source-filter
+assertion checks that local predicates retain scan pruning and discard rows
+before nested scalar cardinality checks.
+
 From the Spark crate directory, use the pinned Python/Java setup and a fresh
 output path to recapture:
 
@@ -1608,6 +1622,8 @@ correlated_union_capture=$(mktemp -d)
 python tests/fixtures/correlated-scalar-union/capture_spark.py "$correlated_union_capture/spark-results.jsonl"
 correlated_window_capture=$(mktemp -d)
 python tests/fixtures/correlated-scalar-window/capture_spark.py "$correlated_window_capture/spark-results.jsonl"
+correlated_nested_capture=$(mktemp -d)
+python tests/fixtures/correlated-scalar-nested/capture_spark.py "$correlated_nested_capture/spark-results.jsonl"
 cargo test --locked --workspace --test correlated_scalar_execution
 ```
 

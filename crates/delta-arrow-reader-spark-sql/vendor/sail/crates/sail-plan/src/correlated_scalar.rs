@@ -26,7 +26,7 @@ mod rows;
 use aggregate::lift_correlated_scalar_aggregate_inputs;
 use rows::{
     apply_row_steps, has_correlated_self_equality, move_correlated_inner_join_predicates,
-    split_correlated_rows,
+    split_correlated_rows, split_scalar_filter_predicates,
 };
 
 /// Lower Spark scalar queries over real inner rows before DataFusion validates them.
@@ -46,58 +46,84 @@ impl AnalyzerRule for LowerSparkCorrelatedScalars {
         {
             return Ok(plan);
         }
-        lower_correlated_scalar_subqueries(lift_correlated_scalar_aggregate_inputs(plan)?)
+        lower_correlated_scalar_subqueries(
+            lift_correlated_scalar_aggregate_inputs(plan)?,
+            &AliasGenerator::new(),
+            None,
+        )
     }
 }
 
-fn lower_correlated_scalar_subqueries(plan: LogicalPlan) -> Result<LogicalPlan> {
-    let aliases = AliasGenerator::new();
-    plan.transform_up_with_subqueries(|node| {
-        let names = NamePreserver::new(&node);
-        match node {
-            LogicalPlan::Projection(mut projection) => {
-                let mut changed = false;
-                for expr in &mut projection.expr {
-                    if expr.contains_scalar_subquery() {
-                        let name = names.save(expr);
-                        let lowered =
-                            lower_expression(expr.clone(), &mut projection.input, &aliases)?;
-                        changed |= lowered.transformed;
-                        *expr = name.restore(lowered.data);
+fn lower_correlated_scalar_subqueries(
+    plan: LogicalPlan,
+    aliases: &AliasGenerator,
+    match_marker: Option<&Column>,
+) -> Result<LogicalPlan> {
+    // Split source filters before postorder traversal can lower their nested scalars.
+    split_scalar_filter_predicates(plan)?
+        .transform_up_with_subqueries(|node| {
+            let names = NamePreserver::new(&node);
+            match node {
+                // Bind ancestor rows before lowering scalars that depend on those rows.
+                LogicalPlan::Projection(mut projection)
+                    if projection.expr.iter().any(Expr::contains_scalar_subquery)
+                        && projection.input.all_out_ref_exprs().is_empty() =>
+                {
+                    let mut changed = false;
+                    for expr in &mut projection.expr {
+                        if expr.contains_scalar_subquery() {
+                            let name = names.save(expr);
+                            let lowered = lower_expression(
+                                expr.clone(),
+                                &mut projection.input,
+                                aliases,
+                                match_marker,
+                            )?;
+                            changed |= lowered.transformed;
+                            *expr = name.restore(lowered.data);
+                        }
+                    }
+                    Ok(Transformed::new_transformed(
+                        LogicalPlan::Projection(projection),
+                        changed,
+                    ))
+                }
+                LogicalPlan::Filter(mut filter)
+                    if filter.predicate.contains_scalar_subquery()
+                        && filter.input.all_out_ref_exprs().is_empty() =>
+                {
+                    let schema = Arc::clone(filter.input.schema());
+                    let lowered = lower_expression(
+                        filter.predicate,
+                        &mut filter.input,
+                        aliases,
+                        match_marker,
+                    )?;
+                    filter.predicate = lowered.data;
+                    let node = LogicalPlan::Filter(filter);
+                    if lowered.transformed {
+                        Ok(Transformed::yes(LogicalPlan::Projection(
+                            Projection::new_from_schema(Arc::new(node), schema),
+                        )))
+                    } else {
+                        Ok(Transformed::no(node))
                     }
                 }
-                Ok(Transformed::new_transformed(
-                    LogicalPlan::Projection(projection),
-                    changed,
-                ))
+                node => Ok(Transformed::no(node)),
             }
-            LogicalPlan::Filter(mut filter) if filter.predicate.contains_scalar_subquery() => {
-                let schema = Arc::clone(filter.input.schema());
-                let lowered = lower_expression(filter.predicate, &mut filter.input, &aliases)?;
-                filter.predicate = lowered.data;
-                let node = LogicalPlan::Filter(filter);
-                if lowered.transformed {
-                    Ok(Transformed::yes(LogicalPlan::Projection(
-                        Projection::new_from_schema(Arc::new(node), schema),
-                    )))
-                } else {
-                    Ok(Transformed::no(node))
-                }
-            }
-            node => Ok(Transformed::no(node)),
-        }
-    })
-    .data()
+        })
+        .data()
 }
 
 fn lower_expression(
     expr: Expr,
     input: &mut Arc<LogicalPlan>,
     aliases: &AliasGenerator,
+    match_marker: Option<&Column>,
 ) -> Result<Transformed<Expr>> {
     expr.transform_up(|expr| {
         if let Expr::ScalarSubquery(subquery) = &expr
-            && let Some((plan, value)) = lower_scalar(subquery, input, aliases)?
+            && let Some((plan, value)) = lower_scalar(subquery, input, aliases, match_marker)?
         {
             *input = Arc::new(plan);
             return Ok(Transformed::yes(value));
@@ -110,6 +136,10 @@ fn scalar_value_input(mut value: Expr, mut input: &LogicalPlan) -> Result<(Expr,
     // Rebuild the selected expression through leading projections and aliases.
     // Leave a shared volatile output in its projection so it still runs once.
     loop {
+        // Nested scalars capture these scopes; expression substitution cannot rebind them.
+        if value.contains_scalar_subquery() {
+            break;
+        }
         match input {
             LogicalPlan::Projection(project) => {
                 let mut volatile = BTreeSet::new();
@@ -176,7 +206,9 @@ fn lower_scalar(
     subquery: &Subquery,
     outer: &Arc<LogicalPlan>,
     aliases: &AliasGenerator,
+    outer_match_marker: Option<&Column>,
 ) -> Result<Option<(LogicalPlan, Expr)>> {
+    let outer_match_marker = outer_match_marker.filter(|marker| outer.schema().has_column(marker));
     let belongs_to_outer = |expr: &Expr| matches!(expr, Expr::OuterReferenceColumn(_, col) if outer.schema().has_column(col));
     if subquery.outer_ref_columns.is_empty()
         || !subquery.outer_ref_columns.iter().all(belongs_to_outer)
@@ -194,8 +226,11 @@ fn lower_scalar(
     }
     let output = Expr::Column(schema.qualified_field(0).into());
     let inner = move_correlated_inner_join_predicates(subquery.subquery.as_ref().clone())?;
+    let inner = split_scalar_filter_predicates(inner)?;
     let (value, input) = scalar_value_input(output, &inner)?;
-    if let LogicalPlan::Aggregate(aggregate) = input
+    // Nested aggregates must consume this level's matches before scalar grouping.
+    if outer_match_marker.is_none()
+        && let LogicalPlan::Aggregate(aggregate) = input
         && aggregate.group_expr.is_empty()
         && !has_correlated_self_equality(input)?
         && !input.exists(|node| {
@@ -223,8 +258,6 @@ fn lower_scalar(
     let Some(rows) = split_correlated_rows(input, aliases)? else {
         return Ok(None);
     };
-    let scalar_input = input.schema();
-
     // Evaluate the selected value only when the subquery returns a row.
     let value = strip_outer_reference(value);
 
@@ -247,10 +280,23 @@ fn lower_scalar(
                 .chain([lit(true).alias(&match_marker.name)]),
         )?
         .build()?;
+    let join_filter = match outer_match_marker {
+        Some(marker) => rows
+            .join_filter
+            .and(Expr::Column(marker.clone()).is_not_null()),
+        None => rows.join_filter,
+    };
     let joined = LogicalPlanBuilder::from(left)
-        .join_on(right, JoinType::Left, [rows.join_filter])?
+        .join_on(right, JoinType::Left, [join_filter])?
         .build()?;
     let rows = apply_row_steps(joined, rows.steps, &row_id, &match_marker, &outer_columns)?;
+    let mut rows = Arc::new(lower_correlated_scalar_subqueries(
+        rows,
+        aliases,
+        Some(&match_marker),
+    )?);
+    let value = lower_expression(value, &mut rows, aliases, Some(&match_marker))?.data;
+    let scalar_input = rows.schema();
 
     let match_count = Column::new_unqualified(aliases.next("__spark_scalar_count"));
     let mut referenced = value.column_refs().into_iter().collect::<Vec<_>>();
@@ -278,7 +324,7 @@ fn lower_scalar(
     let value = replace_col(value, &replacements)?;
     aggregates.push(count(Expr::Column(match_marker.clone())).alias(&match_count.name));
 
-    let grouped = LogicalPlanBuilder::from(rows)
+    let grouped = LogicalPlanBuilder::from(Arc::unwrap_or_clone(rows))
         .aggregate(vec![Expr::Column(row_id)], aggregates)?
         // Spark checks scalar cardinality before evaluating its consumer,
         // including when a CASE branch does not use the result.
