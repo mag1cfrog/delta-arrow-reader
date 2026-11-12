@@ -183,7 +183,12 @@ impl PlanResolver<'_> {
                 }
                 let canonical_function_name = function_name.to_ascii_lowercase();
                 let (argument_display_names, arguments, interval_operands) = self
-                    .resolve_expression_arguments_with_qualifiers(arguments, schema, state)
+                    .resolve_function_call_arguments(
+                        &canonical_function_name,
+                        arguments,
+                        schema,
+                        state,
+                    )
                     .await?;
                 // A window function over an interval, as LAG or MAX, keeps its qualifier.
                 let interval_qualifier =

@@ -68,10 +68,14 @@ impl PlanResolver<'_> {
                 };
                 slots.push(Slot::Lambda(function, arguments));
             } else {
-                slots.push(Slot::Resolved(
-                    self.resolve_named_expression(argument, schema, state)
-                        .await?,
-                ));
+                let named = self
+                    .resolve_named_expression(argument, schema, state)
+                    .await?;
+                slots.extend(
+                    self.expand_function_argument(named, schema, state)?
+                        .into_iter()
+                        .map(Slot::Resolved),
+                );
             }
         }
 

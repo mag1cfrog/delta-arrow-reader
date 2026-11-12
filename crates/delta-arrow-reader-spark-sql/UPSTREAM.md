@@ -31,6 +31,12 @@ clock simplification when no Spark query clock is supplied.
 CURRENT_DATE and CURDATE derive their date from the session-zone-tagged timestamp,
 so Spark SQL options need not change the host session's default time zone.
 
+Function arguments reuse projection wildcard expansion before ordinary arity
+checks and lambda-parameter binding. Qualified stars retain the projection
+resolver's column order, including USING keys. COUNT(*) and COUNT(DISTINCT *)
+keep their aggregate-specific handling. Nested struct stars reuse the existing
+multi-expression lowering rather than reaching scalar evaluation as one value.
+
 ## Dependency forks
 
 Fifteen dependencies have local source overrides in this crate's Cargo.toml:
