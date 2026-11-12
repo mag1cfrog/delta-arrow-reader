@@ -1,3 +1,4 @@
+// Modified for the DAR Spark SQL runtime. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -849,7 +850,12 @@ fn split_and_push_projection(
             extractors[0]
                 .extracted
                 .insert(expr.clone(), alias_name.clone());
-            recovery_exprs.push(Expr::Column(Column::new_unqualified(&alias_name)));
+            let column = Expr::Column(Column::new_unqualified(&alias_name));
+            recovery_exprs.push(if qualifier.is_some() {
+                column.alias_qualified(qualifier.cloned(), field.name())
+            } else {
+                column
+            });
             proj_exprs_captured += 1;
         } else if let Expr::Column(col) = expr {
             // Plain column pass-through — track it in the extractor
@@ -959,8 +965,9 @@ fn split_and_push_projection(
         }
     };
 
-    // Wrap with recovery projection if the output schema changed
-    if needs_recovery {
+    // Pushdown can reorder or qualify even a pure extraction's outputs.
+    // Restore their original order and identities before the parent reads them.
+    if needs_recovery || original_schema.columns() != base_plan.schema().columns() {
         let recovery = LogicalPlan::Projection(Projection::try_new(
             recovery_exprs,
             Arc::new(base_plan),

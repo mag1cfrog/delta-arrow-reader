@@ -371,6 +371,10 @@ impl PlanResolver<'_> {
         let mut exprs: Vec<expr::Expr> = vec![];
 
         for expression in expressions {
+            let is_dotted_attribute = matches!(
+                &expression,
+                spec::Expr::UnresolvedAttribute { name, .. } if name.parts().len() > 1
+            );
             let (named, alias_display_name) = match expression {
                 spec::Expr::Alias {
                     expr,
@@ -455,12 +459,21 @@ impl PlanResolver<'_> {
                 }
 
                 other => {
+                    let projection_name = name.one()?;
                     names.push(
                         alias_display_name
                             .or(expression_name)
-                            .unwrap_or(name.one()?),
+                            .unwrap_or_else(|| projection_name.clone()),
                     );
-                    exprs.push(other);
+                    let expr = if is_dotted_attribute
+                        && !matches!(other, Expr::OuterReferenceColumn(..))
+                        && other.contains_outer()
+                    {
+                        other.alias(projection_name)
+                    } else {
+                        other
+                    };
+                    exprs.push(expr);
                 }
             }
         }
