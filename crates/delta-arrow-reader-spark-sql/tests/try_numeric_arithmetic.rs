@@ -61,8 +61,7 @@ fn references(manifest: &Value) -> TestResult<Vec<Value>> {
             "{id}"
         );
         assert_eq!(
-            case["effective_settings"]["spark.sql.session.timeZone"],
-            "UTC",
+            case["effective_settings"]["spark.sql.session.timeZone"], "UTC",
             "{id}"
         );
     }
@@ -86,7 +85,9 @@ fn result_fields(schema: &Value) -> TestResult<Vec<Value>> {
 fn spark_rows(case: &Value, fields: &[Value]) -> TestResult<Value> {
     let mut rows = case["rows"].as_array().ok_or("missing Spark rows")?.clone();
     for row in &mut rows {
-        let cells = row.as_array_mut().ok_or("expected a positional Spark row")?;
+        let cells = row
+            .as_array_mut()
+            .ok_or("expected a positional Spark row")?;
         assert_eq!(cells.len(), fields.len(), "{}", case["id"]);
         for (cell, field) in cells.iter_mut().zip(fields) {
             if cell.is_null() {
@@ -247,12 +248,26 @@ async fn native_sql_keeps_its_arithmetic_behavior() -> TestResult {
         .as_array()
         .ok_or("missing native cases")?;
     assert!(!cases.is_empty(), "missing native query controls");
+    // DataFusion can choose a different equally close name from each function catalog.
+    let without_suggestion = |observation: &Value| {
+        let mut comparable = observation.clone();
+        if let Some((message, suggestion)) = observation["error"]
+            .as_str()
+            .and_then(|error| error.split_once("\nDid you mean '"))
+            && message.starts_with("Error during planning: Invalid function '")
+            && suggestion.ends_with("'?")
+            && !suggestion.contains('\n')
+        {
+            comparable["error"] = json!(message);
+        }
+        comparable
+    };
     for case in cases {
         let id = case["id"].as_str().ok_or("missing native case ID")?;
         let sql = case["sql"].as_str().ok_or("missing native SQL")?;
         let native = capture_native_query_observation(&native, sql).await?;
         let configured = capture_native_query_observation(&configured, sql).await?;
-        let matches = native == configured;
+        let matches = without_suggestion(&native) == without_suggestion(&configured);
         let record = json!({"id": id, "sql": sql, "matches": matches,
             "native_status": if native["error"].is_null() { "ok" } else { "error" },
             "configured_status": if configured["error"].is_null() { "ok" } else { "error" },

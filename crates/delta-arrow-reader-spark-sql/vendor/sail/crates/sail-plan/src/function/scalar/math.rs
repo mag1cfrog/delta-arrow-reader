@@ -148,44 +148,65 @@ fn add_day_time_interval_to_string(
 
 // Spark promotes a STRING and its numeric peer to BIGINT for ANSI integral
 // arithmetic and to DOUBLE otherwise. Division still returns DOUBLE.
+fn string_arithmetic_type(
+    left_type: &DataType,
+    right_type: &DataType,
+    ansi_mode: bool,
+    try_mode: bool,
+) -> Option<DataType> {
+    let peer = if left_type.is_string() {
+        right_type
+    } else if right_type.is_string() {
+        left_type
+    } else {
+        return None;
+    };
+    if ansi_mode && peer.is_signed_integer() {
+        Some(DataType::Int64)
+    } else if peer.is_numeric() || (try_mode && !ansi_mode && (peer.is_string() || peer.is_null()))
+    {
+        Some(DataType::Float64)
+    } else {
+        None
+    }
+}
+
 fn promote_string_numeric_operands(
     left: Expr,
     right: Expr,
     left_type: &DataType,
     right_type: &DataType,
     ansi_mode: bool,
+    try_mode: bool,
 ) -> PlanResult<(Expr, Expr, Option<DataType>)> {
-    let (string, number, number_type, string_first) =
-        if left_type.is_string() && right_type.is_numeric() {
-            (left, right, right_type, true)
-        } else if right_type.is_string() && left_type.is_numeric() {
-            (right, left, left_type, false)
+    let Some(target) = string_arithmetic_type(left_type, right_type, ansi_mode, try_mode) else {
+        return Ok((left, right, None));
+    };
+    let convert = |operand, data_type: &DataType| -> PlanResult<Expr> {
+        if data_type == &target {
+            Ok(operand)
+        } else if !data_type.is_string() {
+            Ok(cast(operand, target.clone()))
+        } else if target == DataType::Int64 {
+            let cast_mode = if try_mode {
+                StringIntegerCastMode::Try
+            } else {
+                StringIntegerCastMode::Ansi
+            };
+            Ok(SparkCastStringToInteger::try_new(target.clone(), cast_mode)?.into_expr(operand))
         } else {
-            return Ok((left, right, None));
-        };
-    let (string, target) = if ansi_mode && number_type.is_signed_integer() {
-        let target = DataType::Int64;
-        let string =
-            SparkCastStringToInteger::try_new(target.clone(), StringIntegerCastMode::Ansi)?
-                .into_expr(string);
-        (string, target)
-    } else {
-        let target = DataType::Float64;
-        let string = ScalarUDF::from(SparkCastStringToFloat::try_new(target.clone(), !ansi_mode)?)
-            .call(vec![string]);
-        (string, target)
+            Ok(ScalarUDF::from(SparkCastStringToFloat::try_new(
+                target.clone(),
+                try_mode || !ansi_mode,
+            )?)
+            .call(vec![operand]))
+        }
     };
-    let number = if number_type == &target {
-        number
-    } else {
-        cast(number, target.clone())
-    };
-    let (left, right) = if string_first {
-        (string, number)
-    } else {
-        (number, string)
-    };
-    Ok((left, right, Some(target)))
+    Ok((
+        convert(left, left_type)?,
+        convert(right, right_type)?,
+        Some(target),
+    ))
 }
 
 // Reuse division's Decimal/floating and integer-literal coercion rules.
@@ -224,11 +245,13 @@ fn spark_arithmetic(
     left_type: &DataType,
     right_type: &DataType,
     op: Operator,
-    ansi_mode: bool,
-    schema: &DFSchemaRef,
+    function_context: &FunctionContextInput,
+    try_mode: bool,
 ) -> PlanResult<Expr> {
+    let ansi_mode = function_context.plan_config.ansi_mode;
+    let schema = function_context.schema;
     let (left, right, promoted) =
-        promote_string_numeric_operands(left, right, left_type, right_type, ansi_mode)?;
+        promote_string_numeric_operands(left, right, left_type, right_type, ansi_mode, try_mode)?;
     let (left_type, right_type) = if let Some(target) = promoted.as_ref() {
         (target, target)
     } else {
@@ -237,15 +260,20 @@ fn spark_arithmetic(
     let (left, right) =
         coerce_spark_arithmetic_operands(left, right, left_type, right_type, ansi_mode);
     Ok(
-        if ansi_mode
+        if (ansi_mode || try_mode)
             && (left_type.is_signed_integer() || *left_type == DataType::Null)
             && (right_type.is_signed_integer() || *right_type == DataType::Null)
             && (left_type.is_signed_integer() || right_type.is_signed_integer())
         {
-            ScalarUDF::from(SparkCheckedArithmetic::new(op)).call(vec![left, right])
+            let function = if try_mode {
+                SparkCheckedArithmetic::new_try(op)
+            } else {
+                SparkCheckedArithmetic::new(op)
+            };
+            ScalarUDF::from(function).call(vec![left, right])
         } else if is_decimal_type(left_type) || is_decimal_type(right_type) {
             let (left, right) = coerce_decimal_peer_operand(left, right, schema);
-            spark_decimal_arithmetic(left, right, op, schema, ansi_mode)
+            spark_decimal_arithmetic(left, right, op, schema, ansi_mode && !try_mode)
         } else {
             Expr::BinaryExpr(datafusion_expr::BinaryExpr::new(
                 Box::new(left),
@@ -264,7 +292,7 @@ fn spark_decimal_arithmetic(
     mut right: Expr,
     op: Operator,
     schema: &DFSchemaRef,
-    ansi_mode: bool,
+    fail_on_overflow: bool,
 ) -> Expr {
     let binary = |left, right| {
         if op == Operator::Modulo {
@@ -297,10 +325,10 @@ fn spark_decimal_arithmetic(
     };
     if intermediate_precision <= i32::from(DECIMAL128_MAX_PRECISION) {
         let result = binary(left, right);
-        if ansi_mode || op == Operator::Modulo {
+        if fail_on_overflow || op == Operator::Modulo {
             return result;
         }
-        // Legacy Decimal arithmetic remains nullable even when its bounds fit exactly.
+        // Legacy and TRY decimal arithmetic remain nullable when their bounds fit exactly.
         let (precision, scale) = adjust_precision_scale(precision, scale);
         return try_cast(result, DataType::Decimal128(precision, scale));
     }
@@ -308,7 +336,7 @@ fn spark_decimal_arithmetic(
     right = cast(right, DataType::Decimal256(p2, s2));
     let (precision, scale) = adjust_precision_scale(precision, scale);
     let data_type = DataType::Decimal128(precision, scale);
-    if ansi_mode {
+    if fail_on_overflow {
         cast(binary(left, right), data_type)
     } else {
         try_cast(binary(left, right), data_type)
@@ -420,8 +448,8 @@ fn spark_plus(input: ScalarFunctionInput) -> PlanResult<Expr> {
                 &left_type,
                 &right_type,
                 Operator::Plus,
-                function_context.plan_config.ansi_mode,
-                function_context.schema,
+                &function_context,
+                false,
             )?,
             (Err(_), _) | (_, Err(_)) => left + right,
         })
@@ -591,30 +619,61 @@ fn try_eval_operands(
         .collect()
 }
 
-/// Spark's TRY_DIVIDE and TRY_MULTIPLY: `function` over operands that Spark evaluates inside
-/// `TryEval` unless both are numbers.
+fn supports_numeric_try_arithmetic(left: &DataType, right: &DataType, ansi_mode: bool) -> bool {
+    (left.is_numeric() || left.is_null()) && (right.is_numeric() || right.is_null())
+        || string_arithmetic_type(left, right, ansi_mode, true).is_some()
+}
+
+/// Spark's TRY_DIVIDE and TRY_MULTIPLY over date and interval operands use TryEval.
 fn udf_with_try_eval_operands<T>(function: T) -> ScalarFunction
 where
     T: ScalarUDFImpl + Send + Sync + 'static,
 {
     let function = ScalarUDF::from(function);
-    Arc::new(
-        move |ScalarFunctionInput {
-                  arguments,
-                  function_context,
-              }| {
-            Ok(function.call(try_eval_operands(
-                arguments,
-                function_context.schema,
-                function_context.plan_config.ansi_mode,
-            )?))
-        },
-    )
+    Arc::new(move |input| {
+        Ok(function.call(try_eval_operands(
+            input.arguments,
+            input.function_context.schema,
+            input.function_context.plan_config.ansi_mode,
+        )?))
+    })
+}
+
+fn try_arithmetic_with_fallback(op: Operator, fallback: ScalarFunction) -> ScalarFunction {
+    Arc::new(move |input| {
+        let schema = input.function_context.schema;
+        let ansi_mode = input.function_context.plan_config.ansi_mode;
+        if let [left, right] = input.arguments.as_slice()
+            && let (Ok(left_type), Ok(right_type)) = (left.get_type(schema), right.get_type(schema))
+            && supports_numeric_try_arithmetic(&left_type, &right_type, ansi_mode)
+        {
+            if left_type.is_null() && right_type.is_null() {
+                return Ok(lit(ScalarValue::Float64(None)));
+            }
+            return match op {
+                Operator::Divide => spark_divide(input, true),
+                Operator::Modulo => spark_modulo(input, true),
+                _ => {
+                    let (left, right) = input.arguments.two()?;
+                    spark_arithmetic(
+                        left,
+                        right,
+                        &left_type,
+                        &right_type,
+                        op,
+                        &input.function_context,
+                        true,
+                    )
+                }
+            };
+        }
+        fallback(input)
+    })
 }
 
 /// Spark's TRY_ADD: a TIMESTAMP or TIMESTAMP_NTZ and an interval or an untyped NULL, in either
-/// order, add like `+` and give NULL where it fails; two untyped NULLs are a NULL DOUBLE. Other
-/// operands keep `SparkTryAdd`.
+/// order, add like `+` and give NULL where it fails. The caller handles numeric operands with
+/// the same coercion as `+` and returns NULL on overflow.
 fn try_add(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let ScalarFunctionInput {
         arguments,
@@ -668,8 +727,6 @@ fn try_add(input: ScalarFunctionInput) -> PlanResult<Expr> {
         (Ok(DataType::Duration(TimeUnit::Microsecond)), Ok(DataType::Date32)) => {
             shift_date_by_interval_days(right, left, Operator::Plus)
         }
-        // Spark adds two untyped NULLs as DOUBLE values.
-        (Ok(DataType::Null), Ok(DataType::Null)) => lit(ScalarValue::Float64(None)),
         _ => ScalarUDF::from(SparkTryAdd::new()).call(vec![left, right]),
     })
 }
@@ -677,8 +734,8 @@ fn try_add(input: ScalarFunctionInput) -> PlanResult<Expr> {
 /// Spark's TRY_SUBTRACT: an interval from a TIMESTAMP or TIMESTAMP_NTZ; a TIMESTAMP and a
 /// TIMESTAMP, TIMESTAMP_NTZ, DATE or untyped NULL; two TIMESTAMP_NTZ values; a DATE and a
 /// TIMESTAMP_NTZ; and two DATE values, or an untyped NULL and a DATE, subtract like `-` and give
-/// NULL where it fails. Other operands keep `SparkTrySubtract`; two untyped NULLs are a NULL
-/// DOUBLE.
+/// NULL where it fails. The caller handles numeric operands with the same coercion as `-` and
+/// returns NULL on overflow.
 fn try_subtract(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let ScalarFunctionInput {
         arguments,
@@ -741,8 +798,6 @@ fn try_subtract(input: ScalarFunctionInput) -> PlanResult<Expr> {
         (Ok(DataType::Date32), Ok(DataType::Duration(TimeUnit::Microsecond))) => {
             shift_date_by_interval_days(left, right, Operator::Minus)
         }
-        // Spark subtracts two untyped NULLs as DOUBLE values.
-        (Ok(DataType::Null), Ok(DataType::Null)) => lit(ScalarValue::Float64(None)),
         _ => ScalarUDF::from(SparkTrySubtract::new()).call(vec![left, right]),
     })
 }
@@ -826,8 +881,8 @@ fn spark_minus(input: ScalarFunctionInput) -> PlanResult<Expr> {
                 &left_type,
                 &right_type,
                 Operator::Minus,
-                function_context.plan_config.ansi_mode,
-                function_context.schema,
+                &function_context,
+                false,
             )?,
             (Err(_), _) | (_, Err(_)) => left - right,
         })
@@ -888,8 +943,8 @@ fn spark_multiply(input: ScalarFunctionInput) -> PlanResult<Expr> {
             &left_type,
             &right_type,
             Operator::Multiply,
-            function_context.plan_config.ansi_mode,
-            function_context.schema,
+            &function_context,
+            false,
         )?,
         (Err(_), _) | (_, Err(_)) => left * right,
     })
@@ -1146,8 +1201,8 @@ fn integer_digit_count(value: i128) -> u8 {
     value.unsigned_abs().checked_ilog10().unwrap_or(0) as u8 + 1
 }
 
-// Numeric/NULL subset of Sail PR 2225's operand coercion, used only by `/`.
-// The probe uses Spark's default literal.pickMinimumPrecision=true.
+// Numeric/NULL operand coercion for `/` and TRY_DIVIDE, from Sail PR 2225.
+// Spark's default literal.pickMinimumPrecision=true applies.
 fn coerce_decimal_divide_operands(
     left: Expr,
     right: Expr,
@@ -1668,6 +1723,7 @@ fn coerce_string_div_rem_operands(
     schema: &DFSchemaRef,
     ansi: bool,
     integral: bool,
+    try_mode: bool,
 ) -> PlanResult<(Expr, Expr)> {
     let (Ok(left_type), Ok(right_type)) = (left.get_type(schema), right.get_type(schema)) else {
         return Ok((left, right));
@@ -1687,9 +1743,9 @@ fn coerce_string_div_rem_operands(
     };
     // The existing ANSI BIGINT cast already uses Spark's strict integer
     // syntax. DOUBLE needs Spark's parser for hexadecimal and suffix forms.
-    if !integral && peer.is_numeric() && target == DataType::Float64 {
+    if try_mode || !integral && peer.is_numeric() && target == DataType::Float64 {
         let (left, right, _) =
-            promote_string_numeric_operands(left, right, &left_type, &right_type, ansi)?;
+            promote_string_numeric_operands(left, right, &left_type, &right_type, ansi, try_mode)?;
         return Ok((left, right));
     }
     let wrong_type =
@@ -1735,7 +1791,7 @@ fn coerce_string_div_rem_operands(
     Ok((convert(left, &left_type), convert(right, &right_type)))
 }
 
-fn spark_divide(input: ScalarFunctionInput) -> PlanResult<Expr> {
+fn spark_divide(input: ScalarFunctionInput, try_mode: bool) -> PlanResult<Expr> {
     let ScalarFunctionInput {
         arguments,
         function_context,
@@ -1744,12 +1800,14 @@ fn spark_divide(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let (dividend, divisor) = arguments.two()?;
 
     let ansi_mode = function_context.plan_config.ansi_mode;
+    let fail_on_error = ansi_mode && !try_mode;
     let (dividend, divisor) = coerce_string_div_rem_operands(
         dividend,
         divisor,
         function_context.schema,
         ansi_mode,
         false,
+        try_mode,
     )?;
     let (dividend, divisor) =
         coerce_decimal_divide_operands(dividend, divisor, function_context.schema, ansi_mode);
@@ -1788,12 +1846,12 @@ fn spark_divide(input: ScalarFunctionInput) -> PlanResult<Expr> {
             factor,
             factor128: 10_i128.checked_pow(exponent),
             limit: 10_i128.pow(u32::from(precision)) - 1,
-            ansi: ansi_mode,
+            ansi: fail_on_error,
         };
         return Ok(ScalarUDF::from(udf).call(vec![dividend, divisor]));
     }
 
-    if ansi_mode
+    if fail_on_error
         && [&dividend_type, &divisor_type].iter().all(|t| {
             t.as_ref()
                 .is_ok_and(|t| t.is_integer() || t.is_floating() || *t == DataType::Null)
@@ -1813,7 +1871,7 @@ fn spark_divide(input: ScalarFunctionInput) -> PlanResult<Expr> {
 
     // Apply runtime zero-divisor guard to the divisor before building the division expression.
     let effective_divisor_type = divisor_type.as_ref().cloned().unwrap_or(DataType::Int32);
-    let divisor = if ansi_mode
+    let divisor = if fail_on_error
         && matches!(dividend_type, Ok(DataType::Decimal128(_, _)))
         && matches!(divisor_type, Ok(DataType::Decimal128(_, _)))
     {
@@ -1824,7 +1882,7 @@ fn spark_divide(input: ScalarFunctionInput) -> PlanResult<Expr> {
         make_safe_divisor(
             divisor,
             &effective_divisor_type,
-            ansi_mode,
+            fail_on_error,
             "Division by zero",
         )
     };
@@ -1860,7 +1918,7 @@ fn spark_divide(input: ScalarFunctionInput) -> PlanResult<Expr> {
                 };
             let quotient = cast(dividend, dividend_target) / cast(divisor, divisor_target);
             let rounded = expr_fn::round(vec![quotient, lit(result_scale as i32)]);
-            if ansi_mode {
+            if fail_on_error {
                 cast(
                     rounded,
                     DataType::Decimal128(result_precision, result_scale),
@@ -2083,6 +2141,7 @@ fn spark_div(input: ScalarFunctionInput) -> PlanResult<Expr> {
         function_context.schema,
         function_context.plan_config.ansi_mode,
         true,
+        false,
     )?;
 
     let dividend_type = dividend.get_type(function_context.schema);
@@ -2540,19 +2599,21 @@ fn checked_modulo_respects_slices_nulls_and_scalar_positions() -> datafusion_com
 }
 
 /// Modulo checks zero only after NULL propagation, and preserves native kernels.
-fn spark_modulo(input: ScalarFunctionInput) -> PlanResult<Expr> {
+fn spark_modulo(input: ScalarFunctionInput, try_mode: bool) -> PlanResult<Expr> {
     let ScalarFunctionInput {
         arguments,
         function_context,
     } = input;
     let (dividend, divisor) = arguments.two()?;
     let ansi_mode = function_context.plan_config.ansi_mode;
+    let fail_on_error = ansi_mode && !try_mode;
     let (dividend, divisor) = coerce_string_div_rem_operands(
         dividend,
         divisor,
         function_context.schema,
         ansi_mode,
         false,
+        try_mode,
     )?;
     let (dividend, divisor) = match (
         dividend.get_type(function_context.schema),
@@ -2584,16 +2645,16 @@ fn spark_modulo(input: ScalarFunctionInput) -> PlanResult<Expr> {
             right,
             Operator::Modulo,
             function_context.schema,
-            ansi_mode,
+            fail_on_error,
         )
     };
     let data_type = modulo(dividend.clone(), divisor.clone()).get_type(function_context.schema)?;
-    if !ansi_mode && is_zero_literal(&divisor) {
-        // Legacy zero skips the dividend, including a dead failing CAST, but
+    if !fail_on_error && is_zero_literal(&divisor) {
+        // A zero divisor in legacy and TRY mode skips the dividend, but
         // still has the declared remainder result type.
         return Ok(lit(ScalarValue::try_from(&data_type)?));
     }
-    if ansi_mode {
+    if fail_on_error {
         return Ok(modulo(dividend, divisor));
     }
     let divisor_type = divisor.get_type(function_context.schema)?;
@@ -2947,11 +3008,11 @@ pub(super) fn list_built_in_math_functions() -> Vec<(&'static str, ScalarFunctio
     use crate::function::common::ScalarFunctionBuilder as F;
 
     vec![
-        ("%", F::custom(spark_modulo)),
+        ("%", F::custom(|input| spark_modulo(input, false))),
         ("*", F::custom(spark_multiply)),
         ("+", F::custom(spark_plus)),
         ("-", F::custom(spark_minus)),
-        ("/", F::custom(spark_divide)),
+        ("/", F::custom(|input| spark_divide(input, false))),
         ("abs", F::custom(spark_abs)),
         ("acos", F::unary(double(expr_fn::acos))),
         ("acosh", F::unary(double(expr_fn::acosh))),
@@ -2997,7 +3058,7 @@ pub(super) fn list_built_in_math_functions() -> Vec<(&'static str, ScalarFunctio
         ("log10", F::unary(double(log10))),
         ("log1p", F::unary(double(log1p))),
         ("log2", F::unary(double(log2))),
-        ("mod", F::custom(spark_modulo)),
+        ("mod", F::custom(|input| spark_modulo(input, false))),
         ("negative", F::custom(spark_negative)),
         ("pi", F::nullary(expr_fn::pi)),
         ("pmod", F::custom(spark_pmod)),
@@ -3019,14 +3080,32 @@ pub(super) fn list_built_in_math_functions() -> Vec<(&'static str, ScalarFunctio
         ("sqrt", F::unary(double(expr_fn::sqrt))),
         ("tan", F::unary(double(expr_fn::tan))),
         ("tanh", F::unary(double(expr_fn::tanh))),
-        ("try_add", F::custom(try_add)),
-        ("try_divide", udf_with_try_eval_operands(SparkTryDiv::new())),
+        (
+            "try_add",
+            try_arithmetic_with_fallback(Operator::Plus, F::custom(try_add)),
+        ),
+        (
+            "try_divide",
+            try_arithmetic_with_fallback(
+                Operator::Divide,
+                udf_with_try_eval_operands(SparkTryDiv::new()),
+            ),
+        ),
         (
             "try_multiply",
-            udf_with_try_eval_operands(SparkTryMult::new()),
+            try_arithmetic_with_fallback(
+                Operator::Multiply,
+                udf_with_try_eval_operands(SparkTryMult::new()),
+            ),
         ),
-        ("try_mod", F::udf(SparkTryMod::new())),
-        ("try_subtract", F::custom(try_subtract)),
+        (
+            "try_mod",
+            try_arithmetic_with_fallback(Operator::Modulo, F::udf(SparkTryMod::new())),
+        ),
+        (
+            "try_subtract",
+            try_arithmetic_with_fallback(Operator::Minus, F::custom(try_subtract)),
+        ),
         ("unhex", F::udf(SparkUnHex::new())),
         ("uniform", F::udf(SparkUniform::new())),
         ("width_bucket", F::quaternary(math_fn::width_bucket)),
