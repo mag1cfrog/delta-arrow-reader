@@ -21,11 +21,8 @@ impl StringStyle {
         type Extra = chumsky::extra::Default;
 
         let output = match self {
-            Self::SingleQuoted { prefix: None } if options.allow_dual_quote_escape => {
-                dual_quote_escape_string_value::<Extra>('\'').parse(raw)
-            }
             Self::SingleQuoted { prefix: None } => {
-                backslash_escape_string_value::<Extra, _>('\'').parse(raw)
+                dual_quote_escape_string_value::<Extra>('\'').parse(raw)
             }
             Self::SingleQuoted {
                 prefix: Some(prefix @ ('r' | 'R')),

@@ -260,10 +260,18 @@ where
     } else {
         |d: char| backslash_escape_text(d).boxed()
     };
-
     let string = choice((
         raw_string('\'', |prefix| StringStyle::SingleQuoted { prefix }),
         raw_string('"', |prefix| StringStyle::DoubleQuoted { prefix }),
+        dual_quote_escape_text('\'').map_with(|(), e| {
+            (
+                Token::String {
+                    raw: e.slice(),
+                    style: StringStyle::SingleQuoted { prefix: None },
+                },
+                e.span(),
+            )
+        }),
         escape_string(text('\''), |prefix| StringStyle::SingleQuoted { prefix }),
         escape_string(text('"'), |prefix| StringStyle::DoubleQuoted { prefix }),
         unicode_escape_string('\'', StringStyle::UnicodeSingleQuoted { escape: None }),
