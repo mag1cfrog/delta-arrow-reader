@@ -10,7 +10,9 @@ use datafusion_common::config::ConfigOptions;
 use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode};
 use datafusion_common::{Column, Result, ScalarValue};
 use datafusion_expr::expr_rewriter::{NamePreserver, replace_col, strip_outer_reference};
-use datafusion_expr::logical_plan::{Aggregate, Extension, JoinType, Limit, Projection, Sort, Subquery};
+use datafusion_expr::logical_plan::{
+    Aggregate, Extension, JoinType, Limit, Projection, Sort, Subquery,
+};
 use datafusion_expr::utils::{conjunction, split_conjunction};
 use datafusion_expr::{
     Expr, ExprFunctionExt, LogicalPlan, LogicalPlanBuilder, Operator, ScalarUDF, cast, lit, when,
@@ -23,7 +25,9 @@ use crate::expression_errors::SparkSqlExpressionSemantics;
 mod aggregate;
 mod limit;
 
-use aggregate::{aggregate_inner_rows, can_lower_aggregate, lift_correlated_scalar_aggregate_inputs};
+use aggregate::{
+    aggregate_inner_rows, can_lower_aggregate, lift_correlated_scalar_aggregate_inputs,
+};
 use limit::{can_lower_limit, limit_inner_rows};
 
 /// Lower Spark scalar queries over real inner rows before DataFusion validates them.
@@ -154,11 +158,16 @@ enum InnerRows<'a> {
     Limit(&'a Limit, Option<&'a Sort>),
 }
 
-fn split_inner_rows(value: Expr, input: &LogicalPlan) -> Result<(Expr, InnerRows<'_>, &LogicalPlan)> {
+fn split_inner_rows(
+    value: Expr,
+    input: &LogicalPlan,
+) -> Result<(Expr, InnerRows<'_>, &LogicalPlan)> {
     Ok(match input {
-        LogicalPlan::Aggregate(aggregate) if can_lower_aggregate(aggregate) => {
-            (value, InnerRows::Aggregate(aggregate, None), &aggregate.input)
-        }
+        LogicalPlan::Aggregate(aggregate) if can_lower_aggregate(aggregate) => (
+            value,
+            InnerRows::Aggregate(aggregate, None),
+            &aggregate.input,
+        ),
         LogicalPlan::Filter(filter)
             if let LogicalPlan::Aggregate(aggregate) = filter.input.as_ref()
                 && can_lower_aggregate(aggregate) =>
@@ -229,7 +238,12 @@ fn lower_scalar(
         // Keep DataFusion's existing global aggregate decorrelation when it can
         // group on the extracted join keys before joining to the outer rows.
         let mut native = PullUpCorrelatedExpr::new();
-        if subquery.subquery.as_ref().clone().rewrite(&mut native).is_ok()
+        if subquery
+            .subquery
+            .as_ref()
+            .clone()
+            .rewrite(&mut native)
+            .is_ok()
             && native.can_pull_up
             && native.pulled_up_scalar_agg
         {
@@ -302,10 +316,17 @@ fn lower_scalar(
         .build()?;
     let rows = match rows {
         InnerRows::Plain => joined,
-        InnerRows::Aggregate(aggregate, having) => {
-            aggregate_inner_rows(joined, aggregate, having, &row_id, &match_marker, &outer_columns)?
+        InnerRows::Aggregate(aggregate, having) => aggregate_inner_rows(
+            joined,
+            aggregate,
+            having,
+            &row_id,
+            &match_marker,
+            &outer_columns,
+        )?,
+        InnerRows::Limit(limit, sort) => {
+            limit_inner_rows(joined, limit, sort, &row_id, &match_marker)?
         }
-        InnerRows::Limit(limit, sort) => limit_inner_rows(joined, limit, sort, &row_id, &match_marker)?,
     };
 
     let match_count = Column::new_unqualified(aliases.next("__spark_scalar_count"));

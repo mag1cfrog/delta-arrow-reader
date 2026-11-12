@@ -431,9 +431,13 @@ For Spark queries, deterministic correlated scalar projections and aliases over
 a guaranteed one-row relation reuse the existing expression substitution even
 without a CAST elsewhere in the query. This path does not evaluate rows during
 planning or enable additional cast/predicate preparation. Real inner relations
-and volatile scalar results retain their separate execution boundary under
-#140. The [single-row references](tests/fixtures/README.md#guaranteed-single-row-correlated-scalars)
-distinguish exact result comparisons from those retained boundaries.
+use a left join and count scalar rows per outer row. An empty scalar result
+returns a typed NULL. Multiple scalar rows raise during execution, including
+when the consumer is an untaken CASE branch. Grouping, HAVING and literal
+LIMIT apply per outer row. Global aggregates that DataFusion can decorrelate
+on their join keys keep its native path. The
+[correlated scalar references](tests/fixtures/README.md#correlated-scalars-over-inner-rows)
+cover these cases and the existing one-row rewrite.
 Spark scalar results clear inherited user metadata in public fields. Their
 private metadata boundary ends only after the existing guarded one-row
 substitution, allowing executed fields to inherit the inner source metadata or

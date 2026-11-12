@@ -19,8 +19,10 @@ const INPUTS: &str = include_str!("fixtures/correlated-scalar-execution/inputs.j
 const RESULTS: &str = include_str!("fixtures/correlated-scalar-execution/spark-results.jsonl");
 const FAILURES: &str = include_str!("fixtures/correlated-scalar-execution/spark-failures.jsonl");
 const REVIEW_INPUTS: &str = include_str!("fixtures/correlated-scalar-execution/review-inputs.json");
-const REVIEW_RESULTS: &str = include_str!("fixtures/correlated-scalar-execution/review-results.jsonl");
-const REVIEW_FAILURES: &str = include_str!("fixtures/correlated-scalar-execution/review-failures.jsonl");
+const REVIEW_RESULTS: &str =
+    include_str!("fixtures/correlated-scalar-execution/review-results.jsonl");
+const REVIEW_FAILURES: &str =
+    include_str!("fixtures/correlated-scalar-execution/review-failures.jsonl");
 const LEGACY_VALID_RESULTS: &str =
     include_str!("fixtures/correlated-scalar-execution/legacy-valid-results.jsonl");
 const ARCHIVE_REVIEW_RESULTS: &str =
@@ -160,7 +162,10 @@ async fn correlated_scalar_execution_matches_spark() -> TestResult {
     let manifest: Value = serde_json::from_str(INPUTS)?;
     let fresh = fresh_references(&manifest, RESULTS, FAILURES, 9)?;
     let review_manifest: Value = serde_json::from_str(REVIEW_INPUTS)?;
-    assert_eq!(manifest["registered_inputs"], review_manifest["registered_inputs"]);
+    assert_eq!(
+        manifest["registered_inputs"],
+        review_manifest["registered_inputs"]
+    );
     let review = fresh_references(&review_manifest, REVIEW_RESULTS, REVIEW_FAILURES, 9)?;
     let legacy_valid = records(LEGACY_VALID_RESULTS)?;
     let archive_review = records(ARCHIVE_REVIEW_RESULTS)?;

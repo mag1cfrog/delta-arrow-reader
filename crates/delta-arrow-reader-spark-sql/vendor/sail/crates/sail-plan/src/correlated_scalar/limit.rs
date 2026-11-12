@@ -20,9 +20,10 @@ fn literal_bound(expr: Option<&Expr>, default: u64) -> Option<u64> {
     match expr {
         Expr::Literal(ScalarValue::Int32(Some(value)), _) => u64::try_from(*value).ok(),
         Expr::Literal(ScalarValue::Int64(Some(value)), _) => u64::try_from(*value).ok(),
-        Expr::Literal(ScalarValue::Int32(None) | ScalarValue::Int64(None) | ScalarValue::Null, _) => {
-            Some(default)
-        }
+        Expr::Literal(
+            ScalarValue::Int32(None) | ScalarValue::Int64(None) | ScalarValue::Null,
+            _,
+        ) => Some(default),
         _ => None,
     }
 }
@@ -48,9 +49,10 @@ pub(super) fn limit_inner_rows(
     let Some((skip, fetch)) = literal_bounds(limit) else {
         return internal_err!("Correlated scalar limit requires literal OFFSET and LIMIT");
     };
-    let end = skip
-        .saturating_add(fetch)
-        .min(sort.and_then(|sort| sort.fetch).map_or(u64::MAX, |n| n as u64));
+    let end = skip.saturating_add(fetch).min(
+        sort.and_then(|sort| sort.fetch)
+            .map_or(u64::MAX, |n| n as u64),
+    );
     if end <= skip {
         return filter_match_marker(joined, matched, lit(false));
     }

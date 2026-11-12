@@ -71,9 +71,11 @@ pub(super) fn aggregate_inner_rows(
             .data()?;
         results.push(keep_name(expr, column));
     }
-    results.extend(outer_columns.iter().map(|column| {
-        keep_name(first_value(Expr::Column(column.clone()), vec![]), column)
-    }));
+    results.extend(
+        outer_columns
+            .iter()
+            .map(|column| keep_name(first_value(Expr::Column(column.clone()), vec![]), column)),
+    );
 
     // A global aggregate returns one scalar row even on empty input. For a
     // grouped aggregate, the caller discards the unmatched row by its marker.
@@ -144,7 +146,9 @@ pub(super) fn lift_correlated_scalar_aggregate_inputs(plan: LogicalPlan) -> Resu
                 for arg in &mut function.params.args {
                     if !arg.exists(|expr| {
                         Ok(match expr {
-                            Expr::ScalarSubquery(subquery) => !subquery.outer_ref_columns.is_empty(),
+                            Expr::ScalarSubquery(subquery) => {
+                                !subquery.outer_ref_columns.is_empty()
+                            }
                             _ => false,
                         })
                     })? {
