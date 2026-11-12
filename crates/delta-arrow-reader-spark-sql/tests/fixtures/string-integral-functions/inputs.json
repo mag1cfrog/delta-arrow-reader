@@ -1,0 +1,920 @@
+{
+  "baseline": {
+    "commit": "aba5bb6ebc057abb5abb7b438388152926f9292a",
+    "tree": "93c7f072d031414db4773213a63ba78aeb9257df"
+  },
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "registered_inputs": [
+    {
+      "name": "nullable_strings",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "s",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "7"
+        ],
+        [
+          "1",
+          null
+        ]
+      ]
+    },
+    {
+      "name": "required_int",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "s",
+            "type": "string",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "7"
+        ],
+        [
+          "1",
+          " +8 "
+        ],
+        [
+          "2",
+          "-2147483648"
+        ],
+        [
+          "3",
+          "2147483647"
+        ],
+        [
+          "4",
+          "x"
+        ],
+        [
+          "5",
+          ""
+        ],
+        [
+          "6",
+          "2147483648"
+        ],
+        [
+          "7",
+          "-2147483649"
+        ]
+      ]
+    },
+    {
+      "name": "required_bigint",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "s",
+            "type": "string",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "7"
+        ],
+        [
+          "1",
+          " +8 "
+        ],
+        [
+          "2",
+          "-9223372036854775808"
+        ],
+        [
+          "3",
+          "9223372036854775807"
+        ],
+        [
+          "4",
+          "x"
+        ],
+        [
+          "5",
+          ""
+        ],
+        [
+          "6",
+          "9223372036854775808"
+        ],
+        [
+          "7",
+          "-9223372036854775809"
+        ]
+      ]
+    },
+    {
+      "name": "required_smallint",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "s",
+            "type": "string",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "7"
+        ],
+        [
+          "1",
+          " +8 "
+        ],
+        [
+          "2",
+          "-32768"
+        ],
+        [
+          "3",
+          "32767"
+        ],
+        [
+          "4",
+          "x"
+        ],
+        [
+          "5",
+          ""
+        ],
+        [
+          "6",
+          "32768"
+        ],
+        [
+          "7",
+          "-32769"
+        ]
+      ]
+    },
+    {
+      "name": "required_tinyint",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "s",
+            "type": "string",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "7"
+        ],
+        [
+          "1",
+          " +8 "
+        ],
+        [
+          "2",
+          "-128"
+        ],
+        [
+          "3",
+          "127"
+        ],
+        [
+          "4",
+          "x"
+        ],
+        [
+          "5",
+          ""
+        ],
+        [
+          "6",
+          "128"
+        ],
+        [
+          "7",
+          "-129"
+        ]
+      ]
+    },
+    {
+      "name": "partitioned_strings",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "s",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          " -8 "
+        ],
+        [
+          "1",
+          "bad"
+        ],
+        [
+          "2",
+          "7"
+        ],
+        [
+          "3",
+          "x"
+        ]
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "int_literal_plain",
+      "sql": "SELECT int('7') AS f, CAST('7' AS INT) AS c",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "int_literal_spaced",
+      "sql": "SELECT int(' +8 ') AS f, CAST(' +8 ' AS INT) AS c",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "int_literal_minimum",
+      "sql": "SELECT int('-2147483648') AS f, CAST('-2147483648' AS INT) AS c",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "int_literal_maximum",
+      "sql": "SELECT int('2147483647') AS f, CAST('2147483647' AS INT) AS c",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "int_literal_malformed",
+      "sql": "SELECT int('x') AS f, CAST('x' AS INT) AS c",
+      "scope": "permissive",
+      "ansi_modes": [
+        false
+      ]
+    },
+    {
+      "id": "int_literal_empty",
+      "sql": "SELECT int('') AS f, CAST('' AS INT) AS c",
+      "scope": "permissive",
+      "ansi_modes": [
+        false
+      ]
+    },
+    {
+      "id": "int_literal_above_maximum",
+      "sql": "SELECT int('2147483648') AS f, CAST('2147483648' AS INT) AS c",
+      "scope": "permissive",
+      "ansi_modes": [
+        false
+      ]
+    },
+    {
+      "id": "int_literal_below_minimum",
+      "sql": "SELECT int('-2147483649') AS f, CAST('-2147483649' AS INT) AS c",
+      "scope": "permissive",
+      "ansi_modes": [
+        false
+      ]
+    },
+    {
+      "id": "int_literal_string_null",
+      "sql": "SELECT int(CAST(NULL AS STRING)) AS f, CAST(CAST(NULL AS STRING) AS INT) AS c",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "int_literal_null",
+      "sql": "SELECT int(NULL) AS f, CAST(NULL AS INT) AS c",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "int_column_valid",
+      "sql": "SELECT k, int(s) AS f, CAST(s AS INT) AS c FROM required_int WHERE k < 4 ORDER BY k",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "int_column_invalid",
+      "sql": "SELECT k, int(s) AS f, CAST(s AS INT) AS c FROM required_int WHERE k >= 4 ORDER BY k",
+      "scope": "permissive",
+      "ansi_modes": [
+        false
+      ]
+    },
+    {
+      "id": "int_column_nullable",
+      "sql": "SELECT k, int(s) AS f, CAST(s AS INT) AS c FROM nullable_strings ORDER BY k",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "int_nullable_is_null",
+      "sql": "SELECT k, int(s) IS NULL AS f, CAST(s AS INT) IS NULL AS c FROM nullable_strings ORDER BY k",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "int_required_is_null",
+      "sql": "SELECT k, int(s) IS NULL AS f, CAST(s AS INT) IS NULL AS c FROM required_int WHERE k < 4 ORDER BY k",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "int_invalid_is_null",
+      "sql": "SELECT k, int(s) IS NULL AS f, CAST(s AS INT) IS NULL AS c FROM required_int WHERE k >= 4 ORDER BY k",
+      "scope": "permissive",
+      "ansi_modes": [
+        false
+      ]
+    },
+    {
+      "id": "int_provider_filtered",
+      "sql": "SELECT k, int(s) AS f, CAST(s AS INT) AS c FROM partitioned_strings WHERE k IN (0, 2) ORDER BY k",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "int_provider_filtered_is_null",
+      "sql": "SELECT k, int(s) IS NULL AS f, CAST(s AS INT) IS NULL AS c FROM partitioned_strings WHERE k IN (0, 2) ORDER BY k",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "bigint_literal_plain",
+      "sql": "SELECT bigint('7') AS f, CAST('7' AS BIGINT) AS c",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "bigint_literal_spaced",
+      "sql": "SELECT bigint(' +8 ') AS f, CAST(' +8 ' AS BIGINT) AS c",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "bigint_literal_minimum",
+      "sql": "SELECT bigint('-9223372036854775808') AS f, CAST('-9223372036854775808' AS BIGINT) AS c",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "bigint_literal_maximum",
+      "sql": "SELECT bigint('9223372036854775807') AS f, CAST('9223372036854775807' AS BIGINT) AS c",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "bigint_literal_malformed",
+      "sql": "SELECT bigint('x') AS f, CAST('x' AS BIGINT) AS c",
+      "scope": "permissive",
+      "ansi_modes": [
+        false
+      ]
+    },
+    {
+      "id": "bigint_literal_empty",
+      "sql": "SELECT bigint('') AS f, CAST('' AS BIGINT) AS c",
+      "scope": "permissive",
+      "ansi_modes": [
+        false
+      ]
+    },
+    {
+      "id": "bigint_literal_above_maximum",
+      "sql": "SELECT bigint('9223372036854775808') AS f, CAST('9223372036854775808' AS BIGINT) AS c",
+      "scope": "permissive",
+      "ansi_modes": [
+        false
+      ]
+    },
+    {
+      "id": "bigint_literal_below_minimum",
+      "sql": "SELECT bigint('-9223372036854775809') AS f, CAST('-9223372036854775809' AS BIGINT) AS c",
+      "scope": "permissive",
+      "ansi_modes": [
+        false
+      ]
+    },
+    {
+      "id": "bigint_literal_string_null",
+      "sql": "SELECT bigint(CAST(NULL AS STRING)) AS f, CAST(CAST(NULL AS STRING) AS BIGINT) AS c",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "bigint_literal_null",
+      "sql": "SELECT bigint(NULL) AS f, CAST(NULL AS BIGINT) AS c",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "bigint_column_valid",
+      "sql": "SELECT k, bigint(s) AS f, CAST(s AS BIGINT) AS c FROM required_bigint WHERE k < 4 ORDER BY k",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "bigint_column_invalid",
+      "sql": "SELECT k, bigint(s) AS f, CAST(s AS BIGINT) AS c FROM required_bigint WHERE k >= 4 ORDER BY k",
+      "scope": "permissive",
+      "ansi_modes": [
+        false
+      ]
+    },
+    {
+      "id": "bigint_column_nullable",
+      "sql": "SELECT k, bigint(s) AS f, CAST(s AS BIGINT) AS c FROM nullable_strings ORDER BY k",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "bigint_nullable_is_null",
+      "sql": "SELECT k, bigint(s) IS NULL AS f, CAST(s AS BIGINT) IS NULL AS c FROM nullable_strings ORDER BY k",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "bigint_required_is_null",
+      "sql": "SELECT k, bigint(s) IS NULL AS f, CAST(s AS BIGINT) IS NULL AS c FROM required_bigint WHERE k < 4 ORDER BY k",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "bigint_invalid_is_null",
+      "sql": "SELECT k, bigint(s) IS NULL AS f, CAST(s AS BIGINT) IS NULL AS c FROM required_bigint WHERE k >= 4 ORDER BY k",
+      "scope": "permissive",
+      "ansi_modes": [
+        false
+      ]
+    },
+    {
+      "id": "bigint_provider_filtered",
+      "sql": "SELECT k, bigint(s) AS f, CAST(s AS BIGINT) AS c FROM partitioned_strings WHERE k IN (0, 2) ORDER BY k",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "bigint_provider_filtered_is_null",
+      "sql": "SELECT k, bigint(s) IS NULL AS f, CAST(s AS BIGINT) IS NULL AS c FROM partitioned_strings WHERE k IN (0, 2) ORDER BY k",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "smallint_literal_plain",
+      "sql": "SELECT smallint('7') AS f, CAST('7' AS SMALLINT) AS c",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "smallint_literal_spaced",
+      "sql": "SELECT smallint(' +8 ') AS f, CAST(' +8 ' AS SMALLINT) AS c",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "smallint_literal_minimum",
+      "sql": "SELECT smallint('-32768') AS f, CAST('-32768' AS SMALLINT) AS c",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "smallint_literal_maximum",
+      "sql": "SELECT smallint('32767') AS f, CAST('32767' AS SMALLINT) AS c",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "smallint_literal_malformed",
+      "sql": "SELECT smallint('x') AS f, CAST('x' AS SMALLINT) AS c",
+      "scope": "permissive",
+      "ansi_modes": [
+        false
+      ]
+    },
+    {
+      "id": "smallint_literal_empty",
+      "sql": "SELECT smallint('') AS f, CAST('' AS SMALLINT) AS c",
+      "scope": "permissive",
+      "ansi_modes": [
+        false
+      ]
+    },
+    {
+      "id": "smallint_literal_above_maximum",
+      "sql": "SELECT smallint('32768') AS f, CAST('32768' AS SMALLINT) AS c",
+      "scope": "permissive",
+      "ansi_modes": [
+        false
+      ]
+    },
+    {
+      "id": "smallint_literal_below_minimum",
+      "sql": "SELECT smallint('-32769') AS f, CAST('-32769' AS SMALLINT) AS c",
+      "scope": "permissive",
+      "ansi_modes": [
+        false
+      ]
+    },
+    {
+      "id": "smallint_literal_string_null",
+      "sql": "SELECT smallint(CAST(NULL AS STRING)) AS f, CAST(CAST(NULL AS STRING) AS SMALLINT) AS c",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "smallint_literal_null",
+      "sql": "SELECT smallint(NULL) AS f, CAST(NULL AS SMALLINT) AS c",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "smallint_column_valid",
+      "sql": "SELECT k, smallint(s) AS f, CAST(s AS SMALLINT) AS c FROM required_smallint WHERE k < 4 ORDER BY k",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "smallint_column_invalid",
+      "sql": "SELECT k, smallint(s) AS f, CAST(s AS SMALLINT) AS c FROM required_smallint WHERE k >= 4 ORDER BY k",
+      "scope": "permissive",
+      "ansi_modes": [
+        false
+      ]
+    },
+    {
+      "id": "smallint_column_nullable",
+      "sql": "SELECT k, smallint(s) AS f, CAST(s AS SMALLINT) AS c FROM nullable_strings ORDER BY k",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "smallint_nullable_is_null",
+      "sql": "SELECT k, smallint(s) IS NULL AS f, CAST(s AS SMALLINT) IS NULL AS c FROM nullable_strings ORDER BY k",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "smallint_required_is_null",
+      "sql": "SELECT k, smallint(s) IS NULL AS f, CAST(s AS SMALLINT) IS NULL AS c FROM required_smallint WHERE k < 4 ORDER BY k",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "smallint_invalid_is_null",
+      "sql": "SELECT k, smallint(s) IS NULL AS f, CAST(s AS SMALLINT) IS NULL AS c FROM required_smallint WHERE k >= 4 ORDER BY k",
+      "scope": "permissive",
+      "ansi_modes": [
+        false
+      ]
+    },
+    {
+      "id": "smallint_provider_filtered",
+      "sql": "SELECT k, smallint(s) AS f, CAST(s AS SMALLINT) AS c FROM partitioned_strings WHERE k IN (0, 2) ORDER BY k",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "smallint_provider_filtered_is_null",
+      "sql": "SELECT k, smallint(s) IS NULL AS f, CAST(s AS SMALLINT) IS NULL AS c FROM partitioned_strings WHERE k IN (0, 2) ORDER BY k",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "tinyint_literal_plain",
+      "sql": "SELECT tinyint('7') AS f, CAST('7' AS TINYINT) AS c",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "tinyint_literal_spaced",
+      "sql": "SELECT tinyint(' +8 ') AS f, CAST(' +8 ' AS TINYINT) AS c",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "tinyint_literal_minimum",
+      "sql": "SELECT tinyint('-128') AS f, CAST('-128' AS TINYINT) AS c",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "tinyint_literal_maximum",
+      "sql": "SELECT tinyint('127') AS f, CAST('127' AS TINYINT) AS c",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "tinyint_literal_malformed",
+      "sql": "SELECT tinyint('x') AS f, CAST('x' AS TINYINT) AS c",
+      "scope": "permissive",
+      "ansi_modes": [
+        false
+      ]
+    },
+    {
+      "id": "tinyint_literal_empty",
+      "sql": "SELECT tinyint('') AS f, CAST('' AS TINYINT) AS c",
+      "scope": "permissive",
+      "ansi_modes": [
+        false
+      ]
+    },
+    {
+      "id": "tinyint_literal_above_maximum",
+      "sql": "SELECT tinyint('128') AS f, CAST('128' AS TINYINT) AS c",
+      "scope": "permissive",
+      "ansi_modes": [
+        false
+      ]
+    },
+    {
+      "id": "tinyint_literal_below_minimum",
+      "sql": "SELECT tinyint('-129') AS f, CAST('-129' AS TINYINT) AS c",
+      "scope": "permissive",
+      "ansi_modes": [
+        false
+      ]
+    },
+    {
+      "id": "tinyint_literal_string_null",
+      "sql": "SELECT tinyint(CAST(NULL AS STRING)) AS f, CAST(CAST(NULL AS STRING) AS TINYINT) AS c",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "tinyint_literal_null",
+      "sql": "SELECT tinyint(NULL) AS f, CAST(NULL AS TINYINT) AS c",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "tinyint_column_valid",
+      "sql": "SELECT k, tinyint(s) AS f, CAST(s AS TINYINT) AS c FROM required_tinyint WHERE k < 4 ORDER BY k",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "tinyint_column_invalid",
+      "sql": "SELECT k, tinyint(s) AS f, CAST(s AS TINYINT) AS c FROM required_tinyint WHERE k >= 4 ORDER BY k",
+      "scope": "permissive",
+      "ansi_modes": [
+        false
+      ]
+    },
+    {
+      "id": "tinyint_column_nullable",
+      "sql": "SELECT k, tinyint(s) AS f, CAST(s AS TINYINT) AS c FROM nullable_strings ORDER BY k",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "tinyint_nullable_is_null",
+      "sql": "SELECT k, tinyint(s) IS NULL AS f, CAST(s AS TINYINT) IS NULL AS c FROM nullable_strings ORDER BY k",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "tinyint_required_is_null",
+      "sql": "SELECT k, tinyint(s) IS NULL AS f, CAST(s AS TINYINT) IS NULL AS c FROM required_tinyint WHERE k < 4 ORDER BY k",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "tinyint_invalid_is_null",
+      "sql": "SELECT k, tinyint(s) IS NULL AS f, CAST(s AS TINYINT) IS NULL AS c FROM required_tinyint WHERE k >= 4 ORDER BY k",
+      "scope": "permissive",
+      "ansi_modes": [
+        false
+      ]
+    },
+    {
+      "id": "tinyint_provider_filtered",
+      "sql": "SELECT k, tinyint(s) AS f, CAST(s AS TINYINT) AS c FROM partitioned_strings WHERE k IN (0, 2) ORDER BY k",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "tinyint_provider_filtered_is_null",
+      "sql": "SELECT k, tinyint(s) IS NULL AS f, CAST(s AS TINYINT) IS NULL AS c FROM partitioned_strings WHERE k IN (0, 2) ORDER BY k",
+      "scope": "required",
+      "ansi_modes": [
+        false,
+        true
+      ]
+    }
+  ]
+}
