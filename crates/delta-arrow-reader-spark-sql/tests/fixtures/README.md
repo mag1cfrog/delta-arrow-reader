@@ -1585,12 +1585,29 @@ outer evaluation. Cardinality cases require successful planning before an error
 during collection. The replay compares rows and executed types after removing
 nullability and metadata, and fully validates the Arrow inputs and results.
 
+`correlated-scalar-window/spark-results.jsonl` adds 54 Spark 4.2.0 observations in
+both ANSI modes. They cover ranking with ties, multiple partitions and window
+specifications, ROWS and RANGE frames, scalar and row-dependent LAG defaults,
+LEAD, NTH_VALUE, NTILE, and duplicate outer rows. Sorted FIRST_VALUE and
+LAST_VALUE check input order. Filters, grouping, DISTINCT and LIMIT before a
+window check that rejected rows cannot affect its results. NULL and no-match
+inputs retain the scalar result. Frame cases weight individual rows before the
+scalar sum so different frames remain distinguishable. Computed COLLECT_SET and
+COLLECT_LIST arguments check rejected-row evaluation, including COLLECT_SET's
+generated null filter. Computed
+partition keys, order keys, input ordering and LAG defaults also skip rejected
+rows. Multirow scalars must plan successfully before failing during collection.
+The replay uses the same
+executed-type and Arrow validation checks as the union cases.
+
 From the Spark crate directory, use the pinned Python/Java setup and a fresh
 output path to recapture:
 
 ```sh
 correlated_union_capture=$(mktemp -d)
 python tests/fixtures/correlated-scalar-union/capture_spark.py "$correlated_union_capture/spark-results.jsonl"
+correlated_window_capture=$(mktemp -d)
+python tests/fixtures/correlated-scalar-window/capture_spark.py "$correlated_window_capture/spark-results.jsonl"
 cargo test --locked --workspace --test correlated_scalar_execution
 ```
 
