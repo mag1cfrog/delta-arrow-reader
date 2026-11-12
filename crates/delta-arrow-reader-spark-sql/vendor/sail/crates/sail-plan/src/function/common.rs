@@ -21,6 +21,9 @@ use sail_common_datafusion::utils::items::ItemTaker;
 use sail_function::scalar::datetime::spark_date_timestamp_ntz_cast::SparkDateTimestampNtzCast;
 use sail_function::scalar::spark_cast_numeric_to_integer::SparkCastNumericToInteger;
 use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
+use sail_function::scalar::spark_cast_string_to_integer::{
+    SparkCastStringToInteger, StringIntegerCastMode,
+};
 use sail_function::scalar::spark_decimal_cast::{DecimalCastMode, SparkDecimalCast};
 use sail_function::scalar::variant::spark_cast_to_variant::SparkCastToVariant;
 use sail_function::sketch::{DEFAULT_HLL_LG_CONFIG_K, DEFAULT_THETA_LG_NOM_ENTRIES};
@@ -583,6 +586,15 @@ impl ScalarFunctionBuilder {
                   }| {
                 let arg = arguments.one()?;
                 let source = arg.get_type(function_context.schema)?;
+                if source.is_string() && data_type.is_signed_integer() {
+                    return cast_string_to_integer(
+                        arg,
+                        data_type.clone(),
+                        function_context.plan_config.ansi_mode,
+                        false,
+                    )
+                    .map(drop_inherited_column_metadata);
+                }
                 if (matches!(source, DataType::Float32 | DataType::Float64)
                     && data_type.is_signed_integer())
                     || (source == DataType::Int64 && data_type == DataType::Int32)
@@ -1002,6 +1014,22 @@ pub(crate) fn dictionary_string_argument(arg: expr::Expr, schema: &DFSchemaRef) 
         },
         Err(_) => arg,
     }
+}
+
+pub(crate) fn cast_string_to_integer(
+    input: expr::Expr,
+    target: DataType,
+    ansi_mode: bool,
+    is_try: bool,
+) -> PlanResult<expr::Expr> {
+    let mode = if is_try {
+        StringIntegerCastMode::Try
+    } else if ansi_mode {
+        StringIntegerCastMode::Ansi
+    } else {
+        StringIntegerCastMode::Legacy
+    };
+    Ok(SparkCastStringToInteger::try_new(target, mode)?.into_expr(input))
 }
 
 /// A cast of `expr` from `from` to `to` with Spark's nullability for the TIMESTAMP_NTZ and DATE

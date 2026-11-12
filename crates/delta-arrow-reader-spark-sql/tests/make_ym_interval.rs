@@ -52,10 +52,6 @@ enum RetainedDifference {
     /// #749: Spark names an unaliased call with its arguments and the defaulted months; DAR
     /// keeps the arguments as written.
     GeneratedName,
-    /// #1166: DAR plans INT() of a STRING as Arrow's cast, declared NOT NULL for a NOT NULL
-    /// STRING where Spark's cast is nullable, so MAKE_YM_INTERVAL over it is NOT NULL too. IS
-    /// NULL over it folds to false, where Spark gives true outside ANSI and fails under ANSI.
-    IntFunctionCast,
     /// #1151: TRY_ADD, TRY_SUBTRACT, TRY_MULTIPLY and TRY_DIVIDE over an overflowing
     /// MAKE_YM_INTERVAL fail with its overflow, and under ANSI TRY_ADD over a failing argument
     /// cast fails with it, while optimizing for a constant and while collecting rows otherwise,
@@ -72,11 +68,6 @@ enum RetainedDifference {
 
 /// DAR's current name for each unaliased record of the #749 class.
 const GENERATED_NAME_RECORDS: [(&str, &str); 1] = [("name_year", "make_ym_interval(1)")];
-
-/// Records of the #1166 class: MAKE_YM_INTERVAL of INT() over NOT NULL STRING values, and IS
-/// NULL over it where the value is malformed.
-const INT_FUNCTION_RECORD: &str = "column_required_int_function";
-const INT_FUNCTION_IS_NULL_RECORD: &str = "column_required_int_function_is_null";
 
 /// Records of the #1151 class and the stage at which DAR fails.
 const TRY_ARITHMETIC_RECORDS: [(&str, &str); 6] = [
@@ -151,8 +142,6 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
         .any(|(record, _)| *record == id)
     {
         Some(RetainedDifference::GeneratedName)
-    } else if id == INT_FUNCTION_RECORD || id == INT_FUNCTION_IS_NULL_RECORD {
-        Some(RetainedDifference::IntFunctionCast)
     } else if TRY_ARITHMETIC_RECORDS
         .iter()
         .any(|(record, _)| *record == id)
@@ -197,30 +186,6 @@ fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResu
                 }
                 field["name"] = json!(name);
             }
-        }
-        RetainedDifference::IntFunctionCast if id == INT_FUNCTION_RECORD => {
-            for stage in ["analyzed", "optimized", "executed"] {
-                let field = &mut current["schema_stages"][stage]["fields"][1];
-                if field["type"] != "interval year to month" || field["nullable"] != true {
-                    return Err(format!("expected Spark's nullable interval: {case}").into());
-                }
-                field["nullable"] = json!(false);
-            }
-        }
-        RetainedDifference::IntFunctionCast => {
-            let malformed = case["expected"]["rows"] == json!([["3", true]])
-                || (case["expected"]["condition"] == "CAST_INVALID_INPUT"
-                    && case["spark_error_phase"] == "collect");
-            if !malformed {
-                return Err(format!("expected Spark's NULL or cast failure: {case}").into());
-            }
-            let stages = current["schema_stages"]
-                .as_object_mut()
-                .ok_or("missing schema stages")?;
-            let analyzed = stages.get("analyzed").cloned().ok_or("missing analyzed")?;
-            stages.insert("executed".to_owned(), analyzed);
-            current["expected"] = json!({"status": "ok", "rows": [["3", false]]});
-            current["spark_error_phase"] = Value::Null;
         }
         RetainedDifference::TryArithmetic => {
             if case["expected"]["rows"]
@@ -612,7 +577,6 @@ async fn make_ym_interval_matches_spark() -> TestResult {
         retained,
         BTreeMap::from([
             (RetainedDifference::GeneratedName, 4),
-            (RetainedDifference::IntFunctionCast, 8),
             (RetainedDifference::TryArithmetic, 28),
             (RetainedDifference::DecimalCastUnderAnsi, 8),
             (RetainedDifference::ComputedNullBesideFailingConstant, 4),

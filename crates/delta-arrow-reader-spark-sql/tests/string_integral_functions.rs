@@ -16,7 +16,9 @@ mod spark_inputs;
 #[path = "support/spark_results.rs"]
 mod spark_results;
 
-use spark_results::{TestResult, capture_native_query_observation, capture_spark_query_observation};
+use spark_results::{
+    TestResult, capture_native_query_observation, capture_spark_query_observation,
+};
 
 const INPUTS: &str = include_str!("fixtures/string-integral-functions/inputs.json");
 const SPARK: &str = include_str!("fixtures/string-integral-functions/spark-results.jsonl");
@@ -112,7 +114,10 @@ async fn string_integral_functions_match_spark() -> TestResult {
     let mut differences = Vec::new();
     for (storage, dictionary) in [("utf8", false), ("dictionary_uint16_utf8", true)] {
         let session = session();
-        for input in manifest["registered_inputs"].as_array().ok_or("missing inputs")? {
+        for input in manifest["registered_inputs"]
+            .as_array()
+            .ok_or("missing inputs")?
+        {
             let name = input["name"].as_str().ok_or("missing input table name")?;
             let mut batch = spark_inputs::decode_recorded_batch(input)?;
             if dictionary {

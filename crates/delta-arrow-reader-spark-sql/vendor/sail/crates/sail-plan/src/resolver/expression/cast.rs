@@ -24,9 +24,6 @@ use sail_function::scalar::spark_cast_numeric_to_integer::SparkCastNumericToInte
 use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
 use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
 use sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat;
-use sail_function::scalar::spark_cast_string_to_integer::{
-    SparkCastStringToInteger, StringIntegerCastMode,
-};
 use sail_function::scalar::spark_decimal_cast::{
     DecimalCastMode, SparkDecimalCast, decimal_cast_can_overflow,
 };
@@ -38,7 +35,9 @@ use sail_function::scalar::variant::spark_variant_to_json::SparkVariantToJsonUdf
 
 use crate::error::{PlanError, PlanResult};
 use crate::formatter::SparkPlanFormatter;
-use crate::function::common::{dictionary_string_type, drop_inherited_column_metadata};
+use crate::function::common::{
+    cast_string_to_integer, dictionary_string_type, drop_inherited_column_metadata,
+};
 use crate::function::is_spark_compatible_arrow_fixed_offset;
 use crate::function::temporal_coercion::{
     cast_date_expr_to_ltz, cast_local_timestamp_expr_to_ltz, ltz_expr_to_local_timestamp,
@@ -435,16 +434,7 @@ impl PlanResolver<'_> {
                 DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View,
                 to @ (DataType::Int8 | DataType::Int16 | DataType::Int32 | DataType::Int64),
                 is_try,
-            ) => {
-                let mode = if is_try {
-                    StringIntegerCastMode::Try
-                } else if self.config.ansi_mode {
-                    StringIntegerCastMode::Ansi
-                } else {
-                    StringIntegerCastMode::Legacy
-                };
-                SparkCastStringToInteger::try_new(to, mode)?.into_expr(expr)
-            }
+            ) => cast_string_to_integer(expr, to, self.config.ansi_mode, is_try)?,
             (
                 DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View,
                 to @ (DataType::Float32 | DataType::Float64),
