@@ -1,0 +1,380 @@
+{
+  "issue": "https://github.com/mag1cfrog/delta-arrow-reader/issues/827",
+  "baseline": {
+    "commit": "025674c94df58446996382cd571e334d1b615cf3",
+    "tree": "d273e0fbc3242528a4a552b1fc76958881e15289"
+  },
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "ansi_modes": [
+    false,
+    true
+  ],
+  "registered_inputs": [
+    {
+      "name": "declarations_mixed",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "id"
+            }
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {
+              "source": "value"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "1"
+        ],
+        [
+          "1",
+          null
+        ],
+        [
+          "2",
+          "-2"
+        ]
+      ]
+    },
+    {
+      "name": "declarations_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "id"
+            }
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {
+              "source": "value"
+            }
+          }
+        ]
+      },
+      "rows": []
+    },
+    {
+      "name": "duplicate_mixed",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "id"
+            }
+          },
+          {
+            "name": "left_value",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {
+              "source": "left"
+            }
+          },
+          {
+            "name": "right_value",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {
+              "source": "right"
+            }
+          },
+          {
+            "name": "s",
+            "type": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "item",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "first"
+                  }
+                },
+                {
+                  "name": "item",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "second"
+                  }
+                }
+              ]
+            },
+            "nullable": true,
+            "metadata": {
+              "source": "struct"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "1",
+          "2",
+          [
+            "11",
+            "12"
+          ]
+        ],
+        [
+          "1",
+          null,
+          "4",
+          [
+            null,
+            "14"
+          ]
+        ],
+        [
+          "2",
+          "5",
+          null,
+          [
+            "15",
+            null
+          ]
+        ],
+        [
+          "3",
+          null,
+          null,
+          null
+        ]
+      ]
+    },
+    {
+      "name": "duplicate_nulls",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "id"
+            }
+          },
+          {
+            "name": "left_value",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {
+              "source": "left"
+            }
+          },
+          {
+            "name": "right_value",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {
+              "source": "right"
+            }
+          },
+          {
+            "name": "s",
+            "type": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "item",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "first"
+                  }
+                },
+                {
+                  "name": "item",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "second"
+                  }
+                }
+              ]
+            },
+            "nullable": true,
+            "metadata": {
+              "source": "struct"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "3",
+          null,
+          null,
+          null
+        ]
+      ]
+    },
+    {
+      "name": "duplicate_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "id"
+            }
+          },
+          {
+            "name": "left_value",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {
+              "source": "left"
+            }
+          },
+          {
+            "name": "right_value",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {
+              "source": "right"
+            }
+          },
+          {
+            "name": "s",
+            "type": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "item",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "first"
+                  }
+                },
+                {
+                  "name": "item",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "second"
+                  }
+                }
+              ]
+            },
+            "nullable": true,
+            "metadata": {
+              "source": "struct"
+            }
+          }
+        ]
+      },
+      "rows": []
+    }
+  ],
+  "cases": [
+    {
+      "id": "array_literal_unique",
+      "sql": "SELECT ARRAY(STRUCT(CAST(NULL AS INT) AS x),STRUCT(1 AS x)) AS r"
+    },
+    {
+      "id": "array_literal_duplicate",
+      "sql": "SELECT ARRAY(STRUCT(CAST(NULL AS INT) AS item,13 AS item),STRUCT(21 AS item,23 AS item)) AS r"
+    },
+    {
+      "id": "array_literal_required_control",
+      "sql": "SELECT ARRAY(STRUCT(1 AS x),STRUCT(2 AS x)) AS r"
+    },
+    {
+      "id": "array_literal_nullable_parent",
+      "sql": "SELECT ARRAY(CAST(NULL AS STRUCT<x:INT>),STRUCT(1 AS x)) AS r"
+    },
+    {
+      "id": "array_declarations_mixed_unique",
+      "sql": "SELECT q.id,ARRAY(STRUCT(q.v AS x),STRUCT(q.id AS x)) AS r FROM declarations_mixed q ORDER BY q.id"
+    },
+    {
+      "id": "array_declarations_mixed_duplicate",
+      "sql": "SELECT q.id,ARRAY(STRUCT(q.v AS item,q.id AS item),STRUCT(q.id AS item,q.id + 10 AS item)) AS r FROM declarations_mixed q ORDER BY q.id"
+    },
+    {
+      "id": "array_declarations_empty_unique",
+      "sql": "SELECT q.id,ARRAY(STRUCT(q.v AS x),STRUCT(q.id AS x)) AS r FROM declarations_empty q ORDER BY q.id"
+    },
+    {
+      "id": "array_declarations_empty_duplicate",
+      "sql": "SELECT q.id,ARRAY(STRUCT(q.v AS item,q.id AS item),STRUCT(q.id AS item,q.id + 10 AS item)) AS r FROM declarations_empty q ORDER BY q.id"
+    },
+    {
+      "id": "map_literal_unique",
+      "sql": "SELECT MAP('a',STRUCT(CAST(NULL AS INT) AS x),'b',STRUCT(1 AS x)) AS r"
+    },
+    {
+      "id": "map_literal_duplicate",
+      "sql": "SELECT MAP('z',STRUCT(CAST(NULL AS INT) AS item,13 AS item),'a',STRUCT(21 AS item,23 AS item)) AS r"
+    },
+    {
+      "id": "map_literal_required_control",
+      "sql": "SELECT MAP('a',STRUCT(1 AS x),'b',STRUCT(2 AS x)) AS r"
+    },
+    {
+      "id": "map_literal_nullable_parent",
+      "sql": "SELECT MAP('a',CAST(NULL AS STRUCT<x:INT>),'b',STRUCT(1 AS x)) AS r"
+    },
+    {
+      "id": "map_declarations_mixed_unique",
+      "sql": "SELECT q.id,MAP('z',STRUCT(q.v AS x),'a',STRUCT(q.id AS x)) AS r FROM declarations_mixed q ORDER BY q.id"
+    },
+    {
+      "id": "map_declarations_mixed_duplicate",
+      "sql": "SELECT q.id,MAP('z',STRUCT(q.v AS item,q.id AS item),'a',STRUCT(q.id AS item,q.id + 10 AS item)) AS r FROM declarations_mixed q ORDER BY q.id"
+    },
+    {
+      "id": "map_declarations_empty_unique",
+      "sql": "SELECT q.id,MAP('z',STRUCT(q.v AS x),'a',STRUCT(q.id AS x)) AS r FROM declarations_empty q ORDER BY q.id"
+    },
+    {
+      "id": "map_declarations_empty_duplicate",
+      "sql": "SELECT q.id,MAP('z',STRUCT(q.v AS item,q.id AS item),'a',STRUCT(q.id AS item,q.id + 10 AS item)) AS r FROM declarations_empty q ORDER BY q.id"
+    },
+    {
+      "id": "map_historical_widening_duplicate_mixed",
+      "sql": "SELECT MAP('a',STRUCT(q.left_value AS item,q.right_value AS item),'b',STRUCT(CAST(q.id AS BIGINT) AS item,q.right_value AS item)) AS r FROM duplicate_mixed q"
+    },
+    {
+      "id": "map_historical_widening_duplicate_nulls",
+      "sql": "SELECT MAP('a',STRUCT(q.left_value AS item,q.right_value AS item),'b',STRUCT(CAST(q.id AS BIGINT) AS item,q.right_value AS item)) AS r FROM duplicate_nulls q"
+    },
+    {
+      "id": "map_historical_widening_duplicate_empty",
+      "sql": "SELECT MAP('a',STRUCT(q.left_value AS item,q.right_value AS item),'b',STRUCT(CAST(q.id AS BIGINT) AS item,q.right_value AS item)) AS r FROM duplicate_empty q"
+    }
+  ]
+}
