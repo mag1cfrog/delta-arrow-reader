@@ -6,6 +6,7 @@ use datafusion::arrow::compute::{cast as arrow_cast, filter_record_batch};
 use datafusion::arrow::datatypes::{DataType, Schema};
 use datafusion::arrow::record_batch::{RecordBatch, RecordBatchOptions};
 use datafusion::datasource::memory::MemorySourceConfig;
+use datafusion::functions::datetime::current_date::CurrentDateFunc;
 use datafusion::functions::expr_fn;
 use datafusion::logical_expr::execution_props::ExecutionProps;
 use datafusion::optimizer::optimize_projections::OptimizeProjections;
@@ -384,19 +385,32 @@ impl AnalyzerRule for PrepareSparkExpressions {
     }
 
     fn analyze(&self, plan: LogicalPlan, options: &ConfigOptions) -> Result<LogicalPlan> {
+        let query_start_time = crate::like_errors::spark_query_start_time(options);
         let simplifier = ExprSimplifier::new(
             datafusion_expr::simplify::SimplifyContext::builder()
                 .with_config_options(Arc::new(options.clone()))
+                .with_query_execution_start_time(query_start_time)
                 .build(),
         );
-        // OptimizeRand discards valid seeds before arithmetic and producer preparation.
+        // Resolve clocks before parent evaluation and RAND bounds before seed preparation.
         let plan = plan
             .transform_up_with_subqueries(|node| {
                 let names = datafusion_expr::expr_rewriter::NamePreserver::new(&node);
                 let mut fold = |expr: Expr| {
                     let name = names.save(&expr);
-                    expr.transform_up(|expr| fold_rand_comparison(expr, &simplifier))
-                        .map(|expr| expr.update_data(|expr| name.restore(expr)))
+                    expr.transform_up(|expr| {
+                        // Parent casts and arithmetic cannot execute unresolved query clocks.
+                        if query_start_time.is_some()
+                            && matches!(&expr, Expr::ScalarFunction(function)
+                                if function.func.inner().is::<TimestampNow>()
+                                    || function.func.inner().is::<CurrentDateFunc>())
+                        {
+                            simplifier.simplify_algebraic_once(expr)
+                        } else {
+                            fold_rand_comparison(expr, &simplifier)
+                        }
+                    })
+                    .map(|expr| expr.update_data(|expr| name.restore(expr)))
                 };
                 node.map_expressions(|expr| {
                     if matches!(expr, Expr::GroupingSet(_)) {

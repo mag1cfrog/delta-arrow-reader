@@ -1455,6 +1455,14 @@ fn current_timestamp_microseconds(input: ScalarFunctionInput) -> PlanResult<Expr
     }
 }
 
+fn current_date(input: ScalarFunctionInput) -> PlanResult<Expr> {
+    // The timestamp carries the Spark session zone, which can differ from the host's zone.
+    Ok(cast(
+        current_timestamp_microseconds(input)?,
+        DataType::Date32,
+    ))
+}
+
 fn current_localtimestamp_microseconds(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let expr = current_timestamp_microseconds(input)?;
     Ok(expr_fn::to_local_time(vec![expr]))
@@ -2104,8 +2112,8 @@ pub(super) fn list_built_in_datetime_functions() -> Vec<(&'static str, ScalarFun
             F::custom(|input| interval_arithmetic(input, "days", Operator::Plus)),
         ),
         ("convert_timezone", F::custom(convert_timezone)),
-        ("curdate", F::nullary(expr_fn::current_date)),
-        ("current_date", F::nullary(expr_fn::current_date)),
+        ("curdate", F::custom(current_date)),
+        ("current_date", F::custom(current_date)),
         ("current_time", F::nullary(expr_fn::current_time)),
         (
             "current_timestamp",
