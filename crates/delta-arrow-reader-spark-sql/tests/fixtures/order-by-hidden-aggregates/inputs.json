@@ -1,0 +1,257 @@
+{
+  "issue": "https://github.com/mag1cfrog/delta-arrow-reader/issues/1221",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "ansi_modes": [
+    false,
+    true
+  ],
+  "registered_inputs": [
+    {
+      "name": "inputs",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "f",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "n",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "0",
+          "zzzz",
+          "2"
+        ],
+        [
+          "1",
+          "1",
+          null,
+          null
+        ],
+        [
+          "2",
+          "2",
+          "aa",
+          "-2"
+        ],
+        [
+          "3",
+          "3",
+          "b",
+          "20"
+        ],
+        [
+          "4",
+          "0",
+          "z",
+          "3"
+        ],
+        [
+          "5",
+          "2",
+          null,
+          null
+        ],
+        [
+          "6",
+          null,
+          "",
+          "4"
+        ]
+      ]
+    },
+    {
+      "name": "empty_inputs",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "f",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "n",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": []
+    }
+  ],
+  "cases": [
+    {
+      "id": "group_max_ascending",
+      "sql": "SELECT k FROM inputs GROUP BY k ORDER BY MAX(f), k",
+      "purpose": "Issue query. Hidden string maximum, ascending with default null placement."
+    },
+    {
+      "id": "group_max_descending_nulls_first",
+      "sql": "SELECT k FROM inputs GROUP BY k ORDER BY MAX(f) DESC NULLS FIRST, k DESC NULLS LAST",
+      "purpose": "Hidden string maximum with explicit null placement."
+    },
+    {
+      "id": "group_max_ascending_nulls_last",
+      "sql": "SELECT k FROM inputs GROUP BY k ORDER BY MAX(f) ASC NULLS LAST, k",
+      "purpose": "Hidden string maximum with explicit null placement in ascending order."
+    },
+    {
+      "id": "group_length_max",
+      "sql": "SELECT k FROM inputs GROUP BY k ORDER BY LENGTH(MAX(f)) ASC NULLS LAST, k",
+      "purpose": "Scalar length of a hidden aggregate."
+    },
+    {
+      "id": "group_coalesce_max",
+      "sql": "SELECT k FROM inputs GROUP BY k ORDER BY COALESCE(MAX(f), 'x'), k",
+      "purpose": "Scalar coalesce moves the all-null group into a distinct sort position."
+    },
+    {
+      "id": "group_count",
+      "sql": "SELECT k FROM inputs GROUP BY k ORDER BY COUNT(n) DESC, k NULLS LAST",
+      "purpose": "Hidden count, including the all-null group and tied counts."
+    },
+    {
+      "id": "group_sum",
+      "sql": "SELECT k FROM inputs GROUP BY k ORDER BY SUM(n) ASC NULLS LAST, k",
+      "purpose": "Hidden sum with negative, positive and null group totals."
+    },
+    {
+      "id": "group_multiple_hidden",
+      "sql": "SELECT k FROM inputs GROUP BY k ORDER BY COUNT(n) DESC, SUM(n) DESC NULLS LAST, k",
+      "purpose": "Two independent hidden aggregates ordered in sequence."
+    },
+    {
+      "id": "group_having",
+      "sql": "SELECT k FROM inputs GROUP BY k HAVING SUM(n) >= 4 ORDER BY LENGTH(MAX(f)), k",
+      "purpose": "Grouped HAVING and a different hidden aggregate in the sort key."
+    },
+    {
+      "id": "group_having_shared",
+      "sql": "SELECT k FROM inputs GROUP BY k HAVING COUNT(n) > 0 ORDER BY COUNT(n) DESC, k NULLS LAST",
+      "purpose": "The same hidden aggregate is used in HAVING and ORDER BY."
+    },
+    {
+      "id": "group_selected_key_alias",
+      "sql": "SELECT k AS group_key FROM inputs GROUP BY k ORDER BY MAX(f), group_key",
+      "purpose": "Hidden aggregate paired with a selected group key alias."
+    },
+    {
+      "id": "group_visible_max",
+      "sql": "SELECT k, MAX(f) AS max_f FROM inputs GROUP BY k ORDER BY MAX(f), k",
+      "purpose": "Visible aggregate as a control for the direct issue query."
+    },
+    {
+      "id": "group_visible_alias",
+      "sql": "SELECT k, MAX(f) AS max_f FROM inputs GROUP BY k ORDER BY LENGTH(max_f) ASC NULLS LAST, k",
+      "purpose": "Scalar order over a visible aggregate alias."
+    },
+    {
+      "id": "group_empty",
+      "sql": "SELECT k FROM empty_inputs GROUP BY k ORDER BY MAX(f), k",
+      "purpose": "Empty grouped input keeps the selected result schema."
+    },
+    {
+      "id": "global_max",
+      "sql": "SELECT COUNT(*) AS row_count FROM inputs ORDER BY MAX(f)",
+      "purpose": "Global aggregate with a hidden sort key and a visible BIGINT count."
+    },
+    {
+      "id": "global_having",
+      "sql": "SELECT COUNT(*) AS row_count FROM inputs HAVING COUNT(*) > 0 ORDER BY LENGTH(MAX(f))",
+      "purpose": "Global HAVING with a scalar over a hidden aggregate."
+    },
+    {
+      "id": "global_empty",
+      "sql": "SELECT COUNT(*) AS row_count FROM empty_inputs ORDER BY COALESCE(MAX(f), 'x')",
+      "purpose": "Empty global aggregate still returns a count row."
+    },
+    {
+      "id": "global_empty_having",
+      "sql": "SELECT COUNT(*) AS row_count FROM empty_inputs HAVING COUNT(*) > 0 ORDER BY MAX(f)",
+      "purpose": "HAVING filters the global result on empty input."
+    },
+    {
+      "id": "distinct_visible_alias",
+      "sql": "SELECT DISTINCT k, MAX(f) AS max_f FROM inputs GROUP BY k ORDER BY LENGTH(max_f) DESC NULLS LAST, k NULLS LAST",
+      "purpose": "DISTINCT with a selected aggregate alias in the sort expression."
+    },
+    {
+      "id": "distinct_hidden_group_subquery",
+      "sql": "SELECT DISTINCT k FROM (SELECT k FROM inputs GROUP BY k ORDER BY MAX(f), k LIMIT 3) AS grouped ORDER BY k NULLS LAST",
+      "purpose": "DISTINCT applies to rows chosen by an inner hidden aggregate sort."
+    },
+    {
+      "id": "distinct_group_hidden_probe",
+      "sql": "SELECT DISTINCT k FROM inputs GROUP BY k ORDER BY MAX(f), k",
+      "purpose": "Probe whether Spark resolves a hidden sort aggregate through DISTINCT."
+    },
+    {
+      "id": "distinct_global_hidden_probe",
+      "sql": "SELECT DISTINCT COUNT(*) AS row_count FROM inputs ORDER BY MAX(f)",
+      "purpose": "Probe whether Spark resolves a global hidden sort aggregate through DISTINCT."
+    },
+    {
+      "id": "ungrouped_column_with_aggregate_probe",
+      "sql": "SELECT k FROM inputs ORDER BY MAX(f), k",
+      "purpose": "Probe an ungrouped raw column with an aggregate sort key."
+    },
+    {
+      "id": "group_order_alias_collision",
+      "sql": "SELECT k AS f FROM inputs GROUP BY k ORDER BY MAX(f), f",
+      "purpose": "A selected alias shadows a source column inside a hidden aggregate."
+    },
+    {
+      "id": "group_mixed_alias_and_aggregate",
+      "sql": "SELECT k, MAX(f) AS picked FROM inputs GROUP BY k ORDER BY COALESCE(MIN(f), picked), k",
+      "purpose": "A scalar sort key combines a hidden aggregate with a selected aggregate alias."
+    },
+    {
+      "id": "group_having_key_only",
+      "sql": "SELECT k FROM inputs GROUP BY k HAVING k IS NOT NULL ORDER BY MAX(f), k",
+      "purpose": "Grouped HAVING uses only the grouping key; ORDER BY uses a hidden aggregate."
+    },
+    {
+      "id": "global_having_literal",
+      "sql": "SELECT 1 AS r FROM inputs HAVING TRUE ORDER BY MAX(f)",
+      "purpose": "HAVING establishes global aggregation without a selected aggregate."
+    }
+  ]
+}

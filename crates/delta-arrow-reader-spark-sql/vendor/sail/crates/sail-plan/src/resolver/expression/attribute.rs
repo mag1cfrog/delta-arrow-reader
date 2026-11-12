@@ -76,6 +76,11 @@ impl PlanResolver<'_> {
         {
             return Ok(NamedExpr::new(vec![name], expr));
         }
+        if let Some(output) = state.get_sort_output(schema)
+            && let Some(named) = self.resolve_field_or_nested_field(&name, &output, state)?
+        {
+            return Ok(named);
+        }
         if let Some(named) = self.resolve_field_or_nested_field(&name, schema, state)? {
             return Ok(named);
         }

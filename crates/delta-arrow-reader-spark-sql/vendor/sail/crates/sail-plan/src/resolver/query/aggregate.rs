@@ -275,7 +275,11 @@ impl PlanResolver<'_> {
         if let Some(having) = having.as_ref() {
             aggregate_candidates.push(having.clone());
         }
-        let aggregate_exprs = find_aggregate_exprs(&aggregate_candidates);
+        let mut aggregate_exprs = find_aggregate_exprs(&aggregate_candidates);
+        if group_exprs.is_empty() && aggregate_exprs.is_empty() && having.is_some() {
+            // HAVING alone forms a global aggregate, even over empty input.
+            aggregate_exprs.push(count::count(lit(1_i32)));
+        }
         let mut rand_projection = Vec::new();
         // Normalize only each complete grouping key. Aggregate arguments and
         // operands inside a computed key must continue to see the original values.

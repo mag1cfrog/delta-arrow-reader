@@ -59,15 +59,15 @@ Each record keeps the analyzed, optimized and executed schemas and values read f
 internal rows, collected through the Dataset API. `ConvertToLocalRelation` is excluded.
 
 `formatted_unix_timestamp_nullability.rs` compares names, type families with the session zone,
-nullability, metadata and typed rows at batch sizes 1 and 32. A second test runs the DATE column
-records over Date64 copies of the DATE columns and requires the same results. Two differences
-are retained: the ORDER BY records fail while analyzing with a schema error, where Spark sorts
-the rows, since DAR does not sort by an aggregate it does not select (#1221, 8 records); and DAR
-prunes the unused column where Spark computes it, so with ANSI enabled the sorted, joined,
-aggregated and generated records return the dates' seconds, or the literal's, where the CAST
-fails Spark's query, and the scalar subquery records return them in both modes, where the
-subquery fails (#1233, 24 records). A third test runs the derived format records and those with
-a failing aggregate or window function at four target partitions.
+nullability, metadata and typed rows at batch sizes 1 and 32. For the eight ORDER BY records
+(#1221), it checks row order and executed field names and types. A second test repeats the DATE
+column cases with Date64 inputs. A third test runs the derived format records and cases with a
+failing aggregate or window function at four target partitions.
+
+In the 24 #1233 records, DAR prunes a format column that Spark computes. With ANSI enabled, the
+sorted, joined, aggregated and generated cases return the dates' seconds, or the literal's, when
+the CAST fails in Spark. The scalar subquery cases return the seconds in both modes, where Spark
+reports more than one row.
 
 Recapture from the crate root:
 
