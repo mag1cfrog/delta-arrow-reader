@@ -51,14 +51,13 @@ fn formatted_to_date_references() -> TestResult<Vec<Value>> {
     Ok(records)
 }
 
-/// #1221: ORDER BY an aggregate that is not selected fails while analyzing, which the
-/// format's kept aggregate now reaches; Spark sorts the rows.
+/// #1221 records use a hidden aggregate inside the format argument of a sort key.
 const ORDER_BY_AGGREGATE_RECORDS: [&str; 2] = [
     "order_by_aggregate_to_date_nullable_format",
     "order_by_aggregate_try_to_date_nullable_format",
 ];
 
-fn is_retained(case: &Value) -> bool {
+fn is_order_by_aggregate(case: &Value) -> bool {
     case["id"]
         .as_str()
         .is_some_and(|id| ORDER_BY_AGGREGATE_RECORDS.contains(&id))
@@ -83,8 +82,7 @@ fn ungrouped_condition(case: &Value) -> Option<&'static str> {
         .map(|(_, condition)| *condition)
 }
 
-/// The expectation for a record: Spark's, or for a #1221 or #1204 record DAR's schema error
-/// while analyzing.
+/// Use Spark's expectation, with DAR's analysis error for the #1204 cases.
 fn expectation(case: &Value) -> TestResult<Value> {
     if let Some(condition) = ungrouped_condition(case) {
         if case["expected"]["status"] != "error"
@@ -92,10 +90,6 @@ fn expectation(case: &Value) -> TestResult<Value> {
             || case["spark_error_phase"] != "sql"
         {
             return Err(format!("expected Spark's {condition} while analyzing: {case}").into());
-        }
-    } else if is_retained(case) {
-        if case["expected"]["status"] != "ok" {
-            return Err(format!("expected Spark's sorted rows: {case}").into());
         }
     } else {
         return Ok(case.clone());
@@ -246,7 +240,9 @@ async fn observe(session: &SessionContext, case: &Value) -> Value {
                 );
             }
         }
-        rows.sort_by_key(|row| json!(row).to_string());
+        if !is_order_by_aggregate(case) {
+            rows.sort_by_key(|row| json!(row).to_string());
+        }
         Ok(rows)
     }
     .await;
@@ -288,11 +284,29 @@ fn expected_error_texts(case: &Value) -> Vec<String> {
 /// at Spark's stage with DAR's message for it.
 fn differing_parts(case: &Value, observation: &Value) -> TestResult<Vec<&'static str>> {
     let mut differing = Vec::new();
-    for stage in ["analyzed", "optimized", "executed"] {
-        if let Some(expected) = case["schema_stages"].get(stage)
-            && observation[stage] != spark_fields(expected)?
-        {
-            differing.push(stage);
+    if is_order_by_aggregate(case) {
+        let expected = spark_fields(&case["schema_stages"]["executed"])?;
+        let same_fields = observation["executed"]
+            .as_array()
+            .zip(expected.as_array())
+            .is_some_and(|(actual, expected)| {
+                actual
+                    .iter()
+                    .map(|field| (&field["name"], &field["type"]))
+                    .eq(expected
+                        .iter()
+                        .map(|field| (&field["name"], &field["type"])))
+            });
+        if !same_fields {
+            differing.push("executed names and types");
+        }
+    } else {
+        for stage in ["analyzed", "optimized", "executed"] {
+            if let Some(expected) = case["schema_stages"].get(stage)
+                && observation[stage] != spark_fields(expected)?
+            {
+                differing.push(stage);
+            }
         }
     }
     let outcome_matches = match case["expected"]["status"].as_str() {
@@ -434,7 +448,13 @@ fn assert_no_differences(differences: &[Value]) {
 async fn formatted_to_date_nullability_matches_spark() -> TestResult {
     let records = formatted_to_date_references()?;
     let cases = records[1..].iter().collect::<Vec<_>>();
-    assert_eq!(cases.iter().filter(|case| is_retained(case)).count(), 8);
+    assert_eq!(
+        cases
+            .iter()
+            .filter(|case| is_order_by_aggregate(case))
+            .count(),
+        8
+    );
     assert_eq!(
         cases
             .iter()

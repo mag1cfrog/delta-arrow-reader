@@ -46,13 +46,11 @@ Each record keeps the analyzed, optimized and executed schemas and values read f
 internal rows, collected through the Dataset API. `ConvertToLocalRelation` is excluded.
 
 `formatted_to_date_nullability.rs` compares names, type families with the session zone,
-nullability, metadata and typed rows at batch sizes 1 and 32. A second test runs the DATE column
-records over Date64 copies of the DATE columns and requires the same results. The UNIX_TIMESTAMP
-records match since #1203. Two differences are retained: the ORDER BY records fail while
-analyzing with a schema error, where Spark sorts the rows, since DAR does not sort by an
-aggregate it does not select (#1221, 8 records); and the ungrouped records fail while analyzing
-with a schema error, where Spark reports MISSING_GROUP_BY or MISSING_AGGREGATION (#1204, 24
-records).
+nullability, metadata and typed rows at batch sizes 1 and 32. For the eight ORDER BY records
+(#1221), it checks row order and executed field names and types. A second test repeats the DATE
+column cases with Date64 inputs. The UNIX_TIMESTAMP records match since #1203. In the 24 #1204
+records, DAR reports a schema error during analysis, where Spark reports `MISSING_GROUP_BY` or
+`MISSING_AGGREGATION`.
 
 Recapture from the crate root:
 

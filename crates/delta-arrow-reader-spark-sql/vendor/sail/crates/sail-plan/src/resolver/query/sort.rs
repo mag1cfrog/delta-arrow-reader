@@ -2,9 +2,10 @@
 use std::sync::Arc;
 
 use async_recursion::async_recursion;
-use datafusion_common::Column;
 use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode, TreeNodeRecursion};
+use datafusion_common::{Column, DFSchema};
 use datafusion_expr::expr::{Alias, Sort};
+use datafusion_expr::utils::{exprlist_to_fields, find_aggregate_exprs};
 use datafusion_expr::{
     Aggregate, Expr, ExprSchemable, Extension, LogicalPlan, LogicalPlanBuilder, Projection, Window,
 };
@@ -18,7 +19,7 @@ use crate::function::common::{
 };
 use crate::function::sort_keys::spark_sort_key;
 use crate::resolver::PlanResolver;
-use crate::resolver::state::PlanResolverState;
+use crate::resolver::state::{AggregateState, PlanResolverState};
 
 impl PlanResolver<'_> {
     pub(super) async fn resolve_query_sort(
@@ -28,13 +29,13 @@ impl PlanResolver<'_> {
         is_global: bool,
         state: &mut PlanResolverState,
     ) -> PlanResult<LogicalPlan> {
-        let input = self
+        let mut input = self
             .resolve_query_plan_with_hidden_fields(input, state)
             .await?;
         let sorts = self
             .resolve_query_sort_orders_by_plan(&input, &order, state)
             .await?;
-        let sorts = Self::rebase_query_sort_orders(sorts, &input)?;
+        let sorts = Self::rebase_query_sort_orders(sorts, &mut input)?;
         let mut plan = LogicalPlanBuilder::from(input).sort(sorts)?.build()?;
         // The builder adds the sort, with any columns its keys need, and an optional projection
         // above it, so each key's type is known against the sort's input.
@@ -111,17 +112,8 @@ impl PlanResolver<'_> {
             .data()?)
     }
 
-    /// Rebase sort expressions using aggregation expressions when the aggregate plan
-    /// is inside a projection plan.
-    /// Usually the [LogicalPlanBuilder] handles rebase, but this particular case is not handled yet.
-    /// We do not do so recursively to make sure this workaround is only applied to a particular pattern.
-    ///
-    /// This workaround is needed for queries where the aggregation expression is aliased.
-    /// Here is an example.
-    /// ```sql
-    /// SELECT a, sum(b) AS s FROM VALUES (1, 2) AS t(a, b) GROUP BY a ORDER BY sum(b)
-    /// ```
-    fn rebase_query_sort_orders(sorts: Vec<Sort>, plan: &LogicalPlan) -> PlanResult<Vec<Sort>> {
+    /// Add aggregates used only by ORDER BY, then rebase the sort to the available outputs.
+    fn rebase_query_sort_orders(sorts: Vec<Sort>, plan: &mut LogicalPlan) -> PlanResult<Vec<Sort>> {
         let LogicalPlan::Projection(Projection { input, expr, .. }) = plan else {
             return Ok(sorts);
         };
@@ -144,11 +136,20 @@ impl PlanResolver<'_> {
             .collect::<PlanResult<Vec<_>>>()?;
 
         if let Some(aggregate) = aggregate {
+            let missing = find_aggregate_exprs(sorts.iter().map(|sort| &sort.expr))
+                .into_iter()
+                .filter(|expr| !aggregate.aggr_expr.contains(expr))
+                .collect::<Vec<_>>();
+            let mut aggregate = aggregate.clone();
+            if !missing.is_empty() {
+                aggregate = Self::append_sort_aggregates(aggregate, missing)?;
+                *input = Arc::new(Self::replace_sort_aggregate(input, &aggregate)?);
+            }
             let base = Self::distinct_grouping_expressions_from_exprs(&aggregate.group_expr)
                 .into_iter()
                 .chain(aggregate.aggr_expr.iter().cloned())
                 .collect::<Vec<_>>();
-            let plan = LogicalPlan::Aggregate(aggregate.clone());
+            let plan = LogicalPlan::Aggregate(aggregate);
             sorts
                 .into_iter()
                 .map(|x| Self::rebase_sort(x, &base, &plan))
@@ -156,6 +157,49 @@ impl PlanResolver<'_> {
         } else {
             Ok(sorts)
         }
+    }
+
+    fn append_sort_aggregates(
+        mut aggregate: Aggregate,
+        missing: Vec<Expr>,
+    ) -> PlanResult<Aggregate> {
+        let added_fields = exprlist_to_fields(&missing, &aggregate.input)?;
+        // Keep the existing grouping key declarations and private grouping ID metadata.
+        let fields = aggregate
+            .schema
+            .iter()
+            .map(|(qualifier, field)| (qualifier.cloned(), Arc::clone(field)))
+            .chain(added_fields)
+            .collect();
+        let schema = Arc::new(DFSchema::new_with_metadata(
+            fields,
+            aggregate.schema.metadata().clone(),
+        )?);
+        aggregate.aggr_expr.extend(missing);
+        Ok(Aggregate::try_new_with_schema(
+            aggregate.input,
+            aggregate.group_expr,
+            aggregate.aggr_expr,
+            schema,
+        )?)
+    }
+
+    fn replace_sort_aggregate(
+        plan: &LogicalPlan,
+        aggregate: &Aggregate,
+    ) -> PlanResult<LogicalPlan> {
+        let input = match plan {
+            LogicalPlan::Aggregate(_) => return Ok(LogicalPlan::Aggregate(aggregate.clone())),
+            LogicalPlan::Window(window) => &window.input,
+            LogicalPlan::Filter(filter) => &filter.input,
+            _ => {
+                return Err(PlanError::internal(
+                    "expected a sort input with an aggregate",
+                ));
+            }
+        };
+        let input = Self::replace_sort_aggregate(input, aggregate)?;
+        Ok(plan.with_new_exprs(plan.expressions(), vec![input])?)
     }
 
     fn input_aggregate(plan: &LogicalPlan) -> Option<&Aggregate> {
@@ -263,6 +307,10 @@ impl PlanResolver<'_> {
                 if let Some(expr) = find(&e) {
                     return Ok(Transformed::yes(expr));
                 }
+                // Aggregate arguments still use the input schema.
+                if matches!(e, Expr::AggregateFunction(_)) {
+                    return Ok(Transformed::new(e, false, TreeNodeRecursion::Jump));
+                }
                 Ok(Transformed::no(e))
             })
             .data()?;
@@ -297,7 +345,7 @@ impl PlanResolver<'_> {
         let mut results: Vec<Sort> = Vec::with_capacity(sorts.len());
         for sort in sorts {
             let expr = self
-                .resolve_query_sort_order_by_plan(plan, sort, state)
+                .resolve_query_sort_order_by_plan(plan, sort, true, state)
                 .await?;
             results.push(expr);
         }
@@ -313,6 +361,7 @@ impl PlanResolver<'_> {
         &self,
         plan: &LogicalPlan,
         sort: &spec::SortOrder,
+        allow_mixed_aggregate_inputs: bool,
         state: &mut PlanResolverState,
     ) -> PlanResult<Sort> {
         // The ordering type is checked once the key is resolved, so that a calendar interval
@@ -328,10 +377,35 @@ impl PlanResolver<'_> {
         match sort_expr {
             Ok(sort_expr) => Ok(sort_expr),
             Err(_) => {
+                if allow_mixed_aggregate_inputs
+                    && !matches!(sort.child.as_ref(), spec::Expr::Literal(_))
+                    && let LogicalPlan::Projection(projection) = plan
+                    && let Some(aggregate) = Self::input_aggregate(&projection.input)
+                {
+                    let mut merged = projection.schema.as_ref().clone();
+                    merged.merge(aggregate.input.schema());
+                    let merged = Arc::new(merged);
+                    let mut scope = state.enter_aggregate_scope(AggregateState::Sort {
+                        output: Arc::clone(&projection.schema),
+                        merged: Arc::clone(&merged),
+                    });
+                    if let Ok(resolved) = self
+                        .resolve_sort_order_allowing_calendar_intervals(
+                            sort.clone(),
+                            false,
+                            &merged,
+                            scope.state(),
+                        )
+                        .await
+                        && !find_aggregate_exprs([&resolved.expr]).is_empty()
+                    {
+                        return Ok(resolved);
+                    }
+                }
                 let mut sorts = Vec::with_capacity(plan.inputs().len());
                 for input_plan in plan.inputs() {
                     let sort_expr = self
-                        .resolve_query_sort_order_by_plan(input_plan, sort, state)
+                        .resolve_query_sort_order_by_plan(input_plan, sort, false, state)
                         .await?;
                     sorts.push(sort_expr);
                 }
