@@ -18,6 +18,9 @@ use spark_results::{TestResult, compare_exact_spark_query_stages};
 const INPUTS: &str = include_str!("fixtures/correlated-scalar-execution/inputs.json");
 const RESULTS: &str = include_str!("fixtures/correlated-scalar-execution/spark-results.jsonl");
 const FAILURES: &str = include_str!("fixtures/correlated-scalar-execution/spark-failures.jsonl");
+const REVIEW_INPUTS: &str = include_str!("fixtures/correlated-scalar-execution/review-inputs.json");
+const REVIEW_RESULTS: &str = include_str!("fixtures/correlated-scalar-execution/review-results.jsonl");
+const REVIEW_FAILURES: &str = include_str!("fixtures/correlated-scalar-execution/review-failures.jsonl");
 const ROUNDING: &str =
     include_str!("fixtures/correlated-scalar-execution/frozen-rounding-spark.jsonl");
 const SINGLE_ROW: &str = include_str!("fixtures/single-row-correlated-spark.jsonl");
@@ -33,9 +36,14 @@ fn records(source: &str) -> TestResult<Vec<Value>> {
         .collect::<Result<_, _>>()?)
 }
 
-fn fresh_references(manifest: &Value) -> TestResult<Vec<Value>> {
-    let mut references = records(RESULTS)?;
-    references.extend(records(FAILURES)?);
+fn fresh_references(
+    manifest: &Value,
+    results: &str,
+    failures: &str,
+    count: usize,
+) -> TestResult<Vec<Value>> {
+    let mut references = records(results)?;
+    references.extend(records(failures)?);
     let mut seen = BTreeSet::new();
     let definitions = manifest["cases"].as_array().ok_or("missing fresh cases")?;
     for case in &references {
@@ -67,7 +75,7 @@ fn fresh_references(manifest: &Value) -> TestResult<Vec<Value>> {
             return Err(format!("invalid fresh case {id} ANSI={ansi}").into());
         }
     }
-    if definitions.len() != 9 || seen.len() != definitions.len() * 2 {
+    if definitions.len() != count || seen.len() != definitions.len() * 2 {
         return Err("incomplete fresh Spark observations".into());
     }
     Ok(references)
@@ -146,7 +154,10 @@ async fn observe(
 #[tokio::test]
 async fn correlated_scalar_execution_matches_spark() -> TestResult {
     let manifest: Value = serde_json::from_str(INPUTS)?;
-    let fresh = fresh_references(&manifest)?;
+    let fresh = fresh_references(&manifest, RESULTS, FAILURES, 9)?;
+    let review_manifest: Value = serde_json::from_str(REVIEW_INPUTS)?;
+    assert_eq!(manifest["registered_inputs"], review_manifest["registered_inputs"]);
+    let review = fresh_references(&review_manifest, REVIEW_RESULTS, REVIEW_FAILURES, 9)?;
     let rounding = records(ROUNDING)?;
     let single_row = records(SINGLE_ROW)?;
     let historical_stages = records(SINGLE_ROW_STAGES)?;
@@ -197,13 +208,14 @@ async fn correlated_scalar_execution_matches_spark() -> TestResult {
         spark_inputs::register_recorded_inputs(&session, &single_row[0], batch)?;
         for (corpus, cases) in [
             ("fresh", fresh.iter().collect::<Vec<_>>()),
+            ("review", review.iter().collect()),
             ("frozen_rounding", rounding.iter().collect()),
             ("historical_single_row", historical_controls.clone()),
             ("historical_inner_relation", historical_correlated.clone()),
         ] {
             for case in cases {
                 let (expected, schema) = match corpus {
-                    "fresh" => (
+                    "fresh" | "review" => (
                         if case["status"] == "ok" {
                             json!({"rows":case["rows"]})
                         } else {

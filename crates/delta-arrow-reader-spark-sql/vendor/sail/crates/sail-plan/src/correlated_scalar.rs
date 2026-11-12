@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use datafusion::arrow::datatypes::DataType;
 use datafusion::functions_aggregate::expr_fn::{count, first_value};
 use datafusion::optimizer::AnalyzerRule;
 use datafusion::optimizer::decorrelate::PullUpCorrelatedExpr;
@@ -8,17 +9,21 @@ use datafusion_common::config::ConfigOptions;
 use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode};
 use datafusion_common::{Column, Result, ScalarValue};
 use datafusion_expr::expr_rewriter::{NamePreserver, replace_col, strip_outer_reference};
-use datafusion_expr::logical_plan::{Extension, JoinType, Projection, Subquery};
-use datafusion_expr::utils::split_conjunction;
+use datafusion_expr::logical_plan::{Aggregate, Extension, JoinType, Limit, Projection, Sort, Subquery};
+use datafusion_expr::utils::{conjunction, split_conjunction};
 use datafusion_expr::{
-    Expr, LogicalPlan, LogicalPlanBuilder, Operator, ScalarUDF, cast, lit, when,
+    Expr, ExprFunctionExt, LogicalPlan, LogicalPlanBuilder, Operator, ScalarUDF, cast, lit, when,
 };
 use sail_function::scalar::misc::raise_error::RaiseError;
 use sail_logical_plan::monotonic_id::{MonotonicIdNode, MonotonicIdPurpose};
 
-use crate::expression_errors::{
-    SparkSqlExpressionSemantics, lift_correlated_scalar_aggregate_inputs,
-};
+use crate::expression_errors::SparkSqlExpressionSemantics;
+
+mod aggregate;
+mod limit;
+
+use aggregate::{aggregate_inner_rows, can_lower_aggregate, lift_correlated_scalar_aggregate_inputs};
+use limit::{can_lower_limit, limit_inner_rows};
 
 /// Lower Spark scalar queries over real inner rows before DataFusion validates them.
 #[derive(Debug)]
@@ -97,6 +102,48 @@ fn lower_expression(
     })
 }
 
+fn scalar_value_input(mut value: Expr, mut input: &LogicalPlan) -> Result<(Expr, &LogicalPlan)> {
+    // Follow one selected column through leading projections and aliases.
+    // The first computed expression still runs exactly once for a scalar row.
+    while let Expr::Column(column) = &value {
+        match input {
+            LogicalPlan::Projection(project) => {
+                let index = project.schema.index_of_column(column)?;
+                value = project.expr[index].clone().unalias();
+                input = &project.input;
+            }
+            LogicalPlan::SubqueryAlias(alias) => {
+                let index = alias.schema.index_of_column(column)?;
+                value = Expr::Column(alias.input.schema().qualified_field(index).into());
+                input = &alias.input;
+            }
+            _ => break,
+        }
+    }
+    Ok((value, input))
+}
+
+enum InnerRows<'a> {
+    Plain,
+    Aggregate(&'a Aggregate),
+    Limit(&'a Limit, Option<&'a Sort>),
+}
+
+fn split_inner_rows(input: &LogicalPlan) -> Result<(InnerRows<'_>, &LogicalPlan)> {
+    Ok(match input {
+        LogicalPlan::Aggregate(aggregate) if can_lower_aggregate(aggregate) => {
+            (InnerRows::Aggregate(aggregate), &aggregate.input)
+        }
+        LogicalPlan::Limit(limit) if can_lower_limit(limit)? => match limit.input.as_ref() {
+            LogicalPlan::Sort(sort) => {
+                (InnerRows::Limit(limit, Some(sort)), &sort.input)
+            }
+            input => (InnerRows::Limit(limit, None), input),
+        },
+        _ => (InnerRows::Plain, input),
+    })
+}
+
 fn lower_scalar(
     subquery: &Subquery,
     outer: &Arc<LogicalPlan>,
@@ -113,18 +160,27 @@ fn lower_scalar(
     {
         return Ok(None);
     }
-    let LogicalPlan::Projection(project) = subquery.subquery.as_ref() else {
+    let schema = subquery.subquery.schema();
+    if schema.fields().len() != 1 {
         return Ok(None);
+    }
+    let output = Expr::Column(schema.qualified_field(0).into());
+    let (value, input) = scalar_value_input(output, &subquery.subquery)?;
+    let (rows, input) = split_inner_rows(input)?;
+    let scalar_input = match rows {
+        InnerRows::Aggregate(aggregate) => Arc::clone(&aggregate.schema),
+        _ => Arc::clone(input.schema()),
     };
-    let [value] = project.expr.as_slice() else {
-        return Ok(None);
-    };
-    if project.input.exists(|node| {
+    if input.exists(|node| {
         Ok(match node {
             LogicalPlan::Projection(_)
             | LogicalPlan::SubqueryAlias(_)
             | LogicalPlan::TableScan(_)
             | LogicalPlan::Values(_) => false,
+            // A self-contained inner join can produce the rows to be counted.
+            LogicalPlan::Join(join) => {
+                join.join_type != JoinType::Inner || !node.all_out_ref_exprs().is_empty()
+            }
             LogicalPlan::EmptyRelation(empty) => empty.produce_one_row,
             // DataFusion's pull-up discards self-equalities, even on NULL.
             LogicalPlan::Filter(filter) => {
@@ -142,46 +198,19 @@ fn lower_scalar(
         return Ok(None);
     }
 
-    // Count matches before evaluating the result projection, which can depend
+    // Count matching rows before evaluating the result projection, which can depend
     // on the outer row and must only run when the subquery returns a row.
-    let value = strip_outer_reference(value.clone().unalias());
+    let value = strip_outer_reference(value);
     let mut pull_up = PullUpCorrelatedExpr::new();
-    let inner = project
-        .input
-        .as_ref()
-        .clone()
-        .rewrite(&mut pull_up)
-        .data()?;
+    let inner = input.clone().rewrite(&mut pull_up).data()?;
     if !pull_up.can_pull_up {
         return Ok(None);
     }
 
     let row_id = Column::new_unqualified(aliases.next("__spark_scalar_row"));
-    let matched = Column::new_unqualified(aliases.next("__spark_scalar_match"));
-    let matches = Column::new_unqualified(aliases.next("__spark_scalar_count"));
-    let mut referenced = value.column_refs().into_iter().collect::<Vec<_>>();
-    referenced.sort_unstable();
+    let match_marker = Column::new_unqualified(aliases.next("__spark_scalar_match"));
+    let outer_columns = outer.schema().columns();
     let inner_columns = inner.schema().columns();
-    let mut renamed = Vec::new();
-    let mut aggregates = Vec::new();
-    for column in outer.schema().columns() {
-        let expr = first_value(Expr::Column(column.clone()), vec![]);
-        aggregates.push(expr.alias_qualified(column.relation, column.name));
-    }
-    for column in referenced {
-        if let Ok(index) = inner.schema().index_of_column(column) {
-            let name = aliases.next("__spark_scalar_value");
-            let expr = first_value(Expr::Column(inner_columns[index].clone()), vec![]);
-            aggregates.push(expr.alias(&name));
-            renamed.push(((*column).clone(), Column::new_unqualified(name)));
-        } else if !outer.schema().has_column(column) {
-            return Ok(None);
-        }
-    }
-    let replacements = renamed.iter().map(|(old, new)| (old, new)).collect();
-    let value = replace_col(value, &replacements)?;
-    aggregates.push(count(Expr::Column(matched.clone())).alias(&matches.name));
-
     let left = LogicalPlan::Extension(Extension {
         node: Arc::new(MonotonicIdNode::try_new(
             Arc::clone(outer),
@@ -194,25 +223,67 @@ fn lower_scalar(
             inner_columns
                 .into_iter()
                 .map(Expr::Column)
-                .chain([lit(true).alias(&matched.name)]),
+                .chain([lit(true).alias(&match_marker.name)]),
         )?
         .build()?;
-    let grouped = LogicalPlanBuilder::from(left)
-        .join_on(right, JoinType::Left, pull_up.join_filters)?
+    // A scalar can reference the outer row only in its result projection.
+    let join_filter = conjunction(pull_up.join_filters).unwrap_or_else(|| lit(true));
+    let joined = LogicalPlanBuilder::from(left)
+        .join_on(right, JoinType::Left, [join_filter])?
+        .build()?;
+    let rows = match rows {
+        InnerRows::Plain => joined,
+        InnerRows::Aggregate(aggregate) => {
+            aggregate_inner_rows(joined, aggregate, &row_id, &match_marker, &outer_columns)?
+        }
+        InnerRows::Limit(limit, sort) => limit_inner_rows(joined, limit, sort, &row_id, &match_marker)?,
+    };
+
+    let match_count = Column::new_unqualified(aliases.next("__spark_scalar_count"));
+    let mut referenced = value.column_refs().into_iter().collect::<Vec<_>>();
+    referenced.sort_unstable();
+    let mut renamed = Vec::new();
+    let mut aggregates = Vec::new();
+    for column in outer_columns {
+        let expr = first_value(Expr::Column(column.clone()), vec![]);
+        aggregates.push(expr.alias_qualified(column.relation, column.name));
+    }
+    for column in referenced {
+        if let Ok(index) = scalar_input.index_of_column(column) {
+            let inner_column = scalar_input.qualified_field(index).into();
+            let name = aliases.next("__spark_scalar_value");
+            let expr = first_value(Expr::Column(inner_column), vec![])
+                .filter(Expr::Column(match_marker.clone()).is_not_null())
+                .build()?;
+            aggregates.push(expr.alias(&name));
+            renamed.push(((*column).clone(), Column::new_unqualified(name)));
+        } else if !outer.schema().has_column(column) {
+            return Ok(None);
+        }
+    }
+    let replacements = renamed.iter().map(|(old, new)| (old, new)).collect();
+    let value = replace_col(value, &replacements)?;
+    aggregates.push(count(Expr::Column(match_marker.clone())).alias(&match_count.name));
+
+    let grouped = LogicalPlanBuilder::from(rows)
         .aggregate(vec![Expr::Column(row_id)], aggregates)?
+        // Spark checks scalar cardinality before evaluating its consumer,
+        // including when a CASE branch does not use the result.
+        .filter(
+            when(
+                Expr::Column(match_count.clone()).gt(lit(1i64)),
+                cast(
+                    ScalarUDF::from(RaiseError::new())
+                        .call(vec![lit("Scalar subquery returned more than one row")]),
+                    DataType::Boolean,
+                ),
+            )
+            .otherwise(lit(true))?,
+        )?
         .build()?;
 
-    // The marker distinguishes an unmatched row from a real NULL. Checking
-    // cardinality at the original use site preserves conditional evaluation.
-    let data_type = subquery.subquery.schema().field(0).data_type();
-    let matches = Expr::Column(matches);
-    let too_many = ScalarUDF::from(RaiseError::new())
-        .call(vec![lit("Scalar subquery returned more than one row")]);
-    let value = when(
-        matches.clone().gt(lit(1i64)),
-        cast(too_many, data_type.clone()),
-    )
-    .when(matches.eq(lit(1i64)), value)
-    .otherwise(lit(ScalarValue::try_new_null(data_type)?))?;
+    let data_type = schema.field(0).data_type();
+    let value = when(Expr::Column(match_count).eq(lit(1i64)), value)
+        .otherwise(lit(ScalarValue::try_new_null(data_type)?))?;
     Ok(Some((grouped, value)))
 }

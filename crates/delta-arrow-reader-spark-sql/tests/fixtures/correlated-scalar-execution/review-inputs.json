@@ -1,0 +1,225 @@
+{
+  "issue": "https://github.com/mag1cfrog/delta-arrow-reader/issues/140",
+  "baseline": {
+    "commit": "8eeed277d23d53f8b8ecdf2265370d29b2c30746",
+    "tree": "87e796b127a90cd356bae1335125c9750e24f1f8"
+  },
+  "historical_commit": "c426ef86e4da43eb57f270f1a4945c9dcc6559fe",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "ansi_modes": [
+    false,
+    true
+  ],
+  "registered_inputs": [
+    {
+      "name": "ordinary",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "1",
+          "10"
+        ],
+        [
+          "1",
+          "20"
+        ],
+        [
+          "2",
+          "30"
+        ]
+      ]
+    },
+    {
+      "name": "outer_requests",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "min_v",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "1",
+          null,
+          "0"
+        ],
+        [
+          "2",
+          "99",
+          "0"
+        ],
+        [
+          "3",
+          "1",
+          "20"
+        ],
+        [
+          "4",
+          "2",
+          "0"
+        ],
+        [
+          "5",
+          "1",
+          "20"
+        ]
+      ]
+    },
+    {
+      "name": "empty_outer_requests",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "min_v",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": []
+    },
+    {
+      "name": "multiple_outer_requests",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "min_v",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "1",
+          "2",
+          "0"
+        ],
+        [
+          "2",
+          "1",
+          "0"
+        ]
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "aggregate_argument",
+      "sql": "SELECT SUM((SELECT MAX(u.v) FROM ordinary u WHERE u.v=t.v) + 1) AS total FROM ordinary t",
+      "order": "ordered",
+      "expected_condition": null
+    },
+    {
+      "id": "inequality_max",
+      "sql": "SELECT o.k,(SELECT MAX(i.v) FROM ordinary i WHERE i.k<=o.k) AS r FROM VALUES (0),(1),(2) o(k) ORDER BY o.k",
+      "order": "ordered",
+      "expected_condition": null
+    },
+    {
+      "id": "ordered_limit",
+      "sql": "SELECT o.k,(SELECT i.v FROM ordinary i WHERE i.k=o.k ORDER BY i.v DESC LIMIT 1) AS r FROM VALUES (0),(1),(2) o(k) ORDER BY o.k",
+      "order": "ordered",
+      "expected_condition": null
+    },
+    {
+      "id": "conditional_cardinality",
+      "sql": "SELECT t.v, CASE WHEN t.k=2 THEN (SELECT i.v FROM ordinary i WHERE i.k=t.k) ELSE 0 END AS r FROM ordinary t ORDER BY t.v",
+      "order": "ordered",
+      "expected_condition": "SCALAR_SUBQUERY_TOO_MANY_ROWS"
+    },
+    {
+      "id": "nested_project",
+      "sql": "SELECT t.k,(SELECT q.v FROM (SELECT i.v + t.k AS v FROM ordinary i WHERE i.k=t.k AND i.v=20) q) AS r FROM VALUES (1),(2) t(k) ORDER BY t.k",
+      "order": "ordered",
+      "expected_condition": null
+    },
+    {
+      "id": "inequality_count",
+      "sql": "SELECT o.k,(SELECT COUNT(*) FROM ordinary i WHERE i.k<=o.k) AS r FROM VALUES (0),(1),(2) o(k) ORDER BY o.k",
+      "order": "ordered",
+      "expected_condition": null
+    },
+    {
+      "id": "joined_inner",
+      "sql": "SELECT o.k,(SELECT j.v FROM ordinary i JOIN ordinary j ON i.v=j.v WHERE i.k=o.k AND i.v>=20) AS r FROM VALUES (0),(1),(2) o(k) ORDER BY o.k",
+      "order": "ordered",
+      "expected_condition": null
+    },
+    {
+      "id": "grouped_inner",
+      "sql": "SELECT o.k,(SELECT MAX(i.v) FROM ordinary i WHERE i.k<=o.k GROUP BY i.k) AS r FROM VALUES (0),(1) o(k) ORDER BY o.k",
+      "order": "ordered",
+      "expected_condition": null
+    },
+    {
+      "id": "grouped_cardinality",
+      "sql": "SELECT o.k,(SELECT MAX(i.v) FROM ordinary i WHERE i.k<=o.k GROUP BY i.k) AS r FROM VALUES (0),(1),(2) o(k) ORDER BY o.k",
+      "order": "ordered",
+      "expected_condition": "SCALAR_SUBQUERY_TOO_MANY_ROWS"
+    }
+  ]
+}
