@@ -375,6 +375,22 @@
     {
       "id": "map_historical_widening_duplicate_empty",
       "sql": "SELECT MAP('a',STRUCT(q.left_value AS item,q.right_value AS item),'b',STRUCT(CAST(q.id AS BIGINT) AS item,q.right_value AS item)) AS r FROM duplicate_empty q"
+    },
+    {
+      "id": "array_nested_map_declarations",
+      "sql": "SELECT ARRAY(STRUCT(MAP('k', STRUCT(CAST(NULL AS INT) AS x)) AS m), STRUCT(MAP('k', STRUCT(1 AS x)) AS m)) AS r"
+    },
+    {
+      "id": "map_nested_map_declarations",
+      "sql": "SELECT MAP('a', STRUCT(MAP('k', STRUCT(CAST(NULL AS INT) AS x)) AS m), 'b', STRUCT(MAP('k', STRUCT(1 AS x)) AS m)) AS r"
+    },
+    {
+      "id": "array_folded_struct_declaration",
+      "sql": "SELECT id, ARRAY(STRUCT(v AS x, id AS y), STRUCT(CASE WHEN 1 = 1 THEN 1 END AS x, id AS y)) AS r FROM VALUES (CAST(NULL AS INT), 2), (3, 4) AS t(v, id) ORDER BY id"
+    },
+    {
+      "id": "map_folded_struct_declaration",
+      "sql": "SELECT id, MAP('a', STRUCT(v AS x, id AS y), 'b', STRUCT(CASE WHEN 1 = 1 THEN 1 END AS x, id AS y)) AS r FROM VALUES (CAST(NULL AS INT), 2), (3, 4) AS t(v, id) ORDER BY id"
     }
   ]
 }

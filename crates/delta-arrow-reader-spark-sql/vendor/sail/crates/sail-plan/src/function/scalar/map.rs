@@ -12,6 +12,7 @@ use sail_function::scalar::map::str_to_map::StrToMap;
 use crate::config::MapKeyDedupPolicy;
 use crate::error::{PlanError, PlanResult};
 use crate::function::common::{ScalarFunction, ScalarFunctionInput};
+use crate::function::result_coercion::align_struct_constructor_arguments;
 
 fn map(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     use crate::function::common::ScalarFunctionBuilder as F;
@@ -34,8 +35,14 @@ fn map(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         Ok::<_, PlanError>(nullable || value.nullable(schema.as_ref())?)
     })?;
 
-    let keys = expr_fn::make_array(keys);
-    let values = expr_fn::make_array(values);
+    let keys = expr_fn::make_array(align_struct_constructor_arguments(
+        keys,
+        &input.function_context,
+    )?);
+    let values = expr_fn::make_array(align_struct_constructor_arguments(
+        values,
+        &input.function_context,
+    )?);
     let last_value_wins =
         input.function_context.plan_config.map_key_dedup_policy == MapKeyDedupPolicy::LastWin;
     F::udf(

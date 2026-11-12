@@ -46,8 +46,8 @@ use crate::function::common::{
 use crate::function::float_keys::normalize_spark_float_array_comparison;
 use crate::function::numeric_coercion::common_numeric_type;
 use crate::function::result_coercion::{
-    cast_nested_value, common_array_element_type, nested_result_cast_input,
-    same_positional_logical_type,
+    align_struct_constructor_arguments, cast_nested_value, common_array_element_type,
+    nested_result_cast_input, same_positional_logical_type,
 };
 use crate::function::temporal_coercion::{
     cast_local_timestamp_expr_to_ltz, only_dates_and_timestamp_ntz,
@@ -80,7 +80,7 @@ fn array(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
             })
             .collect()
     } else {
-        input.arguments
+        align_struct_constructor_arguments(input.arguments, &input.function_context)?
     };
     Ok(ScalarUDF::from(SparkArray::new()).call(arguments))
 }

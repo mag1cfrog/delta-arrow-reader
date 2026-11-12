@@ -48,7 +48,9 @@ fn result_types(schema: &Value) -> TestResult<Vec<Value>> {
 }
 
 fn comparable_rows(rows: &Value, schema: &Value, ordered: bool) -> TestResult<Vec<Value>> {
-    let fields = schema["fields"].as_array().ok_or("missing executed fields")?;
+    let fields = schema["fields"]
+        .as_array()
+        .ok_or("missing executed fields")?;
     let mut rows = rows.as_array().ok_or("missing result rows")?.clone();
     for row in &mut rows {
         let values = row.as_array_mut().ok_or("expected positional row")?;
@@ -134,7 +136,7 @@ async fn array_struct_declarations_match_spark() -> TestResult {
         .lines()
         .map(serde_json::from_str::<Value>)
         .collect::<Result<Vec<_>, _>>()?;
-    assert_eq!(references.len(), 38);
+    assert_eq!(references.len(), 46);
     let mut identities = BTreeSet::new();
     for case in &references {
         let id = case["id"].as_str().ok_or("missing case ID")?;

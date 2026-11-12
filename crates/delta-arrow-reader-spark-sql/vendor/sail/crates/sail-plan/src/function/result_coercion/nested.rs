@@ -19,7 +19,9 @@
 
 use std::sync::{Arc, LazyLock};
 
-use arrow::array::{Array, ArrayRef, AsArray, LargeListArray, ListArray, StructArray, make_array};
+use arrow::array::{
+    Array, ArrayRef, AsArray, LargeListArray, ListArray, MapArray, StructArray, make_array,
+};
 use arrow::buffer::NullBuffer;
 use arrow::datatypes::{DataType, Field, FieldRef, Fields};
 use arrow::record_batch::RecordBatch;
@@ -35,8 +37,8 @@ use datafusion_expr::type_coercion::binary::{
     comparison_coercion, string_coercion, type_union_resolution,
 };
 use datafusion_expr::{
-    ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature,
-    Volatility, col, expr,
+    ColumnarValue, ExprSchemable, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl,
+    Signature, Volatility, col, expr,
 };
 use icu_casemap::CaseMapper;
 use sail_common::spec::SetOpType;
@@ -63,6 +65,16 @@ fn list_field(data_type: &DataType) -> Option<&FieldRef> {
     }
 }
 
+fn map_entry_fields(entries: &Field) -> Option<(&FieldRef, &FieldRef)> {
+    let DataType::Struct(fields) = entries.data_type() else {
+        return None;
+    };
+    let [key, value] = fields.as_ref() else {
+        return None;
+    };
+    Some((key, value))
+}
+
 pub(crate) fn is_nested_result_type(data_type: &DataType) -> bool {
     list_field(data_type).is_some() || matches!(data_type, DataType::Struct(_))
 }
@@ -78,6 +90,60 @@ enum StructFieldNames {
 enum CommonTypePolicy {
     WiderResult,
     TightestArrayElement,
+    Constructor,
+}
+
+fn contains_struct(data_type: &DataType) -> bool {
+    match data_type {
+        DataType::Struct(_) => true,
+        DataType::Map(entries, _) => map_entry_fields(entries).is_some_and(|(key, value)| {
+            contains_struct(key.data_type()) || contains_struct(value.data_type())
+        }),
+        _ => list_field(data_type).is_some_and(|field| contains_struct(field.data_type())),
+    }
+}
+
+pub(crate) fn align_struct_constructor_arguments(
+    arguments: Vec<expr::Expr>,
+    context: &FunctionContextInput<'_>,
+) -> PlanResult<Vec<expr::Expr>> {
+    if arguments.len() < 2 {
+        return Ok(arguments);
+    }
+    // Expressions such as GROUPING_ID may get their type later.
+    let Ok(types) = arguments
+        .iter()
+        .map(|argument| argument.get_type(context.schema))
+        .collect::<Result<Vec<_>>>()
+    else {
+        return Ok(arguments);
+    };
+    if !types.iter().any(contains_struct) {
+        return Ok(arguments);
+    }
+
+    let mut target = DataType::Null;
+    for source in &types {
+        target = common_type(
+            &target,
+            source,
+            context,
+            StructFieldNames::RequireMatching,
+            CommonTypePolicy::Constructor,
+        )?
+        .ok_or_else(|| {
+            PlanError::invalid(format!("Incompatible STRUCT constructor types: {types:?}"))
+        })?;
+    }
+    // Arrow concatenation needs exactly the same child fields even if folding
+    // refines the declaration of an argument that already has the target type.
+    arguments
+        .into_iter()
+        .zip(&types)
+        .map(|(argument, source)| {
+            cast_nested_value_impl(argument, source, &target, context, CastPolicy::Constructor)
+        })
+        .collect()
 }
 
 pub(crate) fn common_array_element_type(
@@ -237,7 +303,18 @@ fn common_type(
             || right_field.is_nullable()
             || cast_adds_nulls(left_field.data_type(), &target)
             || cast_adds_nulls(right_field.data_type(), &target);
-        let field = Arc::new(Field::new_list_field(target, nullable));
+        let field = if policy == CommonTypePolicy::Constructor {
+            // Keep the Arrow element field when merging constructor inputs.
+            Arc::new(
+                left_field
+                    .as_ref()
+                    .clone()
+                    .with_data_type(target)
+                    .with_nullable(nullable),
+            )
+        } else {
+            Arc::new(Field::new_list_field(target, nullable))
+        };
         return Ok(Some(
             if matches!(left, DataType::LargeList(_) | DataType::LargeListView(_))
                 || matches!(right, DataType::LargeList(_) | DataType::LargeListView(_))
@@ -277,6 +354,60 @@ fn common_type(
         }
         return Ok(Some(DataType::Struct(fields.into())));
     }
+    if policy == CommonTypePolicy::Constructor
+        && let (DataType::Map(left, left_sorted), DataType::Map(right, right_sorted)) =
+            (left, right)
+    {
+        let (Some((left_key, left_value)), Some((right_key, right_value))) =
+            (map_entry_fields(left), map_entry_fields(right))
+        else {
+            return Ok(None);
+        };
+        let merge = |left: &Field, right: &Field| {
+            common_type(
+                left.data_type(),
+                right.data_type(),
+                context,
+                struct_field_names,
+                policy,
+            )
+        };
+        let (Some(key), Some(value)) =
+            (merge(left_key, right_key)?, merge(left_value, right_value)?)
+        else {
+            return Ok(None);
+        };
+        if cast_adds_nulls(left_key.data_type(), &key)
+            || cast_adds_nulls(right_key.data_type(), &key)
+        {
+            return Ok(None);
+        }
+        let sorted = *left_sorted
+            && *right_sorted
+            && left_key.data_type() == &key
+            && right_key.data_type() == &key;
+        let value_nullable = left_value.is_nullable()
+            || right_value.is_nullable()
+            || cast_adds_nulls(left_value.data_type(), &value)
+            || cast_adds_nulls(right_value.data_type(), &value);
+        let fields = vec![
+            left_key
+                .as_ref()
+                .clone()
+                .with_data_type(key)
+                .with_nullable(false),
+            left_value
+                .as_ref()
+                .clone()
+                .with_data_type(value)
+                .with_nullable(value_nullable),
+        ];
+        let entries = left
+            .as_ref()
+            .clone()
+            .with_data_type(DataType::Struct(fields.into()));
+        return Ok(Some(DataType::Map(Arc::new(entries), sorted)));
+    }
     if is_nested_result_type(left) || is_nested_result_type(right) {
         return Ok(None);
     }
@@ -303,17 +434,24 @@ fn common_type(
 }
 
 // Declaration-only differences must remain available to CASE's physical refinement.
-fn same_value_type(source: &DataType, target: &DataType) -> bool {
+fn same_value_type(source: &DataType, target: &DataType, policy: CastPolicy) -> bool {
     if let (Some(source_field), Some(target_field)) = (list_field(source), list_field(target)) {
         return std::mem::discriminant(source) == std::mem::discriminant(target)
-            && same_value_type(source_field.data_type(), target_field.data_type());
+            && same_value_type(source_field.data_type(), target_field.data_type(), policy);
     }
     if let (DataType::Struct(source), DataType::Struct(target)) = (source, target) {
         return source.len() == target.len()
             && source.iter().zip(target).all(|(source, target)| {
                 source.name() == target.name()
-                    && same_value_type(source.data_type(), target.data_type())
+                    && same_value_type(source.data_type(), target.data_type(), policy)
             });
+    }
+    if policy == CastPolicy::Constructor
+        && let (DataType::Map(source, source_sorted), DataType::Map(target, target_sorted)) =
+            (source, target)
+    {
+        return source_sorted == target_sorted
+            && same_value_type(source.data_type(), target.data_type(), policy);
     }
     source == target
 }
@@ -385,7 +523,7 @@ pub(super) fn coerce_nested_result_values(
         .zip(data_types)
         .map(|(argument, source)| {
             // IF keeps its common declaration; only COALESCE may prune declaration casts.
-            let declaration_only = same_value_type(source, &target);
+            let declaration_only = same_value_type(source, &target, CastPolicy::General);
             if source == &target
                 || (nested_declarations == NestedDeclarations::RetainInputs && declaration_only)
             {
@@ -395,6 +533,7 @@ pub(super) fn coerce_nested_result_values(
                 coalesce_declaration_only: nested_declarations
                     == NestedDeclarations::NormalizeCoalesce
                     && declaration_only,
+                constructor_declaration_only: false,
                 target: target.clone(),
                 conversion: ResultCast::new(source, &target, context)?,
             };
@@ -411,14 +550,34 @@ pub(crate) fn cast_nested_value(
     target: &DataType,
     context: &FunctionContextInput<'_>,
 ) -> PlanResult<expr::Expr> {
+    cast_nested_value_impl(argument, source, target, context, CastPolicy::General)
+}
+
+fn cast_nested_value_impl(
+    argument: expr::Expr,
+    source: &DataType,
+    target: &DataType,
+    context: &FunctionContextInput<'_>,
+    policy: CastPolicy,
+) -> PlanResult<expr::Expr> {
     let conversion = NestedResultCast {
         coalesce_declaration_only: false,
+        constructor_declaration_only: policy == CastPolicy::Constructor
+            && same_value_type(source, target, policy),
         target: target.clone(),
-        conversion: ResultCast::new(source, target, context)?,
+        conversion: ResultCast::new_with_policy(source, target, context, policy)?,
     };
     Ok(drop_inherited_column_metadata(
         ScalarUDF::from(conversion).call(vec![argument]),
     ))
+}
+
+pub(crate) fn is_constructor_declaration_cast(function: &expr::ScalarFunction) -> bool {
+    function
+        .func
+        .inner()
+        .downcast_ref::<NestedResultCast>()
+        .is_some_and(|cast| cast.constructor_declaration_only)
 }
 
 pub(crate) fn nested_result_cast_input(expression: &expr::Expr) -> Option<&expr::Expr> {
@@ -471,12 +630,21 @@ pub(crate) fn prune_coalesce_declaration_cast(
     Ok(Transformed::no(expression))
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum CastPolicy {
+    General,
+    Constructor,
+}
+
 #[derive(Debug, PartialEq, Eq, Hash)]
 enum ResultCast {
-    Identity(DataType),
-    List {
+    Identity {
         target: DataType,
-        element: Box<Self>,
+        policy: CastPolicy,
+    },
+    Collection {
+        target: DataType,
+        child: Box<Self>,
     },
     Struct {
         fields: Fields,
@@ -491,16 +659,37 @@ impl ResultCast {
         target: &DataType,
         context: &FunctionContextInput<'_>,
     ) -> PlanResult<Self> {
+        Self::new_with_policy(source, target, context, CastPolicy::General)
+    }
+
+    fn new_with_policy(
+        source: &DataType,
+        target: &DataType,
+        context: &FunctionContextInput<'_>,
+        policy: CastPolicy,
+    ) -> PlanResult<Self> {
         if source == target {
-            return Ok(Self::Identity(target.clone()));
-        }
-        if let (Some(source), Some(target_field)) = (list_field(source), list_field(target)) {
-            return Ok(Self::List {
+            return Ok(Self::Identity {
                 target: target.clone(),
-                element: Box::new(Self::new(
+                policy,
+            });
+        }
+        let elements = match (source, target) {
+            (DataType::Map(source, _), DataType::Map(target, _))
+                if policy == CastPolicy::Constructor =>
+            {
+                Some((source, target))
+            }
+            _ => list_field(source).zip(list_field(target)),
+        };
+        if let Some((source, target_field)) = elements {
+            return Ok(Self::Collection {
+                target: target.clone(),
+                child: Box::new(Self::new_with_policy(
                     source.data_type(),
                     target_field.data_type(),
                     context,
+                    policy,
                 )?),
             });
         }
@@ -511,7 +700,12 @@ impl ResultCast {
                     .iter()
                     .zip(target)
                     .map(|(source, target)| {
-                        Self::new(source.data_type(), target.data_type(), context)
+                        Self::new_with_policy(
+                            source.data_type(),
+                            target.data_type(),
+                            context,
+                            policy,
+                        )
                     })
                     .collect::<PlanResult<_>>()?,
             });
@@ -530,9 +724,9 @@ impl ResultCast {
 
     fn cast_array(&self, array: &ArrayRef) -> Result<ArrayRef> {
         match self {
-            Self::Identity(target) => {
+            Self::Identity { target, policy } => {
                 // Folding can refine declarations after conversion planning.
-                if !same_value_type(array.data_type(), target) {
+                if !same_value_type(array.data_type(), target, *policy) {
                     return datafusion_common::internal_err!(
                         "nested identity cast received incompatible value type {}, expected {target}",
                         array.data_type()
@@ -573,21 +767,26 @@ impl ResultCast {
                     source.nulls().cloned(),
                 )?))
             }
-            Self::List { target, element } => {
-                let source_field = list_field(array.data_type()).ok_or_else(|| {
-                    datafusion_common::DataFusionError::Internal(
-                        "nested cast expected an ARRAY".into(),
-                    )
-                })?;
-                let storage_type = match target {
-                    DataType::LargeList(_) => DataType::LargeList(source_field.clone()),
-                    _ => DataType::List(source_field.clone()),
+            Self::Collection { target, child } => {
+                let source = if matches!(target, DataType::Map(..)) {
+                    let map = array.as_map_opt().ok_or_else(|| {
+                        datafusion_common::internal_datafusion_err!("nested cast expected a MAP")
+                    })?;
+                    Arc::new(ListArray::from(map.clone())) as ArrayRef
+                } else {
+                    let source_field = list_field(array.data_type()).ok_or_else(|| {
+                        datafusion_common::internal_datafusion_err!("nested cast expected an ARRAY")
+                    })?;
+                    let storage_type = match target {
+                        DataType::LargeList(_) => DataType::LargeList(source_field.clone()),
+                        _ => DataType::List(source_field.clone()),
+                    };
+                    ColumnarValue::Array(array.clone())
+                        .cast_to(&storage_type, None)?
+                        .into_array(array.len())?
                 };
-                let source = ColumnarValue::Array(array.clone())
-                    .cast_to(&storage_type, None)?
-                    .into_array(array.len())?;
                 let source = remove_list_null_values(&source)?;
-                let values = element.cast_array(&list_values(source.as_ref())?)?;
+                let values = child.cast_array(&list_values(source.as_ref())?)?;
                 Ok(match target {
                     DataType::List(field) => {
                         let list = source.as_list::<i32>();
@@ -607,7 +806,24 @@ impl ResultCast {
                             list.nulls().cloned(),
                         )?)
                     }
-                    _ => unreachable!("common ARRAY types use List or LargeList storage"),
+                    DataType::Map(field, sorted) => {
+                        let list = source.as_list::<i32>();
+                        let entries = values.as_struct_opt().ok_or_else(|| {
+                            datafusion_common::internal_datafusion_err!(
+                                "nested MAP cast expected STRUCT entries"
+                            )
+                        })?;
+                        Arc::new(MapArray::try_new(
+                            field.clone(),
+                            adjust_offsets_for_slice(list),
+                            entries.clone(),
+                            list.nulls().cloned(),
+                            *sorted,
+                        )?)
+                    }
+                    _ => {
+                        unreachable!("common nested collection uses List, LargeList or Map storage")
+                    }
                 })
             }
         }
@@ -617,6 +833,7 @@ impl ResultCast {
 #[derive(Debug, PartialEq, Eq, Hash)]
 struct NestedResultCast {
     coalesce_declaration_only: bool,
+    constructor_declaration_only: bool,
     target: DataType,
     conversion: ResultCast,
 }
@@ -1118,6 +1335,7 @@ mod tests {
             };
             let conversion = NestedResultCast {
                 coalesce_declaration_only: false,
+                constructor_declaration_only: false,
                 target: target.clone(),
                 conversion: ResultCast::new(input.data_type(), &target, &context)?,
             };
