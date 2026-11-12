@@ -26,7 +26,7 @@ use crate::function::common::{
     drop_inherited_column_metadata, reject_calendar_interval_partition_key,
     reject_calendar_interval_sort_key, without_inherited_column_metadata,
 };
-use crate::function::result_coercion::{coerce_if_result_values, same_positional_logical_type};
+use crate::function::result_coercion::align_offset_window_arguments;
 use crate::function::{get_built_in_window_function, require_deterministic_scalar_expression};
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
@@ -424,7 +424,6 @@ impl PlanResolver<'_> {
         if payload_type != default_type
             && payload_type.is_nested()
             && default_type.is_nested()
-            && same_positional_logical_type(&payload_type, &default_type)
             && (default.any_column_refs()
                 || default.is_volatile()
                 || default.contains_outer()
@@ -438,9 +437,15 @@ impl PlanResolver<'_> {
                 session_context: self.ctx,
                 schema,
             };
-            (*payload, *default) =
-                coerce_if_result_values(vec![payload.clone(), default.clone()], &context)?.two()?;
-            return Ok(drop_inherited_column_metadata(window));
+            if let Some(arguments) = align_offset_window_arguments(
+                [payload.clone(), default.clone()],
+                [payload_type, default_type],
+                &context,
+            )? {
+                (*payload, *default) = arguments.two()?;
+                return Ok(drop_inherited_column_metadata(window));
+            }
+            return Ok(expression);
         }
         if payload_type.is_null()
             || default_type.is_null()

@@ -22,7 +22,8 @@ use crate::function::temporal_coercion::{cast_local_timestamp_expr_to_ltz, commo
 
 mod nested;
 pub(crate) use nested::{
-    align_struct_constructor_arguments, cast_nested_value, common_array_element_type,
+    align_offset_window_arguments, align_struct_constructor_arguments, cast_nested_value,
+    common_array_element_type,
     has_coalesce_declaration_cast, is_constructor_declaration_cast, is_nested_result_type,
     nested_result_cast_input, prune_coalesce_declaration_cast, same_positional_logical_type,
 };

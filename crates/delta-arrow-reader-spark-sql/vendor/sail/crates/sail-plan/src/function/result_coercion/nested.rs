@@ -122,28 +122,51 @@ pub(crate) fn align_struct_constructor_arguments(
         return Ok(arguments);
     }
 
+    align_constructor_declarations(arguments, &types, context)?
+        .ok_or_else(|| PlanError::invalid(format!("Incompatible STRUCT constructor types: {types:?}")))
+}
+
+pub(crate) fn align_offset_window_arguments(
+    arguments: [expr::Expr; 2],
+    types: [DataType; 2],
+    context: &FunctionContextInput<'_>,
+) -> PlanResult<Option<Vec<expr::Expr>>> {
+    let [payload, default] = &types;
+    if !same_logical_type(payload, default, true) {
+        return Ok(None);
+    }
+    align_constructor_declarations(Vec::from(arguments), &types, context)
+}
+
+fn align_constructor_declarations(
+    arguments: Vec<expr::Expr>,
+    types: &[DataType],
+    context: &FunctionContextInput<'_>,
+) -> PlanResult<Option<Vec<expr::Expr>>> {
     let mut target = DataType::Null;
-    for source in &types {
-        target = common_type(
+    for source in types {
+        let Some(common) = common_type(
             &target,
             source,
             context,
             StructFieldNames::RequireMatching,
             CommonTypePolicy::Constructor,
         )?
-        .ok_or_else(|| {
-            PlanError::invalid(format!("Incompatible STRUCT constructor types: {types:?}"))
-        })?;
+        else {
+            return Ok(None);
+        };
+        target = common;
     }
-    // Arrow concatenation needs exactly the same child fields even if folding
+    // Arrow kernels need exactly the same child fields even if folding
     // refines the declaration of an argument that already has the target type.
     arguments
         .into_iter()
-        .zip(&types)
+        .zip(types)
         .map(|(argument, source)| {
             cast_nested_value_impl(argument, source, &target, context, CastPolicy::Constructor)
         })
-        .collect()
+        .collect::<PlanResult<Vec<_>>>()
+        .map(Some)
 }
 
 pub(crate) fn common_array_element_type(
@@ -457,13 +480,25 @@ fn same_value_type(source: &DataType, target: &DataType, policy: CastPolicy) -> 
 }
 
 pub(crate) fn same_positional_logical_type(left: &DataType, right: &DataType) -> bool {
+    same_logical_type(left, right, false)
+}
+
+fn same_logical_type(left: &DataType, right: &DataType, include_maps: bool) -> bool {
     if let (Some(left), Some(right)) = (list_field(left), list_field(right)) {
-        return same_positional_logical_type(left.data_type(), right.data_type());
+        return same_logical_type(left.data_type(), right.data_type(), include_maps);
     }
     if let (DataType::Struct(left), DataType::Struct(right)) = (left, right) {
         return left.len() == right.len()
             && left.iter().zip(right).all(|(left, right)| {
-                same_positional_logical_type(left.data_type(), right.data_type())
+                same_logical_type(left.data_type(), right.data_type(), include_maps)
+            });
+    }
+    if include_maps && let (DataType::Map(left, _), DataType::Map(right, _)) = (left, right) {
+        return map_entry_fields(left)
+            .zip(map_entry_fields(right))
+            .is_some_and(|((left_key, left_value), (right_key, right_value))| {
+                same_logical_type(left_key.data_type(), right_key.data_type(), include_maps)
+                    && same_logical_type(left_value.data_type(), right_value.data_type(), include_maps)
             });
     }
     left == right
