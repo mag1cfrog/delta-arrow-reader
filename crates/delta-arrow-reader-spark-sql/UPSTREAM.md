@@ -864,8 +864,6 @@ failing constant does not. A NULL year skips the months' cast for its row. An ov
 Spark's whole `INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION` message in both modes, while
 optimizing for a constant through [constant folding errors](#constant-folding-errors). It used to
 fail while collecting rows, and its message stopped after the first sentence. Retained:
-- INT() and the other integer functions over a STRING use Arrow's cast, declared NOT NULL for a
-  NOT NULL STRING, so MAKE_YM_INTERVAL over them is NOT NULL where Spark's is nullable (#1166).
 - Under ANSI, a constant call with a malformed STRING beside a NULL that a constant expression
   computes, such as `NULL + 1` or an explicit cast of a NULL STRING to INT, fails while
   optimizing, where Spark gives NULL (#1157).
