@@ -5,8 +5,8 @@ use std::sync::Arc;
 use arrow::datatypes::{DataType, Field};
 use datafusion::functions::expr_fn::coalesce;
 use datafusion::functions_aggregate::{
-    approx_distinct, approx_percentile_cont, array_agg, average, bit_and_or_xor, bool_and_or,
-    correlation, count, covariance, first_last, grouping, median, stddev, sum, variance,
+    approx_distinct, array_agg, average, bit_and_or_xor, bool_and_or, correlation, count,
+    covariance, first_last, grouping, median, stddev, sum, variance,
 };
 use datafusion::functions_nested::string::array_to_string;
 use datafusion::functions_window::cume_dist::cume_dist_udwf;
@@ -22,6 +22,7 @@ use datafusion_spark::function::aggregate::try_sum::SparkTrySum;
 use lazy_static::lazy_static;
 use sail_common::spec::SAIL_LIST_FIELD_NAME;
 use sail_common_datafusion::utils::items::ItemTaker;
+use sail_function::aggregate::approx_percentile::approx_percentile_udaf;
 use sail_function::aggregate::bitmap_and_agg::BitmapAndAggFunction;
 use sail_function::aggregate::bitmap_construct_agg::BitmapConstructAggFunction;
 use sail_function::aggregate::bitmap_or_agg::BitmapOrAggFunction;
@@ -672,10 +673,7 @@ fn list_built_in_window_functions() -> Vec<(&'static str, WinFunction)> {
         ("any", F::aggregate(bool_and_or::bool_or_udaf)),
         ("any_value", F::custom(first_value)),
         ("approx_count_distinct", F::custom(approx_count_distinct)),
-        (
-            "approx_percentile",
-            F::aggregate(approx_percentile_cont::approx_percentile_cont_udaf),
-        ),
+        ("approx_percentile", F::aggregate(approx_percentile_udaf)),
         ("array_agg", F::custom(array_agg_compacted)),
         ("array_join", F::custom(listagg)),
         ("avg", F::custom(avg)),
@@ -742,10 +740,7 @@ fn list_built_in_window_functions() -> Vec<(&'static str, WinFunction)> {
             F::aggregate(|| Arc::new(AggregateUDF::from(ModeFunction::new()))),
         ),
         ("percentile", F::custom(percentile_exact_agg)),
-        (
-            "percentile_approx",
-            F::aggregate(approx_percentile_cont::approx_percentile_cont_udaf),
-        ),
+        ("percentile_approx", F::aggregate(approx_percentile_udaf)),
         ("percentile_cont", F::unknown("percentile_cont")),
         ("percentile_disc", F::unknown("percentile_disc")),
         ("product", F::custom(product)),

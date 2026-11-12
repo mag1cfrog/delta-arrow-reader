@@ -4731,3 +4731,44 @@ every available Field, unavailable stage and recorded result, including nested
 member-ID arrays. A native panic remains a failed observation and does not stop
 the remaining captures. Keep the original 188/8/24 references and historical
 native observations unchanged when extending the separate zero/current inventory.
+
+## Approximate percentile ranks
+
+`approx-percentile-ranks/spark-results.jsonl` records 140 Spark 4.2.0 observations
+in both ANSI modes. It covers both aliases, fractional and boundary ranks,
+repeated values, NULLs, empty input, groups, numeric result types, scalar and
+array probabilities, accuracy, windows and exact percentile controls. Floating
+values use the shared bit encoding.
+
+The ordered compressed cases consume 120001 values with accuracies 10, 100 and
+10000, using one or two explicit RANGE source partitions. Their expected values
+belong to that partition and insertion order. The Rust tests preserve that
+source topology, check summary state round trips and merges, and verify that
+compression reduces retained memory while accuracy affects retained detail.
+`summary-merges-spark.jsonl` records two direct Spark PercentileDigest comparisons
+with 180001 reverse or interleaved values and three partial summaries merged in
+explicit order. These check the same insertion/compression/merge rules without
+execution scheduling changing the merge order. Native DataFusion interpolation
+has a separate control.
+
+DataFusion may repartition before partial aggregation. Separate finite-input
+checks retain the actual configuration, plan and output for target partitions
+2 and the platform default (16 on the capture host), using the one- and
+three-partition inputs at both tested batch sizes.
+They require input membership, the executed result type, and
+[Spark's rank bounds](https://spark.apache.org/docs/4.2.0/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrameStatFunctions.approxQuantile.html).
+Exact output comparisons retain matching source and merge topology. NaN and
+signed-zero references use one partition; they do not establish output
+independence from partitioning for those values.
+
+To refresh the reference, use the pinned Spark environment described above and
+write to a fresh path:
+
+```sh
+percentile_capture="$(mktemp -d)"
+python tests/fixtures/approx-percentile-ranks/capture_spark.py \
+  "$percentile_capture/spark-results.jsonl" \
+  "$percentile_capture/summary-merges-spark.jsonl"
+cargo +1.96.0 test --locked --test approx_percentile_ranks
+cargo +1.96.0 test --locked -p sail-function aggregate::approx_percentile
+```

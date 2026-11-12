@@ -2254,3 +2254,24 @@ retained input buffers. DataFusion's constant-expression inference stops at
 volatile nodes, so a constant RAND seed cannot make its output column constant
 or remove a required sort. Nonvolatile constant inference retains its existing
 rules.
+
+### Approximate percentile ranks
+
+Spark APPROX_PERCENTILE and PERCENTILE_APPROX use a local Rust adaptation of
+[QuantileSummaries from Spark 4.2.0](https://github.com/apache/spark/blob/v4.2.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/util/QuantileSummaries.scala),
+under Apache-2.0. The adapted source retains the following relevant Spark NOTICE:
+
+```text
+Apache Spark
+Copyright 2014 and onwards The Apache Software Foundation.
+
+This product includes software developed at
+The Apache Software Foundation (http://www.apache.org/).
+```
+
+The aggregate retains Spark's buffered insertion, compression,
+rank queries and partial-summary merges. Accuracy controls the relative rank
+error, with a default of 10000. Numeric results retain their input type, and
+scalar and array probabilities share the same summary. Compressed results can
+change with input partitioning and order. Exact PERCENTILE, PERCENTILE_CONT and
+MEDIAN, and native DataFusion approximate percentiles keep their implementations.
