@@ -29,6 +29,8 @@ const ARCHIVE_REVIEW_RESULTS: &str =
     include_str!("fixtures/correlated-scalar-execution/archive-review-results.jsonl");
 const OPERATOR_COMPOSITION_RESULTS: &str =
     include_str!("fixtures/correlated-scalar-execution/operator-composition-results.jsonl");
+const BOUNDARY_RESULTS: &str =
+    include_str!("fixtures/correlated-scalar-execution/boundary-review-results.jsonl");
 const ROUNDING: &str =
     include_str!("fixtures/correlated-scalar-execution/frozen-rounding-spark.jsonl");
 const SINGLE_ROW: &str = include_str!("fixtures/single-row-correlated-spark.jsonl");
@@ -172,10 +174,12 @@ async fn correlated_scalar_execution_matches_spark() -> TestResult {
     let legacy_valid = records(LEGACY_VALID_RESULTS)?;
     let archive_review = records(ARCHIVE_REVIEW_RESULTS)?;
     let operator_composition = records(OPERATOR_COMPOSITION_RESULTS)?;
+    let boundary = records(BOUNDARY_RESULTS)?;
     for (references, count) in [
         (&legacy_valid, 48),
         (&archive_review, 17),
         (&operator_composition, 22),
+        (&boundary, 10),
     ] {
         let ids: BTreeSet<_> = references
             .iter()
@@ -249,6 +253,7 @@ async fn correlated_scalar_execution_matches_spark() -> TestResult {
                 "operator_composition",
                 operator_composition.iter().collect(),
             ),
+            ("boundary_review", boundary.iter().collect()),
             ("frozen_rounding", rounding.iter().collect()),
             ("historical_single_row", historical_controls.clone()),
             ("historical_inner_relation", historical_correlated.clone()),
@@ -259,7 +264,8 @@ async fn correlated_scalar_execution_matches_spark() -> TestResult {
                     | "review"
                     | "legacy_valid"
                     | "archive_review"
-                    | "operator_composition" => (
+                    | "operator_composition"
+                    | "boundary_review" => (
                         if case["status"] == "ok" {
                             json!({"rows":case["rows"]})
                         } else {

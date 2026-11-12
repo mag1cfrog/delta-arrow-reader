@@ -24,7 +24,10 @@ mod limit;
 mod rows;
 
 use aggregate::lift_correlated_scalar_aggregate_inputs;
-use rows::{apply_row_steps, has_correlated_self_equality, split_correlated_rows};
+use rows::{
+    apply_row_steps, has_correlated_self_equality, move_correlated_inner_join_predicates,
+    split_correlated_rows,
+};
 
 /// Lower Spark scalar queries over real inner rows before DataFusion validates them.
 #[derive(Debug)]
@@ -186,8 +189,10 @@ fn lower_scalar(
         return Ok(None);
     }
     let output = Expr::Column(schema.qualified_field(0).into());
-    let (value, input) = scalar_value_input(output, &subquery.subquery)?;
-    if matches!(input, LogicalPlan::Aggregate(aggregate) if aggregate.group_expr.is_empty())
+    let inner = move_correlated_inner_join_predicates(subquery.subquery.as_ref().clone())?;
+    let (value, input) = scalar_value_input(output, &inner)?;
+    if let LogicalPlan::Aggregate(aggregate) = input
+        && aggregate.group_expr.is_empty()
         && !has_correlated_self_equality(input)?
     {
         // Keep DataFusion's existing global aggregate decorrelation when it can

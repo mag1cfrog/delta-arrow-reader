@@ -6,8 +6,8 @@ use datafusion_common::{Column, DFSchema, Result};
 use datafusion_expr::expr_rewriter::strip_outer_reference;
 use datafusion_expr::utils::{conjunction, split_conjunction};
 use datafusion_expr::{
-    Aggregate, Distinct, Expr, Limit, LogicalPlan, LogicalPlanBuilder, Operator, Projection, Sort,
-    SubqueryAlias, lit, when,
+    Aggregate, Distinct, Expr, Filter, JoinType, Limit, LogicalPlan, LogicalPlanBuilder, Operator,
+    Projection, Sort, SubqueryAlias, lit, when,
 };
 
 use super::aggregate::{aggregate_inner_rows, can_lower_aggregate, distinct_inner_rows};
@@ -70,9 +70,49 @@ pub(super) fn split_correlated_rows(mut input: &LogicalPlan) -> Result<Option<Co
                 input
             }
             LogicalPlan::Limit(limit) if can_lower_limit(limit) => split_limit(limit, &mut steps),
+            LogicalPlan::Sort(sort)
+                if sort.fetch.is_none()
+                    && steps.iter().all(|step| {
+                        matches!(
+                            step,
+                            RowStep::Project(_) | RowStep::Alias(_) | RowStep::Filter(_)
+                        )
+                    }) =>
+            {
+                // A scalar observes at most one row unless another operator consumes the order.
+                &sort.input
+            }
             _ => return Ok(None),
         };
     }
+}
+
+pub(super) fn move_correlated_inner_join_predicates(plan: LogicalPlan) -> Result<LogicalPlan> {
+    plan.transform_up(|node| {
+        let LogicalPlan::Join(mut join) = node else {
+            return Ok(Transformed::no(node));
+        };
+        let Some(predicate) = join.filter.as_ref() else {
+            return Ok(Transformed::no(LogicalPlan::Join(join)));
+        };
+        if join.join_type != JoinType::Inner || !predicate.contains_outer() {
+            return Ok(Transformed::no(LogicalPlan::Join(join)));
+        }
+        let (correlated, local): (Vec<_>, Vec<_>) = split_conjunction(predicate)
+            .into_iter()
+            .cloned()
+            .partition(Expr::contains_outer);
+        let Some(predicate) = conjunction(correlated) else {
+            return Ok(Transformed::no(LogicalPlan::Join(join)));
+        };
+        // For an inner join the correlated ON terms can filter the joined rows.
+        join.filter = conjunction(local);
+        Ok(Transformed::yes(LogicalPlan::Filter(Filter::try_new(
+            predicate,
+            Arc::new(LogicalPlan::Join(join)),
+        )?)))
+    })
+    .data()
 }
 
 fn can_pull_up(plan: &LogicalPlan) -> Result<bool> {

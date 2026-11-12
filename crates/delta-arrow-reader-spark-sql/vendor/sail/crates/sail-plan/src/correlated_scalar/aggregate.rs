@@ -144,28 +144,14 @@ pub(super) fn lift_correlated_scalar_aggregate_inputs(plan: LogicalPlan) -> Resu
             let mut next = 0;
             for expr in &mut aggregate.aggr_expr {
                 let name = names.save(expr);
-                let mut body = &mut *expr;
-                while let Expr::Alias(alias) = body {
-                    body = &mut alias.expr;
-                }
-                let Expr::AggregateFunction(function) = body else {
-                    continue;
-                };
-                // Lifting would evaluate arguments before an aggregate's own filter or order.
-                if function.params.filter.is_some() || !function.params.order_by.is_empty() {
-                    continue;
-                }
-                let before = lifted.len();
-                for arg in &mut function.params.args {
-                    if !arg.exists(|expr| {
-                        Ok(match expr {
-                            Expr::ScalarSubquery(subquery) => {
-                                !subquery.outer_ref_columns.is_empty()
-                            }
-                            _ => false,
-                        })
-                    })? {
-                        continue;
+                // The expression tree includes the aggregate's arguments, filter,
+                // and order keys. Leave their evaluation in the aggregate.
+                let rewritten = std::mem::take(expr).transform_up(|expr| {
+                    let Expr::ScalarSubquery(subquery) = &expr else {
+                        return Ok(Transformed::no(expr));
+                    };
+                    if subquery.outer_ref_columns.is_empty() {
+                        return Ok(Transformed::no(expr));
                     }
                     let alias = loop {
                         next += 1;
@@ -179,12 +165,10 @@ pub(super) fn lift_correlated_scalar_aggregate_inputs(plan: LogicalPlan) -> Resu
                         }
                     };
                     let column = Expr::Column(Column::new_unqualified(&alias));
-                    // Keep casts, metadata, and conditional evaluation with the scalar.
-                    lifted.push(std::mem::replace(arg, column).alias(alias));
-                }
-                if lifted.len() != before {
-                    *expr = name.restore(std::mem::take(expr));
-                }
+                    lifted.push(expr.alias(alias));
+                    Ok(Transformed::yes(column))
+                })?;
+                *expr = name.restore(rewritten.data);
             }
             if lifted.is_empty() {
                 return Ok(Transformed::no(LogicalPlan::Aggregate(aggregate)));
