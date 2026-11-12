@@ -51,7 +51,10 @@ fn references(manifest: &Value) -> TestResult<Vec<Value>> {
     let mut planned = BTreeMap::new();
     for case in cases {
         let id = case["id"].as_str().ok_or("missing planned case ID")?;
-        assert!(case["ordered"].is_boolean(), "missing order policy for {id}");
+        assert!(
+            case["ordered"].is_boolean(),
+            "missing order policy for {id}"
+        );
         for ansi in [false, true] {
             assert!(planned.insert((id, ansi), case).is_none(), "duplicate {id}");
         }
@@ -156,7 +159,9 @@ fn register_hidden_payload(session: &SessionContext, input: &Value, batch: usize
         storage_nested.columns().to_vec(),
         original_nested.nulls().cloned(),
     )?;
-    let item = nested.column_by_name("item").ok_or("missing hidden child")?;
+    let item = nested
+        .column_by_name("item")
+        .ok_or("missing hidden child")?;
     let physical_child = encode_value(item.as_ref(), row)?;
     assert!(nested.is_null(row));
     assert_eq!(physical_child, "-3");

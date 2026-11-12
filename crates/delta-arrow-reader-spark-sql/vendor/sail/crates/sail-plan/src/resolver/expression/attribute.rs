@@ -77,11 +77,11 @@ impl PlanResolver<'_> {
             return Ok(NamedExpr::new(vec![name], expr));
         }
         if let Some(output) = state.sort_select_schema(schema)
-            && let Some(named) = self.resolve_field_or_nested_field(&name, &output, state)?
+            && let Some(named) = self.resolve_field_or_nested_field(&name, &output, state, false)?
         {
             return Ok(named);
         }
-        if let Some(named) = self.resolve_field_or_nested_field(&name, schema, state)? {
+        if let Some(named) = self.resolve_field_or_nested_field(&name, schema, state, false)? {
             return Ok(named);
         }
         if let Some((name, expr)) =
@@ -114,8 +114,8 @@ impl PlanResolver<'_> {
         } else {
             ""
         };
-        match self.resolve_outer_field(&name, &outer_schema, state)? {
-            Some((name, expr)) => Ok(NamedExpr::new(vec![name], expr)),
+        match self.resolve_field_or_nested_field(&name, &outer_schema, state, true)? {
+            Some(named) => Ok(named),
             None => Err(PlanError::AnalysisError(format!(
                 // Spark tests expect the error message to start with: "attribute {name:?} is missing"
                 "attribute {name:?} is missing from the schema: cannot resolve attribute or outer attribute{condition}"
@@ -127,7 +127,8 @@ impl PlanResolver<'_> {
         &self,
         name: &spec::ObjectName,
         schema: &DFSchemaRef,
-        state: &mut PlanResolverState,
+        state: &PlanResolverState,
+        is_outer: bool,
     ) -> PlanResult<Option<NamedExpr>> {
         let mut candidates = vec![];
         // Spark tries catalog/schema/table, schema/table, table, then unqualified columns.
@@ -150,17 +151,28 @@ impl PlanResolver<'_> {
             }
         }
         if candidates.len() > 1 {
+            let scope = if is_outer { "outer " } else { "" };
             return Err(PlanError::AnalysisError(format!(
-                "ambiguous attribute: {name:?}"
+                "ambiguous {scope}attribute: {name:?}"
             )));
         }
         let Some((qualifier, field, name, inner)) = candidates.pop() else {
             return Ok(None);
         };
+        let base = if is_outer {
+            let mut outer_field = field.as_ref().clone();
+            clear_inherited_field_metadata(&mut outer_field);
+            expr::Expr::OuterReferenceColumn(
+                Arc::new(outer_field),
+                Column::new(qualifier.cloned(), field.name()),
+            )
+        } else {
+            col((qualifier, field))
+        };
         // A bound local base shadows outer columns even when its nested tail is invalid.
         let mut expression_name = name.as_ref().to_string();
         let expr = Self::resolve_nested_field_and_append_display(
-            col((qualifier, field)),
+            base,
             field.data_type(),
             inner,
             schema,
@@ -240,48 +252,6 @@ impl PlanResolver<'_> {
         if candidates.len() > 1 {
             return Err(PlanError::AnalysisError(format!(
                 "ambiguous attribute: {name:?}"
-            )));
-        }
-        Ok(candidates.pop())
-    }
-
-    fn resolve_outer_field(
-        &self,
-        name: &spec::ObjectName,
-        schema: &DFSchemaRef,
-        state: &mut PlanResolverState,
-    ) -> PlanResult<Option<(String, expr::Expr)>> {
-        let candidates = Self::generate_qualified_field_candidates(name.parts());
-        let mut candidates = schema
-            .iter()
-            .flat_map(|(qualifier, field)| {
-                let Ok(info) = state.get_field_info(field.name()) else {
-                    return vec![];
-                };
-                candidates
-                    .iter()
-                    .filter(|(q, name)| {
-                        (!info.is_hidden() || q.is_some())
-                            && qualifier_matches(q.as_ref(), qualifier)
-                            && info.name().eq_ignore_ascii_case(name.as_ref())
-                    })
-                    .map(|(_, name)| {
-                        let mut outer_field = field.as_ref().clone();
-                        clear_inherited_field_metadata(&mut outer_field);
-                        (
-                            name.as_ref().to_string(),
-                            expr::Expr::OuterReferenceColumn(
-                                Arc::new(outer_field),
-                                Column::new(qualifier.cloned(), field.name()),
-                            ),
-                        )
-                    })
-                    .collect()
-            })
-            .collect::<Vec<_>>();
-        if candidates.len() > 1 {
-            return Err(PlanError::AnalysisError(format!(
-                "ambiguous outer attribute: {name:?}"
             )));
         }
         Ok(candidates.pop())
@@ -415,21 +385,6 @@ impl PlanResolver<'_> {
                     ))),
                 }
             }
-        }
-    }
-
-    fn generate_qualified_field_candidates<T: AsRef<str>>(
-        name: &[T],
-    ) -> Vec<(Option<TableReference>, &T)> {
-        match name {
-            [n1] => vec![(None, n1)],
-            [n1, n2] => vec![(Some(TableReference::bare(n1.as_ref())), n2)],
-            [n1, n2, n3] => vec![(Some(TableReference::partial(n1.as_ref(), n2.as_ref())), n3)],
-            [n1, n2, n3, n4] => vec![(
-                Some(TableReference::full(n1.as_ref(), n2.as_ref(), n3.as_ref())),
-                n4,
-            )],
-            _ => vec![],
         }
     }
 
@@ -681,7 +636,12 @@ mod tests {
                 vec!["catalog", "schema", "p", "id"],
             ] {
                 assert_eq!(
-                    resolver.resolve_field_or_nested_field(&parts.into(), &schema, &mut state)?,
+                    resolver.resolve_field_or_nested_field(
+                        &parts.into(),
+                        &schema,
+                        &state,
+                        false
+                    )?,
                     Some(NamedExpr::new(
                         vec!["id".into()],
                         col((Some(&qualifier), &id)),
@@ -692,7 +652,8 @@ mod tests {
                 resolver.resolve_field_or_nested_field(
                     &["p", "p", "id"].into(),
                     &schema,
-                    &mut state,
+                    &state,
+                    false,
                 )?,
                 Some(
                     NamedExpr::new(
@@ -710,7 +671,8 @@ mod tests {
                 resolver.resolve_field_or_nested_field(
                     &["p", "id"].into(),
                     &struct_only,
-                    &mut state,
+                    &state,
+                    false,
                 )?,
                 Some(
                     NamedExpr::new(
@@ -734,7 +696,8 @@ mod tests {
                 resolver.resolve_field_or_nested_field(
                     &["p", "id"].into(),
                     &duplicate_schema,
-                    &mut state,
+                    &state,
+                    false,
                 ),
                 Err(PlanError::AnalysisError(message)) if message.starts_with("ambiguous attribute")
             ));
@@ -782,7 +745,7 @@ mod tests {
                 }
                 for name in &names {
                     assert_eq!(
-                        resolver.resolve_field_or_nested_field(name, &schema, &mut state)?,
+                        resolver.resolve_field_or_nested_field(name, &schema, &state, false)?,
                         Some(NamedExpr::new(
                             vec!["id".into()],
                             col((Some(&qualifier), &id)),
@@ -800,7 +763,7 @@ mod tests {
                 let duplicates = Arc::new(DFSchema::new_with_metadata(fields, Default::default())?);
                 for name in &names {
                     assert!(matches!(
-                        resolver.resolve_field_or_nested_field(name, &duplicates, &mut state),
+                        resolver.resolve_field_or_nested_field(name, &duplicates, &state, false),
                         Err(PlanError::AnalysisError(message))
                             if message == format!("ambiguous attribute: {name:?}")
                     ));
