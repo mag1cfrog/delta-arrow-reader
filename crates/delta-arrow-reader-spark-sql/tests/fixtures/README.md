@@ -25,6 +25,25 @@ To recapture with `pyspark==4.2.0` and Java 21, choose a new output path:
 TZ=UTC python current-time-expressions/capture_spark.py /tmp/current-time-spark.jsonl
 ```
 
+## Function argument stars
+
+`function-star-arguments/spark-results.jsonl` records Spark 4.2.0 values and
+executed types for bare, qualified and nested struct stars in function arguments.
+It covers scalar calls, literal arguments beside stars, higher-order AGGREGATE,
+window SUM, USING joins, and STRUCT in both ANSI modes. COUNT covers bare,
+nested, repeated and mixed arguments, DISTINCT and windows, with nullable inputs
+that distinguish counting rows from counting non-null argument tuples.
+The USING-join inputs have different non-key values so swapped columns change
+the HASH result. Empty arrays and nullable inputs retain their Spark values.
+
+The comparison keeps nested field names as part of the result type, while
+disregarding nullable flags, metadata and enclosing output labels. From this
+fixture directory, recapture with `pyspark==4.2.0` and Java 21:
+
+```sh
+TZ=UTC python function-star-arguments/capture_spark.py /tmp/function-stars-spark.jsonl
+```
+
 ## Primitive CAST overflow conditions
 
 `reviewed-corrections.json` adds 93 exact ANSI error outcomes for #922. A complete

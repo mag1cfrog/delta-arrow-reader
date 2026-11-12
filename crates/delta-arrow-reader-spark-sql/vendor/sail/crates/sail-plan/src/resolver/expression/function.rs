@@ -68,7 +68,7 @@ impl PlanResolver<'_> {
             return Err(unresolved_routine_error(&function_name, self.ctx));
         }
         // Spark resolves these routines before named arguments, too.
-        let (arguments, arity_error) =
+        let (arguments, expected_arity) =
             self.resolve_datetime_unit_call(&function_name, arguments)?;
         if !named_arguments.is_empty()
             || arguments
@@ -117,11 +117,17 @@ impl PlanResolver<'_> {
                 .await?;
             (names, arguments, vec![])
         } else {
-            self.resolve_expression_arguments_with_qualifiers(arguments, schema, state)
+            self.resolve_function_call_arguments(&canonical_function_name, arguments, schema, state)
                 .await?
         };
-        if let Some(error) = arity_error {
-            return Err(error);
+        if let Some(expected) = expected_arity
+            && arguments.len() != expected
+        {
+            return Err(PlanError::invalid(format!(
+                "[WRONG_NUM_ARGS.WITHOUT_SUGGESTION] The `{canonical_function_name}` requires \
+                 {expected} parameters but the actual number is {}.",
+                arguments.len()
+            )));
         }
 
         let has_lambda_argument = arguments.iter().any(|x| matches!(x, expr::Expr::Lambda(_)));
@@ -358,6 +364,81 @@ impl PlanResolver<'_> {
             .await
     }
 
+    /// Resolve call arguments, expanding stars before arity checks or lambda binding.
+    pub(super) async fn resolve_function_call_arguments(
+        &self,
+        function_name: &str,
+        expressions: Vec<spec::Expr>,
+        schema: &DFSchemaRef,
+        state: &mut PlanResolverState,
+    ) -> PlanResult<(Vec<String>, Vec<expr::Expr>, Vec<IntervalOperand>)> {
+        // COUNT(*) counts rows; its DISTINCT expansion remains with aggregate resolution.
+        if function_name == "count"
+            && matches!(
+                expressions.as_slice(),
+                [spec::Expr::UnresolvedStar {
+                    target: None,
+                    plan_id: None,
+                    wildcard_options,
+                }] if *wildcard_options == spec::WildcardOptions::default()
+            )
+        {
+            return self
+                .resolve_expression_arguments_with_qualifiers(expressions, schema, state)
+                .await;
+        }
+        let mut scope = state.enter_config_scope();
+        let state = scope.state();
+        state.config_mut().include_cast_in_expression_name = true;
+        let mut names = Vec::new();
+        let mut arguments = Vec::new();
+        let mut operands = Vec::new();
+        for expression in expressions {
+            let named = self
+                .resolve_named_expression(expression, schema, state)
+                .await?;
+            for argument in self.expand_function_argument(named, schema, state)? {
+                names.push(argument.expression_name()?);
+                operands.push(IntervalOperand::of(
+                    &argument.expr,
+                    argument.interval_qualifier,
+                    schema,
+                ));
+                arguments.push(argument.expr);
+            }
+        }
+        Ok((names, arguments, operands))
+    }
+
+    pub(super) fn expand_function_argument(
+        &self,
+        argument: NamedExpr,
+        schema: &DFSchemaRef,
+        state: &mut PlanResolverState,
+    ) -> PlanResult<Vec<NamedExpr>> {
+        match &argument.expr {
+            #[expect(deprecated)]
+            Expr::Wildcard { .. } => {
+                let input = LogicalPlan::EmptyRelation(EmptyRelation {
+                    produce_one_row: false,
+                    schema: Arc::clone(schema),
+                });
+                let (_, expanded) = self.rewrite_wildcard(input, vec![argument], state)?;
+                Ok(expanded
+                    .into_iter()
+                    .map(|named| {
+                        let qualifier = super::column_interval_qualifier(&named.expr, state);
+                        named.with_interval_qualifier(qualifier)
+                    })
+                    .collect())
+            }
+            Expr::ScalarFunction(function) if function.func.inner().is::<MultiExpr>() => {
+                self.rewrite_multi_expr(vec![argument])
+            }
+            _ => Ok(vec![argument]),
+        }
+    }
+
     async fn resolve_struct_arguments(
         &self,
         expressions: Vec<spec::Expr>,
@@ -416,9 +497,7 @@ impl PlanResolver<'_> {
             } = named;
 
             match expr {
-                // Expand wildcard inside `struct(...)` only, to match Spark behavior:
-                // - struct(*) expands to all visible columns
-                // - struct(alias.*) expands to all visible columns from that qualifier
+                // STRUCT uses expanded column names as its child field names.
                 #[expect(deprecated)]
                 Expr::Wildcard { qualifier, options } => {
                     let plan = LogicalPlan::EmptyRelation(EmptyRelation {
@@ -528,13 +607,13 @@ impl PlanResolver<'_> {
     /// `written_name`. A call the SQL analyzer marked with a datetime unit keyword reads the unit
     /// as a string. Any other call is ordinary: TIMESTAMPDIFF, TIMEDIFF and TIMESTAMPADD name no
     /// routine, as written, before their arguments resolve; DATEDIFF, DATE_DIFF, DATEADD and
-    /// DATE_ADD take two arguments, so another count fails once the arguments resolve, with the
-    /// returned error, which names the routine in lower case as Spark's registry does.
+    /// DATE_ADD take two arguments. Return that expected arity for validation after argument
+    /// stars have expanded to their input columns.
     fn resolve_datetime_unit_call(
         &self,
         written_name: &str,
         mut arguments: Vec<spec::Expr>,
-    ) -> PlanResult<(Vec<spec::Expr>, Option<PlanError>)> {
+    ) -> PlanResult<(Vec<spec::Expr>, Option<usize>)> {
         if let Some(spec::Expr::DatetimeUnitKeyword(unit)) = arguments.first() {
             arguments[0] = spec::Expr::Literal(spec::Literal::Utf8 {
                 value: Some(unit.clone()),
@@ -545,16 +624,10 @@ impl PlanResolver<'_> {
         if DATETIME_UNIT_FUNCTIONS_WITHOUT_ROUTINE.contains(&routine_name.as_str()) {
             return Err(unresolved_routine_error(written_name, self.ctx));
         }
-        let arity_error = (DATETIME_UNIT_FUNCTIONS_WITH_ROUTINE.contains(&routine_name.as_str())
-            && arguments.len() != 2)
-            .then(|| {
-                PlanError::invalid(format!(
-                    "[WRONG_NUM_ARGS.WITHOUT_SUGGESTION] The `{routine_name}` requires 2 \
-                     parameters but the actual number is {}.",
-                    arguments.len()
-                ))
-            });
-        Ok((arguments, arity_error))
+        let expected_arity = DATETIME_UNIT_FUNCTIONS_WITH_ROUTINE
+            .contains(&routine_name.as_str())
+            .then_some(2);
+        Ok((arguments, expected_arity))
     }
 }
 

@@ -200,7 +200,10 @@ impl PlanResolver<'_> {
         Ok((rewriter.into_plan(), expr))
     }
 
-    pub(super) fn rewrite_multi_expr(&self, expr: Vec<NamedExpr>) -> PlanResult<Vec<NamedExpr>> {
+    pub(in crate::resolver) fn rewrite_multi_expr(
+        &self,
+        expr: Vec<NamedExpr>,
+    ) -> PlanResult<Vec<NamedExpr>> {
         let mut out = vec![];
         for e in expr {
             let NamedExpr {
