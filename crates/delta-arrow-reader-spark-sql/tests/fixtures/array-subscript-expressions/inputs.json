@@ -1,0 +1,375 @@
+{
+  "issue": "https://github.com/mag1cfrog/delta-arrow-reader/issues/863",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "ansi_modes": [
+    false,
+    true
+  ],
+  "registered_inputs": [
+    {
+      "name": "input_table",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "7"
+        ],
+        [
+          "1",
+          null
+        ],
+        [
+          "2",
+          "9"
+        ]
+      ]
+    },
+    {
+      "name": "empty_input_table",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": []
+    },
+    {
+      "name": "indexed_table",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "i",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "a",
+            "type": {
+              "type": "array",
+              "elementType": "integer",
+              "containsNull": true
+            },
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "0",
+          [
+            "10",
+            "11",
+            "12"
+          ]
+        ],
+        [
+          "1",
+          "1",
+          [
+            "20",
+            null,
+            "22"
+          ]
+        ],
+        [
+          "2",
+          "2",
+          [
+            "30",
+            "31",
+            "32",
+            "33"
+          ]
+        ],
+        [
+          "3",
+          null,
+          [
+            "40",
+            "41"
+          ]
+        ],
+        [
+          "4",
+          "0",
+          null
+        ],
+        [
+          "5",
+          "0",
+          []
+        ],
+        [
+          "6",
+          "-1",
+          [
+            "70",
+            "71"
+          ]
+        ],
+        [
+          "7",
+          "2",
+          [
+            "80",
+            "81"
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "empty_indexed_table",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "i",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "a",
+            "type": {
+              "type": "array",
+              "elementType": "integer",
+              "containsNull": true
+            },
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": []
+    },
+    {
+      "name": "wide_indexed_table",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "i",
+            "type": "long",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "a",
+            "type": {
+              "type": "array",
+              "elementType": "integer",
+              "containsNull": true
+            },
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "4294967296",
+          [
+            "110",
+            "111"
+          ]
+        ],
+        [
+          "1",
+          "4294967297",
+          [
+            "120",
+            "121"
+          ]
+        ],
+        [
+          "2",
+          "-4294967296",
+          [
+            "130",
+            "131"
+          ]
+        ],
+        [
+          "3",
+          "9223372036854775807",
+          [
+            "140",
+            "141"
+          ]
+        ],
+        [
+          "4",
+          "-4294967297",
+          [
+            "150",
+            "151"
+          ]
+        ]
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "registered_column",
+      "scope": "parity",
+      "sql": "SELECT id, a[i] AS r FROM indexed_table WHERE id < 3 ORDER BY id"
+    },
+    {
+      "id": "registered_expression",
+      "scope": "parity",
+      "sql": "SELECT id, a[id + 1] AS r FROM indexed_table WHERE id < 3 ORDER BY id"
+    },
+    {
+      "id": "registered_bigint_expression",
+      "scope": "parity",
+      "sql": "SELECT id, a[CAST(id AS BIGINT) + CAST(1 AS BIGINT)] AS r FROM indexed_table WHERE id < 3 ORDER BY id"
+    },
+    {
+      "id": "registered_narrow_expressions",
+      "scope": "parity",
+      "sql": "SELECT id, a[CAST(i AS SMALLINT)] AS short_r, a[CAST(i AS TINYINT)] AS byte_r FROM indexed_table WHERE id < 3 ORDER BY id"
+    },
+    {
+      "id": "string_element",
+      "scope": "parity",
+      "sql": "SELECT id, ARRAY('first', 'second', 'third')[i] AS r FROM indexed_table WHERE id < 3 ORDER BY id"
+    },
+    {
+      "id": "null_index_and_array",
+      "scope": "parity",
+      "sql": "SELECT id, a[i] AS r FROM indexed_table WHERE id IN (3, 4) ORDER BY id"
+    },
+    {
+      "id": "empty_provider",
+      "scope": "parity",
+      "sql": "SELECT id, a[i] AS col_r, a[id + 1] AS expr_r FROM empty_indexed_table ORDER BY id"
+    },
+    {
+      "id": "original_valid_expression",
+      "scope": "parity",
+      "sql": "SELECT id, ARRAY(v)[id - id] AS r FROM input_table ORDER BY id"
+    },
+    {
+      "id": "original_empty_provider",
+      "scope": "parity",
+      "sql": "SELECT ARRAY(v)[id + 1] AS r FROM empty_input_table"
+    },
+    {
+      "id": "original_report",
+      "scope": "observation",
+      "sql": "SELECT ARRAY(v)[id + 1] AS r FROM input_table;"
+    },
+    {
+      "id": "empty_array",
+      "scope": "observation",
+      "sql": "SELECT id, a[i] AS r FROM indexed_table WHERE id = 5"
+    },
+    {
+      "id": "negative_index",
+      "scope": "observation",
+      "sql": "SELECT id, a[i] AS r FROM indexed_table WHERE id = 6"
+    },
+    {
+      "id": "upper_bound_index",
+      "scope": "observation",
+      "sql": "SELECT id, a[i] AS r FROM indexed_table WHERE id = 7"
+    },
+    {
+      "id": "bigint_wrapped",
+      "scope": "observation",
+      "sql": "SELECT id, a[i] AS r FROM wide_indexed_table WHERE id < 3 ORDER BY id"
+    },
+    {
+      "id": "bigint_max",
+      "scope": "observation",
+      "sql": "SELECT id, a[i] AS r FROM wide_indexed_table WHERE id = 3"
+    },
+    {
+      "id": "bigint_negative",
+      "scope": "observation",
+      "sql": "SELECT id, a[i] AS r FROM wide_indexed_table WHERE id = 4"
+    },
+    {
+      "id": "literal_array",
+      "scope": "boundary",
+      "sql": "SELECT id, a[0] AS r FROM indexed_table WHERE id < 3 ORDER BY id"
+    },
+    {
+      "id": "literal_struct_field",
+      "scope": "boundary",
+      "sql": "SELECT id, (named_struct('leaf', id))['leaf'] AS r FROM indexed_table WHERE id < 3 ORDER BY id"
+    },
+    {
+      "id": "dynamic_struct_field_rejected",
+      "scope": "boundary",
+      "sql": "SELECT id, (named_struct('leaf', id))[CAST(i AS STRING)] AS r FROM indexed_table WHERE id < 3 ORDER BY id"
+    },
+    {
+      "id": "dynamic_map_key",
+      "scope": "boundary",
+      "sql": "SELECT id, (MAP(0, 100, 1, 200, 2, 300))[i] AS r FROM indexed_table WHERE id < 3 ORDER BY id"
+    },
+    {
+      "id": "noninteger_array_index_rejected",
+      "scope": "boundary",
+      "sql": "SELECT id, a[CAST(i AS DOUBLE)] AS r FROM indexed_table WHERE id < 3 ORDER BY id"
+    },
+    {
+      "id": "null_array_skips_failing_index",
+      "scope": "parity",
+      "sql": "SELECT id, a[CAST(1 / i AS INT)] AS r FROM indexed_table WHERE id IN (2, 4) ORDER BY id"
+    }
+  ]
+}
