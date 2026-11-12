@@ -1386,9 +1386,8 @@ Spark. The replay checks the exact ID-specific policy rows before accepting
 an override, so an unrelated case cannot acquire an exception through fixture
 metadata. The other 120 records use the independent Spark result directly.
 
-This is coverage and gap routing, not a claim of full relational compatibility.
-Nested qualified scalar-subquery execution and live unaggregated correlated
-cardinality behavior remain owned by #140 for S09. The eight historical ANSI
+The [correlated scalar replay](#correlated-scalars-over-inner-rows) covers
+nested qualified references and runtime cardinality. The eight historical ANSI
 UNION/LIMIT early-error differences remain owned by #149 for S07; their complete
 accepted-runtime alternatives remain explicit. Exact Spark error-stage and
 analyzed-nullability parity are not established by the row/schema checks here.
@@ -1428,24 +1427,19 @@ types and metadata, and may safely narrow nullability. Returned NULLs must fit
 every declaration. The test logs the actual stage schemas and does not replace
 fields with expected schemas.
 
-The other references record explicit boundaries. Eighteen correlated queries
-over real inner relations and 24 queries with a volatile scalar result retain
-their scalar plans during preparation; this checks that the one-row rewrite
-does not consume them. Their Spark execution results are preserved as evidence
-for #140, and are not claimed as passing runtime comparisons. Spark evaluates a
-volatile alias reused as `x+x` once per outer row, so substituting that alias
-twice would be incorrect. The replay does check unused volatile outputs, and a
-separate counting UDF test checks zero evaluations during planning and one per
-executed outer row for a volatile sibling. Empty outer input evaluates no rows.
+Eighteen correlated queries over real inner relations and 24 queries with a
+volatile scalar result retain their scalar plans during preparation. Spark
+evaluates a volatile alias reused as `x+x` once per outer row. The replay
+checks unused volatile outputs, and a counting UDF checks zero evaluations
+during planning and one per executed outer row for a volatile sibling. Empty
+outer input evaluates no rows.
 
 Six raw projected IN records retain Spark's NULL behavior; separate tests keep
 the approved SQL three-valued policy and native DataFusion behavior. Two raw
 RAND observations keep their original values and schemas as observations only;
 random values from independent executions are not treated as equal. The
-double-nested scalar references require Spark's unresolved-column error. This
-bounded repair does not complete correlated cardinality or volatile scalar
-execution under #140. The original PIVOT/control references remain unchanged
-in the PIVOT fixture and require their separate integration replay.
+double-nested scalar references require Spark's unresolved-column error.
+The PIVOT fixture records the PIVOT and its controls for separate replay.
 
 From the Spark crate directory, use the pinned Python/Java setup above and a
 fresh output path to preserve the committed evidence:
@@ -1459,6 +1453,22 @@ python tests/fixtures/capture_single_row_correlated_nonnullable_spark.py "$singl
 cargo test --workspace --test single_row_correlated
 cargo test --workspace --test window_metadata
 ```
+
+## Correlated scalars over inner rows
+
+`correlated_scalar_execution` checks values and executed types against Spark
+4.2.0 at batch sizes 1 and 32. It uses both ANSI modes for registered inner
+tables, nested projections, grouped and global aggregates, HAVING, DISTINCT,
+and sorted LIMIT and OFFSET. The combined cases check that filtering and
+grouping occur before each row's LIMIT. The qualified-star and one-row
+observations run alongside the real-inner replay. The frozen ROUND and BROUND
+cases require a scalar cardinality error during collection, even with a NULL
+scale.
+
+The independent captures retain input rows, SQL, and Spark schemas. The legacy
+replay uses the original SQL with a fresh capture of the executed types. The
+native scalar tests and the observed provider in `inline_values_evaluation`
+check the native route and that Spark planning reads no rows.
 
 ## Global aggregate argument admission
 

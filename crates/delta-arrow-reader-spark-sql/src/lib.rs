@@ -33,6 +33,7 @@ use datafusion::physical_optimizer::aggregate_statistics::PreserveAggregateStati
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::prelude::SessionContext;
 use sail_common_datafusion::rename::physical_plan::rename_physical_plan;
+use sail_plan::correlated_scalar::LowerSparkCorrelatedScalars;
 use sail_plan::expression_errors::{PrepareSparkExpressions, SparkSqlExpressionSemantics};
 use sail_plan::like_errors::{PreserveSparkLikeErrors, set_spark_query_start_time};
 use sail_plan::physical_plan::SparkQueryPlanner;
@@ -66,6 +67,7 @@ pub fn configure_spark_sql(mut builder: SessionStateBuilder) -> SessionStateBuil
     builder
         .with_query_planner(Arc::new(SparkQueryPlanner))
         .with_analyzer_rule(Arc::new(PrepareSparkExpressions))
+        .with_analyzer_rule(Arc::new(LowerSparkCorrelatedScalars))
         .with_analyzer_rule(Arc::new(PreserveSparkLikeErrors))
         .with_analyzer_rule(Arc::new(CaptureSparkInputSortBoundaries))
 }

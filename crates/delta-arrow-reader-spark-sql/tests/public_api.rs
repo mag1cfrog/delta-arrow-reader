@@ -217,22 +217,33 @@ async fn preserve_hidden_sort_keys_below_scalar_subqueries() -> TestResult {
 }
 
 #[tokio::test]
-async fn reject_correlated_scalar_grouping_without_single_row_guarantee() -> TestResult {
+async fn correlated_scalar_grouping_checks_cardinality_during_collection() -> TestResult {
     let session = session();
     for sql in [
         "SELECT (SELECT count(*) FROM VALUES (0,1),(0,2) t(id,g) WHERE id=o.k GROUP BY g) AS r FROM VALUES (0) o(k)",
         "SELECT (SELECT count(*) FROM VALUES (1,10),(2,10) i(k,v) WHERE (i.k=o.k AND false) OR i.v=o.v GROUP BY i.k) AS r FROM VALUES (1,10) o(k,v)",
     ] {
-        let query = plan_query(&session, sql, &SparkSqlOptions::default()).await?;
-        let error = query
-            .create_physical_plan(&session)
-            .await
-            .err()
-            .ok_or("accepted a potentially multi-row correlated scalar subquery")?;
-        assert!(
-            error.to_string().contains("non-correlated columns"),
-            "{sql}: {error}"
-        );
+        for ansi_mode in [false, true] {
+            let query = plan_query(
+                &session,
+                sql,
+                &SparkSqlOptions {
+                    ansi_mode,
+                    ..SparkSqlOptions::default()
+                },
+            )
+            .await?;
+            let physical = query.create_physical_plan(&session).await?;
+            let error = collect(physical, session.task_ctx())
+                .await
+                .err()
+                .ok_or("collected a multi-row correlated scalar subquery")?;
+            assert_eq!(
+                error.to_string(),
+                "Execution error: Scalar subquery returned more than one row",
+                "{sql}, ANSI={ansi_mode}"
+            );
+        }
     }
     Ok(())
 }
