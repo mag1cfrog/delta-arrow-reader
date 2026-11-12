@@ -247,7 +247,7 @@ async fn row_dependent_offset_defaults_match_spark() -> TestResult {
     assert_eq!(manifest["timezone"], "UTC");
     assert_eq!(manifest["ansi_modes"], json!([false, true]));
     let cases = manifest["cases"].as_array().ok_or("missing cases")?;
-    assert_eq!(cases.len(), 14);
+    assert_eq!(cases.len(), 16);
     let mut planned = BTreeMap::new();
     for case in cases {
         let id = case["id"].as_str().ok_or("missing case ID")?;
@@ -282,7 +282,7 @@ async fn row_dependent_offset_defaults_match_spark() -> TestResult {
                 .ok_or("missing Spark executed fields")?,
         );
     }
-    assert_eq!(references.len(), 27);
+    assert_eq!(references.len(), 30);
     assert!(planned.is_empty(), "missing Spark references: {planned:?}");
 
     let mut differences = Vec::new();
