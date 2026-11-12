@@ -193,7 +193,12 @@ fn lower_scalar(
         // Keep DataFusion's existing global aggregate decorrelation when it can
         // group on the extracted join keys before joining to the outer rows.
         let mut native = PullUpCorrelatedExpr::new();
-        if subquery.subquery.as_ref().clone().rewrite(&mut native).is_ok()
+        if subquery
+            .subquery
+            .as_ref()
+            .clone()
+            .rewrite(&mut native)
+            .is_ok()
             && native.can_pull_up
             && native.pulled_up_scalar_agg
         {

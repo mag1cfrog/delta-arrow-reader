@@ -1460,9 +1460,10 @@ cargo test --workspace --test window_metadata
 4.2.0 at batch sizes 1 and 32. It uses both ANSI modes for registered inner
 tables, nested projections, grouped and global aggregates, HAVING, DISTINCT,
 and sorted LIMIT and OFFSET. The combined cases check that filtering and
-grouping occur before each row's LIMIT. The qualified-star and one-row observations run alongside
-the real-inner replay. The frozen ROUND and BROUND cases require a scalar
-cardinality error during collection, even with a NULL scale.
+grouping occur before each row's LIMIT. The qualified-star and one-row
+observations run alongside the real-inner replay. The frozen ROUND and BROUND
+cases require a scalar cardinality error during collection, even with a NULL
+scale.
 
 The independent captures retain input rows, SQL, and Spark schemas. The legacy
 replay uses the original SQL with a fresh capture of the executed types. The

@@ -436,8 +436,7 @@ uses a left join and counts scalar rows per outer row. An empty scalar result
 returns a typed NULL. Multiple scalar rows raise during execution, including
 when the consumer is an untaken CASE branch. Projections, aliases, filters,
 grouping, DISTINCT and literal LIMIT compose per outer row. Global aggregates
-that DataFusion can decorrelate
-on their join keys keep its native path. The
+that DataFusion can decorrelate on their join keys keep its native path. The
 [correlated scalar references](tests/fixtures/README.md#correlated-scalars-over-inner-rows)
 cover these cases and the existing one-row rewrite.
 Spark scalar results clear inherited user metadata in public fields. Their

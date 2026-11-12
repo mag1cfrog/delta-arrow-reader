@@ -245,14 +245,21 @@ async fn correlated_scalar_execution_matches_spark() -> TestResult {
             ("review", review.iter().collect()),
             ("legacy_valid", legacy_valid.iter().collect()),
             ("archive_review", archive_review.iter().collect()),
-            ("operator_composition", operator_composition.iter().collect()),
+            (
+                "operator_composition",
+                operator_composition.iter().collect(),
+            ),
             ("frozen_rounding", rounding.iter().collect()),
             ("historical_single_row", historical_controls.clone()),
             ("historical_inner_relation", historical_correlated.clone()),
         ] {
             for case in cases {
                 let (expected, schema) = match corpus {
-                    "fresh" | "review" | "legacy_valid" | "archive_review" | "operator_composition" => (
+                    "fresh"
+                    | "review"
+                    | "legacy_valid"
+                    | "archive_review"
+                    | "operator_composition" => (
                         if case["status"] == "ok" {
                             json!({"rows":case["rows"]})
                         } else {

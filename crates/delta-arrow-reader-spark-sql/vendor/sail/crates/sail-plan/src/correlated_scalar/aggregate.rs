@@ -109,7 +109,12 @@ pub(super) fn distinct_inner_rows(
     marker: &Column,
     outer_columns: &[Column],
 ) -> Result<LogicalPlan> {
-    let groups = input.schema().columns().into_iter().map(Expr::Column).collect();
+    let groups = input
+        .schema()
+        .columns()
+        .into_iter()
+        .map(Expr::Column)
+        .collect();
     let distinct = Aggregate::try_new(Arc::clone(input), groups, vec![])?;
     aggregate_inner_rows(joined, &distinct, row_id, marker, outer_columns)
 }

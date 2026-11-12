@@ -40,7 +40,11 @@ pub(super) fn split_correlated_rows(mut input: &LogicalPlan) -> Result<Option<Co
             if pull_up.can_pull_up {
                 // Correlation can appear only in the selected value.
                 let join_filter = conjunction(pull_up.join_filters).unwrap_or_else(|| lit(true));
-                return Ok(Some(CorrelatedRows { input: inner, join_filter, steps }));
+                return Ok(Some(CorrelatedRows {
+                    input: inner,
+                    join_filter,
+                    steps,
+                }));
             }
         }
         // Keep row-changing operations on the per-outer-row side of the join.
@@ -65,9 +69,7 @@ pub(super) fn split_correlated_rows(mut input: &LogicalPlan) -> Result<Option<Co
                 steps.push(RowStep::Distinct(input));
                 input
             }
-            LogicalPlan::Limit(limit) if can_lower_limit(limit) => {
-                split_limit(limit, &mut steps)
-            }
+            LogicalPlan::Limit(limit) if can_lower_limit(limit) => split_limit(limit, &mut steps),
             _ => return Ok(None),
         };
     }
@@ -123,28 +125,33 @@ pub(super) fn has_correlated_self_equality(plan: &LogicalPlan) -> Result<bool> {
 }
 
 fn preserve_self_equalities(input: LogicalPlan) -> Result<LogicalPlan> {
-    input.transform_up(|node| {
-        let LogicalPlan::Filter(mut filter) = node else {
-            return Ok(Transformed::no(node));
-        };
-        let mut changed = false;
-        let predicates = split_conjunction(&filter.predicate)
-            .into_iter()
-            .map(|predicate| {
-                if is_correlated_self_equality(predicate) {
-                    // Native pull-up discards bare self-equality even on NULL.
-                    changed = true;
-                    Expr::IsTrue(Box::new(predicate.clone()))
-                } else {
-                    predicate.clone()
-                }
-            })
-            .collect::<Vec<_>>();
-        if changed && let Some(predicate) = conjunction(predicates) {
-            filter.predicate = predicate;
-        }
-        Ok(Transformed::new_transformed(LogicalPlan::Filter(filter), changed))
-    }).data()
+    input
+        .transform_up(|node| {
+            let LogicalPlan::Filter(mut filter) = node else {
+                return Ok(Transformed::no(node));
+            };
+            let mut changed = false;
+            let predicates = split_conjunction(&filter.predicate)
+                .into_iter()
+                .map(|predicate| {
+                    if is_correlated_self_equality(predicate) {
+                        // Native pull-up discards bare self-equality even on NULL.
+                        changed = true;
+                        Expr::IsTrue(Box::new(predicate.clone()))
+                    } else {
+                        predicate.clone()
+                    }
+                })
+                .collect::<Vec<_>>();
+            if changed && let Some(predicate) = conjunction(predicates) {
+                filter.predicate = predicate;
+            }
+            Ok(Transformed::new_transformed(
+                LogicalPlan::Filter(filter),
+                changed,
+            ))
+        })
+        .data()
 }
 
 pub(super) fn apply_row_steps(
@@ -157,7 +164,12 @@ pub(super) fn apply_row_steps(
     for step in steps.into_iter().rev() {
         plan = match step {
             RowStep::Project(project) => project_inner_rows(
-                plan, project.expr.iter().cloned(), &project.schema, row_id, marker, outer_columns,
+                plan,
+                project.expr.iter().cloned(),
+                &project.schema,
+                row_id,
+                marker,
+                outer_columns,
             )?,
             RowStep::Alias(alias) => project_inner_rows(
                 plan,
@@ -173,7 +185,9 @@ pub(super) fn apply_row_steps(
             RowStep::Aggregate(aggregate) => {
                 aggregate_inner_rows(plan, aggregate, row_id, marker, outer_columns)?
             }
-            RowStep::Distinct(input) => distinct_inner_rows(plan, input, row_id, marker, outer_columns)?,
+            RowStep::Distinct(input) => {
+                distinct_inner_rows(plan, input, row_id, marker, outer_columns)?
+            }
             RowStep::Limit(limit, sort) => limit_inner_rows(plan, limit, sort, row_id, marker)?,
         };
     }
@@ -198,6 +212,12 @@ fn project_inner_rows(
         };
         expressions.push(expr.alias_qualified(column.relation, column.name));
     }
-    expressions.extend(outer_columns.iter().chain([row_id, marker]).cloned().map(Expr::Column));
+    expressions.extend(
+        outer_columns
+            .iter()
+            .chain([row_id, marker])
+            .cloned()
+            .map(Expr::Column),
+    );
     LogicalPlanBuilder::from(plan).project(expressions)?.build()
 }
