@@ -1,0 +1,2008 @@
+{
+  "issue": "https://github.com/mag1cfrog/delta-arrow-reader/issues/1142",
+  "issues": [
+    "https://github.com/mag1cfrog/delta-arrow-reader/issues/1142",
+    "https://github.com/mag1cfrog/delta-arrow-reader/issues/1153"
+  ],
+  "baseline": {
+    "commit": "2d870d147c4f6924180a1d60f2ff7476e6d482c6",
+    "tree": "d812c007d803d94d1edb5532570f70b26b8eb62b"
+  },
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "ansi_modes": [
+    false,
+    true
+  ],
+  "timezone": "UTC",
+  "registered_inputs": [
+    {
+      "name": "widths",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "b",
+            "type": "byte",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "s",
+            "type": "short",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "i",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "l",
+            "type": "long",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "b_rhs",
+            "type": "byte",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "s_rhs",
+            "type": "short",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "7",
+          "-11",
+          "23",
+          "1099511627776",
+          "-3",
+          "5"
+        ],
+        [
+          "1",
+          "127",
+          "32767",
+          "2147483647",
+          "9223372036854775807",
+          "1",
+          "1"
+        ],
+        [
+          "2",
+          "-128",
+          "-32768",
+          "-2147483648",
+          "-9223372036854775808",
+          "1",
+          "1"
+        ],
+        [
+          "3",
+          "127",
+          "32767",
+          "2147483647",
+          "9223372036854775807",
+          "-1",
+          "-1"
+        ],
+        [
+          "4",
+          "-128",
+          "-32768",
+          "-2147483648",
+          "-9223372036854775808",
+          "-1",
+          "-1"
+        ],
+        [
+          "5",
+          "64",
+          "16384",
+          "2147483647",
+          "2",
+          "2",
+          "2"
+        ],
+        [
+          "6",
+          "1",
+          "1",
+          "1",
+          "0",
+          "0",
+          "0"
+        ],
+        [
+          "7",
+          "0",
+          "0",
+          "0",
+          "1",
+          "1",
+          "1"
+        ],
+        [
+          "8",
+          null,
+          null,
+          "3",
+          "5",
+          "1",
+          "1"
+        ],
+        [
+          "9",
+          "1",
+          "1",
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "10",
+          "1",
+          null,
+          null,
+          "5",
+          "2",
+          "2"
+        ],
+        [
+          "11",
+          null,
+          "2",
+          "3",
+          null,
+          "2",
+          "2"
+        ],
+        [
+          "12",
+          "1",
+          "1",
+          "2147483647",
+          "1",
+          "1",
+          "1"
+        ],
+        [
+          "13",
+          "1",
+          "1",
+          "1",
+          "-9223372036854775808",
+          "1",
+          "1"
+        ],
+        [
+          "14",
+          "-1",
+          "-1",
+          "-1",
+          "-9223372036854775808",
+          "-1",
+          "-1"
+        ]
+      ]
+    },
+    {
+      "name": "numerics",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "i",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "d",
+            "type": "decimal(8,2)",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "f",
+            "type": "double",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "-7",
+          "2.50",
+          "3fe0000000000000"
+        ],
+        [
+          "1",
+          "2",
+          "-5.25",
+          "c004000000000000"
+        ],
+        [
+          "2",
+          "3",
+          "0.00",
+          "8000000000000000"
+        ],
+        [
+          "3",
+          "0",
+          "1.25",
+          "4004000000000000"
+        ],
+        [
+          "4",
+          null,
+          "1.25",
+          "4004000000000000"
+        ],
+        [
+          "5",
+          "1",
+          null,
+          null
+        ],
+        [
+          "6",
+          "2",
+          "1.25",
+          "7fefffffffffffff"
+        ]
+      ]
+    },
+    {
+      "name": "wide_decimals",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "d",
+            "type": "decimal(38,0)",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "i",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "99999999999999999999999999999999",
+          "1"
+        ],
+        [
+          "1",
+          "100000000000000000000000000000000",
+          "1"
+        ],
+        [
+          "2",
+          "100000000000000000000000000000000",
+          "2"
+        ],
+        [
+          "3",
+          "99999999999999999999999999999999999999",
+          "2"
+        ],
+        [
+          "4",
+          "1",
+          "128"
+        ],
+        [
+          "5",
+          "-1",
+          "128"
+        ],
+        [
+          "6",
+          "1999999",
+          "2000000"
+        ],
+        [
+          "7",
+          "1",
+          "0"
+        ],
+        [
+          "8",
+          "0",
+          "1"
+        ],
+        [
+          "9",
+          null,
+          "1"
+        ],
+        [
+          "10",
+          "1",
+          null
+        ]
+      ]
+    },
+    {
+      "name": "float_pairs",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "f",
+            "type": "float",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "g",
+            "type": "float",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "i",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "4b800000",
+          "40400000",
+          "16777217"
+        ],
+        [
+          "1",
+          "3f800000",
+          "40400000",
+          "3"
+        ],
+        [
+          "2",
+          "80000000",
+          "40000000",
+          "3"
+        ],
+        [
+          "3",
+          "40000000",
+          "80000000",
+          "0"
+        ],
+        [
+          "4",
+          null,
+          "40400000",
+          "3"
+        ],
+        [
+          "5",
+          "3f800000",
+          null,
+          null
+        ]
+      ]
+    },
+    {
+      "name": "numeric_strings",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "n",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "i",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "l",
+            "type": "long",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "d",
+            "type": "decimal(8,2)",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "f",
+            "type": "double",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "12",
+          "3",
+          "4",
+          "1.25",
+          "4004000000000000"
+        ],
+        [
+          "1",
+          " -7 ",
+          "2",
+          "4",
+          "-1.25",
+          "c004000000000000"
+        ],
+        [
+          "2",
+          "2.5",
+          "3",
+          "4",
+          "1.25",
+          "4004000000000000"
+        ],
+        [
+          "3",
+          "1e2",
+          "3",
+          "4",
+          "1.25",
+          "4004000000000000"
+        ],
+        [
+          "4",
+          "bad",
+          "3",
+          "4",
+          "1.25",
+          "4004000000000000"
+        ],
+        [
+          "5",
+          "",
+          "3",
+          "4",
+          "1.25",
+          "4004000000000000"
+        ],
+        [
+          "6",
+          null,
+          "3",
+          "4",
+          "1.25",
+          "4004000000000000"
+        ],
+        [
+          "7",
+          "12",
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "8",
+          "0",
+          "3",
+          "4",
+          "1.25",
+          "4004000000000000"
+        ],
+        [
+          "9",
+          "12",
+          "0",
+          "0",
+          "0.00",
+          "8000000000000000"
+        ],
+        [
+          "10",
+          "9223372036854775807",
+          "2",
+          "2",
+          "1.25",
+          "4004000000000000"
+        ],
+        [
+          "11",
+          "-9223372036854775808",
+          "2",
+          "2",
+          "1.25",
+          "4004000000000000"
+        ],
+        [
+          "12",
+          "9223372036854775808",
+          "2",
+          "2",
+          "1.25",
+          "4004000000000000"
+        ],
+        [
+          "13",
+          "1e309",
+          "2",
+          "2",
+          "1.25",
+          "4004000000000000"
+        ],
+        [
+          "14",
+          "-0.0",
+          "2",
+          "2",
+          "1.25",
+          "4004000000000000"
+        ]
+      ]
+    },
+    {
+      "name": "string_pairs",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "s",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "t",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "7",
+          "2"
+        ],
+        [
+          "1",
+          "7",
+          "0"
+        ],
+        [
+          "2",
+          "7",
+          " -2.5 "
+        ],
+        [
+          "3",
+          "bad",
+          "2"
+        ],
+        [
+          "4",
+          "2",
+          "bad"
+        ],
+        [
+          "5",
+          null,
+          "2"
+        ],
+        [
+          "6",
+          "2",
+          null
+        ]
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "mixed_width_add_columns",
+      "sql": "SELECT k, try_add(b, s) AS add_b_s, try_add(s, b) AS add_s_b, try_add(b, i) AS add_b_i, try_add(i, b) AS add_i_b, try_add(b, l) AS add_b_l, try_add(l, b) AS add_l_b, try_add(s, i) AS add_s_i, try_add(i, s) AS add_i_s, try_add(s, l) AS add_s_l, try_add(l, s) AS add_l_s, try_add(i, l) AS add_i_l, try_add(l, i) AS add_l_i FROM widths ORDER BY k",
+      "ansi_modes": [
+        false,
+        true
+      ],
+      "scope": "required"
+    },
+    {
+      "id": "mixed_width_other_columns",
+      "sql": "SELECT k, try_subtract(b, s) AS subtract_b_s, try_multiply(b, s) AS multiply_b_s, try_divide(b, s) AS divide_b_s, try_mod(b, s) AS mod_b_s, try_subtract(s, b) AS subtract_s_b, try_multiply(s, b) AS multiply_s_b, try_divide(s, b) AS divide_s_b, try_mod(s, b) AS mod_s_b, try_subtract(b, i) AS subtract_b_i, try_multiply(b, i) AS multiply_b_i, try_divide(b, i) AS divide_b_i, try_mod(b, i) AS mod_b_i, try_subtract(i, b) AS subtract_i_b, try_multiply(i, b) AS multiply_i_b, try_divide(i, b) AS divide_i_b, try_mod(i, b) AS mod_i_b, try_subtract(b, l) AS subtract_b_l, try_multiply(b, l) AS multiply_b_l, try_divide(b, l) AS divide_b_l, try_mod(b, l) AS mod_b_l, try_subtract(l, b) AS subtract_l_b, try_multiply(l, b) AS multiply_l_b, try_divide(l, b) AS divide_l_b, try_mod(l, b) AS mod_l_b, try_subtract(s, i) AS subtract_s_i, try_multiply(s, i) AS multiply_s_i, try_divide(s, i) AS divide_s_i, try_mod(s, i) AS mod_s_i, try_subtract(i, s) AS subtract_i_s, try_multiply(i, s) AS multiply_i_s, try_divide(i, s) AS divide_i_s, try_mod(i, s) AS mod_i_s, try_subtract(s, l) AS subtract_s_l, try_multiply(s, l) AS multiply_s_l, try_divide(s, l) AS divide_s_l, try_mod(s, l) AS mod_s_l, try_subtract(l, s) AS subtract_l_s, try_multiply(l, s) AS multiply_l_s, try_divide(l, s) AS divide_l_s, try_mod(l, s) AS mod_l_s, try_subtract(i, l) AS subtract_i_l, try_multiply(i, l) AS multiply_i_l, try_divide(i, l) AS divide_i_l, try_mod(i, l) AS mod_i_l, try_subtract(l, i) AS subtract_l_i, try_multiply(l, i) AS multiply_l_i, try_divide(l, i) AS divide_l_i, try_mod(l, i) AS mod_l_i FROM widths ORDER BY k",
+      "ansi_modes": [
+        false,
+        true
+      ],
+      "scope": "required"
+    },
+    {
+      "id": "same_narrow_width_columns",
+      "sql": "SELECT k, try_add(b, b_rhs) AS add_b_b_rhs, try_subtract(b, b_rhs) AS subtract_b_b_rhs, try_multiply(b, b_rhs) AS multiply_b_b_rhs, try_divide(b, b_rhs) AS divide_b_b_rhs, try_mod(b, b_rhs) AS mod_b_b_rhs, try_add(b_rhs, b) AS add_b_rhs_b, try_subtract(b_rhs, b) AS subtract_b_rhs_b, try_multiply(b_rhs, b) AS multiply_b_rhs_b, try_divide(b_rhs, b) AS divide_b_rhs_b, try_mod(b_rhs, b) AS mod_b_rhs_b, try_add(s, s_rhs) AS add_s_s_rhs, try_subtract(s, s_rhs) AS subtract_s_s_rhs, try_multiply(s, s_rhs) AS multiply_s_s_rhs, try_divide(s, s_rhs) AS divide_s_s_rhs, try_mod(s, s_rhs) AS mod_s_s_rhs, try_add(s_rhs, s) AS add_s_rhs_s, try_subtract(s_rhs, s) AS subtract_s_rhs_s, try_multiply(s_rhs, s) AS multiply_s_rhs_s, try_divide(s_rhs, s) AS divide_s_rhs_s, try_mod(s_rhs, s) AS mod_s_rhs_s FROM widths ORDER BY k",
+      "ansi_modes": [
+        false,
+        true
+      ],
+      "scope": "required"
+    },
+    {
+      "id": "decimal_double_int_columns",
+      "sql": "SELECT k, try_add(i, d) AS add_i_d, try_subtract(i, d) AS subtract_i_d, try_multiply(i, d) AS multiply_i_d, try_divide(i, d) AS divide_i_d, try_mod(i, d) AS mod_i_d, try_add(d, i) AS add_d_i, try_subtract(d, i) AS subtract_d_i, try_multiply(d, i) AS multiply_d_i, try_divide(d, i) AS divide_d_i, try_mod(d, i) AS mod_d_i, try_add(i, f) AS add_i_f, try_subtract(i, f) AS subtract_i_f, try_multiply(i, f) AS multiply_i_f, try_divide(i, f) AS divide_i_f, try_mod(i, f) AS mod_i_f, try_add(f, i) AS add_f_i, try_subtract(f, i) AS subtract_f_i, try_multiply(f, i) AS multiply_f_i, try_divide(f, i) AS divide_f_i, try_mod(f, i) AS mod_f_i, try_add(d, f) AS add_d_f, try_subtract(d, f) AS subtract_d_f, try_multiply(d, f) AS multiply_d_f, try_divide(d, f) AS divide_d_f, try_mod(d, f) AS mod_d_f, try_add(f, d) AS add_f_d, try_subtract(f, d) AS subtract_f_d, try_multiply(f, d) AS multiply_f_d, try_divide(f, d) AS divide_f_d, try_mod(f, d) AS mod_f_d FROM numerics ORDER BY k",
+      "ansi_modes": [
+        false,
+        true
+      ],
+      "scope": "required"
+    },
+    {
+      "id": "wide_decimal_columns",
+      "sql": "SELECT k, try_add(d, i) AS add_d_i, try_subtract(d, i) AS subtract_d_i, try_multiply(d, i) AS multiply_d_i, try_divide(d, i) AS divide_d_i, try_mod(d, i) AS mod_d_i, try_add(i, d) AS add_i_d, try_subtract(i, d) AS subtract_i_d, try_multiply(i, d) AS multiply_i_d, try_divide(i, d) AS divide_i_d, try_mod(i, d) AS mod_i_d FROM wide_decimals ORDER BY k",
+      "ansi_modes": [
+        false,
+        true
+      ],
+      "scope": "required"
+    },
+    {
+      "id": "float_division_columns",
+      "sql": "SELECT k, try_divide(f, g) AS divide_f_g, try_divide(g, f) AS divide_g_f, try_divide(f, i) AS divide_f_i, try_divide(i, f) AS divide_i_f FROM float_pairs ORDER BY k",
+      "ansi_modes": [
+        false,
+        true
+      ],
+      "scope": "required"
+    },
+    {
+      "id": "string_number_columns",
+      "sql": "SELECT k, try_add(n, i) AS add_n_i, try_subtract(n, i) AS subtract_n_i, try_multiply(n, i) AS multiply_n_i, try_divide(n, i) AS divide_n_i, try_mod(n, i) AS mod_n_i, try_add(i, n) AS add_i_n, try_subtract(i, n) AS subtract_i_n, try_multiply(i, n) AS multiply_i_n, try_divide(i, n) AS divide_i_n, try_mod(i, n) AS mod_i_n, try_add(n, l) AS add_n_l, try_subtract(n, l) AS subtract_n_l, try_multiply(n, l) AS multiply_n_l, try_divide(n, l) AS divide_n_l, try_mod(n, l) AS mod_n_l, try_add(l, n) AS add_l_n, try_subtract(l, n) AS subtract_l_n, try_multiply(l, n) AS multiply_l_n, try_divide(l, n) AS divide_l_n, try_mod(l, n) AS mod_l_n, try_add(n, d) AS add_n_d, try_subtract(n, d) AS subtract_n_d, try_multiply(n, d) AS multiply_n_d, try_divide(n, d) AS divide_n_d, try_mod(n, d) AS mod_n_d, try_add(d, n) AS add_d_n, try_subtract(d, n) AS subtract_d_n, try_multiply(d, n) AS multiply_d_n, try_divide(d, n) AS divide_d_n, try_mod(d, n) AS mod_d_n, try_add(n, f) AS add_n_f, try_subtract(n, f) AS subtract_n_f, try_multiply(n, f) AS multiply_n_f, try_divide(n, f) AS divide_n_f, try_mod(n, f) AS mod_n_f, try_add(f, n) AS add_f_n, try_subtract(f, n) AS subtract_f_n, try_multiply(f, n) AS multiply_f_n, try_divide(f, n) AS divide_f_n, try_mod(f, n) AS mod_f_n FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "required"
+    },
+    {
+      "id": "string_column_int_literal",
+      "sql": "SELECT k, try_add(n, 3) AS add_n_three, try_subtract(n, 3) AS subtract_n_three, try_multiply(n, 3) AS multiply_n_three, try_divide(n, 3) AS divide_n_three, try_mod(n, 3) AS mod_n_three, try_add(3, n) AS add_three_n, try_subtract(3, n) AS subtract_three_n, try_multiply(3, n) AS multiply_three_n, try_divide(3, n) AS divide_three_n, try_mod(3, n) AS mod_three_n FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "required"
+    },
+    {
+      "id": "string_literal_int_column",
+      "sql": "SELECT k, try_add('12', i) AS add_twelve_i, try_subtract('12', i) AS subtract_twelve_i, try_multiply('12', i) AS multiply_twelve_i, try_divide('12', i) AS divide_twelve_i, try_mod('12', i) AS mod_twelve_i, try_add(i, '12') AS add_i_twelve, try_subtract(i, '12') AS subtract_i_twelve, try_multiply(i, '12') AS multiply_i_twelve, try_divide(i, '12') AS divide_i_twelve, try_mod(i, '12') AS mod_i_twelve FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        false,
+        true
+      ],
+      "scope": "required"
+    },
+    {
+      "id": "malformed_literal_int_column",
+      "sql": "SELECT k, try_add('bad', i) AS add_bad_i, try_subtract('bad', i) AS subtract_bad_i, try_multiply('bad', i) AS multiply_bad_i, try_divide('bad', i) AS divide_bad_i, try_mod('bad', i) AS mod_bad_i, try_add(i, 'bad') AS add_i_bad, try_subtract(i, 'bad') AS subtract_i_bad, try_multiply(i, 'bad') AS multiply_i_bad, try_divide(i, 'bad') AS divide_i_bad, try_mod(i, 'bad') AS mod_i_bad FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "required"
+    },
+    {
+      "id": "literal_issue_1142",
+      "sql": "SELECT try_add(1, 2L) AS r",
+      "ansi_modes": [
+        false,
+        true
+      ],
+      "scope": "required"
+    },
+    {
+      "id": "literal_issue_1153_decimal",
+      "sql": "SELECT try_add(1.5, 2) AS r",
+      "ansi_modes": [
+        false,
+        true
+      ],
+      "scope": "required"
+    },
+    {
+      "id": "literal_issue_1153_string_divide",
+      "sql": "SELECT try_divide('5', 2) AS r",
+      "ansi_modes": [
+        false,
+        true
+      ],
+      "scope": "required"
+    },
+    {
+      "id": "literal_issue_1153_string_mod",
+      "sql": "SELECT try_mod('5', 2) AS r",
+      "ansi_modes": [
+        false,
+        true
+      ],
+      "scope": "required"
+    },
+    {
+      "id": "untyped_null_add_literal",
+      "sql": "SELECT try_add(NULL, NULL) AS r",
+      "ansi_modes": [
+        false,
+        true
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "untyped_null_subtract_literal",
+      "sql": "SELECT try_subtract(NULL, NULL) AS r",
+      "ansi_modes": [
+        false,
+        true
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "untyped_null_multiply_literal",
+      "sql": "SELECT try_multiply(NULL, NULL) AS r",
+      "ansi_modes": [
+        false,
+        true
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "untyped_null_divide_literal",
+      "sql": "SELECT try_divide(NULL, NULL) AS r",
+      "ansi_modes": [
+        false,
+        true
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "untyped_null_mod_literal",
+      "sql": "SELECT try_mod(NULL, NULL) AS r",
+      "ansi_modes": [
+        false,
+        true
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "mixed_width_literals",
+      "sql": "SELECT try_add(CAST(1 AS TINYINT), CAST(2 AS SMALLINT)) AS add_b_s, try_add(CAST(2 AS SMALLINT), CAST(1 AS TINYINT)) AS add_s_b, try_add(CAST(1 AS TINYINT), CAST(2 AS INT)) AS add_b_i, try_add(CAST(2 AS INT), CAST(1 AS TINYINT)) AS add_i_b, try_add(CAST(1 AS TINYINT), CAST(2 AS BIGINT)) AS add_b_l, try_add(CAST(2 AS BIGINT), CAST(1 AS TINYINT)) AS add_l_b, try_add(CAST(1 AS SMALLINT), CAST(2 AS INT)) AS add_s_i, try_add(CAST(2 AS INT), CAST(1 AS SMALLINT)) AS add_i_s, try_add(CAST(1 AS SMALLINT), CAST(2 AS BIGINT)) AS add_s_l, try_add(CAST(2 AS BIGINT), CAST(1 AS SMALLINT)) AS add_l_s, try_add(CAST(1 AS INT), CAST(2 AS BIGINT)) AS add_i_l, try_add(CAST(2 AS BIGINT), CAST(1 AS INT)) AS add_l_i",
+      "ansi_modes": [
+        false,
+        true
+      ],
+      "scope": "required"
+    },
+    {
+      "id": "int_long_boundary_literals",
+      "sql": "SELECT try_add(2147483647, 1L) AS add_widen, try_subtract(2147483647, 1L) AS subtract_widen, try_multiply(2147483647, 1L) AS multiply_widen, try_divide(2147483647, 1L) AS divide_widen, try_mod(2147483647, 1L) AS mod_widen, try_add(9223372036854775807L, 1) AS add_overflow, try_subtract(9223372036854775807L, 1) AS subtract_overflow, try_multiply(9223372036854775807L, 1) AS multiply_overflow, try_divide(9223372036854775807L, 1) AS divide_overflow, try_mod(9223372036854775807L, 1) AS mod_overflow, try_add(CAST('-9223372036854775808' AS BIGINT), 1) AS add_min_minus_one, try_subtract(CAST('-9223372036854775808' AS BIGINT), 1) AS subtract_min_minus_one, try_multiply(CAST('-9223372036854775808' AS BIGINT), 1) AS multiply_min_minus_one, try_divide(CAST('-9223372036854775808' AS BIGINT), 1) AS divide_min_minus_one, try_mod(CAST('-9223372036854775808' AS BIGINT), 1) AS mod_min_minus_one, try_add(CAST('-9223372036854775808' AS BIGINT), -1) AS add_min_times_negative_one, try_subtract(CAST('-9223372036854775808' AS BIGINT), -1) AS subtract_min_times_negative_one, try_multiply(CAST('-9223372036854775808' AS BIGINT), -1) AS multiply_min_times_negative_one, try_divide(CAST('-9223372036854775808' AS BIGINT), -1) AS divide_min_times_negative_one, try_mod(CAST('-9223372036854775808' AS BIGINT), -1) AS mod_min_times_negative_one, try_add(5, 0L) AS add_zero, try_subtract(5, 0L) AS subtract_zero, try_multiply(5, 0L) AS multiply_zero, try_divide(5, 0L) AS divide_zero, try_mod(5, 0L) AS mod_zero, try_add(CAST(NULL AS INT), 2L) AS add_null, try_subtract(CAST(NULL AS INT), 2L) AS subtract_null, try_multiply(CAST(NULL AS INT), 2L) AS multiply_null, try_divide(CAST(NULL AS INT), 2L) AS divide_null, try_mod(CAST(NULL AS INT), 2L) AS mod_null",
+      "ansi_modes": [
+        false,
+        true
+      ],
+      "scope": "required"
+    },
+    {
+      "id": "same_byte_literals",
+      "sql": "SELECT try_add(CAST(127 AS TINYINT), CAST(1 AS TINYINT)) AS add_add_overflow, try_subtract(CAST(127 AS TINYINT), CAST(1 AS TINYINT)) AS subtract_add_overflow, try_multiply(CAST(127 AS TINYINT), CAST(1 AS TINYINT)) AS multiply_add_overflow, try_divide(CAST(127 AS TINYINT), CAST(1 AS TINYINT)) AS divide_add_overflow, try_mod(CAST(127 AS TINYINT), CAST(1 AS TINYINT)) AS mod_add_overflow, try_add(CAST(-128 AS TINYINT), CAST(1 AS TINYINT)) AS add_subtract_overflow, try_subtract(CAST(-128 AS TINYINT), CAST(1 AS TINYINT)) AS subtract_subtract_overflow, try_multiply(CAST(-128 AS TINYINT), CAST(1 AS TINYINT)) AS multiply_subtract_overflow, try_divide(CAST(-128 AS TINYINT), CAST(1 AS TINYINT)) AS divide_subtract_overflow, try_mod(CAST(-128 AS TINYINT), CAST(1 AS TINYINT)) AS mod_subtract_overflow, try_add(CAST(64 AS TINYINT), CAST(2 AS TINYINT)) AS add_multiply_overflow, try_subtract(CAST(64 AS TINYINT), CAST(2 AS TINYINT)) AS subtract_multiply_overflow, try_multiply(CAST(64 AS TINYINT), CAST(2 AS TINYINT)) AS multiply_multiply_overflow, try_divide(CAST(64 AS TINYINT), CAST(2 AS TINYINT)) AS divide_multiply_overflow, try_mod(CAST(64 AS TINYINT), CAST(2 AS TINYINT)) AS mod_multiply_overflow, try_add(CAST(-128 AS TINYINT), CAST(-1 AS TINYINT)) AS add_minimum_negative_one, try_subtract(CAST(-128 AS TINYINT), CAST(-1 AS TINYINT)) AS subtract_minimum_negative_one, try_multiply(CAST(-128 AS TINYINT), CAST(-1 AS TINYINT)) AS multiply_minimum_negative_one, try_divide(CAST(-128 AS TINYINT), CAST(-1 AS TINYINT)) AS divide_minimum_negative_one, try_mod(CAST(-128 AS TINYINT), CAST(-1 AS TINYINT)) AS mod_minimum_negative_one, try_add(CAST(7 AS TINYINT), CAST(0 AS TINYINT)) AS add_zero, try_subtract(CAST(7 AS TINYINT), CAST(0 AS TINYINT)) AS subtract_zero, try_multiply(CAST(7 AS TINYINT), CAST(0 AS TINYINT)) AS multiply_zero, try_divide(CAST(7 AS TINYINT), CAST(0 AS TINYINT)) AS divide_zero, try_mod(CAST(7 AS TINYINT), CAST(0 AS TINYINT)) AS mod_zero, try_add(CAST(NULL AS TINYINT), CAST(1 AS TINYINT)) AS add_null, try_subtract(CAST(NULL AS TINYINT), CAST(1 AS TINYINT)) AS subtract_null, try_multiply(CAST(NULL AS TINYINT), CAST(1 AS TINYINT)) AS multiply_null, try_divide(CAST(NULL AS TINYINT), CAST(1 AS TINYINT)) AS divide_null, try_mod(CAST(NULL AS TINYINT), CAST(1 AS TINYINT)) AS mod_null",
+      "ansi_modes": [
+        false,
+        true
+      ],
+      "scope": "required"
+    },
+    {
+      "id": "same_short_literals",
+      "sql": "SELECT try_add(CAST(32767 AS SMALLINT), CAST(1 AS SMALLINT)) AS add_add_overflow, try_subtract(CAST(32767 AS SMALLINT), CAST(1 AS SMALLINT)) AS subtract_add_overflow, try_multiply(CAST(32767 AS SMALLINT), CAST(1 AS SMALLINT)) AS multiply_add_overflow, try_divide(CAST(32767 AS SMALLINT), CAST(1 AS SMALLINT)) AS divide_add_overflow, try_mod(CAST(32767 AS SMALLINT), CAST(1 AS SMALLINT)) AS mod_add_overflow, try_add(CAST(-32768 AS SMALLINT), CAST(1 AS SMALLINT)) AS add_subtract_overflow, try_subtract(CAST(-32768 AS SMALLINT), CAST(1 AS SMALLINT)) AS subtract_subtract_overflow, try_multiply(CAST(-32768 AS SMALLINT), CAST(1 AS SMALLINT)) AS multiply_subtract_overflow, try_divide(CAST(-32768 AS SMALLINT), CAST(1 AS SMALLINT)) AS divide_subtract_overflow, try_mod(CAST(-32768 AS SMALLINT), CAST(1 AS SMALLINT)) AS mod_subtract_overflow, try_add(CAST(16384 AS SMALLINT), CAST(2 AS SMALLINT)) AS add_multiply_overflow, try_subtract(CAST(16384 AS SMALLINT), CAST(2 AS SMALLINT)) AS subtract_multiply_overflow, try_multiply(CAST(16384 AS SMALLINT), CAST(2 AS SMALLINT)) AS multiply_multiply_overflow, try_divide(CAST(16384 AS SMALLINT), CAST(2 AS SMALLINT)) AS divide_multiply_overflow, try_mod(CAST(16384 AS SMALLINT), CAST(2 AS SMALLINT)) AS mod_multiply_overflow, try_add(CAST(-32768 AS SMALLINT), CAST(-1 AS SMALLINT)) AS add_minimum_negative_one, try_subtract(CAST(-32768 AS SMALLINT), CAST(-1 AS SMALLINT)) AS subtract_minimum_negative_one, try_multiply(CAST(-32768 AS SMALLINT), CAST(-1 AS SMALLINT)) AS multiply_minimum_negative_one, try_divide(CAST(-32768 AS SMALLINT), CAST(-1 AS SMALLINT)) AS divide_minimum_negative_one, try_mod(CAST(-32768 AS SMALLINT), CAST(-1 AS SMALLINT)) AS mod_minimum_negative_one, try_add(CAST(7 AS SMALLINT), CAST(0 AS SMALLINT)) AS add_zero, try_subtract(CAST(7 AS SMALLINT), CAST(0 AS SMALLINT)) AS subtract_zero, try_multiply(CAST(7 AS SMALLINT), CAST(0 AS SMALLINT)) AS multiply_zero, try_divide(CAST(7 AS SMALLINT), CAST(0 AS SMALLINT)) AS divide_zero, try_mod(CAST(7 AS SMALLINT), CAST(0 AS SMALLINT)) AS mod_zero, try_add(CAST(NULL AS SMALLINT), CAST(1 AS SMALLINT)) AS add_null, try_subtract(CAST(NULL AS SMALLINT), CAST(1 AS SMALLINT)) AS subtract_null, try_multiply(CAST(NULL AS SMALLINT), CAST(1 AS SMALLINT)) AS multiply_null, try_divide(CAST(NULL AS SMALLINT), CAST(1 AS SMALLINT)) AS divide_null, try_mod(CAST(NULL AS SMALLINT), CAST(1 AS SMALLINT)) AS mod_null",
+      "ansi_modes": [
+        false,
+        true
+      ],
+      "scope": "required"
+    },
+    {
+      "id": "decimal_double_int_literals",
+      "sql": "SELECT try_add(CAST('2.50' AS DECIMAL(8,2)), -7) AS add_d_i, try_subtract(CAST('2.50' AS DECIMAL(8,2)), -7) AS subtract_d_i, try_multiply(CAST('2.50' AS DECIMAL(8,2)), -7) AS multiply_d_i, try_divide(CAST('2.50' AS DECIMAL(8,2)), -7) AS divide_d_i, try_mod(CAST('2.50' AS DECIMAL(8,2)), -7) AS mod_d_i, try_add(-7, CAST('2.50' AS DECIMAL(8,2))) AS add_i_d, try_subtract(-7, CAST('2.50' AS DECIMAL(8,2))) AS subtract_i_d, try_multiply(-7, CAST('2.50' AS DECIMAL(8,2))) AS multiply_i_d, try_divide(-7, CAST('2.50' AS DECIMAL(8,2))) AS divide_i_d, try_mod(-7, CAST('2.50' AS DECIMAL(8,2))) AS mod_i_d, try_add(CAST('0.5' AS DOUBLE), -7) AS add_f_i, try_subtract(CAST('0.5' AS DOUBLE), -7) AS subtract_f_i, try_multiply(CAST('0.5' AS DOUBLE), -7) AS multiply_f_i, try_divide(CAST('0.5' AS DOUBLE), -7) AS divide_f_i, try_mod(CAST('0.5' AS DOUBLE), -7) AS mod_f_i, try_add(-7, CAST('0.5' AS DOUBLE)) AS add_i_f, try_subtract(-7, CAST('0.5' AS DOUBLE)) AS subtract_i_f, try_multiply(-7, CAST('0.5' AS DOUBLE)) AS multiply_i_f, try_divide(-7, CAST('0.5' AS DOUBLE)) AS divide_i_f, try_mod(-7, CAST('0.5' AS DOUBLE)) AS mod_i_f, try_add(CAST('2.50' AS DECIMAL(8,2)), CAST('0.5' AS DOUBLE)) AS add_d_f, try_subtract(CAST('2.50' AS DECIMAL(8,2)), CAST('0.5' AS DOUBLE)) AS subtract_d_f, try_multiply(CAST('2.50' AS DECIMAL(8,2)), CAST('0.5' AS DOUBLE)) AS multiply_d_f, try_divide(CAST('2.50' AS DECIMAL(8,2)), CAST('0.5' AS DOUBLE)) AS divide_d_f, try_mod(CAST('2.50' AS DECIMAL(8,2)), CAST('0.5' AS DOUBLE)) AS mod_d_f, try_add(CAST('0.5' AS DOUBLE), CAST('2.50' AS DECIMAL(8,2))) AS add_f_d, try_subtract(CAST('0.5' AS DOUBLE), CAST('2.50' AS DECIMAL(8,2))) AS subtract_f_d, try_multiply(CAST('0.5' AS DOUBLE), CAST('2.50' AS DECIMAL(8,2))) AS multiply_f_d, try_divide(CAST('0.5' AS DOUBLE), CAST('2.50' AS DECIMAL(8,2))) AS divide_f_d, try_mod(CAST('0.5' AS DOUBLE), CAST('2.50' AS DECIMAL(8,2))) AS mod_f_d",
+      "ansi_modes": [
+        false,
+        true
+      ],
+      "scope": "required"
+    },
+    {
+      "id": "float_division_literals",
+      "sql": "SELECT try_divide(CAST(1 AS FLOAT), CAST(3 AS FLOAT)) AS divide_f_g, try_divide(CAST(3 AS FLOAT), CAST(1 AS FLOAT)) AS divide_g_f, try_divide(CAST(16777216 AS FLOAT), 16777217) AS divide_f_i, try_divide(16777217, CAST(16777216 AS FLOAT)) AS divide_i_f, try_divide(CAST('-0.0' AS FLOAT), CAST(2 AS FLOAT)) AS divide_negzero_two, try_divide(CAST(2 AS FLOAT), CAST('-0.0' AS FLOAT)) AS divide_two_negzero",
+      "ansi_modes": [
+        false,
+        true
+      ],
+      "scope": "required"
+    },
+    {
+      "id": "decimal_untyped_null_column",
+      "sql": "SELECT k, try_divide(d, NULL) AS divide_d_null, try_divide(NULL, d) AS divide_null_d, try_divide(d, CAST(NULL AS DECIMAL(8,2))) AS divide_d_typed, try_divide(CAST(NULL AS DECIMAL(8,2)), d) AS divide_typed_d FROM numerics ORDER BY k",
+      "ansi_modes": [
+        false,
+        true
+      ],
+      "scope": "required"
+    },
+    {
+      "id": "decimal_untyped_null_literal",
+      "sql": "SELECT try_divide(CAST('1.25' AS DECIMAL(8,2)), NULL) AS divide_d_null, try_divide(NULL, CAST('1.25' AS DECIMAL(8,2))) AS divide_null_d, try_divide(CAST('1.25' AS DECIMAL(8,2)), CAST(NULL AS DECIMAL(8,2))) AS divide_d_typed, try_divide(CAST(NULL AS DECIMAL(8,2)), CAST('1.25' AS DECIMAL(8,2))) AS divide_typed_d",
+      "ansi_modes": [
+        false,
+        true
+      ],
+      "scope": "required"
+    },
+    {
+      "id": "wide_decimal_boundary_literals",
+      "sql": "SELECT try_divide(CAST('99999999999999999999999999999999' AS DECIMAL(38,0)), 1) AS divide_d0_i0, try_add(CAST('99999999999999999999999999999999' AS DECIMAL(38,0)), 1) AS add_d0_i0, try_divide(1, CAST('99999999999999999999999999999999' AS DECIMAL(38,0))) AS divide_i0_d0, try_add(1, CAST('99999999999999999999999999999999' AS DECIMAL(38,0))) AS add_i0_d0, try_divide(CAST('100000000000000000000000000000000' AS DECIMAL(38,0)), 1) AS divide_d1_i1, try_add(CAST('100000000000000000000000000000000' AS DECIMAL(38,0)), 1) AS add_d1_i1, try_divide(1, CAST('100000000000000000000000000000000' AS DECIMAL(38,0))) AS divide_i1_d1, try_add(1, CAST('100000000000000000000000000000000' AS DECIMAL(38,0))) AS add_i1_d1, try_divide(CAST('100000000000000000000000000000000' AS DECIMAL(38,0)), 2) AS divide_d2_i2, try_add(CAST('100000000000000000000000000000000' AS DECIMAL(38,0)), 2) AS add_d2_i2, try_divide(2, CAST('100000000000000000000000000000000' AS DECIMAL(38,0))) AS divide_i2_d2, try_add(2, CAST('100000000000000000000000000000000' AS DECIMAL(38,0))) AS add_i2_d2, try_divide(CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0)), 2) AS divide_d3_i3, try_add(CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0)), 2) AS add_d3_i3, try_divide(2, CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0))) AS divide_i3_d3, try_add(2, CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0))) AS add_i3_d3, try_divide(CAST('1' AS DECIMAL(38,0)), 128) AS divide_d4_i4, try_add(CAST('1' AS DECIMAL(38,0)), 128) AS add_d4_i4, try_divide(128, CAST('1' AS DECIMAL(38,0))) AS divide_i4_d4, try_add(128, CAST('1' AS DECIMAL(38,0))) AS add_i4_d4, try_divide(CAST('-1' AS DECIMAL(38,0)), 128) AS divide_d5_i5, try_add(CAST('-1' AS DECIMAL(38,0)), 128) AS add_d5_i5, try_divide(128, CAST('-1' AS DECIMAL(38,0))) AS divide_i5_d5, try_add(128, CAST('-1' AS DECIMAL(38,0))) AS add_i5_d5, try_divide(CAST('1999999' AS DECIMAL(38,0)), 2000000) AS divide_d6_i6, try_add(CAST('1999999' AS DECIMAL(38,0)), 2000000) AS add_d6_i6, try_divide(2000000, CAST('1999999' AS DECIMAL(38,0))) AS divide_i6_d6, try_add(2000000, CAST('1999999' AS DECIMAL(38,0))) AS add_i6_d6, try_divide(CAST('1' AS DECIMAL(38,0)), 0) AS divide_d7_i7, try_add(CAST('1' AS DECIMAL(38,0)), 0) AS add_d7_i7, try_divide(0, CAST('1' AS DECIMAL(38,0))) AS divide_i7_d7, try_add(0, CAST('1' AS DECIMAL(38,0))) AS add_i7_d7, try_divide(CAST('0' AS DECIMAL(38,0)), 1) AS divide_d8_i8, try_add(CAST('0' AS DECIMAL(38,0)), 1) AS add_d8_i8, try_divide(1, CAST('0' AS DECIMAL(38,0))) AS divide_i8_d8, try_add(1, CAST('0' AS DECIMAL(38,0))) AS add_i8_d8",
+      "ansi_modes": [
+        false,
+        true
+      ],
+      "scope": "required"
+    },
+    {
+      "id": "string_valid_literals",
+      "sql": "SELECT try_add('12', 2) AS add_n_i, try_subtract('12', 2) AS subtract_n_i, try_multiply('12', 2) AS multiply_n_i, try_divide('12', 2) AS divide_n_i, try_mod('12', 2) AS mod_n_i, try_add(2, '12') AS add_i_n, try_subtract(2, '12') AS subtract_i_n, try_multiply(2, '12') AS multiply_i_n, try_divide(2, '12') AS divide_i_n, try_mod(2, '12') AS mod_i_n, try_add('12', CAST('1.25' AS DECIMAL(8,2))) AS add_n_d, try_subtract('12', CAST('1.25' AS DECIMAL(8,2))) AS subtract_n_d, try_multiply('12', CAST('1.25' AS DECIMAL(8,2))) AS multiply_n_d, try_divide('12', CAST('1.25' AS DECIMAL(8,2))) AS divide_n_d, try_mod('12', CAST('1.25' AS DECIMAL(8,2))) AS mod_n_d, try_add(CAST('1.25' AS DECIMAL(8,2)), '12') AS add_d_n, try_subtract(CAST('1.25' AS DECIMAL(8,2)), '12') AS subtract_d_n, try_multiply(CAST('1.25' AS DECIMAL(8,2)), '12') AS multiply_d_n, try_divide(CAST('1.25' AS DECIMAL(8,2)), '12') AS divide_d_n, try_mod(CAST('1.25' AS DECIMAL(8,2)), '12') AS mod_d_n, try_add('12', CAST('2.5' AS DOUBLE)) AS add_n_f, try_subtract('12', CAST('2.5' AS DOUBLE)) AS subtract_n_f, try_multiply('12', CAST('2.5' AS DOUBLE)) AS multiply_n_f, try_divide('12', CAST('2.5' AS DOUBLE)) AS divide_n_f, try_mod('12', CAST('2.5' AS DOUBLE)) AS mod_n_f, try_add(CAST('2.5' AS DOUBLE), '12') AS add_f_n, try_subtract(CAST('2.5' AS DOUBLE), '12') AS subtract_f_n, try_multiply(CAST('2.5' AS DOUBLE), '12') AS multiply_f_n, try_divide(CAST('2.5' AS DOUBLE), '12') AS divide_f_n, try_mod(CAST('2.5' AS DOUBLE), '12') AS mod_f_n",
+      "ansi_modes": [
+        false,
+        true
+      ],
+      "scope": "required"
+    },
+    {
+      "id": "string_fraction_literals",
+      "sql": "SELECT try_add('2.5', 2) AS add_n_i, try_subtract('2.5', 2) AS subtract_n_i, try_multiply('2.5', 2) AS multiply_n_i, try_divide('2.5', 2) AS divide_n_i, try_mod('2.5', 2) AS mod_n_i, try_add(2, '2.5') AS add_i_n, try_subtract(2, '2.5') AS subtract_i_n, try_multiply(2, '2.5') AS multiply_i_n, try_divide(2, '2.5') AS divide_i_n, try_mod(2, '2.5') AS mod_i_n, try_add('2.5', CAST('1.25' AS DECIMAL(8,2))) AS add_n_d, try_subtract('2.5', CAST('1.25' AS DECIMAL(8,2))) AS subtract_n_d, try_multiply('2.5', CAST('1.25' AS DECIMAL(8,2))) AS multiply_n_d, try_divide('2.5', CAST('1.25' AS DECIMAL(8,2))) AS divide_n_d, try_mod('2.5', CAST('1.25' AS DECIMAL(8,2))) AS mod_n_d, try_add(CAST('1.25' AS DECIMAL(8,2)), '2.5') AS add_d_n, try_subtract(CAST('1.25' AS DECIMAL(8,2)), '2.5') AS subtract_d_n, try_multiply(CAST('1.25' AS DECIMAL(8,2)), '2.5') AS multiply_d_n, try_divide(CAST('1.25' AS DECIMAL(8,2)), '2.5') AS divide_d_n, try_mod(CAST('1.25' AS DECIMAL(8,2)), '2.5') AS mod_d_n, try_add('2.5', CAST('2.5' AS DOUBLE)) AS add_n_f, try_subtract('2.5', CAST('2.5' AS DOUBLE)) AS subtract_n_f, try_multiply('2.5', CAST('2.5' AS DOUBLE)) AS multiply_n_f, try_divide('2.5', CAST('2.5' AS DOUBLE)) AS divide_n_f, try_mod('2.5', CAST('2.5' AS DOUBLE)) AS mod_n_f, try_add(CAST('2.5' AS DOUBLE), '2.5') AS add_f_n, try_subtract(CAST('2.5' AS DOUBLE), '2.5') AS subtract_f_n, try_multiply(CAST('2.5' AS DOUBLE), '2.5') AS multiply_f_n, try_divide(CAST('2.5' AS DOUBLE), '2.5') AS divide_f_n, try_mod(CAST('2.5' AS DOUBLE), '2.5') AS mod_f_n",
+      "ansi_modes": [
+        false,
+        true
+      ],
+      "scope": "required"
+    },
+    {
+      "id": "string_malformed_literals",
+      "sql": "SELECT try_add('bad', 2) AS add_n_i, try_subtract('bad', 2) AS subtract_n_i, try_multiply('bad', 2) AS multiply_n_i, try_divide('bad', 2) AS divide_n_i, try_mod('bad', 2) AS mod_n_i, try_add(2, 'bad') AS add_i_n, try_subtract(2, 'bad') AS subtract_i_n, try_multiply(2, 'bad') AS multiply_i_n, try_divide(2, 'bad') AS divide_i_n, try_mod(2, 'bad') AS mod_i_n, try_add('bad', CAST('1.25' AS DECIMAL(8,2))) AS add_n_d, try_subtract('bad', CAST('1.25' AS DECIMAL(8,2))) AS subtract_n_d, try_multiply('bad', CAST('1.25' AS DECIMAL(8,2))) AS multiply_n_d, try_divide('bad', CAST('1.25' AS DECIMAL(8,2))) AS divide_n_d, try_mod('bad', CAST('1.25' AS DECIMAL(8,2))) AS mod_n_d, try_add(CAST('1.25' AS DECIMAL(8,2)), 'bad') AS add_d_n, try_subtract(CAST('1.25' AS DECIMAL(8,2)), 'bad') AS subtract_d_n, try_multiply(CAST('1.25' AS DECIMAL(8,2)), 'bad') AS multiply_d_n, try_divide(CAST('1.25' AS DECIMAL(8,2)), 'bad') AS divide_d_n, try_mod(CAST('1.25' AS DECIMAL(8,2)), 'bad') AS mod_d_n, try_add('bad', CAST('2.5' AS DOUBLE)) AS add_n_f, try_subtract('bad', CAST('2.5' AS DOUBLE)) AS subtract_n_f, try_multiply('bad', CAST('2.5' AS DOUBLE)) AS multiply_n_f, try_divide('bad', CAST('2.5' AS DOUBLE)) AS divide_n_f, try_mod('bad', CAST('2.5' AS DOUBLE)) AS mod_n_f, try_add(CAST('2.5' AS DOUBLE), 'bad') AS add_f_n, try_subtract(CAST('2.5' AS DOUBLE), 'bad') AS subtract_f_n, try_multiply(CAST('2.5' AS DOUBLE), 'bad') AS multiply_f_n, try_divide(CAST('2.5' AS DOUBLE), 'bad') AS divide_f_n, try_mod(CAST('2.5' AS DOUBLE), 'bad') AS mod_f_n",
+      "ansi_modes": [
+        false,
+        true
+      ],
+      "scope": "required"
+    },
+    {
+      "id": "string_overflow_literals",
+      "sql": "SELECT try_add('9223372036854775808', 2) AS add_n_i, try_subtract('9223372036854775808', 2) AS subtract_n_i, try_multiply('9223372036854775808', 2) AS multiply_n_i, try_divide('9223372036854775808', 2) AS divide_n_i, try_mod('9223372036854775808', 2) AS mod_n_i, try_add(2, '9223372036854775808') AS add_i_n, try_subtract(2, '9223372036854775808') AS subtract_i_n, try_multiply(2, '9223372036854775808') AS multiply_i_n, try_divide(2, '9223372036854775808') AS divide_i_n, try_mod(2, '9223372036854775808') AS mod_i_n, try_add('9223372036854775808', CAST('1.25' AS DECIMAL(8,2))) AS add_n_d, try_subtract('9223372036854775808', CAST('1.25' AS DECIMAL(8,2))) AS subtract_n_d, try_multiply('9223372036854775808', CAST('1.25' AS DECIMAL(8,2))) AS multiply_n_d, try_divide('9223372036854775808', CAST('1.25' AS DECIMAL(8,2))) AS divide_n_d, try_mod('9223372036854775808', CAST('1.25' AS DECIMAL(8,2))) AS mod_n_d, try_add(CAST('1.25' AS DECIMAL(8,2)), '9223372036854775808') AS add_d_n, try_subtract(CAST('1.25' AS DECIMAL(8,2)), '9223372036854775808') AS subtract_d_n, try_multiply(CAST('1.25' AS DECIMAL(8,2)), '9223372036854775808') AS multiply_d_n, try_divide(CAST('1.25' AS DECIMAL(8,2)), '9223372036854775808') AS divide_d_n, try_mod(CAST('1.25' AS DECIMAL(8,2)), '9223372036854775808') AS mod_d_n, try_add('9223372036854775808', CAST('2.5' AS DOUBLE)) AS add_n_f, try_subtract('9223372036854775808', CAST('2.5' AS DOUBLE)) AS subtract_n_f, try_multiply('9223372036854775808', CAST('2.5' AS DOUBLE)) AS multiply_n_f, try_divide('9223372036854775808', CAST('2.5' AS DOUBLE)) AS divide_n_f, try_mod('9223372036854775808', CAST('2.5' AS DOUBLE)) AS mod_n_f, try_add(CAST('2.5' AS DOUBLE), '9223372036854775808') AS add_f_n, try_subtract(CAST('2.5' AS DOUBLE), '9223372036854775808') AS subtract_f_n, try_multiply(CAST('2.5' AS DOUBLE), '9223372036854775808') AS multiply_f_n, try_divide(CAST('2.5' AS DOUBLE), '9223372036854775808') AS divide_f_n, try_mod(CAST('2.5' AS DOUBLE), '9223372036854775808') AS mod_f_n",
+      "ansi_modes": [
+        false,
+        true
+      ],
+      "scope": "required"
+    },
+    {
+      "id": "string_zero_literals",
+      "sql": "SELECT try_add('0', 2) AS add_n_i, try_subtract('0', 2) AS subtract_n_i, try_multiply('0', 2) AS multiply_n_i, try_divide('0', 2) AS divide_n_i, try_mod('0', 2) AS mod_n_i, try_add(2, '0') AS add_i_n, try_subtract(2, '0') AS subtract_i_n, try_multiply(2, '0') AS multiply_i_n, try_divide(2, '0') AS divide_i_n, try_mod(2, '0') AS mod_i_n, try_add('0', CAST('1.25' AS DECIMAL(8,2))) AS add_n_d, try_subtract('0', CAST('1.25' AS DECIMAL(8,2))) AS subtract_n_d, try_multiply('0', CAST('1.25' AS DECIMAL(8,2))) AS multiply_n_d, try_divide('0', CAST('1.25' AS DECIMAL(8,2))) AS divide_n_d, try_mod('0', CAST('1.25' AS DECIMAL(8,2))) AS mod_n_d, try_add(CAST('1.25' AS DECIMAL(8,2)), '0') AS add_d_n, try_subtract(CAST('1.25' AS DECIMAL(8,2)), '0') AS subtract_d_n, try_multiply(CAST('1.25' AS DECIMAL(8,2)), '0') AS multiply_d_n, try_divide(CAST('1.25' AS DECIMAL(8,2)), '0') AS divide_d_n, try_mod(CAST('1.25' AS DECIMAL(8,2)), '0') AS mod_d_n, try_add('0', CAST('2.5' AS DOUBLE)) AS add_n_f, try_subtract('0', CAST('2.5' AS DOUBLE)) AS subtract_n_f, try_multiply('0', CAST('2.5' AS DOUBLE)) AS multiply_n_f, try_divide('0', CAST('2.5' AS DOUBLE)) AS divide_n_f, try_mod('0', CAST('2.5' AS DOUBLE)) AS mod_n_f, try_add(CAST('2.5' AS DOUBLE), '0') AS add_f_n, try_subtract(CAST('2.5' AS DOUBLE), '0') AS subtract_f_n, try_multiply(CAST('2.5' AS DOUBLE), '0') AS multiply_f_n, try_divide(CAST('2.5' AS DOUBLE), '0') AS divide_f_n, try_mod(CAST('2.5' AS DOUBLE), '0') AS mod_f_n",
+      "ansi_modes": [
+        false,
+        true
+      ],
+      "scope": "required"
+    },
+    {
+      "id": "string_null_literals",
+      "sql": "SELECT try_add(CAST(NULL AS STRING), 2) AS add_n_i, try_subtract(CAST(NULL AS STRING), 2) AS subtract_n_i, try_multiply(CAST(NULL AS STRING), 2) AS multiply_n_i, try_divide(CAST(NULL AS STRING), 2) AS divide_n_i, try_mod(CAST(NULL AS STRING), 2) AS mod_n_i, try_add(2, CAST(NULL AS STRING)) AS add_i_n, try_subtract(2, CAST(NULL AS STRING)) AS subtract_i_n, try_multiply(2, CAST(NULL AS STRING)) AS multiply_i_n, try_divide(2, CAST(NULL AS STRING)) AS divide_i_n, try_mod(2, CAST(NULL AS STRING)) AS mod_i_n, try_add(CAST(NULL AS STRING), CAST('1.25' AS DECIMAL(8,2))) AS add_n_d, try_subtract(CAST(NULL AS STRING), CAST('1.25' AS DECIMAL(8,2))) AS subtract_n_d, try_multiply(CAST(NULL AS STRING), CAST('1.25' AS DECIMAL(8,2))) AS multiply_n_d, try_divide(CAST(NULL AS STRING), CAST('1.25' AS DECIMAL(8,2))) AS divide_n_d, try_mod(CAST(NULL AS STRING), CAST('1.25' AS DECIMAL(8,2))) AS mod_n_d, try_add(CAST('1.25' AS DECIMAL(8,2)), CAST(NULL AS STRING)) AS add_d_n, try_subtract(CAST('1.25' AS DECIMAL(8,2)), CAST(NULL AS STRING)) AS subtract_d_n, try_multiply(CAST('1.25' AS DECIMAL(8,2)), CAST(NULL AS STRING)) AS multiply_d_n, try_divide(CAST('1.25' AS DECIMAL(8,2)), CAST(NULL AS STRING)) AS divide_d_n, try_mod(CAST('1.25' AS DECIMAL(8,2)), CAST(NULL AS STRING)) AS mod_d_n, try_add(CAST(NULL AS STRING), CAST('2.5' AS DOUBLE)) AS add_n_f, try_subtract(CAST(NULL AS STRING), CAST('2.5' AS DOUBLE)) AS subtract_n_f, try_multiply(CAST(NULL AS STRING), CAST('2.5' AS DOUBLE)) AS multiply_n_f, try_divide(CAST(NULL AS STRING), CAST('2.5' AS DOUBLE)) AS divide_n_f, try_mod(CAST(NULL AS STRING), CAST('2.5' AS DOUBLE)) AS mod_n_f, try_add(CAST('2.5' AS DOUBLE), CAST(NULL AS STRING)) AS add_f_n, try_subtract(CAST('2.5' AS DOUBLE), CAST(NULL AS STRING)) AS subtract_f_n, try_multiply(CAST('2.5' AS DOUBLE), CAST(NULL AS STRING)) AS multiply_f_n, try_divide(CAST('2.5' AS DOUBLE), CAST(NULL AS STRING)) AS divide_f_n, try_mod(CAST('2.5' AS DOUBLE), CAST(NULL AS STRING)) AS mod_f_n",
+      "ansi_modes": [
+        false,
+        true
+      ],
+      "scope": "required"
+    },
+    {
+      "id": "plain_width_control",
+      "sql": "SELECT k, b + s AS add_b_s, b - s AS subtract_b_s, b * s AS multiply_b_s, b / s AS divide_b_s, b % s AS mod_b_s, s + b AS add_s_b, s - b AS subtract_s_b, s * b AS multiply_s_b, s / b AS divide_s_b, s % b AS mod_s_b, i + l AS add_i_l, i - l AS subtract_i_l, i * l AS multiply_i_l, i / l AS divide_i_l, i % l AS mod_i_l, l + i AS add_l_i, l - i AS subtract_l_i, l * i AS multiply_l_i, l / i AS divide_l_i, l % i AS mod_l_i FROM widths WHERE k = 0 ORDER BY k",
+      "ansi_modes": [
+        false,
+        true
+      ],
+      "scope": "plain_control"
+    },
+    {
+      "id": "plain_decimal_control",
+      "sql": "SELECT k, i + d AS add_i_d, i - d AS subtract_i_d, i * d AS multiply_i_d, i / d AS divide_i_d, i % d AS mod_i_d, d + i AS add_d_i, d - i AS subtract_d_i, d * i AS multiply_d_i, d / i AS divide_d_i, d % i AS mod_d_i FROM numerics WHERE k < 2 ORDER BY k",
+      "ansi_modes": [
+        false,
+        true
+      ],
+      "scope": "plain_control"
+    },
+    {
+      "id": "plain_float_control",
+      "sql": "SELECT k, f / g AS divide_f_g, g / f AS divide_g_f, f / i AS divide_f_i, i / f AS divide_i_f FROM float_pairs WHERE k < 2 ORDER BY k",
+      "ansi_modes": [
+        false,
+        true
+      ],
+      "scope": "plain_control"
+    },
+    {
+      "id": "plain_string_control",
+      "sql": "SELECT k, n + i AS add_n_i, n - i AS subtract_n_i, n * i AS multiply_n_i, n / i AS divide_n_i, n % i AS mod_n_i, i + n AS add_i_n, i - n AS subtract_i_n, i * n AS multiply_i_n, i / n AS divide_i_n, i % n AS mod_i_n, n + f AS add_n_f, n - f AS subtract_n_f, n * f AS multiply_n_f, n / f AS divide_n_f, n % f AS mod_n_f, f + n AS add_f_n, f - n AS subtract_f_n, f * n AS multiply_f_n, f / n AS divide_f_n, f % n AS mod_f_n FROM numeric_strings WHERE k < 2 ORDER BY k",
+      "ansi_modes": [
+        false,
+        true
+      ],
+      "scope": "plain_control"
+    },
+    {
+      "id": "plain_decimal_division_rounding",
+      "sql": "SELECT k, d / i AS divide_d_i, i / d AS divide_i_d FROM wide_decimals WHERE k IN (0, 2, 4, 5, 6) ORDER BY k",
+      "ansi_modes": [
+        false,
+        true
+      ],
+      "scope": "plain_control"
+    },
+    {
+      "id": "connected_try_add_columns_s_t",
+      "sql": "SELECT k, try_add(s, t) AS r FROM string_pairs ORDER BY k",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_add_columns_t_s",
+      "sql": "SELECT k, try_add(t, s) AS r FROM string_pairs ORDER BY k",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_add_columns_s_null",
+      "sql": "SELECT k, try_add(s, NULL) AS r FROM string_pairs ORDER BY k",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_add_columns_null_s",
+      "sql": "SELECT k, try_add(NULL, s) AS r FROM string_pairs ORDER BY k",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_subtract_columns_s_t",
+      "sql": "SELECT k, try_subtract(s, t) AS r FROM string_pairs ORDER BY k",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_subtract_columns_t_s",
+      "sql": "SELECT k, try_subtract(t, s) AS r FROM string_pairs ORDER BY k",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_subtract_columns_s_null",
+      "sql": "SELECT k, try_subtract(s, NULL) AS r FROM string_pairs ORDER BY k",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_subtract_columns_null_s",
+      "sql": "SELECT k, try_subtract(NULL, s) AS r FROM string_pairs ORDER BY k",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_multiply_columns_s_t",
+      "sql": "SELECT k, try_multiply(s, t) AS r FROM string_pairs ORDER BY k",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_multiply_columns_t_s",
+      "sql": "SELECT k, try_multiply(t, s) AS r FROM string_pairs ORDER BY k",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_multiply_columns_s_null",
+      "sql": "SELECT k, try_multiply(s, NULL) AS r FROM string_pairs ORDER BY k",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_multiply_columns_null_s",
+      "sql": "SELECT k, try_multiply(NULL, s) AS r FROM string_pairs ORDER BY k",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_divide_columns_s_t",
+      "sql": "SELECT k, try_divide(s, t) AS r FROM string_pairs ORDER BY k",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "legacy_plain_divide_columns_s_t",
+      "sql": "SELECT k, s / t AS r FROM string_pairs ORDER BY k",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "plain_control",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_divide_columns_t_s",
+      "sql": "SELECT k, try_divide(t, s) AS r FROM string_pairs ORDER BY k",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "legacy_plain_divide_columns_t_s",
+      "sql": "SELECT k, t / s AS r FROM string_pairs ORDER BY k",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "plain_control",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_divide_columns_s_null",
+      "sql": "SELECT k, try_divide(s, NULL) AS r FROM string_pairs ORDER BY k",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "legacy_plain_divide_columns_s_null",
+      "sql": "SELECT k, s / NULL AS r FROM string_pairs ORDER BY k",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "plain_control",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_divide_columns_null_s",
+      "sql": "SELECT k, try_divide(NULL, s) AS r FROM string_pairs ORDER BY k",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "legacy_plain_divide_columns_null_s",
+      "sql": "SELECT k, NULL / s AS r FROM string_pairs ORDER BY k",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "plain_control",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_mod_columns_s_t",
+      "sql": "SELECT k, try_mod(s, t) AS r FROM string_pairs ORDER BY k",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "legacy_plain_mod_columns_s_t",
+      "sql": "SELECT k, s % t AS r FROM string_pairs ORDER BY k",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "plain_control",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_mod_columns_t_s",
+      "sql": "SELECT k, try_mod(t, s) AS r FROM string_pairs ORDER BY k",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "legacy_plain_mod_columns_t_s",
+      "sql": "SELECT k, t % s AS r FROM string_pairs ORDER BY k",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "plain_control",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_mod_columns_s_null",
+      "sql": "SELECT k, try_mod(s, NULL) AS r FROM string_pairs ORDER BY k",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "legacy_plain_mod_columns_s_null",
+      "sql": "SELECT k, s % NULL AS r FROM string_pairs ORDER BY k",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "plain_control",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_mod_columns_null_s",
+      "sql": "SELECT k, try_mod(NULL, s) AS r FROM string_pairs ORDER BY k",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "legacy_plain_mod_columns_null_s",
+      "sql": "SELECT k, NULL % s AS r FROM string_pairs ORDER BY k",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "plain_control",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_add_literals_s_t",
+      "sql": "SELECT try_add('7', '2') AS r",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_add_literals_t_s",
+      "sql": "SELECT try_add('2', '7') AS r",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_add_literals_s_null",
+      "sql": "SELECT try_add('7', NULL) AS r",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_add_literals_null_s",
+      "sql": "SELECT try_add(NULL, '7') AS r",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_subtract_literals_s_t",
+      "sql": "SELECT try_subtract('7', '2') AS r",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_subtract_literals_t_s",
+      "sql": "SELECT try_subtract('2', '7') AS r",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_subtract_literals_s_null",
+      "sql": "SELECT try_subtract('7', NULL) AS r",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_subtract_literals_null_s",
+      "sql": "SELECT try_subtract(NULL, '7') AS r",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_multiply_literals_s_t",
+      "sql": "SELECT try_multiply('7', '2') AS r",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_multiply_literals_t_s",
+      "sql": "SELECT try_multiply('2', '7') AS r",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_multiply_literals_s_null",
+      "sql": "SELECT try_multiply('7', NULL) AS r",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_multiply_literals_null_s",
+      "sql": "SELECT try_multiply(NULL, '7') AS r",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_divide_literals_s_t",
+      "sql": "SELECT try_divide('7', '2') AS r",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "legacy_plain_divide_literals_s_t",
+      "sql": "SELECT '7' / '2' AS r",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "plain_control",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_divide_literals_t_s",
+      "sql": "SELECT try_divide('2', '7') AS r",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "legacy_plain_divide_literals_t_s",
+      "sql": "SELECT '2' / '7' AS r",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "plain_control",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_divide_literals_s_null",
+      "sql": "SELECT try_divide('7', NULL) AS r",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "legacy_plain_divide_literals_s_null",
+      "sql": "SELECT '7' / NULL AS r",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "plain_control",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_divide_literals_null_s",
+      "sql": "SELECT try_divide(NULL, '7') AS r",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "legacy_plain_divide_literals_null_s",
+      "sql": "SELECT NULL / '7' AS r",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "plain_control",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_mod_literals_s_t",
+      "sql": "SELECT try_mod('7', '2') AS r",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "legacy_plain_mod_literals_s_t",
+      "sql": "SELECT '7' % '2' AS r",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "plain_control",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_mod_literals_t_s",
+      "sql": "SELECT try_mod('2', '7') AS r",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "legacy_plain_mod_literals_t_s",
+      "sql": "SELECT '2' % '7' AS r",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "plain_control",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_mod_literals_s_null",
+      "sql": "SELECT try_mod('7', NULL) AS r",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "legacy_plain_mod_literals_s_null",
+      "sql": "SELECT '7' % NULL AS r",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "plain_control",
+      "observe_status": true
+    },
+    {
+      "id": "connected_try_mod_literals_null_s",
+      "sql": "SELECT try_mod(NULL, '7') AS r",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "connected",
+      "observe_status": true
+    },
+    {
+      "id": "legacy_plain_mod_literals_null_s",
+      "sql": "SELECT NULL % '7' AS r",
+      "ansi_modes": [
+        false
+      ],
+      "scope": "plain_control",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_add_n_i",
+      "sql": "SELECT k, try_add(n, i) AS add_n_i FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_subtract_n_i",
+      "sql": "SELECT k, try_subtract(n, i) AS subtract_n_i FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_multiply_n_i",
+      "sql": "SELECT k, try_multiply(n, i) AS multiply_n_i FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_divide_n_i",
+      "sql": "SELECT k, try_divide(n, i) AS divide_n_i FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_mod_n_i",
+      "sql": "SELECT k, try_mod(n, i) AS mod_n_i FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_add_i_n",
+      "sql": "SELECT k, try_add(i, n) AS add_i_n FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_subtract_i_n",
+      "sql": "SELECT k, try_subtract(i, n) AS subtract_i_n FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_multiply_i_n",
+      "sql": "SELECT k, try_multiply(i, n) AS multiply_i_n FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_divide_i_n",
+      "sql": "SELECT k, try_divide(i, n) AS divide_i_n FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_mod_i_n",
+      "sql": "SELECT k, try_mod(i, n) AS mod_i_n FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_add_n_l",
+      "sql": "SELECT k, try_add(n, l) AS add_n_l FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_subtract_n_l",
+      "sql": "SELECT k, try_subtract(n, l) AS subtract_n_l FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_multiply_n_l",
+      "sql": "SELECT k, try_multiply(n, l) AS multiply_n_l FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_divide_n_l",
+      "sql": "SELECT k, try_divide(n, l) AS divide_n_l FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_mod_n_l",
+      "sql": "SELECT k, try_mod(n, l) AS mod_n_l FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_add_l_n",
+      "sql": "SELECT k, try_add(l, n) AS add_l_n FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_subtract_l_n",
+      "sql": "SELECT k, try_subtract(l, n) AS subtract_l_n FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_multiply_l_n",
+      "sql": "SELECT k, try_multiply(l, n) AS multiply_l_n FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_divide_l_n",
+      "sql": "SELECT k, try_divide(l, n) AS divide_l_n FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_mod_l_n",
+      "sql": "SELECT k, try_mod(l, n) AS mod_l_n FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_add_n_d",
+      "sql": "SELECT k, try_add(n, d) AS add_n_d FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_subtract_n_d",
+      "sql": "SELECT k, try_subtract(n, d) AS subtract_n_d FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_multiply_n_d",
+      "sql": "SELECT k, try_multiply(n, d) AS multiply_n_d FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_divide_n_d",
+      "sql": "SELECT k, try_divide(n, d) AS divide_n_d FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_mod_n_d",
+      "sql": "SELECT k, try_mod(n, d) AS mod_n_d FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_add_d_n",
+      "sql": "SELECT k, try_add(d, n) AS add_d_n FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_subtract_d_n",
+      "sql": "SELECT k, try_subtract(d, n) AS subtract_d_n FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_multiply_d_n",
+      "sql": "SELECT k, try_multiply(d, n) AS multiply_d_n FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_divide_d_n",
+      "sql": "SELECT k, try_divide(d, n) AS divide_d_n FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_mod_d_n",
+      "sql": "SELECT k, try_mod(d, n) AS mod_d_n FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_add_n_f",
+      "sql": "SELECT k, try_add(n, f) AS add_n_f FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_subtract_n_f",
+      "sql": "SELECT k, try_subtract(n, f) AS subtract_n_f FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_multiply_n_f",
+      "sql": "SELECT k, try_multiply(n, f) AS multiply_n_f FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_divide_n_f",
+      "sql": "SELECT k, try_divide(n, f) AS divide_n_f FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_mod_n_f",
+      "sql": "SELECT k, try_mod(n, f) AS mod_n_f FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_add_f_n",
+      "sql": "SELECT k, try_add(f, n) AS add_f_n FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_subtract_f_n",
+      "sql": "SELECT k, try_subtract(f, n) AS subtract_f_n FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_multiply_f_n",
+      "sql": "SELECT k, try_multiply(f, n) AS multiply_f_n FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_divide_f_n",
+      "sql": "SELECT k, try_divide(f, n) AS divide_f_n FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_number_columns_mod_f_n",
+      "sql": "SELECT k, try_mod(f, n) AS mod_f_n FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_column_int_literal_add_n_three",
+      "sql": "SELECT k, try_add(n, 3) AS add_n_three FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_column_int_literal_subtract_n_three",
+      "sql": "SELECT k, try_subtract(n, 3) AS subtract_n_three FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_column_int_literal_multiply_n_three",
+      "sql": "SELECT k, try_multiply(n, 3) AS multiply_n_three FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_column_int_literal_divide_n_three",
+      "sql": "SELECT k, try_divide(n, 3) AS divide_n_three FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_column_int_literal_mod_n_three",
+      "sql": "SELECT k, try_mod(n, 3) AS mod_n_three FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_column_int_literal_add_three_n",
+      "sql": "SELECT k, try_add(3, n) AS add_three_n FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_column_int_literal_subtract_three_n",
+      "sql": "SELECT k, try_subtract(3, n) AS subtract_three_n FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_column_int_literal_multiply_three_n",
+      "sql": "SELECT k, try_multiply(3, n) AS multiply_three_n FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_column_int_literal_divide_three_n",
+      "sql": "SELECT k, try_divide(3, n) AS divide_three_n FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    },
+    {
+      "id": "ansi_isolated_string_column_int_literal_mod_three_n",
+      "sql": "SELECT k, try_mod(3, n) AS mod_three_n FROM numeric_strings ORDER BY k",
+      "ansi_modes": [
+        true
+      ],
+      "scope": "required",
+      "observe_status": true
+    }
+  ],
+  "native_cases": [
+    {
+      "id": "native_numeric",
+      "sql": "SELECT i + l AS r FROM widths WHERE k = 0"
+    },
+    {
+      "id": "native_decimal",
+      "sql": "SELECT d + i AS r FROM numerics WHERE k = 0"
+    },
+    {
+      "id": "native_implicit_string",
+      "sql": "SELECT n + i AS r FROM numeric_strings WHERE k = 0"
+    },
+    {
+      "id": "native_try_add",
+      "sql": "SELECT try_add(6, 2) AS r"
+    },
+    {
+      "id": "native_try_subtract",
+      "sql": "SELECT try_subtract(6, 2) AS r"
+    },
+    {
+      "id": "native_try_multiply",
+      "sql": "SELECT try_multiply(6, 2) AS r"
+    },
+    {
+      "id": "native_try_divide",
+      "sql": "SELECT try_divide(6, 2) AS r"
+    },
+    {
+      "id": "native_try_mod",
+      "sql": "SELECT try_mod(6, 2) AS r"
+    }
+  ]
+}
