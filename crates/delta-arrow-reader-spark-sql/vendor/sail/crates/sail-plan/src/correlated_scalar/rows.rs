@@ -11,7 +11,7 @@ use datafusion_expr::{
 };
 
 use super::aggregate::{aggregate_inner_rows, can_lower_aggregate, distinct_inner_rows};
-use super::filter_match_marker;
+use super::clear_match_marker_on_rejection;
 use super::limit::{can_lower_limit, limit_inner_rows};
 
 pub(super) struct CorrelatedRows<'a> {
@@ -219,9 +219,11 @@ pub(super) fn apply_row_steps(
                 marker,
                 outer_columns,
             )?,
-            RowStep::Filter(predicate) => {
-                filter_match_marker(plan, marker, strip_outer_reference(predicate.clone()))?
-            }
+            RowStep::Filter(predicate) => clear_match_marker_on_rejection(
+                plan,
+                marker,
+                strip_outer_reference(predicate.clone()),
+            )?,
             RowStep::Aggregate(aggregate) => {
                 aggregate_inner_rows(plan, aggregate, row_id, marker, outer_columns)?
             }

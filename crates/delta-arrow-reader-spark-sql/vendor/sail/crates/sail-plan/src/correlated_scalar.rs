@@ -151,7 +151,11 @@ fn scalar_value_input(mut value: Expr, mut input: &LogicalPlan) -> Result<(Expr,
     Ok((value, input))
 }
 
-fn filter_match_marker(plan: LogicalPlan, marker: &Column, predicate: Expr) -> Result<LogicalPlan> {
+fn clear_match_marker_on_rejection(
+    plan: LogicalPlan,
+    marker: &Column,
+    predicate: Expr,
+) -> Result<LogicalPlan> {
     let null = lit(ScalarValue::Boolean(None));
     let retained = when(Expr::Column(marker.clone()).is_null(), null.clone())
         .when(predicate, lit(true))

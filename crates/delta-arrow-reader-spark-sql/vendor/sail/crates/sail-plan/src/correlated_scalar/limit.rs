@@ -8,7 +8,7 @@ use datafusion_expr::{
     Expr, ExprFunctionExt, Limit, LogicalPlan, LogicalPlanBuilder, Sort, Window, lit, when,
 };
 
-use super::filter_match_marker;
+use super::clear_match_marker_on_rejection;
 
 fn literal_bound(expr: Option<&Expr>, default: u64) -> Option<u64> {
     let Some(expr) = expr else {
@@ -56,7 +56,7 @@ pub(super) fn limit_inner_rows(
             .map_or(u64::MAX, |n| n as u64),
     );
     if end <= skip {
-        return filter_match_marker(joined, matched, lit(false));
+        return clear_match_marker_on_rejection(joined, matched, lit(false));
     }
     let columns = joined.schema().columns();
     let position = Column::new_unqualified(format!("{}_position", row_id.name));
@@ -79,7 +79,7 @@ pub(super) fn limit_inner_rows(
 
     // Keep even out-of-range rows so each outer row still has a group.
     let position = Expr::Column(position);
-    let retained = filter_match_marker(
+    let retained = clear_match_marker_on_rejection(
         ranked,
         matched,
         position.clone().gt(lit(skip)).and(position.lt_eq(lit(end))),
