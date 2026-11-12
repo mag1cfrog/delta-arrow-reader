@@ -50,6 +50,12 @@ value field and buffers into an array. It no longer casts the input and result
 to restore array-element nullability; that restoration could reject valid STRUCT
 values as an unsupported narrowing cast.
 
+Unknown-column errors name the requested identifier and the visible input,
+outer-query, aggregate, sort and lambda bindings using SQL-quoted names.
+JOIN USING lists only the failing input's columns. Sort retries keep errors from
+attempts that bound the earlier missing reference, preserving concrete type
+failures and avoiding false missing-column reports.
+
 ## Dependency forks
 
 Fifteen dependencies have local source overrides in this crate's Cargo.toml:

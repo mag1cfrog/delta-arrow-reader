@@ -64,7 +64,7 @@ fn pivot_error_matches(case: &Value, observation: &Value) -> bool {
         return false;
     };
     let parameters = &case["spark_error_details"]["message_parameters"];
-    let attribute = |key: &str| {
+    let debug_attribute_name = |key: &str| {
         parameters[key].as_str().map(|name| {
             let parts = name
                 .split('.')
@@ -78,14 +78,14 @@ fn pivot_error_matches(case: &Value, observation: &Value) -> bool {
         Some("PARSE_SYNTAX_ERROR") => {
             error.starts_with("External error: error in SQL parser: ")
         }
-        Some("AMBIGUOUS_REFERENCE") => attribute("name").is_some_and(|name| {
+        Some("AMBIGUOUS_REFERENCE") => debug_attribute_name("name").is_some_and(|name| {
             error == format!("External error: analysis error: ambiguous attribute: {name}")
         }),
         Some("UNRESOLVED_COLUMN.WITH_SUGGESTION") => {
-            attribute("objectName").is_some_and(|name| {
-                error == format!(
-                    "External error: analysis error: attribute {name} is missing from the schema: cannot resolve attribute"
-                )
+            parameters["objectName"].as_str().is_some_and(|name| {
+                error.starts_with(&format!(
+                    "External error: analysis error: attribute {name} is missing from the schema: cannot resolve attribute "
+                )) && error.contains("available columns:")
             })
         }
         Some("INVALID_EXTRACT_BASE_FIELD_TYPE") => {

@@ -9,7 +9,10 @@ Those native contracts do not establish Spark compatibility.
 The `nested_consumers` and `struct_paths` checks compare complete values and
 schema stages against Spark. Their eight historical observations with `col1`
 children remain in the native archive but do not define current expectations.
-The other 64 retained controls keep their existing comparisons.
+The other 64 retained controls keep exact schema, row and phase comparisons.
+The two unknown-reference scenarios require the requested name and current scope
+hints; only diagnostic text and its derived comparison flags differ from their
+archived observations.
 
 To recapture from a clean checkout on Linux or macOS, use a Python environment with
 Spark 4.2.0 revision `32f7299601108917fb01920a54e084595b7b3bf8`. The recorded run used

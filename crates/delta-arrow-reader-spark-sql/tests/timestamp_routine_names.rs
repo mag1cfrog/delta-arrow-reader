@@ -223,7 +223,7 @@ fn expected_error_text(case: &Value) -> Option<String> {
 const ROUTINE_POSITION_RECORDS: [(&str, &str); 8] = [
     (
         "column_window_timestamp_diff",
-        "attribute ObjectName([Identifier(\"DAY\")]) is missing from the schema",
+        "attribute `DAY` is missing from the schema",
     ),
     (
         "column_window_timestamp_add",
@@ -231,13 +231,13 @@ const ROUTINE_POSITION_RECORDS: [(&str, &str); 8] = [
     ),
     (
         "column_order_by_timestamp_diff",
-        "invalid argument: sort expression: SortOrder { child: UnresolvedFunction(\
-         UnresolvedFunction { function_name: ObjectName([Identifier(\"timestamp_diff\")])",
+        "[UNRESOLVED_ROUTINE] Cannot resolve routine `timestamp_diff` on search path \
+         [`system`.`builtin`, `system`.`session`, `datafusion`.`public`]. SQLSTATE: 42883",
     ),
     (
         "column_sort_by_timestamp_add",
-        "invalid argument: sort expression: SortOrder { child: UnresolvedFunction(\
-         UnresolvedFunction { function_name: ObjectName([Identifier(\"timestamp_add\")])",
+        "[UNRESOLVED_ROUTINE] Cannot resolve routine `timestamp_add` on search path \
+         [`system`.`builtin`, `system`.`session`, `datafusion`.`public`]. SQLSTATE: 42883",
     ),
     (
         "column_lateral_view_timestamp_diff",
@@ -251,7 +251,7 @@ const ROUTINE_POSITION_RECORDS: [(&str, &str); 8] = [
     ),
     (
         "literal_unresolved_column_beside_timestamp_diff",
-        "attribute ObjectName([Identifier(\"nosuch\")]) is missing from the schema",
+        "attribute `nosuch` is missing from the schema",
     ),
     (
         "literal_qualified_timestamp_add",

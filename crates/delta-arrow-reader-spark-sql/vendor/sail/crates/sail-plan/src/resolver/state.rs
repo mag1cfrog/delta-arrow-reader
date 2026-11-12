@@ -284,6 +284,13 @@ impl PlanResolverState {
             .map(|(p, f)| (p.as_str(), f.as_ref()))
     }
 
+    pub fn lambda_parameter_names(&self) -> impl Iterator<Item = &str> {
+        self.lambda_param_scopes
+            .iter()
+            .rev()
+            .flat_map(|frame| frame.iter().map(|(name, _)| name.as_str()))
+    }
+
     pub fn in_lambda_scope(&self) -> bool {
         !self.lambda_param_scopes.is_empty()
     }

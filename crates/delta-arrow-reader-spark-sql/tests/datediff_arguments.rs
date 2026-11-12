@@ -43,11 +43,9 @@ fn datediff_argument_references() -> TestResult<Vec<Value>> {
     Ok(records)
 }
 
-/// #1185: a failing sort key reports DAR's dump of the unresolved expression, without Spark's
-/// condition, as for an unknown routine there.
+/// A failing sort key retains the concrete argument-type diagnostic.
 const SORT_KEY_RECORD: &str = "column_order_by_datediff_int";
-const SORT_KEY_TEXT: &str = "invalid argument: sort expression: SortOrder { child: \
-    UnresolvedFunction(UnresolvedFunction { function_name: ObjectName([Identifier(\"datediff\")])";
+const SORT_KEY_TEXT: &str = "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] `datediff`: The first parameter requires the \"DATE\" type, got Int32";
 
 fn is_retained(case: &Value) -> bool {
     case["id"] == SORT_KEY_RECORD

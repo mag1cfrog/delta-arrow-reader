@@ -15,10 +15,11 @@ use crate::function::common::clear_inherited_field_metadata;
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
 use crate::resolver::expression::lambda::LAMBDA_VARIABLE_EXPRESSION_NAME;
+use crate::resolver::schema::quote_column_name;
 use crate::resolver::state::PlanResolverState;
 
 impl PlanResolver<'_> {
-    pub(super) fn resolve_expression_attribute(
+    pub(in super::super) fn resolve_expression_attribute(
         &self,
         name: spec::ObjectName,
         is_metadata_column: bool,
@@ -93,35 +94,53 @@ impl PlanResolver<'_> {
         if let Some((name, expr)) = self.resolve_hidden_field(&name, schema, state)? {
             return Ok(NamedExpr::new(vec![name], expr));
         }
-        // Keep suggestion-bearing scopes on their existing diagnostic path.
-        let no_suggestions = schema.fields().is_empty()
-            && state.get_projections_for_grouping().is_empty()
-            && state.get_projections_for_having().is_empty()
-            && state.get_grouping_for_having().is_empty()
-            && !state.in_lambda_scope();
-        let condition = if no_suggestions {
-            " [UNRESOLVED_COLUMN.WITHOUT_SUGGESTION]"
-        } else {
-            ""
-        };
-        let Some(outer_schema) = state.get_outer_query_schema().cloned() else {
-            return Err(PlanError::AnalysisError(format!(
-                // Spark tests expect the error message to start with: "attribute {name:?} is missing"
-                "attribute {name:?} is missing from the schema: cannot resolve attribute{condition}"
-            )));
-        };
-        let condition = if no_suggestions && outer_schema.fields().is_empty() {
-            condition
-        } else {
-            ""
-        };
-        match self.resolve_field_or_nested_field(&name, &outer_schema, state, true)? {
-            Some(named) => Ok(named),
-            None => Err(PlanError::AnalysisError(format!(
-                // Spark tests expect the error message to start with: "attribute {name:?} is missing"
-                "attribute {name:?} is missing from the schema: cannot resolve attribute or outer attribute{condition}"
-            ))),
+        if let Some(outer_schema) = state.get_outer_query_schema().cloned()
+            && let Some(named) =
+                self.resolve_field_or_nested_field(&name, &outer_schema, state, true)?
+        {
+            return Ok(named);
         }
+        Err(Self::unknown_column_error(
+            &name,
+            Self::available_attribute_names(schema, state),
+        ))
+    }
+
+    fn available_attribute_names(schema: &DFSchemaRef, state: &PlanResolverState) -> Vec<String> {
+        let selected = state.sort_select_schema(schema);
+        let mut columns = Vec::new();
+        for schema in std::iter::once(schema)
+            .chain(selected.as_ref())
+            .chain(state.get_outer_query_schema())
+        {
+            for (qualifier, field) in schema.iter() {
+                let Ok(info) = state.get_field_info(field.name()) else {
+                    continue;
+                };
+                let mut parts = Vec::new();
+                if let Some(qualifier) = qualifier {
+                    parts.extend(qualifier.catalog());
+                    parts.extend(qualifier.schema());
+                    parts.push(qualifier.table());
+                }
+                parts.push(info.name());
+                columns.push(quote_column_name(parts));
+            }
+        }
+        for named in state
+            .get_projections_for_grouping()
+            .iter()
+            .chain(state.get_projections_for_having())
+            .chain(state.get_grouping_for_having())
+        {
+            columns.extend(named.name.iter().map(|name| quote_column_name([name])));
+        }
+        columns.extend(
+            state
+                .lambda_parameter_names()
+                .map(|name| quote_column_name([name])),
+        );
+        columns
     }
 
     fn resolve_field_or_nested_field(

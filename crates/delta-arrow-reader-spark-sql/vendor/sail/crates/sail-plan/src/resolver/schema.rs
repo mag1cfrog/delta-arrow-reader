@@ -9,7 +9,36 @@ use crate::error::{PlanError, PlanResult};
 use crate::resolver::PlanResolver;
 use crate::resolver::state::PlanResolverState;
 
+pub(super) fn quote_column_name(parts: impl IntoIterator<Item = impl AsRef<str>>) -> String {
+    parts
+        .into_iter()
+        .map(|part| format!("`{}`", part.as_ref().replace('`', "``")))
+        .collect::<Vec<_>>()
+        .join(".")
+}
+
 impl PlanResolver<'_> {
+    pub(super) fn unknown_column_error(
+        name: &spec::ObjectName,
+        mut columns: Vec<String>,
+    ) -> PlanError {
+        columns.sort_unstable();
+        columns.dedup();
+        let condition = if columns.is_empty() {
+            "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION"
+        } else {
+            "UNRESOLVED_COLUMN.WITH_SUGGESTION"
+        };
+        let display_name = quote_column_name(name.parts().iter().map(|part| part.as_ref()));
+        PlanError::UnknownColumn {
+            name: name.clone(),
+            message: format!(
+                "attribute {display_name} is missing from the schema: cannot resolve attribute [{condition}]; available columns: [{}]",
+                columns.join(", ")
+            ),
+        }
+    }
+
     pub(super) fn resolve_table_reference(
         &self,
         name: &spec::ObjectName,
@@ -78,9 +107,14 @@ impl PlanResolver<'_> {
         if let Some(column) = self.resolve_optional_column(schema, name, state)? {
             Ok(column)
         } else {
-            Err(PlanError::AnalysisError(format!(
-                "[UNRESOLVED_COLUMN] Cannot find column {name}"
-            )))
+            let columns = Self::get_field_names(schema, state)?
+                .iter()
+                .map(|name| quote_column_name([name]))
+                .collect();
+            Err(Self::unknown_column_error(
+                &spec::ObjectName::bare(name),
+                columns,
+            ))
         }
     }
 

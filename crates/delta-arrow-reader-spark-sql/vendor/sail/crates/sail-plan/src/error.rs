@@ -1,6 +1,7 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use datafusion::arrow::error::ArrowError;
 use datafusion::common::DataFusionError;
+use sail_common::spec;
 use sail_sql_analyzer::error::SqlError;
 use thiserror::Error;
 
@@ -39,6 +40,12 @@ pub enum PlanError {
     InternalError(String),
     #[error("analysis error: {0}")]
     AnalysisError(String),
+    // Retain the requested reference for binding retries without parsing diagnostics.
+    #[error("analysis error: {message}")]
+    UnknownColumn {
+        name: spec::ObjectName,
+        message: String,
+    },
 }
 
 impl PlanError {
