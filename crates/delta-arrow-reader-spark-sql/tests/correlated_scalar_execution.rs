@@ -18,7 +18,8 @@ use spark_results::{TestResult, compare_exact_spark_query_stages};
 const INPUTS: &str = include_str!("fixtures/correlated-scalar-execution/inputs.json");
 const RESULTS: &str = include_str!("fixtures/correlated-scalar-execution/spark-results.jsonl");
 const FAILURES: &str = include_str!("fixtures/correlated-scalar-execution/spark-failures.jsonl");
-const ROUNDING: &str = include_str!("fixtures/correlated-scalar-execution/frozen-rounding-spark.jsonl");
+const ROUNDING: &str =
+    include_str!("fixtures/correlated-scalar-execution/frozen-rounding-spark.jsonl");
 const SINGLE_ROW: &str = include_str!("fixtures/single-row-correlated-spark.jsonl");
 const SINGLE_ROW_STAGES: &str = include_str!(
     "fixtures/correlated-scalar-metadata-stages/main-replay/main-scalar-stages-spark.jsonl"
@@ -178,7 +179,10 @@ async fn correlated_scalar_execution_matches_spark() -> TestResult {
                 .is_some_and(|id| id.contains("_correlated_"))
         })
         .collect();
-    if rounding_ids.len() != 20 || historical_controls.len() != 36 || historical_correlated.len() != 18 {
+    if rounding_ids.len() != 20
+        || historical_controls.len() != 36
+        || historical_correlated.len() != 18
+    {
         return Err("incomplete historical Spark observations".into());
     }
 

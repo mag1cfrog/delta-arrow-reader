@@ -11,6 +11,7 @@ use sail_common_datafusion::utils::items::ItemTaker;
 pub enum MonotonicIdPurpose {
     SqlFunction,
     WindowOrdering,
+    ScalarCorrelation,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Educe)]
