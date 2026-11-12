@@ -451,11 +451,25 @@ impl PlanResolver<'_> {
         let mut names: Vec<String> = vec![];
         let mut exprs: Vec<expr::Expr> = vec![];
 
-        for expression in expressions {
-            let is_dotted_attribute = matches!(
-                &expression,
-                spec::Expr::UnresolvedAttribute { name, .. } if name.parts().len() > 1
-            );
+        for (argument_index, expression) in expressions.into_iter().enumerate() {
+            let is_identifier_argument = matches!(&expression, spec::Expr::IdentifierClause { .. });
+            // Spark chooses child names before field reads and NULL guards are lowered.
+            let inferred_child_name = match &expression {
+                spec::Expr::UnresolvedAttribute { name, .. } => {
+                    name.parts().last().map(|name| name.as_ref().to_string())
+                }
+                spec::Expr::UnresolvedExtractValue { extraction, .. } => {
+                    match extraction.as_ref() {
+                        spec::Expr::Literal(spec::Literal::Utf8 { value }) => value.clone(),
+                        _ => None,
+                    }
+                }
+                _ => None,
+            };
+            let wildcard_target = match &expression {
+                spec::Expr::UnresolvedStar { target, .. } => target.clone(),
+                _ => None,
+            };
             let (named, alias_display_name) = match expression {
                 spec::Expr::Alias {
                     expr,
@@ -519,14 +533,20 @@ impl PlanResolver<'_> {
                     if func.inner().is::<MultiExpr>() =>
                 {
                     if name.len() == args.len() {
+                        let source_name = wildcard_target
+                            .map(|target| {
+                                self.resolve_expression_attribute(target, false, schema, state)?
+                                    .expression_name()
+                            })
+                            .transpose()?;
                         for (n, arg) in name.into_iter().zip(args) {
-                            let field_name = n;
-                            names.push(field_name.clone());
-                            exprs.push(Expr::Alias(expr::Alias::new(
-                                arg,
-                                None::<datafusion_common::TableReference>,
-                                field_name,
-                            )));
+                            names.push(match &source_name {
+                                Some(source) => {
+                                    struct_alias_display_name(&format!("{source}.{n}"), &n)
+                                }
+                                None => n.clone(),
+                            });
+                            exprs.push(arg.alias(n));
                         }
                     } else {
                         return Err(PlanError::internal(format!(
@@ -544,11 +564,17 @@ impl PlanResolver<'_> {
                             .or(expression_name)
                             .unwrap_or_else(|| projection_name.clone()),
                     );
-                    let expr = if is_dotted_attribute
-                        && !matches!(other, Expr::OuterReferenceColumn(..))
-                        && other.contains_outer()
+                    let expr = if let Some(name) = inferred_child_name
+                        && !matches!(other, Expr::Column(_) | Expr::OuterReferenceColumn(..))
                     {
-                        other.alias(projection_name)
+                        other.alias(name)
+                    } else if is_identifier_argument
+                        || !matches!(
+                            &other,
+                            Expr::Column(_) | Expr::OuterReferenceColumn(_, _) | Expr::Alias(_)
+                        )
+                    {
+                        other.alias(format!("col{}", argument_index + 1))
                     } else {
                         other
                     };

@@ -113,9 +113,6 @@ fn apply_recorded_comparison_exceptions(
     let actual_field = &actual["schema"]["fields"][0];
     let expected_field = &mut expected["schema"]["fields"][0];
     let known_name_gap = match id {
-        // #757 owns constructor alias text in generated labels.
-        "constructed" => Some("struct(item).item"),
-        "struct_alias" => Some("struct(renamed)"),
         // #727 owns the complete OVER clause.
         "window_partition" | "window_order" | "window_qualified" | "window_quoted" => {
             Some("SUM(v)")
@@ -131,11 +128,6 @@ fn apply_recorded_comparison_exceptions(
             "unclassified name difference for {id}"
         );
         expected_field["name"] = json!(name);
-    }
-    if id == "struct" && actual_field["type"] != expected_field["type"] {
-        // #757 owns inferred STRUCT child names, separately from expression display.
-        assert_eq!(actual_field["type"]["fields"][0]["name"], "col1");
-        expected_field["type"]["fields"][0]["name"] = json!("col1");
     }
     Ok(())
 }

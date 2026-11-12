@@ -1333,8 +1333,12 @@ path without its relation qualifier. Function arguments, casts and extraction
 use the display name while projections retain their existing names and metadata.
 Bound lambda variables use Spark's `namedlambdavariable()` placeholder in
 generated labels; their executable expressions retain declared parameter names.
-The [field-name references](tests/fixtures/README.md#nested-field-expression-names)
-record remaining STRUCT schema, alias display and metadata differences separately.
+STRUCT uses selected nested field names as its child names, so
+`STRUCT(nested.item)` exposes `item` to field access and TO_JSON. Explicit aliases
+take precedence. Anonymous children retain their original argument position even
+when an earlier wildcard expands to several fields. The
+[field-name references](tests/fixtures/README.md#nested-field-expression-names)
+compare values and executed child types separately from display labels and metadata.
 
 ### Offset-window result Fields
 
