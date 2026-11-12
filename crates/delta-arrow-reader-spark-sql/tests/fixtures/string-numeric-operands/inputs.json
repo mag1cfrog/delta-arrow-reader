@@ -1690,6 +1690,30 @@
     {
       "id": "aggregate_malformed_where",
       "sql": "SELECT AVG(n) AS avg_r, SUM(n) AS sum_r FROM aggregate_bad WHERE id < 5"
+    },
+    {
+      "id": "aggregate_window_avg_sum",
+      "sql": "SELECT id, AVG(n) OVER () AS avg_r, SUM(n) OVER () AS sum_r FROM aggregate_inputs ORDER BY id"
+    },
+    {
+      "id": "window_numeric_statistics",
+      "sql": "SELECT id, STDDEV(n) OVER () AS std_r, VAR_POP(n) OVER () AS var_r, CORR(n,d) OVER () AS corr_r, REGR_COUNT(n,d) OVER () AS count_r FROM aggregate_inputs ORDER BY id"
+    },
+    {
+      "id": "window_numeric_percentiles",
+      "sql": "SELECT id, MEDIAN(n) OVER () AS median_r, PERCENTILE(n, 0.5) OVER () AS pct_r, APPROX_PERCENTILE(n, 0.5) OVER () AS approx_r FROM aggregate_inputs ORDER BY id"
+    },
+    {
+      "id": "arithmetic_malformed_column_with_null",
+      "sql": "SELECT id, CAST(NULL AS INT) + n AS add_r, n / CAST(NULL AS INT) AS div_r, n % CAST(NULL AS DOUBLE) AS rem_r FROM arithmetic_bad ORDER BY id"
+    },
+    {
+      "id": "ordered_set_percentile_cont",
+      "sql": "SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY n) AS r FROM aggregate_inputs"
+    },
+    {
+      "id": "ordered_set_percentile_disc",
+      "sql": "SELECT PERCENTILE_DISC(0.5) WITHIN GROUP (ORDER BY n) AS r FROM aggregate_inputs"
     }
   ]
 }

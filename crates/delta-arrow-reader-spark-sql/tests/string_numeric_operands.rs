@@ -4,7 +4,11 @@ use std::collections::BTreeMap;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::panic::AssertUnwindSafe;
+use std::sync::Arc;
 
+use arrow::datatypes::{DataType, Schema};
+use arrow::record_batch::RecordBatch;
+use datafusion::datasource::MemTable;
 use datafusion::execution::SessionStateBuilder;
 use datafusion::physical_plan::collect;
 use datafusion::prelude::{SessionConfig, SessionContext};
@@ -25,10 +29,17 @@ use spark_results::{
 
 const INPUTS: &str = include_str!("fixtures/string-numeric-operands/inputs.json");
 const RESULTS: &str = include_str!("fixtures/string-numeric-operands/spark-results.jsonl");
+const DICTIONARY_INPUTS: &str =
+    include_str!("fixtures/string-numeric-operands/dictionary-inputs.json");
+const DICTIONARY_RESULTS: &str =
+    include_str!("fixtures/string-numeric-operands/dictionary-spark-results.jsonl");
 
-fn references(manifest: &Value) -> TestResult<Vec<Value>> {
+fn references(manifest: &Value, source: &str) -> TestResult<Vec<Value>> {
     let mut expected = BTreeMap::new();
-    for case in manifest["cases"].as_array().ok_or("missing case definitions")? {
+    for case in manifest["cases"]
+        .as_array()
+        .ok_or("missing case definitions")?
+    {
         let id = case["id"].as_str().ok_or("missing case ID")?;
         let sql = case["sql"].as_str().ok_or("missing SQL")?;
         let modes = match case.get("ansi_modes") {
@@ -42,13 +53,17 @@ fn references(manifest: &Value) -> TestResult<Vec<Value>> {
         assert!(!modes.is_empty() && error_modes.iter().all(|ansi| modes.contains(ansi)));
         for ansi in modes {
             let succeeds = !error_modes.contains(&ansi);
-            assert!(expected.insert((id.to_owned(), ansi), (sql, succeeds)).is_none());
+            assert!(
+                expected
+                    .insert((id.to_owned(), ansi), (sql, succeeds))
+                    .is_none()
+            );
         }
     }
     expected.retain(|_, (_, succeeds)| *succeeds);
     assert!(!expected.is_empty(), "missing Spark query matrix");
     let mut records = Vec::with_capacity(expected.len());
-    for line in RESULTS.lines() {
+    for line in source.lines() {
         let case: Value = serde_json::from_str(line)?;
         let id = case["id"].as_str().ok_or("missing reference ID")?;
         let ansi = case["ansi"].as_bool().ok_or("missing ANSI mode")?;
@@ -62,10 +77,16 @@ fn references(manifest: &Value) -> TestResult<Vec<Value>> {
             ansi.to_string(),
             "{id}"
         );
-        assert_eq!(case["effective_settings"]["spark.sql.session.timeZone"], "UTC");
+        assert_eq!(
+            case["effective_settings"]["spark.sql.session.timeZone"],
+            "UTC"
+        );
         records.push(case);
     }
-    assert!(expected.is_empty(), "missing Spark references: {expected:?}");
+    assert!(
+        expected.is_empty(),
+        "missing Spark references: {expected:?}"
+    );
     Ok(records)
 }
 
@@ -85,7 +106,9 @@ fn result_fields(schema: &Value) -> TestResult<Vec<Value>> {
 fn spark_rows(case: &Value, fields: &[Value]) -> TestResult<Vec<Value>> {
     let mut rows = case["rows"].as_array().ok_or("missing Spark rows")?.clone();
     for row in &mut rows {
-        let cells = row.as_array_mut().ok_or("expected a positional Spark row")?;
+        let cells = row
+            .as_array_mut()
+            .ok_or("expected a positional Spark row")?;
         assert_eq!(cells.len(), fields.len());
         for (cell, field) in cells.iter_mut().zip(fields) {
             if cell.is_null() {
@@ -165,6 +188,75 @@ async fn observe(session: &SessionContext, sql: &str, ansi_mode: bool) -> Value 
     actual
 }
 
+fn spark_session(batch_size: usize) -> SessionContext {
+    SessionContext::new_with_state(
+        configure_spark_sql(
+            SessionStateBuilder::new()
+                .with_default_features()
+                .with_config(
+                    SessionConfig::new()
+                        .with_batch_size(batch_size)
+                        .with_target_partitions(2),
+                ),
+        )
+        .build(),
+    )
+}
+
+fn result_difference(case: &Value, actual: &Value) -> TestResult<Option<String>> {
+    let expected_fields = result_fields(&case["physical_schema"])?;
+    let mut expected_rows = spark_rows(case, &expected_fields)?;
+    let (actual_fields, mut actual_rows) = if actual["status"] == "ok" {
+        (
+            result_fields(&actual["executed_schema"])?,
+            actual["output"]["rows"]
+                .as_array()
+                .ok_or("missing executed rows")?
+                .clone(),
+        )
+    } else {
+        (Vec::new(), Vec::new())
+    };
+    let sql = case["sql"].as_str().ok_or("missing SQL")?;
+    if !sql.contains(" ORDER BY ") {
+        expected_rows.sort_by_key(Value::to_string);
+        actual_rows.sort_by_key(Value::to_string);
+    }
+    if actual["status"] == "ok" && actual_fields == expected_fields && actual_rows == expected_rows
+    {
+        return Ok(None);
+    }
+    Ok(Some(format!(
+        "expected fields={} rows={}, got fields={} rows={} error={} panic={}",
+        json!(expected_fields),
+        json!(expected_rows),
+        json!(actual_fields),
+        json!(actual_rows),
+        actual["error"]["display"],
+        actual["panic"],
+    )))
+}
+
+fn matches_recorded_correlation_rounding(case: &Value, actual: &Value) -> TestResult<bool> {
+    if !matches!(
+        case["id"].as_str(),
+        Some("aggregate_pairs" | "aggregate_pairs_malformed")
+    ) {
+        return Ok(false);
+    }
+
+    // #1269 reproduces this exact numeric result with explicit DOUBLE casts.
+    let fields = result_fields(&case["physical_schema"])?;
+    let index = fields
+        .iter()
+        .position(|field| field["name"] == "corr_both" && field["type"] == "double")
+        .ok_or("missing corr_both field")?;
+    let mut recorded = case.clone();
+    assert_eq!(recorded["rows"][0][index], "1.0");
+    recorded["rows"][0][index] = json!("0.9999999999999999");
+    Ok(result_difference(&recorded, actual)?.is_none())
+}
+
 #[tokio::test]
 async fn string_numeric_operands_match_spark() -> TestResult {
     let manifest: Value = serde_json::from_str(INPUTS)?;
@@ -174,52 +266,29 @@ async fn string_numeric_operands_match_spark() -> TestResult {
         "32f7299601108917fb01920a54e084595b7b3bf8"
     );
     assert_eq!(manifest["ansi_modes"], json!([false, true]));
-    let references = references(&manifest)?;
+    let references = references(&manifest, RESULTS)?;
     let inputs = json!({"inputs": manifest["registered_inputs"]});
     let mut output = std::env::var_os("DAR_STRING_NUMERIC_OPERANDS_OUTPUT")
         .map(|path| OpenOptions::new().write(true).create_new(true).open(path))
         .transpose()?;
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
-        let session = SessionContext::new_with_state(
-            configure_spark_sql(
-                SessionStateBuilder::new()
-                    .with_default_features()
-                    .with_config(
-                        SessionConfig::new()
-                            .with_batch_size(batch_size)
-                            .with_target_partitions(2),
-                    ),
-            )
-            .build(),
-        );
+        let session = spark_session(batch_size);
         spark_inputs::register_recorded_inputs(&session, &inputs, batch_size)?;
         for case in &references {
             let sql = case["sql"].as_str().ok_or("missing SQL")?;
             let ansi = case["ansi"].as_bool().ok_or("missing ANSI mode")?;
             let actual = observe(&session, sql, ansi).await;
-            let expected_fields = result_fields(&case["physical_schema"])?;
-            let mut expected_rows = spark_rows(case, &expected_fields)?;
-            let (actual_fields, mut actual_rows) = if actual["status"] == "ok" {
-                (
-                    result_fields(&actual["executed_schema"])?,
-                    actual["output"]["rows"].as_array().ok_or("missing executed rows")?.clone(),
-                )
-            } else {
-                (Vec::new(), Vec::new())
-            };
-            if !sql.contains(" ORDER BY ") {
-                expected_rows.sort_by_key(Value::to_string);
-                actual_rows.sort_by_key(Value::to_string);
-            }
-            let matches = actual["status"] == "ok"
-                && actual_fields == expected_fields
-                && actual_rows == expected_rows;
-            if !matches {
+            let difference = result_difference(case, &actual)?;
+            let matches = difference.is_none();
+            let recorded_correlation_rounding =
+                !matches && matches_recorded_correlation_rounding(case, &actual)?;
+            if let Some(difference) = difference
+                && !recorded_correlation_rounding
+            {
                 differences.push(format!(
-                    "{} ANSI={ansi} batch={batch_size}: expected fields={} rows={}, got fields={} rows={} error={} panic={}",
-                    case["id"], json!(expected_fields), json!(expected_rows),
-                    json!(actual_fields), json!(actual_rows), actual["error"]["display"], actual["panic"],
+                    "{} ANSI={ansi} batch={batch_size}: {difference}",
+                    case["id"],
                 ));
             }
             if let Some(file) = &mut output {
@@ -227,7 +296,9 @@ async fn string_numeric_operands_match_spark() -> TestResult {
                     file,
                     "{}",
                     json!({"id": case["id"], "sql": sql, "ansi": ansi, "batch_size": batch_size,
-                        "target_partitions": 2, "matches": matches, "spark": case, "actual": actual})
+                        "target_partitions": 2, "matches": matches,
+                        "recorded_correlation_rounding": recorded_correlation_rounding,
+                        "spark": case, "actual": actual})
                 )?;
             }
         }
@@ -238,6 +309,66 @@ async fn string_numeric_operands_match_spark() -> TestResult {
         differences.len(),
         differences.join("\n")
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn nullable_divisors_match_spark_for_dictionary_strings() -> TestResult {
+    let manifest: Value = serde_json::from_str(DICTIONARY_INPUTS)?;
+    let references = references(&manifest, DICTIONARY_RESULTS)?;
+    let input = &manifest["registered_inputs"][0];
+    let table = input["name"].as_str().ok_or("missing table name")?;
+    let plain = spark_inputs::decode_recorded_batch(input)?;
+    let schema = plain.schema();
+    let string_index = schema.index_of("n")?;
+    let string_type = DataType::Dictionary(Box::new(DataType::UInt16), Box::new(DataType::Utf8));
+    let mut columns = plain.columns().to_vec();
+    columns[string_index] = arrow::compute::cast(&columns[string_index], &string_type)?;
+    let mut fields = schema.fields().to_vec();
+    fields[string_index] = Arc::new(
+        schema
+            .field(string_index)
+            .clone()
+            .with_data_type(string_type),
+    );
+    let dictionary = RecordBatch::try_new(
+        Arc::new(Schema::new_with_metadata(fields, schema.metadata().clone())),
+        columns,
+    )?;
+
+    let mut differences = Vec::new();
+    for batch_size in [1, 32] {
+        for (storage, batch) in [("utf8", &plain), ("dictionary_uint16_utf8", &dictionary)] {
+            let session = spark_session(batch_size);
+            let mut partitions = vec![Vec::new(); 2];
+            for (index, offset) in (0..batch.num_rows()).step_by(batch_size).enumerate() {
+                partitions[index % 2]
+                    .push(batch.slice(offset, batch_size.min(batch.num_rows() - offset)));
+            }
+            session.register_table(
+                table,
+                Arc::new(MemTable::try_new(batch.schema(), partitions)?),
+            )?;
+            for case in &references {
+                let sql = case["sql"].as_str().ok_or("missing SQL")?;
+                let ansi = case["ansi"].as_bool().ok_or("missing ANSI mode")?;
+                let actual = observe(&session, sql, ansi).await;
+                let difference = result_difference(case, &actual)?;
+                println!(
+                    "{}",
+                    json!({"storage": storage, "batch_size": batch_size, "id": case["id"],
+                        "sql": sql, "ansi": ansi, "matches": difference.is_none(), "actual": actual})
+                );
+                if let Some(difference) = difference {
+                    differences.push(format!(
+                        "{} storage={storage} ANSI={ansi} batch={batch_size}: {difference}",
+                        case["id"],
+                    ));
+                }
+            }
+        }
+    }
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }
 
@@ -260,7 +391,10 @@ async fn native_sql_keeps_its_numeric_coercion() -> TestResult {
             "SELECT avg(n) AS r FROM inputs",
         ] {
             let observed = capture_native_query_observation(&session, sql).await?;
-            println!("{}", json!({"context": context, "sql": sql, "actual": observed}));
+            println!(
+                "{}",
+                json!({"context": context, "sql": sql, "actual": observed})
+            );
             assert!(observed["error"].is_string(), "{sql}: {observed}");
         }
         for (sql, fields, rows) in [
@@ -276,7 +410,10 @@ async fn native_sql_keeps_its_numeric_coercion() -> TestResult {
             ),
         ] {
             let observed = capture_native_query_observation(&session, sql).await?;
-            println!("{}", json!({"context": context, "sql": sql, "actual": observed}));
+            println!(
+                "{}",
+                json!({"context": context, "sql": sql, "actual": observed})
+            );
             assert!(observed["error"].is_null(), "{sql}: {observed}");
             assert_eq!(
                 json!(result_fields(&observed["physical_schema"])?),

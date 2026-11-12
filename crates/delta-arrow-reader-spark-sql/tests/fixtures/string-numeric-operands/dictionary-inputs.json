@@ -1,0 +1,86 @@
+{
+  "issue": "https://github.com/mag1cfrog/delta-arrow-reader/issues/1244",
+  "baseline": {
+    "commit": "dbe64179c96b3b2bbdb2ee2355ecf18e80288650",
+    "tree": "ad278d89935280fca494ea566051323e2000b699"
+  },
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "ansi_modes": [
+    false,
+    true
+  ],
+  "registered_inputs": [
+    {
+      "name": "nullable_divisors",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "n",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "d",
+            "type": "double",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "bad",
+          null
+        ],
+        [
+          "1",
+          "6",
+          "4004000000000000"
+        ],
+        [
+          "2",
+          null,
+          "4010000000000000"
+        ]
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "nullable_divisor_div",
+      "sql": "SELECT id, n / d AS r FROM nullable_divisors ORDER BY id",
+      "observe_status": true
+    },
+    {
+      "id": "nullable_divisor_rem",
+      "sql": "SELECT id, n % d AS r FROM nullable_divisors ORDER BY id",
+      "observe_status": true
+    },
+    {
+      "id": "nullable_divisor_div_int",
+      "sql": "SELECT id, n / CAST(d AS INT) AS r FROM nullable_divisors ORDER BY id"
+    },
+    {
+      "id": "nullable_divisor_rem_int",
+      "sql": "SELECT id, n % CAST(d AS INT) AS r FROM nullable_divisors ORDER BY id"
+    },
+    {
+      "id": "nullable_divisor_div_bigint",
+      "sql": "SELECT id, n / CAST(d AS BIGINT) AS r FROM nullable_divisors ORDER BY id"
+    },
+    {
+      "id": "nullable_divisor_rem_bigint",
+      "sql": "SELECT id, n % CAST(d AS BIGINT) AS r FROM nullable_divisors ORDER BY id"
+    }
+  ]
+}
