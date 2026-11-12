@@ -74,7 +74,9 @@ pub(crate) async fn capture_executed_query_result(
             );
         }
     }
-    rows.sort_by_key(|row| json!(row).to_string());
+    if case["ordered"].as_bool() != Some(true) {
+        rows.sort_by_key(|row| json!(row).to_string());
+    }
     Ok(json!({"schema":schema,"rows":rows}))
 }
 
