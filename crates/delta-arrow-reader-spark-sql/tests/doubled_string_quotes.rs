@@ -64,7 +64,10 @@ async fn spark_string_literal_values_and_executed_types() -> TestResult {
             seen.insert((id.clone(), ansi)),
             "duplicate case {id} ANSI={ansi}"
         );
-        assert!(case["rows"].is_array() && case["fields"].is_array(), "{case}");
+        assert!(
+            case["rows"].is_array() && case["fields"].is_array(),
+            "{case}"
+        );
 
         let actual = collect_spark(&session, sql, ansi).await;
         let (rows_match, types_match) = match &actual {
@@ -118,6 +121,9 @@ async fn spark_setup_preserves_native_doubled_quotes() -> TestResult {
         let actual = session.sql(sql).await?.collect().await?;
         assert_eq!(actual, expected, "after Spark query with ANSI={ansi}");
     }
-    eprintln!("native string quote control: {}", capture_batches(&expected)?);
+    eprintln!(
+        "native string quote control: {}",
+        capture_batches(&expected)?
+    );
     Ok(())
 }
