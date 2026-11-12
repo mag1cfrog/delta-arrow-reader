@@ -23,6 +23,63 @@ pub(crate) type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
 
 #[allow(
     dead_code,
+    reason = "Integration tests select individual comparison contracts."
+)]
+pub(crate) fn remove_nullability_and_metadata(value: &mut Value) {
+    match value {
+        Value::Object(object) => {
+            for key in ["nullable", "metadata", "containsNull", "valueContainsNull"] {
+                object.remove(key);
+            }
+            object
+                .values_mut()
+                .for_each(remove_nullability_and_metadata);
+        }
+        Value::Array(values) => values.iter_mut().for_each(remove_nullability_and_metadata),
+        _ => {}
+    }
+}
+
+/// Collect values and the executed schema without comparing logical annotations.
+#[allow(
+    dead_code,
+    reason = "Integration tests select individual comparison contracts."
+)]
+pub(crate) async fn capture_executed_query_result(
+    session: &SessionContext,
+    case: &Value,
+) -> TestResult<Value> {
+    let query = plan_query(
+        session,
+        case["sql"].as_str().ok_or("missing SQL")?,
+        &SparkSqlOptions {
+            ansi_mode: case["ansi"].as_bool().ok_or("missing ANSI mode")?,
+            ..SparkSqlOptions::default()
+        },
+    )
+    .await?;
+    let physical = query.create_physical_plan(session).await?;
+    let physical_schema = physical.schema();
+    let schema = capture_schema(physical_schema.fields(), None)?;
+    let mut rows = Vec::new();
+    for batch in collect(physical, session.task_ctx()).await? {
+        validate_batch(physical_schema.as_ref(), &batch)?;
+        for row in 0..batch.num_rows() {
+            rows.push(
+                batch
+                    .columns()
+                    .iter()
+                    .map(|column| encode_value(column.as_ref(), row))
+                    .collect::<TestResult<Vec<_>>>()?,
+            );
+        }
+    }
+    rows.sort_by_key(|row| json!(row).to_string());
+    Ok(json!({"schema":schema,"rows":rows}))
+}
+
+#[allow(
+    dead_code,
     reason = "Integration tests select individual shared reference checks."
 )]
 pub(crate) const STAGES: [(&str, &str); 5] = [

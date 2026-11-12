@@ -90,6 +90,56 @@ fn reader_error(error: &DataFusionError) -> TestResult<&DeltaReaderError> {
 }
 
 #[tokio::test]
+async fn struct_union_filters_keep_delta_file_pruning() -> TestResult {
+    let fixture = RealParquetDeltaTable::new_with_two_files("spark-union-file-pruning")?;
+    let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
+        .with_warmup(WarmupMode::QueryPlanning)
+        .load_table()
+        .await?;
+    for ansi_mode in [false, true] {
+        let ctx = context(1);
+        ctx.register_table(
+            "source",
+            Arc::new(DeltaTableProvider::try_new(
+                table.clone(),
+                ScanOptions {
+                    target_partitions: Some(1),
+                    ..Default::default()
+                },
+            )?),
+        )?;
+        let sql = "SELECT id, s FROM (
+            SELECT id, named_struct('v', id) AS s FROM source
+            UNION ALL SELECT id, named_struct('v', id) FROM source
+        ) q WHERE id >= 3";
+        let query = plan_query(
+            &ctx,
+            sql,
+            &SparkSqlOptions {
+                ansi_mode,
+                ..Default::default()
+            },
+        )
+        .await?;
+        let physical = query.create_physical_plan(&ctx).await?;
+        let scans = collect_scan_metrics(physical.as_ref());
+        assert_eq!(scans.len(), 2);
+        for scan in &scans {
+            assert_eq!(scan.snapshot().reader_metrics.file_tasks_started, 0);
+        }
+        assert_eq!(read_ids(&ctx, physical).await?, vec![3, 3, 4, 4]);
+        for scan in scans {
+            assert_eq!(
+                scan.snapshot().reader_metrics.file_tasks_started,
+                1,
+                "each branch must prune the file whose ids are 1 and 2"
+            );
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn spark_delta_deletion_vectors_preserve_rows_and_schema() -> TestResult {
     let fixture = RealParquetDeltaTable::new_with_two_row_groups_and_deletion_vector(
         "spark-dv-row-groups",

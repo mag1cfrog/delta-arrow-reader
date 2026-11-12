@@ -57,14 +57,15 @@ pub(crate) fn drop_inherited_column_metadata(expression: expr::Expr) -> expr::Ex
     set_result_metadata(expression, vec![])
 }
 
+pub(crate) fn is_arrow_extension_metadata_key(key: &str) -> bool {
+    matches!(key, EXTENSION_TYPE_NAME_KEY | EXTENSION_TYPE_METADATA_KEY)
+}
+
 pub(crate) fn clear_inherited_field_metadata(field: &mut Field) {
     // Spark drops user metadata on derived values; Arrow extensions describe their type.
-    field.metadata_mut().retain(|key, _| {
-        matches!(
-            key.as_str(),
-            EXTENSION_TYPE_NAME_KEY | EXTENSION_TYPE_METADATA_KEY
-        )
-    });
+    field
+        .metadata_mut()
+        .retain(|key, _| is_arrow_extension_metadata_key(key));
 }
 
 pub(crate) fn drop_inherited_column_metadata_for_analysis(expression: expr::Expr) -> expr::Expr {
