@@ -1,0 +1,303 @@
+{
+  "issue": "https://github.com/mag1cfrog/delta-arrow-reader/issues/1243",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "ansi_modes": [
+    false,
+    true
+  ],
+  "registered_inputs": [
+    {
+      "name": "inputs",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "s",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "t",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "a,b,c",
+          "k1"
+        ],
+        [
+          "1",
+          "x",
+          "k2"
+        ]
+      ]
+    },
+    {
+      "name": "collections",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "a",
+            "type": {
+              "type": "array",
+              "elementType": "string",
+              "containsNull": true
+            },
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "m",
+            "type": {
+              "type": "map",
+              "keyType": "string",
+              "valueType": "string",
+              "valueContainsNull": true
+            },
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          [
+            "q",
+            null,
+            "p",
+            "q"
+          ],
+          [
+            [
+              "z",
+              "last"
+            ],
+            [
+              "a",
+              null
+            ],
+            [
+              "m",
+              "first"
+            ]
+          ]
+        ],
+        [
+          "1",
+          [],
+          []
+        ],
+        [
+          "2",
+          null,
+          null
+        ],
+        [
+          "3",
+          [
+            null
+          ],
+          [
+            [
+              "b",
+              null
+            ]
+          ]
+        ]
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "report_select_posexplode_split",
+      "sql": "SELECT posexplode(split(s, ',')) FROM inputs",
+      "order": "multiset"
+    },
+    {
+      "id": "report_lateral_posexplode_split",
+      "sql": "SELECT k, pos, col FROM inputs LATERAL VIEW posexplode(split(s, ',')) x AS pos, col",
+      "order": "multiset"
+    },
+    {
+      "id": "report_select_explode_map",
+      "sql": "SELECT explode(map(t, s)) FROM inputs",
+      "order": "multiset"
+    },
+    {
+      "id": "report_lateral_explode_map",
+      "sql": "SELECT k, key, value FROM inputs LATERAL VIEW explode(map(t, s)) x AS key, value",
+      "order": "multiset"
+    },
+    {
+      "id": "select_posexplode_array",
+      "sql": "SELECT id, posexplode(a) FROM collections ORDER BY id, pos NULLS FIRST",
+      "order": "ordered"
+    },
+    {
+      "id": "lateral_posexplode_array",
+      "sql": "SELECT id, pos, col FROM collections LATERAL VIEW posexplode(a) x AS pos, col ORDER BY id, pos NULLS FIRST",
+      "order": "ordered"
+    },
+    {
+      "id": "lateral_outer_posexplode_array",
+      "sql": "SELECT id, pos, col FROM collections LATERAL VIEW OUTER posexplode(a) x AS pos, col ORDER BY id, pos NULLS FIRST",
+      "order": "ordered"
+    },
+    {
+      "id": "select_posexplode_outer_array",
+      "sql": "SELECT id, posexplode_outer(a) FROM collections ORDER BY id, pos NULLS FIRST",
+      "order": "ordered"
+    },
+    {
+      "id": "lateral_posexplode_outer_array",
+      "sql": "SELECT id, pos, col FROM collections LATERAL VIEW posexplode_outer(a) x AS pos, col ORDER BY id, pos NULLS FIRST",
+      "order": "ordered"
+    },
+    {
+      "id": "select_explode_array",
+      "sql": "SELECT id, explode(a) FROM collections ORDER BY id, col NULLS FIRST",
+      "order": "ordered"
+    },
+    {
+      "id": "lateral_explode_array",
+      "sql": "SELECT id, col FROM collections LATERAL VIEW explode(a) x AS col ORDER BY id, col NULLS FIRST",
+      "order": "ordered"
+    },
+    {
+      "id": "lateral_outer_explode_array",
+      "sql": "SELECT id, col FROM collections LATERAL VIEW OUTER explode(a) x AS col ORDER BY id, col NULLS FIRST",
+      "order": "ordered"
+    },
+    {
+      "id": "select_explode_outer_array",
+      "sql": "SELECT id, explode_outer(a) FROM collections ORDER BY id, col NULLS FIRST",
+      "order": "ordered"
+    },
+    {
+      "id": "lateral_explode_outer_array",
+      "sql": "SELECT id, col FROM collections LATERAL VIEW explode_outer(a) x AS col ORDER BY id, col NULLS FIRST",
+      "order": "ordered"
+    },
+    {
+      "id": "select_aliased_posexplode_outer_array",
+      "sql": "SELECT id, posexplode_outer(a) AS (entry_pos, item) FROM collections ORDER BY id, entry_pos NULLS FIRST",
+      "order": "ordered"
+    },
+    {
+      "id": "lateral_aliased_posexplode_outer_array",
+      "sql": "SELECT id, entry_pos, item FROM collections LATERAL VIEW posexplode_outer(a) entries AS entry_pos, item ORDER BY id, entry_pos NULLS FIRST",
+      "order": "ordered"
+    },
+    {
+      "id": "select_posexplode_map",
+      "sql": "SELECT id, posexplode(m) FROM collections ORDER BY id, pos NULLS FIRST",
+      "order": "ordered"
+    },
+    {
+      "id": "lateral_posexplode_map",
+      "sql": "SELECT id, pos, key, value FROM collections LATERAL VIEW posexplode(m) x AS pos, key, value ORDER BY id, pos NULLS FIRST",
+      "order": "ordered"
+    },
+    {
+      "id": "lateral_outer_posexplode_map",
+      "sql": "SELECT id, pos, key, value FROM collections LATERAL VIEW OUTER posexplode(m) x AS pos, key, value ORDER BY id, pos NULLS FIRST",
+      "order": "ordered"
+    },
+    {
+      "id": "select_posexplode_outer_map",
+      "sql": "SELECT id, posexplode_outer(m) FROM collections ORDER BY id, pos NULLS FIRST",
+      "order": "ordered"
+    },
+    {
+      "id": "lateral_posexplode_outer_map",
+      "sql": "SELECT id, pos, key, value FROM collections LATERAL VIEW posexplode_outer(m) x AS pos, key, value ORDER BY id, pos NULLS FIRST",
+      "order": "ordered"
+    },
+    {
+      "id": "select_explode_map",
+      "sql": "SELECT id, explode(m) FROM collections ORDER BY id, key NULLS FIRST",
+      "order": "ordered"
+    },
+    {
+      "id": "lateral_explode_map",
+      "sql": "SELECT id, key, value FROM collections LATERAL VIEW explode(m) x AS key, value ORDER BY id, key NULLS FIRST",
+      "order": "ordered"
+    },
+    {
+      "id": "lateral_outer_explode_map",
+      "sql": "SELECT id, key, value FROM collections LATERAL VIEW OUTER explode(m) x AS key, value ORDER BY id, key NULLS FIRST",
+      "order": "ordered"
+    },
+    {
+      "id": "select_explode_outer_map",
+      "sql": "SELECT id, explode_outer(m) FROM collections ORDER BY id, key NULLS FIRST",
+      "order": "ordered"
+    },
+    {
+      "id": "lateral_explode_outer_map",
+      "sql": "SELECT id, key, value FROM collections LATERAL VIEW explode_outer(m) x AS key, value ORDER BY id, key NULLS FIRST",
+      "order": "ordered"
+    },
+    {
+      "id": "select_aliased_posexplode_outer_map",
+      "sql": "SELECT id, posexplode_outer(m) AS (entry_pos, entry_key, item) FROM collections ORDER BY id, entry_pos NULLS FIRST",
+      "order": "ordered"
+    },
+    {
+      "id": "lateral_aliased_posexplode_outer_map",
+      "sql": "SELECT id, entry_pos, entry_key, item FROM collections LATERAL VIEW posexplode_outer(m) entries AS entry_pos, entry_key, item ORDER BY id, entry_pos NULLS FIRST",
+      "order": "ordered"
+    },
+    {
+      "id": "required_map_values",
+      "order": "ordered",
+      "sql": "SELECT k, explode(map(t, k)) FROM inputs ORDER BY k, key"
+    },
+    {
+      "id": "literal_map_positions",
+      "order": "ordered",
+      "sql": "SELECT posexplode(map('z', 7, 'a', 8)) ORDER BY pos"
+    },
+    {
+      "id": "partial_map_projection",
+      "order": "ordered",
+      "sql": "SELECT id, key FROM collections LATERAL VIEW explode(m) x AS key, value ORDER BY id, key NULLS FIRST"
+    },
+    {
+      "id": "partial_outer_position",
+      "order": "ordered",
+      "sql": "SELECT id, pos FROM collections LATERAL VIEW OUTER posexplode(m) x AS pos, key, value ORDER BY id, pos NULLS FIRST"
+    },
+    {
+      "id": "array_struct_field",
+      "order": "ordered",
+      "sql": "SELECT x.col.code AS code FROM inputs LATERAL VIEW explode(array(named_struct('code', k))) x AS col ORDER BY code"
+    },
+    {
+      "id": "outer_volatile_array",
+      "order": "ordered",
+      "sql": "SELECT id, posexplode_outer(CASE WHEN RAND(7) < 0.5 THEN CAST(array() AS ARRAY<STRING>) ELSE array('x') END) FROM VALUES (0), (1), (2), (3) AS t(id) ORDER BY id, pos NULLS FIRST"
+    }
+  ]
+}
