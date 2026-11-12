@@ -210,21 +210,25 @@ fn matches_retained_native_profile(
     Ok(reference_fields_match && native_observation == expected_native_observation)
 }
 
-// #1118 compares executed field names and types, including struct children.
+// #1118 compares executed names and types without nested nullability or metadata.
 fn executed_field_names_and_types(schema: &Value) -> Option<Vec<(&str, Value)>> {
     schema["fields"]
         .as_array()?
         .iter()
-        .map(|field| {
-            let data_type = &field["type"];
-            let data_type = if data_type["type"] == "struct" {
-                json!({"type":"struct","fields":executed_field_names_and_types(data_type)?})
-            } else {
-                json!(data_type.as_str()?)
-            };
-            Some((field["name"].as_str()?, data_type))
-        })
+        .map(|field| Some((field["name"].as_str()?, executed_data_type(&field["type"])?)))
         .collect()
+}
+
+fn executed_data_type(data_type: &Value) -> Option<Value> {
+    match data_type["type"].as_str() {
+        Some("struct") => {
+            Some(json!({"type":"struct","fields":executed_field_names_and_types(data_type)?}))
+        }
+        Some("map") => Some(json!({"type":"map",
+            "keyType":executed_data_type(&data_type["keyType"])?,
+            "valueType":executed_data_type(&data_type["valueType"])?})),
+        _ => data_type.as_str().map(Value::from),
+    }
 }
 
 #[tokio::test]
@@ -240,8 +244,10 @@ async fn row_dependent_offset_defaults_match_spark() -> TestResult {
     );
     assert_eq!(manifest["timezone"], "UTC");
     assert_eq!(manifest["ansi_modes"], json!([false, true]));
+    let cases = manifest["cases"].as_array().ok_or("missing cases")?;
+    assert_eq!(cases.len(), 12);
     let mut planned = BTreeMap::new();
-    for case in manifest["cases"].as_array().ok_or("missing cases")? {
+    for case in cases {
         let id = case["id"].as_str().ok_or("missing case ID")?;
         let sql = case["sql"].as_str().ok_or("missing SQL")?;
         for ansi in [false, true] {
@@ -267,7 +273,7 @@ async fn row_dependent_offset_defaults_match_spark() -> TestResult {
                 .ok_or("missing Spark executed fields")?,
         );
     }
-    assert!(!references.is_empty());
+    assert_eq!(references.len(), 24);
     assert!(planned.is_empty(), "missing Spark references: {planned:?}");
 
     let mut differences = Vec::new();

@@ -294,6 +294,18 @@
     {
       "id": "typed_null_payload",
       "sql": "SELECT id, g, LAG(CAST(NULL AS SMALLINT), 1, CAST(d AS SMALLINT)) RESPECT NULLS OVER w AS lag_null, LEAD(CAST(NULL AS SMALLINT), 1, CAST(d AS SMALLINT)) IGNORE NULLS OVER w AS lead_null FROM offset_scalar WINDOW w AS (PARTITION BY g ORDER BY id) ORDER BY id"
+    },
+    {
+      "id": "dynamic_map_defaults",
+      "sql": "SELECT id, g, LAG(MAP('x', d), 1, MAP('x', v)) OVER w AS lag_nullable_default, LAG(MAP('x', v), 1, MAP('x', d)) OVER w AS lag_nullable_payload FROM offset_scalar WINDOW w AS (PARTITION BY g ORDER BY id) ORDER BY id"
+    },
+    {
+      "id": "lead_ignore_nulls_gap_limit",
+      "sql": "WITH s AS (SELECT id, d, CASE WHEN id IN (0, 4) THEN CAST(NULL AS INT) ELSE r END AS x FROM offset_scalar WHERE id < 6) SELECT id, LEAD(x, 2, d) IGNORE NULLS OVER w AS lead_gap, LAG(x, -2, d) IGNORE NULLS OVER w AS lag_gap FROM s WINDOW w AS (ORDER BY id) ORDER BY id LIMIT 3"
+    },
+    {
+      "id": "mixed_dynamic_literal_siblings",
+      "sql": "SELECT id, LAG(r,1,d) OVER w AS dynamic_lag, LEAD(r,1,-1) IGNORE NULLS OVER w AS literal_lead FROM offset_scalar WINDOW w AS (ORDER BY id) ORDER BY id"
     }
   ]
 }
