@@ -55,11 +55,10 @@ internal rows, collected through the Dataset API. `ConvertToLocalRelation` is ex
 
 `calendar_interval_ordering.rs` compares names, type families, nullability, metadata and typed
 rows at batch sizes 1 and 32, keeping row order where Spark's record does. An analysis failure
-must have Spark's condition. Five differences are retained, each at DAR's exact current result:
+must have Spark's condition. For four open issues, the test checks DAR's current result.
+
 - #1160: MAX, MIN, MAX_BY, SORT_ARRAY, ARRAY_SORT and ARRAY_MAX accept calendar intervals and
   return DAR's fields and rows, where Spark rejects them (24 records);
-- #1161: PIVOT also groups by the aggregate's argument column, so the PIVOT controls return a
-  row per value (6 records);
 - #1090: `greatest(make_dt_interval(d), NULL)` is nullable where Spark declares it NOT NULL
   (4 records);
 - #1176: DataFusion's comparison coercion, which decides whether a field beside a calendar

@@ -68,9 +68,20 @@ impl PlanResolver<'_> {
             ));
         }
 
+        let previous_references = std::mem::replace(
+            &mut state.pivot_aggregate_references,
+            grouping
+                .is_none()
+                .then(|| (Arc::clone(&schema), HashSet::new())),
+        );
         let aggregates = self
             .resolve_named_output_expressions(aggregate, &schema, state)
-            .await?;
+            .await;
+        let aggregate_references =
+            std::mem::replace(&mut state.pivot_aggregate_references, previous_references)
+                .map(|(_, references)| references)
+                .unwrap_or_default();
+        let aggregates = aggregates?;
 
         // Spark allows aggregate expressions and pure literals, but rejects columns outside an
         // aggregate function.
@@ -86,7 +97,13 @@ impl PlanResolver<'_> {
                 self.resolve_named_output_expressions(grouping, &schema, state)
                     .await?
             }
-            None => Self::implicit_pivot_grouping(&schema, &pivot_column, &aggregates, state)?,
+            None => Self::implicit_pivot_grouping(
+                &schema,
+                &pivot_column,
+                &aggregates,
+                aggregate_references,
+                state,
+            )?,
         };
 
         // SQL PIVOT supplies a nonempty value list.
@@ -263,16 +280,12 @@ impl PlanResolver<'_> {
         schema: &DFSchemaRef,
         pivot_column: &expr::Expr,
         aggregates: &[NamedExpr],
+        mut referenced: HashSet<Column>,
         state: &PlanResolverState,
     ) -> PlanResult<Vec<NamedExpr>> {
-        let mut referenced: HashSet<Column> = HashSet::new();
-        for column in pivot_column.column_refs() {
-            referenced.insert(column.clone());
-        }
+        Self::add_pivot_references(pivot_column, schema, &mut referenced)?;
         for agg in aggregates {
-            for column in agg.expr.column_refs() {
-                referenced.insert(column.clone());
-            }
+            Self::add_pivot_references(&agg.expr, schema, &mut referenced)?;
         }
         // The schema field names are internal ids (e.g. `#6`); map each to its
         // user-facing name so the grouping columns keep their original names.
@@ -290,6 +303,36 @@ impl PlanResolver<'_> {
                 interval_qualifier: None,
             })
             .collect())
+    }
+
+    pub(in crate::resolver) fn add_pivot_references(
+        expression: &expr::Expr,
+        schema: &DFSchema,
+        references: &mut HashSet<Column>,
+    ) -> PlanResult<()> {
+        expression.apply(|expression| {
+            match expression {
+                expr::Expr::Column(column) => {
+                    references.insert(column.clone());
+                }
+                expr::Expr::ScalarSubquery(subquery)
+                | expr::Expr::Exists(expr::Exists { subquery, .. })
+                | expr::Expr::InSubquery(expr::InSubquery { subquery, .. })
+                | expr::Expr::SetComparison(expr::SetComparison { subquery, .. }) => {
+                    // Subqueries expose their correlations without visiting their internal plans.
+                    for reference in &subquery.outer_ref_columns {
+                        if let expr::Expr::OuterReferenceColumn(_, column) = reference
+                            && schema.has_column(column)
+                        {
+                            references.insert(column.clone());
+                        }
+                    }
+                }
+                _ => {}
+            }
+            Ok(TreeNodeRecursion::Continue)
+        })?;
+        Ok(())
     }
 
     pub(super) async fn resolve_query_unpivot(

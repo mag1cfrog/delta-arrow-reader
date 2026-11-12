@@ -53,9 +53,6 @@ enum RetainedDifference {
     /// #1160: aggregates and array functions that order their values accept calendar
     /// intervals, where Spark rejects them during analysis. DAR's fields and rows are pinned.
     OrderingConsumer,
-    /// #1161: PIVOT also groups by the aggregate's argument column, so it returns a row per
-    /// value with that column, where Spark returns one row.
-    PivotImplicitGrouping,
     /// #1090: GREATEST over a NOT NULL DAY TO SECOND interval and NULL is nullable, where Spark
     /// declares it NOT NULL.
     GreatestNullability,
@@ -184,39 +181,6 @@ fn key_and_boolean_stages() -> Value {
     json!({"analyzed": schema, "optimized": schema, "executed": schema})
 }
 
-/// DAR's current fields and rows for each record of the #1161 class.
-fn pivot_grouping_result(case: &Value) -> Option<(Value, Value)> {
-    let field = |name: &str, data_type: Value, nullable: bool| json!({"name": name, "type": data_type, "nullable": nullable, "metadata": {}});
-    let days = |days: &str| json!(["0", days, "0"]);
-    let (fields, rows) = match case["id"].as_str()? {
-        "pivot_day_time_control" => (
-            vec![
-                field("k", json!("integer"), false),
-                field("one", json!("long"), true),
-            ],
-            json!([["0", "1"], ["1", null], ["2", null]]),
-        ),
-        "pivot_interval_payload_control" if case["ansi"] == true => (
-            vec![
-                field("i", json!("interval"), false),
-                field("z", json!("long"), true),
-                field("o", json!("long"), true),
-            ],
-            json!([
-                [days("-2"), null, "1"],
-                [days("1"), "1", null],
-                [days("3"), null, null]
-            ]),
-        ),
-        _ => return None,
-    };
-    let schema = json!({"type": "struct", "fields": fields});
-    Some((
-        json!({"analyzed": schema, "optimized": schema, "executed": schema}),
-        rows,
-    ))
-}
-
 /// DAR's current rows for each record of the #1160 class.
 fn ordering_consumer_rows(id: &str) -> Option<Value> {
     let days = |days: &str| json!(["0", days, "0"]);
@@ -254,8 +218,6 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
     let id = case["id"].as_str()?;
     if ordering_consumer_rows(id).is_some() {
         Some(RetainedDifference::OrderingConsumer)
-    } else if pivot_grouping_result(case).is_some() {
-        Some(RetainedDifference::PivotImplicitGrouping)
     } else if id == "greatest_day_time_null_control" {
         Some(RetainedDifference::GreatestNullability)
     } else if NESTED_COERCION_RECORDS
@@ -337,14 +299,6 @@ fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResu
                 ordering_consumer_schema(id, case["ansi"] == true).ok_or("missing DAR fields")?;
             current["expected"] = json!({"status": "ok", "rows": rows});
             current["spark_error_phase"] = Value::Null;
-        }
-        RetainedDifference::PivotImplicitGrouping => {
-            if case["expected"]["status"] != "ok" {
-                return Err(format!("expected a Spark result: {case}").into());
-            }
-            let (stages, rows) = pivot_grouping_result(case).ok_or("missing DAR result")?;
-            current["schema_stages"] = stages;
-            current["expected"]["rows"] = rows;
         }
         RetainedDifference::GreatestNullability => {
             for stage in ["analyzed", "optimized", "executed"] {
@@ -659,7 +613,6 @@ async fn calendar_interval_ordering_matches_spark() -> TestResult {
         retained,
         BTreeMap::from([
             (RetainedDifference::OrderingConsumer, 24),
-            (RetainedDifference::PivotImplicitGrouping, 6),
             (RetainedDifference::GreatestNullability, 4),
             (RetainedDifference::NestedComparisonCoercion, 64),
             (RetainedDifference::DateTimestampZone, 2),

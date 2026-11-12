@@ -1,9 +1,9 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use datafusion_common::arrow::datatypes::{Field, FieldRef};
-use datafusion_common::{DFSchemaRef, TableReference};
+use datafusion_common::{Column, DFSchemaRef, TableReference};
 use datafusion_expr::LogicalPlan;
 use sail_common::spec;
 
@@ -70,6 +70,8 @@ pub(super) struct PlanResolverState {
     outer_query_schema: Option<DFSchemaRef>,
     /// The aggregate state for the current query.
     aggregate_state: AggregateState,
+    /// The input schema and pre-lowering aggregate references for an implicit PIVOT.
+    pub(super) pivot_aggregate_references: Option<(DFSchemaRef, HashSet<Column>)>,
     /// The CTEs for the current query.
     ctes: HashMap<TableReference, Arc<LogicalPlan>>,
     config: PlanResolverStateConfig,
@@ -95,6 +97,7 @@ impl PlanResolverState {
             fields: HashMap::new(),
             outer_query_schema: None,
             aggregate_state: AggregateState::default(),
+            pivot_aggregate_references: None,
             ctes: HashMap::new(),
             config: PlanResolverStateConfig::default(),
             lambda_param_scopes: Vec::new(),

@@ -1,4 +1,6 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
+use std::sync::Arc;
+
 use datafusion_common::DFSchemaRef;
 use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode};
 use datafusion_expr::expr::ScalarFunction;
@@ -211,6 +213,18 @@ impl PlanResolver<'_> {
             } else {
                 arguments
             };
+            if let Some((pivot_schema, references)) = &mut state.pivot_aggregate_references
+                && Arc::ptr_eq(pivot_schema, schema)
+            {
+                // An aggregate builder can erase a reference, as COUNT does for non-null inputs.
+                for expression in arguments
+                    .iter()
+                    .chain(filter.as_deref())
+                    .chain(order_by.iter().map(|order| &order.expr))
+                {
+                    Self::add_pivot_references(expression, schema, references)?;
+                }
+            }
             // An aggregate reads a dictionary-encoded STRING argument as its STRING values (#1242).
             let arguments = arguments
                 .into_iter()
