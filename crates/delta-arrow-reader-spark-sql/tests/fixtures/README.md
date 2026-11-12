@@ -5,6 +5,26 @@ including its unresolved Spark differences. `import_accepted_runtime.py`
 reconstructs it from the source archive named in `accepted-runtime.json`.
 Importing the fixture does not run Spark or certify compatibility.
 
+## Current-time expressions
+
+`current-time-expressions/spark-results.jsonl` records Spark 4.2.0 values and
+executed result types for current-date and current-timestamp filters, interval
+arithmetic and repeated calls, including formatted UNIX_TIMESTAMP. It covers
+both ANSI modes in UTC and America/Los_Angeles. Comparisons use dates far from
+the query clock, while repeated calls compare against each other.
+
+The fixed-clock records use Spark timestamp literals to check dates, instants and
+date comparisons at winter and summer UTC-midnight boundaries. The Rust test
+supplies those instants as the execution clock and checks CURRENT_DATE and
+CURRENT_TIMESTAMP while the native host session keeps its default UTC time zone.
+It does not compare nullable flags, metadata or error stages.
+
+To recapture with `pyspark==4.2.0` and Java 21, choose a new output path:
+
+```sh
+TZ=UTC python current-time-expressions/capture_spark.py /tmp/current-time-spark.jsonl
+```
+
 ## Primitive CAST overflow conditions
 
 `reviewed-corrections.json` adds 93 exact ANSI error outcomes for #922. A complete

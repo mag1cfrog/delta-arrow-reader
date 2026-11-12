@@ -24,6 +24,13 @@ Later source moves retain their original inventory paths and hashes, with a
 `renamed_to` path to the current file. Compatibility changes after consolidation
 are recorded in Git rather than rewriting the accepted source checksums.
 
+Spark expression preparation resolves CURRENT_DATE and CURRENT_TIMESTAMP from
+the execution's query clock before evaluating parent casts and arithmetic.
+All occurrences share that instant. Native DataFusion queries keep their own
+clock simplification when no Spark query clock is supplied.
+CURRENT_DATE and CURDATE derive their date from the session-zone-tagged timestamp,
+so Spark SQL options need not change the host session's default time zone.
+
 ## Dependency forks
 
 Fifteen dependencies have local source overrides in this crate's Cargo.toml:
