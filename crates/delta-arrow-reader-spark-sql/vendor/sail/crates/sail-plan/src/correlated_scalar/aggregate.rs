@@ -121,7 +121,7 @@ pub(super) fn distinct_inner_rows(
 
 // DataFusion evaluates aggregate arguments and keys before applying FILTER.
 // Skip computations on the placeholder from the left join as well as its update.
-fn guard_unmatched(expr: Expr, is_match: &Expr) -> Result<Expr> {
+pub(super) fn guard_unmatched(expr: Expr, is_match: &Expr) -> Result<Expr> {
     match expr {
         Expr::Column(_) | Expr::Literal(_, _) => Ok(expr),
         Expr::Alias(mut alias) => {

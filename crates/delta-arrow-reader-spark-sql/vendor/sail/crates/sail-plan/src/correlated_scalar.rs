@@ -198,6 +198,9 @@ fn lower_scalar(
     if let LogicalPlan::Aggregate(aggregate) = input
         && aggregate.group_expr.is_empty()
         && !has_correlated_self_equality(input)?
+        && !input.exists(|node| {
+            Ok(matches!(node, LogicalPlan::Window(_)) && !node.all_out_ref_exprs().is_empty())
+        })?
     {
         // Keep DataFusion's existing global aggregate decorrelation when it can
         // group on the extracted join keys before joining to the outer rows.

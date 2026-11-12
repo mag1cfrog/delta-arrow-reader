@@ -467,8 +467,13 @@ pulls correlated predicates from scans and joins with independent inputs. It
 uses a left join and counts scalar rows per outer row. An empty scalar result
 returns a typed NULL. Multiple scalar rows raise during execution, including
 when the consumer is an untaken CASE branch. Projections, aliases, filters,
-grouping, DISTINCT and literal LIMIT compose per outer row. Global aggregates
-that DataFusion can decorrelate on their join keys keep its native path. The
+grouping, DISTINCT, literal LIMIT and windows compose per outer row. Windows
+retain their partition, order and frame, with the outer row identifier added to
+each partition. Rows rejected by earlier steps use separate window partitions
+so they cannot change the live rows' ranks or frames. Computed row arguments,
+keys and filters skip rejected rows. Global aggregates
+over correlated windows use these steps too; aggregates that DataFusion can
+decorrelate on their join keys keep its native path. The
 [correlated scalar references](tests/fixtures/README.md#correlated-scalars-over-inner-rows)
 cover these cases and the existing one-row rewrite.
 

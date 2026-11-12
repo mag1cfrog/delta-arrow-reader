@@ -4,14 +4,18 @@ use datafusion::optimizer::decorrelate::PullUpCorrelatedExpr;
 use datafusion_common::alias::AliasGenerator;
 use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode, TreeNodeRecursion};
 use datafusion_common::{Column, DFSchema, Result, ScalarValue, internal_err};
-use datafusion_expr::expr_rewriter::strip_outer_reference;
+use datafusion_expr::expr_rewriter::{NamePreserver, strip_outer_reference};
 use datafusion_expr::utils::{conjunction, disjunction, split_conjunction};
 use datafusion_expr::{
-    Aggregate, Distinct, Expr, Filter, JoinType, Limit, LogicalPlan, LogicalPlanBuilder, Operator,
-    Projection, Sort, SubqueryAlias, Union, lit, when,
+    Aggregate, Distinct, Expr, Extension, Filter, JoinType, Limit, LogicalPlan, LogicalPlanBuilder,
+    Operator, Projection, Sort, SubqueryAlias, Union, Window, WindowFunctionDefinition, lit, when,
 };
+use sail_logical_plan::monotonic_id::{MonotonicIdNode, MonotonicIdPurpose};
+use sail_logical_plan::sort::RequiredSortNode;
 
-use super::aggregate::{aggregate_inner_rows, can_lower_aggregate, distinct_inner_rows};
+use super::aggregate::{
+    aggregate_inner_rows, can_lower_aggregate, distinct_inner_rows, guard_unmatched,
+};
 use super::clear_match_marker_on_rejection;
 use super::limit::{can_lower_limit, limit_inner_rows};
 
@@ -27,7 +31,10 @@ pub(super) enum RowStep<'a> {
     Filter(&'a Expr),
     Aggregate(&'a Aggregate),
     Distinct(&'a Arc<LogicalPlan>),
-    Limit(&'a Limit, Option<&'a Sort>),
+    Limit(&'a Limit, Option<Sort>),
+    Window(&'a Window),
+    Sort(&'a Sort),
+    WindowOrder(&'a Extension),
     UnionOutput(Vec<Expr>, &'a DFSchema),
 }
 
@@ -75,6 +82,25 @@ pub(super) fn split_correlated_rows<'a>(
                 input
             }
             LogicalPlan::Limit(limit) if can_lower_limit(limit) => split_limit(limit, &mut steps),
+            LogicalPlan::Window(window) => {
+                steps.push(RowStep::Window(window));
+                &window.input
+            }
+            LogicalPlan::Extension(extension)
+                if extension
+                    .node
+                    .as_any()
+                    .downcast_ref::<MonotonicIdNode>()
+                    .is_some_and(|node| node.purpose() == MonotonicIdPurpose::WindowOrdering)
+                    || extension
+                        .node
+                        .as_any()
+                        .downcast_ref::<RequiredSortNode>()
+                        .is_some_and(|node| node.fetch().is_none()) =>
+            {
+                steps.push(RowStep::WindowOrder(extension));
+                extension.node.inputs()[0]
+            }
             LogicalPlan::Union(union) => return split_union_rows(union, steps, aliases),
             LogicalPlan::Sort(sort)
                 if sort.fetch.is_none()
@@ -86,6 +112,10 @@ pub(super) fn split_correlated_rows<'a>(
                     }) =>
             {
                 // A scalar observes at most one row unless another operator consumes the order.
+                &sort.input
+            }
+            LogicalPlan::Sort(sort) if sort.fetch.is_none() => {
+                steps.push(RowStep::Sort(sort));
                 &sort.input
             }
             _ => return Ok(None),
@@ -289,10 +319,23 @@ fn split_limit<'a>(limit: &'a Limit, steps: &mut Vec<RowStep<'a>>) -> &'a Logica
         wrappers.push(RowStep::Project(projection));
         input = &projection.input;
     }
-    if let LogicalPlan::Sort(sort) = input {
+    let sort = match input {
+        LogicalPlan::Sort(sort) => Some(sort.clone()),
+        LogicalPlan::Extension(extension) => extension
+            .node
+            .as_any()
+            .downcast_ref::<RequiredSortNode>()
+            .map(|sort| Sort {
+                expr: sort.sort_expr().to_vec(),
+                input: Arc::new(extension.node.inputs()[0].clone()),
+                fetch: sort.fetch(),
+            }),
+        _ => None,
+    };
+    if let Some(sort) = sort {
         steps.extend(wrappers);
         steps.push(RowStep::Limit(limit, Some(sort)));
-        &sort.input
+        input.inputs()[0]
     } else {
         steps.push(RowStep::Limit(limit, None));
         &limit.input
@@ -377,13 +420,103 @@ pub(super) fn apply_row_steps(
             RowStep::Distinct(input) => {
                 distinct_inner_rows(plan, input, row_id, marker, outer_columns)?
             }
-            RowStep::Limit(limit, sort) => limit_inner_rows(plan, limit, sort, row_id, marker)?,
+            RowStep::Limit(limit, sort) => {
+                limit_inner_rows(plan, limit, sort.as_ref(), row_id, marker)?
+            }
+            RowStep::Window(window) => window_inner_rows(plan, window, row_id, marker)?,
+            RowStep::Sort(sort) => {
+                let mut sort = sort.clone();
+                for key in &mut sort.expr {
+                    key.expr = guard_unmatched(
+                        strip_outer_reference(std::mem::take(&mut key.expr)),
+                        &Expr::Column(marker.clone()).is_not_null(),
+                    )?;
+                }
+                sort.input = Arc::new(plan);
+                LogicalPlan::Sort(sort)
+            }
+            RowStep::WindowOrder(extension) => {
+                let expressions = extension
+                    .node
+                    .expressions()
+                    .into_iter()
+                    .map(|expr| {
+                        guard_unmatched(
+                            strip_outer_reference(expr),
+                            &Expr::Column(marker.clone()).is_not_null(),
+                        )
+                    })
+                    .collect::<Result<_>>()?;
+                LogicalPlan::Extension(Extension {
+                    node: extension
+                        .node
+                        .with_exprs_and_inputs(expressions, vec![plan])?,
+                })
+            }
             RowStep::UnionOutput(expr, schema) => {
                 project_inner_rows(plan, expr, schema, row_id, marker, outer_columns)?
             }
         };
     }
     Ok(plan)
+}
+
+fn window_inner_rows(
+    plan: LogicalPlan,
+    window: &Window,
+    row_id: &Column,
+    marker: &Column,
+) -> Result<LogicalPlan> {
+    let is_match = Expr::Column(marker.clone()).is_not_null();
+    let names = NamePreserver::new_for_projection();
+    let expressions = window
+        .window_expr
+        .iter()
+        .map(|expr| {
+            let name = names.save(expr);
+            let expr = strip_outer_reference(expr.clone())
+                .transform_up(|expr| {
+                    let Expr::WindowFunction(mut function) = expr else {
+                        return Ok(Transformed::no(expr));
+                    };
+                    for (index, arg) in function.params.args.iter_mut().enumerate() {
+                        // These scalar parameters must remain constant for the window evaluator.
+                        if let WindowFunctionDefinition::WindowUDF(udwf) = &function.fun
+                            && matches!(
+                                (udwf.name(), index),
+                                ("lag" | "lead" | "nth_value", 1) | ("ntile", 0)
+                            )
+                        {
+                            continue;
+                        }
+                        *arg = guard_unmatched(std::mem::take(arg), &is_match)?;
+                    }
+                    for partition in &mut function.params.partition_by {
+                        *partition = guard_unmatched(std::mem::take(partition), &is_match)?;
+                    }
+                    for sort in &mut function.params.order_by {
+                        sort.expr = guard_unmatched(std::mem::take(&mut sort.expr), &is_match)?;
+                    }
+                    if let Some(filter) = function.params.filter.take() {
+                        function.params.filter = Some(Box::new(
+                            when(is_match.clone(), *filter).otherwise(lit(false))?,
+                        ));
+                    }
+                    // Rejected rows preserve the outer group but cannot affect a live frame.
+                    function
+                        .params
+                        .partition_by
+                        .splice(0..0, [Expr::Column(row_id.clone()), is_match.clone()]);
+                    Ok(Transformed::yes(Expr::WindowFunction(function)))
+                })?
+                .data;
+            Ok(name.restore(expr))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok(LogicalPlan::Window(Window::try_new(
+        expressions,
+        Arc::new(plan),
+    )?))
 }
 
 fn project_inner_rows(

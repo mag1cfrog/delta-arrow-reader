@@ -361,3 +361,96 @@ async fn correlated_union_all_preserves_values_types_and_cardinality() -> TestRe
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }
+
+#[tokio::test]
+async fn correlated_windows_preserve_values_types_and_cardinality() -> TestResult {
+    let references = records(include_str!(
+        "fixtures/correlated-scalar-window/spark-results.jsonl"
+    ))?;
+    assert_eq!(references[0]["spark_version"], "4.2.0");
+    assert_eq!(references.len() - 1, 54);
+    let mut seen = BTreeSet::new();
+    for case in &references[1..] {
+        assert!(seen.insert((case["id"].to_string(), case["ansi"].as_bool())));
+        if case["id"] == "issue_row_number" {
+            assert_eq!(case["rows"], json!([["0", null], ["1", "20"], ["2", "30"]]));
+            assert_eq!(
+                executed_fields(&case["schema"]),
+                Some(vec![
+                    (&json!("k"), &json!("integer")),
+                    (&json!("r"), &json!("integer"))
+                ])
+            );
+        }
+        if case["id"] == "different_window_specs" {
+            assert_eq!(
+                case["rows"],
+                json!([
+                    ["0", null],
+                    ["1", "940"],
+                    ["2", "940"],
+                    ["3", "730"],
+                    ["4", null],
+                    ["5", null]
+                ])
+            );
+        }
+    }
+    for input in references[0]["inputs"].as_array().ok_or("missing inputs")? {
+        let batch = spark_inputs::decode_recorded_batch(input)?;
+        spark_results::validate_batch(batch.schema().as_ref(), &batch)?;
+    }
+    let mut differences = Vec::new();
+    for batch in [1, 32] {
+        let session = session(batch);
+        spark_inputs::register_recorded_inputs(&session, &references[0], batch)?;
+        for case in &references[1..] {
+            let result: TestResult<Value> = async {
+                if case["cardinality_error"] == true {
+                    let query = plan_query(
+                        &session,
+                        case["sql"].as_str().ok_or("missing SQL")?,
+                        &SparkSqlOptions {
+                            ansi_mode: case["ansi"].as_bool().ok_or("missing ANSI")?,
+                            ..SparkSqlOptions::default()
+                        },
+                    )
+                    .await?;
+                    let physical = query.create_physical_plan(&session).await?;
+                    let result =
+                        datafusion::physical_plan::collect(physical, session.task_ctx()).await;
+                    let error = result.err().ok_or("scalar cardinality guard did not run")?;
+                    assert!(
+                        error
+                            .to_string()
+                            .contains("Scalar subquery returned more than one row")
+                    );
+                    return Ok(json!({"cardinality_error":true}));
+                }
+                spark_results::capture_executed_query_result(&session, case).await
+            }
+            .await;
+            let mut actual = result.unwrap_or_else(|error| json!({"error":error.to_string()}));
+            spark_results::remove_nullability_and_metadata(&mut actual);
+            let mut expected = if case["cardinality_error"] == true {
+                json!({"cardinality_error":true})
+            } else {
+                json!({"rows":case["rows"],"schema":case["schema"]})
+            };
+            spark_results::remove_nullability_and_metadata(&mut expected);
+            println!(
+                "CORRELATED_WINDOW {}",
+                json!({"id":case["id"],"ansi":case["ansi"],
+                "batch":batch,"matches":actual==expected,"actual":actual})
+            );
+            if actual != expected {
+                differences.push(format!(
+                    "{} ANSI={} batch={batch}: {actual}",
+                    case["id"], case["ansi"]
+                ));
+            }
+        }
+    }
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+    Ok(())
+}
