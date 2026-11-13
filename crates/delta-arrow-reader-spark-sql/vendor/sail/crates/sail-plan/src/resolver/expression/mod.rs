@@ -2,8 +2,8 @@
 use std::fmt::Debug;
 
 use async_recursion::async_recursion;
-use datafusion_common::DFSchemaRef;
 use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion};
+use datafusion_common::{Column, DFSchemaRef};
 use datafusion_expr::expr;
 use datafusion_functions::core::getfield::GetFieldFunc;
 use sail_common::spec;
@@ -32,6 +32,12 @@ mod wildcard;
 mod window;
 
 #[derive(Debug, Clone, PartialEq)]
+pub(super) enum ColumnOrigin {
+    Attribute(Column),
+    Star,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub(super) struct NamedExpr {
     /// The name of the expression to be used in projection.
     /// The name can be empty if the expression is not supposed to exist in the resolved
@@ -45,6 +51,8 @@ pub(super) struct NamedExpr {
     pub metadata: Vec<(String, String)>,
     /// The Spark qualifier of an interval value, where the resolver knows it (#1152).
     pub interval_qualifier: Option<IntervalQualifier>,
+    /// Set before rewriting only for bare input columns and star expansion.
+    pub column_origin: Option<ColumnOrigin>,
 }
 
 impl NamedExpr {
@@ -77,6 +85,7 @@ impl NamedExpr {
             expr,
             metadata,
             interval_qualifier: None,
+            column_origin: None,
         }
     }
 
@@ -91,6 +100,7 @@ impl NamedExpr {
                     .map(|x| x.to_hashmap().into_iter().collect())
                     .unwrap_or(vec![]),
                 interval_qualifier: None,
+                column_origin: None,
             }),
             _ => Err(PlanError::invalid(
                 "alias expected to create named expression",
@@ -105,6 +115,21 @@ impl NamedExpr {
             set_result_metadata(self.expr, self.metadata)
         };
         expression.alias(field_id)
+    }
+
+    pub fn with_column_origin(mut self) -> Self {
+        self.column_origin = match &self.expr {
+            expr::Expr::Column(column) | expr::Expr::OuterReferenceColumn(_, column) => {
+                Some(ColumnOrigin::Attribute(column.clone()))
+            }
+            _ => None,
+        };
+        self
+    }
+
+    pub fn with_star_origin(mut self) -> Self {
+        self.column_origin = Some(ColumnOrigin::Star);
+        self
     }
 
     pub fn with_metadata(mut self, metadata: Vec<(String, String)>) -> Self {
@@ -493,6 +518,12 @@ impl PlanResolver<'_> {
         state.config_mut().include_cast_in_expression_name = false;
         let mut results = Vec::with_capacity(expressions.len());
         for expression in expressions {
+            let column_or_star = matches!(
+                &expression,
+                spec::Expr::UnresolvedAttribute { .. }
+                    | spec::Expr::UnresolvedStar { .. }
+                    | spec::Expr::IdentifierClause { .. }
+            );
             let extraction_only = is_extraction_only(&expression);
             let named_source = matches!(
                 &expression,
@@ -521,6 +552,9 @@ impl PlanResolver<'_> {
                     false,
                 ),
             };
+            if !column_or_star {
+                named.column_origin = None;
+            }
             if !named_source && !needs_projection_expansion(&named.expr) {
                 if !direct_named_cast && !extraction_only {
                     // Output metadata must not participate in grouping expression identity.
@@ -819,6 +853,7 @@ mod tests {
                 ))),
                 metadata: Default::default(),
                 interval_qualifier: None,
+                column_origin: None,
             }
         );
 
@@ -886,6 +921,7 @@ mod tests {
                 }),
                 metadata: Default::default(),
                 interval_qualifier: None,
+                column_origin: None,
             },
         );
 

@@ -1,0 +1,1404 @@
+{
+  "issue": 786,
+  "expected_record_count": 114,
+  "corpora": [
+    {
+      "corpus": "repeated-source-columns",
+      "source": "Current unchanged relational providers plus recovered original repeated-projection provider metadata. Integer inputs converted losslessly to maintained string encoding.",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "left_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "n",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "label",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                null,
+                "10",
+                "null-left"
+              ],
+              [
+                "1",
+                "20",
+                "a"
+              ],
+              [
+                "2",
+                "30",
+                "b"
+              ],
+              [
+                "2",
+                "31",
+                "b2"
+              ],
+              [
+                "4",
+                null,
+                null
+              ]
+            ]
+          },
+          {
+            "name": "right_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "long",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "w",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "label",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                null,
+                "100",
+                "null-right"
+              ],
+              [
+                "2",
+                "200",
+                "x"
+              ],
+              [
+                "2",
+                "201",
+                "x2"
+              ],
+              [
+                "3",
+                null,
+                "y"
+              ]
+            ]
+          },
+          {
+            "name": "empty_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "n",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "label",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": []
+          },
+          {
+            "name": "left_mixed",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "left"
+                  }
+                },
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "key"
+                  }
+                },
+                {
+                  "name": "lv",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "value"
+                  }
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                "7",
+                "10"
+              ],
+              [
+                "1",
+                "7",
+                "11"
+              ],
+              [
+                "2",
+                "8",
+                "20"
+              ],
+              [
+                null,
+                null,
+                "30"
+              ]
+            ]
+          },
+          {
+            "name": "left_nulls",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "left"
+                  }
+                },
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "key"
+                  }
+                },
+                {
+                  "name": "lv",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "value"
+                  }
+                }
+              ]
+            },
+            "rows": [
+              [
+                null,
+                null,
+                null
+              ]
+            ]
+          },
+          {
+            "name": "left_empty",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "left"
+                  }
+                },
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "key"
+                  }
+                },
+                {
+                  "name": "lv",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "value"
+                  }
+                }
+              ]
+            },
+            "rows": []
+          },
+          {
+            "name": "right_mixed",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "right"
+                  }
+                },
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "key"
+                  }
+                },
+                {
+                  "name": "rv",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "value"
+                  }
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                "7",
+                "40"
+              ],
+              [
+                "1",
+                "7",
+                "40"
+              ],
+              [
+                "3",
+                "9",
+                "50"
+              ],
+              [
+                null,
+                null,
+                "60"
+              ]
+            ]
+          },
+          {
+            "name": "right_nulls",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "right"
+                  }
+                },
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "key"
+                  }
+                },
+                {
+                  "name": "rv",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "value"
+                  }
+                }
+              ]
+            },
+            "rows": [
+              [
+                null,
+                null,
+                null
+              ]
+            ]
+          },
+          {
+            "name": "right_empty",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "right"
+                  }
+                },
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "key"
+                  }
+                },
+                {
+                  "name": "rv",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "value"
+                  }
+                }
+              ]
+            },
+            "rows": []
+          },
+          {
+            "name": "pivot_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "g",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "v",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "p",
+                  "type": "boolean",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "0",
+                null,
+                null,
+                null
+              ],
+              [
+                "1",
+                "0",
+                "1",
+                "10",
+                "True"
+              ],
+              [
+                "2",
+                "0",
+                "1",
+                "20",
+                "False"
+              ],
+              [
+                "3",
+                "0",
+                "3",
+                null,
+                "True"
+              ],
+              [
+                "4",
+                "0",
+                "5",
+                "10",
+                null
+              ],
+              [
+                "5",
+                "1",
+                null,
+                null,
+                "False"
+              ],
+              [
+                "6",
+                "1",
+                "2",
+                null,
+                null
+              ],
+              [
+                "7",
+                null,
+                "1",
+                "-4",
+                "True"
+              ],
+              [
+                "8",
+                null,
+                "1",
+                "6",
+                "False"
+              ],
+              [
+                "9",
+                null,
+                "4",
+                "6",
+                "True"
+              ],
+              [
+                "10",
+                "0",
+                "1",
+                "20",
+                "False"
+              ]
+            ]
+          },
+          {
+            "name": "pivot_empty_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "g",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "v",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "p",
+                  "type": "boolean",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": []
+          },
+          {
+            "name": "pivot_null_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "g",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "v",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "p",
+                  "type": "boolean",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                null,
+                null,
+                null,
+                null
+              ],
+              [
+                "1",
+                null,
+                null,
+                null,
+                null
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_populated_key_first_lookup",
+          "sql": "WITH q AS (SELECT k,* FROM left_inputs) SELECT l.k,l.n FROM q l",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_populated_key_first_left_on",
+          "sql": "WITH q AS (SELECT k,* FROM left_inputs) SELECT l.k,l.n,r.w FROM q l LEFT JOIN right_inputs r ON l.k=r.k",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_populated_key_first_left_using",
+          "sql": "WITH q AS (SELECT k,* FROM left_inputs) SELECT l.k,l.n,r.w FROM q l LEFT JOIN right_inputs r USING(k)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_populated_key_first_reuse_on",
+          "sql": "WITH q AS (SELECT k,* FROM left_inputs) SELECT l.k,l.n,r.n AS rn FROM q l JOIN q r ON l.k=r.k",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_populated_key_first_reuse_using",
+          "sql": "WITH q AS (SELECT k,* FROM left_inputs) SELECT l.k,l.n,r.n AS rn FROM q l JOIN q r USING(k)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_populated_unique_lookup",
+          "sql": "WITH q AS (SELECT k,n,label FROM left_inputs) SELECT l.k,l.n FROM q l",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_populated_unique_left_on",
+          "sql": "WITH q AS (SELECT k,n,label FROM left_inputs) SELECT l.k,l.n,r.w FROM q l LEFT JOIN right_inputs r ON l.k=r.k",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_populated_unique_left_using",
+          "sql": "WITH q AS (SELECT k,n,label FROM left_inputs) SELECT l.k,l.n,r.w FROM q l LEFT JOIN right_inputs r USING(k)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_populated_unique_reuse_on",
+          "sql": "WITH q AS (SELECT k,n,label FROM left_inputs) SELECT l.k,l.n,r.n AS rn FROM q l JOIN q r ON l.k=r.k",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_populated_unique_reuse_using",
+          "sql": "WITH q AS (SELECT k,n,label FROM left_inputs) SELECT l.k,l.n,r.n AS rn FROM q l JOIN q r USING(k)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_populated_preserve_repeated_star",
+          "sql": "WITH q AS (SELECT k,* FROM left_inputs) SELECT l.* FROM q l",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_empty_key_first_lookup",
+          "sql": "WITH q AS (SELECT k,* FROM empty_inputs) SELECT l.k,l.n FROM q l",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_empty_key_first_left_on",
+          "sql": "WITH q AS (SELECT k,* FROM empty_inputs) SELECT l.k,l.n,r.w FROM q l LEFT JOIN right_inputs r ON l.k=r.k",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_empty_key_first_left_using",
+          "sql": "WITH q AS (SELECT k,* FROM empty_inputs) SELECT l.k,l.n,r.w FROM q l LEFT JOIN right_inputs r USING(k)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_empty_key_first_reuse_on",
+          "sql": "WITH q AS (SELECT k,* FROM empty_inputs) SELECT l.k,l.n,r.n AS rn FROM q l JOIN q r ON l.k=r.k",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_empty_key_first_reuse_using",
+          "sql": "WITH q AS (SELECT k,* FROM empty_inputs) SELECT l.k,l.n,r.n AS rn FROM q l JOIN q r USING(k)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_empty_unique_lookup",
+          "sql": "WITH q AS (SELECT k,n,label FROM empty_inputs) SELECT l.k,l.n FROM q l",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_empty_unique_left_on",
+          "sql": "WITH q AS (SELECT k,n,label FROM empty_inputs) SELECT l.k,l.n,r.w FROM q l LEFT JOIN right_inputs r ON l.k=r.k",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_empty_unique_left_using",
+          "sql": "WITH q AS (SELECT k,n,label FROM empty_inputs) SELECT l.k,l.n,r.w FROM q l LEFT JOIN right_inputs r USING(k)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_empty_unique_reuse_on",
+          "sql": "WITH q AS (SELECT k,n,label FROM empty_inputs) SELECT l.k,l.n,r.n AS rn FROM q l JOIN q r ON l.k=r.k",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_empty_unique_reuse_using",
+          "sql": "WITH q AS (SELECT k,n,label FROM empty_inputs) SELECT l.k,l.n,r.n AS rn FROM q l JOIN q r USING(k)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_empty_preserve_repeated_star",
+          "sql": "WITH q AS (SELECT k,* FROM empty_inputs) SELECT l.* FROM q l",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_original_mixed_on",
+          "sql": "SELECT l.id FROM (SELECT id,id FROM left_mixed) l LEFT JOIN right_mixed r ON l.id=r.id",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_original_mixed_using",
+          "sql": "SELECT l.id FROM (SELECT id,id FROM left_mixed) l LEFT JOIN right_mixed r USING(id)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_original_nulls_on",
+          "sql": "SELECT l.id FROM (SELECT id,id FROM left_nulls) l LEFT JOIN right_nulls r ON l.id=r.id",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_original_nulls_using",
+          "sql": "SELECT l.id FROM (SELECT id,id FROM left_nulls) l LEFT JOIN right_nulls r USING(id)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_original_empty_on",
+          "sql": "SELECT l.id FROM (SELECT id,id FROM left_empty) l LEFT JOIN right_empty r ON l.id=r.id",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_original_empty_using",
+          "sql": "SELECT l.id FROM (SELECT id,id FROM left_empty) l LEFT JOIN right_empty r USING(id)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_genuine_duplicate_on",
+          "sql": "SELECT l.id FROM (SELECT id,k AS id FROM left_mixed) l LEFT JOIN right_mixed r ON l.id=r.id",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_genuine_duplicate_using",
+          "sql": "SELECT l.id FROM (SELECT id,k AS id FROM left_mixed) l LEFT JOIN right_mixed r USING(id)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_explicit_same_source_alias",
+          "sql": "SELECT l.id FROM (SELECT id,id AS id FROM left_mixed) l",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_separate_cte_sources",
+          "sql": "WITH q AS(SELECT id,lv FROM left_mixed) SELECT s.id FROM (SELECT l.id,r.id FROM q l JOIN q r ON l.lv=r.lv) s",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_same_cte_source_repeat",
+          "sql": "WITH q AS(SELECT id,lv FROM left_mixed) SELECT s.id FROM (SELECT l.id,l.id FROM q l JOIN q r ON l.lv=r.lv) s",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_populated_key_first_lookup",
+          "sql": "WITH q AS (SELECT k,* FROM left_inputs) SELECT l.k,l.n FROM q l",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_populated_key_first_left_on",
+          "sql": "WITH q AS (SELECT k,* FROM left_inputs) SELECT l.k,l.n,r.w FROM q l LEFT JOIN right_inputs r ON l.k=r.k",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_populated_key_first_left_using",
+          "sql": "WITH q AS (SELECT k,* FROM left_inputs) SELECT l.k,l.n,r.w FROM q l LEFT JOIN right_inputs r USING(k)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_populated_key_first_reuse_on",
+          "sql": "WITH q AS (SELECT k,* FROM left_inputs) SELECT l.k,l.n,r.n AS rn FROM q l JOIN q r ON l.k=r.k",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_populated_key_first_reuse_using",
+          "sql": "WITH q AS (SELECT k,* FROM left_inputs) SELECT l.k,l.n,r.n AS rn FROM q l JOIN q r USING(k)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_populated_unique_lookup",
+          "sql": "WITH q AS (SELECT k,n,label FROM left_inputs) SELECT l.k,l.n FROM q l",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_populated_unique_left_on",
+          "sql": "WITH q AS (SELECT k,n,label FROM left_inputs) SELECT l.k,l.n,r.w FROM q l LEFT JOIN right_inputs r ON l.k=r.k",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_populated_unique_left_using",
+          "sql": "WITH q AS (SELECT k,n,label FROM left_inputs) SELECT l.k,l.n,r.w FROM q l LEFT JOIN right_inputs r USING(k)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_populated_unique_reuse_on",
+          "sql": "WITH q AS (SELECT k,n,label FROM left_inputs) SELECT l.k,l.n,r.n AS rn FROM q l JOIN q r ON l.k=r.k",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_populated_unique_reuse_using",
+          "sql": "WITH q AS (SELECT k,n,label FROM left_inputs) SELECT l.k,l.n,r.n AS rn FROM q l JOIN q r USING(k)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_populated_preserve_repeated_star",
+          "sql": "WITH q AS (SELECT k,* FROM left_inputs) SELECT l.* FROM q l",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_empty_key_first_lookup",
+          "sql": "WITH q AS (SELECT k,* FROM empty_inputs) SELECT l.k,l.n FROM q l",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_empty_key_first_left_on",
+          "sql": "WITH q AS (SELECT k,* FROM empty_inputs) SELECT l.k,l.n,r.w FROM q l LEFT JOIN right_inputs r ON l.k=r.k",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_empty_key_first_left_using",
+          "sql": "WITH q AS (SELECT k,* FROM empty_inputs) SELECT l.k,l.n,r.w FROM q l LEFT JOIN right_inputs r USING(k)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_empty_key_first_reuse_on",
+          "sql": "WITH q AS (SELECT k,* FROM empty_inputs) SELECT l.k,l.n,r.n AS rn FROM q l JOIN q r ON l.k=r.k",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_empty_key_first_reuse_using",
+          "sql": "WITH q AS (SELECT k,* FROM empty_inputs) SELECT l.k,l.n,r.n AS rn FROM q l JOIN q r USING(k)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_empty_unique_lookup",
+          "sql": "WITH q AS (SELECT k,n,label FROM empty_inputs) SELECT l.k,l.n FROM q l",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_empty_unique_left_on",
+          "sql": "WITH q AS (SELECT k,n,label FROM empty_inputs) SELECT l.k,l.n,r.w FROM q l LEFT JOIN right_inputs r ON l.k=r.k",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_empty_unique_left_using",
+          "sql": "WITH q AS (SELECT k,n,label FROM empty_inputs) SELECT l.k,l.n,r.w FROM q l LEFT JOIN right_inputs r USING(k)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_empty_unique_reuse_on",
+          "sql": "WITH q AS (SELECT k,n,label FROM empty_inputs) SELECT l.k,l.n,r.n AS rn FROM q l JOIN q r ON l.k=r.k",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_empty_unique_reuse_using",
+          "sql": "WITH q AS (SELECT k,n,label FROM empty_inputs) SELECT l.k,l.n,r.n AS rn FROM q l JOIN q r USING(k)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_empty_preserve_repeated_star",
+          "sql": "WITH q AS (SELECT k,* FROM empty_inputs) SELECT l.* FROM q l",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_original_mixed_on",
+          "sql": "SELECT l.id FROM (SELECT id,id FROM left_mixed) l LEFT JOIN right_mixed r ON l.id=r.id",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_original_mixed_using",
+          "sql": "SELECT l.id FROM (SELECT id,id FROM left_mixed) l LEFT JOIN right_mixed r USING(id)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_original_nulls_on",
+          "sql": "SELECT l.id FROM (SELECT id,id FROM left_nulls) l LEFT JOIN right_nulls r ON l.id=r.id",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_original_nulls_using",
+          "sql": "SELECT l.id FROM (SELECT id,id FROM left_nulls) l LEFT JOIN right_nulls r USING(id)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_original_empty_on",
+          "sql": "SELECT l.id FROM (SELECT id,id FROM left_empty) l LEFT JOIN right_empty r ON l.id=r.id",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_original_empty_using",
+          "sql": "SELECT l.id FROM (SELECT id,id FROM left_empty) l LEFT JOIN right_empty r USING(id)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_genuine_duplicate_on",
+          "sql": "SELECT l.id FROM (SELECT id,k AS id FROM left_mixed) l LEFT JOIN right_mixed r ON l.id=r.id",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_genuine_duplicate_using",
+          "sql": "SELECT l.id FROM (SELECT id,k AS id FROM left_mixed) l LEFT JOIN right_mixed r USING(id)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_explicit_same_source_alias",
+          "sql": "SELECT l.id FROM (SELECT id,id AS id FROM left_mixed) l",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_separate_cte_sources",
+          "sql": "WITH q AS(SELECT id,lv FROM left_mixed) SELECT s.id FROM (SELECT l.id,r.id FROM q l JOIN q r ON l.lv=r.lv) s",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "786_same_cte_source_repeat",
+          "sql": "WITH q AS(SELECT id,lv FROM left_mixed) SELECT s.id FROM (SELECT l.id,l.id FROM q l JOIN q r ON l.lv=r.lv) s",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "computed_aliases_distinct",
+          "sql": "SELECT q.id FROM (SELECT id+1 AS id,id+2 AS id FROM left_mixed) q",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "aggregate_aliases_distinct",
+          "sql": "SELECT q.id FROM (SELECT SUM(id) AS id,SUM(k) AS id FROM left_mixed) q",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "aggregate_repeated_no_alias",
+          "sql": "SELECT q.`sum(id)` FROM (SELECT SUM(id),SUM(id) FROM left_mixed) q",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "window_aliases_distinct",
+          "sql": "SELECT q.id FROM (SELECT ROW_NUMBER() OVER(ORDER BY lv) AS id,ROW_NUMBER() OVER(ORDER BY lv DESC) AS id FROM left_mixed) q",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "column_list_aliases_same_name",
+          "sql": "SELECT q.id FROM (SELECT id,id FROM left_mixed) q(id,id)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "column_list_aliases_renamed",
+          "sql": "SELECT q.x FROM (SELECT id,id FROM left_mixed) q(x,x)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "union_all_repeated_sources",
+          "sql": "SELECT q.id FROM (SELECT id,id FROM left_mixed UNION ALL SELECT id,id FROM left_mixed) q",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "union_all_distinct_positions",
+          "sql": "SELECT q.id FROM (SELECT id,id FROM left_mixed UNION ALL SELECT id,k FROM left_mixed) q",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "joined_distinct_cte_rows",
+          "sql": "WITH a AS(SELECT id,lv FROM left_mixed) SELECT q.id FROM (SELECT l.id,r.id FROM a l JOIN a r ON l.lv<r.lv) q",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "repeated_star_except",
+          "sql": "WITH q AS(SELECT k,* FROM left_inputs) SELECT * EXCEPT(k) FROM q",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "repeated_natural_using",
+          "sql": "SELECT * FROM (SELECT id,id FROM left_mixed) l NATURAL LEFT JOIN (SELECT id,rv FROM right_mixed) r",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "outer_scalar_passthrough",
+          "sql": "SELECT l.id,(SELECT l.id) AS r FROM (SELECT id,id FROM left_mixed) l",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "projection_repeated_using_wildcards",
+          "sql": "SELECT *,l.*,r.* FROM (SELECT id,id,k,lv FROM left_mixed) l LEFT JOIN right_mixed r USING(id)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "projection_repeated_on_wildcards",
+          "sql": "SELECT l.*,r.* FROM (SELECT id,id,k,lv FROM left_mixed) l LEFT JOIN right_mixed r ON l.id=r.id",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "projection_repeated_nested_paths",
+          "sql": "WITH shared AS (SELECT named_struct('a',id,'b',k) AS s FROM left_mixed) SELECT q.s.a,q.s.b FROM (SELECT s,s FROM shared) q",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "duplicate_pivot_input",
+          "sql": "SELECT * FROM (SELECT g,g,v FROM pivot_inputs) p PIVOT(SUM(p.v) FOR g IN (0,1))",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "prior_duplicate_alias_free",
+          "sql": "SELECT * FROM (SELECT g,g,v FROM pivot_inputs) PIVOT(SUM(v) FOR (g) IN (0,1))",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "computed_aliases_distinct",
+          "sql": "SELECT q.id FROM (SELECT id+1 AS id,id+2 AS id FROM left_mixed) q",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "aggregate_aliases_distinct",
+          "sql": "SELECT q.id FROM (SELECT SUM(id) AS id,SUM(k) AS id FROM left_mixed) q",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "aggregate_repeated_no_alias",
+          "sql": "SELECT q.`sum(id)` FROM (SELECT SUM(id),SUM(id) FROM left_mixed) q",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "window_aliases_distinct",
+          "sql": "SELECT q.id FROM (SELECT ROW_NUMBER() OVER(ORDER BY lv) AS id,ROW_NUMBER() OVER(ORDER BY lv DESC) AS id FROM left_mixed) q",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "column_list_aliases_same_name",
+          "sql": "SELECT q.id FROM (SELECT id,id FROM left_mixed) q(id,id)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "column_list_aliases_renamed",
+          "sql": "SELECT q.x FROM (SELECT id,id FROM left_mixed) q(x,x)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "union_all_repeated_sources",
+          "sql": "SELECT q.id FROM (SELECT id,id FROM left_mixed UNION ALL SELECT id,id FROM left_mixed) q",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "union_all_distinct_positions",
+          "sql": "SELECT q.id FROM (SELECT id,id FROM left_mixed UNION ALL SELECT id,k FROM left_mixed) q",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "joined_distinct_cte_rows",
+          "sql": "WITH a AS(SELECT id,lv FROM left_mixed) SELECT q.id FROM (SELECT l.id,r.id FROM a l JOIN a r ON l.lv<r.lv) q",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "repeated_star_except",
+          "sql": "WITH q AS(SELECT k,* FROM left_inputs) SELECT * EXCEPT(k) FROM q",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "repeated_natural_using",
+          "sql": "SELECT * FROM (SELECT id,id FROM left_mixed) l NATURAL LEFT JOIN (SELECT id,rv FROM right_mixed) r",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "outer_scalar_passthrough",
+          "sql": "SELECT l.id,(SELECT l.id) AS r FROM (SELECT id,id FROM left_mixed) l",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "projection_repeated_using_wildcards",
+          "sql": "SELECT *,l.*,r.* FROM (SELECT id,id,k,lv FROM left_mixed) l LEFT JOIN right_mixed r USING(id)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "projection_repeated_on_wildcards",
+          "sql": "SELECT l.*,r.* FROM (SELECT id,id,k,lv FROM left_mixed) l LEFT JOIN right_mixed r ON l.id=r.id",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "projection_repeated_nested_paths",
+          "sql": "WITH shared AS (SELECT named_struct('a',id,'b',k) AS s FROM left_mixed) SELECT q.s.a,q.s.b FROM (SELECT s,s FROM shared) q",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "duplicate_pivot_input",
+          "sql": "SELECT * FROM (SELECT g,g,v FROM pivot_inputs) p PIVOT(SUM(p.v) FOR g IN (0,1))",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "prior_duplicate_alias_free",
+          "sql": "SELECT * FROM (SELECT g,g,v FROM pivot_inputs) PIVOT(SUM(v) FOR (g) IN (0,1))",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "union_all_distinct_positions_star",
+          "sql": "SELECT q.* FROM (SELECT id,id FROM left_mixed UNION ALL SELECT id,k FROM left_mixed) q",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "using_selected_source_identity",
+          "sql": "SELECT s.k FROM (SELECT k,l.k FROM left_inputs l JOIN right_inputs r USING(k)) s",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "full_using_coalesced_identity",
+          "sql": "SELECT s.k FROM (SELECT k,l.k FROM left_inputs l FULL JOIN right_inputs r USING(k)) s",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "ordinary_sum_count",
+          "sql": "SELECT SUM(k) AS s,COUNT(*) AS n FROM left_inputs",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "ordinary_grouped_count",
+          "sql": "SELECT g.k,g.n FROM (SELECT k,COUNT(*) AS n FROM left_inputs GROUP BY k) g",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "union_all_distinct_positions_star",
+          "sql": "SELECT q.* FROM (SELECT id,id FROM left_mixed UNION ALL SELECT id,k FROM left_mixed) q",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "using_selected_source_identity",
+          "sql": "SELECT s.k FROM (SELECT k,l.k FROM left_inputs l JOIN right_inputs r USING(k)) s",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "full_using_coalesced_identity",
+          "sql": "SELECT s.k FROM (SELECT k,l.k FROM left_inputs l FULL JOIN right_inputs r USING(k)) s",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "ordinary_sum_count",
+          "sql": "SELECT SUM(k) AS s,COUNT(*) AS n FROM left_inputs",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "ordinary_grouped_count",
+          "sql": "SELECT g.k,g.n FROM (SELECT k,COUNT(*) AS n FROM left_inputs GROUP BY k) g",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "grouped_repeated_attribute",
+          "sql": "SELECT g.k FROM (SELECT k,k FROM left_inputs GROUP BY k) g",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "grouped_repeated_attribute",
+          "sql": "SELECT g.k FROM (SELECT k,k FROM left_inputs GROUP BY k) g",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "using_chain_qualified_paths",
+          "sql": "SELECT x.k,x.*,y.k,z.k FROM left_inputs x LEFT JOIN right_inputs y USING(k) LEFT JOIN left_inputs z USING(k)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "repeated-source-columns",
+          "id": "using_chain_qualified_paths",
+          "sql": "SELECT x.k,x.*,y.k,z.k FROM left_inputs x LEFT JOIN right_inputs y USING(k) LEFT JOIN left_inputs z USING(k)",
+          "ansi": true,
+          "ordered": false
+        }
+      ]
+    }
+  ]
+}

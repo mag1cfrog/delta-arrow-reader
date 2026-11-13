@@ -216,6 +216,7 @@ impl PlanResolver<'_> {
                     expr,
                     metadata: vec![],
                     interval_qualifier: None,
+                    column_origin: None,
                 });
             }
         }
@@ -287,22 +288,20 @@ impl PlanResolver<'_> {
         for agg in aggregates {
             Self::add_pivot_references(&agg.expr, schema, &mut referenced)?;
         }
-        // The schema field names are internal ids (e.g. `#6`); map each to its
-        // user-facing name so the grouping columns keep their original names.
+        let referenced = referenced
+            .iter()
+            .map(|column| state.column_identity(column))
+            .collect::<PlanResult<HashSet<_>>>()?;
         let names = Self::get_field_names(schema, state)?;
-        Ok(schema
-            .columns()
-            .into_iter()
-            .zip(names)
-            .filter(|(column, _)| !referenced.contains(column))
-            .map(|(column, name)| NamedExpr {
-                name: vec![name],
-                expression_name: None,
-                expr: expr::Expr::Column(column),
-                metadata: vec![],
-                interval_qualifier: None,
-            })
-            .collect())
+        let mut grouping = Vec::new();
+        for (column, name) in schema.columns().into_iter().zip(names) {
+            if !referenced.contains(&state.column_identity(&column)?) {
+                grouping.push(
+                    NamedExpr::new(vec![name], expr::Expr::Column(column)).with_column_origin(),
+                );
+            }
+        }
+        Ok(grouping)
     }
 
     pub(in crate::resolver) fn add_pivot_references(
@@ -488,6 +487,7 @@ impl PlanResolver<'_> {
                 expr: expr.clone(),
                 metadata: vec![],
                 interval_qualifier: None,
+                column_origin: None,
             })
             .collect::<Vec<_>>();
 

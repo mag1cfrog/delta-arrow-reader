@@ -1,4 +1,5 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use arrow::datatypes::{DataType, Field, FieldRef, Fields};
@@ -92,7 +93,7 @@ impl PlanResolver<'_> {
             return Ok(NamedExpr::new(vec![name], expr));
         }
         if let Some((name, expr)) = self.resolve_hidden_field(&name, schema, state)? {
-            return Ok(NamedExpr::new(vec![name], expr));
+            return Ok(NamedExpr::new(vec![name], expr).with_column_origin());
         }
         if let Some(outer_schema) = state.get_outer_query_schema().cloned()
             && let Some(named) =
@@ -151,6 +152,7 @@ impl PlanResolver<'_> {
         is_outer: bool,
     ) -> PlanResult<Option<NamedExpr>> {
         let mut candidates = vec![];
+        let mut identities = HashSet::new();
         // Spark tries catalog/schema/table, schema/table, table, then unqualified columns.
         for (q, column_name, inner) in
             Self::generate_qualified_nested_field_candidates(name.parts())
@@ -163,7 +165,10 @@ impl PlanResolver<'_> {
                     && qualifier_matches(q.as_ref(), qualifier)
                     && info.name().eq_ignore_ascii_case(column_name.as_ref())
                 {
-                    candidates.push((qualifier, field, column_name, inner));
+                    if identities.insert(state.column_identity(&Column::from((qualifier, field)))?)
+                    {
+                        candidates.push((qualifier, field, column_name, inner));
+                    }
                 }
             }
             if !candidates.is_empty() {
@@ -207,7 +212,7 @@ impl PlanResolver<'_> {
         let projection_name = inner.last().unwrap_or(name).as_ref().to_string();
         let named = NamedExpr::new(vec![projection_name], expr);
         Ok(Some(if inner.is_empty() {
-            named
+            named.with_column_origin()
         } else {
             named.with_expression_name(expression_name)
         }))
@@ -699,10 +704,10 @@ mod tests {
                         &state,
                         false
                     )?,
-                    Some(NamedExpr::new(
-                        vec!["id".into()],
-                        col((Some(&qualifier), &id)),
-                    )),
+                    Some(
+                        NamedExpr::new(vec!["id".into()], col((Some(&qualifier), &id)),)
+                            .with_column_origin()
+                    ),
                 );
             }
             assert_eq!(
@@ -803,10 +808,10 @@ mod tests {
                 for name in &names {
                     assert_eq!(
                         resolver.resolve_field_or_nested_field(name, &schema, &state, false)?,
-                        Some(NamedExpr::new(
-                            vec!["id".into()],
-                            col((Some(&qualifier), &id)),
-                        )),
+                        Some(
+                            NamedExpr::new(vec!["id".into()], col((Some(&qualifier), &id)),)
+                                .with_column_origin()
+                        ),
                     );
                 }
                 fields.push((
@@ -904,7 +909,8 @@ mod tests {
                             outer_field.clone(),
                             Column::new(Some(qualifier), outer_field.name()),
                         ),
-                    ),
+                    )
+                    .with_column_origin(),
                 );
             }
         }
