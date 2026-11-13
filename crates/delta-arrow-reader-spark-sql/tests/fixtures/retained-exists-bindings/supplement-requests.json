@@ -1,0 +1,774 @@
+{
+  "issue": 1309,
+  "base": "33a3cd29ee54eba8943e9a7a3b82daa44c0699f5",
+  "expected_record_count": 20,
+  "corpora": [
+    {
+      "corpus": "retained_exists_bindings",
+      "source": "Only missing signed-predicate and outer-payload IN/scalar/empty/projected contexts; reviewed EXISTS/NOT EXISTS oracles retained separately unchanged.",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "left_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "n",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "label",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                null,
+                "10",
+                "null-left"
+              ],
+              [
+                "1",
+                "20",
+                "a"
+              ],
+              [
+                "2",
+                "30",
+                "b"
+              ],
+              [
+                "2",
+                "31",
+                "b2"
+              ],
+              [
+                "4",
+                null,
+                null
+              ]
+            ]
+          },
+          {
+            "name": "right_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "long",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "w",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "label",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                null,
+                "100",
+                "null-right"
+              ],
+              [
+                "2",
+                "200",
+                "x"
+              ],
+              [
+                "2",
+                "201",
+                "x2"
+              ],
+              [
+                "3",
+                null,
+                "y"
+              ]
+            ]
+          },
+          {
+            "name": "empty_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "n",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "label",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": []
+          },
+          {
+            "name": "left_mixed",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "left"
+                  }
+                },
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "key"
+                  }
+                },
+                {
+                  "name": "lv",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "value"
+                  }
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                "7",
+                "10"
+              ],
+              [
+                "1",
+                "7",
+                "11"
+              ],
+              [
+                "2",
+                "8",
+                "20"
+              ],
+              [
+                null,
+                null,
+                "30"
+              ]
+            ]
+          },
+          {
+            "name": "left_nulls",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "left"
+                  }
+                },
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "key"
+                  }
+                },
+                {
+                  "name": "lv",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "value"
+                  }
+                }
+              ]
+            },
+            "rows": [
+              [
+                null,
+                null,
+                null
+              ]
+            ]
+          },
+          {
+            "name": "left_empty",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "left"
+                  }
+                },
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "key"
+                  }
+                },
+                {
+                  "name": "lv",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "value"
+                  }
+                }
+              ]
+            },
+            "rows": []
+          },
+          {
+            "name": "right_mixed",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "right"
+                  }
+                },
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "key"
+                  }
+                },
+                {
+                  "name": "rv",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "value"
+                  }
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                "7",
+                "40"
+              ],
+              [
+                "1",
+                "7",
+                "40"
+              ],
+              [
+                "3",
+                "9",
+                "50"
+              ],
+              [
+                null,
+                null,
+                "60"
+              ]
+            ]
+          },
+          {
+            "name": "right_nulls",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "right"
+                  }
+                },
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "key"
+                  }
+                },
+                {
+                  "name": "rv",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "value"
+                  }
+                }
+              ]
+            },
+            "rows": [
+              [
+                null,
+                null,
+                null
+              ]
+            ]
+          },
+          {
+            "name": "right_empty",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "right"
+                  }
+                },
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "key"
+                  }
+                },
+                {
+                  "name": "rv",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "value"
+                  }
+                }
+              ]
+            },
+            "rows": []
+          },
+          {
+            "name": "right_payload_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "long",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "w",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "label",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                null,
+                "100",
+                "null-right"
+              ],
+              [
+                "2",
+                "200",
+                "x"
+              ],
+              [
+                "2",
+                "201",
+                "x2"
+              ],
+              [
+                "3",
+                null,
+                "y"
+              ],
+              [
+                "4",
+                "400",
+                "four"
+              ],
+              [
+                "1",
+                null,
+                "null-payload"
+              ]
+            ]
+          },
+          {
+            "name": "allowed_keys",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "long",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "200"
+              ]
+            ]
+          },
+          {
+            "name": "empty_allowed_keys",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "long",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": []
+          },
+          {
+            "name": "outer_allowed_keys",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "30"
+              ]
+            ]
+          },
+          {
+            "name": "left_signed_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "n",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "label",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                null,
+                "10",
+                "null-left"
+              ],
+              [
+                "1",
+                "20",
+                "a"
+              ],
+              [
+                "2",
+                "30",
+                "b"
+              ],
+              [
+                "2",
+                "31",
+                "b2"
+              ],
+              [
+                "4",
+                null,
+                null
+              ],
+              [
+                "-1",
+                "0",
+                "nonpositive"
+              ]
+            ]
+          },
+          {
+            "name": "right_signed_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "long",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "w",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "label",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                null,
+                "100",
+                "null-right"
+              ],
+              [
+                "2",
+                "200",
+                "x"
+              ],
+              [
+                "2",
+                "201",
+                "x2"
+              ],
+              [
+                "3",
+                null,
+                "y"
+              ],
+              [
+                "0",
+                "0",
+                "zero"
+              ]
+            ]
+          },
+          {
+            "name": "empty_outer_allowed_keys",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": []
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "retained_exists_bindings",
+          "id": "computed_nonpositive_exists",
+          "sql": "SELECT l.k,l.n FROM left_signed_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT l.k+1 AS outer_k,r.k AS inner_k FROM right_signed_inputs r) q WHERE q.outer_k=q.inner_k AND q.outer_k>0)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "retained_exists_bindings",
+          "id": "computed_nonpositive_exists",
+          "sql": "SELECT l.k,l.n FROM left_signed_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT l.k+1 AS outer_k,r.k AS inner_k FROM right_signed_inputs r) q WHERE q.outer_k=q.inner_k AND q.outer_k>0)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "retained_exists_bindings",
+          "id": "computed_nonpositive_not",
+          "sql": "SELECT l.k,l.n FROM left_signed_inputs l WHERE NOT EXISTS(SELECT 1 FROM (SELECT l.k+1 AS outer_k,r.k AS inner_k FROM right_signed_inputs r) q WHERE q.outer_k=q.inner_k AND q.outer_k>0)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "retained_exists_bindings",
+          "id": "computed_nonpositive_not",
+          "sql": "SELECT l.k,l.n FROM left_signed_inputs l WHERE NOT EXISTS(SELECT 1 FROM (SELECT l.k+1 AS outer_k,r.k AS inner_k FROM right_signed_inputs r) q WHERE q.outer_k=q.inner_k AND q.outer_k>0)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "retained_exists_bindings",
+          "id": "outer_payload_in_exists",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT s.outer_k,s.inner_k,s.outer_payload IN(SELECT t.k FROM outer_allowed_keys t) AS e FROM (SELECT l.k AS outer_k,l.n AS outer_payload,r.k AS inner_k FROM right_inputs r) s) q WHERE q.outer_k=q.inner_k AND q.e)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "retained_exists_bindings",
+          "id": "outer_payload_in_exists",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT s.outer_k,s.inner_k,s.outer_payload IN(SELECT t.k FROM outer_allowed_keys t) AS e FROM (SELECT l.k AS outer_k,l.n AS outer_payload,r.k AS inner_k FROM right_inputs r) s) q WHERE q.outer_k=q.inner_k AND q.e)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "retained_exists_bindings",
+          "id": "outer_payload_in_not",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE NOT EXISTS(SELECT 1 FROM (SELECT s.outer_k,s.inner_k,s.outer_payload IN(SELECT t.k FROM outer_allowed_keys t) AS e FROM (SELECT l.k AS outer_k,l.n AS outer_payload,r.k AS inner_k FROM right_inputs r) s) q WHERE q.outer_k=q.inner_k AND q.e)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "retained_exists_bindings",
+          "id": "outer_payload_in_not",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE NOT EXISTS(SELECT 1 FROM (SELECT s.outer_k,s.inner_k,s.outer_payload IN(SELECT t.k FROM outer_allowed_keys t) AS e FROM (SELECT l.k AS outer_k,l.n AS outer_payload,r.k AS inner_k FROM right_inputs r) s) q WHERE q.outer_k=q.inner_k AND q.e)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "retained_exists_bindings",
+          "id": "outer_payload_scalar_exists",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT s.outer_k,s.inner_k,(SELECT MAX(t.k) FROM outer_allowed_keys t WHERE t.k=s.outer_payload)=s.outer_payload AS e FROM (SELECT l.k AS outer_k,l.n AS outer_payload,r.k AS inner_k FROM right_inputs r) s) q WHERE q.outer_k=q.inner_k AND q.e)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "retained_exists_bindings",
+          "id": "outer_payload_scalar_exists",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT s.outer_k,s.inner_k,(SELECT MAX(t.k) FROM outer_allowed_keys t WHERE t.k=s.outer_payload)=s.outer_payload AS e FROM (SELECT l.k AS outer_k,l.n AS outer_payload,r.k AS inner_k FROM right_inputs r) s) q WHERE q.outer_k=q.inner_k AND q.e)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "retained_exists_bindings",
+          "id": "outer_payload_scalar_not",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE NOT EXISTS(SELECT 1 FROM (SELECT s.outer_k,s.inner_k,(SELECT MAX(t.k) FROM outer_allowed_keys t WHERE t.k=s.outer_payload)=s.outer_payload AS e FROM (SELECT l.k AS outer_k,l.n AS outer_payload,r.k AS inner_k FROM right_inputs r) s) q WHERE q.outer_k=q.inner_k AND q.e)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "retained_exists_bindings",
+          "id": "outer_payload_scalar_not",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE NOT EXISTS(SELECT 1 FROM (SELECT s.outer_k,s.inner_k,(SELECT MAX(t.k) FROM outer_allowed_keys t WHERE t.k=s.outer_payload)=s.outer_payload AS e FROM (SELECT l.k AS outer_k,l.n AS outer_payload,r.k AS inner_k FROM right_inputs r) s) q WHERE q.outer_k=q.inner_k AND q.e)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "retained_exists_bindings",
+          "id": "outer_payload_empty_allowed",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT s.outer_k,s.inner_k,EXISTS(SELECT 1 FROM empty_outer_allowed_keys t WHERE t.k=s.outer_payload) AS e FROM (SELECT l.k AS outer_k,l.n AS outer_payload,r.k AS inner_k FROM right_inputs r) s) q WHERE q.outer_k=q.inner_k AND q.e)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "retained_exists_bindings",
+          "id": "outer_payload_empty_allowed",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT s.outer_k,s.inner_k,EXISTS(SELECT 1 FROM empty_outer_allowed_keys t WHERE t.k=s.outer_payload) AS e FROM (SELECT l.k AS outer_k,l.n AS outer_payload,r.k AS inner_k FROM right_inputs r) s) q WHERE q.outer_k=q.inner_k AND q.e)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "retained_exists_bindings",
+          "id": "outer_payload_empty_inner_exists",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT s.outer_k,s.inner_k,EXISTS(SELECT 1 FROM outer_allowed_keys t WHERE t.k=s.outer_payload) AS e FROM (SELECT l.k AS outer_k,l.n AS outer_payload,r.k AS inner_k FROM empty_inputs r) s) q WHERE q.outer_k=q.inner_k AND q.e)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "retained_exists_bindings",
+          "id": "outer_payload_empty_inner_exists",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT s.outer_k,s.inner_k,EXISTS(SELECT 1 FROM outer_allowed_keys t WHERE t.k=s.outer_payload) AS e FROM (SELECT l.k AS outer_k,l.n AS outer_payload,r.k AS inner_k FROM empty_inputs r) s) q WHERE q.outer_k=q.inner_k AND q.e)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "retained_exists_bindings",
+          "id": "outer_payload_empty_inner_not",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE NOT EXISTS(SELECT 1 FROM (SELECT s.outer_k,s.inner_k,EXISTS(SELECT 1 FROM outer_allowed_keys t WHERE t.k=s.outer_payload) AS e FROM (SELECT l.k AS outer_k,l.n AS outer_payload,r.k AS inner_k FROM empty_inputs r) s) q WHERE q.outer_k=q.inner_k AND q.e)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "retained_exists_bindings",
+          "id": "outer_payload_empty_inner_not",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE NOT EXISTS(SELECT 1 FROM (SELECT s.outer_k,s.inner_k,EXISTS(SELECT 1 FROM outer_allowed_keys t WHERE t.k=s.outer_payload) AS e FROM (SELECT l.k AS outer_k,l.n AS outer_payload,r.k AS inner_k FROM empty_inputs r) s) q WHERE q.outer_k=q.inner_k AND q.e)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "retained_exists_bindings",
+          "id": "outer_payload_projected_flag",
+          "sql": "SELECT l.k,l.n,EXISTS(SELECT 1 FROM (SELECT s.outer_k,s.inner_k,EXISTS(SELECT 1 FROM outer_allowed_keys t WHERE t.k=s.outer_payload) AS e FROM (SELECT l.k AS outer_k,l.n AS outer_payload,r.k AS inner_k FROM right_inputs r) s) q WHERE q.outer_k=q.inner_k AND q.e) AS found FROM left_inputs l",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "retained_exists_bindings",
+          "id": "outer_payload_projected_flag",
+          "sql": "SELECT l.k,l.n,EXISTS(SELECT 1 FROM (SELECT s.outer_k,s.inner_k,EXISTS(SELECT 1 FROM outer_allowed_keys t WHERE t.k=s.outer_payload) AS e FROM (SELECT l.k AS outer_k,l.n AS outer_payload,r.k AS inner_k FROM right_inputs r) s) q WHERE q.outer_k=q.inner_k AND q.e) AS found FROM left_inputs l",
+          "ansi": true,
+          "ordered": false
+        }
+      ]
+    }
+  ]
+}
