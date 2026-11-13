@@ -74,24 +74,29 @@ async fn distinct_percentile_uses_bounded_windows_and_respects_memory_limits() -
             .with_target_partitions(1),
         runtime,
     );
-    let query = plan_query(
-        &session,
-        "SELECT APPROX_PERCENTILE(DISTINCT CAST(id%1001 AS DOUBLE),0.5) AS d FROM range(0,200000)",
-        &SparkSqlOptions::default(),
-    )
-    .await?;
-    let physical = query.create_physical_plan(&session).await?;
-    let plan = displayable(physical.as_ref()).indent(true).to_string();
-    assert!(plan.contains("BoundedWindowAggExec"), "{plan}");
-    assert!(plan.contains("mode=[Sorted]"), "{plan}");
-    let error = match collect(physical, session.task_ctx()).await {
-        Ok(_) => return Err("expected the DISTINCT sort to exceed the memory limit".into()),
-        Err(error) => error,
-    };
-    assert!(
-        matches!(error.find_root(), DataFusionError::ResourcesExhausted(_)),
-        "{error}"
-    );
+    for function in [
+        "APPROX_PERCENTILE(DISTINCT CAST(id%1001 AS DOUBLE),0.5)",
+        "PERCENTILE(DISTINCT CAST(id%1001 AS DOUBLE),0.5,id%3)",
+    ] {
+        let query = plan_query(
+            &session,
+            &format!("SELECT {function} AS d FROM range(0,200000)"),
+            &SparkSqlOptions::default(),
+        )
+        .await?;
+        let physical = query.create_physical_plan(&session).await?;
+        let plan = displayable(physical.as_ref()).indent(true).to_string();
+        assert!(plan.contains("BoundedWindowAggExec"), "{plan}");
+        assert!(plan.contains("mode=[Sorted]"), "{plan}");
+        let error = match collect(physical, session.task_ctx()).await {
+            Ok(_) => return Err("expected the DISTINCT sort to exceed the memory limit".into()),
+            Err(error) => error,
+        };
+        assert!(
+            matches!(error.find_root(), DataFusionError::ResourcesExhausted(_)),
+            "{error}"
+        );
+    }
     Ok(())
 }
 
@@ -102,20 +107,22 @@ async fn ordinary_and_native_percentiles_keep_their_original_plans() -> TestResu
     use datafusion::physical_plan::{collect, displayable};
 
     let session = SessionContext::new();
-    let sql = "SELECT APPROX_PERCENTILE(v,0.5) AS b FROM VALUES (1D),(1D),(1D),(9D),(20D) AS t(v)";
-    let query = plan_query(&session, sql, &SparkSqlOptions::default()).await?;
-    let physical = query.create_physical_plan(&session).await?;
-    assert!(
-        !displayable(physical.as_ref())
-            .indent(true)
-            .to_string()
-            .contains("WindowAggExec")
-    );
-    let batches = collect(physical, session.task_ctx()).await?;
-    assert_eq!(
-        batches[0].column(0).as_primitive::<Float64Type>().value(0),
-        1.0
-    );
+    for function in ["APPROX_PERCENTILE(v,0.5)", "PERCENTILE(v,0.5)", "MEDIAN(v)"] {
+        let sql = format!("SELECT {function} AS b FROM VALUES (1D),(1D),(1D),(9D),(20D) AS t(v)");
+        let query = plan_query(&session, &sql, &SparkSqlOptions::default()).await?;
+        let physical = query.create_physical_plan(&session).await?;
+        assert!(
+            !displayable(physical.as_ref())
+                .indent(true)
+                .to_string()
+                .contains("WindowAggExec")
+        );
+        let batches = collect(physical, session.task_ctx()).await?;
+        assert_eq!(
+            batches[0].column(0).as_primitive::<Float64Type>().value(0),
+            1.0
+        );
+    }
     let batches = session.sql("SELECT APPROX_PERCENTILE_CONT(v,0.5) AS b FROM (VALUES (1.0::DOUBLE),(1.0::DOUBLE),(1.0::DOUBLE),(9.0::DOUBLE),(20.0::DOUBLE)) AS t(v)").await?.collect().await?;
     assert_eq!(
         batches[0].column(0).as_primitive::<Float64Type>().value(0),

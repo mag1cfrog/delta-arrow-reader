@@ -627,7 +627,7 @@ impl PlanResolver<'_> {
         Ok(false)
     }
 
-    pub(in crate::resolver) fn lower_distinct_approx_percentiles(
+    pub(in crate::resolver) fn lower_distinct_percentiles(
         plan: LogicalPlan,
         state: &mut PlanResolverState,
     ) -> PlanResult<LogicalPlan> {
@@ -638,7 +638,8 @@ impl PlanResolver<'_> {
                 };
                 let is_distinct_percentile = |expr: &Expr| {
                     matches!(expr, Expr::AggregateFunction(function)
-                        if function.func.name() == "approx_percentile" && function.params.distinct)
+                        if matches!(function.func.name(), "approx_percentile" | "percentile")
+                            && function.params.distinct)
                 };
                 if !aggregate.aggr_expr.iter().any(is_distinct_percentile) {
                     return Ok(Transformed::no(LogicalPlan::Aggregate(aggregate)));
@@ -701,12 +702,27 @@ impl PlanResolver<'_> {
                         for set in &sets {
                             let mut partition =
                                 set.iter().cloned().map(Expr::unalias).collect::<Vec<_>>();
-                            let value = function.params.args[0].clone();
-                            let value = match function.params.filter.as_deref() {
-                                Some(filter) => when(filter.clone(), value).end()?,
-                                None => value,
-                            };
-                            partition.push(value);
+                            let mut distinct_args = vec![function.params.args[0].clone()];
+                            // Probabilities and accuracy are constant; exact frequencies are per row.
+                            if function.func.name() == "percentile"
+                                && let Some(frequency) = function.params.args.get(2)
+                            {
+                                distinct_args.push(frequency.clone());
+                            }
+                            for argument in distinct_args {
+                                let argument = match function.params.filter.as_deref() {
+                                    Some(filter) => when(filter.clone(), argument).end()?,
+                                    None => argument,
+                                };
+                                // Constant keys add no distinctness and can obscure window ordering.
+                                if argument.any_column_refs()
+                                    || argument.contains_outer()
+                                    || argument.contains_scalar_subquery()
+                                    || argument.is_volatile()
+                                {
+                                    partition.push(argument);
+                                }
+                            }
                             let marker = match markers.iter().find(|(keys, _)| *keys == partition) {
                                 Some((_, marker)) => marker.clone(),
                                 None => {
