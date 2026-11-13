@@ -15,6 +15,8 @@ unused nested input columns preserve the original source definition.
 source/runtime hashes, settings, raw rows, row multisets, schemas and plans. The
 maintained driver owns and reaps its JVM and reads no expected output. The local
 adapter decodes ARRAY/MAP inputs and encodes MAP values as entry pairs.
+Future captures explicitly hash the delegated encoder as well. The committed
+capture retains its original historical source header.
 
 `../../lateral_view_filters.rs` compares full rows and executed types across
 provider/input/target/output layouts `(1,1,1,1)`, `(3,2,4,3)` and `(2,32,2,32)`.

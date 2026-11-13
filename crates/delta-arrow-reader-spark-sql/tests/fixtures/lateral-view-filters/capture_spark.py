@@ -39,6 +39,7 @@ registration.decode = decode
 request_path = HERE / "requests.json"
 capture_requested_queries(
     json.loads(request_path.read_text()), Path(sys.argv[1]),
-    [Path(__file__), request_path, FIXTURES / "capture_window_name_stages_spark.py"],
+    [Path(__file__), request_path, FIXTURES / "capture_window_name_stages_spark.py",
+     FIXTURES / "capture_floating_group_keys_spark.py"],
     [request_path],
 )
