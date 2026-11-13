@@ -283,6 +283,21 @@ impl PlanResolver<'_> {
             // HAVING alone forms a global aggregate, even over empty input.
             aggregate_exprs.push(count::count(lit(1_i32)));
         }
+        // Spark expands grouping sets from input rows; a lone empty set is a global aggregate.
+        let suppress_empty_totals = match group_exprs.as_slice() {
+            [Expr::GroupingSet(GroupingSet::GroupingSets(sets))] => {
+                sets.len() > 1 && sets.iter().any(Vec::is_empty)
+            }
+            [Expr::GroupingSet(GroupingSet::Rollup(keys) | GroupingSet::Cube(keys))] => {
+                !keys.is_empty()
+            }
+            _ => false,
+        };
+        let input_row_count = suppress_empty_totals.then(|| {
+            let name = state.register_hidden_field_name("__grouping_input_rows");
+            aggregate_exprs.push(count::count(lit(1_i32)).alias(&name));
+            name
+        });
         let mut rand_projection = Vec::new();
         // Normalize only each complete grouping key. Aggregate arguments and
         // operands inside a computed key must continue to see the original values.
@@ -384,12 +399,25 @@ impl PlanResolver<'_> {
                 })
             })
             .collect::<PlanResult<Vec<_>>>()?;
+        let having = having
+            .map(|having| Self::rebase_expression(having, &aggregate_or_grouping_exprs, &plan))
+            .transpose()?;
+        let having = if let Some(input_row_count) = input_row_count {
+            // Check input presence before HAVING, then normalize NULL to a false filter.
+            // A plain AND can break ORDER BY a constant GROUPING(k).
+            Some(
+                when(
+                    ident(input_row_count).gt(lit(0_i64)),
+                    having.unwrap_or(lit(true)),
+                )
+                .end()?
+                .is_true(),
+            )
+        } else {
+            having
+        };
         let plan = match having {
-            Some(having) => {
-                let having =
-                    Self::rebase_expression(having.clone(), &aggregate_or_grouping_exprs, &plan)?;
-                LogicalPlanBuilder::from(plan).having(having)?.build()?
-            }
+            Some(having) => LogicalPlanBuilder::from(plan).having(having)?.build()?,
             None => plan,
         };
         let (plan, projections) =
@@ -1731,9 +1759,7 @@ async fn grouping_ids_preserve_duplicate_rows_and_signed_bits() -> PlanResult<()
         cases.push((format!("SELECT grouping_id() AS gid,count(*) AS n FROM (VALUES({values}),({values})) t({columns}) GROUP BY GROUPING SETS ({groups}) ORDER BY gid"), ids, 2));
     }
     cases.push(("SELECT grouping_id() AS gid,count(*) AS n FROM (VALUES(1),(2)) t(v) GROUP BY GROUPING SETS ((),(),()) ORDER BY gid".into(), vec![0,0,0], 2));
-    // Empty grouping sets still emit grand-total rows on empty input. Spark 4.2
-    // drops them in this shape; retain the SQL aggregate semantics instead.
-    cases.push(("SELECT grouping_id(v) AS gid,count(*) AS n FROM (SELECT 1 AS v WHERE FALSE) t GROUP BY GROUPING SETS ((v),(v),(),()) ORDER BY gid".into(), vec![1,1], 0));
+    cases.push(("SELECT grouping_id(v) AS gid,count(*) AS n FROM (SELECT 1 AS v WHERE FALSE) t GROUP BY GROUPING SETS ((v),(v),(),()) ORDER BY gid".into(), vec![], 0));
     cases.push(("SELECT grouping_id(v,w) AS gid,count(*) AS n FROM (VALUES(1,2),(1,2)) t(v,w) GROUP BY ROLLUP(v,w),ROLLUP(v,w) ORDER BY grouping_id(v,w)".into(), vec![0,0,0,0,0,1,1,1,3], 2));
     for ansi in [true, false] {
         let ctx = SessionContext::new_with_state(
@@ -1895,7 +1921,7 @@ async fn grouping_aliases_share_semantic_keys_and_keep_duplicate_rows() -> PlanR
         ("SELECT v AS k1,v AS k2,grouping_id() AS gid,count(*) AS n FROM (VALUES(CAST('-0' AS FLOAT)),(CAST('0' AS FLOAT)),(CAST(NULL AS FLOAT))) t(v) GROUP BY ROLLUP(k1,k2) ORDER BY gid,n".to_string(), 2, vec![(0,1),(0,1),(0,2),(0,2),(1,3)]),
         ("SELECT v AS k1,v AS k2,grouping_id() AS gid,count(*) AS n FROM (VALUES(1),(NULL)) t(v) GROUP BY CUBE(k1,k2) ORDER BY gid,n".to_string(), 2, vec![(0,1),(0,1),(0,1),(0,1),(0,1),(0,1),(1,2)]),
         ("SELECT grouping_id(v,w) AS gid,count(*) AS n FROM (VALUES(1,2),(1,2)) t(v,w) GROUP BY ROLLUP(v,v,w) ORDER BY gid,n".to_string(), 0, vec![(0,2),(1,2),(1,2),(3,2)]),
-        ("SELECT v AS k1,v AS k2,grouping_id() AS gid,count(*) AS n FROM (SELECT 1 AS v WHERE FALSE) t GROUP BY ROLLUP(k1,k2) ORDER BY gid,n".to_string(), 2, vec![(1,0)]),
+        ("SELECT v AS k1,v AS k2,grouping_id() AS gid,count(*) AS n FROM (SELECT 1 AS v WHERE FALSE) t GROUP BY ROLLUP(k1,k2) ORDER BY gid,n".to_string(), 2, vec![]),
     ];
     for count in [8, 16, 32, 63] {
         let columns = (0..count)

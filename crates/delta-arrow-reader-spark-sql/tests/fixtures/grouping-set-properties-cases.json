@@ -299,8 +299,7 @@
     {
       "id": "float_empty_provider_sets",
       "sql": "SELECT ARRAY(CAST('-0.0' AS float)) AS key,GROUPING(ARRAY(CAST('-0.0' AS float))) AS total,COUNT(*) AS n FROM float_scalar_empty GROUP BY GROUPING SETS ((ARRAY(CAST('-0.0' AS float))),())",
-      "category": "empty_provider",
-      "native_policy": "empty_grand_total"
+      "category": "empty_provider"
     },
     {
       "id": "float_all_null_provider_sets",
@@ -355,8 +354,7 @@
     {
       "id": "double_empty_provider_sets",
       "sql": "SELECT ARRAY(CAST('-0.0' AS double)) AS key,GROUPING(ARRAY(CAST('-0.0' AS double))) AS total,COUNT(*) AS n FROM double_scalar_empty GROUP BY GROUPING SETS ((ARRAY(CAST('-0.0' AS double))),())",
-      "category": "empty_provider",
-      "native_policy": "empty_grand_total"
+      "category": "empty_provider"
     },
     {
       "id": "double_all_null_provider_sets",
@@ -376,8 +374,7 @@
     {
       "id": "repeated_empty_sets",
       "sql": "SELECT GROUPING_ID() AS gid,COUNT(*) AS n FROM float_scalar_empty GROUP BY GROUPING SETS ((),(),())",
-      "category": "empty_provider",
-      "native_policy": "empty_grand_total"
+      "category": "empty_provider"
     }
   ]
 }

@@ -6666,7 +6666,7 @@ async fn empty_local_projection_precedes_scalar_preparation()
 }
 
 #[tokio::test]
-async fn empty_group_preparation_preserves_grand_totals()
+async fn empty_group_preparation_preserves_only_global_totals()
 -> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use crate::{config::PlanConfig, physical_plan::SparkQueryPlanner, resolver::PlanResolver};
     use datafusion::arrow::array::AsArray;
@@ -6768,9 +6768,9 @@ async fn empty_group_preparation_preserves_grand_totals()
             ("", true),
             (" GROUP BY id", false),
             (" GROUP BY GROUPING SETS(())", true),
-            (" GROUP BY GROUPING SETS((id),())", true),
-            (" GROUP BY ROLLUP(id)", true),
-            (" GROUP BY CUBE(id)", true),
+            (" GROUP BY GROUPING SETS((id),())", false),
+            (" GROUP BY ROLLUP(id)", false),
+            (" GROUP BY CUBE(id)", false),
         ] {
             let sql = format!(
                 "SELECT count(CAST('7' AS INT)) AS n FROM VALUES(0),(1) t(id) WHERE false{grouping}"
@@ -6899,9 +6899,9 @@ async fn empty_operators_precede_scalar_children()
             ("", true),
             (" GROUP BY id", false),
             (" GROUP BY GROUPING SETS(())", true),
-            (" GROUP BY GROUPING SETS((id),())", true),
-            (" GROUP BY ROLLUP(id)", true),
-            (" GROUP BY CUBE(id)", true),
+            (" GROUP BY GROUPING SETS((id),())", false),
+            (" GROUP BY ROLLUP(id)", false),
+            (" GROUP BY CUBE(id)", false),
         ] {
             let sql = format!(
                 "SELECT count((SELECT CAST('7' AS INT) FROM range(1))) AS n \
