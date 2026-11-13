@@ -254,6 +254,7 @@ fn from_ast_query_select(select: QuerySelect) -> SqlResult<spec::QueryPlan> {
         .map(|FromClause { from: _, tables }| tables.into_items().collect())
         .unwrap_or_default();
     let plan = from_ast_tables(tables)?;
+    let plan = query_plan_with_lateral_views(plan, lateral_views)?;
 
     let condition = r#where.map(
         |WhereClause {
@@ -266,8 +267,6 @@ fn from_ast_query_select(select: QuerySelect) -> SqlResult<spec::QueryPlan> {
     } else {
         plan
     };
-
-    let plan = query_plan_with_lateral_views(plan, lateral_views)?;
 
     let projection = projection
         .into_items()

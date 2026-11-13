@@ -1,0 +1,792 @@
+{
+  "issue": "1317",
+  "expected_record_count": 48,
+  "corpora": [
+    {
+      "corpus": "lateral-view-filters",
+      "source": {
+        "original_issue": "156",
+        "original_request_sha256": "f0e3c1d265e5a4da4666880fe886bf1256621ec11ac3b8fa4454231c47f2db4f",
+        "original_case": "filtered_generator",
+        "note": "Original registered input definitions retained; only ARRAY/MAP and scalar columns are read."
+      },
+      "metadata": {
+        "spark_version": "4.2.0",
+        "timezone": "UTC",
+        "inputs": [
+          {
+            "name": "nested_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "idx",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "lookup",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "a",
+                  "type": {
+                    "type": "array",
+                    "elementType": "integer",
+                    "containsNull": true
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "code",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "label",
+                        "type": "string",
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "numbers",
+                        "type": {
+                          "type": "array",
+                          "elementType": "integer",
+                          "containsNull": true
+                        },
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "m",
+                  "type": {
+                    "type": "map",
+                    "keyType": "string",
+                    "valueType": "integer",
+                    "valueContainsNull": true
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "records",
+                  "type": {
+                    "type": "array",
+                    "elementType": {
+                      "type": "struct",
+                      "fields": [
+                        {
+                          "name": "code",
+                          "type": "integer",
+                          "nullable": true,
+                          "metadata": {}
+                        },
+                        {
+                          "name": "label",
+                          "type": "string",
+                          "nullable": true,
+                          "metadata": {}
+                        }
+                      ]
+                    },
+                    "containsNull": true
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "groups",
+                  "type": {
+                    "type": "map",
+                    "keyType": "string",
+                    "valueType": {
+                      "type": "array",
+                      "elementType": "integer",
+                      "containsNull": true
+                    },
+                    "valueContainsNull": true
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "0",
+                "a",
+                [
+                  "7",
+                  null,
+                  "7"
+                ],
+                [
+                  "3",
+                  "ok",
+                  [
+                    "10",
+                    null
+                  ]
+                ],
+                [
+                  [
+                    "a",
+                    "7"
+                  ],
+                  [
+                    "b",
+                    null
+                  ]
+                ],
+                [
+                  [
+                    "1",
+                    "p"
+                  ],
+                  null,
+                  [
+                    "1",
+                    "p"
+                  ]
+                ],
+                [
+                  [
+                    "a",
+                    [
+                      "5",
+                      null
+                    ]
+                  ],
+                  [
+                    "b",
+                    []
+                  ]
+                ]
+              ],
+              [
+                "1",
+                "1",
+                "missing",
+                [
+                  "8",
+                  "9"
+                ],
+                [
+                  null,
+                  null,
+                  []
+                ],
+                [
+                  [
+                    "a",
+                    null
+                  ]
+                ],
+                [],
+                [
+                  [
+                    "a",
+                    null
+                  ]
+                ]
+              ],
+              [
+                "2",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+              ],
+              [
+                "3",
+                "0",
+                "a",
+                [],
+                [
+                  "4",
+                  "",
+                  null
+                ],
+                [],
+                [
+                  null
+                ],
+                []
+              ],
+              [
+                "4",
+                "0",
+                "A",
+                [
+                  null
+                ],
+                [
+                  null,
+                  null,
+                  null
+                ],
+                [
+                  [
+                    "a",
+                    null
+                  ]
+                ],
+                [
+                  [
+                    null,
+                    null
+                  ]
+                ],
+                [
+                  [
+                    "a",
+                    [
+                      null
+                    ]
+                  ]
+                ]
+              ],
+              [
+                "0",
+                "0",
+                "a",
+                [
+                  "7",
+                  null,
+                  "7"
+                ],
+                [
+                  "3",
+                  "ok",
+                  [
+                    "10",
+                    null
+                  ]
+                ],
+                [
+                  [
+                    "a",
+                    "7"
+                  ],
+                  [
+                    "b",
+                    null
+                  ]
+                ],
+                [
+                  [
+                    "1",
+                    "p"
+                  ],
+                  null,
+                  [
+                    "1",
+                    "p"
+                  ]
+                ],
+                [
+                  [
+                    "a",
+                    [
+                      "5",
+                      null
+                    ]
+                  ],
+                  [
+                    "b",
+                    []
+                  ]
+                ]
+              ]
+            ]
+          },
+          {
+            "name": "empty_nested_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "idx",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "lookup",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "a",
+                  "type": {
+                    "type": "array",
+                    "elementType": "integer",
+                    "containsNull": true
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "code",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "label",
+                        "type": "string",
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "numbers",
+                        "type": {
+                          "type": "array",
+                          "elementType": "integer",
+                          "containsNull": true
+                        },
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "m",
+                  "type": {
+                    "type": "map",
+                    "keyType": "string",
+                    "valueType": "integer",
+                    "valueContainsNull": true
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "records",
+                  "type": {
+                    "type": "array",
+                    "elementType": {
+                      "type": "struct",
+                      "fields": [
+                        {
+                          "name": "code",
+                          "type": "integer",
+                          "nullable": true,
+                          "metadata": {}
+                        },
+                        {
+                          "name": "label",
+                          "type": "string",
+                          "nullable": true,
+                          "metadata": {}
+                        }
+                      ]
+                    },
+                    "containsNull": true
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "groups",
+                  "type": {
+                    "type": "map",
+                    "keyType": "string",
+                    "valueType": {
+                      "type": "array",
+                      "elementType": "integer",
+                      "containsNull": true
+                    },
+                    "valueContainsNull": true
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": []
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "lateral-view-filters",
+          "id": "reported_item_filter",
+          "sql": "SELECT id, pos, item FROM nested_inputs LATERAL VIEW posexplode(a) x AS pos, item WHERE item = 7",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "array_item_filter",
+          "sql": "SELECT id, item FROM nested_inputs LATERAL VIEW explode(a) x AS item WHERE item = 7 ORDER BY id, item",
+          "ordered": true,
+          "ansi": false
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "array_position_filter",
+          "sql": "SELECT id, pos, item FROM nested_inputs LATERAL VIEW posexplode(a) x AS pos, item WHERE pos = 2 ORDER BY id, pos",
+          "ordered": true,
+          "ansi": false
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "array_qualified_filter",
+          "sql": "SELECT n.id, e.p, e.item FROM nested_inputs n LATERAL VIEW posexplode(n.a) e AS p, item WHERE e.item = 7 AND n.id = 0",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "array_null_item_filter",
+          "sql": "SELECT id, item FROM nested_inputs LATERAL VIEW explode(a) x AS item WHERE item IS NULL",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "array_outer_null_item_filter",
+          "sql": "SELECT id, item FROM nested_inputs LATERAL VIEW OUTER explode(a) x AS item WHERE item IS NULL",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "array_outer_null_position_filter",
+          "sql": "SELECT id, pos, item FROM nested_inputs LATERAL VIEW OUTER posexplode(a) x AS pos, item WHERE pos IS NULL ORDER BY id",
+          "ordered": true,
+          "ansi": false
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "array_named_outer_filter",
+          "sql": "SELECT id, item FROM nested_inputs LATERAL VIEW explode_outer(a) x AS item WHERE item IS NULL",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "map_key_filter",
+          "sql": "SELECT id, entry_key, value FROM nested_inputs LATERAL VIEW explode(m) x AS entry_key, value WHERE entry_key = 'a'",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "map_value_filter",
+          "sql": "SELECT id, entry_key, value FROM nested_inputs LATERAL VIEW explode(m) x AS entry_key, value WHERE value IS NULL",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "map_position_filter",
+          "sql": "SELECT id, pos, entry_key, value FROM nested_inputs LATERAL VIEW posexplode(m) x AS pos, entry_key, value WHERE pos = 1 AND entry_key = 'b'",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "map_qualified_filter",
+          "sql": "SELECT n.id, e.pos, e.entry_key, e.value FROM nested_inputs n LATERAL VIEW posexplode(n.m) e AS pos, entry_key, value WHERE e.entry_key = 'a' AND e.value = 7",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "map_outer_null_key_filter",
+          "sql": "SELECT id, entry_key, value FROM nested_inputs LATERAL VIEW OUTER explode(m) x AS entry_key, value WHERE entry_key IS NULL ORDER BY id",
+          "ordered": true,
+          "ansi": false
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "map_outer_null_position_filter",
+          "sql": "SELECT id, pos, entry_key, value FROM nested_inputs LATERAL VIEW OUTER posexplode(m) x AS pos, entry_key, value WHERE pos IS NULL",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "map_named_outer_filter",
+          "sql": "SELECT id, pos, entry_key, value FROM nested_inputs LATERAL VIEW posexplode_outer(m) x AS pos, entry_key, value WHERE value IS NULL ORDER BY id, pos NULLS FIRST",
+          "ordered": true,
+          "ansi": false
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "chained_array_filters",
+          "sql": "SELECT id, first_item, second_item FROM nested_inputs LATERAL VIEW explode(a) x AS first_item LATERAL VIEW explode(a) y AS second_item WHERE x.first_item = y.second_item AND first_item = 7",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "chained_array_map_filters",
+          "sql": "SELECT id, pos, item, entry_key, value FROM nested_inputs LATERAL VIEW posexplode(a) x AS pos, item LATERAL VIEW explode(m) y AS entry_key, value WHERE item = value AND entry_key = 'a' AND pos >= 0",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "chained_dependent_filter",
+          "sql": "SELECT id, item, next_item FROM nested_inputs LATERAL VIEW explode(a) x AS item LATERAL VIEW explode(array(item, item + 1)) y AS next_item WHERE item = 7 AND next_item = 8",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "chained_outer_filter",
+          "sql": "SELECT id, item, entry_key, value FROM nested_inputs LATERAL VIEW OUTER explode(a) x AS item LATERAL VIEW OUTER explode(m) y AS entry_key, value WHERE item IS NULL AND entry_key IS NULL",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "input_only_filter",
+          "sql": "SELECT n.id, item FROM nested_inputs n LATERAL VIEW explode(a) x AS item WHERE n.id = 0",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "input_only_null_filter",
+          "sql": "SELECT id, item FROM nested_inputs LATERAL VIEW OUTER explode(a) x AS item WHERE a IS NULL",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "without_lateral_filter",
+          "sql": "SELECT id, a, m FROM nested_inputs WHERE id = 0 OR id = 2 ORDER BY id",
+          "ordered": true,
+          "ansi": false
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "empty_provider_filter",
+          "sql": "SELECT id, pos, item FROM empty_nested_inputs LATERAL VIEW OUTER posexplode(a) x AS pos, item WHERE pos IS NULL",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "no_matching_items",
+          "sql": "SELECT id, pos, item FROM nested_inputs LATERAL VIEW posexplode(a) x AS pos, item WHERE item = 99",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "reported_item_filter",
+          "sql": "SELECT id, pos, item FROM nested_inputs LATERAL VIEW posexplode(a) x AS pos, item WHERE item = 7",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "array_item_filter",
+          "sql": "SELECT id, item FROM nested_inputs LATERAL VIEW explode(a) x AS item WHERE item = 7 ORDER BY id, item",
+          "ordered": true,
+          "ansi": true
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "array_position_filter",
+          "sql": "SELECT id, pos, item FROM nested_inputs LATERAL VIEW posexplode(a) x AS pos, item WHERE pos = 2 ORDER BY id, pos",
+          "ordered": true,
+          "ansi": true
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "array_qualified_filter",
+          "sql": "SELECT n.id, e.p, e.item FROM nested_inputs n LATERAL VIEW posexplode(n.a) e AS p, item WHERE e.item = 7 AND n.id = 0",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "array_null_item_filter",
+          "sql": "SELECT id, item FROM nested_inputs LATERAL VIEW explode(a) x AS item WHERE item IS NULL",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "array_outer_null_item_filter",
+          "sql": "SELECT id, item FROM nested_inputs LATERAL VIEW OUTER explode(a) x AS item WHERE item IS NULL",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "array_outer_null_position_filter",
+          "sql": "SELECT id, pos, item FROM nested_inputs LATERAL VIEW OUTER posexplode(a) x AS pos, item WHERE pos IS NULL ORDER BY id",
+          "ordered": true,
+          "ansi": true
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "array_named_outer_filter",
+          "sql": "SELECT id, item FROM nested_inputs LATERAL VIEW explode_outer(a) x AS item WHERE item IS NULL",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "map_key_filter",
+          "sql": "SELECT id, entry_key, value FROM nested_inputs LATERAL VIEW explode(m) x AS entry_key, value WHERE entry_key = 'a'",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "map_value_filter",
+          "sql": "SELECT id, entry_key, value FROM nested_inputs LATERAL VIEW explode(m) x AS entry_key, value WHERE value IS NULL",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "map_position_filter",
+          "sql": "SELECT id, pos, entry_key, value FROM nested_inputs LATERAL VIEW posexplode(m) x AS pos, entry_key, value WHERE pos = 1 AND entry_key = 'b'",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "map_qualified_filter",
+          "sql": "SELECT n.id, e.pos, e.entry_key, e.value FROM nested_inputs n LATERAL VIEW posexplode(n.m) e AS pos, entry_key, value WHERE e.entry_key = 'a' AND e.value = 7",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "map_outer_null_key_filter",
+          "sql": "SELECT id, entry_key, value FROM nested_inputs LATERAL VIEW OUTER explode(m) x AS entry_key, value WHERE entry_key IS NULL ORDER BY id",
+          "ordered": true,
+          "ansi": true
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "map_outer_null_position_filter",
+          "sql": "SELECT id, pos, entry_key, value FROM nested_inputs LATERAL VIEW OUTER posexplode(m) x AS pos, entry_key, value WHERE pos IS NULL",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "map_named_outer_filter",
+          "sql": "SELECT id, pos, entry_key, value FROM nested_inputs LATERAL VIEW posexplode_outer(m) x AS pos, entry_key, value WHERE value IS NULL ORDER BY id, pos NULLS FIRST",
+          "ordered": true,
+          "ansi": true
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "chained_array_filters",
+          "sql": "SELECT id, first_item, second_item FROM nested_inputs LATERAL VIEW explode(a) x AS first_item LATERAL VIEW explode(a) y AS second_item WHERE x.first_item = y.second_item AND first_item = 7",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "chained_array_map_filters",
+          "sql": "SELECT id, pos, item, entry_key, value FROM nested_inputs LATERAL VIEW posexplode(a) x AS pos, item LATERAL VIEW explode(m) y AS entry_key, value WHERE item = value AND entry_key = 'a' AND pos >= 0",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "chained_dependent_filter",
+          "sql": "SELECT id, item, next_item FROM nested_inputs LATERAL VIEW explode(a) x AS item LATERAL VIEW explode(array(item, item + 1)) y AS next_item WHERE item = 7 AND next_item = 8",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "chained_outer_filter",
+          "sql": "SELECT id, item, entry_key, value FROM nested_inputs LATERAL VIEW OUTER explode(a) x AS item LATERAL VIEW OUTER explode(m) y AS entry_key, value WHERE item IS NULL AND entry_key IS NULL",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "input_only_filter",
+          "sql": "SELECT n.id, item FROM nested_inputs n LATERAL VIEW explode(a) x AS item WHERE n.id = 0",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "input_only_null_filter",
+          "sql": "SELECT id, item FROM nested_inputs LATERAL VIEW OUTER explode(a) x AS item WHERE a IS NULL",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "without_lateral_filter",
+          "sql": "SELECT id, a, m FROM nested_inputs WHERE id = 0 OR id = 2 ORDER BY id",
+          "ordered": true,
+          "ansi": true
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "empty_provider_filter",
+          "sql": "SELECT id, pos, item FROM empty_nested_inputs LATERAL VIEW OUTER posexplode(a) x AS pos, item WHERE pos IS NULL",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "lateral-view-filters",
+          "id": "no_matching_items",
+          "sql": "SELECT id, pos, item FROM nested_inputs LATERAL VIEW posexplode(a) x AS pos, item WHERE item = 99",
+          "ordered": false,
+          "ansi": true
+        }
+      ]
+    }
+  ]
+}

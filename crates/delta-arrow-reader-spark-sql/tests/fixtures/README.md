@@ -5,6 +5,17 @@ including its unresolved Spark differences. `import_accepted_runtime.py`
 reconstructs it from the source archive named in `accepted-runtime.json`.
 Importing the fixture does not run Spark or certify compatibility.
 
+## LATERAL VIEW filters
+
+[`lateral-view-filters/`](lateral-view-filters/README.md) records independent
+Spark 4.2.0 rows and executed types for WHERE predicates over generated array/map
+columns, including qualified names, OUTER and chained views, in both ANSI modes.
+Input-only and non-LATERAL predicates, NULLs, empty collections and providers,
+duplicates, native SQL and unresolved-column checks protect connected behavior.
+The replay varies provider partitions, input batches and execution settings,
+checks direct source scans and compares ordered sequences or row multisets.
+See the fixture README for the source-only recapture command.
+
 ## Unknown column diagnostics
 
 `unknown-columns/spark-results.jsonl` records 23 unknown-column scenarios and 13

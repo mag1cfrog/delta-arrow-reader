@@ -6,6 +6,10 @@ functions and the execution extensions needed by registered DataFusion providers
 Sail services, Python execution, catalog backends and additional storage readers
 are excluded from this selection.
 
+SELECT construction expands LATERAL VIEW clauses before applying WHERE, so
+predicates can resolve every preceding generator's outputs. Existing generator
+resolution and filtering build the resulting plan without changing native SQL.
+
 The extraction and accepted repairs come from the frozen DAR branch at commit
 `c426ef86e4da43eb57f270f1a4945c9dcc6559fe`. The final accepted runtime change was
 [PR #291](https://github.com/mag1cfrog/delta-arrow-reader/pull/291), merged as
