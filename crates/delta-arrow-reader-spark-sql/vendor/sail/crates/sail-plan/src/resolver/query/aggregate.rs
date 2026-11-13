@@ -3,19 +3,22 @@ use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 
 use datafusion::functions_aggregate::{average, bit_and_or_xor, bool_and_or, count, min_max, sum};
+use datafusion::functions_window::expr_fn::row_number;
 use datafusion_common::arrow::datatypes::{DataType, FieldRef};
 use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode, TreeNodeRecursion};
 use datafusion_common::{
     Column, DFSchema, DFSchemaRef, DataFusionError, Result as DataFusionResult, ScalarValue,
 };
-use datafusion_expr::expr::GroupingSet;
+use datafusion_expr::expr::{Case, GroupingSet};
 use datafusion_expr::expr_rewriter::normalize_col;
 use datafusion_expr::logical_plan::{FetchType, SkipType};
-use datafusion_expr::utils::{enumerate_grouping_sets, find_aggregate_exprs, powerset};
+use datafusion_expr::utils::{
+    enumerate_grouping_sets, find_aggregate_exprs, grouping_set_to_exprlist, powerset,
+};
 use datafusion_expr::{
-    Aggregate, AggregateUDF, ColumnarValue, Expr, ExprSchemable, Extension, LogicalPlan,
-    LogicalPlanBuilder, Projection, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl,
-    Signature, SortExpr, Volatility, bitwise_and, bitwise_or, bitwise_shift_left,
+    Aggregate, AggregateUDF, ColumnarValue, Expr, ExprFunctionExt, ExprSchemable, Extension,
+    LogicalPlan, LogicalPlanBuilder, Projection, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF,
+    ScalarUDFImpl, Signature, SortExpr, Volatility, bitwise_and, bitwise_or, bitwise_shift_left,
     bitwise_shift_right, cast, ident, lit, when,
 };
 use datafusion_spark::function::aggregate::try_sum::SparkTrySum;
@@ -23,7 +26,7 @@ use sail_common::spec;
 use sail_common_datafusion::utils::items::ItemTaker;
 use sail_function::aggregate::try_avg::TryAvgFunction;
 use sail_function::scalar::explode::Explode;
-use sail_logical_plan::monotonic_id::MonotonicIdNode;
+use sail_logical_plan::monotonic_id::{MonotonicIdNode, MonotonicIdPurpose};
 use sail_logical_plan::sort::{RequiredSortNode, SortWithinPartitionsNode};
 use sail_logical_plan::spark_partition_id::SparkPartitionIdNode;
 
@@ -594,6 +597,172 @@ impl PlanResolver<'_> {
         }
 
         Ok(false)
+    }
+
+    pub(in crate::resolver) fn lower_distinct_approx_percentiles(
+        plan: LogicalPlan,
+        state: &mut PlanResolverState,
+    ) -> PlanResult<LogicalPlan> {
+        Ok(plan
+            .transform_up_with_subqueries(|plan| {
+                let LogicalPlan::Aggregate(aggregate) = plan else {
+                    return Ok(Transformed::no(plan));
+                };
+                let is_distinct_percentile = |expr: &Expr| {
+                    matches!(expr, Expr::AggregateFunction(function)
+                        if function.func.name() == "approx_percentile" && function.params.distinct)
+                };
+                if !aggregate.aggr_expr.iter().any(is_distinct_percentile) {
+                    return Ok(Transformed::no(LogicalPlan::Aggregate(aggregate)));
+                }
+
+                let mut sets = match aggregate.group_expr.as_slice() {
+                    [Expr::GroupingSet(GroupingSet::GroupingSets(sets))] => sets.clone(),
+                    [Expr::GroupingSet(GroupingSet::Rollup(keys))] => (0..=keys.len())
+                        .map(|length| keys[..length].to_vec())
+                        .collect(),
+                    [Expr::GroupingSet(GroupingSet::Cube(keys))] => powerset(keys)?
+                        .into_iter()
+                        .map(|set| set.into_iter().cloned().collect())
+                        .collect(),
+                    grouping => vec![grouping.to_vec()],
+                };
+                if sets.is_empty() {
+                    return Ok(Transformed::no(LogicalPlan::Aggregate(aggregate)));
+                }
+                let mut seen = HashSet::new();
+                sets.retain(|set| seen.insert(set.clone()));
+                let keys = grouping_set_to_exprlist(&aggregate.group_expr)?;
+                let has_grouping_set = Self::has_grouping_set(&aggregate.group_expr);
+                let semantic_mask = keys.iter().fold(0_u64, |mask, _| (mask << 1) | 1);
+                let grouping_id = bitwise_and(
+                    Self::grouping_id_column(),
+                    Self::grouping_bitmask_literal(semantic_mask, keys.len()),
+                );
+                let group_count = aggregate.schema.fields().len() - aggregate.aggr_expr.len();
+                let mut output = aggregate.schema.columns()[..group_count]
+                    .iter()
+                    .cloned()
+                    .map(Expr::Column)
+                    .collect::<Vec<_>>();
+                let (mut input, ordered, global) = Self::require_input_sort_inner(
+                    Arc::unwrap_or_clone(Arc::clone(&aggregate.input)),
+                )
+                .map_err(|error| DataFusionError::External(Box::new(error)))?;
+                // Marker windows sort by value; retain the original order for other measures.
+                let restore_order = if ordered {
+                    let column = state.register_hidden_field_name("__percentile_input_order");
+                    input = LogicalPlan::Extension(Extension {
+                        node: Arc::new(MonotonicIdNode::try_new(
+                            Arc::new(input),
+                            column.clone(),
+                            MonotonicIdPurpose::WindowOrdering,
+                        )?),
+                    });
+                    Some(ident(column).sort(true, true))
+                } else {
+                    None
+                };
+                let mut markers: Vec<(Vec<Expr>, String)> = Vec::new();
+                let mut measures = Vec::new();
+                for (index, expr) in aggregate.aggr_expr.iter().enumerate() {
+                    let result = if is_distinct_percentile(expr)
+                        && let Expr::AggregateFunction(function) = expr
+                    {
+                        let mut choices = Vec::new();
+                        for set in &sets {
+                            let mut partition =
+                                set.iter().cloned().map(Expr::unalias).collect::<Vec<_>>();
+                            let value = function.params.args[0].clone();
+                            let value = match function.params.filter.as_deref() {
+                                Some(filter) => when(filter.clone(), value).end()?,
+                                None => value,
+                            };
+                            partition.push(value);
+                            let marker = match markers.iter().find(|(keys, _)| *keys == partition) {
+                                Some((_, marker)) => marker.clone(),
+                                None => {
+                                    let marker = state
+                                        .register_hidden_field_name("__percentile_distinct_row");
+                                    input = LogicalPlanBuilder::from(input)
+                                        .window(vec![
+                                            row_number()
+                                                .partition_by(partition.clone())
+                                                .build()?
+                                                .alias(&marker),
+                                        ])?
+                                        .build()?;
+                                    markers.push((partition, marker.clone()));
+                                    marker
+                                }
+                            };
+                            let mut measure = function.clone();
+                            measure.params.distinct = false;
+                            let first = ident(marker).eq(lit(1_u64));
+                            measure.params.filter = Some(Box::new(match measure.params.filter {
+                                Some(filter) => filter.and(first),
+                                None => first,
+                            }));
+                            let name = state.register_hidden_field_name("__distinct_percentile");
+                            measures.push(Expr::AggregateFunction(measure).alias(&name));
+                            let mask = keys.iter().fold(0_u64, |mask, key| {
+                                (mask << 1) | u64::from(!set.contains(key))
+                            });
+                            choices.push((
+                                Box::new(Self::grouping_bitmask_literal(mask, keys.len())),
+                                Box::new(ident(name)),
+                            ));
+                        }
+                        if has_grouping_set {
+                            // Ignore native duplicate-set ordinal bits when selecting a measure.
+                            Expr::Case(Case::new(
+                                Some(Box::new(grouping_id.clone())),
+                                choices,
+                                None,
+                            ))
+                        } else {
+                            *choices.remove(0).1
+                        }
+                    } else {
+                        measures.push(expr.clone());
+                        Expr::from(aggregate.schema.qualified_field(group_count + index))
+                    };
+                    let (qualifier, field) = aggregate.schema.qualified_field(group_count + index);
+                    output.push(result.alias_qualified(qualifier.cloned(), field.name()));
+                }
+                if let Some(order) = restore_order {
+                    input = LogicalPlan::Extension(Extension {
+                        node: Arc::new(RequiredSortNode::new(
+                            Arc::new(input),
+                            vec![order],
+                            None,
+                            !global,
+                        )),
+                    });
+                }
+                let mut lowered =
+                    Aggregate::try_new(Arc::new(input), aggregate.group_expr, measures)?;
+                // Retain the grouping bitmap's internal key-order metadata.
+                let fields = aggregate
+                    .schema
+                    .iter()
+                    .take(group_count)
+                    .chain(lowered.schema.iter().skip(group_count))
+                    .map(|(qualifier, field)| (qualifier.cloned(), Arc::clone(field)))
+                    .collect();
+                lowered.schema = Arc::new(
+                    DFSchema::new_with_metadata(fields, lowered.schema.metadata().clone())?
+                        .with_functional_dependencies(
+                            lowered.schema.functional_dependencies().clone(),
+                        )?,
+                );
+                Ok(Transformed::yes(
+                    LogicalPlanBuilder::from(LogicalPlan::Aggregate(lowered))
+                        .project(output)?
+                        .build()?,
+                ))
+            })?
+            .data)
     }
 
     fn requires_input_order(
