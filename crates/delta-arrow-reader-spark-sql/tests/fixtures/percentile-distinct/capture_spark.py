@@ -66,7 +66,19 @@ def main():
             ('sorted_mixed', 'SELECT PERCENTILE(DISTINCT v,0.25D,f) AS d,APPROX_PERCENTILE(DISTINCT v,0.5) AS a,FIRST(v,true) AS f,LAST(v,true) AS l,COLLECT_LIST(v) AS values FROM (SELECT v,f FROM samples WHERE g=0 ORDER BY id DESC)'),
             ('family_shared', 'SELECT g,PERCENTILE(DISTINCT v,0.5) AS e,MEDIAN(DISTINCT v) AS m,APPROX_PERCENTILE(DISTINCT v,0.5) AS a,PERCENTILE_APPROX(DISTINCT v,ARRAY(0D,0.5D,1D),100) AS aa,PERCENTILE(DISTINCT v,0.25D,f) AS f FROM samples GROUP BY g ORDER BY g NULLS FIRST'),
             ('family_ordered_controls', 'SELECT PERCENTILE_CONT(0.5) WITHIN GROUP(ORDER BY v) AS c,PERCENTILE_DISC(0.5) WITHIN GROUP(ORDER BY v DESC) AS d FROM samples'),
+            ('empty_array_issue', 'SELECT PERCENTILE(v,ARRAY()) AS p,PERCENTILE(v,ARRAY(),f) AS weighted,PERCENTILE(DISTINCT v,ARRAY()) AS d,PERCENTILE(DISTINCT v,ARRAY(),f) AS wd FROM VALUES (1D,1L),(1D,2L),(9D,4L) AS t(v,f)'),
+            ('empty_array_global', 'SELECT PERCENTILE(v,ARRAY()) AS p,PERCENTILE(v,ARRAY(),f) AS weighted,PERCENTILE(DISTINCT v,ARRAY()) AS d,PERCENTILE(DISTINCT v,ARRAY(),f) AS wd FROM samples'),
+            ('empty_array_grouped', 'SELECT g,PERCENTILE(v,ARRAY()) AS p,PERCENTILE(v,ARRAY(),f) AS weighted,PERCENTILE(DISTINCT v,ARRAY()) AS d,PERCENTILE(DISTINCT v,ARRAY(),f) AS wd,COUNT(*) AS n FROM samples GROUP BY g ORDER BY g NULLS FIRST'),
+            ('empty_array_filtered', 'SELECT g,PERCENTILE(v,ARRAY()) FILTER(WHERE keep) AS p,PERCENTILE(v,ARRAY(),f) FILTER(WHERE keep) AS weighted,PERCENTILE(DISTINCT v,ARRAY()) FILTER(WHERE keep) AS d,PERCENTILE(DISTINCT v,ARRAY(),f) FILTER(WHERE keep) AS wd FROM samples GROUP BY g ORDER BY g NULLS FIRST'),
+            ('empty_array_filter_false_or_null', 'SELECT PERCENTILE(v,ARRAY()) FILTER(WHERE false) AS p,PERCENTILE(v,ARRAY(),f) FILTER(WHERE CAST(NULL AS BOOLEAN)) AS weighted,PERCENTILE(DISTINCT v,ARRAY()) FILTER(WHERE false) AS d,PERCENTILE(DISTINCT v,ARRAY(),f) FILTER(WHERE CAST(NULL AS BOOLEAN)) AS wd FROM samples'),
+            ('empty_array_empty', 'SELECT PERCENTILE(v,ARRAY()) AS p,PERCENTILE(v,ARRAY(),f) AS weighted,PERCENTILE(DISTINCT v,ARRAY()) AS d,PERCENTILE(DISTINCT v,ARRAY(),f) AS wd FROM samples WHERE false'),
+            ('empty_array_all_null', 'SELECT PERCENTILE(v,ARRAY()) AS p,PERCENTILE(v,ARRAY(),f) AS weighted,PERCENTILE(DISTINCT v,ARRAY()) AS d,PERCENTILE(DISTINCT v,ARRAY(),f) AS wd FROM samples WHERE v IS NULL'),
+            ('empty_array_zero_or_null_frequency', 'SELECT PERCENTILE(v,ARRAY(),f) AS weighted,PERCENTILE(DISTINCT v,ARRAY(),f) AS wd FROM samples WHERE f=0 OR f IS NULL'),
+            ('empty_array_constant', 'SELECT PERCENTILE(DISTINCT 7D,ARRAY()) AS d,PERCENTILE(DISTINCT 3D+4D,ARRAY(),f) FILTER(WHERE keep) AS wd FROM samples'),
+            ('empty_array_family', 'SELECT APPROX_PERCENTILE(v,ARRAY()) AS a,PERCENTILE_APPROX(DISTINCT v,ARRAY()) AS d,PERCENTILE_DISC(ARRAY()) WITHIN GROUP(ORDER BY v) AS discrete,MEDIAN(v) AS m,PERCENTILE_CONT(0.5) WITHIN GROUP(ORDER BY v) AS continuous FROM samples'),
         ]
+        for frame, label in [('UNBOUNDED PRECEDING', 'running'), ('2 PRECEDING', 'sliding')]:
+            cases.append(('empty_array_'+label, f'SELECT id,PERCENTILE(v,ARRAY()) OVER(ORDER BY id ROWS BETWEEN {frame} AND CURRENT ROW) AS p,PERCENTILE(v,ARRAY(),f) OVER(ORDER BY id ROWS BETWEEN {frame} AND CURRENT ROW) AS weighted FROM samples ORDER BY id'))
         for name, grouping, columns in [
                 ('rollup', 'ROLLUP(g)', 'g'), ('cube', 'CUBE(g,keep)', 'g,keep'),
                 ('grouping_sets', 'GROUPING SETS ((g),(keep))', 'g,keep'),
@@ -74,6 +86,7 @@ def main():
             cases.append((name, f'SELECT {columns},GROUPING_ID() AS gid,PERCENTILE(DISTINCT v,ARRAY(0D,0.5D)) FILTER(WHERE keep) AS e,MEDIAN(DISTINCT v) FILTER(WHERE keep) AS m,APPROX_PERCENTILE(DISTINCT v,0.5) FILTER(WHERE keep) AS a,PERCENTILE(DISTINCT v,ARRAY(0.25D,0.5D),f) FILTER(WHERE keep) AS f,PERCENTILE(v,0.5,f) AS b,COUNT(*) AS n FROM samples GROUP BY {grouping} ORDER BY gid,{columns} NULLS FIRST'))
         for dtype in ['TINYINT', 'SMALLINT', 'INT', 'BIGINT', 'FLOAT', 'DOUBLE', 'DECIMAL(12,2)']:
             cases.append(('value_'+dtype, f'SELECT PERCENTILE(DISTINCT CAST(v AS {dtype}),0.25D) AS scalar,PERCENTILE(DISTINCT CAST(v AS {dtype}),{probabilities},f) AS weighted,MEDIAN(DISTINCT CAST(v AS {dtype})) AS m FROM samples'))
+            cases.append(('empty_array_value_'+dtype, f'SELECT PERCENTILE(CAST(v AS {dtype}),ARRAY()) AS p,PERCENTILE(CAST(v AS {dtype}),ARRAY(),f) AS weighted,PERCENTILE(DISTINCT CAST(v AS {dtype}),ARRAY()) AS d,PERCENTILE(DISTINCT CAST(v AS {dtype}),ARRAY(),f) AS wd FROM samples'))
         for dtype in ['TINYINT', 'SMALLINT', 'INT', 'BIGINT']:
             cases.append(('frequency_'+dtype, f'SELECT PERCENTILE(DISTINCT v,0.25D,CAST(f AS {dtype})) AS scalar,PERCENTILE(DISTINCT v,{probabilities},CAST(f AS {dtype})) AS a FROM samples'))
         rejected = [
