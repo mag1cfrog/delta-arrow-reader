@@ -1961,18 +1961,10 @@ match completely for nonempty, empty and all-NULL inputs.
 `pivot-source-aliases-retained-baseline-facets.json` preserves 16 historical
 native contexts under [#786](https://github.com/mag1cfrog/delta-arrow-reader/issues/786)
 (repeated projection identity) and [#1076](https://github.com/mag1cfrog/delta-arrow-reader/issues/1076)
-(UNPIVOT NULL filtering and result nullability). Only the eight #786 contexts
-remain active regression allowances. The eight original UNPIVOT contexts now
-require complete Spark agreement; their historical entries grant no allowance.
-The unchanged 82-record corpus has 156 Spark comparisons and eight active
-inherited controls at batches 1 and 32.
-
-Each active contract binds the exact case ID, ANSI mode, batch, SQL and full
-reference payload. The report keeps raw `matches` and `actual` values, then
-adds separate `independent_gap_owner` and `regression_matches` fields. Native
-private field IDs and unordered raw-row order are not frozen. The tests retain
-all 16 historical identities, check the active eight against every retained
-facet, and reject #1076 credit even when a historical observation is supplied.
+(UNPIVOT NULL filtering and result nullability). These historical entries grant
+no regression allowance. The unchanged 82-record corpus requires complete
+Spark agreement in all 164 comparisons at batch sizes 1 and 32. The optional
+report retains each current reference and native observation.
 
 ```sh
 DAR_PIVOT_SOURCE_ALIASES_REPORT=target/pivot-source-aliases-report.json \

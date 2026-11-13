@@ -92,6 +92,7 @@ impl PlanResolver<'_> {
             metadata: inner_metadata,
             expression_name,
             interval_qualifier,
+            column_origin,
         } = named_expr;
         if name.is_empty() {
             return Ok(NamedExpr {
@@ -100,6 +101,7 @@ impl PlanResolver<'_> {
                 expr,
                 metadata: metadata.unwrap_or(inner_metadata),
                 interval_qualifier,
+                column_origin,
             });
         }
         let metadata = metadata.unwrap_or(inner_metadata);

@@ -1,4 +1,5 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use datafusion_common::tree_node::{TreeNode, TreeNodeRewriter};
@@ -13,7 +14,7 @@ use sail_function::scalar::multi_expr::MultiExpr;
 use crate::error::{PlanError, PlanResult};
 use crate::function::common::clear_inherited_field_metadata;
 use crate::resolver::PlanResolver;
-use crate::resolver::expression::NamedExpr;
+use crate::resolver::expression::{ColumnOrigin, NamedExpr};
 use crate::resolver::state::PlanResolverState;
 use crate::resolver::tree::PlanRewriter;
 use crate::resolver::tree::explode::ExplodeRewriter;
@@ -82,10 +83,10 @@ impl PlanResolver<'_> {
             if info.is_hidden() && !qualified {
                 return Ok(None);
             }
-            Ok(Some(NamedExpr::new(
-                vec![info.name().to_string()],
-                Expr::Column(column),
-            )))
+            Ok(Some(
+                NamedExpr::new(vec![info.name().to_string()], Expr::Column(column))
+                    .with_column_origin(),
+            ))
         }
 
         fn expand_outer_wildcard(
@@ -124,7 +125,10 @@ impl PlanResolver<'_> {
                         Arc::new(outer_field),
                         Column::new(qualifier.cloned(), field.name()),
                     );
-                    projected.push(NamedExpr::new(vec![info.name().to_string()], outer_col));
+                    projected.push(
+                        NamedExpr::new(vec![info.name().to_string()], outer_col)
+                            .with_column_origin(),
+                    );
                 }
             }
             Ok(())
@@ -212,6 +216,7 @@ impl PlanResolver<'_> {
                 metadata,
                 expression_name,
                 interval_qualifier,
+                column_origin,
             } = e;
             match expr {
                 Expr::ScalarFunction(ScalarFunction { func, args }) => {
@@ -219,7 +224,11 @@ impl PlanResolver<'_> {
                         // The metadata from the original expression are ignored.
                         if name.len() == args.len() {
                             for (name, arg) in name.into_iter().zip(args) {
-                                out.push(NamedExpr::new(vec![name], arg));
+                                let mut named = NamedExpr::new(vec![name], arg);
+                                if matches!(column_origin, Some(ColumnOrigin::Star)) {
+                                    named = named.with_column_origin();
+                                }
+                                out.push(named);
                             }
                         } else {
                             for arg in args {
@@ -233,6 +242,7 @@ impl PlanResolver<'_> {
                             metadata,
                             expression_name,
                             interval_qualifier,
+                            column_origin,
                         });
                     }
                 }
@@ -243,6 +253,7 @@ impl PlanResolver<'_> {
                         metadata,
                         expression_name,
                         interval_qualifier,
+                        column_origin,
                     });
                 }
             };
@@ -258,6 +269,21 @@ impl PlanResolver<'_> {
         expr: Vec<NamedExpr>,
         state: &mut PlanResolverState,
     ) -> PlanResult<Vec<Expr>> {
+        for named in &expr {
+            if let Expr::Column(column) = &named.expr {
+                state.get_field_info(column.name())?;
+            }
+        }
+        self.register_named_expressions(expr, state)
+    }
+
+    /// Registers output IDs after the caller has bound expressions to its input schema.
+    pub(super) fn register_named_expressions(
+        &self,
+        expr: Vec<NamedExpr>,
+        state: &mut PlanResolverState,
+    ) -> PlanResult<Vec<Expr>> {
+        let mut identities = HashMap::new();
         expr.into_iter()
             .map(|e| {
                 let name = if e.name.len() == 1 {
@@ -268,18 +294,82 @@ impl PlanResolver<'_> {
                         "one name expected for expression, got: {names}"
                     )));
                 };
-                if let Expr::Column(Column { name: field_id, .. }) = &e.expr {
-                    state.get_field_info(field_id)?;
-                }
                 // A column passed through, as by `*`, keeps its field's qualifier.
                 let qualifier = e.interval_qualifier.or_else(|| match &e.expr {
                     Expr::Column(column) => state.interval_qualifier(&column.name),
                     _ => None,
                 });
+                let source = match &e.column_origin {
+                    Some(ColumnOrigin::Attribute(column)) => Some(state.column_identity(column)?),
+                    _ => None,
+                };
                 let field_id = state.register_field_name(name);
+                if let Some(source) = source {
+                    let identity = identities
+                        .entry(source)
+                        .or_insert_with(|| field_id.clone())
+                        .clone();
+                    state.set_column_identity(&field_id, identity);
+                }
                 state.set_interval_qualifier(&field_id, qualifier);
                 Ok(e.into_alias(field_id))
             })
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::PlanConfig;
+    use datafusion::prelude::SessionContext;
+
+    #[tokio::test]
+    async fn projection_identity_depends_on_passthrough_origin_and_relation() -> PlanResult<()> {
+        let session = SessionContext::new();
+        let resolver = PlanResolver::new(&session, Arc::new(PlanConfig::default()));
+        let mut state = PlanResolverState::new();
+        let input = state.register_field_name("k");
+        let left = Column::new(Some(TableReference::bare("l")), input.clone());
+        let right = Column::new(Some(TableReference::bare("r")), input);
+        let bare = |column: Column| {
+            NamedExpr::new(vec!["k".into()], Expr::Column(column)).with_column_origin()
+        };
+        let output = resolver.rewrite_named_expressions(
+            vec![
+                bare(left.clone()),
+                bare(left.clone()),
+                NamedExpr::new(vec!["k".into()], Expr::Column(left)),
+                bare(right),
+            ],
+            &mut state,
+        )?;
+        let columns = output
+            .iter()
+            .map(|expr| match expr {
+                Expr::Alias(alias) => Ok(Column::new_unqualified(alias.name.clone())),
+                _ => Err(PlanError::internal("projection output is not aliased")),
+            })
+            .collect::<PlanResult<Vec<_>>>()?;
+        assert_eq!(
+            columns
+                .iter()
+                .collect::<std::collections::HashSet<_>>()
+                .len(),
+            4
+        );
+        assert_eq!(
+            state.column_identity(&columns[0])?,
+            state.column_identity(&columns[1])?
+        );
+        assert_ne!(
+            state.column_identity(&columns[0])?,
+            state.column_identity(&columns[2])?
+        );
+        assert_ne!(
+            state.column_identity(&columns[0])?,
+            state.column_identity(&columns[3])?
+        );
+        Ok(())
     }
 }

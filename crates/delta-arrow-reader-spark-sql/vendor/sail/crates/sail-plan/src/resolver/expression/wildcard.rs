@@ -1,7 +1,9 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
+use std::collections::HashSet;
+
 use arrow::datatypes::DataType;
 use datafusion::sql::sqlparser::ast::{Ident, ObjectName, ObjectNamePart};
-use datafusion_common::{DFSchemaRef, TableReference};
+use datafusion_common::{Column, DFSchemaRef, TableReference};
 use datafusion_expr::expr::ScalarFunction;
 use datafusion_expr::{ExprSchemable, ScalarUDF, col, expr, lit};
 use datafusion_functions::core::get_field;
@@ -41,7 +43,8 @@ impl PlanResolver<'_> {
                         qualifier,
                         options: Box::new(options),
                     },
-                ))
+                )
+                .with_star_origin())
             }
         }?;
         match exclusions {
@@ -56,10 +59,10 @@ impl PlanResolver<'_> {
                     .collect::<PlanResult<Vec<_>>>()?
                     .into_iter()
                     .unzip();
-                Ok(NamedExpr::new(
-                    names,
-                    ScalarUDF::from(MultiExpr::new()).call(expressions),
-                ))
+                Ok(
+                    NamedExpr::new(names, ScalarUDF::from(MultiExpr::new()).call(expressions))
+                        .with_star_origin(),
+                )
             }
         }
     }
@@ -106,12 +109,30 @@ impl PlanResolver<'_> {
                 if matches.is_empty() {
                     continue;
                 }
-                let [index] = matches.as_slice() else {
+                let mut identities = HashSet::new();
+                for &index in &matches {
+                    let identity = match &columns[index].expr {
+                        expr::Expr::Column(column)
+                        | expr::Expr::OuterReferenceColumn(_, column) => {
+                            state.column_identity(column)?
+                        }
+                        _ if matches.len() == 1 => continue,
+                        _ => {
+                            return Err(PlanError::analysis(format!(
+                                "ambiguous wildcard exclusion: {exclusion:?}"
+                            )));
+                        }
+                    };
+                    identities.insert(identity);
+                }
+                if identities.len() > 1 {
                     return Err(PlanError::analysis(format!(
                         "ambiguous wildcard exclusion: {exclusion:?}"
                     )));
-                };
-                paths[*index].push(inner);
+                }
+                for index in matches {
+                    paths[index].push(inner);
+                }
                 resolved = true;
                 break;
             }
@@ -135,6 +156,7 @@ impl PlanResolver<'_> {
                     let data_type = column.expr.get_type(schema)?;
                     column.expr =
                         Self::exclude_struct_fields(column.expr, &data_type, &paths, schema)?;
+                    column.column_origin = None;
                     Ok(column)
                 })())
             })
@@ -212,11 +234,13 @@ impl PlanResolver<'_> {
                             qualifier: qualifier.cloned(),
                             options: Default::default(),
                         },
-                    ));
+                    )
+                    .with_star_origin());
                 }
             }
         }
 
+        let mut identities = HashSet::new();
         let candidates = Self::generate_qualified_wildcard_candidates(name.parts())
             .into_iter()
             .flat_map(|(q, name)| match name {
@@ -231,11 +255,15 @@ impl PlanResolver<'_> {
                             && qualifier_matches(q.as_ref(), qualifier)
                             && info.name().eq_ignore_ascii_case(column.as_ref())
                         {
-                            Self::resolve_nested_field_wildcard(
+                            let wildcard = Self::resolve_nested_field_wildcard(
                                 col((q.as_ref(), field)),
                                 field.data_type(),
                                 inner,
-                            )
+                            )?;
+                            let identity = state
+                                .column_identity(&Column::from((qualifier, field)))
+                                .ok()?;
+                            identities.insert(identity).then_some(wildcard)
                         } else {
                             None
                         }
@@ -275,10 +303,10 @@ impl PlanResolver<'_> {
                         )
                     })
                     .unzip();
-                Some(NamedExpr::new(
-                    names,
-                    ScalarUDF::from(MultiExpr::new()).call(exprs),
-                ))
+                Some(
+                    NamedExpr::new(names, ScalarUDF::from(MultiExpr::new()).call(exprs))
+                        .with_star_origin(),
+                )
             }
             [name, remaining @ ..] => fields
                 .iter()

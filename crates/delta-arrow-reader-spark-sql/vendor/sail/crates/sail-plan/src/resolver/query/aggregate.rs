@@ -428,14 +428,8 @@ impl PlanResolver<'_> {
             self.rewrite_projection::<ExplodeRewriter>(plan, projections, state)?;
         let (plan, projections) =
             self.rewrite_projection::<WindowRewriter>(plan, projections, state)?;
-        let projections = projections
-            .into_iter()
-            .map(|named| {
-                let field_id = state.register_field_name(named.name.clone().one()?);
-                state.set_interval_qualifier(&field_id, named.interval_qualifier);
-                Ok(named.into_alias(field_id))
-            })
-            .collect::<PlanResult<Vec<_>>>()?;
+        // Aggregate references use aggregate-schema names before output IDs are registered.
+        let projections = self.register_named_expressions(projections, state)?;
         Ok(LogicalPlanBuilder::from(plan)
             .project(projections)?
             .build()?)
@@ -1133,6 +1127,7 @@ impl PlanResolver<'_> {
             metadata,
             expression_name,
             interval_qualifier,
+            column_origin,
         } in grouping
         {
             let exprs = match expr {
@@ -1150,6 +1145,7 @@ impl PlanResolver<'_> {
                 metadata: metadata.clone(),
                 expression_name: expression_name.clone(),
                 interval_qualifier,
+                column_origin: column_origin.clone(),
             }));
         }
         Ok(result)

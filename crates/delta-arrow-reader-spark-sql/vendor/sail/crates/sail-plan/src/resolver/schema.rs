@@ -1,4 +1,5 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use datafusion_common::{Column, DFSchemaRef, TableReference};
@@ -84,7 +85,13 @@ impl PlanResolver<'_> {
         name: &str,
         state: &PlanResolverState,
     ) -> PlanResult<Option<Column>> {
-        let columns = self.resolve_column_candidates(schema, name, state);
+        let mut identities = HashSet::new();
+        let mut columns = Vec::new();
+        for column in self.resolve_column_candidates(schema, name, state) {
+            if identities.insert(state.column_identity(&column)?) {
+                columns.push(column);
+            }
+        }
         if columns.len() > 1 {
             return Err(PlanError::AnalysisError(format!(
                 "[AMBIGUOUS_REFERENCE] Reference {name} is ambiguous, found: {} matches",

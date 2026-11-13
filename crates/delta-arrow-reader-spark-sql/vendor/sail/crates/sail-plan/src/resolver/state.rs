@@ -16,6 +16,8 @@ use crate::resolver::interval_qualifier::IntervalQualifier;
 pub(super) struct FieldInfo {
     /// The user-facing name of the field.
     name: String,
+    /// Attribute identity for name resolution; physical slots can diverge after UNION.
+    column_identity: String,
     /// Whether this is a hidden field that should be excluded from the
     /// final logical plan.
     /// A hidden field is helpful for filtering or sorting plans using columns
@@ -23,7 +25,7 @@ pub(super) struct FieldInfo {
     hidden: bool,
     /// The Spark qualifier of an interval field, where the resolver knows it (#1152).
     interval_qualifier: Option<IntervalQualifier>,
-    /// The source qualifier of a visible USING key whose plan alias is unqualified.
+    /// The source qualifier of a USING key whose plan alias is unqualified.
     using_key_qualifier: Option<TableReference>,
 }
 
@@ -117,6 +119,7 @@ impl PlanResolverState {
         let field_id = self.next_field_id();
         let info = FieldInfo {
             name: name.into(),
+            column_identity: field_id.clone(),
             hidden,
             interval_qualifier: None,
             using_key_qualifier: None,
@@ -136,6 +139,23 @@ impl PlanResolverState {
     /// This is similar to [`Self::register_field_name`] but the field is marked as hidden.
     pub fn register_hidden_field_name(&mut self, name: impl Into<String>) -> String {
         self.register_field_info(name, true)
+    }
+
+    pub fn column_identity(&self, column: &Column) -> PlanResult<Column> {
+        let info = self.get_field_info(column.name())?;
+        Ok(Column::new(
+            column
+                .relation
+                .clone()
+                .or_else(|| info.using_key_qualifier.clone()),
+            info.column_identity.clone(),
+        ))
+    }
+
+    pub fn set_column_identity(&mut self, field_id: &str, identity: String) {
+        if let Some(info) = self.fields.get_mut(field_id) {
+            info.column_identity = identity;
+        }
     }
 
     pub fn set_using_key_qualifier(&mut self, field_id: &str, qualifier: Option<TableReference>) {

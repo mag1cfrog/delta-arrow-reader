@@ -1,4 +1,5 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use datafusion_common::{Column, JoinType, NullEquality};
@@ -88,9 +89,12 @@ impl PlanResolver<'_> {
             (Some(join_type), Some(spec::JoinCriteria::Natural)) => {
                 let left_names = Self::get_field_names(left.schema(), state)?;
                 let right_names = Self::get_field_names(right.schema(), state)?;
+                let mut seen = HashSet::new();
                 let using = left_names
                     .iter()
-                    .filter(|name| right_names.contains(name))
+                    .filter(|name| {
+                        right_names.contains(name) && seen.insert(name.to_ascii_lowercase())
+                    })
                     .map(|x| x.clone().into())
                     .collect::<Vec<_>>();
                 // We let the column resolver return errors when either plan contains
@@ -195,21 +199,34 @@ impl PlanResolver<'_> {
                 .or_else(|| right_columns.iter().position(|key| key == col))
                 .unwrap_or(left_columns.len())
         });
+        let key_identities = left_columns
+            .iter()
+            .chain(&right_columns)
+            .map(|column| state.column_identity(column))
+            .collect::<PlanResult<HashSet<_>>>()?;
+        let mut seen_keys = HashSet::new();
         let hidden_columns = columns
             .into_iter()
             .map(|col| {
-                if left_columns.iter().any(|x| x.name == col.name)
-                    || right_columns.iter().any(|x| x.name == col.name)
-                {
+                let identity = state.column_identity(&col)?;
+                if key_identities.contains(&identity) {
+                    if !seen_keys.insert((col.relation.clone(), identity.clone())) {
+                        return Ok(None);
+                    }
                     let info = state.get_field_info(col.name())?.clone();
                     let field_id = state.register_hidden_field_name(info.name());
+                    state.set_column_identity(&field_id, identity.name.clone());
+                    state.set_using_key_qualifier(&field_id, identity.relation.clone());
                     let qualifier = col.relation.clone();
-                    Ok(Expr::Column(col).alias_qualified(qualifier, field_id))
+                    Ok(Some(Expr::Column(col).alias_qualified(qualifier, field_id)))
                 } else {
-                    Ok(Expr::Column(col))
+                    Ok(Some(Expr::Column(col)))
                 }
             })
-            .collect::<PlanResult<Vec<_>>>()?;
+            .collect::<PlanResult<Vec<_>>>()?
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>();
         let builder = match join_type {
             JoinType::Inner | JoinType::Left | JoinType::Right => {
                 let uses_right = matches!(join_type, JoinType::Right);
@@ -221,10 +238,14 @@ impl PlanResolver<'_> {
                             .relation
                             .clone()
                             .or_else(|| state.using_key_qualifier(column.name()).cloned());
+                        let identity = state.column_identity(&column)?;
                         let field_id = state.register_field_name(name);
+                        state.set_column_identity(&field_id, identity.name);
                         state.set_using_key_qualifier(&field_id, qualifier);
-                        Expr::Column(column).alias(field_id)
+                        Ok(Expr::Column(column).alias(field_id))
                     })
+                    .collect::<PlanResult<Vec<_>>>()?
+                    .into_iter()
                     .chain(hidden_columns);
                 builder.project(projections)?
             }
@@ -266,10 +287,14 @@ impl PlanResolver<'_> {
                             .relation
                             .clone()
                             .or_else(|| state.using_key_qualifier(col.name()).cloned());
+                        let identity = state.column_identity(&col)?;
                         let field_id = state.register_field_name(name);
+                        state.set_column_identity(&field_id, identity.name);
                         state.set_using_key_qualifier(&field_id, qualifier);
-                        Expr::Column(col).alias(field_id)
+                        Ok(Expr::Column(col).alias(field_id))
                     })
+                    .collect::<PlanResult<Vec<_>>>()?
+                    .into_iter()
                     .chain(hidden_columns);
                 builder.project(projections)?
             }
