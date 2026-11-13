@@ -27,7 +27,7 @@ async fn distinct_percentiles_match_spark_values_and_executed_types() -> TestRes
         .iter()
         .filter(|case| case["spark_rejected"] != true)
         .collect::<Vec<_>>();
-    assert_eq!(cases.len(), 74);
+    assert_eq!(cases.len(), 112);
     assert_eq!(references.len() - 1 - cases.len(), 14);
     let mut differences = Vec::new();
     for partitions in [1, 3] {

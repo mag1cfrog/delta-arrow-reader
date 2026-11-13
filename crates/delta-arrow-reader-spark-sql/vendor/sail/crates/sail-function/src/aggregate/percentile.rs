@@ -313,7 +313,7 @@ impl Accumulator for NumericPercentileAccumulator {
                 self.calculate_percentile(&counts, self.percentiles[0]),
             ));
         }
-        if self.total_count == 0 {
+        if self.total_count == 0 || self.percentiles.is_empty() {
             return Ok(ScalarValue::new_null_list(DataType::Float64, true, 1));
         }
         let results: Vec<_> = self
@@ -1609,6 +1609,37 @@ mod numeric_frequency_tests {
         assert_eq!(first.evaluate()?, ScalarValue::Float64(Some(9.)));
         first.retract_batch(&second_rows)?;
         assert_eq!(first.evaluate()?, ScalarValue::Float64(None));
+        Ok(())
+    }
+
+    #[test]
+    fn empty_probabilities_preserve_weighted_state_and_validation() -> Result<()> {
+        let mut accumulator = NumericPercentileAccumulator::with_percentiles(vec![], true);
+        let null = ScalarValue::new_null_list(DataType::Float64, true, 1);
+        assert_eq!(accumulator.evaluate()?, null);
+        let rows = inputs(vec![Some(1.), Some(9.)], vec![Some(2), Some(3)]);
+        accumulator.update_batch(&rows)?;
+        assert_eq!(accumulator.total_count, 5);
+        assert_eq!(accumulator.evaluate()?, null);
+        let mut merged = NumericPercentileAccumulator::with_percentiles(vec![], true);
+        merged.merge_batch(
+            &accumulator
+                .state()?
+                .iter()
+                .map(|state| state.to_array())
+                .collect::<Result<Vec<_>>>()?,
+        )?;
+        assert_eq!(merged.total_count, 5);
+        assert_eq!(merged.evaluate()?, null);
+        merged.retract_batch(&rows)?;
+        assert_eq!(merged.total_count, 0);
+        assert_eq!(merged.evaluate()?, null);
+        assert!(
+            merged
+                .update_batch(&inputs(vec![Some(1.)], vec![Some(-1)]))
+                .is_err()
+        );
+        assert_eq!(merged.total_count, 0);
         Ok(())
     }
 
