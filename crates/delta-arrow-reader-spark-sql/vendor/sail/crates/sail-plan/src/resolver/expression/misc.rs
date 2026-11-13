@@ -278,6 +278,7 @@ impl PlanResolver<'_> {
                 true,
                 &mut discarded_display,
             )?;
+            let expr = Self::guard_nested_parent_nulls(expr, schema)?;
             return Ok(NamedExpr::new(vec![name], expr));
         }
         let expr = match data_type {

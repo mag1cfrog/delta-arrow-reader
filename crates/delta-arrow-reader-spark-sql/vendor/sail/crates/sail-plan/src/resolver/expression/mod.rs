@@ -9,6 +9,7 @@ use datafusion_functions::core::getfield::GetFieldFunc;
 use sail_common::spec;
 use sail_common_datafusion::utils::items::ItemTaker;
 use sail_function::scalar::explode::Explode;
+use sail_function::scalar::get_field_with_parent_nulls::GetFieldWithParentNulls;
 use sail_function::scalar::multi_expr::MultiExpr;
 
 use crate::error::{PlanError, PlanResult};
@@ -236,7 +237,10 @@ fn inherits_alias_metadata(expression: &expr::Expr) -> bool {
         | expr::Expr::Column(_)
         | expr::Expr::OuterReferenceColumn(..)
         | expr::Expr::Literal(..) => true,
-        expr::Expr::ScalarFunction(function) => function.func.inner().is::<GetFieldFunc>(),
+        expr::Expr::ScalarFunction(function) => {
+            function.func.inner().is::<GetFieldFunc>()
+                || function.func.inner().is::<GetFieldWithParentNulls>()
+        }
         _ => false,
     }
 }

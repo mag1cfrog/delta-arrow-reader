@@ -6,6 +6,7 @@ pub mod csv;
 pub mod datetime;
 pub mod explode;
 pub mod geo;
+pub mod get_field_with_parent_nulls;
 pub mod hash;
 pub mod json;
 pub mod map;
