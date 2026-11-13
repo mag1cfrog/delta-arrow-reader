@@ -20,22 +20,24 @@ use sail_logical_plan::monotonic_id::{MonotonicIdNode, MonotonicIdPurpose};
 use crate::expression_errors::SparkSqlExpressionSemantics;
 
 mod aggregate;
+mod exists;
 mod limit;
 mod rows;
 
 use aggregate::lift_correlated_scalar_aggregate_inputs;
+use exists::inline_projected_outer_exists;
 use rows::{
     apply_row_steps, has_correlated_self_equality, move_correlated_inner_join_predicates,
     split_correlated_rows, split_scalar_filter_predicates,
 };
 
-/// Lower Spark scalar queries over real inner rows before DataFusion validates them.
+/// Bind projected-outer EXISTS and lower Spark scalars before DataFusion validates them.
 #[derive(Debug)]
-pub struct LowerSparkCorrelatedScalars;
+pub struct LowerSparkCorrelatedSubqueries;
 
-impl AnalyzerRule for LowerSparkCorrelatedScalars {
+impl AnalyzerRule for LowerSparkCorrelatedSubqueries {
     fn name(&self) -> &str {
-        "lower_spark_correlated_scalars"
+        "lower_spark_correlated_subqueries"
     }
 
     fn analyze(&self, plan: LogicalPlan, config: &ConfigOptions) -> Result<LogicalPlan> {
@@ -47,7 +49,7 @@ impl AnalyzerRule for LowerSparkCorrelatedScalars {
             return Ok(plan);
         }
         lower_correlated_scalar_subqueries(
-            lift_correlated_scalar_aggregate_inputs(plan)?,
+            lift_correlated_scalar_aggregate_inputs(inline_projected_outer_exists(plan)?)?,
             &AliasGenerator::new(),
             None,
         )
@@ -132,51 +134,83 @@ fn lower_expression(
     })
 }
 
-fn scalar_value_input(mut value: Expr, mut input: &LogicalPlan) -> Result<(Expr, &LogicalPlan)> {
-    // Rebuild the selected expression through leading projections and aliases.
-    // Leave a shared volatile output in its projection so it still runs once.
-    loop {
-        // Nested scalars capture these scopes; expression substitution cannot rebind them.
-        if value.contains_scalar_subquery() {
-            break;
-        }
-        match input {
-            LogicalPlan::Projection(project) => {
-                let mut volatile = BTreeSet::new();
-                let mut shared_volatile = false;
-                let rewritten = value
-                    .clone()
-                    .transform_up(|expr| {
-                        let Expr::Column(column) = &expr else {
-                            return Ok(Transformed::no(expr));
-                        };
-                        let index = project.schema.index_of_column(column)?;
-                        let source = &project.expr[index];
-                        shared_volatile |= source.is_volatile() && !volatile.insert(index);
-                        Ok(Transformed::yes(source.clone().unalias()))
-                    })?
-                    .data;
-                if shared_volatile {
-                    break;
-                }
-                value = rewritten;
-                input = &project.input;
+fn contains_subquery(expr: &Expr) -> Result<bool> {
+    expr.exists(|expr| {
+        Ok(matches!(
+            expr,
+            Expr::ScalarSubquery(_) | Expr::Exists(_) | Expr::InSubquery(_)
+        ))
+    })
+}
+
+fn is_projection_leaf(mut expr: &Expr) -> bool {
+    while let Expr::Alias(alias) = expr {
+        expr = &alias.expr;
+    }
+    matches!(
+        expr,
+        Expr::Column(_) | Expr::OuterReferenceColumn(_, _) | Expr::Literal(_, _)
+    )
+}
+
+fn inline_projection_or_alias(
+    value: Expr,
+    input: &LogicalPlan,
+) -> Result<Option<(Expr, &LogicalPlan)>> {
+    // Nested queries capture these scopes; expression substitution cannot rebind them.
+    if contains_subquery(&value)? {
+        return Ok(None);
+    }
+    match input {
+        LogicalPlan::Projection(project) => {
+            let mut computations = BTreeSet::new();
+            let mut shared_computation = false;
+            let rewritten = value
+                .transform_up(|expr| {
+                    let Expr::Column(column) = &expr else {
+                        return Ok(Transformed::no(expr));
+                    };
+                    let index = project.schema.index_of_column(column)?;
+                    let source = &project.expr[index];
+                    shared_computation |=
+                        !is_projection_leaf(source) && !computations.insert(index);
+                    if shared_computation {
+                        return Ok(Transformed::no(expr));
+                    }
+                    Ok(Transformed::yes(source.clone().unalias()))
+                })?
+                .data;
+            // Shared producers stay in their projection, avoiding duplicated work and tree growth.
+            if shared_computation {
+                Ok(None)
+            } else {
+                Ok(Some((rewritten, project.input.as_ref())))
             }
-            LogicalPlan::SubqueryAlias(alias) => {
-                value = value
-                    .transform_up(|expr| {
-                        let Expr::Column(column) = &expr else {
-                            return Ok(Transformed::no(expr));
-                        };
-                        let index = alias.schema.index_of_column(column)?;
-                        let column = alias.input.schema().qualified_field(index).into();
-                        Ok(Transformed::yes(Expr::Column(column)))
-                    })?
-                    .data;
-                input = &alias.input;
-            }
-            _ => break,
         }
+        LogicalPlan::SubqueryAlias(alias) => {
+            let rewritten = value
+                .transform_up(|expr| {
+                    let Expr::Column(column) = &expr else {
+                        return Ok(Transformed::no(expr));
+                    };
+                    let index = alias.schema.index_of_column(column)?;
+                    let column = alias.input.schema().qualified_field(index).into();
+                    Ok(Transformed::yes(Expr::Column(column)))
+                })?
+                .data;
+            Ok(Some((rewritten, alias.input.as_ref())))
+        }
+        _ => Ok(None),
+    }
+}
+
+fn inline_projection_bindings(
+    mut value: Expr,
+    mut input: &LogicalPlan,
+) -> Result<(Expr, &LogicalPlan)> {
+    while let Some((rebound, remaining)) = inline_projection_or_alias(value.clone(), input)? {
+        value = rebound;
+        input = remaining;
     }
     Ok((value, input))
 }
@@ -227,7 +261,7 @@ fn lower_scalar(
     let output = Expr::Column(schema.qualified_field(0).into());
     let inner = move_correlated_inner_join_predicates(subquery.subquery.as_ref().clone())?;
     let inner = split_scalar_filter_predicates(inner)?;
-    let (value, input) = scalar_value_input(output, &inner)?;
+    let (value, input) = inline_projection_bindings(output, &inner)?;
     // Nested aggregates must consume this level's matches before scalar grouping.
     if outer_match_marker.is_none()
         && let LogicalPlan::Aggregate(aggregate) = input
