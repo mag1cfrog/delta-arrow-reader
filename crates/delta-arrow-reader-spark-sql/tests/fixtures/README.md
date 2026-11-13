@@ -5,6 +5,17 @@ including its unresolved Spark differences. `import_accepted_runtime.py`
 reconstructs it from the source archive named in `accepted-runtime.json`.
 Importing the fixture does not run Spark or certify compatibility.
 
+## NULL STRUCT parents
+
+[`null-struct-parent/`](null-struct-parent/README.md) records independent Spark
+4.2.0 rows and executed types for field access through NULL STRUCT parents,
+including nested fields, predicates, aliases, outer references, wildcards and
+ARRAY/lambda consumers in both ANSI modes. The replay compares logical Arrow
+inputs and valid storage with hidden non-NULL children against the same Spark
+expectations. It checks single evaluation of effectful parents, linear nested
+access growth, sliced dictionary children, validation and unchanged native SQL.
+See the fixture README for source-only capture and focused replay commands.
+
 ## LATERAL VIEW filters
 
 [`lateral-view-filters/`](lateral-view-filters/README.md) records independent

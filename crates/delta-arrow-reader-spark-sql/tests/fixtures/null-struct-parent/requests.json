@@ -1,0 +1,780 @@
+{
+  "issue": "1318",
+  "expected_record_count": 52,
+  "corpora": [
+    {
+      "corpus": "null-struct-parent",
+      "source": "Logical STRUCT values; hidden physical children are added only in the Arrow replay without changing visible input.",
+      "metadata": {
+        "spark_version": "4.2.0",
+        "timezone": "UTC",
+        "inputs": [
+          {
+            "name": "parents",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "code",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "label",
+                        "type": "string",
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "numbers",
+                        "type": {
+                          "type": "array",
+                          "elementType": "integer",
+                          "containsNull": true
+                        },
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "meta",
+                        "type": {
+                          "type": "struct",
+                          "fields": [
+                            {
+                              "name": "tag",
+                              "type": "string",
+                              "nullable": true,
+                              "metadata": {}
+                            },
+                            {
+                              "name": "value",
+                              "type": "integer",
+                              "nullable": true,
+                              "metadata": {}
+                            }
+                          ]
+                        },
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "values",
+                        "type": {
+                          "type": "map",
+                          "keyType": "string",
+                          "valueType": "integer",
+                          "valueContainsNull": true
+                        },
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "nothing",
+                        "type": "void",
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "records",
+                  "type": {
+                    "type": "array",
+                    "elementType": {
+                      "type": "struct",
+                      "fields": [
+                        {
+                          "name": "code",
+                          "type": "integer",
+                          "nullable": true,
+                          "metadata": {}
+                        },
+                        {
+                          "name": "label",
+                          "type": "string",
+                          "nullable": true,
+                          "metadata": {}
+                        },
+                        {
+                          "name": "meta",
+                          "type": {
+                            "type": "struct",
+                            "fields": [
+                              {
+                                "name": "tag",
+                                "type": "string",
+                                "nullable": true,
+                                "metadata": {}
+                              },
+                              {
+                                "name": "value",
+                                "type": "integer",
+                                "nullable": true,
+                                "metadata": {}
+                              }
+                            ]
+                          },
+                          "nullable": true,
+                          "metadata": {}
+                        }
+                      ]
+                    },
+                    "containsNull": true
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                [
+                  "1",
+                  "one",
+                  [
+                    "7",
+                    null
+                  ],
+                  [
+                    "a",
+                    "2"
+                  ],
+                  [
+                    [
+                      "a",
+                      "1"
+                    ],
+                    [
+                      "b",
+                      null
+                    ]
+                  ],
+                  null
+                ],
+                [
+                  [
+                    "1",
+                    "x",
+                    [
+                      "tag",
+                      "5"
+                    ]
+                  ],
+                  null,
+                  [
+                    "1",
+                    "x",
+                    [
+                      "tag",
+                      "5"
+                    ]
+                  ]
+                ]
+              ],
+              [
+                "1",
+                null,
+                null
+              ],
+              [
+                "2",
+                [
+                  null,
+                  null,
+                  [],
+                  null,
+                  [],
+                  null
+                ],
+                [
+                  null,
+                  [
+                    null,
+                    null,
+                    null
+                  ]
+                ]
+              ],
+              [
+                "3",
+                [
+                  "3",
+                  "",
+                  null,
+                  [
+                    null,
+                    null
+                  ],
+                  null,
+                  null
+                ],
+                []
+              ],
+              [
+                "0",
+                [
+                  "1",
+                  "one",
+                  [
+                    "7",
+                    null
+                  ],
+                  [
+                    "a",
+                    "2"
+                  ],
+                  [
+                    [
+                      "a",
+                      "1"
+                    ],
+                    [
+                      "b",
+                      null
+                    ]
+                  ],
+                  null
+                ],
+                [
+                  [
+                    "1",
+                    "x",
+                    [
+                      "tag",
+                      "5"
+                    ]
+                  ],
+                  null,
+                  [
+                    "1",
+                    "x",
+                    [
+                      "tag",
+                      "5"
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          },
+          {
+            "name": "empty_parents",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "code",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "label",
+                        "type": "string",
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "numbers",
+                        "type": {
+                          "type": "array",
+                          "elementType": "integer",
+                          "containsNull": true
+                        },
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "meta",
+                        "type": {
+                          "type": "struct",
+                          "fields": [
+                            {
+                              "name": "tag",
+                              "type": "string",
+                              "nullable": true,
+                              "metadata": {}
+                            },
+                            {
+                              "name": "value",
+                              "type": "integer",
+                              "nullable": true,
+                              "metadata": {}
+                            }
+                          ]
+                        },
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "values",
+                        "type": {
+                          "type": "map",
+                          "keyType": "string",
+                          "valueType": "integer",
+                          "valueContainsNull": true
+                        },
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "nothing",
+                        "type": "void",
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "records",
+                  "type": {
+                    "type": "array",
+                    "elementType": {
+                      "type": "struct",
+                      "fields": [
+                        {
+                          "name": "code",
+                          "type": "integer",
+                          "nullable": true,
+                          "metadata": {}
+                        },
+                        {
+                          "name": "label",
+                          "type": "string",
+                          "nullable": true,
+                          "metadata": {}
+                        },
+                        {
+                          "name": "meta",
+                          "type": {
+                            "type": "struct",
+                            "fields": [
+                              {
+                                "name": "tag",
+                                "type": "string",
+                                "nullable": true,
+                                "metadata": {}
+                              },
+                              {
+                                "name": "value",
+                                "type": "integer",
+                                "nullable": true,
+                                "metadata": {}
+                              }
+                            ]
+                          },
+                          "nullable": true,
+                          "metadata": {}
+                        }
+                      ]
+                    },
+                    "containsNull": true
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": []
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "null-struct-parent",
+          "id": "visible_parent",
+          "sql": "SELECT id, s, records FROM parents",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "dotted_children",
+          "sql": "SELECT id, s.code, s.label, s.numbers, s.meta, s.values, s.nothing FROM parents ORDER BY id",
+          "ordered": true,
+          "ansi": false
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "bracket_children",
+          "sql": "SELECT id, s['code'], s['label'], s['numbers'], s['meta'], s['values'], s['nothing'] FROM parents ORDER BY id",
+          "ordered": true,
+          "ansi": false
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "nested_dots",
+          "sql": "SELECT id, s.meta.tag, s.meta.value FROM parents",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "nested_brackets",
+          "sql": "SELECT id, s['meta']['tag'], s['meta']['value'] FROM parents",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "mixed_paths",
+          "sql": "SELECT id, s['meta'].value, s.meta['tag'] FROM parents",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "null_parent_predicate",
+          "sql": "SELECT id FROM parents WHERE s.code IS NULL ORDER BY id",
+          "ordered": true,
+          "ansi": false
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "nonnull_child_predicate",
+          "sql": "SELECT id FROM parents WHERE s['code'] IS NOT NULL ORDER BY id",
+          "ordered": true,
+          "ansi": false
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "nested_null_predicate",
+          "sql": "SELECT id FROM parents WHERE s.meta.value IS NULL",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "derived_alias",
+          "sql": "SELECT id, details['meta'].value AS value, details.code AS code FROM (SELECT id, s AS details FROM parents) q",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "coalesce_consumer",
+          "sql": "SELECT id, coalesce(s.meta.value, -1) AS value FROM parents",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "group_consumer",
+          "sql": "SELECT s.code AS code, count(*) AS n FROM parents GROUP BY s.code ORDER BY code NULLS FIRST",
+          "ordered": true,
+          "ansi": false
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "wildcard",
+          "sql": "SELECT id, s.* FROM parents",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "nested_wildcard",
+          "sql": "SELECT id, s.meta.* FROM parents",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "function_star",
+          "sql": "SELECT id, struct(s.*) AS value FROM parents",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "star_except",
+          "sql": "SELECT * EXCEPT (s.code) FROM parents",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "outer_dots",
+          "sql": "SELECT id, (SELECT s.code) AS code, (SELECT s.meta.value) AS value FROM parents",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "outer_brackets",
+          "sql": "SELECT id, (SELECT s['code']) AS code, (SELECT s['meta']['value']) AS value FROM parents",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "array_fields",
+          "sql": "SELECT id, records.code, records.label, records.meta FROM parents",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "lambda_fields",
+          "sql": "SELECT id, transform(records, x -> x.code) AS codes, transform(records, x -> x['meta'].value) AS vals FROM parents",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "lambda_nested",
+          "sql": "SELECT id, transform(records, x -> array(x.code, x.meta.value)) AS values FROM parents",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "lambda_outer_capture",
+          "sql": "SELECT id, transform(records, x -> coalesce(x.code, s.code)) AS values FROM parents",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "lateral_consumer",
+          "sql": "SELECT id, item.code, item.meta.value FROM parents LATERAL VIEW OUTER explode(records) x AS item",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "array_element_consumer",
+          "sql": "SELECT id, records[0].code, records[0].meta.value FROM parents WHERE size(records) > 0",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "empty_provider",
+          "sql": "SELECT id, s.code, s.meta.value, records.code FROM empty_parents",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "constructed_struct",
+          "sql": "SELECT id, named_struct('code', id).code AS value FROM parents WHERE id = 0",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "visible_parent",
+          "sql": "SELECT id, s, records FROM parents",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "dotted_children",
+          "sql": "SELECT id, s.code, s.label, s.numbers, s.meta, s.values, s.nothing FROM parents ORDER BY id",
+          "ordered": true,
+          "ansi": true
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "bracket_children",
+          "sql": "SELECT id, s['code'], s['label'], s['numbers'], s['meta'], s['values'], s['nothing'] FROM parents ORDER BY id",
+          "ordered": true,
+          "ansi": true
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "nested_dots",
+          "sql": "SELECT id, s.meta.tag, s.meta.value FROM parents",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "nested_brackets",
+          "sql": "SELECT id, s['meta']['tag'], s['meta']['value'] FROM parents",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "mixed_paths",
+          "sql": "SELECT id, s['meta'].value, s.meta['tag'] FROM parents",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "null_parent_predicate",
+          "sql": "SELECT id FROM parents WHERE s.code IS NULL ORDER BY id",
+          "ordered": true,
+          "ansi": true
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "nonnull_child_predicate",
+          "sql": "SELECT id FROM parents WHERE s['code'] IS NOT NULL ORDER BY id",
+          "ordered": true,
+          "ansi": true
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "nested_null_predicate",
+          "sql": "SELECT id FROM parents WHERE s.meta.value IS NULL",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "derived_alias",
+          "sql": "SELECT id, details['meta'].value AS value, details.code AS code FROM (SELECT id, s AS details FROM parents) q",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "coalesce_consumer",
+          "sql": "SELECT id, coalesce(s.meta.value, -1) AS value FROM parents",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "group_consumer",
+          "sql": "SELECT s.code AS code, count(*) AS n FROM parents GROUP BY s.code ORDER BY code NULLS FIRST",
+          "ordered": true,
+          "ansi": true
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "wildcard",
+          "sql": "SELECT id, s.* FROM parents",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "nested_wildcard",
+          "sql": "SELECT id, s.meta.* FROM parents",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "function_star",
+          "sql": "SELECT id, struct(s.*) AS value FROM parents",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "star_except",
+          "sql": "SELECT * EXCEPT (s.code) FROM parents",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "outer_dots",
+          "sql": "SELECT id, (SELECT s.code) AS code, (SELECT s.meta.value) AS value FROM parents",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "outer_brackets",
+          "sql": "SELECT id, (SELECT s['code']) AS code, (SELECT s['meta']['value']) AS value FROM parents",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "array_fields",
+          "sql": "SELECT id, records.code, records.label, records.meta FROM parents",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "lambda_fields",
+          "sql": "SELECT id, transform(records, x -> x.code) AS codes, transform(records, x -> x['meta'].value) AS vals FROM parents",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "lambda_nested",
+          "sql": "SELECT id, transform(records, x -> array(x.code, x.meta.value)) AS values FROM parents",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "lambda_outer_capture",
+          "sql": "SELECT id, transform(records, x -> coalesce(x.code, s.code)) AS values FROM parents",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "lateral_consumer",
+          "sql": "SELECT id, item.code, item.meta.value FROM parents LATERAL VIEW OUTER explode(records) x AS item",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "array_element_consumer",
+          "sql": "SELECT id, records[0].code, records[0].meta.value FROM parents WHERE size(records) > 0",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "empty_provider",
+          "sql": "SELECT id, s.code, s.meta.value, records.code FROM empty_parents",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "null-struct-parent",
+          "id": "constructed_struct",
+          "sql": "SELECT id, named_struct('code', id).code AS value FROM parents WHERE id = 0",
+          "ordered": false,
+          "ansi": true
+        }
+      ]
+    }
+  ]
+}

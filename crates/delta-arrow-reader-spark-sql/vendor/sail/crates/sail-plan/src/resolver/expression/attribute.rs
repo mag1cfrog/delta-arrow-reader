@@ -3,13 +3,15 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use arrow::datatypes::{DataType, Field, FieldRef, Fields};
+use datafusion_common::tree_node::{Transformed, TreeNode};
 use datafusion_common::{Column, DFSchemaRef, ScalarValue, TableReference};
-use datafusion_expr::expr::{Case, LambdaVariable, ScalarFunction};
+use datafusion_expr::expr::{LambdaVariable, ScalarFunction};
 use datafusion_expr::{ExprSchemable, ScalarUDF, col, expr, lit};
 use datafusion_functions::core::get_field;
 use datafusion_functions::core::getfield::GetFieldFunc;
 use sail_common::spec;
 use sail_function::scalar::array_struct_field::ArrayStructField;
+use sail_function::scalar::get_field_with_parent_nulls::GetFieldWithParentNulls;
 
 use crate::error::{PlanError, PlanResult};
 use crate::function::common::clear_inherited_field_metadata;
@@ -65,6 +67,7 @@ impl PlanResolver<'_> {
                     expression_name.push_str(part.as_ref());
                 }
             }
+            expr = Self::guard_nested_parent_nulls(expr, schema)?;
             return Ok(
                 NamedExpr::new(vec![projection_name], expr).with_expression_name(expression_name)
             );
@@ -204,7 +207,7 @@ impl PlanResolver<'_> {
             true,
             &mut expression_name,
         )?;
-        let expr = if is_outer && !inner.is_empty() {
+        let expr = if !inner.is_empty() {
             Self::guard_nested_parent_nulls(expr, schema)?
         } else {
             expr
@@ -222,32 +225,19 @@ impl PlanResolver<'_> {
         expr: expr::Expr,
         schema: &DFSchemaRef,
     ) -> PlanResult<expr::Expr> {
-        // Arrow can retain child values under a NULL parent. Test each parent
-        // before reading deeper children from the extraction.
-        let mut guards = Vec::new();
-        let mut access = &expr;
-        while let expr::Expr::ScalarFunction(function) = access
-            && let Some(base) = function.args.first()
-        {
-            if function.func.inner().is::<GetFieldFunc>() && base.nullable(schema)? {
-                guards.push(base.clone().is_null());
-            }
-            access = base;
-        }
-        if guards.is_empty() {
-            return Ok(expr);
-        }
-        let null = lit(ScalarValue::try_new_null(&expr.get_type(schema)?)?);
-        let when_then = guards
-            .into_iter()
-            .rev()
-            .map(|guard| (Box::new(guard), Box::new(null.clone())))
-            .collect();
-        Ok(expr::Expr::Case(Case::new(
-            None,
-            when_then,
-            Some(Box::new(expr)),
-        )))
+        Ok(expr
+            .transform_up(|mut expr| -> datafusion_common::Result<_> {
+                if let expr::Expr::ScalarFunction(function) = &mut expr
+                    && function.func.inner().is::<GetFieldFunc>()
+                    && let Some(base) = function.args.first()
+                    && base.nullable(schema)?
+                {
+                    function.func = Arc::new(ScalarUDF::from(GetFieldWithParentNulls::new()));
+                    return Ok(Transformed::yes(expr));
+                }
+                Ok(Transformed::no(expr))
+            })?
+            .data)
     }
 
     fn resolve_aggregate_field(
@@ -720,7 +710,8 @@ mod tests {
                 Some(
                     NamedExpr::new(
                         vec!["id".into()],
-                        get_field().call(vec![col((Some(&qualifier), &nested)), lit("id")]),
+                        ScalarUDF::from(GetFieldWithParentNulls::new())
+                            .call(vec![col((Some(&qualifier), &nested)), lit("id")]),
                     )
                     .with_expression_name("p.id".into()),
                 ),
@@ -739,7 +730,8 @@ mod tests {
                 Some(
                     NamedExpr::new(
                         vec!["id".into()],
-                        get_field().call(vec![col((Some(&qualifier), &nested)), lit("id")]),
+                        ScalarUDF::from(GetFieldWithParentNulls::new())
+                            .call(vec![col((Some(&qualifier), &nested)), lit("id")]),
                     )
                     .with_expression_name("p.id".into()),
                 ),
@@ -959,7 +951,7 @@ mod tests {
             } else {
                 assert_eq!(
                     resolved?.expr,
-                    get_field().call(vec![
+                    ScalarUDF::from(GetFieldWithParentNulls::new()).call(vec![
                         expr::Expr::LambdaVariable(LambdaVariable::new("x".into(), Some(field))),
                         lit("Item"),
                     ]),
@@ -972,7 +964,7 @@ mod tests {
             resolver
                 .resolve_expression_attribute(["x", "item"].into(), false, &schema, scope.state(),)?
                 .expr,
-            get_field().call(vec![
+            ScalarUDF::from(GetFieldWithParentNulls::new()).call(vec![
                 expr::Expr::LambdaVariable(LambdaVariable::new("x".into(), None)),
                 lit("item"),
             ]),
