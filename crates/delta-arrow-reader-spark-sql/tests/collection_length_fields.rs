@@ -16,10 +16,6 @@ use sail_plan::expression_errors::SparkSqlExpressionSemantics;
 use serde_json::{Value, json};
 
 #[path = "support/spark_inputs.rs"]
-#[expect(
-    dead_code,
-    reason = "Explicit one-partition registration leaves the default two-partition wrapper unused."
-)]
 mod spark_inputs;
 #[path = "support/spark_results.rs"]
 mod spark_results;

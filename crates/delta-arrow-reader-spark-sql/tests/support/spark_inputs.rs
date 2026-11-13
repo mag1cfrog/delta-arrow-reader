@@ -319,6 +319,10 @@ fn register_recorded_inputs_with_slices_impl(
     Ok(())
 }
 
+#[allow(
+    dead_code,
+    reason = "Integration tests select individual shared input registrations."
+)]
 pub(crate) fn register_recorded_inputs(
     session: &SessionContext,
     metadata: &Value,

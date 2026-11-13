@@ -1,0 +1,432 @@
+{
+  "spark_version": "4.2.0",
+  "timezone": "UTC",
+  "inputs": [
+    {
+      "name": "samples",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "g",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "h",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "p",
+            "type": "boolean",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "0",
+          "10",
+          null,
+          null,
+          null
+        ],
+        [
+          "1",
+          "0",
+          "10",
+          null,
+          "10",
+          "true"
+        ],
+        [
+          "2",
+          "0",
+          "10",
+          "1",
+          "10",
+          "true"
+        ],
+        [
+          "3",
+          "0",
+          "20",
+          "1",
+          "20",
+          "false"
+        ],
+        [
+          "4",
+          "0",
+          "20",
+          "2",
+          null,
+          "true"
+        ],
+        [
+          "5",
+          "0",
+          "20",
+          "4",
+          "40",
+          "false"
+        ],
+        [
+          "6",
+          "1",
+          "10",
+          null,
+          null,
+          null
+        ],
+        [
+          "7",
+          "1",
+          "10",
+          "1",
+          null,
+          "false"
+        ],
+        [
+          "8",
+          "1",
+          "20",
+          "2",
+          null,
+          "true"
+        ],
+        [
+          "9",
+          "2",
+          "10",
+          "1",
+          "-4",
+          "true"
+        ],
+        [
+          "10",
+          "2",
+          "10",
+          "1",
+          "-4",
+          null
+        ],
+        [
+          "11",
+          "2",
+          "20",
+          "3",
+          "4",
+          "false"
+        ],
+        [
+          "12",
+          null,
+          "10",
+          null,
+          "8",
+          "true"
+        ],
+        [
+          "13",
+          null,
+          null,
+          "2",
+          "8",
+          "false"
+        ],
+        [
+          "14",
+          null,
+          null,
+          "2",
+          "16",
+          "true"
+        ],
+        [
+          "15",
+          null,
+          "20",
+          "5",
+          null,
+          null
+        ]
+      ]
+    },
+    {
+      "name": "empty_samples",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "g",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "h",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "p",
+            "type": "boolean",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": []
+    }
+  ],
+  "cases": [
+    {
+      "id": "aggregate_mixed",
+      "sql": "SELECT COUNT(*) AS n,COUNT(v) AS nonnull,SUM(v) AS total,AVG(v) AS mean,COUNT_IF(p) AS kept,COUNT(DISTINCT v) AS unique_values,SUM(DISTINCT v) AS unique_total,AVG(DISTINCT v) AS unique_mean FROM samples",
+      "ordered": true
+    },
+    {
+      "id": "grouped_mixed",
+      "sql": "SELECT g,COUNT(*) AS n,COUNT(v) AS nonnull,SUM(v) AS total,AVG(v) AS mean,COUNT_IF(p) AS kept,COUNT(DISTINCT v) AS unique_values,SUM(DISTINCT v) AS unique_total,AVG(DISTINCT v) AS unique_mean FROM samples GROUP BY g ORDER BY g NULLS FIRST",
+      "ordered": true
+    },
+    {
+      "id": "aggregate_empty",
+      "sql": "SELECT COUNT(*) AS n,COUNT(v) AS nonnull,SUM(v) AS total,AVG(v) AS mean,COUNT_IF(p) AS kept,COUNT(DISTINCT v) AS unique_values,SUM(DISTINCT v) AS unique_total,AVG(DISTINCT v) AS unique_mean FROM empty_samples",
+      "ordered": true
+    },
+    {
+      "id": "grouped_empty",
+      "sql": "SELECT g,COUNT(*) AS n,COUNT(v) AS nonnull,SUM(v) AS total,AVG(v) AS mean,COUNT_IF(p) AS kept,COUNT(DISTINCT v) AS unique_values,SUM(DISTINCT v) AS unique_total,AVG(DISTINCT v) AS unique_mean FROM empty_samples GROUP BY g ORDER BY g NULLS FIRST",
+      "ordered": true
+    },
+    {
+      "id": "aggregate_all_null",
+      "sql": "SELECT COUNT(*) AS n,COUNT(v) AS nonnull,SUM(v) AS total,AVG(v) AS mean,COUNT_IF(p) AS kept,COUNT(DISTINCT v) AS unique_values,SUM(DISTINCT v) AS unique_total,AVG(DISTINCT v) AS unique_mean FROM samples WHERE g=1",
+      "ordered": true
+    },
+    {
+      "id": "grouped_all_null",
+      "sql": "SELECT g,COUNT(*) AS n,COUNT(v) AS nonnull,SUM(v) AS total,AVG(v) AS mean,COUNT_IF(p) AS kept,COUNT(DISTINCT v) AS unique_values,SUM(DISTINCT v) AS unique_total,AVG(DISTINCT v) AS unique_mean FROM samples WHERE g=1 GROUP BY g ORDER BY g NULLS FIRST",
+      "ordered": true
+    },
+    {
+      "id": "filtered_aggregate",
+      "sql": "SELECT COUNT(*) FILTER(WHERE p) AS n,COUNT(v) FILTER(WHERE p) AS nonnull,SUM(v) FILTER(WHERE p) AS total,AVG(v) FILTER(WHERE p) AS mean,COUNT_IF(p) FILTER(WHERE v IS NULL) AS kept,COUNT(DISTINCT v) FILTER(WHERE p) AS unique_values,SUM(DISTINCT v) FILTER(WHERE p) AS unique_total,AVG(DISTINCT v) FILTER(WHERE p) AS unique_mean,COUNT_IF(DISTINCT p) AS unique_kept FROM samples",
+      "ordered": true
+    },
+    {
+      "id": "filtered_grouped",
+      "sql": "SELECT g,COUNT(*) FILTER(WHERE p) AS n,COUNT(v) FILTER(WHERE p) AS nonnull,SUM(v) FILTER(WHERE p) AS total,AVG(v) FILTER(WHERE p) AS mean,COUNT_IF(p) FILTER(WHERE v IS NULL) AS kept,COUNT(DISTINCT v) FILTER(WHERE p) AS unique_values,SUM(DISTINCT v) FILTER(WHERE p) AS unique_total,AVG(DISTINCT v) FILTER(WHERE p) AS unique_mean,COUNT_IF(DISTINCT p) AS unique_kept FROM samples GROUP BY g ORDER BY g NULLS FIRST",
+      "ordered": true
+    },
+    {
+      "id": "having_filtered_distinct",
+      "sql": "SELECT g,COUNT(DISTINCT v) FILTER(WHERE p) AS n,SUM(DISTINCT v) FILTER(WHERE p) AS total FROM samples GROUP BY g HAVING COUNT(DISTINCT v) FILTER(WHERE p)>0 ORDER BY total DESC,g NULLS FIRST",
+      "ordered": true
+    },
+    {
+      "id": "order_hidden_aggregate",
+      "sql": "SELECT g,COUNT(v) AS n FROM samples GROUP BY g ORDER BY SUM(v) DESC NULLS LAST,g NULLS FIRST",
+      "ordered": true
+    },
+    {
+      "id": "grouping_sets",
+      "sql": "SELECT g,h,GROUPING(g) AS gg,GROUPING(h) AS gh,GROUPING_ID(g,h) AS gid,COUNT(*) AS n,COUNT(v) AS nonnull,SUM(v) AS total,COUNT(DISTINCT v) FILTER(WHERE p) AS unique_kept FROM samples GROUP BY GROUPING SETS ((g,h),(g),(h),())",
+      "ordered": false
+    },
+    {
+      "id": "rollup",
+      "sql": "SELECT g,h,GROUPING(g) AS gg,GROUPING(h) AS gh,GROUPING_ID(g,h) AS gid,COUNT(*) AS n,COUNT(v) AS nonnull,SUM(v) AS total,COUNT(DISTINCT v) FILTER(WHERE p) AS unique_kept FROM samples GROUP BY ROLLUP(g,h)",
+      "ordered": false
+    },
+    {
+      "id": "cube",
+      "sql": "SELECT g,h,GROUPING(g) AS gg,GROUPING(h) AS gh,GROUPING_ID(g,h) AS gid,COUNT(*) AS n,COUNT(v) AS nonnull,SUM(v) AS total,COUNT(DISTINCT v) FILTER(WHERE p) AS unique_kept FROM samples GROUP BY CUBE(g,h)",
+      "ordered": false
+    },
+    {
+      "id": "duplicate_sets",
+      "sql": "SELECT g,h,GROUPING(g) AS gg,GROUPING(h) AS gh,GROUPING_ID(g,h) AS gid,COUNT(*) AS n,COUNT(v) AS nonnull,SUM(v) AS total,COUNT(DISTINCT v) FILTER(WHERE p) AS unique_kept FROM samples GROUP BY GROUPING SETS ((g,h),(g),(g,h),(),(h),())",
+      "ordered": false
+    },
+    {
+      "id": "offset_rank_asc_default",
+      "sql": "SELECT id,g,k,ROW_NUMBER() OVER(PARTITION BY g ORDER BY k,id) AS row_number,RANK() OVER(PARTITION BY g ORDER BY k) AS rank,LAG(v) OVER(PARTITION BY g ORDER BY k,id) AS previous,LEAD(v,2,-99) OVER(PARTITION BY g ORDER BY k,id) AS next,LAG(v,2,CAST(NULL AS INT)) OVER(PARTITION BY g ORDER BY k,id) AS previous_two FROM samples ORDER BY id",
+      "ordered": true
+    },
+    {
+      "id": "range_asc_default",
+      "sql": "SELECT id,k,COUNT(*) OVER(PARTITION BY g ORDER BY k RANGE BETWEEN 1 PRECEDING AND 2 FOLLOWING) AS n,COUNT(v) OVER(PARTITION BY g ORDER BY k RANGE BETWEEN 1 PRECEDING AND 2 FOLLOWING) AS nonnull,SUM(v) OVER(PARTITION BY g ORDER BY k RANGE BETWEEN 1 PRECEDING AND 2 FOLLOWING) AS total,AVG(v) OVER(PARTITION BY g ORDER BY k RANGE BETWEEN 1 PRECEDING AND 2 FOLLOWING) AS mean FROM samples ORDER BY id",
+      "ordered": true
+    },
+    {
+      "id": "offset_rank_desc_default",
+      "sql": "SELECT id,g,k,ROW_NUMBER() OVER(PARTITION BY g ORDER BY k DESC,id) AS row_number,RANK() OVER(PARTITION BY g ORDER BY k DESC) AS rank,LAG(v) OVER(PARTITION BY g ORDER BY k DESC,id) AS previous,LEAD(v,2,-99) OVER(PARTITION BY g ORDER BY k DESC,id) AS next,LAG(v,2,CAST(NULL AS INT)) OVER(PARTITION BY g ORDER BY k DESC,id) AS previous_two FROM samples ORDER BY id",
+      "ordered": true
+    },
+    {
+      "id": "range_desc_default",
+      "sql": "SELECT id,k,COUNT(*) OVER(PARTITION BY g ORDER BY k DESC RANGE BETWEEN 1 PRECEDING AND 2 FOLLOWING) AS n,COUNT(v) OVER(PARTITION BY g ORDER BY k DESC RANGE BETWEEN 1 PRECEDING AND 2 FOLLOWING) AS nonnull,SUM(v) OVER(PARTITION BY g ORDER BY k DESC RANGE BETWEEN 1 PRECEDING AND 2 FOLLOWING) AS total,AVG(v) OVER(PARTITION BY g ORDER BY k DESC RANGE BETWEEN 1 PRECEDING AND 2 FOLLOWING) AS mean FROM samples ORDER BY id",
+      "ordered": true
+    },
+    {
+      "id": "offset_rank_asc_nulls_first",
+      "sql": "SELECT id,g,k,ROW_NUMBER() OVER(PARTITION BY g ORDER BY k ASC NULLS FIRST,id) AS row_number,RANK() OVER(PARTITION BY g ORDER BY k ASC NULLS FIRST) AS rank,LAG(v) OVER(PARTITION BY g ORDER BY k ASC NULLS FIRST,id) AS previous,LEAD(v,2,-99) OVER(PARTITION BY g ORDER BY k ASC NULLS FIRST,id) AS next,LAG(v,2,CAST(NULL AS INT)) OVER(PARTITION BY g ORDER BY k ASC NULLS FIRST,id) AS previous_two FROM samples ORDER BY id",
+      "ordered": true
+    },
+    {
+      "id": "range_asc_nulls_first",
+      "sql": "SELECT id,k,COUNT(*) OVER(PARTITION BY g ORDER BY k ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 2 FOLLOWING) AS n,COUNT(v) OVER(PARTITION BY g ORDER BY k ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 2 FOLLOWING) AS nonnull,SUM(v) OVER(PARTITION BY g ORDER BY k ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 2 FOLLOWING) AS total,AVG(v) OVER(PARTITION BY g ORDER BY k ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 2 FOLLOWING) AS mean FROM samples ORDER BY id",
+      "ordered": true
+    },
+    {
+      "id": "offset_rank_asc_nulls_last",
+      "sql": "SELECT id,g,k,ROW_NUMBER() OVER(PARTITION BY g ORDER BY k ASC NULLS LAST,id) AS row_number,RANK() OVER(PARTITION BY g ORDER BY k ASC NULLS LAST) AS rank,LAG(v) OVER(PARTITION BY g ORDER BY k ASC NULLS LAST,id) AS previous,LEAD(v,2,-99) OVER(PARTITION BY g ORDER BY k ASC NULLS LAST,id) AS next,LAG(v,2,CAST(NULL AS INT)) OVER(PARTITION BY g ORDER BY k ASC NULLS LAST,id) AS previous_two FROM samples ORDER BY id",
+      "ordered": true
+    },
+    {
+      "id": "range_asc_nulls_last",
+      "sql": "SELECT id,k,COUNT(*) OVER(PARTITION BY g ORDER BY k ASC NULLS LAST RANGE BETWEEN 1 PRECEDING AND 2 FOLLOWING) AS n,COUNT(v) OVER(PARTITION BY g ORDER BY k ASC NULLS LAST RANGE BETWEEN 1 PRECEDING AND 2 FOLLOWING) AS nonnull,SUM(v) OVER(PARTITION BY g ORDER BY k ASC NULLS LAST RANGE BETWEEN 1 PRECEDING AND 2 FOLLOWING) AS total,AVG(v) OVER(PARTITION BY g ORDER BY k ASC NULLS LAST RANGE BETWEEN 1 PRECEDING AND 2 FOLLOWING) AS mean FROM samples ORDER BY id",
+      "ordered": true
+    },
+    {
+      "id": "offset_rank_desc_nulls_first",
+      "sql": "SELECT id,g,k,ROW_NUMBER() OVER(PARTITION BY g ORDER BY k DESC NULLS FIRST,id) AS row_number,RANK() OVER(PARTITION BY g ORDER BY k DESC NULLS FIRST) AS rank,LAG(v) OVER(PARTITION BY g ORDER BY k DESC NULLS FIRST,id) AS previous,LEAD(v,2,-99) OVER(PARTITION BY g ORDER BY k DESC NULLS FIRST,id) AS next,LAG(v,2,CAST(NULL AS INT)) OVER(PARTITION BY g ORDER BY k DESC NULLS FIRST,id) AS previous_two FROM samples ORDER BY id",
+      "ordered": true
+    },
+    {
+      "id": "range_desc_nulls_first",
+      "sql": "SELECT id,k,COUNT(*) OVER(PARTITION BY g ORDER BY k DESC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 2 FOLLOWING) AS n,COUNT(v) OVER(PARTITION BY g ORDER BY k DESC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 2 FOLLOWING) AS nonnull,SUM(v) OVER(PARTITION BY g ORDER BY k DESC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 2 FOLLOWING) AS total,AVG(v) OVER(PARTITION BY g ORDER BY k DESC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 2 FOLLOWING) AS mean FROM samples ORDER BY id",
+      "ordered": true
+    },
+    {
+      "id": "offset_rank_desc_nulls_last",
+      "sql": "SELECT id,g,k,ROW_NUMBER() OVER(PARTITION BY g ORDER BY k DESC NULLS LAST,id) AS row_number,RANK() OVER(PARTITION BY g ORDER BY k DESC NULLS LAST) AS rank,LAG(v) OVER(PARTITION BY g ORDER BY k DESC NULLS LAST,id) AS previous,LEAD(v,2,-99) OVER(PARTITION BY g ORDER BY k DESC NULLS LAST,id) AS next,LAG(v,2,CAST(NULL AS INT)) OVER(PARTITION BY g ORDER BY k DESC NULLS LAST,id) AS previous_two FROM samples ORDER BY id",
+      "ordered": true
+    },
+    {
+      "id": "range_desc_nulls_last",
+      "sql": "SELECT id,k,COUNT(*) OVER(PARTITION BY g ORDER BY k DESC NULLS LAST RANGE BETWEEN 1 PRECEDING AND 2 FOLLOWING) AS n,COUNT(v) OVER(PARTITION BY g ORDER BY k DESC NULLS LAST RANGE BETWEEN 1 PRECEDING AND 2 FOLLOWING) AS nonnull,SUM(v) OVER(PARTITION BY g ORDER BY k DESC NULLS LAST RANGE BETWEEN 1 PRECEDING AND 2 FOLLOWING) AS total,AVG(v) OVER(PARTITION BY g ORDER BY k DESC NULLS LAST RANGE BETWEEN 1 PRECEDING AND 2 FOLLOWING) AS mean FROM samples ORDER BY id",
+      "ordered": true
+    },
+    {
+      "id": "offset_ignore",
+      "sql": "SELECT id,LAG(v,1,-99) IGNORE NULLS OVER(PARTITION BY g ORDER BY k NULLS LAST,id) AS previous,LEAD(v,2,-99) IGNORE NULLS OVER(PARTITION BY g ORDER BY k NULLS LAST,id) AS next FROM samples ORDER BY id",
+      "ordered": true
+    },
+    {
+      "id": "offset_respect",
+      "sql": "SELECT id,LAG(v,1,-99) RESPECT NULLS OVER(PARTITION BY g ORDER BY k NULLS LAST,id) AS previous,LEAD(v,2,-99) RESPECT NULLS OVER(PARTITION BY g ORDER BY k NULLS LAST,id) AS next FROM samples ORDER BY id",
+      "ordered": true
+    },
+    {
+      "id": "rows_sliding",
+      "sql": "SELECT id,COUNT(*) OVER(PARTITION BY g ORDER BY k NULLS LAST,id ROWS BETWEEN 2 PRECEDING AND 1 FOLLOWING) AS n,COUNT(v) OVER(PARTITION BY g ORDER BY k NULLS LAST,id ROWS BETWEEN 2 PRECEDING AND 1 FOLLOWING) AS nonnull,SUM(v) OVER(PARTITION BY g ORDER BY k NULLS LAST,id ROWS BETWEEN 2 PRECEDING AND 1 FOLLOWING) AS total,AVG(v) OVER(PARTITION BY g ORDER BY k NULLS LAST,id ROWS BETWEEN 2 PRECEDING AND 1 FOLLOWING) AS mean FROM samples ORDER BY id",
+      "ordered": true
+    },
+    {
+      "id": "rows_running",
+      "sql": "SELECT id,COUNT(*) OVER(PARTITION BY g ORDER BY k NULLS LAST,id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS n,COUNT(v) OVER(PARTITION BY g ORDER BY k NULLS LAST,id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS nonnull,SUM(v) OVER(PARTITION BY g ORDER BY k NULLS LAST,id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS total,AVG(v) OVER(PARTITION BY g ORDER BY k NULLS LAST,id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS mean FROM samples ORDER BY id",
+      "ordered": true
+    },
+    {
+      "id": "rows_following",
+      "sql": "SELECT id,COUNT(*) OVER(PARTITION BY g ORDER BY k NULLS LAST,id ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS n,COUNT(v) OVER(PARTITION BY g ORDER BY k NULLS LAST,id ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS nonnull,SUM(v) OVER(PARTITION BY g ORDER BY k NULLS LAST,id ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS total,AVG(v) OVER(PARTITION BY g ORDER BY k NULLS LAST,id ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS mean FROM samples ORDER BY id",
+      "ordered": true
+    },
+    {
+      "id": "rows_empty",
+      "sql": "SELECT id,COUNT(*) OVER(PARTITION BY g ORDER BY k NULLS LAST,id ROWS BETWEEN 2 FOLLOWING AND 3 FOLLOWING) AS n,COUNT(v) OVER(PARTITION BY g ORDER BY k NULLS LAST,id ROWS BETWEEN 2 FOLLOWING AND 3 FOLLOWING) AS nonnull,SUM(v) OVER(PARTITION BY g ORDER BY k NULLS LAST,id ROWS BETWEEN 2 FOLLOWING AND 3 FOLLOWING) AS total,AVG(v) OVER(PARTITION BY g ORDER BY k NULLS LAST,id ROWS BETWEEN 2 FOLLOWING AND 3 FOLLOWING) AS mean FROM samples ORDER BY id",
+      "ordered": true
+    },
+    {
+      "id": "ordered_values_full",
+      "sql": "SELECT id,FIRST_VALUE(v) OVER(PARTITION BY g ORDER BY k NULLS FIRST,id ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS first_value,LAST_VALUE(v) OVER(PARTITION BY g ORDER BY k NULLS FIRST,id ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS last_value,FIRST_VALUE(v) IGNORE NULLS OVER(PARTITION BY g ORDER BY k NULLS FIRST,id ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS first_nonnull,LAST_VALUE(v) IGNORE NULLS OVER(PARTITION BY g ORDER BY k NULLS FIRST,id ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS last_nonnull,NTH_VALUE(v,2) OVER(PARTITION BY g ORDER BY k NULLS FIRST,id ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS second_value,NTH_VALUE(v,2) IGNORE NULLS OVER(PARTITION BY g ORDER BY k NULLS FIRST,id ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS second_nonnull FROM samples ORDER BY id",
+      "ordered": true
+    },
+    {
+      "id": "ordered_values_sliding",
+      "sql": "SELECT id,FIRST_VALUE(v) OVER(PARTITION BY g ORDER BY k NULLS FIRST,id ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS first_value,LAST_VALUE(v) OVER(PARTITION BY g ORDER BY k NULLS FIRST,id ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS last_value,FIRST_VALUE(v) IGNORE NULLS OVER(PARTITION BY g ORDER BY k NULLS FIRST,id ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS first_nonnull,LAST_VALUE(v) IGNORE NULLS OVER(PARTITION BY g ORDER BY k NULLS FIRST,id ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS last_nonnull,NTH_VALUE(v,2) OVER(PARTITION BY g ORDER BY k NULLS FIRST,id ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS second_value,NTH_VALUE(v,2) IGNORE NULLS OVER(PARTITION BY g ORDER BY k NULLS FIRST,id ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS second_nonnull FROM samples ORDER BY id",
+      "ordered": true
+    },
+    {
+      "id": "range_peers",
+      "sql": "SELECT id,COUNT(*) OVER(PARTITION BY g ORDER BY k RANGE BETWEEN CURRENT ROW AND CURRENT ROW) AS peers,SUM(v) OVER(PARTITION BY g ORDER BY k) AS running FROM samples ORDER BY id",
+      "ordered": true
+    },
+    {
+      "id": "range_empty",
+      "sql": "SELECT id,COUNT(*) OVER(PARTITION BY g ORDER BY k RANGE BETWEEN 1 FOLLOWING AND 1 FOLLOWING) AS n,SUM(v) OVER(PARTITION BY g ORDER BY k RANGE BETWEEN 1 FOLLOWING AND 1 FOLLOWING) AS total FROM samples ORDER BY id",
+      "ordered": true
+    },
+    {
+      "id": "collection_global",
+      "sql": "SELECT SORT_ARRAY(COLLECT_LIST(v)) AS values,SORT_ARRAY(COLLECT_SET(v)) AS unique_values,SORT_ARRAY(COLLECT_LIST(v) FILTER(WHERE p)) AS kept FROM samples",
+      "ordered": true
+    },
+    {
+      "id": "collection_grouped",
+      "sql": "SELECT g,SORT_ARRAY(COLLECT_LIST(v)) AS values,SORT_ARRAY(COLLECT_SET(v)) AS unique_values,SORT_ARRAY(COLLECT_LIST(v) FILTER(WHERE p)) AS kept FROM samples GROUP BY g ORDER BY g NULLS FIRST",
+      "ordered": true
+    },
+    {
+      "id": "pivot_unique_values",
+      "sql": "SELECT * FROM (SELECT g,v FROM samples) PIVOT(SUM(v) FOR g IN(0 AS zero,1 AS one,2 AS two))",
+      "ordered": true
+    },
+    {
+      "id": "count_if_all_null",
+      "sql": "SELECT COUNT(*) AS n,COUNT_IF(p) AS kept,COUNT_IF(DISTINCT p) AS unique_kept FROM samples WHERE p IS NULL",
+      "ordered": true
+    },
+    {
+      "id": "count_if_all_null_grouped",
+      "sql": "SELECT g,COUNT(*) AS n,COUNT_IF(p) AS kept,COUNT_IF(DISTINCT p) AS unique_kept FROM samples WHERE p IS NULL GROUP BY g ORDER BY g NULLS FIRST",
+      "ordered": true
+    }
+  ]
+}
