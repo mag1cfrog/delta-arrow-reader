@@ -1,0 +1,789 @@
+{
+  "issue": 800,
+  "base": "7fc10b1497c55b0cfb0933c13aca8f0d2f4de4e3",
+  "expected_record_count": 56,
+  "corpora": [
+    {
+      "corpus": "projected_outer_exists",
+      "source": "Retained C02 relational input data and #800 SQL, recaptured after projection-identity repair; additional bounded row-presence controls.",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "left_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "n",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "label",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                null,
+                "10",
+                "null-left"
+              ],
+              [
+                "1",
+                "20",
+                "a"
+              ],
+              [
+                "2",
+                "30",
+                "b"
+              ],
+              [
+                "2",
+                "31",
+                "b2"
+              ],
+              [
+                "4",
+                null,
+                null
+              ]
+            ]
+          },
+          {
+            "name": "right_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "long",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "w",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "label",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                null,
+                "100",
+                "null-right"
+              ],
+              [
+                "2",
+                "200",
+                "x"
+              ],
+              [
+                "2",
+                "201",
+                "x2"
+              ],
+              [
+                "3",
+                null,
+                "y"
+              ]
+            ]
+          },
+          {
+            "name": "empty_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "n",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "label",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": []
+          },
+          {
+            "name": "left_mixed",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "left"
+                  }
+                },
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "key"
+                  }
+                },
+                {
+                  "name": "lv",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "value"
+                  }
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                "7",
+                "10"
+              ],
+              [
+                "1",
+                "7",
+                "11"
+              ],
+              [
+                "2",
+                "8",
+                "20"
+              ],
+              [
+                null,
+                null,
+                "30"
+              ]
+            ]
+          },
+          {
+            "name": "left_nulls",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "left"
+                  }
+                },
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "key"
+                  }
+                },
+                {
+                  "name": "lv",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "value"
+                  }
+                }
+              ]
+            },
+            "rows": [
+              [
+                null,
+                null,
+                null
+              ]
+            ]
+          },
+          {
+            "name": "left_empty",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "left"
+                  }
+                },
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "key"
+                  }
+                },
+                {
+                  "name": "lv",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "value"
+                  }
+                }
+              ]
+            },
+            "rows": []
+          },
+          {
+            "name": "right_mixed",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "right"
+                  }
+                },
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "key"
+                  }
+                },
+                {
+                  "name": "rv",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "value"
+                  }
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                "7",
+                "40"
+              ],
+              [
+                "1",
+                "7",
+                "40"
+              ],
+              [
+                "3",
+                "9",
+                "50"
+              ],
+              [
+                null,
+                null,
+                "60"
+              ]
+            ]
+          },
+          {
+            "name": "right_nulls",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "right"
+                  }
+                },
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "key"
+                  }
+                },
+                {
+                  "name": "rv",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "value"
+                  }
+                }
+              ]
+            },
+            "rows": [
+              [
+                null,
+                null,
+                null
+              ]
+            ]
+          },
+          {
+            "name": "right_empty",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "right"
+                  }
+                },
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "key"
+                  }
+                },
+                {
+                  "name": "rv",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "value"
+                  }
+                }
+              ]
+            },
+            "rows": []
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_real_exists_direct",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT 1 FROM right_inputs r WHERE r.k=l.k)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_real_exists_projected",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT l.k AS outer_k,r.k AS inner_k FROM right_inputs r) q WHERE q.outer_k=q.inner_k)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_real_exists_outer_only_real_rows",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT l.k AS outer_k FROM right_inputs r) q WHERE q.outer_k=2)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_real_not_exists_direct",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE NOT EXISTS(SELECT 1 FROM right_inputs r WHERE r.k=l.k)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_real_not_exists_projected",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE NOT EXISTS(SELECT 1 FROM (SELECT l.k AS outer_k,r.k AS inner_k FROM right_inputs r) q WHERE q.outer_k=q.inner_k)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_real_not_exists_outer_only_real_rows",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE NOT EXISTS(SELECT 1 FROM (SELECT l.k AS outer_k FROM right_inputs r) q WHERE q.outer_k=2)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_empty_inner_exists_direct",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT 1 FROM empty_inputs r WHERE r.k=l.k)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_empty_inner_exists_projected",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT l.k AS outer_k,r.k AS inner_k FROM empty_inputs r) q WHERE q.outer_k=q.inner_k)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_empty_inner_exists_outer_only_real_rows",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT l.k AS outer_k FROM empty_inputs r) q WHERE q.outer_k=2)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_empty_inner_not_exists_direct",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE NOT EXISTS(SELECT 1 FROM empty_inputs r WHERE r.k=l.k)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_empty_inner_not_exists_projected",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE NOT EXISTS(SELECT 1 FROM (SELECT l.k AS outer_k,r.k AS inner_k FROM empty_inputs r) q WHERE q.outer_k=q.inner_k)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_empty_inner_not_exists_outer_only_real_rows",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE NOT EXISTS(SELECT 1 FROM (SELECT l.k AS outer_k FROM empty_inputs r) q WHERE q.outer_k=2)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_local_single_outer",
+          "sql": "SELECT l.id FROM left_mixed l WHERE EXISTS(SELECT 1 FROM (SELECT l.id AS outer_id) q WHERE q.outer_id=1)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_original_double_outer",
+          "sql": "SELECT l.id FROM left_mixed l WHERE EXISTS(SELECT 1 FROM (SELECT l.id,l.id) q WHERE q.id=1)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_empty_outer_real_inner",
+          "sql": "SELECT l.k,l.n FROM empty_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT l.k AS outer_k,r.k AS inner_k FROM right_inputs r) q WHERE q.outer_k=q.inner_k)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_projected_flag",
+          "sql": "SELECT l.k,l.n,EXISTS(SELECT 1 FROM (SELECT l.k AS outer_k,r.k AS inner_k FROM right_inputs r) q WHERE q.outer_k=q.inner_k) AS found FROM left_inputs l",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_projected_live_arithmetic",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT l.k+1 AS outer_k,r.k AS inner_k FROM right_inputs r) q WHERE q.outer_k=q.inner_k)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_projected_null_predicate",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT l.k AS outer_k FROM right_inputs r) q WHERE q.outer_k IS NULL)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_real_exists_direct",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT 1 FROM right_inputs r WHERE r.k=l.k)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_real_exists_projected",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT l.k AS outer_k,r.k AS inner_k FROM right_inputs r) q WHERE q.outer_k=q.inner_k)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_real_exists_outer_only_real_rows",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT l.k AS outer_k FROM right_inputs r) q WHERE q.outer_k=2)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_real_not_exists_direct",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE NOT EXISTS(SELECT 1 FROM right_inputs r WHERE r.k=l.k)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_real_not_exists_projected",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE NOT EXISTS(SELECT 1 FROM (SELECT l.k AS outer_k,r.k AS inner_k FROM right_inputs r) q WHERE q.outer_k=q.inner_k)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_real_not_exists_outer_only_real_rows",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE NOT EXISTS(SELECT 1 FROM (SELECT l.k AS outer_k FROM right_inputs r) q WHERE q.outer_k=2)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_empty_inner_exists_direct",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT 1 FROM empty_inputs r WHERE r.k=l.k)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_empty_inner_exists_projected",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT l.k AS outer_k,r.k AS inner_k FROM empty_inputs r) q WHERE q.outer_k=q.inner_k)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_empty_inner_exists_outer_only_real_rows",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT l.k AS outer_k FROM empty_inputs r) q WHERE q.outer_k=2)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_empty_inner_not_exists_direct",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE NOT EXISTS(SELECT 1 FROM empty_inputs r WHERE r.k=l.k)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_empty_inner_not_exists_projected",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE NOT EXISTS(SELECT 1 FROM (SELECT l.k AS outer_k,r.k AS inner_k FROM empty_inputs r) q WHERE q.outer_k=q.inner_k)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_empty_inner_not_exists_outer_only_real_rows",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE NOT EXISTS(SELECT 1 FROM (SELECT l.k AS outer_k FROM empty_inputs r) q WHERE q.outer_k=2)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_local_single_outer",
+          "sql": "SELECT l.id FROM left_mixed l WHERE EXISTS(SELECT 1 FROM (SELECT l.id AS outer_id) q WHERE q.outer_id=1)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_original_double_outer",
+          "sql": "SELECT l.id FROM left_mixed l WHERE EXISTS(SELECT 1 FROM (SELECT l.id,l.id) q WHERE q.id=1)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_empty_outer_real_inner",
+          "sql": "SELECT l.k,l.n FROM empty_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT l.k AS outer_k,r.k AS inner_k FROM right_inputs r) q WHERE q.outer_k=q.inner_k)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_projected_flag",
+          "sql": "SELECT l.k,l.n,EXISTS(SELECT 1 FROM (SELECT l.k AS outer_k,r.k AS inner_k FROM right_inputs r) q WHERE q.outer_k=q.inner_k) AS found FROM left_inputs l",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_projected_live_arithmetic",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT l.k+1 AS outer_k,r.k AS inner_k FROM right_inputs r) q WHERE q.outer_k=q.inner_k)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_projected_null_predicate",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT l.k AS outer_k FROM right_inputs r) q WHERE q.outer_k IS NULL)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "id": "800_duplicate_output_exists",
+          "sql": "SELECT l.k FROM left_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT l.k AS outer_k,r.k AS inner_k FROM right_inputs r) q WHERE q.outer_k=q.inner_k)",
+          "ansi": false,
+          "ordered": false,
+          "corpus": "projected_outer_exists"
+        },
+        {
+          "id": "800_all_null_exists",
+          "sql": "SELECT l.id FROM left_nulls l WHERE EXISTS(SELECT 1 FROM (SELECT l.id AS outer_k,r.id AS inner_k FROM right_nulls r) q WHERE q.outer_k=q.inner_k)",
+          "ansi": false,
+          "ordered": false,
+          "corpus": "projected_outer_exists"
+        },
+        {
+          "id": "800_all_null_not_exists",
+          "sql": "SELECT l.id FROM left_nulls l WHERE NOT EXISTS(SELECT 1 FROM (SELECT l.id AS outer_k,r.id AS inner_k FROM right_nulls r) q WHERE q.outer_k=q.inner_k)",
+          "ansi": false,
+          "ordered": false,
+          "corpus": "projected_outer_exists"
+        },
+        {
+          "id": "800_local_double_not_exists",
+          "sql": "SELECT l.id FROM left_mixed l WHERE NOT EXISTS(SELECT 1 FROM (SELECT l.id,l.id) q WHERE q.id=1)",
+          "ansi": false,
+          "ordered": false,
+          "corpus": "projected_outer_exists"
+        },
+        {
+          "id": "800_direct_global_aggregate_empty",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT COUNT(*) FROM empty_inputs r WHERE r.k=l.k)",
+          "ansi": false,
+          "ordered": false,
+          "corpus": "projected_outer_exists"
+        },
+        {
+          "id": "800_direct_global_aggregate_empty_not",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE NOT EXISTS(SELECT COUNT(*) FROM empty_inputs r WHERE r.k=l.k)",
+          "ansi": false,
+          "ordered": false,
+          "corpus": "projected_outer_exists"
+        },
+        {
+          "id": "800_projected_limit_zero",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT l.k AS outer_k,r.k AS inner_k FROM right_inputs r) q WHERE q.outer_k=q.inner_k LIMIT 0)",
+          "ansi": false,
+          "ordered": false,
+          "corpus": "projected_outer_exists"
+        },
+        {
+          "id": "800_projected_limit_zero_not",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE NOT EXISTS(SELECT 1 FROM (SELECT l.k AS outer_k,r.k AS inner_k FROM right_inputs r) q WHERE q.outer_k=q.inner_k LIMIT 0)",
+          "ansi": false,
+          "ordered": false,
+          "corpus": "projected_outer_exists"
+        },
+        {
+          "id": "800_duplicate_output_exists",
+          "sql": "SELECT l.k FROM left_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT l.k AS outer_k,r.k AS inner_k FROM right_inputs r) q WHERE q.outer_k=q.inner_k)",
+          "ansi": true,
+          "ordered": false,
+          "corpus": "projected_outer_exists"
+        },
+        {
+          "id": "800_all_null_exists",
+          "sql": "SELECT l.id FROM left_nulls l WHERE EXISTS(SELECT 1 FROM (SELECT l.id AS outer_k,r.id AS inner_k FROM right_nulls r) q WHERE q.outer_k=q.inner_k)",
+          "ansi": true,
+          "ordered": false,
+          "corpus": "projected_outer_exists"
+        },
+        {
+          "id": "800_all_null_not_exists",
+          "sql": "SELECT l.id FROM left_nulls l WHERE NOT EXISTS(SELECT 1 FROM (SELECT l.id AS outer_k,r.id AS inner_k FROM right_nulls r) q WHERE q.outer_k=q.inner_k)",
+          "ansi": true,
+          "ordered": false,
+          "corpus": "projected_outer_exists"
+        },
+        {
+          "id": "800_local_double_not_exists",
+          "sql": "SELECT l.id FROM left_mixed l WHERE NOT EXISTS(SELECT 1 FROM (SELECT l.id,l.id) q WHERE q.id=1)",
+          "ansi": true,
+          "ordered": false,
+          "corpus": "projected_outer_exists"
+        },
+        {
+          "id": "800_direct_global_aggregate_empty",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT COUNT(*) FROM empty_inputs r WHERE r.k=l.k)",
+          "ansi": true,
+          "ordered": false,
+          "corpus": "projected_outer_exists"
+        },
+        {
+          "id": "800_direct_global_aggregate_empty_not",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE NOT EXISTS(SELECT COUNT(*) FROM empty_inputs r WHERE r.k=l.k)",
+          "ansi": true,
+          "ordered": false,
+          "corpus": "projected_outer_exists"
+        },
+        {
+          "id": "800_projected_limit_zero",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT l.k AS outer_k,r.k AS inner_k FROM right_inputs r) q WHERE q.outer_k=q.inner_k LIMIT 0)",
+          "ansi": true,
+          "ordered": false,
+          "corpus": "projected_outer_exists"
+        },
+        {
+          "id": "800_projected_limit_zero_not",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE NOT EXISTS(SELECT 1 FROM (SELECT l.k AS outer_k,r.k AS inner_k FROM right_inputs r) q WHERE q.outer_k=q.inner_k LIMIT 0)",
+          "ansi": true,
+          "ordered": false,
+          "corpus": "projected_outer_exists"
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_real_exists_projected_ordered",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT l.k AS outer_k,r.k AS inner_k FROM right_inputs r) q WHERE q.outer_k=q.inner_k) ORDER BY l.k NULLS FIRST,l.n",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_real_not_exists_projected_ordered",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE NOT EXISTS(SELECT 1 FROM (SELECT l.k AS outer_k,r.k AS inner_k FROM right_inputs r) q WHERE q.outer_k=q.inner_k) ORDER BY l.k NULLS FIRST,l.n",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_real_exists_projected_ordered",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT l.k AS outer_k,r.k AS inner_k FROM right_inputs r) q WHERE q.outer_k=q.inner_k) ORDER BY l.k NULLS FIRST,l.n",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "projected_outer_exists",
+          "id": "800_real_not_exists_projected_ordered",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE NOT EXISTS(SELECT 1 FROM (SELECT l.k AS outer_k,r.k AS inner_k FROM right_inputs r) q WHERE q.outer_k=q.inner_k) ORDER BY l.k NULLS FIRST,l.n",
+          "ansi": true,
+          "ordered": true
+        }
+      ]
+    }
+  ]
+}
