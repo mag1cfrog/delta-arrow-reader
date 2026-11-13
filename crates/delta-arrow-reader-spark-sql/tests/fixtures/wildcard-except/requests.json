@@ -1,0 +1,1233 @@
+{
+  "issue": 1280,
+  "expected_record_count": 142,
+  "corpora": [
+    {
+      "corpus": "wildcard-except",
+      "source": "independent-current-Spark",
+      "metadata": {
+        "spark_version": "4.2.0",
+        "inputs": [
+          {
+            "name": "numbers",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "a",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "b",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "c",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                "2",
+                "3"
+              ],
+              [
+                null,
+                "3",
+                "4"
+              ],
+              [
+                "4",
+                null,
+                "5"
+              ],
+              [
+                null,
+                null,
+                null
+              ],
+              [
+                "1",
+                "2",
+                "3"
+              ]
+            ]
+          },
+          {
+            "name": "empty_numbers",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "a",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "b",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "c",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": []
+          },
+          {
+            "name": "null_numbers",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "a",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "b",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "c",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                null,
+                null,
+                null
+              ],
+              [
+                null,
+                null,
+                null
+              ]
+            ]
+          },
+          {
+            "name": "nested",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "x",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "child",
+                        "type": {
+                          "type": "struct",
+                          "fields": [
+                            {
+                              "name": "x",
+                              "type": "integer",
+                              "nullable": true,
+                              "metadata": {}
+                            },
+                            {
+                              "name": "y",
+                              "type": "integer",
+                              "nullable": true,
+                              "metadata": {}
+                            }
+                          ]
+                        },
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "z",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "a.b",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                [
+                  "10",
+                  [
+                    "20",
+                    "30"
+                  ],
+                  "40"
+                ],
+                "50"
+              ],
+              [
+                "2",
+                [
+                  null,
+                  [
+                    null,
+                    "31"
+                  ],
+                  null
+                ],
+                null
+              ],
+              [
+                "3",
+                null,
+                "51"
+              ],
+              [
+                "4",
+                [
+                  "11",
+                  null,
+                  "41"
+                ],
+                "52"
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "wildcard-except",
+          "id": "issue_values",
+          "sql": "SELECT count(* EXCEPT(b)) AS r FROM VALUES(1,2),(NULL,3),(4,NULL),(NULL,NULL)t(a,b)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "bare_projection",
+          "sql": "SELECT * EXCEPT(b) FROM numbers",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "qualified_projection",
+          "sql": "SELECT n.* EXCEPT(b) FROM numbers n",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "qualified_exclusion",
+          "sql": "SELECT * EXCEPT(n.b) FROM numbers n",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "qualified_both",
+          "sql": "SELECT n.* EXCEPT(n.b) FROM numbers n",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "case_insensitive",
+          "sql": "SELECT N.* EXCEPT(B) FROM numbers n",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "count_bare",
+          "sql": "SELECT count(* EXCEPT(b,c)) AS r FROM numbers",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "count_multiple",
+          "sql": "SELECT count(* EXCEPT(c)) AS r FROM numbers",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "count_distinct",
+          "sql": "SELECT count(DISTINCT * EXCEPT(c)) AS r FROM numbers",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "count_qualified",
+          "sql": "SELECT count(n.* EXCEPT(b)) AS r FROM numbers n",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "count_window",
+          "sql": "SELECT count(* EXCEPT(b)) OVER () AS r FROM numbers",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "count_window_qualified",
+          "sql": "SELECT count(n.* EXCEPT(b)) OVER () AS r FROM numbers n",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "count_repeated",
+          "sql": "SELECT count(* EXCEPT(b), * EXCEPT(c),1) AS r FROM numbers",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "struct_bare",
+          "sql": "SELECT struct(* EXCEPT(b)) AS r FROM numbers",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "struct_qualified",
+          "sql": "SELECT struct(n.* EXCEPT(b)) AS r FROM numbers n",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "hash_bare",
+          "sql": "SELECT hash(17,* EXCEPT(b),29) AS r FROM numbers",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "hash_qualified",
+          "sql": "SELECT hash(n.* EXCEPT(b)) AS r FROM numbers n",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "repeated_projection",
+          "sql": "SELECT * EXCEPT(b),* EXCEPT(c) FROM numbers",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "nested_star",
+          "sql": "SELECT s.* EXCEPT(x) FROM nested",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "nested_star_qualified",
+          "sql": "SELECT n.s.* EXCEPT(x) FROM nested n",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "nested_star_relative_path",
+          "sql": "SELECT s.* EXCEPT(child.x) FROM nested",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "nested_parent_path",
+          "sql": "SELECT * EXCEPT(s.child.x) FROM nested",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "nested_siblings",
+          "sql": "SELECT * EXCEPT(s.x,s.child.y,`a.b`) FROM nested",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "nested_qualified_path",
+          "sql": "SELECT n.* EXCEPT(n.s.child.y) FROM nested n",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "nested_full_prune",
+          "sql": "SELECT * EXCEPT(s.child.x,s.child.y) FROM nested",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "nested_direct_prune",
+          "sql": "SELECT * EXCEPT(s.child) FROM nested",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "nested_struct_argument",
+          "sql": "SELECT struct(s.* EXCEPT(x)) AS r FROM nested",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "nested_struct_path_argument",
+          "sql": "SELECT struct(* EXCEPT(s.child.x)) AS r FROM nested",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "nested_hash_argument",
+          "sql": "SELECT hash(s.* EXCEPT(child)) AS r FROM nested",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "nested_count_argument",
+          "sql": "SELECT count(s.* EXCEPT(child)) AS r FROM nested",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "nested_count_window",
+          "sql": "SELECT count(s.* EXCEPT(child)) OVER () AS r FROM nested",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "nested_all_excluded",
+          "sql": "SELECT s.* EXCEPT(x,child,z) FROM nested",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "zero_struct",
+          "sql": "SELECT struct(* EXCEPT(a,b,c)) AS r FROM numbers",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "using_bare",
+          "sql": "SELECT * EXCEPT(x.b,y.c) FROM numbers x JOIN numbers y USING(a)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "using_qualified",
+          "sql": "SELECT x.* EXCEPT(b),y.* EXCEPT(c) FROM numbers x JOIN numbers y USING(a)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "using_full_outer",
+          "sql": "SELECT * EXCEPT(x.b,y.c) FROM numbers x FULL OUTER JOIN numbers y USING(a)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "using_struct",
+          "sql": "SELECT struct(x.* EXCEPT(b), y.* EXCEPT(c)) AS r FROM numbers x FULL OUTER JOIN numbers y USING(a)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "using_count",
+          "sql": "SELECT count(* EXCEPT(x.b,y.c)) AS r FROM numbers x JOIN numbers y USING(a)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "using_hash",
+          "sql": "SELECT hash(x.* EXCEPT(b),y.* EXCEPT(c)) AS r FROM numbers x JOIN numbers y USING(a)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "quoted_name",
+          "sql": "SELECT * EXCEPT(`a.b`) FROM nested",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "plain_star",
+          "sql": "SELECT * FROM numbers",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "plain_count",
+          "sql": "SELECT count(*) AS r FROM numbers",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "empty_numbers_projection",
+          "sql": "SELECT * EXCEPT(b) FROM empty_numbers",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "empty_numbers_count",
+          "sql": "SELECT count(* EXCEPT(b)) AS r FROM empty_numbers",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "empty_numbers_struct",
+          "sql": "SELECT struct(* EXCEPT(b)) AS r FROM empty_numbers",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "empty_numbers_hash",
+          "sql": "SELECT hash(* EXCEPT(b)) AS r FROM empty_numbers",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "empty_numbers_window",
+          "sql": "SELECT count(* EXCEPT(b)) OVER () AS r FROM empty_numbers",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "null_numbers_projection",
+          "sql": "SELECT * EXCEPT(b) FROM null_numbers",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "null_numbers_count",
+          "sql": "SELECT count(* EXCEPT(b)) AS r FROM null_numbers",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "null_numbers_struct",
+          "sql": "SELECT struct(* EXCEPT(b)) AS r FROM null_numbers",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "null_numbers_hash",
+          "sql": "SELECT hash(* EXCEPT(b)) AS r FROM null_numbers",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "null_numbers_window",
+          "sql": "SELECT count(* EXCEPT(b)) OVER () AS r FROM null_numbers",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "issue_values",
+          "sql": "SELECT count(* EXCEPT(b)) AS r FROM VALUES(1,2),(NULL,3),(4,NULL),(NULL,NULL)t(a,b)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "bare_projection",
+          "sql": "SELECT * EXCEPT(b) FROM numbers",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "qualified_projection",
+          "sql": "SELECT n.* EXCEPT(b) FROM numbers n",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "qualified_exclusion",
+          "sql": "SELECT * EXCEPT(n.b) FROM numbers n",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "qualified_both",
+          "sql": "SELECT n.* EXCEPT(n.b) FROM numbers n",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "case_insensitive",
+          "sql": "SELECT N.* EXCEPT(B) FROM numbers n",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "count_bare",
+          "sql": "SELECT count(* EXCEPT(b,c)) AS r FROM numbers",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "count_multiple",
+          "sql": "SELECT count(* EXCEPT(c)) AS r FROM numbers",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "count_distinct",
+          "sql": "SELECT count(DISTINCT * EXCEPT(c)) AS r FROM numbers",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "count_qualified",
+          "sql": "SELECT count(n.* EXCEPT(b)) AS r FROM numbers n",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "count_window",
+          "sql": "SELECT count(* EXCEPT(b)) OVER () AS r FROM numbers",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "count_window_qualified",
+          "sql": "SELECT count(n.* EXCEPT(b)) OVER () AS r FROM numbers n",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "count_repeated",
+          "sql": "SELECT count(* EXCEPT(b), * EXCEPT(c),1) AS r FROM numbers",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "struct_bare",
+          "sql": "SELECT struct(* EXCEPT(b)) AS r FROM numbers",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "struct_qualified",
+          "sql": "SELECT struct(n.* EXCEPT(b)) AS r FROM numbers n",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "hash_bare",
+          "sql": "SELECT hash(17,* EXCEPT(b),29) AS r FROM numbers",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "hash_qualified",
+          "sql": "SELECT hash(n.* EXCEPT(b)) AS r FROM numbers n",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "repeated_projection",
+          "sql": "SELECT * EXCEPT(b),* EXCEPT(c) FROM numbers",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "nested_star",
+          "sql": "SELECT s.* EXCEPT(x) FROM nested",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "nested_star_qualified",
+          "sql": "SELECT n.s.* EXCEPT(x) FROM nested n",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "nested_star_relative_path",
+          "sql": "SELECT s.* EXCEPT(child.x) FROM nested",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "nested_parent_path",
+          "sql": "SELECT * EXCEPT(s.child.x) FROM nested",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "nested_siblings",
+          "sql": "SELECT * EXCEPT(s.x,s.child.y,`a.b`) FROM nested",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "nested_qualified_path",
+          "sql": "SELECT n.* EXCEPT(n.s.child.y) FROM nested n",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "nested_full_prune",
+          "sql": "SELECT * EXCEPT(s.child.x,s.child.y) FROM nested",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "nested_direct_prune",
+          "sql": "SELECT * EXCEPT(s.child) FROM nested",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "nested_struct_argument",
+          "sql": "SELECT struct(s.* EXCEPT(x)) AS r FROM nested",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "nested_struct_path_argument",
+          "sql": "SELECT struct(* EXCEPT(s.child.x)) AS r FROM nested",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "nested_hash_argument",
+          "sql": "SELECT hash(s.* EXCEPT(child)) AS r FROM nested",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "nested_count_argument",
+          "sql": "SELECT count(s.* EXCEPT(child)) AS r FROM nested",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "nested_count_window",
+          "sql": "SELECT count(s.* EXCEPT(child)) OVER () AS r FROM nested",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "nested_all_excluded",
+          "sql": "SELECT s.* EXCEPT(x,child,z) FROM nested",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "zero_struct",
+          "sql": "SELECT struct(* EXCEPT(a,b,c)) AS r FROM numbers",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "using_bare",
+          "sql": "SELECT * EXCEPT(x.b,y.c) FROM numbers x JOIN numbers y USING(a)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "using_qualified",
+          "sql": "SELECT x.* EXCEPT(b),y.* EXCEPT(c) FROM numbers x JOIN numbers y USING(a)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "using_full_outer",
+          "sql": "SELECT * EXCEPT(x.b,y.c) FROM numbers x FULL OUTER JOIN numbers y USING(a)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "using_struct",
+          "sql": "SELECT struct(x.* EXCEPT(b), y.* EXCEPT(c)) AS r FROM numbers x FULL OUTER JOIN numbers y USING(a)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "using_count",
+          "sql": "SELECT count(* EXCEPT(x.b,y.c)) AS r FROM numbers x JOIN numbers y USING(a)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "using_hash",
+          "sql": "SELECT hash(x.* EXCEPT(b),y.* EXCEPT(c)) AS r FROM numbers x JOIN numbers y USING(a)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "quoted_name",
+          "sql": "SELECT * EXCEPT(`a.b`) FROM nested",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "plain_star",
+          "sql": "SELECT * FROM numbers",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "plain_count",
+          "sql": "SELECT count(*) AS r FROM numbers",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "empty_numbers_projection",
+          "sql": "SELECT * EXCEPT(b) FROM empty_numbers",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "empty_numbers_count",
+          "sql": "SELECT count(* EXCEPT(b)) AS r FROM empty_numbers",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "empty_numbers_struct",
+          "sql": "SELECT struct(* EXCEPT(b)) AS r FROM empty_numbers",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "empty_numbers_hash",
+          "sql": "SELECT hash(* EXCEPT(b)) AS r FROM empty_numbers",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "empty_numbers_window",
+          "sql": "SELECT count(* EXCEPT(b)) OVER () AS r FROM empty_numbers",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "null_numbers_projection",
+          "sql": "SELECT * EXCEPT(b) FROM null_numbers",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "null_numbers_count",
+          "sql": "SELECT count(* EXCEPT(b)) AS r FROM null_numbers",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "null_numbers_struct",
+          "sql": "SELECT struct(* EXCEPT(b)) AS r FROM null_numbers",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "null_numbers_hash",
+          "sql": "SELECT hash(* EXCEPT(b)) AS r FROM null_numbers",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "null_numbers_window",
+          "sql": "SELECT count(* EXCEPT(b)) OVER () AS r FROM null_numbers",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "using_drop_merged_key",
+          "sql": "SELECT * EXCEPT(a,x.b,y.c) FROM numbers x FULL OUTER JOIN numbers y USING(a)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "using_drop_qualified_keys",
+          "sql": "SELECT x.* EXCEPT(a,b),y.* EXCEPT(a,c) FROM numbers x FULL OUTER JOIN numbers y USING(a)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "using_qualified_key_exclusion",
+          "sql": "SELECT * EXCEPT(x.a) FROM numbers x JOIN numbers y USING(a)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "nested_deep_star",
+          "sql": "SELECT s.child.* EXCEPT(x) FROM nested",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "nested_star_case",
+          "sql": "SELECT n.S.* EXCEPT(CHILD.X) FROM nested n",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "nested_prune_struct_null_count",
+          "sql": "SELECT count(* EXCEPT(id,`a.b`,s.x,s.z,s.child.x)) AS r FROM nested",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "preserve_untouched_nested",
+          "sql": "SELECT * EXCEPT(s.z) FROM nested",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "using_drop_merged_key",
+          "sql": "SELECT * EXCEPT(a,x.b,y.c) FROM numbers x FULL OUTER JOIN numbers y USING(a)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "using_drop_qualified_keys",
+          "sql": "SELECT x.* EXCEPT(a,b),y.* EXCEPT(a,c) FROM numbers x FULL OUTER JOIN numbers y USING(a)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "using_qualified_key_exclusion",
+          "sql": "SELECT * EXCEPT(x.a) FROM numbers x JOIN numbers y USING(a)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "nested_deep_star",
+          "sql": "SELECT s.child.* EXCEPT(x) FROM nested",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "nested_star_case",
+          "sql": "SELECT n.S.* EXCEPT(CHILD.X) FROM nested n",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "nested_prune_struct_null_count",
+          "sql": "SELECT count(* EXCEPT(id,`a.b`,s.x,s.z,s.child.x)) AS r FROM nested",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "preserve_untouched_nested",
+          "sql": "SELECT * EXCEPT(s.z) FROM nested",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "set_except_parenthesized",
+          "sql": "SELECT 1 AS x EXCEPT (SELECT 1 AS x)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "set_except_parenthesized_different",
+          "sql": "SELECT 1 AS x EXCEPT (SELECT 2 AS x)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "using_right_key_exclusion",
+          "sql": "SELECT * EXCEPT(y.a,x.b,y.c) FROM numbers x RIGHT OUTER JOIN numbers y USING(a)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "using_left_key_exclusion",
+          "sql": "SELECT * EXCEPT(x.a,x.b,y.c) FROM numbers x LEFT OUTER JOIN numbers y USING(a)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "using_semi_key_exclusion",
+          "sql": "SELECT * EXCEPT(x.a) FROM numbers x LEFT SEMI JOIN numbers y USING(a)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "using_chain_key_exclusion",
+          "sql": "SELECT * EXCEPT(x.a,x.b,y.b,z.b) FROM numbers x JOIN numbers y USING(a) JOIN numbers z USING(a)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "set_except_parenthesized",
+          "sql": "SELECT 1 AS x EXCEPT (SELECT 1 AS x)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "set_except_parenthesized_different",
+          "sql": "SELECT 1 AS x EXCEPT (SELECT 2 AS x)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "using_right_key_exclusion",
+          "sql": "SELECT * EXCEPT(y.a,x.b,y.c) FROM numbers x RIGHT OUTER JOIN numbers y USING(a)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "using_left_key_exclusion",
+          "sql": "SELECT * EXCEPT(x.a,x.b,y.c) FROM numbers x LEFT OUTER JOIN numbers y USING(a)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "using_semi_key_exclusion",
+          "sql": "SELECT * EXCEPT(x.a) FROM numbers x LEFT SEMI JOIN numbers y USING(a)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "using_chain_key_exclusion",
+          "sql": "SELECT * EXCEPT(x.a,x.b,y.b,z.b) FROM numbers x JOIN numbers y USING(a) JOIN numbers z USING(a)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "set_except_no_alias",
+          "sql": "SELECT 1 EXCEPT (SELECT 1)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "set_except_no_alias_different",
+          "sql": "SELECT 1 EXCEPT (SELECT 2)",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "using_derived_alias_exclusion",
+          "sql": "SELECT * EXCEPT(q.a) FROM (SELECT * FROM numbers x JOIN numbers y USING(a)) q",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "using_cte_alias_exclusion",
+          "sql": "WITH q AS (SELECT * FROM numbers x JOIN numbers y USING(a)) SELECT * EXCEPT(q.a) FROM q",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "set_except_no_alias",
+          "sql": "SELECT 1 EXCEPT (SELECT 1)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "set_except_no_alias_different",
+          "sql": "SELECT 1 EXCEPT (SELECT 2)",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "using_derived_alias_exclusion",
+          "sql": "SELECT * EXCEPT(q.a) FROM (SELECT * FROM numbers x JOIN numbers y USING(a)) q",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "using_cte_alias_exclusion",
+          "sql": "WITH q AS (SELECT * FROM numbers x JOIN numbers y USING(a)) SELECT * EXCEPT(q.a) FROM q",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "plain_nested_star",
+          "sql": "SELECT s.* FROM nested",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "plain_deep_nested_star",
+          "sql": "SELECT s.child.* FROM nested",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "plain_nested_star",
+          "sql": "SELECT s.* FROM nested",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "wildcard-except",
+          "id": "plain_deep_nested_star",
+          "sql": "SELECT s.child.* FROM nested",
+          "ansi": true,
+          "ordered": false
+        }
+      ]
+    }
+  ]
+}

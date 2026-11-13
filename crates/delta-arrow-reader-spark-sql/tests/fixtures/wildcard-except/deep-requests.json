@@ -1,0 +1,559 @@
+{
+  "issue": 1280,
+  "expected_record_count": 4,
+  "corpora": [
+    {
+      "corpus": "deep-wildcard-except-review",
+      "source": "independent-review-Spark",
+      "metadata": {
+        "spark_version": "4.2.0",
+        "inputs": [
+          {
+            "name": "deep_12",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "s",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "next",
+                        "type": {
+                          "type": "struct",
+                          "fields": [
+                            {
+                              "name": "next",
+                              "type": {
+                                "type": "struct",
+                                "fields": [
+                                  {
+                                    "name": "next",
+                                    "type": {
+                                      "type": "struct",
+                                      "fields": [
+                                        {
+                                          "name": "next",
+                                          "type": {
+                                            "type": "struct",
+                                            "fields": [
+                                              {
+                                                "name": "next",
+                                                "type": {
+                                                  "type": "struct",
+                                                  "fields": [
+                                                    {
+                                                      "name": "next",
+                                                      "type": {
+                                                        "type": "struct",
+                                                        "fields": [
+                                                          {
+                                                            "name": "next",
+                                                            "type": {
+                                                              "type": "struct",
+                                                              "fields": [
+                                                                {
+                                                                  "name": "next",
+                                                                  "type": {
+                                                                    "type": "struct",
+                                                                    "fields": [
+                                                                      {
+                                                                        "name": "next",
+                                                                        "type": {
+                                                                          "type": "struct",
+                                                                          "fields": [
+                                                                            {
+                                                                              "name": "next",
+                                                                              "type": {
+                                                                                "type": "struct",
+                                                                                "fields": [
+                                                                                  {
+                                                                                    "name": "next",
+                                                                                    "type": {
+                                                                                      "type": "struct",
+                                                                                      "fields": [
+                                                                                        {
+                                                                                          "name": "next",
+                                                                                          "type": {
+                                                                                            "type": "struct",
+                                                                                            "fields": [
+                                                                                              {
+                                                                                                "name": "keep",
+                                                                                                "type": "integer",
+                                                                                                "nullable": true,
+                                                                                                "metadata": {}
+                                                                                              },
+                                                                                              {
+                                                                                                "name": "drop",
+                                                                                                "type": "integer",
+                                                                                                "nullable": true,
+                                                                                                "metadata": {}
+                                                                                              }
+                                                                                            ]
+                                                                                          },
+                                                                                          "nullable": true,
+                                                                                          "metadata": {}
+                                                                                        }
+                                                                                      ]
+                                                                                    },
+                                                                                    "nullable": true,
+                                                                                    "metadata": {}
+                                                                                  }
+                                                                                ]
+                                                                              },
+                                                                              "nullable": true,
+                                                                              "metadata": {}
+                                                                            }
+                                                                          ]
+                                                                        },
+                                                                        "nullable": true,
+                                                                        "metadata": {}
+                                                                      }
+                                                                    ]
+                                                                  },
+                                                                  "nullable": true,
+                                                                  "metadata": {}
+                                                                }
+                                                              ]
+                                                            },
+                                                            "nullable": true,
+                                                            "metadata": {}
+                                                          }
+                                                        ]
+                                                      },
+                                                      "nullable": true,
+                                                      "metadata": {}
+                                                    }
+                                                  ]
+                                                },
+                                                "nullable": true,
+                                                "metadata": {}
+                                              }
+                                            ]
+                                          },
+                                          "nullable": true,
+                                          "metadata": {}
+                                        }
+                                      ]
+                                    },
+                                    "nullable": true,
+                                    "metadata": {}
+                                  }
+                                ]
+                              },
+                              "nullable": true,
+                              "metadata": {}
+                            }
+                          ]
+                        },
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                [
+                  [
+                    [
+                      [
+                        [
+                          [
+                            [
+                              [
+                                [
+                                  [
+                                    [
+                                      [
+                                        [
+                                          "7",
+                                          "9"
+                                        ]
+                                      ]
+                                    ]
+                                  ]
+                                ]
+                              ]
+                            ]
+                          ]
+                        ]
+                      ]
+                    ]
+                  ]
+                ]
+              ],
+              [
+                null
+              ]
+            ]
+          },
+          {
+            "name": "deep_24",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "s",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "next",
+                        "type": {
+                          "type": "struct",
+                          "fields": [
+                            {
+                              "name": "next",
+                              "type": {
+                                "type": "struct",
+                                "fields": [
+                                  {
+                                    "name": "next",
+                                    "type": {
+                                      "type": "struct",
+                                      "fields": [
+                                        {
+                                          "name": "next",
+                                          "type": {
+                                            "type": "struct",
+                                            "fields": [
+                                              {
+                                                "name": "next",
+                                                "type": {
+                                                  "type": "struct",
+                                                  "fields": [
+                                                    {
+                                                      "name": "next",
+                                                      "type": {
+                                                        "type": "struct",
+                                                        "fields": [
+                                                          {
+                                                            "name": "next",
+                                                            "type": {
+                                                              "type": "struct",
+                                                              "fields": [
+                                                                {
+                                                                  "name": "next",
+                                                                  "type": {
+                                                                    "type": "struct",
+                                                                    "fields": [
+                                                                      {
+                                                                        "name": "next",
+                                                                        "type": {
+                                                                          "type": "struct",
+                                                                          "fields": [
+                                                                            {
+                                                                              "name": "next",
+                                                                              "type": {
+                                                                                "type": "struct",
+                                                                                "fields": [
+                                                                                  {
+                                                                                    "name": "next",
+                                                                                    "type": {
+                                                                                      "type": "struct",
+                                                                                      "fields": [
+                                                                                        {
+                                                                                          "name": "next",
+                                                                                          "type": {
+                                                                                            "type": "struct",
+                                                                                            "fields": [
+                                                                                              {
+                                                                                                "name": "next",
+                                                                                                "type": {
+                                                                                                  "type": "struct",
+                                                                                                  "fields": [
+                                                                                                    {
+                                                                                                      "name": "next",
+                                                                                                      "type": {
+                                                                                                        "type": "struct",
+                                                                                                        "fields": [
+                                                                                                          {
+                                                                                                            "name": "next",
+                                                                                                            "type": {
+                                                                                                              "type": "struct",
+                                                                                                              "fields": [
+                                                                                                                {
+                                                                                                                  "name": "next",
+                                                                                                                  "type": {
+                                                                                                                    "type": "struct",
+                                                                                                                    "fields": [
+                                                                                                                      {
+                                                                                                                        "name": "next",
+                                                                                                                        "type": {
+                                                                                                                          "type": "struct",
+                                                                                                                          "fields": [
+                                                                                                                            {
+                                                                                                                              "name": "next",
+                                                                                                                              "type": {
+                                                                                                                                "type": "struct",
+                                                                                                                                "fields": [
+                                                                                                                                  {
+                                                                                                                                    "name": "next",
+                                                                                                                                    "type": {
+                                                                                                                                      "type": "struct",
+                                                                                                                                      "fields": [
+                                                                                                                                        {
+                                                                                                                                          "name": "next",
+                                                                                                                                          "type": {
+                                                                                                                                            "type": "struct",
+                                                                                                                                            "fields": [
+                                                                                                                                              {
+                                                                                                                                                "name": "next",
+                                                                                                                                                "type": {
+                                                                                                                                                  "type": "struct",
+                                                                                                                                                  "fields": [
+                                                                                                                                                    {
+                                                                                                                                                      "name": "next",
+                                                                                                                                                      "type": {
+                                                                                                                                                        "type": "struct",
+                                                                                                                                                        "fields": [
+                                                                                                                                                          {
+                                                                                                                                                            "name": "next",
+                                                                                                                                                            "type": {
+                                                                                                                                                              "type": "struct",
+                                                                                                                                                              "fields": [
+                                                                                                                                                                {
+                                                                                                                                                                  "name": "next",
+                                                                                                                                                                  "type": {
+                                                                                                                                                                    "type": "struct",
+                                                                                                                                                                    "fields": [
+                                                                                                                                                                      {
+                                                                                                                                                                        "name": "keep",
+                                                                                                                                                                        "type": "integer",
+                                                                                                                                                                        "nullable": true,
+                                                                                                                                                                        "metadata": {}
+                                                                                                                                                                      },
+                                                                                                                                                                      {
+                                                                                                                                                                        "name": "drop",
+                                                                                                                                                                        "type": "integer",
+                                                                                                                                                                        "nullable": true,
+                                                                                                                                                                        "metadata": {}
+                                                                                                                                                                      }
+                                                                                                                                                                    ]
+                                                                                                                                                                  },
+                                                                                                                                                                  "nullable": true,
+                                                                                                                                                                  "metadata": {}
+                                                                                                                                                                }
+                                                                                                                                                              ]
+                                                                                                                                                            },
+                                                                                                                                                            "nullable": true,
+                                                                                                                                                            "metadata": {}
+                                                                                                                                                          }
+                                                                                                                                                        ]
+                                                                                                                                                      },
+                                                                                                                                                      "nullable": true,
+                                                                                                                                                      "metadata": {}
+                                                                                                                                                    }
+                                                                                                                                                  ]
+                                                                                                                                                },
+                                                                                                                                                "nullable": true,
+                                                                                                                                                "metadata": {}
+                                                                                                                                              }
+                                                                                                                                            ]
+                                                                                                                                          },
+                                                                                                                                          "nullable": true,
+                                                                                                                                          "metadata": {}
+                                                                                                                                        }
+                                                                                                                                      ]
+                                                                                                                                    },
+                                                                                                                                    "nullable": true,
+                                                                                                                                    "metadata": {}
+                                                                                                                                  }
+                                                                                                                                ]
+                                                                                                                              },
+                                                                                                                              "nullable": true,
+                                                                                                                              "metadata": {}
+                                                                                                                            }
+                                                                                                                          ]
+                                                                                                                        },
+                                                                                                                        "nullable": true,
+                                                                                                                        "metadata": {}
+                                                                                                                      }
+                                                                                                                    ]
+                                                                                                                  },
+                                                                                                                  "nullable": true,
+                                                                                                                  "metadata": {}
+                                                                                                                }
+                                                                                                              ]
+                                                                                                            },
+                                                                                                            "nullable": true,
+                                                                                                            "metadata": {}
+                                                                                                          }
+                                                                                                        ]
+                                                                                                      },
+                                                                                                      "nullable": true,
+                                                                                                      "metadata": {}
+                                                                                                    }
+                                                                                                  ]
+                                                                                                },
+                                                                                                "nullable": true,
+                                                                                                "metadata": {}
+                                                                                              }
+                                                                                            ]
+                                                                                          },
+                                                                                          "nullable": true,
+                                                                                          "metadata": {}
+                                                                                        }
+                                                                                      ]
+                                                                                    },
+                                                                                    "nullable": true,
+                                                                                    "metadata": {}
+                                                                                  }
+                                                                                ]
+                                                                              },
+                                                                              "nullable": true,
+                                                                              "metadata": {}
+                                                                            }
+                                                                          ]
+                                                                        },
+                                                                        "nullable": true,
+                                                                        "metadata": {}
+                                                                      }
+                                                                    ]
+                                                                  },
+                                                                  "nullable": true,
+                                                                  "metadata": {}
+                                                                }
+                                                              ]
+                                                            },
+                                                            "nullable": true,
+                                                            "metadata": {}
+                                                          }
+                                                        ]
+                                                      },
+                                                      "nullable": true,
+                                                      "metadata": {}
+                                                    }
+                                                  ]
+                                                },
+                                                "nullable": true,
+                                                "metadata": {}
+                                              }
+                                            ]
+                                          },
+                                          "nullable": true,
+                                          "metadata": {}
+                                        }
+                                      ]
+                                    },
+                                    "nullable": true,
+                                    "metadata": {}
+                                  }
+                                ]
+                              },
+                              "nullable": true,
+                              "metadata": {}
+                            }
+                          ]
+                        },
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                [
+                  [
+                    [
+                      [
+                        [
+                          [
+                            [
+                              [
+                                [
+                                  [
+                                    [
+                                      [
+                                        [
+                                          [
+                                            [
+                                              [
+                                                [
+                                                  [
+                                                    [
+                                                      [
+                                                        [
+                                                          [
+                                                            [
+                                                              [
+                                                                [
+                                                                  "7",
+                                                                  "9"
+                                                                ]
+                                                              ]
+                                                            ]
+                                                          ]
+                                                        ]
+                                                      ]
+                                                    ]
+                                                  ]
+                                                ]
+                                              ]
+                                            ]
+                                          ]
+                                        ]
+                                      ]
+                                    ]
+                                  ]
+                                ]
+                              ]
+                            ]
+                          ]
+                        ]
+                      ]
+                    ]
+                  ]
+                ]
+              ],
+              [
+                null
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "deep-wildcard-except-review",
+          "id": "deep_12",
+          "sql": "SELECT * EXCEPT(s.next.next.next.next.next.next.next.next.next.next.next.next.drop) FROM deep_12",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "deep-wildcard-except-review",
+          "id": "deep_12",
+          "sql": "SELECT * EXCEPT(s.next.next.next.next.next.next.next.next.next.next.next.next.drop) FROM deep_12",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "deep-wildcard-except-review",
+          "id": "deep_24",
+          "sql": "SELECT * EXCEPT(s.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.drop) FROM deep_24",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "deep-wildcard-except-review",
+          "id": "deep_24",
+          "sql": "SELECT * EXCEPT(s.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.drop) FROM deep_24",
+          "ansi": true,
+          "ordered": false
+        }
+      ]
+    }
+  ]
+}

@@ -200,7 +200,7 @@ impl PlanResolver<'_> {
             &mut expression_name,
         )?;
         let expr = if is_outer && !inner.is_empty() {
-            Self::guard_outer_nested_nulls(expr, schema)?
+            Self::guard_nested_parent_nulls(expr, schema)?
         } else {
             expr
         };
@@ -213,7 +213,10 @@ impl PlanResolver<'_> {
         }))
     }
 
-    fn guard_outer_nested_nulls(expr: expr::Expr, schema: &DFSchemaRef) -> PlanResult<expr::Expr> {
+    pub(super) fn guard_nested_parent_nulls(
+        expr: expr::Expr,
+        schema: &DFSchemaRef,
+    ) -> PlanResult<expr::Expr> {
         // Arrow can retain child values under a NULL parent. Test each parent
         // before reading deeper children from the extraction.
         let mut guards = Vec::new();
@@ -442,7 +445,7 @@ impl PlanResolver<'_> {
         }
     }
 
-    fn generate_qualified_nested_field_candidates<T: AsRef<str>>(
+    pub(super) fn generate_qualified_nested_field_candidates<T: AsRef<str>>(
         name: &[T],
     ) -> Vec<(Option<TableReference>, &T, &[T])> {
         let mut out = vec![];

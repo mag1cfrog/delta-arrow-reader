@@ -23,6 +23,8 @@ pub(super) struct FieldInfo {
     hidden: bool,
     /// The Spark qualifier of an interval field, where the resolver knows it (#1152).
     interval_qualifier: Option<IntervalQualifier>,
+    /// The source qualifier of a visible USING key whose plan alias is unqualified.
+    using_key_qualifier: Option<TableReference>,
 }
 
 impl FieldInfo {
@@ -117,6 +119,7 @@ impl PlanResolverState {
             name: name.into(),
             hidden,
             interval_qualifier: None,
+            using_key_qualifier: None,
         };
         self.fields.insert(field_id.clone(), info);
         field_id
@@ -133,6 +136,16 @@ impl PlanResolverState {
     /// This is similar to [`Self::register_field_name`] but the field is marked as hidden.
     pub fn register_hidden_field_name(&mut self, name: impl Into<String>) -> String {
         self.register_field_info(name, true)
+    }
+
+    pub fn set_using_key_qualifier(&mut self, field_id: &str, qualifier: Option<TableReference>) {
+        if let Some(info) = self.fields.get_mut(field_id) {
+            info.using_key_qualifier = qualifier;
+        }
+    }
+
+    pub fn using_key_qualifier(&self, field_id: &str) -> Option<&TableReference> {
+        self.fields.get(field_id)?.using_key_qualifier.as_ref()
     }
 
     /// Sets the display name of an already-registered field. Used to give a

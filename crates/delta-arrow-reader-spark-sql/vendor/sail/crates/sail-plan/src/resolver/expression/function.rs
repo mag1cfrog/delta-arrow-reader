@@ -467,7 +467,11 @@ impl PlanResolver<'_> {
                 _ => None,
             };
             let wildcard_target = match &expression {
-                spec::Expr::UnresolvedStar { target, .. } => target.clone(),
+                spec::Expr::UnresolvedStar {
+                    target,
+                    wildcard_options,
+                    ..
+                } if wildcard_options.except_columns.is_none() => target.clone(),
                 _ => None,
             };
             let (named, alias_display_name) = match expression {

@@ -301,7 +301,7 @@ pub struct UnresolvedNamedLambdaVariable {
 pub struct WildcardOptions {
     pub ilike_pattern: Option<String>,
     pub exclude_columns: Option<Vec<Identifier>>,
-    pub except_columns: Option<Vec<Identifier>>,
+    pub except_columns: Option<Vec<ObjectName>>,
     pub replace_columns: Option<Vec<WildcardReplaceColumn>>,
     pub rename_columns: Option<Vec<IdentifierWithAlias>>,
 }

@@ -359,6 +359,29 @@ pub fn from_ast_expression(expr: Expr) -> SqlResult<spec::Expr> {
                 order_by: None,
             }))
         }
+        Expr::WildcardExcept(expr, clause) => {
+            let spec::Expr::UnresolvedStar {
+                target,
+                plan_id,
+                mut wildcard_options,
+            } = from_ast_expression(*expr)?
+            else {
+                return Err(SqlError::invalid("EXCEPT requires a wildcard"));
+            };
+            let columns = clause
+                .columns
+                .into_items()
+                .map(from_ast_object_name)
+                .collect::<SqlResult<Vec<_>>>()?;
+            if wildcard_options.except_columns.replace(columns).is_some() {
+                return Err(SqlError::invalid("duplicate wildcard EXCEPT clause"));
+            }
+            Ok(spec::Expr::UnresolvedStar {
+                target,
+                plan_id,
+                wildcard_options,
+            })
+        }
         Expr::Wildcard(expr, _, _) => {
             let expr = from_ast_expression(*expr)?;
             match expr {
