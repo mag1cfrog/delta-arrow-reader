@@ -3120,6 +3120,16 @@
                         "nonTerminal": "Box(Expression)"
                       },
                       {
+                        "nonTerminal": "WildcardExceptClause"
+                      }
+                    ]
+                  },
+                  {
+                    "sequence": [
+                      {
+                        "nonTerminal": "Box(Expression)"
+                      },
+                      {
                         "nonTerminal": "Operator(Period)"
                       },
                       {
@@ -12181,6 +12191,25 @@
                   },
                   {
                     "nonTerminal": "Expression"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "WildcardExceptClause",
+              "node": {
+                "sequence": [
+                  {
+                    "nonTerminal": "Keyword(Except)"
+                  },
+                  {
+                    "nonTerminal": "Operator(LeftParenthesis)"
+                  },
+                  {
+                    "nonTerminal": "Sequence(ObjectName, Operator(Comma))"
+                  },
+                  {
+                    "nonTerminal": "Operator(RightParenthesis)"
                   }
                 ]
               }

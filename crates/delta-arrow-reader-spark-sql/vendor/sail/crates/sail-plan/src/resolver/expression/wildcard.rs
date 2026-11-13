@@ -1,15 +1,14 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
-use std::collections::VecDeque;
-
 use arrow::datatypes::DataType;
 use datafusion::sql::sqlparser::ast::{Ident, ObjectName, ObjectNamePart};
 use datafusion_common::{DFSchemaRef, TableReference};
 use datafusion_expr::expr::ScalarFunction;
-use datafusion_expr::{ScalarUDF, col, expr, lit};
+use datafusion_expr::{ExprSchemable, ScalarUDF, col, expr, lit};
 use datafusion_functions::core::get_field;
 use sail_common::spec;
 use sail_common_datafusion::utils::items::ItemTaker;
 use sail_function::scalar::multi_expr::MultiExpr;
+use sail_function::scalar::struct_function::StructFunction;
 
 use crate::error::{PlanError, PlanResult};
 use crate::resolver::PlanResolver;
@@ -21,11 +20,12 @@ impl PlanResolver<'_> {
     pub(super) async fn resolve_expression_wildcard(
         &self,
         target: Option<spec::ObjectName>,
-        wildcard_options: spec::WildcardOptions,
+        mut wildcard_options: spec::WildcardOptions,
         schema: &DFSchemaRef,
         state: &mut PlanResolverState,
     ) -> PlanResult<NamedExpr> {
-        match target {
+        let exclusions = wildcard_options.except_columns.take();
+        let wildcard = match target {
             Some(target) if wildcard_options == Default::default() => {
                 self.resolve_wildcard_or_nested_field_wildcard(&target, schema, state)
             }
@@ -43,7 +43,147 @@ impl PlanResolver<'_> {
                     },
                 ))
             }
+        }?;
+        match exclusions {
+            None => Ok(wildcard),
+            Some(exclusions) => {
+                let columns = self.expand_function_argument(wildcard, schema, state)?;
+                let columns =
+                    Self::resolve_wildcard_exclusions(columns, &exclusions, schema, state)?;
+                let (names, expressions) = columns
+                    .into_iter()
+                    .map(|named| Ok((named.name.one()?, named.expr)))
+                    .collect::<PlanResult<Vec<_>>>()?
+                    .into_iter()
+                    .unzip();
+                Ok(NamedExpr::new(
+                    names,
+                    ScalarUDF::from(MultiExpr::new()).call(expressions),
+                ))
+            }
         }
+    }
+
+    fn resolve_wildcard_exclusions(
+        columns: Vec<NamedExpr>,
+        exclusions: &[spec::ObjectName],
+        schema: &DFSchemaRef,
+        state: &PlanResolverState,
+    ) -> PlanResult<Vec<NamedExpr>> {
+        if exclusions.is_empty() {
+            return Err(PlanError::invalid(
+                "except columns must have at least one column",
+            ));
+        }
+        let mut paths = vec![Vec::new(); columns.len()];
+        for exclusion in exclusions {
+            let mut resolved = false;
+            for (qualifier, column_name, inner) in
+                Self::generate_qualified_nested_field_candidates(exclusion.parts())
+            {
+                let matches = columns
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, named)| {
+                        named
+                            .name
+                            .first()
+                            .is_some_and(|name| name.eq_ignore_ascii_case(column_name.as_ref()))
+                            && match &named.expr {
+                                expr::Expr::Column(column)
+                                | expr::Expr::OuterReferenceColumn(_, column) => qualifier_matches(
+                                    qualifier.as_ref(),
+                                    column
+                                        .relation
+                                        .as_ref()
+                                        .or_else(|| state.using_key_qualifier(column.name())),
+                                ),
+                                _ => qualifier.is_none(),
+                            }
+                    })
+                    .map(|(index, _)| index)
+                    .collect::<Vec<_>>();
+                if matches.is_empty() {
+                    continue;
+                }
+                let [index] = matches.as_slice() else {
+                    return Err(PlanError::analysis(format!(
+                        "ambiguous wildcard exclusion: {exclusion:?}"
+                    )));
+                };
+                paths[*index].push(inner);
+                resolved = true;
+                break;
+            }
+            if !resolved {
+                return Err(PlanError::analysis(format!(
+                    "cannot resolve wildcard exclusion: {exclusion:?}"
+                )));
+            }
+        }
+        columns
+            .into_iter()
+            .zip(paths)
+            .filter_map(|(mut column, paths)| {
+                if paths.iter().any(|path| path.is_empty()) {
+                    return None;
+                }
+                if paths.is_empty() {
+                    return Some(Ok(column));
+                }
+                Some((|| {
+                    let data_type = column.expr.get_type(schema)?;
+                    column.expr =
+                        Self::exclude_struct_fields(column.expr, &data_type, &paths, schema)?;
+                    Ok(column)
+                })())
+            })
+            .collect()
+    }
+
+    fn exclude_struct_fields(
+        expression: expr::Expr,
+        data_type: &DataType,
+        paths: &[&[spec::Identifier]],
+        schema: &DFSchemaRef,
+    ) -> PlanResult<expr::Expr> {
+        let DataType::Struct(fields) = data_type else {
+            return Err(PlanError::analysis("wildcard exclusion requires a STRUCT"));
+        };
+        for path in paths {
+            let matches = fields
+                .iter()
+                .filter(|field| field.name().eq_ignore_ascii_case(path[0].as_ref()))
+                .count();
+            if matches != 1 {
+                return Err(PlanError::analysis(format!(
+                    "missing or ambiguous wildcard exclusion field: {:?}",
+                    path[0]
+                )));
+            }
+        }
+        let mut names = Vec::new();
+        let mut arguments = Vec::new();
+        for field in fields {
+            let remaining = paths
+                .iter()
+                .filter(|path| field.name().eq_ignore_ascii_case(path[0].as_ref()))
+                .map(|path| &path[1..])
+                .collect::<Vec<_>>();
+            if remaining.iter().any(|path| path.is_empty()) {
+                continue;
+            }
+            let value = get_field().call(vec![expression.clone(), lit(field.name().clone())]);
+            let value = if remaining.is_empty() {
+                Self::guard_nested_parent_nulls(value, schema)?
+            } else {
+                Self::exclude_struct_fields(value, field.data_type(), &remaining, schema)?
+            };
+            names.push(field.name().clone());
+            arguments.push(value);
+        }
+        // Spark rebuilds affected STRUCTs even when their original parent was NULL.
+        Ok(ScalarUDF::from(StructFunction::new(names)).call(arguments))
     }
 
     fn resolve_wildcard_or_nested_field_wildcard(
@@ -103,9 +243,15 @@ impl PlanResolver<'_> {
                     .collect(),
             })
             .collect::<Vec<_>>();
-        candidates
+        let mut wildcard = candidates
             .one()
-            .map_err(|_| PlanError::AnalysisError(format!("cannot resolve wildcard: {name:?}")))
+            .map_err(|_| PlanError::AnalysisError(format!("cannot resolve wildcard: {name:?}")))?;
+        if let expr::Expr::ScalarFunction(function) = &mut wildcard.expr {
+            for argument in &mut function.args {
+                *argument = Self::guard_nested_parent_nulls(argument.clone(), schema)?;
+            }
+        }
+        Ok(wildcard)
     }
 
     fn resolve_nested_field_wildcard<T: AsRef<str>>(
@@ -176,32 +322,6 @@ impl PlanResolver<'_> {
                 Ok(exclude)
             })
             .transpose()?;
-        let except = wildcard_options
-            .except_columns
-            .map(|x| {
-                let except = if x.len() > 1 {
-                    let mut deque = VecDeque::from(x);
-                    let first_element = deque.pop_front().ok_or_else(|| {
-                        PlanError::invalid("except columns must have at least one column")
-                    })?;
-                    let additional_elements = deque.into_iter().map(make_ident).collect();
-                    expr::ExceptSelectItem {
-                        first_element: make_ident(first_element),
-                        additional_elements,
-                    }
-                } else if let Some(x) = x.into_iter().next() {
-                    expr::ExceptSelectItem {
-                        first_element: make_ident(x),
-                        additional_elements: vec![],
-                    }
-                } else {
-                    return Err(PlanError::invalid(
-                        "except columns must have at least one column",
-                    ));
-                };
-                Ok(except)
-            })
-            .transpose()?;
         // ponytail: DF's sql feature changes these AST types. Exclude REPLACE/RENAME
         // from this probe until their metadata is adapted and tested.
         if wildcard_options.replace_columns.is_some() || wildcard_options.rename_columns.is_some() {
@@ -212,7 +332,7 @@ impl PlanResolver<'_> {
         Ok(expr::WildcardOptions {
             ilike,
             exclude,
-            except,
+            except: None,
             replace,
             rename,
         })
@@ -235,5 +355,65 @@ impl PlanResolver<'_> {
             ));
         }
         out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use arrow::datatypes::{Field, Schema};
+    use datafusion_common::DFSchema;
+    use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion};
+
+    use super::*;
+
+    #[test]
+    fn wildcard_exclusion_expression_growth_is_quadratic() -> PlanResult<()> {
+        let expression_nodes = |depth| -> PlanResult<usize> {
+            let mut data_type = DataType::Struct(
+                vec![
+                    Field::new("keep", DataType::Int32, true),
+                    Field::new("drop", DataType::Int32, true),
+                ]
+                .into(),
+            );
+            for _ in 1..depth {
+                data_type = DataType::Struct(vec![Field::new("next", data_type, true)].into());
+            }
+            let schema = Arc::new(DFSchema::try_from(Schema::new(vec![Field::new(
+                "payload",
+                data_type.clone(),
+                true,
+            )]))?);
+            let mut path = vec![spec::Identifier::from("next"); depth - 1];
+            path.push("drop".into());
+            let expression = PlanResolver::exclude_struct_fields(
+                col("payload"),
+                &data_type,
+                &[path.as_slice()],
+                &schema,
+            )?;
+            let mut nodes = 0;
+            expression.apply(|_| {
+                nodes += 1;
+                Ok(TreeNodeRecursion::Continue)
+            })?;
+            Ok(nodes)
+        };
+        let mut previous = None;
+        for depth in [4, 8, 12, 24] {
+            let nodes = expression_nodes(depth)?;
+            println!("EXCEPT_EXPRESSION_NODES depth={depth} nodes={nodes}");
+            if let Some((previous_depth, previous_nodes)) = previous {
+                // Raw ancestor prefixes give quadratic growth; check shallow depths before advancing.
+                assert!(
+                    nodes * previous_depth * previous_depth <= previous_nodes * depth * depth,
+                    "depth {previous_depth}->{depth} grew {previous_nodes} nodes to {nodes}"
+                );
+            }
+            previous = Some((depth, nodes));
+        }
+        Ok(())
     }
 }

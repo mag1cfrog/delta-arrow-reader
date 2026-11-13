@@ -217,7 +217,13 @@ impl PlanResolver<'_> {
                     .into_iter()
                     .map(|(name, (left, right))| {
                         let column = if uses_right { right } else { left };
-                        Expr::Column(column).alias(state.register_field_name(name))
+                        let qualifier = column
+                            .relation
+                            .clone()
+                            .or_else(|| state.using_key_qualifier(column.name()).cloned());
+                        let field_id = state.register_field_name(name);
+                        state.set_using_key_qualifier(&field_id, qualifier);
+                        Expr::Column(column).alias(field_id)
                     })
                     .chain(hidden_columns);
                 builder.project(projections)?
@@ -256,7 +262,13 @@ impl PlanResolver<'_> {
                     .into_iter()
                     .map(|(name, (left, right))| {
                         let col = if uses_right { right } else { left };
-                        Expr::Column(col).alias(state.register_field_name(name))
+                        let qualifier = col
+                            .relation
+                            .clone()
+                            .or_else(|| state.using_key_qualifier(col.name()).cloned());
+                        let field_id = state.register_field_name(name);
+                        state.set_using_key_qualifier(&field_id, qualifier);
+                        Expr::Column(col).alias(field_id)
                     })
                     .chain(hidden_columns);
                 builder.project(projections)?

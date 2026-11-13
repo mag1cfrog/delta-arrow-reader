@@ -12,14 +12,14 @@ use crate::ast::data_type::{DataType, IntervalDayTimeUnit, IntervalYearMonthUnit
 use crate::ast::identifier::{Ident, ObjectName, Variable};
 use crate::ast::keywords::{
     All, And, Any, As, Asc, Between, Both, By, Case, Cast, Cube, Current, CurrentDate,
-    CurrentTimestamp, CurrentUser, Date, Day, Days, Desc, Distinct, Div, Else, End, Escape, Exists,
-    Extract, False, Filter, First, Following, For, From, Group, Grouping, Hour, Hours, Identifier,
-    Ignore, Ilike, In, Interval, Is, Last, Leading, Like, Microsecond, Microseconds, Millisecond,
-    Milliseconds, Minute, Minutes, Month, Months, Not, Null, Nulls, Or, Order, Over, Overlay,
-    Placing, Position, Preceding, Range, Regexp, Respect, Rlike, Rollup, Row, Rows, Second,
-    Seconds, Sets, Similar, Struct, Substr, Substring, Table, Then, Time, Timestamp, TimestampLtz,
-    TimestampNtz, To, Trailing, Trim, True, TryCast, Unbounded, Unknown, Week, Weeks, When, Where,
-    Within, Year, Years,
+    CurrentTimestamp, CurrentUser, Date, Day, Days, Desc, Distinct, Div, Else, End, Escape, Except,
+    Exists, Extract, False, Filter, First, Following, For, From, Group, Grouping, Hour, Hours,
+    Identifier, Ignore, Ilike, In, Interval, Is, Last, Leading, Like, Microsecond, Microseconds,
+    Millisecond, Milliseconds, Minute, Minutes, Month, Months, Not, Null, Nulls, Or, Order, Over,
+    Overlay, Placing, Position, Preceding, Range, Regexp, Respect, Rlike, Rollup, Row, Rows,
+    Second, Seconds, Sets, Similar, Struct, Substr, Substring, Table, Then, Time, Timestamp,
+    TimestampLtz, TimestampNtz, To, Trailing, Trim, True, TryCast, Unbounded, Unknown, Week, Weeks,
+    When, Where, Within, Year, Years,
 };
 use crate::ast::literal::{NumberLiteral, StringLiteral};
 use crate::ast::operator;
@@ -44,6 +44,7 @@ pub enum Expr {
     UnaryOperator(UnaryOperator, Box<Expr>),
     BinaryOperator(Box<Expr>, BinaryOperator, Box<Expr>),
     Wildcard(Box<Expr>, Period, operator::Asterisk),
+    WildcardExcept(Box<Expr>, WildcardExceptClause),
     Field(Box<Expr>, Period, Ident),
     Subscript(Box<Expr>, LeftBracket, Box<Expr>, RightBracket),
     Cast(Box<Expr>, DoubleColon, DataType),
@@ -625,6 +626,14 @@ pub struct GroupingSet {
     pub right: RightParenthesis,
 }
 
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+pub struct WildcardExceptClause {
+    pub except: Except,
+    pub left: LeftParenthesis,
+    pub columns: Sequence<ObjectName, Comma>,
+    pub right: RightParenthesis,
+}
+
 // All private `struct`s or `enum`s are "internal" AST nodes used to parse expressions.
 // They are not part of the final AST.
 
@@ -632,6 +641,7 @@ pub struct GroupingSet {
 #[parser(dependency = "(Expr, DataType)")]
 enum ExprModifier {
     Wildcard(Period, operator::Asterisk),
+    WildcardExcept(WildcardExceptClause),
     Field(Period, Ident),
     Subscript(
         LeftBracket,
@@ -749,6 +759,9 @@ where
                 let expr = expr.build::<I, E>()?;
                 match modifier {
                     ExprModifier::Wildcard(x1, x2) => Ok(Expr::Wildcard(Box::new(expr), x1, x2)),
+                    ExprModifier::WildcardExcept(clause) => {
+                        Ok(Expr::WildcardExcept(Box::new(expr), clause))
+                    }
                     ExprModifier::Field(x1, x2) => Ok(Expr::Field(Box::new(expr), x1, x2)),
                     ExprModifier::Subscript(x1, x2, x3) => {
                         Ok(Expr::Subscript(Box::new(expr), x1, Box::new(x2), x3))
