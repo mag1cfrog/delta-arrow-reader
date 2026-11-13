@@ -1,0 +1,983 @@
+{
+  "issue": "156",
+  "expected_record_count": 76,
+  "corpora": [
+    {
+      "corpus": "nested-results-coverage",
+      "source": "source-only ordinary nested SQL and registered Arrow-equivalent values",
+      "metadata": {
+        "spark_version": "4.2.0",
+        "timezone": "UTC",
+        "inputs": [
+          {
+            "name": "nested_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "idx",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "lookup",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "a",
+                  "type": {
+                    "type": "array",
+                    "elementType": "integer",
+                    "containsNull": true
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "code",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "label",
+                        "type": "string",
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "numbers",
+                        "type": {
+                          "type": "array",
+                          "elementType": "integer",
+                          "containsNull": true
+                        },
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "m",
+                  "type": {
+                    "type": "map",
+                    "keyType": "string",
+                    "valueType": "integer",
+                    "valueContainsNull": true
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "records",
+                  "type": {
+                    "type": "array",
+                    "elementType": {
+                      "type": "struct",
+                      "fields": [
+                        {
+                          "name": "code",
+                          "type": "integer",
+                          "nullable": true,
+                          "metadata": {}
+                        },
+                        {
+                          "name": "label",
+                          "type": "string",
+                          "nullable": true,
+                          "metadata": {}
+                        }
+                      ]
+                    },
+                    "containsNull": true
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "groups",
+                  "type": {
+                    "type": "map",
+                    "keyType": "string",
+                    "valueType": {
+                      "type": "array",
+                      "elementType": "integer",
+                      "containsNull": true
+                    },
+                    "valueContainsNull": true
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "0",
+                "a",
+                [
+                  "7",
+                  null,
+                  "7"
+                ],
+                [
+                  "3",
+                  "ok",
+                  [
+                    "10",
+                    null
+                  ]
+                ],
+                [
+                  [
+                    "a",
+                    "7"
+                  ],
+                  [
+                    "b",
+                    null
+                  ]
+                ],
+                [
+                  [
+                    "1",
+                    "p"
+                  ],
+                  null,
+                  [
+                    "1",
+                    "p"
+                  ]
+                ],
+                [
+                  [
+                    "a",
+                    [
+                      "5",
+                      null
+                    ]
+                  ],
+                  [
+                    "b",
+                    []
+                  ]
+                ]
+              ],
+              [
+                "1",
+                "1",
+                "missing",
+                [
+                  "8",
+                  "9"
+                ],
+                [
+                  null,
+                  null,
+                  []
+                ],
+                [
+                  [
+                    "a",
+                    null
+                  ]
+                ],
+                [],
+                [
+                  [
+                    "a",
+                    null
+                  ]
+                ]
+              ],
+              [
+                "2",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+              ],
+              [
+                "3",
+                "0",
+                "a",
+                [],
+                [
+                  "4",
+                  "",
+                  null
+                ],
+                [],
+                [
+                  null
+                ],
+                []
+              ],
+              [
+                "4",
+                "0",
+                "A",
+                [
+                  null
+                ],
+                [
+                  null,
+                  null,
+                  null
+                ],
+                [
+                  [
+                    "a",
+                    null
+                  ]
+                ],
+                [
+                  [
+                    null,
+                    null
+                  ]
+                ],
+                [
+                  [
+                    "a",
+                    [
+                      null
+                    ]
+                  ]
+                ]
+              ],
+              [
+                "0",
+                "0",
+                "a",
+                [
+                  "7",
+                  null,
+                  "7"
+                ],
+                [
+                  "3",
+                  "ok",
+                  [
+                    "10",
+                    null
+                  ]
+                ],
+                [
+                  [
+                    "a",
+                    "7"
+                  ],
+                  [
+                    "b",
+                    null
+                  ]
+                ],
+                [
+                  [
+                    "1",
+                    "p"
+                  ],
+                  null,
+                  [
+                    "1",
+                    "p"
+                  ]
+                ],
+                [
+                  [
+                    "a",
+                    [
+                      "5",
+                      null
+                    ]
+                  ],
+                  [
+                    "b",
+                    []
+                  ]
+                ]
+              ]
+            ]
+          },
+          {
+            "name": "empty_nested_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "idx",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "lookup",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "a",
+                  "type": {
+                    "type": "array",
+                    "elementType": "integer",
+                    "containsNull": true
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "code",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "label",
+                        "type": "string",
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "numbers",
+                        "type": {
+                          "type": "array",
+                          "elementType": "integer",
+                          "containsNull": true
+                        },
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "m",
+                  "type": {
+                    "type": "map",
+                    "keyType": "string",
+                    "valueType": "integer",
+                    "valueContainsNull": true
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "records",
+                  "type": {
+                    "type": "array",
+                    "elementType": {
+                      "type": "struct",
+                      "fields": [
+                        {
+                          "name": "code",
+                          "type": "integer",
+                          "nullable": true,
+                          "metadata": {}
+                        },
+                        {
+                          "name": "label",
+                          "type": "string",
+                          "nullable": true,
+                          "metadata": {}
+                        }
+                      ]
+                    },
+                    "containsNull": true
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "groups",
+                  "type": {
+                    "type": "map",
+                    "keyType": "string",
+                    "valueType": {
+                      "type": "array",
+                      "elementType": "integer",
+                      "containsNull": true
+                    },
+                    "valueContainsNull": true
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": []
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "nested-results-coverage",
+          "id": "literal_containers",
+          "sql": "SELECT array(1, CAST(NULL AS INT), 1) AS a, named_struct('code', 2, 'label', CAST(NULL AS STRING)) AS s, map('a', 3, 'b', CAST(NULL AS INT)) AS m",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "literal_nested",
+          "sql": "SELECT array(named_struct('code', 2, 'label', 'x'), CAST(NULL AS STRUCT<code:INT,label:STRING>)) AS records, map('a', array(1, CAST(NULL AS INT)), 'b', array()) AS groups",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "typed_null_containers",
+          "sql": "SELECT CAST(NULL AS ARRAY<INT>) AS a, CAST(NULL AS STRUCT<code:INT,label:STRING>) AS s, CAST(NULL AS MAP<STRING,INT>) AS m",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "empty_and_void_containers",
+          "sql": "SELECT array() AS a, map() AS m, array(NULL) AS nulls, named_struct('n', NULL) AS s",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "registered_containers",
+          "sql": "SELECT id, a, s, m, records, groups FROM nested_inputs",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "registered_empty",
+          "sql": "SELECT id, a, s, m, records, groups FROM empty_nested_inputs",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "column_constructors",
+          "sql": "SELECT id, array(idx, s.code, CAST(NULL AS INT)) AS a, named_struct('source', s, 'items', a) AS s, map('a', idx, 'b', s.code) AS m FROM nested_inputs",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "nested_column_constructors",
+          "sql": "SELECT id, array(s) AS a, map('a', records, 'b', array(CAST(NULL AS STRUCT<code:INT,label:STRING>))) AS m FROM nested_inputs",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "struct_dotted_fields",
+          "sql": "SELECT id, s.code, s.label, s.numbers FROM nested_inputs ORDER BY id",
+          "ordered": true,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "struct_bracket_fields",
+          "sql": "SELECT id, s['code'], s['label'], s['numbers'] FROM nested_inputs ORDER BY id",
+          "ordered": true,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "array_struct_field_projection",
+          "sql": "SELECT id, records.code, records.label FROM nested_inputs ORDER BY id",
+          "ordered": true,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "array_literal_access",
+          "sql": "SELECT array(7, 9)[1] AS i, array(named_struct('code', 5))[0].code AS code, map('a', array(8, 9))['a'][0] AS nested",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "array_column_access",
+          "sql": "SELECT id, a[0], a[idx], a[idx + 0] FROM nested_inputs WHERE size(a) > 0 ORDER BY id",
+          "ordered": true,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "array_computed_access",
+          "sql": "SELECT id, a[CASE WHEN idx = 1 THEN idx - 1 ELSE idx END] AS item FROM nested_inputs WHERE size(a) > 0",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "array_null_subscript",
+          "sql": "SELECT id, a[CAST(NULL AS INT)] AS item FROM nested_inputs",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "array_element_at",
+          "sql": "SELECT id, element_at(a, idx + 1) AS item, element_at(a, -1) AS last FROM nested_inputs WHERE size(a) > 0",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "nested_struct_subscript",
+          "sql": "SELECT id, s.numbers[idx + 0] AS item FROM nested_inputs WHERE size(s.numbers) > idx",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "nested_array_struct_access",
+          "sql": "SELECT id, records[0].code AS code, records[0]['label'] AS label FROM nested_inputs WHERE size(records) > 0",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "map_column_access",
+          "sql": "SELECT id, m['a'] AS a, m[lookup] AS dynamic, element_at(m, lookup) AS element FROM nested_inputs ORDER BY id",
+          "ordered": true,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "map_computed_access",
+          "sql": "SELECT id, m[lower(lookup)] AS value FROM nested_inputs",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "map_missing_and_null",
+          "sql": "SELECT id, m['absent'] AS missing, m[CAST(NULL AS STRING)] AS null_key, element_at(m, CAST(NULL AS STRING)) AS null_element FROM nested_inputs",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "map_nested_access",
+          "sql": "SELECT id, groups['a'] AS items, element_at(groups, lookup) AS chosen FROM nested_inputs ORDER BY id",
+          "ordered": true,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "nested_map_array_access",
+          "sql": "SELECT id, groups['a'][0] AS item FROM nested_inputs WHERE size(groups['a']) > 0",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "filtered_nested_values",
+          "sql": "SELECT id, a, s, m FROM nested_inputs WHERE s.code IS NULL AND m['a'] IS NULL",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "outer_consumer",
+          "sql": "SELECT id, item, details.code FROM (SELECT id, a[0] AS item, s AS details FROM nested_inputs WHERE size(a) > 0) q ORDER BY id",
+          "ordered": true,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "records_select_explode",
+          "sql": "SELECT id, explode(records) FROM nested_inputs",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "records_select_posexplode_outer",
+          "sql": "SELECT id, posexplode_outer(records) FROM nested_inputs ORDER BY id, pos NULLS FIRST",
+          "ordered": true,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "records_lateral_explode_outer",
+          "sql": "SELECT id, item FROM nested_inputs LATERAL VIEW explode_outer(records) x AS item",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "records_lateral_outer_posexplode",
+          "sql": "SELECT id, pos, item FROM nested_inputs LATERAL VIEW OUTER posexplode(records) x AS pos, item ORDER BY id, pos NULLS FIRST",
+          "ordered": true,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "groups_select_explode",
+          "sql": "SELECT id, explode(groups) FROM nested_inputs",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "groups_select_posexplode_outer",
+          "sql": "SELECT id, posexplode_outer(groups) FROM nested_inputs ORDER BY id, pos NULLS FIRST",
+          "ordered": true,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "groups_lateral_explode_outer",
+          "sql": "SELECT id, entry_key, items FROM nested_inputs LATERAL VIEW explode_outer(groups) x AS entry_key, items",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "groups_lateral_outer_posexplode",
+          "sql": "SELECT id, pos, entry_key, items FROM nested_inputs LATERAL VIEW OUTER posexplode(groups) x AS pos, entry_key, items ORDER BY id, pos NULLS FIRST",
+          "ordered": true,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "nested_generator_consumer",
+          "sql": "SELECT id, item.code AS code, item.label AS label FROM nested_inputs LATERAL VIEW explode(records) x AS item ORDER BY id, code NULLS FIRST, label NULLS FIRST",
+          "ordered": true,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "chained_generators",
+          "sql": "SELECT id, item, code FROM nested_inputs LATERAL VIEW explode(a) x AS item LATERAL VIEW OUTER explode(records.code) y AS code",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "filtered_generator",
+          "sql": "SELECT id, pos, item FROM nested_inputs LATERAL VIEW posexplode(a) x AS pos, item WHERE item = 7",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "empty_array_outer_generator",
+          "sql": "SELECT id, posexplode_outer(a) FROM empty_nested_inputs ORDER BY id, pos",
+          "ordered": true,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "empty_map_outer_generator",
+          "sql": "SELECT id, posexplode_outer(m) FROM empty_nested_inputs ORDER BY id, pos",
+          "ordered": true,
+          "ansi": false
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "literal_containers",
+          "sql": "SELECT array(1, CAST(NULL AS INT), 1) AS a, named_struct('code', 2, 'label', CAST(NULL AS STRING)) AS s, map('a', 3, 'b', CAST(NULL AS INT)) AS m",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "literal_nested",
+          "sql": "SELECT array(named_struct('code', 2, 'label', 'x'), CAST(NULL AS STRUCT<code:INT,label:STRING>)) AS records, map('a', array(1, CAST(NULL AS INT)), 'b', array()) AS groups",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "typed_null_containers",
+          "sql": "SELECT CAST(NULL AS ARRAY<INT>) AS a, CAST(NULL AS STRUCT<code:INT,label:STRING>) AS s, CAST(NULL AS MAP<STRING,INT>) AS m",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "empty_and_void_containers",
+          "sql": "SELECT array() AS a, map() AS m, array(NULL) AS nulls, named_struct('n', NULL) AS s",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "registered_containers",
+          "sql": "SELECT id, a, s, m, records, groups FROM nested_inputs",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "registered_empty",
+          "sql": "SELECT id, a, s, m, records, groups FROM empty_nested_inputs",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "column_constructors",
+          "sql": "SELECT id, array(idx, s.code, CAST(NULL AS INT)) AS a, named_struct('source', s, 'items', a) AS s, map('a', idx, 'b', s.code) AS m FROM nested_inputs",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "nested_column_constructors",
+          "sql": "SELECT id, array(s) AS a, map('a', records, 'b', array(CAST(NULL AS STRUCT<code:INT,label:STRING>))) AS m FROM nested_inputs",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "struct_dotted_fields",
+          "sql": "SELECT id, s.code, s.label, s.numbers FROM nested_inputs ORDER BY id",
+          "ordered": true,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "struct_bracket_fields",
+          "sql": "SELECT id, s['code'], s['label'], s['numbers'] FROM nested_inputs ORDER BY id",
+          "ordered": true,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "array_struct_field_projection",
+          "sql": "SELECT id, records.code, records.label FROM nested_inputs ORDER BY id",
+          "ordered": true,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "array_literal_access",
+          "sql": "SELECT array(7, 9)[1] AS i, array(named_struct('code', 5))[0].code AS code, map('a', array(8, 9))['a'][0] AS nested",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "array_column_access",
+          "sql": "SELECT id, a[0], a[idx], a[idx + 0] FROM nested_inputs WHERE size(a) > 0 ORDER BY id",
+          "ordered": true,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "array_computed_access",
+          "sql": "SELECT id, a[CASE WHEN idx = 1 THEN idx - 1 ELSE idx END] AS item FROM nested_inputs WHERE size(a) > 0",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "array_null_subscript",
+          "sql": "SELECT id, a[CAST(NULL AS INT)] AS item FROM nested_inputs",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "array_element_at",
+          "sql": "SELECT id, element_at(a, idx + 1) AS item, element_at(a, -1) AS last FROM nested_inputs WHERE size(a) > 0",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "nested_struct_subscript",
+          "sql": "SELECT id, s.numbers[idx + 0] AS item FROM nested_inputs WHERE size(s.numbers) > idx",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "nested_array_struct_access",
+          "sql": "SELECT id, records[0].code AS code, records[0]['label'] AS label FROM nested_inputs WHERE size(records) > 0",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "map_column_access",
+          "sql": "SELECT id, m['a'] AS a, m[lookup] AS dynamic, element_at(m, lookup) AS element FROM nested_inputs ORDER BY id",
+          "ordered": true,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "map_computed_access",
+          "sql": "SELECT id, m[lower(lookup)] AS value FROM nested_inputs",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "map_missing_and_null",
+          "sql": "SELECT id, m['absent'] AS missing, m[CAST(NULL AS STRING)] AS null_key, element_at(m, CAST(NULL AS STRING)) AS null_element FROM nested_inputs",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "map_nested_access",
+          "sql": "SELECT id, groups['a'] AS items, element_at(groups, lookup) AS chosen FROM nested_inputs ORDER BY id",
+          "ordered": true,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "nested_map_array_access",
+          "sql": "SELECT id, groups['a'][0] AS item FROM nested_inputs WHERE size(groups['a']) > 0",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "filtered_nested_values",
+          "sql": "SELECT id, a, s, m FROM nested_inputs WHERE s.code IS NULL AND m['a'] IS NULL",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "outer_consumer",
+          "sql": "SELECT id, item, details.code FROM (SELECT id, a[0] AS item, s AS details FROM nested_inputs WHERE size(a) > 0) q ORDER BY id",
+          "ordered": true,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "records_select_explode",
+          "sql": "SELECT id, explode(records) FROM nested_inputs",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "records_select_posexplode_outer",
+          "sql": "SELECT id, posexplode_outer(records) FROM nested_inputs ORDER BY id, pos NULLS FIRST",
+          "ordered": true,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "records_lateral_explode_outer",
+          "sql": "SELECT id, item FROM nested_inputs LATERAL VIEW explode_outer(records) x AS item",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "records_lateral_outer_posexplode",
+          "sql": "SELECT id, pos, item FROM nested_inputs LATERAL VIEW OUTER posexplode(records) x AS pos, item ORDER BY id, pos NULLS FIRST",
+          "ordered": true,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "groups_select_explode",
+          "sql": "SELECT id, explode(groups) FROM nested_inputs",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "groups_select_posexplode_outer",
+          "sql": "SELECT id, posexplode_outer(groups) FROM nested_inputs ORDER BY id, pos NULLS FIRST",
+          "ordered": true,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "groups_lateral_explode_outer",
+          "sql": "SELECT id, entry_key, items FROM nested_inputs LATERAL VIEW explode_outer(groups) x AS entry_key, items",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "groups_lateral_outer_posexplode",
+          "sql": "SELECT id, pos, entry_key, items FROM nested_inputs LATERAL VIEW OUTER posexplode(groups) x AS pos, entry_key, items ORDER BY id, pos NULLS FIRST",
+          "ordered": true,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "nested_generator_consumer",
+          "sql": "SELECT id, item.code AS code, item.label AS label FROM nested_inputs LATERAL VIEW explode(records) x AS item ORDER BY id, code NULLS FIRST, label NULLS FIRST",
+          "ordered": true,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "chained_generators",
+          "sql": "SELECT id, item, code FROM nested_inputs LATERAL VIEW explode(a) x AS item LATERAL VIEW OUTER explode(records.code) y AS code",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "filtered_generator",
+          "sql": "SELECT id, pos, item FROM nested_inputs LATERAL VIEW posexplode(a) x AS pos, item WHERE item = 7",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "empty_array_outer_generator",
+          "sql": "SELECT id, posexplode_outer(a) FROM empty_nested_inputs ORDER BY id, pos",
+          "ordered": true,
+          "ansi": true
+        },
+        {
+          "corpus": "nested-results-coverage",
+          "id": "empty_map_outer_generator",
+          "sql": "SELECT id, posexplode_outer(m) FROM empty_nested_inputs ORDER BY id, pos",
+          "ordered": true,
+          "ansi": true
+        }
+      ]
+    }
+  ]
+}

@@ -5,6 +5,20 @@ including its unresolved Spark differences. `import_accepted_runtime.py`
 reconstructs it from the source archive named in `accepted-runtime.json`.
 Importing the fixture does not run Spark or certify compatibility.
 
+## Ordinary nested results
+
+[`nested-results-coverage/`](nested-results-coverage/README.md) adds independent
+Spark 4.2.0 references for ordinary ARRAY, STRUCT and MAP literals, registered
+columns, field and computed element access, missing and NULL lookup keys, and
+nested generators in both ANSI modes. The replay also uses the unchanged
+primitive generator references from `array-map-explode/`. It compares full rows,
+NULLs, duplicate counts and executed types across independently varied input,
+provider and execution layouts. Ordered queries retain sequence; the rest use
+row multisets. Nullability annotations, result metadata and output labels are
+excluded, while actual Arrow batch validity stays checked. See the fixture
+README for the source-only recapture command and the focused storage and native
+SQL controls.
+
 ## NULL STRUCT parents
 
 [`null-struct-parent/`](null-struct-parent/README.md) records independent Spark
