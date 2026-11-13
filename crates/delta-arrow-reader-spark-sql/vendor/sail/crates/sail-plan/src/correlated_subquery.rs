@@ -21,11 +21,13 @@ use crate::expression_errors::SparkSqlExpressionSemantics;
 
 mod aggregate;
 mod exists;
+mod exists_bindings;
 mod limit;
 mod rows;
 
 use aggregate::lift_correlated_scalar_aggregate_inputs;
 use exists::inline_projected_outer_exists;
+use exists_bindings::materialize_outer_exists_bindings;
 use rows::{
     apply_row_steps, has_correlated_self_equality, move_correlated_inner_join_predicates,
     split_correlated_rows, split_scalar_filter_predicates,
@@ -48,9 +50,12 @@ impl AnalyzerRule for LowerSparkCorrelatedSubqueries {
         {
             return Ok(plan);
         }
+        let aliases = AliasGenerator::new();
+        let plan = inline_projected_outer_exists(plan)?;
+        let plan = materialize_outer_exists_bindings(plan, &aliases)?;
         lower_correlated_scalar_subqueries(
-            lift_correlated_scalar_aggregate_inputs(inline_projected_outer_exists(plan)?)?,
-            &AliasGenerator::new(),
+            lift_correlated_scalar_aggregate_inputs(plan)?,
+            &aliases,
             None,
         )
     }

@@ -1,0 +1,70 @@
+{
+  "expected_record_count": 10,
+  "corpora": [
+    {
+      "corpus": "retained_exists_bindings",
+      "cases": [
+        {
+          "id": "800_live_shared_computed",
+          "ansi": false,
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT l.k+1 AS outer_k,r.k AS inner_k FROM right_inputs r) q WHERE q.outer_k=q.inner_k AND q.outer_k>0)",
+          "ordered": false
+        },
+        {
+          "id": "800_live_nested_exists_flag",
+          "ansi": false,
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT s.outer_k,s.inner_k,EXISTS(SELECT 1 FROM right_inputs t WHERE t.k=s.inner_k) AS e FROM (SELECT l.k AS outer_k,r.k AS inner_k FROM right_inputs r) s) q WHERE q.outer_k=q.inner_k AND q.e)",
+          "ordered": false
+        },
+        {
+          "id": "800_live_shared_computed",
+          "ansi": true,
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT l.k+1 AS outer_k,r.k AS inner_k FROM right_inputs r) q WHERE q.outer_k=q.inner_k AND q.outer_k>0)",
+          "ordered": false
+        },
+        {
+          "id": "800_live_nested_exists_flag",
+          "ansi": true,
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT s.outer_k,s.inner_k,EXISTS(SELECT 1 FROM right_inputs t WHERE t.k=s.inner_k) AS e FROM (SELECT l.k AS outer_k,r.k AS inner_k FROM right_inputs r) s) q WHERE q.outer_k=q.inner_k AND q.e)",
+          "ordered": false
+        },
+        {
+          "id": "review_outer_capture_flag",
+          "ansi": false,
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT s.outer_k,s.inner_k,EXISTS(SELECT 1 FROM right_inputs t WHERE t.k=s.outer_k) AS e FROM (SELECT l.k AS outer_k,r.k AS inner_k FROM right_inputs r) s) q WHERE q.outer_k=q.inner_k AND q.e)",
+          "ordered": false
+        },
+        {
+          "id": "review_outer_capture_flag",
+          "ansi": true,
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT s.outer_k,s.inner_k,EXISTS(SELECT 1 FROM right_inputs t WHERE t.k=s.outer_k) AS e FROM (SELECT l.k AS outer_k,r.k AS inner_k FROM right_inputs r) s) q WHERE q.outer_k=q.inner_k AND q.e)",
+          "ordered": false
+        },
+        {
+          "id": "review_distinct_outer_payload_exists",
+          "ansi": false,
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT s.outer_k,s.inner_k,EXISTS(SELECT 1 FROM outer_allowed_keys t WHERE t.k=s.outer_payload) AS e FROM (SELECT l.k AS outer_k,l.n AS outer_payload,r.k AS inner_k FROM right_inputs r) s) q WHERE q.outer_k=q.inner_k AND q.e)",
+          "ordered": false
+        },
+        {
+          "id": "review_distinct_outer_payload_exists",
+          "ansi": true,
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS(SELECT 1 FROM (SELECT s.outer_k,s.inner_k,EXISTS(SELECT 1 FROM outer_allowed_keys t WHERE t.k=s.outer_payload) AS e FROM (SELECT l.k AS outer_k,l.n AS outer_payload,r.k AS inner_k FROM right_inputs r) s) q WHERE q.outer_k=q.inner_k AND q.e)",
+          "ordered": false
+        },
+        {
+          "id": "review_distinct_outer_payload_not",
+          "ansi": false,
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE NOT EXISTS(SELECT 1 FROM (SELECT s.outer_k,s.inner_k,EXISTS(SELECT 1 FROM outer_allowed_keys t WHERE t.k=s.outer_payload) AS e FROM (SELECT l.k AS outer_k,l.n AS outer_payload,r.k AS inner_k FROM right_inputs r) s) q WHERE q.outer_k=q.inner_k AND q.e)",
+          "ordered": false
+        },
+        {
+          "id": "review_distinct_outer_payload_not",
+          "ansi": true,
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE NOT EXISTS(SELECT 1 FROM (SELECT s.outer_k,s.inner_k,EXISTS(SELECT 1 FROM outer_allowed_keys t WHERE t.k=s.outer_payload) AS e FROM (SELECT l.k AS outer_k,l.n AS outer_payload,r.k AS inner_k FROM right_inputs r) s) q WHERE q.outer_k=q.inner_k AND q.e)",
+          "ordered": false
+        }
+      ]
+    }
+  ]
+}
