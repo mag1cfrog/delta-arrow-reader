@@ -1,0 +1,1149 @@
+{
+  "issue": 1306,
+  "base": "c0bcc83fd16aa285d9de9b424766e4ee861f00d2",
+  "expected_record_count": 128,
+  "corpora": [
+    {
+      "corpus": "relational_original64",
+      "source": "Source-only ordinary SQL and nullable registered inputs; no expected output read by capture.",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "left_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "n",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "label",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                null,
+                "10",
+                "null-left"
+              ],
+              [
+                "1",
+                "20",
+                "a"
+              ],
+              [
+                "2",
+                "30",
+                "b"
+              ],
+              [
+                "2",
+                "31",
+                "b2"
+              ],
+              [
+                "4",
+                null,
+                null
+              ]
+            ]
+          },
+          {
+            "name": "right_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "long",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "w",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "label",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                null,
+                "100",
+                "null-right"
+              ],
+              [
+                "2",
+                "200",
+                "x"
+              ],
+              [
+                "2",
+                "201",
+                "x2"
+              ],
+              [
+                "3",
+                null,
+                "y"
+              ]
+            ]
+          },
+          {
+            "name": "empty_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "n",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "label",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": []
+          },
+          {
+            "name": "float_left",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "double",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "7ff8000000000000"
+              ],
+              [
+                "0000000000000000"
+              ],
+              [
+                "8000000000000000"
+              ],
+              [
+                "3ff0000000000000"
+              ],
+              [
+                null
+              ],
+              [
+                "7ff8000000000000"
+              ]
+            ]
+          },
+          {
+            "name": "float_right",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "double",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "7ff8000000000000"
+              ],
+              [
+                "0000000000000000"
+              ],
+              [
+                "4000000000000000"
+              ],
+              [
+                null
+              ]
+            ]
+          },
+          {
+            "name": "zero_positive",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "double",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0000000000000000"
+              ],
+              [
+                "0000000000000000"
+              ]
+            ]
+          },
+          {
+            "name": "zero_negative",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "double",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "8000000000000000"
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "relational_original64",
+          "id": "projection",
+          "sql": "SELECT k,n,label FROM left_inputs ORDER BY k NULLS FIRST,n",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "projection_alias",
+          "sql": "SELECT n+1 AS next_n,label AS text FROM left_inputs ORDER BY k NULLS FIRST,n",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "projection_empty",
+          "sql": "SELECT k,n,label FROM empty_inputs",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "filter",
+          "sql": "SELECT k,n FROM left_inputs WHERE n>=20 AND k<>4 ORDER BY k,n",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "filter_null",
+          "sql": "SELECT k,n FROM left_inputs WHERE k IS NULL OR n IS NULL ORDER BY k NULLS FIRST,n",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "filter_empty",
+          "sql": "SELECT k,n FROM left_inputs WHERE k>99",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "cross_join",
+          "sql": "SELECT l.k AS lk,r.k AS rk FROM left_inputs l CROSS JOIN right_inputs r WHERE l.k=1 AND r.k=3",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "cte_chain",
+          "sql": "WITH a AS (SELECT k,n FROM left_inputs), b AS (SELECT k,n+1 AS n FROM a WHERE k=2) SELECT k,n FROM b ORDER BY k,n",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "cte_reuse",
+          "sql": "WITH a AS (SELECT k,n FROM left_inputs WHERE k=2) SELECT l.n AS ln,r.n AS rn FROM a l JOIN a r ON l.k=r.k ORDER BY ln,rn",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "cte_nested",
+          "sql": "WITH a AS (WITH b AS (SELECT k,n FROM left_inputs) SELECT k,n FROM b WHERE k=1) SELECT k,n FROM a",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "cte_shadow",
+          "sql": "WITH a AS (SELECT k,n FROM left_inputs WHERE k=1) SELECT k,n FROM (WITH a AS (SELECT k,n FROM left_inputs WHERE k=2) SELECT k,n FROM a) nested ORDER BY k,n",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "scalar_one",
+          "sql": "SELECT (SELECT n FROM left_inputs WHERE k=1) AS r",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "scalar_empty",
+          "sql": "SELECT (SELECT n FROM left_inputs WHERE k=99) AS r",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "scalar_many",
+          "sql": "SELECT (SELECT k FROM left_inputs WHERE k=2) AS r",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "correlated_sum",
+          "sql": "SELECT l.k,(SELECT SUM(r.w) FROM right_inputs r WHERE r.k=l.k) AS total FROM left_inputs l ORDER BY l.k NULLS FIRST,l.n",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "correlated_count",
+          "sql": "SELECT l.k,(SELECT COUNT(*) FROM right_inputs r WHERE r.k=l.k) AS total FROM left_inputs l ORDER BY l.k NULLS FIRST,l.n",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "values_decimal",
+          "sql": "SELECT v FROM VALUES (1.25),(2),(CAST(NULL AS DECIMAL(5,2))) t(v) ORDER BY v NULLS FIRST",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "values_decimal_explicit",
+          "sql": "SELECT v FROM VALUES (CAST(1.25 AS DECIMAL(12,2))),(CAST(2 AS DECIMAL(12,2))) t(v) ORDER BY v",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "intersect_all_unbalanced",
+          "sql": "SELECT v FROM (SELECT v FROM VALUES(1),(1),(1) l(v) INTERSECT ALL SELECT v FROM VALUES(1) r(v)) result",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "intersect_all_unbalanced_reversed",
+          "sql": "SELECT v FROM (SELECT v FROM VALUES(1) l(v) INTERSECT ALL SELECT v FROM VALUES(1),(1),(1) r(v)) result",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "join_inner_equal",
+          "sql": "SELECT l.k AS lk,r.k AS rk,l.n,r.w FROM left_inputs l INNER JOIN right_inputs r ON l.k = r.k ORDER BY lk NULLS FIRST,rk NULLS FIRST,n,w",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "join_inner_null_safe",
+          "sql": "SELECT l.k AS lk,r.k AS rk,l.n,r.w FROM left_inputs l INNER JOIN right_inputs r ON l.k <=> r.k ORDER BY lk NULLS FIRST,rk NULLS FIRST,n,w",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "join_left_equal",
+          "sql": "SELECT l.k AS lk,r.k AS rk,l.n,r.w FROM left_inputs l LEFT JOIN right_inputs r ON l.k = r.k ORDER BY lk NULLS FIRST,rk NULLS FIRST,n,w",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "join_left_null_safe",
+          "sql": "SELECT l.k AS lk,r.k AS rk,l.n,r.w FROM left_inputs l LEFT JOIN right_inputs r ON l.k <=> r.k ORDER BY lk NULLS FIRST,rk NULLS FIRST,n,w",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "join_right_equal",
+          "sql": "SELECT l.k AS lk,r.k AS rk,l.n,r.w FROM left_inputs l RIGHT JOIN right_inputs r ON l.k = r.k ORDER BY lk NULLS FIRST,rk NULLS FIRST,n,w",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "join_right_null_safe",
+          "sql": "SELECT l.k AS lk,r.k AS rk,l.n,r.w FROM left_inputs l RIGHT JOIN right_inputs r ON l.k <=> r.k ORDER BY lk NULLS FIRST,rk NULLS FIRST,n,w",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "join_full_equal",
+          "sql": "SELECT l.k AS lk,r.k AS rk,l.n,r.w FROM left_inputs l FULL JOIN right_inputs r ON l.k = r.k ORDER BY lk NULLS FIRST,rk NULLS FIRST,n,w",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "join_full_null_safe",
+          "sql": "SELECT l.k AS lk,r.k AS rk,l.n,r.w FROM left_inputs l FULL JOIN right_inputs r ON l.k <=> r.k ORDER BY lk NULLS FIRST,rk NULLS FIRST,n,w",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "join_left_semi_equal",
+          "sql": "SELECT l.k AS lk,l.n FROM left_inputs l LEFT SEMI JOIN right_inputs r ON l.k = r.k ORDER BY lk NULLS FIRST,n",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "join_left_semi_null_safe",
+          "sql": "SELECT l.k AS lk,l.n FROM left_inputs l LEFT SEMI JOIN right_inputs r ON l.k <=> r.k ORDER BY lk NULLS FIRST,n",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "join_left_anti_equal",
+          "sql": "SELECT l.k AS lk,l.n FROM left_inputs l LEFT ANTI JOIN right_inputs r ON l.k = r.k ORDER BY lk NULLS FIRST,n",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "join_left_anti_null_safe",
+          "sql": "SELECT l.k AS lk,l.n FROM left_inputs l LEFT ANTI JOIN right_inputs r ON l.k <=> r.k ORDER BY lk NULLS FIRST,n",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "using_inner",
+          "sql": "SELECT k,l.n,r.w FROM left_inputs l INNER JOIN right_inputs r USING(k) ORDER BY k NULLS FIRST,n,w",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "empty_join_inner",
+          "sql": "SELECT l.k AS lk,r.k AS rk FROM empty_inputs l INNER JOIN right_inputs r ON l.k=r.k ORDER BY lk NULLS FIRST,rk NULLS FIRST",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "using_left",
+          "sql": "SELECT k,l.n,r.w FROM left_inputs l LEFT JOIN right_inputs r USING(k) ORDER BY k NULLS FIRST,n,w",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "empty_join_left",
+          "sql": "SELECT l.k AS lk,r.k AS rk FROM empty_inputs l LEFT JOIN right_inputs r ON l.k=r.k ORDER BY lk NULLS FIRST,rk NULLS FIRST",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "using_right",
+          "sql": "SELECT k,l.n,r.w FROM left_inputs l RIGHT JOIN right_inputs r USING(k) ORDER BY k NULLS FIRST,n,w",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "empty_join_right",
+          "sql": "SELECT l.k AS lk,r.k AS rk FROM empty_inputs l RIGHT JOIN right_inputs r ON l.k=r.k ORDER BY lk NULLS FIRST,rk NULLS FIRST",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "using_full",
+          "sql": "SELECT k,l.n,r.w FROM left_inputs l FULL JOIN right_inputs r USING(k) ORDER BY k NULLS FIRST,n,w",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "empty_join_full",
+          "sql": "SELECT l.k AS lk,r.k AS rk FROM empty_inputs l FULL JOIN right_inputs r ON l.k=r.k ORDER BY lk NULLS FIRST,rk NULLS FIRST",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "set_integer_union",
+          "sql": "SELECT k FROM (SELECT CAST(k AS BIGINT) AS k FROM left_inputs UNION SELECT CAST(k AS BIGINT) AS k FROM right_inputs) result ORDER BY k NULLS FIRST",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "set_float_union",
+          "sql": "SELECT k FROM (SELECT k AS k FROM float_left UNION SELECT k AS k FROM float_right) result ORDER BY k NULLS FIRST",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "set_zero_union",
+          "sql": "SELECT k FROM (SELECT k AS k FROM zero_positive UNION SELECT k AS k FROM zero_negative) result ORDER BY k NULLS FIRST",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "set_integer_union_all",
+          "sql": "SELECT k FROM (SELECT CAST(k AS BIGINT) AS k FROM left_inputs UNION ALL SELECT CAST(k AS BIGINT) AS k FROM right_inputs) result ORDER BY k NULLS FIRST",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "set_float_union_all",
+          "sql": "SELECT k FROM (SELECT k AS k FROM float_left UNION ALL SELECT k AS k FROM float_right) result ORDER BY k NULLS FIRST",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "set_zero_union_all",
+          "sql": "SELECT k FROM (SELECT k AS k FROM zero_positive UNION ALL SELECT k AS k FROM zero_negative) result ORDER BY k NULLS FIRST",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "set_integer_intersect",
+          "sql": "SELECT k FROM (SELECT CAST(k AS BIGINT) AS k FROM left_inputs INTERSECT SELECT CAST(k AS BIGINT) AS k FROM right_inputs) result ORDER BY k NULLS FIRST",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "set_float_intersect",
+          "sql": "SELECT k FROM (SELECT k AS k FROM float_left INTERSECT SELECT k AS k FROM float_right) result ORDER BY k NULLS FIRST",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "set_zero_intersect",
+          "sql": "SELECT k FROM (SELECT k AS k FROM zero_positive INTERSECT SELECT k AS k FROM zero_negative) result ORDER BY k NULLS FIRST",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "set_integer_intersect_all",
+          "sql": "SELECT k FROM (SELECT CAST(k AS BIGINT) AS k FROM left_inputs INTERSECT ALL SELECT CAST(k AS BIGINT) AS k FROM right_inputs) result ORDER BY k NULLS FIRST",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "set_float_intersect_all",
+          "sql": "SELECT k FROM (SELECT k AS k FROM float_left INTERSECT ALL SELECT k AS k FROM float_right) result ORDER BY k NULLS FIRST",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "set_zero_intersect_all",
+          "sql": "SELECT k FROM (SELECT k AS k FROM zero_positive INTERSECT ALL SELECT k AS k FROM zero_negative) result ORDER BY k NULLS FIRST",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "set_integer_except",
+          "sql": "SELECT k FROM (SELECT CAST(k AS BIGINT) AS k FROM left_inputs EXCEPT SELECT CAST(k AS BIGINT) AS k FROM right_inputs) result ORDER BY k NULLS FIRST",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "set_float_except",
+          "sql": "SELECT k FROM (SELECT k AS k FROM float_left EXCEPT SELECT k AS k FROM float_right) result ORDER BY k NULLS FIRST",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "set_zero_except",
+          "sql": "SELECT k FROM (SELECT k AS k FROM zero_positive EXCEPT SELECT k AS k FROM zero_negative) result ORDER BY k NULLS FIRST",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "set_integer_except_all",
+          "sql": "SELECT k FROM (SELECT CAST(k AS BIGINT) AS k FROM left_inputs EXCEPT ALL SELECT CAST(k AS BIGINT) AS k FROM right_inputs) result ORDER BY k NULLS FIRST",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "set_float_except_all",
+          "sql": "SELECT k FROM (SELECT k AS k FROM float_left EXCEPT ALL SELECT k AS k FROM float_right) result ORDER BY k NULLS FIRST",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "set_zero_except_all",
+          "sql": "SELECT k FROM (SELECT k AS k FROM zero_positive EXCEPT ALL SELECT k AS k FROM zero_negative) result ORDER BY k NULLS FIRST",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "exists",
+          "sql": "SELECT l.k,EXISTS(SELECT r.k FROM right_inputs r WHERE r.k=l.k) AS found FROM left_inputs l ORDER BY l.k NULLS FIRST,l.n",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "in",
+          "sql": "SELECT k,k IN (SELECT k FROM right_inputs) AS found FROM left_inputs ORDER BY k NULLS FIRST,n",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "in_empty",
+          "sql": "SELECT k,k IN (SELECT k FROM right_inputs WHERE false) AS found FROM left_inputs ORDER BY k NULLS FIRST,n",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "not_exists",
+          "sql": "SELECT l.k,NOT EXISTS(SELECT r.k FROM right_inputs r WHERE r.k=l.k) AS found FROM left_inputs l ORDER BY l.k NULLS FIRST,l.n",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "not_in",
+          "sql": "SELECT k,k NOT IN (SELECT k FROM right_inputs) AS found FROM left_inputs ORDER BY k NULLS FIRST,n",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "not_in_empty",
+          "sql": "SELECT k,k NOT IN (SELECT k FROM right_inputs WHERE false) AS found FROM left_inputs ORDER BY k NULLS FIRST,n",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "projection",
+          "sql": "SELECT k,n,label FROM left_inputs ORDER BY k NULLS FIRST,n",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "projection_alias",
+          "sql": "SELECT n+1 AS next_n,label AS text FROM left_inputs ORDER BY k NULLS FIRST,n",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "projection_empty",
+          "sql": "SELECT k,n,label FROM empty_inputs",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "filter",
+          "sql": "SELECT k,n FROM left_inputs WHERE n>=20 AND k<>4 ORDER BY k,n",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "filter_null",
+          "sql": "SELECT k,n FROM left_inputs WHERE k IS NULL OR n IS NULL ORDER BY k NULLS FIRST,n",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "filter_empty",
+          "sql": "SELECT k,n FROM left_inputs WHERE k>99",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "cross_join",
+          "sql": "SELECT l.k AS lk,r.k AS rk FROM left_inputs l CROSS JOIN right_inputs r WHERE l.k=1 AND r.k=3",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "cte_chain",
+          "sql": "WITH a AS (SELECT k,n FROM left_inputs), b AS (SELECT k,n+1 AS n FROM a WHERE k=2) SELECT k,n FROM b ORDER BY k,n",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "cte_reuse",
+          "sql": "WITH a AS (SELECT k,n FROM left_inputs WHERE k=2) SELECT l.n AS ln,r.n AS rn FROM a l JOIN a r ON l.k=r.k ORDER BY ln,rn",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "cte_nested",
+          "sql": "WITH a AS (WITH b AS (SELECT k,n FROM left_inputs) SELECT k,n FROM b WHERE k=1) SELECT k,n FROM a",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "cte_shadow",
+          "sql": "WITH a AS (SELECT k,n FROM left_inputs WHERE k=1) SELECT k,n FROM (WITH a AS (SELECT k,n FROM left_inputs WHERE k=2) SELECT k,n FROM a) nested ORDER BY k,n",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "scalar_one",
+          "sql": "SELECT (SELECT n FROM left_inputs WHERE k=1) AS r",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "scalar_empty",
+          "sql": "SELECT (SELECT n FROM left_inputs WHERE k=99) AS r",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "scalar_many",
+          "sql": "SELECT (SELECT k FROM left_inputs WHERE k=2) AS r",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "correlated_sum",
+          "sql": "SELECT l.k,(SELECT SUM(r.w) FROM right_inputs r WHERE r.k=l.k) AS total FROM left_inputs l ORDER BY l.k NULLS FIRST,l.n",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "correlated_count",
+          "sql": "SELECT l.k,(SELECT COUNT(*) FROM right_inputs r WHERE r.k=l.k) AS total FROM left_inputs l ORDER BY l.k NULLS FIRST,l.n",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "values_decimal",
+          "sql": "SELECT v FROM VALUES (1.25),(2),(CAST(NULL AS DECIMAL(5,2))) t(v) ORDER BY v NULLS FIRST",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "values_decimal_explicit",
+          "sql": "SELECT v FROM VALUES (CAST(1.25 AS DECIMAL(12,2))),(CAST(2 AS DECIMAL(12,2))) t(v) ORDER BY v",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "intersect_all_unbalanced",
+          "sql": "SELECT v FROM (SELECT v FROM VALUES(1),(1),(1) l(v) INTERSECT ALL SELECT v FROM VALUES(1) r(v)) result",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "intersect_all_unbalanced_reversed",
+          "sql": "SELECT v FROM (SELECT v FROM VALUES(1) l(v) INTERSECT ALL SELECT v FROM VALUES(1),(1),(1) r(v)) result",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "join_inner_equal",
+          "sql": "SELECT l.k AS lk,r.k AS rk,l.n,r.w FROM left_inputs l INNER JOIN right_inputs r ON l.k = r.k ORDER BY lk NULLS FIRST,rk NULLS FIRST,n,w",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "join_inner_null_safe",
+          "sql": "SELECT l.k AS lk,r.k AS rk,l.n,r.w FROM left_inputs l INNER JOIN right_inputs r ON l.k <=> r.k ORDER BY lk NULLS FIRST,rk NULLS FIRST,n,w",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "join_left_equal",
+          "sql": "SELECT l.k AS lk,r.k AS rk,l.n,r.w FROM left_inputs l LEFT JOIN right_inputs r ON l.k = r.k ORDER BY lk NULLS FIRST,rk NULLS FIRST,n,w",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "join_left_null_safe",
+          "sql": "SELECT l.k AS lk,r.k AS rk,l.n,r.w FROM left_inputs l LEFT JOIN right_inputs r ON l.k <=> r.k ORDER BY lk NULLS FIRST,rk NULLS FIRST,n,w",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "join_right_equal",
+          "sql": "SELECT l.k AS lk,r.k AS rk,l.n,r.w FROM left_inputs l RIGHT JOIN right_inputs r ON l.k = r.k ORDER BY lk NULLS FIRST,rk NULLS FIRST,n,w",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "join_right_null_safe",
+          "sql": "SELECT l.k AS lk,r.k AS rk,l.n,r.w FROM left_inputs l RIGHT JOIN right_inputs r ON l.k <=> r.k ORDER BY lk NULLS FIRST,rk NULLS FIRST,n,w",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "join_full_equal",
+          "sql": "SELECT l.k AS lk,r.k AS rk,l.n,r.w FROM left_inputs l FULL JOIN right_inputs r ON l.k = r.k ORDER BY lk NULLS FIRST,rk NULLS FIRST,n,w",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "join_full_null_safe",
+          "sql": "SELECT l.k AS lk,r.k AS rk,l.n,r.w FROM left_inputs l FULL JOIN right_inputs r ON l.k <=> r.k ORDER BY lk NULLS FIRST,rk NULLS FIRST,n,w",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "join_left_semi_equal",
+          "sql": "SELECT l.k AS lk,l.n FROM left_inputs l LEFT SEMI JOIN right_inputs r ON l.k = r.k ORDER BY lk NULLS FIRST,n",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "join_left_semi_null_safe",
+          "sql": "SELECT l.k AS lk,l.n FROM left_inputs l LEFT SEMI JOIN right_inputs r ON l.k <=> r.k ORDER BY lk NULLS FIRST,n",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "join_left_anti_equal",
+          "sql": "SELECT l.k AS lk,l.n FROM left_inputs l LEFT ANTI JOIN right_inputs r ON l.k = r.k ORDER BY lk NULLS FIRST,n",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "join_left_anti_null_safe",
+          "sql": "SELECT l.k AS lk,l.n FROM left_inputs l LEFT ANTI JOIN right_inputs r ON l.k <=> r.k ORDER BY lk NULLS FIRST,n",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "using_inner",
+          "sql": "SELECT k,l.n,r.w FROM left_inputs l INNER JOIN right_inputs r USING(k) ORDER BY k NULLS FIRST,n,w",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "empty_join_inner",
+          "sql": "SELECT l.k AS lk,r.k AS rk FROM empty_inputs l INNER JOIN right_inputs r ON l.k=r.k ORDER BY lk NULLS FIRST,rk NULLS FIRST",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "using_left",
+          "sql": "SELECT k,l.n,r.w FROM left_inputs l LEFT JOIN right_inputs r USING(k) ORDER BY k NULLS FIRST,n,w",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "empty_join_left",
+          "sql": "SELECT l.k AS lk,r.k AS rk FROM empty_inputs l LEFT JOIN right_inputs r ON l.k=r.k ORDER BY lk NULLS FIRST,rk NULLS FIRST",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "using_right",
+          "sql": "SELECT k,l.n,r.w FROM left_inputs l RIGHT JOIN right_inputs r USING(k) ORDER BY k NULLS FIRST,n,w",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "empty_join_right",
+          "sql": "SELECT l.k AS lk,r.k AS rk FROM empty_inputs l RIGHT JOIN right_inputs r ON l.k=r.k ORDER BY lk NULLS FIRST,rk NULLS FIRST",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "using_full",
+          "sql": "SELECT k,l.n,r.w FROM left_inputs l FULL JOIN right_inputs r USING(k) ORDER BY k NULLS FIRST,n,w",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "empty_join_full",
+          "sql": "SELECT l.k AS lk,r.k AS rk FROM empty_inputs l FULL JOIN right_inputs r ON l.k=r.k ORDER BY lk NULLS FIRST,rk NULLS FIRST",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "set_integer_union",
+          "sql": "SELECT k FROM (SELECT CAST(k AS BIGINT) AS k FROM left_inputs UNION SELECT CAST(k AS BIGINT) AS k FROM right_inputs) result ORDER BY k NULLS FIRST",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "set_float_union",
+          "sql": "SELECT k FROM (SELECT k AS k FROM float_left UNION SELECT k AS k FROM float_right) result ORDER BY k NULLS FIRST",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "set_zero_union",
+          "sql": "SELECT k FROM (SELECT k AS k FROM zero_positive UNION SELECT k AS k FROM zero_negative) result ORDER BY k NULLS FIRST",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "set_integer_union_all",
+          "sql": "SELECT k FROM (SELECT CAST(k AS BIGINT) AS k FROM left_inputs UNION ALL SELECT CAST(k AS BIGINT) AS k FROM right_inputs) result ORDER BY k NULLS FIRST",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "set_float_union_all",
+          "sql": "SELECT k FROM (SELECT k AS k FROM float_left UNION ALL SELECT k AS k FROM float_right) result ORDER BY k NULLS FIRST",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "set_zero_union_all",
+          "sql": "SELECT k FROM (SELECT k AS k FROM zero_positive UNION ALL SELECT k AS k FROM zero_negative) result ORDER BY k NULLS FIRST",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "set_integer_intersect",
+          "sql": "SELECT k FROM (SELECT CAST(k AS BIGINT) AS k FROM left_inputs INTERSECT SELECT CAST(k AS BIGINT) AS k FROM right_inputs) result ORDER BY k NULLS FIRST",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "set_float_intersect",
+          "sql": "SELECT k FROM (SELECT k AS k FROM float_left INTERSECT SELECT k AS k FROM float_right) result ORDER BY k NULLS FIRST",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "set_zero_intersect",
+          "sql": "SELECT k FROM (SELECT k AS k FROM zero_positive INTERSECT SELECT k AS k FROM zero_negative) result ORDER BY k NULLS FIRST",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "set_integer_intersect_all",
+          "sql": "SELECT k FROM (SELECT CAST(k AS BIGINT) AS k FROM left_inputs INTERSECT ALL SELECT CAST(k AS BIGINT) AS k FROM right_inputs) result ORDER BY k NULLS FIRST",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "set_float_intersect_all",
+          "sql": "SELECT k FROM (SELECT k AS k FROM float_left INTERSECT ALL SELECT k AS k FROM float_right) result ORDER BY k NULLS FIRST",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "set_zero_intersect_all",
+          "sql": "SELECT k FROM (SELECT k AS k FROM zero_positive INTERSECT ALL SELECT k AS k FROM zero_negative) result ORDER BY k NULLS FIRST",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "set_integer_except",
+          "sql": "SELECT k FROM (SELECT CAST(k AS BIGINT) AS k FROM left_inputs EXCEPT SELECT CAST(k AS BIGINT) AS k FROM right_inputs) result ORDER BY k NULLS FIRST",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "set_float_except",
+          "sql": "SELECT k FROM (SELECT k AS k FROM float_left EXCEPT SELECT k AS k FROM float_right) result ORDER BY k NULLS FIRST",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "set_zero_except",
+          "sql": "SELECT k FROM (SELECT k AS k FROM zero_positive EXCEPT SELECT k AS k FROM zero_negative) result ORDER BY k NULLS FIRST",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "set_integer_except_all",
+          "sql": "SELECT k FROM (SELECT CAST(k AS BIGINT) AS k FROM left_inputs EXCEPT ALL SELECT CAST(k AS BIGINT) AS k FROM right_inputs) result ORDER BY k NULLS FIRST",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "set_float_except_all",
+          "sql": "SELECT k FROM (SELECT k AS k FROM float_left EXCEPT ALL SELECT k AS k FROM float_right) result ORDER BY k NULLS FIRST",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "set_zero_except_all",
+          "sql": "SELECT k FROM (SELECT k AS k FROM zero_positive EXCEPT ALL SELECT k AS k FROM zero_negative) result ORDER BY k NULLS FIRST",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "exists",
+          "sql": "SELECT l.k,EXISTS(SELECT r.k FROM right_inputs r WHERE r.k=l.k) AS found FROM left_inputs l ORDER BY l.k NULLS FIRST,l.n",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "in",
+          "sql": "SELECT k,k IN (SELECT k FROM right_inputs) AS found FROM left_inputs ORDER BY k NULLS FIRST,n",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "in_empty",
+          "sql": "SELECT k,k IN (SELECT k FROM right_inputs WHERE false) AS found FROM left_inputs ORDER BY k NULLS FIRST,n",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "not_exists",
+          "sql": "SELECT l.k,NOT EXISTS(SELECT r.k FROM right_inputs r WHERE r.k=l.k) AS found FROM left_inputs l ORDER BY l.k NULLS FIRST,l.n",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "not_in",
+          "sql": "SELECT k,k NOT IN (SELECT k FROM right_inputs) AS found FROM left_inputs ORDER BY k NULLS FIRST,n",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_original64",
+          "id": "not_in_empty",
+          "sql": "SELECT k,k NOT IN (SELECT k FROM right_inputs WHERE false) AS found FROM left_inputs ORDER BY k NULLS FIRST,n",
+          "ansi": true,
+          "ordered": true
+        }
+      ]
+    }
+  ],
+  "historical_definition_source": {
+    "path": "crates/delta-arrow-reader-spark-sql/tests/fixtures/capture_relational_queries_spark.py",
+    "sha256": "35a5d843eff85b9dc9e6eec64767156c957e92e1d122fc6ffdc119ffbed6d2a2",
+    "extraction": "Only input/query definitions and loops before first function; no expected fixture outputs opened."
+  }
+}
