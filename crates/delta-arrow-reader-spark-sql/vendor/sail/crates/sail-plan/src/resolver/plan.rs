@@ -24,7 +24,7 @@ impl PlanResolver<'_> {
         let mut state = PlanResolverState::new();
         let plan = self.resolve_query_plan(query, &mut state).await?;
         Self::validate_aggregate_arguments(&plan)?;
-        let plan = Self::lower_distinct_approx_percentiles(plan, &mut state)?;
+        let plan = Self::lower_distinct_percentiles(plan, &mut state)?;
         let plan = self.lower_resolved_set_operations(plan, &mut state)?;
         let plan = Self::preserve_order_sensitive_aggregate_sorts(plan)?;
         let fields = Self::get_field_names(plan.schema(), &state)?;
