@@ -18,10 +18,6 @@ use serde_json::{Value, json};
 mod string_binary;
 use string_binary::{TestResult, capture_observation};
 
-#[expect(
-    dead_code,
-    reason = "This target registers string carriers with the shared string observer."
-)]
 #[path = "support/spark_inputs.rs"]
 mod spark_inputs;
 #[path = "support/spark_results.rs"]
