@@ -1,0 +1,646 @@
+{
+  "issue": 1306,
+  "base": "c0bcc83fd16aa285d9de9b424766e4ee861f00d2",
+  "expected_record_count": 42,
+  "corpora": [
+    {
+      "corpus": "relational_missing21",
+      "source": "Source-only ordinary SQL and nullable registered inputs; no expected output read by capture.",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "left_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "n",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "label",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                null,
+                "10",
+                "null-left"
+              ],
+              [
+                "1",
+                "20",
+                "a"
+              ],
+              [
+                "2",
+                "30",
+                "b"
+              ],
+              [
+                "2",
+                "31",
+                "b2"
+              ],
+              [
+                "4",
+                null,
+                null
+              ]
+            ]
+          },
+          {
+            "name": "right_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "long",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "w",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "label",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                null,
+                "100",
+                "null-right"
+              ],
+              [
+                "2",
+                "200",
+                "x"
+              ],
+              [
+                "2",
+                "201",
+                "x2"
+              ],
+              [
+                "3",
+                null,
+                "y"
+              ]
+            ]
+          },
+          {
+            "name": "empty_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "n",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "label",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": []
+          },
+          {
+            "name": "float_left",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "double",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "7ff8000000000000"
+              ],
+              [
+                "0000000000000000"
+              ],
+              [
+                "8000000000000000"
+              ],
+              [
+                "3ff0000000000000"
+              ],
+              [
+                null
+              ],
+              [
+                "7ff8000000000000"
+              ]
+            ]
+          },
+          {
+            "name": "float_right",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "double",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "7ff8000000000000"
+              ],
+              [
+                "0000000000000000"
+              ],
+              [
+                "4000000000000000"
+              ],
+              [
+                null
+              ]
+            ]
+          },
+          {
+            "name": "zero_positive",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "double",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0000000000000000"
+              ],
+              [
+                "0000000000000000"
+              ]
+            ]
+          },
+          {
+            "name": "zero_negative",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "double",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "8000000000000000"
+              ]
+            ]
+          },
+          {
+            "name": "bag_left",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "v",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                "10"
+              ],
+              [
+                "1",
+                "10"
+              ],
+              [
+                "1",
+                "10"
+              ],
+              [
+                "1",
+                "11"
+              ],
+              [
+                null,
+                "10"
+              ],
+              [
+                null,
+                "10"
+              ],
+              [
+                null,
+                null
+              ],
+              [
+                null,
+                null
+              ],
+              [
+                "2",
+                "20"
+              ]
+            ]
+          },
+          {
+            "name": "bag_right",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "v",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                "10"
+              ],
+              [
+                null,
+                "10"
+              ],
+              [
+                null,
+                null
+              ],
+              [
+                null,
+                null
+              ],
+              [
+                null,
+                null
+              ],
+              [
+                "3",
+                "30"
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "relational_missing21",
+          "id": "distinct_registered",
+          "sql": "SELECT DISTINCT k FROM left_inputs ORDER BY k NULLS FIRST",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "distinct_empty",
+          "sql": "SELECT DISTINCT k FROM empty_inputs",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "ordered_limit_offset",
+          "sql": "SELECT k,n FROM left_inputs ORDER BY k NULLS FIRST,n LIMIT 2 OFFSET 1",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "ordered_limit_zero",
+          "sql": "SELECT k,n FROM left_inputs ORDER BY k NULLS FIRST,n LIMIT 0 OFFSET 2",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "empty_right_on_inner",
+          "sql": "SELECT l.k AS lk,r.k AS rk,l.n,r.n AS rn FROM left_inputs l INNER JOIN empty_inputs r ON l.k=r.k ORDER BY lk NULLS FIRST,n",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "empty_right_on_left",
+          "sql": "SELECT l.k AS lk,r.k AS rk,l.n,r.n AS rn FROM left_inputs l LEFT JOIN empty_inputs r ON l.k=r.k ORDER BY lk NULLS FIRST,n",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "empty_right_on_right",
+          "sql": "SELECT l.k AS lk,r.k AS rk,l.n,r.n AS rn FROM left_inputs l RIGHT JOIN empty_inputs r ON l.k=r.k ORDER BY lk NULLS FIRST,n",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "empty_right_on_full",
+          "sql": "SELECT l.k AS lk,r.k AS rk,l.n,r.n AS rn FROM left_inputs l FULL JOIN empty_inputs r ON l.k=r.k ORDER BY lk NULLS FIRST,n",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "empty_right_on_left_semi",
+          "sql": "SELECT l.k AS lk,l.n FROM left_inputs l LEFT SEMI JOIN empty_inputs r ON l.k=r.k ORDER BY lk NULLS FIRST,n",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "empty_right_on_left_anti",
+          "sql": "SELECT l.k AS lk,l.n FROM left_inputs l LEFT ANTI JOIN empty_inputs r ON l.k=r.k ORDER BY lk NULLS FIRST,n",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "empty_right_using_inner",
+          "sql": "SELECT k,l.k AS lk,r.k AS rk,l.n,r.n AS rn FROM left_inputs l INNER JOIN empty_inputs r USING(k) ORDER BY k NULLS FIRST,l.n",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "empty_right_using_left",
+          "sql": "SELECT k,l.k AS lk,r.k AS rk,l.n,r.n AS rn FROM left_inputs l LEFT JOIN empty_inputs r USING(k) ORDER BY k NULLS FIRST,l.n",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "empty_right_using_right",
+          "sql": "SELECT k,l.k AS lk,r.k AS rk,l.n,r.n AS rn FROM left_inputs l RIGHT JOIN empty_inputs r USING(k) ORDER BY k NULLS FIRST,l.n",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "empty_right_using_full",
+          "sql": "SELECT k,l.k AS lk,r.k AS rk,l.n,r.n AS rn FROM left_inputs l FULL JOIN empty_inputs r USING(k) ORDER BY k NULLS FIRST,l.n",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "where_empty_in",
+          "sql": "SELECT k,n FROM left_inputs WHERE k IN (SELECT k FROM empty_inputs) ORDER BY k NULLS FIRST,n",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "where_empty_not_in",
+          "sql": "SELECT k,n FROM left_inputs WHERE k NOT IN (SELECT k FROM empty_inputs) ORDER BY k NULLS FIRST,n",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "where_empty_exists",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS (SELECT 1 FROM empty_inputs r WHERE r.k=l.k) ORDER BY l.k NULLS FIRST,l.n",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "where_empty_not_exists",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE NOT EXISTS (SELECT 1 FROM empty_inputs r WHERE r.k=l.k) ORDER BY l.k NULLS FIRST,l.n",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "bag_left_except_all",
+          "sql": "SELECT k,v FROM bag_left EXCEPT ALL SELECT k,v FROM bag_right",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "bag_right_except_all",
+          "sql": "SELECT k,v FROM bag_right EXCEPT ALL SELECT k,v FROM bag_left",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "natural_qualified_keys",
+          "sql": "SELECT l.k AS lk,r.k AS rk,l.n,r.w FROM left_inputs l NATURAL LEFT JOIN (SELECT k,w FROM right_inputs) r ORDER BY l.k NULLS FIRST,l.n,r.w",
+          "ansi": false,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "distinct_registered",
+          "sql": "SELECT DISTINCT k FROM left_inputs ORDER BY k NULLS FIRST",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "distinct_empty",
+          "sql": "SELECT DISTINCT k FROM empty_inputs",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "ordered_limit_offset",
+          "sql": "SELECT k,n FROM left_inputs ORDER BY k NULLS FIRST,n LIMIT 2 OFFSET 1",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "ordered_limit_zero",
+          "sql": "SELECT k,n FROM left_inputs ORDER BY k NULLS FIRST,n LIMIT 0 OFFSET 2",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "empty_right_on_inner",
+          "sql": "SELECT l.k AS lk,r.k AS rk,l.n,r.n AS rn FROM left_inputs l INNER JOIN empty_inputs r ON l.k=r.k ORDER BY lk NULLS FIRST,n",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "empty_right_on_left",
+          "sql": "SELECT l.k AS lk,r.k AS rk,l.n,r.n AS rn FROM left_inputs l LEFT JOIN empty_inputs r ON l.k=r.k ORDER BY lk NULLS FIRST,n",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "empty_right_on_right",
+          "sql": "SELECT l.k AS lk,r.k AS rk,l.n,r.n AS rn FROM left_inputs l RIGHT JOIN empty_inputs r ON l.k=r.k ORDER BY lk NULLS FIRST,n",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "empty_right_on_full",
+          "sql": "SELECT l.k AS lk,r.k AS rk,l.n,r.n AS rn FROM left_inputs l FULL JOIN empty_inputs r ON l.k=r.k ORDER BY lk NULLS FIRST,n",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "empty_right_on_left_semi",
+          "sql": "SELECT l.k AS lk,l.n FROM left_inputs l LEFT SEMI JOIN empty_inputs r ON l.k=r.k ORDER BY lk NULLS FIRST,n",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "empty_right_on_left_anti",
+          "sql": "SELECT l.k AS lk,l.n FROM left_inputs l LEFT ANTI JOIN empty_inputs r ON l.k=r.k ORDER BY lk NULLS FIRST,n",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "empty_right_using_inner",
+          "sql": "SELECT k,l.k AS lk,r.k AS rk,l.n,r.n AS rn FROM left_inputs l INNER JOIN empty_inputs r USING(k) ORDER BY k NULLS FIRST,l.n",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "empty_right_using_left",
+          "sql": "SELECT k,l.k AS lk,r.k AS rk,l.n,r.n AS rn FROM left_inputs l LEFT JOIN empty_inputs r USING(k) ORDER BY k NULLS FIRST,l.n",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "empty_right_using_right",
+          "sql": "SELECT k,l.k AS lk,r.k AS rk,l.n,r.n AS rn FROM left_inputs l RIGHT JOIN empty_inputs r USING(k) ORDER BY k NULLS FIRST,l.n",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "empty_right_using_full",
+          "sql": "SELECT k,l.k AS lk,r.k AS rk,l.n,r.n AS rn FROM left_inputs l FULL JOIN empty_inputs r USING(k) ORDER BY k NULLS FIRST,l.n",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "where_empty_in",
+          "sql": "SELECT k,n FROM left_inputs WHERE k IN (SELECT k FROM empty_inputs) ORDER BY k NULLS FIRST,n",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "where_empty_not_in",
+          "sql": "SELECT k,n FROM left_inputs WHERE k NOT IN (SELECT k FROM empty_inputs) ORDER BY k NULLS FIRST,n",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "where_empty_exists",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE EXISTS (SELECT 1 FROM empty_inputs r WHERE r.k=l.k) ORDER BY l.k NULLS FIRST,l.n",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "where_empty_not_exists",
+          "sql": "SELECT l.k,l.n FROM left_inputs l WHERE NOT EXISTS (SELECT 1 FROM empty_inputs r WHERE r.k=l.k) ORDER BY l.k NULLS FIRST,l.n",
+          "ansi": true,
+          "ordered": true
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "bag_left_except_all",
+          "sql": "SELECT k,v FROM bag_left EXCEPT ALL SELECT k,v FROM bag_right",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "bag_right_except_all",
+          "sql": "SELECT k,v FROM bag_right EXCEPT ALL SELECT k,v FROM bag_left",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "relational_missing21",
+          "id": "natural_qualified_keys",
+          "sql": "SELECT l.k AS lk,r.k AS rk,l.n,r.w FROM left_inputs l NATURAL LEFT JOIN (SELECT k,w FROM right_inputs) r ORDER BY l.k NULLS FIRST,l.n,r.w",
+          "ansi": true,
+          "ordered": true
+        }
+      ]
+    }
+  ]
+}

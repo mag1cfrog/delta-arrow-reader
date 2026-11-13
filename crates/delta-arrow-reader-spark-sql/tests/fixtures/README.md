@@ -1473,30 +1473,42 @@ set operators. Existing raw-bit, metadata and native-SQL controls remain require
 `capture_relational_queries_spark.py` records 128 independent Spark 4.2.0
 observations in `relational-queries-spark.jsonl`, over explicit nullable inputs
 with duplicates and empty tables. The two ANSI modes cover 64 query shapes.
-`relational_queries.rs` replays them at batch sizes 1 and 32, checking ordered
-rows, names, logical/physical types, metadata and representable NULL values.
-The scalar multi-row cases must fail for cardinality, not an arbitrary error.
+That historical fixture stays unchanged. The
+[ordinary relational references](relational-results-coverage/README.md) add 42
+records for 21 missing shapes and supply source-only requests for a current
+Spark replay of all 128 original records.
 
-The capture covers projections, filters, ordinary/null-safe/USING joins, nested
-and shadowed CTEs, reused CTEs, all six set operators, scalar subqueries,
-correlated aggregates, EXISTS and Decimal VALUES. Numeric floating zero signs
-are equivalent in this row comparison. Observable post-set STRING/negation
-results and raw UNION ALL bits have separate exact tests described above.
-Decimal rounding and mixed-width input rules also retain their larger dedicated
-VALUES and coercion captures.
+`relational_queries.rs` compares final rows, NULLs, multiplicity and executed
+types at three provider/input/target/output layouts: `(1,1,1,1)`, `(3,2,4,3)` and
+`(2,32,2,32)`. Ordered SQL keeps its sequence; other results compare multisets.
+Names, metadata and nullability annotations are excluded. Physical batch
+validity remains checked, and scalar multi-row cases must fail for cardinality.
+
+The original capture covers projections, filters, ordinary/null-safe/USING
+joins, nested and shadowed CTEs, reused CTEs, all six set operators, scalar
+subqueries, correlated aggregates, EXISTS and Decimal VALUES. The added cases
+cover registered DISTINCT, deterministic LIMIT/OFFSET, empty-right ON/USING
+joins, empty-inner WHERE subqueries, skewed multi-column EXCEPT ALL and qualified
+NATURAL keys. Numeric floating zero signs retain the original row comparison's
+equivalence. Observable post-set STRING/negation results and raw UNION ALL bits
+have separate exact tests described above. Decimal rounding and mixed-width
+input rules retain their dedicated VALUES and coercion captures.
 
 The four projected IN/NOT IN shapes preserve the approved SQL three-valued
 policy, including false/true for empty subqueries. Both raw Spark rows and the
 policy rows remain recorded. Eight records carry this policy; four differ from
 Spark. The replay checks the exact ID-specific policy rows before accepting
 an override, so an unrelated case cannot acquire an exception through fixture
-metadata. The other 120 records use the independent Spark result directly.
+metadata. Across three layouts, 480 contexts compare successful Spark rows and
+types, 24 check the approved IN truth tables, and six check DAR's own scalar
+cardinality validation. Policy and error checks are not counted as Spark row
+matches.
 
 The [correlated scalar replay](#correlated-scalars-over-inner-rows) covers
 nested qualified references and runtime cardinality. The eight historical ANSI
 UNION/LIMIT early-error differences remain owned by #149 for S07; their complete
 accepted-runtime alternatives remain explicit. Exact Spark error-stage and
-analyzed-nullability parity are not established by the row/schema checks here.
+analyzed-nullability parity are outside this result comparison.
 
 ## Guaranteed single-row correlated scalars
 
