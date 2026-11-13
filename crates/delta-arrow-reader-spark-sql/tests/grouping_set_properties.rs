@@ -152,7 +152,7 @@ fn captured_records() -> TestResult<(Vec<Value>, Value)> {
             .iter()
             .find(|definition| definition["id"] == id)
             .ok_or("unrecorded identity")?;
-        for key in ["sql", "category", "native_policy"] {
+        for key in ["sql", "category"] {
             assert_eq!(case[key], definition[key], "{id}: {key}");
         }
         if case["expected"].get("rows").is_some() {
@@ -185,10 +185,7 @@ async fn captured_grouping_masks_match_each_spark_stage() -> TestResult {
     for batch_size in [1, 32] {
         let session = session(batch_size, 2);
         spark_inputs::register_recorded_inputs(&session, &records[0], batch_size)?;
-        for case in records[1..]
-            .iter()
-            .filter(|case| case["native_policy"].is_null())
-        {
+        for case in &records[1..] {
             let actual = compare_exact_spark_query_stages_with_optimized(&session, case).await?;
             let matches = comparison_matches(case, &actual);
             eprintln!(
@@ -199,54 +196,6 @@ async fn captured_grouping_masks_match_each_spark_stage() -> TestResult {
                 })
             );
             if !matches {
-                differences.push(format!(
-                    "{} ANSI={} batch={batch_size}: {actual}",
-                    case["id"], case["ansi"]
-                ));
-            }
-        }
-    }
-    assert!(differences.is_empty(), "{}", differences.join("\n"));
-    Ok(())
-}
-
-#[tokio::test]
-async fn captured_empty_inputs_keep_the_existing_native_grand_total_policy() -> TestResult {
-    let (records, _) = captured_records()?;
-    let mut differences = Vec::new();
-    for batch_size in [1, 32] {
-        let session = session(batch_size, 2);
-        spark_inputs::register_recorded_inputs(&session, &records[0], batch_size)?;
-        for case in records[1..]
-            .iter()
-            .filter(|case| case["native_policy"] == "empty_grand_total")
-        {
-            let actual = compare_exact_spark_query_stages_with_optimized(&session, case).await?;
-            // Native SQL keeps one zero-count row for each empty grouping set.
-            let policy_rows = if case["id"] == "repeated_empty_sets" {
-                json!([["0", "0"], ["0", "0"], ["0", "0"]])
-            } else {
-                json!([[null, "1", "0"]])
-            };
-            let fields_match = [
-                "public_matches",
-                "optimized_matches",
-                "before_matches",
-                "physical_matches",
-            ]
-            .iter()
-            .all(|key| actual[*key] == true);
-            let policy_matches = actual["error"].is_null() && actual["rows"] == policy_rows;
-            eprintln!(
-                "GROUPING_SET_EMPTY_POLICY {}",
-                json!({
-                    "id":case["id"],"ansi":case["ansi"],"batch":batch_size,
-                    "spark_expected":case["expected"],"spark_matches":actual["matches"],
-                    "observation":actual,"native_policy_rows":policy_rows,
-                    "fields_match":fields_match,"native_policy_matches":policy_matches,
-                })
-            );
-            if !fields_match || !policy_matches {
                 differences.push(format!(
                     "{} ANSI={} batch={batch_size}: {actual}",
                     case["id"], case["ansi"]
