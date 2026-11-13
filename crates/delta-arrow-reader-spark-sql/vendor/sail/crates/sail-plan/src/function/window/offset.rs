@@ -6,7 +6,7 @@ use arrow::datatypes::{DataType, FieldRef};
 use datafusion::functions_window::lead_lag::{lag_udwf, lead_udwf};
 use datafusion::physical_expr::PhysicalExpr;
 use datafusion::physical_expr::expressions::Literal;
-use datafusion_common::Result;
+use datafusion_common::{Result, ScalarValue};
 use datafusion_expr::function::{
     ExpressionArgs, PartitionEvaluatorArgs, WindowFunctionSimplification, WindowUDFFieldArgs,
 };
@@ -58,7 +58,25 @@ impl WindowUDFImpl for SparkOffsetWindow {
         args: PartitionEvaluatorArgs,
     ) -> Result<Box<dyn PartitionEvaluator>> {
         let Some([_, offset, _]) = row_default_args(args.input_exprs()) else {
-            return self.native.partition_evaluator_factory(args);
+            let zero_offset = args
+                .input_exprs()
+                .get(1)
+                .and_then(|offset| offset.downcast_ref::<Literal>())
+                .is_some_and(|offset| {
+                    let value = offset.value();
+                    value.data_type().is_integer()
+                        && ScalarValue::new_zero(&value.data_type())
+                            .is_ok_and(|zero| value == &zero)
+                });
+            // Spark keeps the current NULL payload at zero, including with IGNORE NULLS.
+            return self
+                .native
+                .partition_evaluator_factory(PartitionEvaluatorArgs::new(
+                    args.input_exprs(),
+                    args.input_fields(),
+                    args.is_reversed(),
+                    args.ignore_nulls() && !zero_offset,
+                ));
         };
         let Some(offset) = offset.downcast_ref::<Literal>().map(Literal::value) else {
             return datafusion_common::not_impl_err!(
@@ -349,10 +367,21 @@ mod tests {
             (spark_lag_udwf(), lag_udwf()),
             (spark_lead_udwf(), lead_udwf()),
         ] {
-            for offset in [-1, 0, 1] {
+            for offset in [
+                ScalarValue::Int64(Some(-1)),
+                ScalarValue::Int64(Some(0)),
+                ScalarValue::Int64(Some(1)),
+                ScalarValue::Int32(Some(0)),
+                ScalarValue::Null,
+                ScalarValue::Int64(None),
+            ] {
+                let zero_offset = matches!(
+                    offset,
+                    ScalarValue::Int32(Some(0)) | ScalarValue::Int64(Some(0))
+                );
                 let args: Vec<Arc<dyn PhysicalExpr>> = vec![
                     Arc::new(Column::new("payload", 0)),
-                    Arc::new(Literal::new(ScalarValue::Int64(Some(offset)))),
+                    Arc::new(Literal::new(offset)),
                     Arc::new(Literal::new(ScalarValue::Int32(Some(-99)))),
                 ];
                 let fields = args
@@ -390,14 +419,29 @@ mod tests {
                         for row in 0..4 {
                             let range = actual.get_range(row, 4)?;
                             assert_eq!(range, expected.get_range(row, 4)?);
+                            let native_value = expected.evaluate(&values, &range)?;
                             assert_eq!(
                                 actual.evaluate(&values, &range)?,
-                                expected.evaluate(&values, &range)?
+                                if zero_offset {
+                                    ScalarValue::try_from_array(&values[0], row)?
+                                } else {
+                                    native_value.clone()
+                                }
                             );
+                            if zero_offset && ignore_nulls && row == 1 {
+                                assert_eq!(native_value, ScalarValue::Int32(Some(-99)));
+                            }
                         }
                         let actual_values = actual.evaluate_all(&values, 4)?;
                         let expected_values = expected.evaluate_all(&values, 4)?;
-                        assert_eq!(actual_values.as_ref(), expected_values.as_ref());
+                        if zero_offset {
+                            assert_eq!(actual_values.as_ref(), values[0].as_ref());
+                            if ignore_nulls {
+                                assert_ne!(actual_values.as_ref(), expected_values.as_ref());
+                            }
+                        } else {
+                            assert_eq!(actual_values.as_ref(), expected_values.as_ref());
+                        }
                     }
                 }
             }

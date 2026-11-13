@@ -14,9 +14,10 @@ mod spark_inputs;
 #[path = "support/spark_results.rs"]
 mod spark_results;
 use spark_results::{
-    STAGES, TestResult, capture_native_query_observation, case_identity,
-    compare_exact_spark_query_stages, compare_exact_spark_query_stages_with_optimized,
-    native_result_matches_spark_reference, validate_spark_reference_result,
+    STAGES, TestResult, capture_executed_query_result, capture_native_query_observation,
+    case_identity, compare_exact_spark_query_stages,
+    compare_exact_spark_query_stages_with_optimized, native_result_matches_spark_reference,
+    validate_spark_reference_result,
 };
 
 fn new_test_session(batch_size: usize, enable_spark_sql: bool) -> SessionContext {
@@ -210,7 +211,7 @@ fn matches_retained_native_profile(
     Ok(reference_fields_match && native_observation == expected_native_observation)
 }
 
-// #1118 compares executed names and types without nested nullability or metadata.
+// Offset value regressions compare executed names and types without nullable flags or metadata.
 fn executed_field_names_and_types(schema: &Value) -> Option<Vec<(&str, Value)>> {
     schema["fields"]
         .as_array()?
@@ -231,6 +232,64 @@ fn executed_data_type(data_type: &Value) -> Option<Value> {
             "valueType":executed_data_type(&data_type["valueType"])?})),
         _ => data_type.as_str().map(Value::from),
     }
+}
+
+#[tokio::test]
+async fn zero_offset_nulls_match_spark() -> TestResult {
+    let manifest: Value =
+        serde_json::from_str(include_str!("fixtures/zero-offset-nulls/inputs.json"))?;
+    assert_eq!(manifest["issue"], 1117);
+    assert_eq!(manifest["spark_version"], "4.2.0");
+    assert_eq!(manifest["ansi_modes"], json!([false, true]));
+    assert_eq!(manifest["native_batch_sizes"], json!([1, 32]));
+    let inputs: Value = serde_json::from_str(include_str!(
+        "fixtures/offset-window-fields-1044-cases.json"
+    ))?;
+    let cases = manifest["cases"].as_array().ok_or("missing cases")?;
+    let references = include_str!("fixtures/zero-offset-nulls/spark-results.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(cases.len(), 9);
+    assert_eq!(references.len(), cases.len() * 2);
+    let mut completed = BTreeSet::new();
+    for batch in [1, 32] {
+        let session = new_test_session(batch, true);
+        spark_inputs::register_recorded_inputs(&session, &inputs["corpora"][0]["metadata"], batch)?;
+        for reference in &references {
+            let source = cases
+                .iter()
+                .find(|case| case["id"] == reference["id"])
+                .ok_or("unexpected reference ID")?;
+            assert_eq!(reference["sql"], source["sql"]);
+            assert_eq!(reference["ordered"], true);
+            assert_eq!(reference["status"], "ok");
+            let id = reference["id"].as_str().ok_or("missing reference ID")?;
+            let ansi = reference["ansi"].as_bool().ok_or("missing ANSI mode")?;
+            assert!(completed.insert((id, ansi, batch)), "duplicate reference");
+            let actual = capture_executed_query_result(&session, reference).await?;
+            assert_eq!(
+                actual["rows"], reference["rows"],
+                "{} ANSI={} batch={batch}",
+                reference["id"], reference["ansi"]
+            );
+            assert_eq!(
+                executed_field_names_and_types(&actual["schema"])
+                    .ok_or("missing executed fields")?,
+                executed_field_names_and_types(&reference["physical_schema"])
+                    .ok_or("missing Spark executed fields")?,
+                "{} ANSI={} batch={batch}",
+                reference["id"],
+                reference["ansi"]
+            );
+            eprintln!(
+                "ZERO_OFFSET_NULLS {}",
+                json!({"id":reference["id"],"ansi":reference["ansi"],"batch":batch,"actual":actual,"matches":true})
+            );
+        }
+    }
+    assert_eq!(completed.len(), cases.len() * 4);
+    Ok(())
 }
 
 #[tokio::test]
@@ -358,8 +417,8 @@ async fn offset_window_fields_match_spark_at_each_stage() -> TestResult {
             include_str!("fixtures/offset-window-fields-1044-spark.jsonl"),
             include_str!("fixtures/offset-window-fields-1044-retained.json"),
             188,
-            128,
-            60,
+            144,
+            44,
         ),
         (
             include_str!("fixtures/offset-window-default-coercion-1044-cases.json"),
@@ -467,8 +526,28 @@ fn retained_profiles_cannot_override_spark_field_expectations() -> TestResult {
             "diagnostic",
         ),
     ] {
-        let (_, cases, retained) =
+        let (_, cases, mut retained) =
             load_reference_fixtures(source_request, spark_reference, retained_profiles)?;
+        if control_kind == "rows" {
+            // Successful rows no longer need a waiver, but must still protect the Field guard.
+            let case = cases
+                .iter()
+                .find(|case| case["id"] == "lag_offset_scalar_signed_ignore")
+                .ok_or("missing successful row reference")?;
+            let mut observation = json!({"error":null,"native_phase":"encode",
+                "rows_raw":case["rows_raw"],"optimized_error":null});
+            for (stage, native_field_key) in STAGES {
+                observation[native_field_key] = case["schema_stages"][stage].clone();
+            }
+            retained["profiles"]["successful_rows"] = observation;
+            retained["controls"]
+                .as_array_mut()
+                .ok_or("missing controls")?
+                .push(
+                    json!({"corpus":case["corpus"],"id":case["id"],"ansi":case["ansi"],
+                    "kind":"rows","profile":"successful_rows"}),
+                );
+        }
         let control = retained["controls"]
             .as_array()
             .ok_or("missing controls")?
@@ -548,6 +627,7 @@ async fn spark_offset_planning_keeps_native_fields_and_required_defaults_unchang
     let mut sqls = Vec::new();
     for table in ["offset_scalar", "empty_offset_scalar", "null_offset_scalar"] {
         sqls.push(format!("SELECT id,r,v,LAG(r,2,CAST(-99 AS INT)) OVER (ORDER BY id) AS required_lag,LEAD(r,2,CAST(-99 AS INT)) OVER (ORDER BY id) AS required_lead,LAG(r) OVER (ORDER BY id) AS omitted_default,LEAD(v,0,CAST(NULL AS INT)) OVER (ORDER BY id) AS nullable_payload FROM {table} ORDER BY id"));
+        sqls.push(format!("SELECT id,LAG(v,0,-99) IGNORE NULLS OVER (ORDER BY id) AS previous,LEAD(v,0,-99) IGNORE NULLS OVER (ORDER BY id) AS following FROM {table} ORDER BY id"));
     }
     for table in ["offset_nested", "empty_offset_nested", "null_offset_nested"] {
         sqls.push(format!("SELECT id,r,v,LAG(r) OVER (ORDER BY id) AS required_source,LEAD(v) OVER (ORDER BY id) AS nullable_source FROM {table} ORDER BY id"));
