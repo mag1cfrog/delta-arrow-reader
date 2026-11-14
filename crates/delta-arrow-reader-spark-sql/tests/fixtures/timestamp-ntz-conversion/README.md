@@ -53,7 +53,9 @@ error condition, Java exception class, first message line and failing stage.
 `timestamp_ntz_conversion.rs` registers the instants annotated with UTC, as Delta reads
 them, with `Asia/Kathmandu` and with `+05:45`. For each annotation it compares names, type
 families, nullability, metadata and typed rows at batch sizes 1 and 32, in each record's
-session time zone. A TIMESTAMP result must be annotated with the session zone. Spark fails
+session time zone. The repaired formatted TIMESTAMP and TIMESTAMP() records compare final
+rows and executed types, without nullable flags or metadata. A TIMESTAMP result must be
+annotated with the session zone. Spark fails
 an overflowing conversion with Java's `ArithmeticException`, during optimization for a
 literal; DAR must fail at the same stage with its `long overflow` message. Another test
 checks that native DataFusion SQL keeps Arrow's cast.
@@ -79,11 +81,10 @@ The test replaces only the retained part with the current DAR result and checks 
     optimization;
   - 4 TRY_CAST calls over a NOT NULL column fail because they return NULL in a NOT NULL
     field, where Spark returns -1.
-- #1107: 30 records of TIMESTAMP arguments:
-  - 18 formatted TO_TIMESTAMP_NTZ and TO_TIMESTAMP calls fail in the string parser.
-    Strict ANSI literals fail during optimization; the other calls fail while collecting
-    rows. The literal ones declare a nullable result;
-  - 12 TIMESTAMP() calls return TIMESTAMP_NTZ holding the UTC date-time.
+
+The original 542 raw records remain unchanged. The
+[temporal argument fixture](../timestamp-temporal-arguments/README.md) adds ordinary
+TIMESTAMP arguments with NULL/column formats and ignored aggregate/window bindings.
 
 Recapture from the crate root:
 

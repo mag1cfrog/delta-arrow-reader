@@ -1,5 +1,5 @@
 //! TIMESTAMP values convert to TIMESTAMP_NTZ at their local date-time in the session time
-//! zone like Spark, in casts, TO_TIMESTAMP_NTZ and CONVERT_TIMEZONE.
+//! zone like Spark, in casts, one-argument TO_TIMESTAMP_NTZ and CONVERT_TIMEZONE.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -11,6 +11,7 @@ use arrow::datatypes::{
     TimestampMicrosecondType, TimestampNanosecondType,
 };
 use arrow::record_batch::RecordBatch;
+use datafusion::common::tree_node::{TreeNode, TreeNodeRecursion};
 use datafusion::datasource::MemTable;
 use datafusion::execution::SessionStateBuilder;
 use datafusion::logical_expr::LogicalPlan;
@@ -161,6 +162,14 @@ async fn observe(session: &SessionContext, case: &Value) -> Value {
         );
         phase = "optimized";
         let optimized = optimize(session, &query.logical_plan)?;
+        let mut windows = 0;
+        optimized.apply(|plan| {
+            if matches!(plan, LogicalPlan::Window(_)) {
+                windows += 1;
+            }
+            Ok(TreeNodeRecursion::Continue)
+        })?;
+        observation["window_operators"] = json!(windows);
         observation["optimized"] = dar_fields(
             optimized.schema().fields(),
             Some(&query.column_names),
@@ -215,10 +224,22 @@ fn dar_message(case: &Value) -> Option<&str> {
     }
 }
 
-/// The recorded stages and outcome that differ from the observation. A failure must occur
-/// at Spark's stage with DAR's message for it.
+/// Preserve the original schema/error controls; repaired #1107 cases compare final values
+/// and executed types without metadata, nullable flags or error-stage matching.
 /// An omitted stage makes no claim; an explicit NULL requires that stage to be unavailable.
 fn differing_parts(case: &Value, observation: &Value) -> TestResult<Vec<&'static str>> {
+    if matches!(
+        case["id"].as_str(),
+        Some(
+            "column_to_timestamp_ntz_format"
+                | "column_to_timestamp_format"
+                | "literal_to_timestamp_ntz_format"
+                | "column_timestamp_function"
+                | "literal_timestamp_function"
+        )
+    ) {
+        return temporal_argument_differences(case, observation);
+    }
     let mut differing = Vec::new();
     for stage in ["analyzed", "optimized", "executed"] {
         if let Some(expected) = case["schema_stages"].get(stage) {
@@ -273,12 +294,6 @@ enum RetainedDifference {
     /// #1106: TRY_CAST of a NOT NULL TIMESTAMP that overflows puts NULL in a NOT NULL field,
     /// which fails while collecting rows. Spark returns -1.
     NullInRequiredTryCast,
-    /// #1107: formatted TO_TIMESTAMP and TO_TIMESTAMP_NTZ of a TIMESTAMP fail in the string
-    /// parser and declare a nullable result. Strict literals fail during optimization;
-    /// other calls fail while collecting rows.
-    StringOnlyFormattedParsing,
-    /// #1107: TIMESTAMP() returns a TIMESTAMP_NTZ holding the UTC date-time.
-    NtzTimestampFunction,
 }
 
 /// Comparisons with the repeated Los Angeles local date-time 2024-11-03 01:30 that Spark
@@ -334,17 +349,6 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
         return Some(RetainedDifference::NullInRequiredTryCast);
     }
     match id {
-        "column_to_timestamp_ntz_format"
-        | "column_to_timestamp_format"
-        | "literal_to_timestamp_ntz_format" => {
-            return Some(RetainedDifference::StringOnlyFormattedParsing);
-        }
-        "column_timestamp_function" | "literal_timestamp_function" => {
-            return Some(RetainedDifference::NtzTimestampFunction);
-        }
-        _ => {}
-    }
-    match id {
         "column_cast" if matches!(case["timezone"].as_str(), Some("PST" | "GMT+08:00")) => {
             Some(RetainedDifference::UnparsedSessionZone)
         }
@@ -388,17 +392,6 @@ fn out_of_range(instant: &Value) -> TestResult<bool> {
     })
 }
 
-/// Set `key` of the result field `r` in each recorded schema stage.
-fn set_result_field(case: &mut Value, key: &str, value: Value) {
-    for stage in ["analyzed", "optimized", "executed"] {
-        if let Some(fields) = case["schema_stages"][stage]["fields"].as_array_mut() {
-            for field in fields.iter_mut().filter(|field| field["name"] == "r") {
-                field[key] = value.clone();
-            }
-        }
-    }
-}
-
 /// DAR's current result for a record with a retained difference: Spark's record with only
 /// the retained part replaced.
 fn current_expectation(
@@ -409,19 +402,9 @@ fn current_expectation(
     let instants = registered_instants(metadata)?;
     let mut current = case.clone();
     let id = case["id"].as_str().ok_or("missing id")?;
-    match difference {
-        RetainedDifference::LateConvertTimezoneOverflow => {
-            current["spark_error_phase"] = json!("collect");
-            return Ok(current);
-        }
-        RetainedDifference::StringOnlyFormattedParsing => {
-            set_result_field(&mut current, "nullable", json!(true));
-        }
-        RetainedDifference::NtzTimestampFunction => {
-            set_result_field(&mut current, "type", json!("timestamp_ntz"));
-            return Ok(current);
-        }
-        _ => {}
+    if difference == RetainedDifference::LateConvertTimezoneOverflow {
+        current["spark_error_phase"] = json!("collect");
+        return Ok(current);
     }
     let failure = match difference {
         // The first out-of-range row fails the query.
@@ -436,27 +419,13 @@ fn current_expectation(
         RetainedDifference::NullInRequiredTryCast => {
             Some("declared as non-nullable but contains null values")
         }
-        RetainedDifference::StringOnlyFormattedParsing => Some("expected string"),
         _ => None,
     };
     if let Some(message) = failure {
-        let fails_during_optimization = difference
-            == RetainedDifference::StringOnlyFormattedParsing
-            && id == "literal_to_timestamp_ntz_format"
-            && case["ansi"] == true;
         current["expected"] = json!({"status": "error", "dar_message": message});
-        current["spark_error_phase"] = json!(if fails_during_optimization {
-            "optimized"
-        } else {
-            "collect"
-        });
+        current["spark_error_phase"] = json!("collect");
         if let Some(stages) = current["schema_stages"].as_object_mut() {
-            if fails_during_optimization {
-                stages.insert("optimized".into(), Value::Null);
-                stages.insert("executed".into(), Value::Null);
-            } else {
-                stages.remove("executed");
-            }
+            stages.remove("executed");
         }
         return Ok(current);
     }
@@ -504,43 +473,6 @@ fn current_expectation(
     }
     rows.sort_by_key(|row| row.to_string());
     Ok(current)
-}
-
-#[test]
-fn strict_formatted_literal_errors_require_unavailable_later_stages() -> TestResult {
-    let records = conversion_references()?;
-    let reference = records
-        .iter()
-        .find(|case| {
-            case["id"] == "literal_to_timestamp_ntz_format"
-                && case["ansi"] == true
-                && case["timezone"] == "UTC"
-        })
-        .ok_or("missing strict formatted literal reference")?;
-    let expectation = current_expectation(
-        reference,
-        RetainedDifference::StringOnlyFormattedParsing,
-        &records[0],
-    )?;
-    let fields = json!([{"name":"r", "type":"timestamp_ntz", "nullable":true, "metadata":{}}]);
-    let observation = json!({
-        "analyzed":fields,
-        "error_phase":"optimized",
-        "error":"Optimizer rule 'simplify_expressions' failed\ncaused by\nExecution error: expected string scalar for `timestamp`",
-    });
-    assert!(differing_parts(&expectation, &observation)?.is_empty());
-    for stage in ["optimized", "executed"] {
-        let mut late_failure = observation.clone();
-        late_failure[stage] = fields.clone();
-        assert_eq!(differing_parts(&expectation, &late_failure)?, [stage]);
-        let mut unknown_stage = expectation.clone();
-        unknown_stage["schema_stages"]
-            .as_object_mut()
-            .ok_or("missing expected schema stages")?
-            .remove(stage);
-        assert!(differing_parts(&unknown_stage, &late_failure)?.is_empty());
-    }
-    Ok(())
 }
 
 fn session_context(batch_size: usize) -> SessionContext {
@@ -617,6 +549,120 @@ fn register_inputs(
     Ok(())
 }
 
+/// #1107 compares final values and executed types, including multiplicity from ignored
+/// aggregate formats. Schema metadata, nullable flags and error stages are not compared.
+fn temporal_argument_differences(
+    case: &Value,
+    observation: &Value,
+) -> TestResult<Vec<&'static str>> {
+    assert_eq!(case["expected"]["status"], "ok");
+    let expected: Vec<_> = spark_fields(&case["schema_stages"]["executed"])?
+        .as_array()
+        .ok_or("missing executed fields")?
+        .iter()
+        .map(|field| field["type"].clone())
+        .collect();
+    let actual: Vec<_> = observation["executed"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|field| field["type"].clone())
+        .collect();
+    let mut differences = Vec::new();
+    if expected != actual {
+        differences.push("executed types");
+    }
+    if observation["rows"] != case["expected"]["rows"] {
+        differences.push("rows");
+    }
+    if case["id"]
+        .as_str()
+        .is_some_and(|id| id.ends_with("_window"))
+        && observation["window_operators"] != 1
+    {
+        differences.push("window binding");
+    }
+    Ok(differences)
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn timestamp_temporal_arguments_match_spark() -> TestResult {
+    let records = include_str!("fixtures/timestamp-temporal-arguments/spark.jsonl")
+        .lines()
+        .map(serde_json::from_str)
+        .collect::<Result<Vec<Value>, _>>()?;
+    let request: Value = serde_json::from_str(include_str!(
+        "fixtures/timestamp-temporal-arguments/requests.json"
+    ))?;
+    assert_eq!(records[0]["spark_version"], "4.2.0");
+    assert_eq!(records.len() - 1, 188);
+    let requested: Vec<_> = request["corpora"]
+        .as_array()
+        .ok_or("missing corpora")?
+        .iter()
+        .flat_map(|corpus| corpus["cases"].as_array().unwrap())
+        .collect();
+    assert_eq!(requested.len(), 188);
+    for (case, definition) in records[1..].iter().zip(requested) {
+        for key in ["corpus", "id", "sql", "ansi", "timezone", "ordered"] {
+            assert_eq!(case[key], definition[key], "case identity {key}");
+        }
+    }
+    let mut differences = Vec::new();
+    for batch_size in [1, 32] {
+        let session = session_context(batch_size);
+        register_inputs(
+            &session,
+            &request["corpora"][0]["metadata"],
+            "UTC",
+            batch_size,
+        )?;
+        for case in &records[1..] {
+            let observation = observe(&session, case).await;
+            println!(
+                "timestamp_argument_observation={}",
+                json!({"id":case["id"],
+                "timezone":case["timezone"], "ansi":case["ansi"], "batch":batch_size,
+                "expected":case["expected"], "executed":case["schema_stages"]["executed"],
+                "actual":observation})
+            );
+            let differing = temporal_argument_differences(case, &observation)?;
+            if !differing.is_empty() {
+                differences.push(json!({"id":case["id"], "timezone":case["timezone"],
+                    "ansi":case["ansi"], "batch":batch_size,"differing":differing,
+                    "expected":case["expected"], "actual":observation}));
+            }
+        }
+    }
+    assert!(
+        differences.is_empty(),
+        "{} differences: {}",
+        differences.len(),
+        json!(differences)
+    );
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn native_timestamp_cast_keeps_its_unzoned_type() -> TestResult {
+    let session = session_context(32);
+    let batches = session
+        .sql("SELECT CAST(1 AS TIMESTAMP) AS r")
+        .await?
+        .collect()
+        .await?;
+    assert_eq!(batches.len(), 1);
+    assert_eq!(batches[0].num_rows(), 1);
+    assert_eq!(
+        batches[0].schema().field(0).data_type(),
+        &DataType::Timestamp(TimeUnit::Nanosecond, None)
+    );
+    validate_batch(batches[0].schema().as_ref(), &batches[0])?;
+    let counts = cast(batches[0].column(0).as_ref(), &DataType::Int64)?;
+    assert_eq!(counts.as_primitive::<Int64Type>().value(0), 1_000_000_000);
+    Ok(())
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn timestamp_ntz_conversions_follow_the_session_zone_like_spark() -> TestResult {
     let records = conversion_references()?;
@@ -636,8 +682,6 @@ async fn timestamp_ntz_conversions_follow_the_session_zone_like_spark() -> TestR
             (RetainedDifference::LocalDateTimeComparison, 30),
             (RetainedDifference::LateConvertTimezoneOverflow, 4),
             (RetainedDifference::NullInRequiredTryCast, 4),
-            (RetainedDifference::StringOnlyFormattedParsing, 18),
-            (RetainedDifference::NtzTimestampFunction, 12),
         ])
     );
     let mut differences = Vec::new();

@@ -1003,9 +1003,16 @@ Related cases are still open:
   (#1103);
 - TIMESTAMP_NTZ values beyond Chrono's years are read wrongly (#1104);
 - Spark's optimizer compares a converted value with a TIMESTAMP_NTZ literal by the
-  literal's instant, which DAR does not yet do (#1105);
-- formatted TO_TIMESTAMP and TO_TIMESTAMP_NTZ fail on a TIMESTAMP, and TIMESTAMP() returns
-  TIMESTAMP_NTZ (#1107).
+  literal's instant, which DAR does not yet do (#1105).
+
+Formatted TO_TIMESTAMP, TRY_TO_TIMESTAMP and the explicit LTZ/NTZ forms accept TIMESTAMP
+arguments without parsing them. The LTZ forms keep the instant; formatted TO_TIMESTAMP_NTZ
+keeps the stored UTC date-time, unlike its one-argument local-wall conversion. Even a NULL
+format is ignored, while its aggregate/window/column bindings use the existing omitted-input
+carrier so row multiplicity is preserved. TIMESTAMP() returns LTZ TIMESTAMP and uses the
+existing local-date/time conversion for DATE and TIMESTAMP_NTZ inputs. The
+[temporal argument references](tests/fixtures/timestamp-temporal-arguments/README.md) record
+these checks.
 
 Native DataFusion SQL keeps Arrow's cast. The
 [TIMESTAMP_NTZ conversion references](tests/fixtures/timestamp-ntz-conversion/README.md)
