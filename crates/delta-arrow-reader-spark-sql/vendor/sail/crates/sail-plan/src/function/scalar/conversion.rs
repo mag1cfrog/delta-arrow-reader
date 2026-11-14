@@ -11,6 +11,7 @@ use crate::error::PlanResult;
 use crate::function::common::{
     ScalarFunction, ScalarFunctionInput, cast_with_date_ntz_nullability,
 };
+use crate::function::temporal_coercion::cast_local_timestamp_expr_to_ltz;
 
 pub(crate) fn cast_to_date(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let arg = input.arguments.one()?;
@@ -80,9 +81,16 @@ fn cast_to_timestamp(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
             args: vec![arg],
         }))
     } else {
+        let timezone = &input.function_context.plan_config.session_timezone;
+        if matches!(
+            data_type,
+            DataType::Date32 | DataType::Date64 | DataType::Timestamp(_, None)
+        ) {
+            return Ok(cast_local_timestamp_expr_to_ltz(arg, &data_type, timezone));
+        }
         Ok(expr::Expr::Cast(expr::Cast::new(
             Box::new(arg),
-            DataType::Timestamp(TimeUnit::Microsecond, None),
+            DataType::Timestamp(TimeUnit::Microsecond, Some(Arc::clone(timezone))),
         )))
     }
 }

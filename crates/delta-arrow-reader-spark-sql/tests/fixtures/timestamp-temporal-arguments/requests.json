@@ -1,0 +1,1842 @@
+{
+  "issue": "1107",
+  "expected_record_count": 188,
+  "corpora": [
+    {
+      "corpus": "timestamp_args_UTC",
+      "source": "source-only #1107 temporal timestamp arguments and ignored-format bindings",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "temporal_args",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "ts",
+                  "type": "timestamp",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "tn",
+                  "type": "timestamp_ntz",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "dt",
+                  "type": "date",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "fmt",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "1704200645123456",
+                "1704200645123456",
+                "19724",
+                "2024-01-02 13:04:05.123456",
+                "yyyy-MM-dd HH:mm:ss"
+              ],
+              [
+                "1",
+                "1710064799999999",
+                "1710064799999999",
+                "19792",
+                "2024-03-10 09:59:59.999999",
+                "ignored q"
+              ],
+              [
+                "2",
+                "1710064800000000",
+                "1710064800000000",
+                "19792",
+                "2024-03-10 10:00:00.000000",
+                null
+              ],
+              [
+                "3",
+                "1730622600000000",
+                "1730622600000000",
+                "20030",
+                "2024-11-03 08:30:00.000000",
+                "yyyy-MM-dd"
+              ],
+              [
+                "4",
+                "1730626200000000",
+                "1730626200000000",
+                "20030",
+                "2024-11-03 09:30:00.000000",
+                "bad pattern"
+              ],
+              [
+                "5",
+                "-1",
+                "-1",
+                "-1",
+                "1969-12-31 23:59:59.999999",
+                "yyyy"
+              ],
+              [
+                "6",
+                "1704200645123456",
+                "1704200645123456",
+                "19724",
+                "2024-01-02 13:04:05.123456",
+                null
+              ],
+              [
+                "7",
+                null,
+                null,
+                null,
+                null,
+                null
+              ]
+            ]
+          },
+          {
+            "name": "empty_temporal_args",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "ts",
+                  "type": "timestamp",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "tn",
+                  "type": "timestamp_ntz",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "dt",
+                  "type": "date",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "fmt",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": []
+          }
+        ],
+        "timezone": "UTC"
+      },
+      "cases": [
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_column",
+          "sql": "SELECT k, to_timestamp(ts, 'yyyy-MM-dd HH:mm:ss') AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_column_null_format",
+          "sql": "SELECT k, to_timestamp(ts, NULL) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_column_format",
+          "sql": "SELECT k, to_timestamp(ts, fmt) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_literal",
+          "sql": "SELECT to_timestamp(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_literal_null_format",
+          "sql": "SELECT to_timestamp(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', NULL) AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_null_argument",
+          "sql": "SELECT to_timestamp(NULL, 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_string_control",
+          "sql": "SELECT k, to_timestamp(s, 'yyyy-MM-dd HH:mm:ss.SSSSSS') AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_ntz_column",
+          "sql": "SELECT k, to_timestamp_ntz(ts, 'yyyy-MM-dd HH:mm:ss') AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_ntz_column_null_format",
+          "sql": "SELECT k, to_timestamp_ntz(ts, NULL) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_ntz_column_format",
+          "sql": "SELECT k, to_timestamp_ntz(ts, fmt) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_ntz_literal",
+          "sql": "SELECT to_timestamp_ntz(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_ntz_literal_null_format",
+          "sql": "SELECT to_timestamp_ntz(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', NULL) AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_ntz_null_argument",
+          "sql": "SELECT to_timestamp_ntz(NULL, 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_ntz_string_control",
+          "sql": "SELECT k, to_timestamp_ntz(s, 'yyyy-MM-dd HH:mm:ss.SSSSSS') AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_ltz_column",
+          "sql": "SELECT k, to_timestamp_ltz(ts, 'yyyy-MM-dd HH:mm:ss') AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_ltz_column_null_format",
+          "sql": "SELECT k, to_timestamp_ltz(ts, NULL) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_ltz_column_format",
+          "sql": "SELECT k, to_timestamp_ltz(ts, fmt) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_ltz_literal",
+          "sql": "SELECT to_timestamp_ltz(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_ltz_literal_null_format",
+          "sql": "SELECT to_timestamp_ltz(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', NULL) AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_ltz_null_argument",
+          "sql": "SELECT to_timestamp_ltz(NULL, 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_ltz_string_control",
+          "sql": "SELECT k, to_timestamp_ltz(s, 'yyyy-MM-dd HH:mm:ss.SSSSSS') AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "try_to_timestamp_column",
+          "sql": "SELECT k, try_to_timestamp(ts, 'yyyy-MM-dd HH:mm:ss') AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "try_to_timestamp_column_null_format",
+          "sql": "SELECT k, try_to_timestamp(ts, NULL) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "try_to_timestamp_column_format",
+          "sql": "SELECT k, try_to_timestamp(ts, fmt) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "try_to_timestamp_literal",
+          "sql": "SELECT try_to_timestamp(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "try_to_timestamp_literal_null_format",
+          "sql": "SELECT try_to_timestamp(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', NULL) AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "try_to_timestamp_null_argument",
+          "sql": "SELECT try_to_timestamp(NULL, 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "try_to_timestamp_string_control",
+          "sql": "SELECT k, try_to_timestamp(s, 'yyyy-MM-dd HH:mm:ss.SSSSSS') AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "one_arg_ntz",
+          "sql": "SELECT k, to_timestamp_ntz(ts) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "cast_ntz",
+          "sql": "SELECT k, CAST(ts AS TIMESTAMP_NTZ) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "one_arg_ltz",
+          "sql": "SELECT k, to_timestamp(ts) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "one_arg_date",
+          "sql": "SELECT k, to_timestamp(dt) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "one_arg_ntz_input",
+          "sql": "SELECT k, to_timestamp(tn) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "timestamp_column",
+          "sql": "SELECT k, timestamp(ts) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "timestamp_date",
+          "sql": "SELECT k, timestamp(dt) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "timestamp_ntz_input",
+          "sql": "SELECT k, timestamp(tn) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "timestamp_literal",
+          "sql": "SELECT timestamp(TIMESTAMP '2024-01-02 13:04:05.123456+00:00') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_aggregate",
+          "sql": "SELECT to_timestamp(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', CAST(max(k) AS STRING)) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_empty_aggregate",
+          "sql": "SELECT to_timestamp(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', CAST(max(k) AS STRING)) AS r FROM empty_temporal_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_null_aggregate",
+          "sql": "SELECT to_timestamp(CAST(NULL AS TIMESTAMP), CAST(max(k) AS STRING)) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_window",
+          "sql": "SELECT k, to_timestamp(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', CAST(row_number() OVER (ORDER BY k) AS STRING)) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_ntz_aggregate",
+          "sql": "SELECT to_timestamp_ntz(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', CAST(max(k) AS STRING)) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_ntz_empty_aggregate",
+          "sql": "SELECT to_timestamp_ntz(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', CAST(max(k) AS STRING)) AS r FROM empty_temporal_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_ntz_null_aggregate",
+          "sql": "SELECT to_timestamp_ntz(CAST(NULL AS TIMESTAMP), CAST(max(k) AS STRING)) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_ntz_window",
+          "sql": "SELECT k, to_timestamp_ntz(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', CAST(row_number() OVER (ORDER BY k) AS STRING)) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_column",
+          "sql": "SELECT k, to_timestamp(ts, 'yyyy-MM-dd HH:mm:ss') AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_column_null_format",
+          "sql": "SELECT k, to_timestamp(ts, NULL) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_column_format",
+          "sql": "SELECT k, to_timestamp(ts, fmt) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_literal",
+          "sql": "SELECT to_timestamp(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_literal_null_format",
+          "sql": "SELECT to_timestamp(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', NULL) AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_null_argument",
+          "sql": "SELECT to_timestamp(NULL, 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_string_control",
+          "sql": "SELECT k, to_timestamp(s, 'yyyy-MM-dd HH:mm:ss.SSSSSS') AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_ntz_column",
+          "sql": "SELECT k, to_timestamp_ntz(ts, 'yyyy-MM-dd HH:mm:ss') AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_ntz_column_null_format",
+          "sql": "SELECT k, to_timestamp_ntz(ts, NULL) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_ntz_column_format",
+          "sql": "SELECT k, to_timestamp_ntz(ts, fmt) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_ntz_literal",
+          "sql": "SELECT to_timestamp_ntz(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_ntz_literal_null_format",
+          "sql": "SELECT to_timestamp_ntz(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', NULL) AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_ntz_null_argument",
+          "sql": "SELECT to_timestamp_ntz(NULL, 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_ntz_string_control",
+          "sql": "SELECT k, to_timestamp_ntz(s, 'yyyy-MM-dd HH:mm:ss.SSSSSS') AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_ltz_column",
+          "sql": "SELECT k, to_timestamp_ltz(ts, 'yyyy-MM-dd HH:mm:ss') AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_ltz_column_null_format",
+          "sql": "SELECT k, to_timestamp_ltz(ts, NULL) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_ltz_column_format",
+          "sql": "SELECT k, to_timestamp_ltz(ts, fmt) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_ltz_literal",
+          "sql": "SELECT to_timestamp_ltz(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_ltz_literal_null_format",
+          "sql": "SELECT to_timestamp_ltz(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', NULL) AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_ltz_null_argument",
+          "sql": "SELECT to_timestamp_ltz(NULL, 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_ltz_string_control",
+          "sql": "SELECT k, to_timestamp_ltz(s, 'yyyy-MM-dd HH:mm:ss.SSSSSS') AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "try_to_timestamp_column",
+          "sql": "SELECT k, try_to_timestamp(ts, 'yyyy-MM-dd HH:mm:ss') AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "try_to_timestamp_column_null_format",
+          "sql": "SELECT k, try_to_timestamp(ts, NULL) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "try_to_timestamp_column_format",
+          "sql": "SELECT k, try_to_timestamp(ts, fmt) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "try_to_timestamp_literal",
+          "sql": "SELECT try_to_timestamp(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "try_to_timestamp_literal_null_format",
+          "sql": "SELECT try_to_timestamp(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', NULL) AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "try_to_timestamp_null_argument",
+          "sql": "SELECT try_to_timestamp(NULL, 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "try_to_timestamp_string_control",
+          "sql": "SELECT k, try_to_timestamp(s, 'yyyy-MM-dd HH:mm:ss.SSSSSS') AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "one_arg_ntz",
+          "sql": "SELECT k, to_timestamp_ntz(ts) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "cast_ntz",
+          "sql": "SELECT k, CAST(ts AS TIMESTAMP_NTZ) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "one_arg_ltz",
+          "sql": "SELECT k, to_timestamp(ts) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "one_arg_date",
+          "sql": "SELECT k, to_timestamp(dt) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "one_arg_ntz_input",
+          "sql": "SELECT k, to_timestamp(tn) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "timestamp_column",
+          "sql": "SELECT k, timestamp(ts) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "timestamp_date",
+          "sql": "SELECT k, timestamp(dt) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "timestamp_ntz_input",
+          "sql": "SELECT k, timestamp(tn) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "timestamp_literal",
+          "sql": "SELECT timestamp(TIMESTAMP '2024-01-02 13:04:05.123456+00:00') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_aggregate",
+          "sql": "SELECT to_timestamp(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', CAST(max(k) AS STRING)) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_empty_aggregate",
+          "sql": "SELECT to_timestamp(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', CAST(max(k) AS STRING)) AS r FROM empty_temporal_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_null_aggregate",
+          "sql": "SELECT to_timestamp(CAST(NULL AS TIMESTAMP), CAST(max(k) AS STRING)) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_window",
+          "sql": "SELECT k, to_timestamp(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', CAST(row_number() OVER (ORDER BY k) AS STRING)) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_ntz_aggregate",
+          "sql": "SELECT to_timestamp_ntz(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', CAST(max(k) AS STRING)) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_ntz_empty_aggregate",
+          "sql": "SELECT to_timestamp_ntz(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', CAST(max(k) AS STRING)) AS r FROM empty_temporal_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_ntz_null_aggregate",
+          "sql": "SELECT to_timestamp_ntz(CAST(NULL AS TIMESTAMP), CAST(max(k) AS STRING)) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "to_timestamp_ntz_window",
+          "sql": "SELECT k, to_timestamp_ntz(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', CAST(row_number() OVER (ORDER BY k) AS STRING)) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "timestamp_ntz_gap",
+          "sql": "SELECT timestamp(TIMESTAMP_NTZ '2024-03-10 02:30:00') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "timestamp_string_control",
+          "sql": "SELECT k, timestamp(s) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "timestamp_ntz_gap",
+          "sql": "SELECT timestamp(TIMESTAMP_NTZ '2024-03-10 02:30:00') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_UTC",
+          "id": "timestamp_string_control",
+          "sql": "SELECT k, timestamp(s) AS r FROM temporal_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        }
+      ]
+    },
+    {
+      "corpus": "timestamp_args_America_Los_Angeles",
+      "source": "source-only #1107 temporal timestamp arguments and ignored-format bindings",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "temporal_args",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "ts",
+                  "type": "timestamp",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "tn",
+                  "type": "timestamp_ntz",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "dt",
+                  "type": "date",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "fmt",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "1704200645123456",
+                "1704200645123456",
+                "19724",
+                "2024-01-02 13:04:05.123456",
+                "yyyy-MM-dd HH:mm:ss"
+              ],
+              [
+                "1",
+                "1710064799999999",
+                "1710064799999999",
+                "19792",
+                "2024-03-10 09:59:59.999999",
+                "ignored q"
+              ],
+              [
+                "2",
+                "1710064800000000",
+                "1710064800000000",
+                "19792",
+                "2024-03-10 10:00:00.000000",
+                null
+              ],
+              [
+                "3",
+                "1730622600000000",
+                "1730622600000000",
+                "20030",
+                "2024-11-03 08:30:00.000000",
+                "yyyy-MM-dd"
+              ],
+              [
+                "4",
+                "1730626200000000",
+                "1730626200000000",
+                "20030",
+                "2024-11-03 09:30:00.000000",
+                "bad pattern"
+              ],
+              [
+                "5",
+                "-1",
+                "-1",
+                "-1",
+                "1969-12-31 23:59:59.999999",
+                "yyyy"
+              ],
+              [
+                "6",
+                "1704200645123456",
+                "1704200645123456",
+                "19724",
+                "2024-01-02 13:04:05.123456",
+                null
+              ],
+              [
+                "7",
+                null,
+                null,
+                null,
+                null,
+                null
+              ]
+            ]
+          },
+          {
+            "name": "empty_temporal_args",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "ts",
+                  "type": "timestamp",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "tn",
+                  "type": "timestamp_ntz",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "dt",
+                  "type": "date",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "fmt",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": []
+          }
+        ],
+        "timezone": "America/Los_Angeles"
+      },
+      "cases": [
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_column",
+          "sql": "SELECT k, to_timestamp(ts, 'yyyy-MM-dd HH:mm:ss') AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_column_null_format",
+          "sql": "SELECT k, to_timestamp(ts, NULL) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_column_format",
+          "sql": "SELECT k, to_timestamp(ts, fmt) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_literal",
+          "sql": "SELECT to_timestamp(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_literal_null_format",
+          "sql": "SELECT to_timestamp(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', NULL) AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_null_argument",
+          "sql": "SELECT to_timestamp(NULL, 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_string_control",
+          "sql": "SELECT k, to_timestamp(s, 'yyyy-MM-dd HH:mm:ss.SSSSSS') AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_ntz_column",
+          "sql": "SELECT k, to_timestamp_ntz(ts, 'yyyy-MM-dd HH:mm:ss') AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_ntz_column_null_format",
+          "sql": "SELECT k, to_timestamp_ntz(ts, NULL) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_ntz_column_format",
+          "sql": "SELECT k, to_timestamp_ntz(ts, fmt) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_ntz_literal",
+          "sql": "SELECT to_timestamp_ntz(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_ntz_literal_null_format",
+          "sql": "SELECT to_timestamp_ntz(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', NULL) AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_ntz_null_argument",
+          "sql": "SELECT to_timestamp_ntz(NULL, 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_ntz_string_control",
+          "sql": "SELECT k, to_timestamp_ntz(s, 'yyyy-MM-dd HH:mm:ss.SSSSSS') AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_ltz_column",
+          "sql": "SELECT k, to_timestamp_ltz(ts, 'yyyy-MM-dd HH:mm:ss') AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_ltz_column_null_format",
+          "sql": "SELECT k, to_timestamp_ltz(ts, NULL) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_ltz_column_format",
+          "sql": "SELECT k, to_timestamp_ltz(ts, fmt) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_ltz_literal",
+          "sql": "SELECT to_timestamp_ltz(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_ltz_literal_null_format",
+          "sql": "SELECT to_timestamp_ltz(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', NULL) AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_ltz_null_argument",
+          "sql": "SELECT to_timestamp_ltz(NULL, 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_ltz_string_control",
+          "sql": "SELECT k, to_timestamp_ltz(s, 'yyyy-MM-dd HH:mm:ss.SSSSSS') AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "try_to_timestamp_column",
+          "sql": "SELECT k, try_to_timestamp(ts, 'yyyy-MM-dd HH:mm:ss') AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "try_to_timestamp_column_null_format",
+          "sql": "SELECT k, try_to_timestamp(ts, NULL) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "try_to_timestamp_column_format",
+          "sql": "SELECT k, try_to_timestamp(ts, fmt) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "try_to_timestamp_literal",
+          "sql": "SELECT try_to_timestamp(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "try_to_timestamp_literal_null_format",
+          "sql": "SELECT try_to_timestamp(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', NULL) AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "try_to_timestamp_null_argument",
+          "sql": "SELECT try_to_timestamp(NULL, 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "try_to_timestamp_string_control",
+          "sql": "SELECT k, try_to_timestamp(s, 'yyyy-MM-dd HH:mm:ss.SSSSSS') AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "one_arg_ntz",
+          "sql": "SELECT k, to_timestamp_ntz(ts) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "cast_ntz",
+          "sql": "SELECT k, CAST(ts AS TIMESTAMP_NTZ) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "one_arg_ltz",
+          "sql": "SELECT k, to_timestamp(ts) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "one_arg_date",
+          "sql": "SELECT k, to_timestamp(dt) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "one_arg_ntz_input",
+          "sql": "SELECT k, to_timestamp(tn) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "timestamp_column",
+          "sql": "SELECT k, timestamp(ts) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "timestamp_date",
+          "sql": "SELECT k, timestamp(dt) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "timestamp_ntz_input",
+          "sql": "SELECT k, timestamp(tn) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "timestamp_literal",
+          "sql": "SELECT timestamp(TIMESTAMP '2024-01-02 13:04:05.123456+00:00') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_aggregate",
+          "sql": "SELECT to_timestamp(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', CAST(max(k) AS STRING)) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_empty_aggregate",
+          "sql": "SELECT to_timestamp(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', CAST(max(k) AS STRING)) AS r FROM empty_temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_null_aggregate",
+          "sql": "SELECT to_timestamp(CAST(NULL AS TIMESTAMP), CAST(max(k) AS STRING)) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_window",
+          "sql": "SELECT k, to_timestamp(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', CAST(row_number() OVER (ORDER BY k) AS STRING)) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_ntz_aggregate",
+          "sql": "SELECT to_timestamp_ntz(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', CAST(max(k) AS STRING)) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_ntz_empty_aggregate",
+          "sql": "SELECT to_timestamp_ntz(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', CAST(max(k) AS STRING)) AS r FROM empty_temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_ntz_null_aggregate",
+          "sql": "SELECT to_timestamp_ntz(CAST(NULL AS TIMESTAMP), CAST(max(k) AS STRING)) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_ntz_window",
+          "sql": "SELECT k, to_timestamp_ntz(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', CAST(row_number() OVER (ORDER BY k) AS STRING)) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_column",
+          "sql": "SELECT k, to_timestamp(ts, 'yyyy-MM-dd HH:mm:ss') AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_column_null_format",
+          "sql": "SELECT k, to_timestamp(ts, NULL) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_column_format",
+          "sql": "SELECT k, to_timestamp(ts, fmt) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_literal",
+          "sql": "SELECT to_timestamp(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_literal_null_format",
+          "sql": "SELECT to_timestamp(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', NULL) AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_null_argument",
+          "sql": "SELECT to_timestamp(NULL, 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_string_control",
+          "sql": "SELECT k, to_timestamp(s, 'yyyy-MM-dd HH:mm:ss.SSSSSS') AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_ntz_column",
+          "sql": "SELECT k, to_timestamp_ntz(ts, 'yyyy-MM-dd HH:mm:ss') AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_ntz_column_null_format",
+          "sql": "SELECT k, to_timestamp_ntz(ts, NULL) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_ntz_column_format",
+          "sql": "SELECT k, to_timestamp_ntz(ts, fmt) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_ntz_literal",
+          "sql": "SELECT to_timestamp_ntz(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_ntz_literal_null_format",
+          "sql": "SELECT to_timestamp_ntz(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', NULL) AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_ntz_null_argument",
+          "sql": "SELECT to_timestamp_ntz(NULL, 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_ntz_string_control",
+          "sql": "SELECT k, to_timestamp_ntz(s, 'yyyy-MM-dd HH:mm:ss.SSSSSS') AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_ltz_column",
+          "sql": "SELECT k, to_timestamp_ltz(ts, 'yyyy-MM-dd HH:mm:ss') AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_ltz_column_null_format",
+          "sql": "SELECT k, to_timestamp_ltz(ts, NULL) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_ltz_column_format",
+          "sql": "SELECT k, to_timestamp_ltz(ts, fmt) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_ltz_literal",
+          "sql": "SELECT to_timestamp_ltz(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_ltz_literal_null_format",
+          "sql": "SELECT to_timestamp_ltz(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', NULL) AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_ltz_null_argument",
+          "sql": "SELECT to_timestamp_ltz(NULL, 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_ltz_string_control",
+          "sql": "SELECT k, to_timestamp_ltz(s, 'yyyy-MM-dd HH:mm:ss.SSSSSS') AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "try_to_timestamp_column",
+          "sql": "SELECT k, try_to_timestamp(ts, 'yyyy-MM-dd HH:mm:ss') AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "try_to_timestamp_column_null_format",
+          "sql": "SELECT k, try_to_timestamp(ts, NULL) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "try_to_timestamp_column_format",
+          "sql": "SELECT k, try_to_timestamp(ts, fmt) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "try_to_timestamp_literal",
+          "sql": "SELECT try_to_timestamp(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "try_to_timestamp_literal_null_format",
+          "sql": "SELECT try_to_timestamp(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', NULL) AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "try_to_timestamp_null_argument",
+          "sql": "SELECT try_to_timestamp(NULL, 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "try_to_timestamp_string_control",
+          "sql": "SELECT k, try_to_timestamp(s, 'yyyy-MM-dd HH:mm:ss.SSSSSS') AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "one_arg_ntz",
+          "sql": "SELECT k, to_timestamp_ntz(ts) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "cast_ntz",
+          "sql": "SELECT k, CAST(ts AS TIMESTAMP_NTZ) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "one_arg_ltz",
+          "sql": "SELECT k, to_timestamp(ts) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "one_arg_date",
+          "sql": "SELECT k, to_timestamp(dt) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "one_arg_ntz_input",
+          "sql": "SELECT k, to_timestamp(tn) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "timestamp_column",
+          "sql": "SELECT k, timestamp(ts) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "timestamp_date",
+          "sql": "SELECT k, timestamp(dt) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "timestamp_ntz_input",
+          "sql": "SELECT k, timestamp(tn) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "timestamp_literal",
+          "sql": "SELECT timestamp(TIMESTAMP '2024-01-02 13:04:05.123456+00:00') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_aggregate",
+          "sql": "SELECT to_timestamp(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', CAST(max(k) AS STRING)) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_empty_aggregate",
+          "sql": "SELECT to_timestamp(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', CAST(max(k) AS STRING)) AS r FROM empty_temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_null_aggregate",
+          "sql": "SELECT to_timestamp(CAST(NULL AS TIMESTAMP), CAST(max(k) AS STRING)) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_window",
+          "sql": "SELECT k, to_timestamp(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', CAST(row_number() OVER (ORDER BY k) AS STRING)) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_ntz_aggregate",
+          "sql": "SELECT to_timestamp_ntz(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', CAST(max(k) AS STRING)) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_ntz_empty_aggregate",
+          "sql": "SELECT to_timestamp_ntz(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', CAST(max(k) AS STRING)) AS r FROM empty_temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_ntz_null_aggregate",
+          "sql": "SELECT to_timestamp_ntz(CAST(NULL AS TIMESTAMP), CAST(max(k) AS STRING)) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "to_timestamp_ntz_window",
+          "sql": "SELECT k, to_timestamp_ntz(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', CAST(row_number() OVER (ORDER BY k) AS STRING)) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "timestamp_ntz_gap",
+          "sql": "SELECT timestamp(TIMESTAMP_NTZ '2024-03-10 02:30:00') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "timestamp_string_control",
+          "sql": "SELECT k, timestamp(s) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "timestamp_ntz_gap",
+          "sql": "SELECT timestamp(TIMESTAMP_NTZ '2024-03-10 02:30:00') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "timestamp_args_America_Los_Angeles",
+          "id": "timestamp_string_control",
+          "sql": "SELECT k, timestamp(s) AS r FROM temporal_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        }
+      ]
+    }
+  ]
+}

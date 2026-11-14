@@ -1302,7 +1302,8 @@ fn try_to_timestamp(input: ScalarFunctionInput, timestamp_ntz: bool) -> PlanResu
 ///
 /// The 1-arg form goes through `cast` / `try_cast`, which route strings to
 /// `SparkTimestamp` (honoring ANSI for the strict variant) and cast other types.
-/// The 2-arg form parses the value with the given format via `SparkTimestamp`.
+/// The 2-arg form keeps a TIMESTAMP's stored value and ignores its format; strings parse
+/// through `SparkTimestamp` with that format.
 fn timestamp_with_try(
     input: ScalarFunctionInput,
     timestamp_ntz: bool,
@@ -1369,6 +1370,21 @@ fn timestamp_with_try(
             }
         }
     } else if arguments.len() == 2 {
+        if matches!(
+            arguments[0].get_type(input.function_context.schema)?,
+            DataType::Timestamp(_, Some(_))
+        ) {
+            // Formatted NTZ keeps the stored UTC date-time, unlike the local-wall conversion
+            // of the one-argument form. A TIMESTAMP input ignores even a NULL format.
+            let timestamp = cast(arguments[0].clone(), data_type);
+            let nullable = timestamp.nullable(input.function_context.schema)?;
+            return declare_spark_nullability(
+                timestamp,
+                nullable,
+                Some(&arguments[1]),
+                input.function_context.schema,
+            );
+        }
         let null = timestamp_null(&input, timestamp_ntz);
         if arguments.iter().any(is_null_literal) {
             return Ok(null);

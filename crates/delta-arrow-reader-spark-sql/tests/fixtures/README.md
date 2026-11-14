@@ -4828,3 +4828,11 @@ observations of TO_DATE and TRY_TO_DATE over ordinary numeric, BOOLEAN, BINARY a
 arguments, with and without formats, in both ANSI modes and UTC/Los_Angeles sessions.
 It checks final rows and executed types alongside the unchanged
 [TRY_TO_DATE temporal references](try-to-date/README.md) and encoded input controls.
+
+## Timestamp temporal arguments
+
+The [temporal timestamp fixture](timestamp-temporal-arguments/README.md) records 188 Spark
+4.2.0 observations for formatted TIMESTAMP arguments and TIMESTAMP(), including ignored
+NULL formats and aggregate/window bindings, in both ANSI modes and UTC/Los_Angeles.
+It distinguishes formatted NTZ's stored UTC date-time from one-argument local-wall time,
+alongside unchanged STRING, DATE, NTZ and native SQL controls.
