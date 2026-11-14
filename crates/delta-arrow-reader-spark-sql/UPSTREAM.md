@@ -848,16 +848,16 @@ MONTHS_BETWEEN builds its result so that its nullability follows from its parts 
 as Spark's does: NOT NULL for NOT NULL DATE, TIMESTAMP and TIMESTAMP_NTZ arguments and
 `roundOff`. Its CASE expressions ended in `WHEN true` without ELSE, which made the result
 nullable until the optimizer removed it (#1199). Spark's cast of a STRING argument to TIMESTAMP
-is nullable, which `SparkKnownNullable` declares until constant folding replaces a literal's. A
+is nullable, as the shared timestamp parser declares until constant folding replaces a literal's. A
 local function, `SparkMonthsBetweenRoundOff`, applies `roundOff` to the month count as Spark's
 last step: it reads the count, and with it the arguments, before `roundOff` in each batch, and
 each row's `roundOff` once, gives NULL for a NULL `roundOff`, where DAR gave the unrounded
 value, and is nullable when either input is. `roundOff` must be a BOOLEAN or NULL, or in ANSI
 mode a STRING, which Spark's STRING-to-BOOLEAN cast reads and `SparkKnownNullable` declares
 nullable, as Spark's implicit cast is; other types fail while analyzing, as in Spark, where DAR
-cast them. DAR counts the wall-clock seconds of a day, not the seconds since the instant of its
-midnight, for a STRING argument, which it casts to TIMESTAMP_NTZ (#942), and for a TIMESTAMP_NTZ
-argument (#1228), so on a change day of a DST zone the fraction can differ by an hour. It also
+cast them. STRING arguments now use the shared Spark timestamp parser with the session LTZ type.
+DAR still counts wall-clock seconds for a TIMESTAMP_NTZ argument (#1228), so on a DST
+change day the fraction can differ by an hour. It also
 reads `roundOff` beside a NULL argument and reports the first failure of a batch, not of a row
 (#1229). The [MONTHS_BETWEEN references](tests/fixtures/months-between-nullability/README.md)
 record the checks.
@@ -967,7 +967,7 @@ WEEKDAY numbers Monday 0 through Sunday 6, where it returned -1 for Sunday. WEEK
 DAYOFWEEK cast a TIMESTAMP_NTZ or NULL argument to DATE like Spark, and convert a STRING with
 Spark's STRING-to-DATE rules. Spaces, short months and days and years outside Arrow's
 nanosecond range now parse. An invalid string fails with `CAST_INVALID_INPUT` under ANSI or
-gives NULL; other temporal functions keep their STRING handling (#942). A NULL literal gives
+gives NULL. A NULL literal gives
 NULL, where it failed. DAYNAME nullability and rejected argument types still differ (#1236).
 The [WEEKDAY references](tests/fixtures/weekday/README.md) record the checks.
 
@@ -978,7 +978,7 @@ DataFusion's ISO day of week, Monday 1 through Sunday 7, and its ISO week-number
 date field reads a STRING, TIMESTAMP_NTZ or NULL source as the implicit DATE argument of
 WEEKDAY does: a STRING with Spark's STRING-to-DATE rules, where DataFusion read it as a
 nanosecond TIMESTAMP and failed beyond those years, and NULL as a NULL DATE, where it failed.
-Time fields of a STRING keep DataFusion's reading (#942). The fields DAR maps match their names
+Time fields of a STRING use the shared Spark timestamp parser with the session LTZ type. The fields DAR maps match their names
 exactly, ignoring case, as in Spark; other names go to DataFusion, which also accepts some
 Spark rejects, such as `isodow` or a quoted name (#1236). The [day-of-week field
 references](tests/fixtures/day-of-week-fields/README.md) record the checks.
@@ -1066,6 +1066,18 @@ ASCII controls and spaces, and only a complete date may discard a suffix after
 space or uppercase `T`. Partial dates and calendar validation retain their own
 checks. The [boundary references](tests/fixtures/README.md#date-string-boundaries)
 cover strict/tolerant casts and distinguish this repair from timestamp parsing.
+
+Ordinary STRING arguments of DATEDIFF, YEAR, MONTH, DAY, DAYOFYEAR, QUARTER,
+LAST_DAY, ADD_MONTHS and NEXT_DAY use that DATE parser. DATE IN lists and
+subqueries parse STRING as DATE under ANSI and compare strings in legacy mode.
+ANSI parsing reuses the STRING temporal comparison caster; projected subquery
+NULLs retain the separate SQL three-valued contract recorded under #1305. HOUR, MINUTE, DATE_TRUNC, MONTHS_BETWEEN and EXTRACT time
+fields use the Spark timestamp parser with the session LTZ type, independently
+of the default timestamp type (#942). Timestamp parsing trims surrounding ASCII
+controls and spaces and consumes all fractional digits while retaining
+microsecond precision (#943). The standalone TIME parser keeps its precision
+limit. The [STRING argument references](tests/fixtures/temporal-string-arguments/README.md)
+record final values and executed types for these shared routes.
 
 Two-argument DATE_ADD/DATEADD and DATE_SUB operate on signed 32-bit day values,
 including wrapping overflow in both ANSI modes. They retain their DATE result

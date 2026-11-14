@@ -412,7 +412,7 @@ fn differing_parts(expectation: &Value, observation: &Value) -> Vec<&'static str
 /// issue. A record can have several.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum RetainedDifference {
-    /// #943: typed TIMESTAMP literals roll second 60 over to the next minute.
+    /// #1236: typed TIMESTAMP literals roll second 60 over to the next minute.
     RolledOverLeapSecond,
     /// #1010: invalid datetime patterns use DAR's message, and `#`, `{` and `}` are
     /// formatted as literal text.

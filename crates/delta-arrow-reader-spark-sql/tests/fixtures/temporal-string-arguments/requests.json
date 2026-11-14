@@ -1,0 +1,838 @@
+{
+  "issue": "942+943",
+  "expected_record_count": 52,
+  "corpora": [
+    {
+      "corpus": "temporal_strings_UTC",
+      "source": "source-only paired #942 argument routes and #943 shared timestamp trim/fraction cases",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "date_strings",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                " 2024-01-02 "
+              ],
+              [
+                "1",
+                "2024"
+              ],
+              [
+                "2",
+                "2024-05"
+              ],
+              [
+                "3",
+                "\t2024-05-17\n"
+              ],
+              [
+                "4",
+                "2024-02-29T23:59:59"
+              ],
+              [
+                "5",
+                null
+              ],
+              [
+                "6",
+                "garbage"
+              ],
+              [
+                "7",
+                "2024-02-30"
+              ],
+              [
+                "8",
+                "2024-05"
+              ]
+            ]
+          },
+          {
+            "name": "timestamp_strings",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                " 2024-01-02 13:04:05 "
+              ],
+              [
+                "1",
+                "\t2024-01-02 13:04:05\r\n"
+              ],
+              [
+                "2",
+                "2024"
+              ],
+              [
+                "3",
+                "2024-05"
+              ],
+              [
+                "4",
+                "1969-12-31 23:59:59.999999999123Z"
+              ],
+              [
+                "5",
+                "2024-01-02 00:30:00.123456789123+02:00"
+              ],
+              [
+                "6",
+                "2024-03-10 03:00:00"
+              ],
+              [
+                "7",
+                null
+              ],
+              [
+                "8",
+                "garbage"
+              ],
+              [
+                "9",
+                "2024-05"
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "temporal_strings_UTC",
+          "id": "date_functions_valid",
+          "issue_scope": 942,
+          "sql": "SELECT k AS r0, DATEDIFF(s, DATE '2024-05-01') AS r1, YEAR(s) AS r2, MONTH(s) AS r3, DAY(s) AS r4, DAYOFYEAR(s) AS r5, QUARTER(s) AS r6, LAST_DAY(s) AS r7, ADD_MONTHS(s, 1) AS r8, NEXT_DAY(s, 'MON') AS r9, EXTRACT(YEAR FROM s) AS r10 FROM date_strings WHERE k IN (0,1,2,3,4,5,8)",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "temporal_strings_UTC",
+          "id": "time_functions_valid",
+          "issue_scope": 942,
+          "sql": "SELECT k AS r0, HOUR(s) AS r1, MINUTE(s) AS r2, DATE_TRUNC('HOUR', s) AS r3, MONTHS_BETWEEN(TIMESTAMP_LTZ '2023-11-01 12:00:00Z', s) AS r4, EXTRACT(HOUR FROM s) AS r5, EXTRACT(MINUTE FROM s) AS r6 FROM timestamp_strings WHERE k <> 8",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "temporal_strings_UTC",
+          "id": "date_in_valid",
+          "issue_scope": 942,
+          "sql": "SELECT k AS r0, s IN (DATE '2024-05-17', CAST(NULL AS DATE)) AS r1, DATE '2024-05-17' IN (s, CAST(NULL AS STRING)) AS r2, s NOT IN (DATE '2024-05-17', CAST(NULL AS DATE)) AS r3, s IN (SELECT DATE '2024-05-17') AS r4 FROM date_strings WHERE k IN (0,1,2,3,4,5,8)",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "temporal_strings_UTC",
+          "id": "shared_casts_valid",
+          "issue_scope": 943,
+          "sql": "SELECT k AS r0, CAST(s AS TIMESTAMP) AS r1, TRY_CAST(s AS TIMESTAMP) AS r2, TO_TIMESTAMP(s) AS r3, TO_TIMESTAMP_NTZ(s) AS r4, CAST(s AS TIMESTAMP_NTZ) AS r5 FROM timestamp_strings WHERE k <> 8",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "temporal_strings_UTC",
+          "id": "date_in_subquery_output",
+          "issue_scope": 942,
+          "sql": "SELECT DATE '2024-05-17' IN (SELECT s FROM date_strings WHERE k IN (0,1,2,3,4,5,8)) AS r0, DATE '2024-05-18' IN (SELECT s FROM date_strings WHERE k IN (0,1,2,3,4,5,8)) AS r1",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "temporal_strings_UTC",
+          "id": "typed_trim_fraction_0",
+          "issue_scope": 943,
+          "sql": "SELECT TIMESTAMP ' 2024-01-02 13:04:05 ' AS r0, TIMESTAMP_LTZ ' 2024-01-02 13:04:05 ' AS r1, TIMESTAMP_NTZ ' 2024-01-02 13:04:05 ' AS r2",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "temporal_strings_UTC",
+          "id": "typed_trim_fraction_1",
+          "issue_scope": 943,
+          "sql": "SELECT TIMESTAMP '\t2024-01-02 13:04:05\r\n' AS r0, TIMESTAMP_LTZ '\t2024-01-02 13:04:05\r\n' AS r1, TIMESTAMP_NTZ '\t2024-01-02 13:04:05\r\n' AS r2",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "temporal_strings_UTC",
+          "id": "typed_trim_fraction_2",
+          "issue_scope": 943,
+          "sql": "SELECT TIMESTAMP '1969-12-31 23:59:59.999999999123Z' AS r0, TIMESTAMP_LTZ '1969-12-31 23:59:59.999999999123Z' AS r1, TIMESTAMP_NTZ '1969-12-31 23:59:59.999999999123Z' AS r2",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "temporal_strings_UTC",
+          "id": "typed_trim_fraction_3",
+          "issue_scope": 943,
+          "sql": "SELECT TIMESTAMP '2024-01-02 00:30:00.123456789123+02:00' AS r0, TIMESTAMP_LTZ '2024-01-02 00:30:00.123456789123+02:00' AS r1, TIMESTAMP_NTZ '2024-01-02 00:30:00.123456789123+02:00' AS r2",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "temporal_strings_UTC",
+          "id": "default_ntz_time_routes",
+          "issue_scope": 942,
+          "sql": "SELECT k AS r0, HOUR(s) AS r1, MINUTE(s) AS r2, DATE_TRUNC('HOUR', s) AS r3, MONTHS_BETWEEN(TIMESTAMP_LTZ '2023-11-01 12:00:00Z', s) AS r4, EXTRACT(HOUR FROM s) AS r5, EXTRACT(MINUTE FROM s) AS r6 FROM timestamp_strings WHERE k <> 8",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_NTZ",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "temporal_strings_UTC",
+          "id": "non_string_controls",
+          "issue_scope": 942,
+          "sql": "SELECT YEAR(DATE '2024-01-02') AS r0, DATEDIFF(DATE '2024-01-15',DATE '2024-01-02') AS r1, LAST_DAY(DATE '2024-01-02') AS r2, ADD_MONTHS(DATE '2024-01-31',1) AS r3, NEXT_DAY(DATE '2024-01-02','MON') AS r4, HOUR(TIMESTAMP_NTZ '2024-01-02 13:04:05') AS r5, MINUTE(TIMESTAMP_LTZ '2024-01-02 13:04:05Z') AS r6, DATE_TRUNC('HOUR',TIMESTAMP_LTZ '2024-01-02 13:04:05Z') AS r7, MONTHS_BETWEEN(TIMESTAMP_LTZ '2024-01-15 12:00:00Z',TIMESTAMP_LTZ '2024-01-02 12:00:00Z') AS r8",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "temporal_strings_UTC",
+          "id": "date_functions_valid",
+          "issue_scope": 942,
+          "sql": "SELECT k AS r0, DATEDIFF(s, DATE '2024-05-01') AS r1, YEAR(s) AS r2, MONTH(s) AS r3, DAY(s) AS r4, DAYOFYEAR(s) AS r5, QUARTER(s) AS r6, LAST_DAY(s) AS r7, ADD_MONTHS(s, 1) AS r8, NEXT_DAY(s, 'MON') AS r9, EXTRACT(YEAR FROM s) AS r10 FROM date_strings WHERE k IN (0,1,2,3,4,5,8)",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "temporal_strings_UTC",
+          "id": "date_functions_legacy_malformed",
+          "issue_scope": 942,
+          "sql": "SELECT k AS r0, DATEDIFF(s, DATE '2024-05-01') AS r1, YEAR(s) AS r2, MONTH(s) AS r3, DAY(s) AS r4, DAYOFYEAR(s) AS r5, QUARTER(s) AS r6, LAST_DAY(s) AS r7, ADD_MONTHS(s, 1) AS r8, NEXT_DAY(s, 'MON') AS r9, EXTRACT(YEAR FROM s) AS r10 FROM date_strings",
+          "ordered": false,
+          "legacy_only": true,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "temporal_strings_UTC",
+          "id": "time_functions_valid",
+          "issue_scope": 942,
+          "sql": "SELECT k AS r0, HOUR(s) AS r1, MINUTE(s) AS r2, DATE_TRUNC('HOUR', s) AS r3, MONTHS_BETWEEN(TIMESTAMP_LTZ '2023-11-01 12:00:00Z', s) AS r4, EXTRACT(HOUR FROM s) AS r5, EXTRACT(MINUTE FROM s) AS r6 FROM timestamp_strings WHERE k <> 8",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "temporal_strings_UTC",
+          "id": "time_functions_legacy_malformed",
+          "issue_scope": 942,
+          "sql": "SELECT k AS r0, HOUR(s) AS r1, MINUTE(s) AS r2, DATE_TRUNC('HOUR', s) AS r3, MONTHS_BETWEEN(TIMESTAMP_LTZ '2023-11-01 12:00:00Z', s) AS r4, EXTRACT(HOUR FROM s) AS r5, EXTRACT(MINUTE FROM s) AS r6 FROM timestamp_strings",
+          "ordered": false,
+          "legacy_only": true,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "temporal_strings_UTC",
+          "id": "date_in_valid",
+          "issue_scope": 942,
+          "sql": "SELECT k AS r0, s IN (DATE '2024-05-17', CAST(NULL AS DATE)) AS r1, DATE '2024-05-17' IN (s, CAST(NULL AS STRING)) AS r2, s NOT IN (DATE '2024-05-17', CAST(NULL AS DATE)) AS r3, s IN (SELECT DATE '2024-05-17') AS r4 FROM date_strings WHERE k IN (0,1,2,3,4,5,8)",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "temporal_strings_UTC",
+          "id": "date_in_legacy_malformed",
+          "issue_scope": 942,
+          "sql": "SELECT k AS r0, s IN (DATE '2024-05-17', CAST(NULL AS DATE)) AS r1, DATE '2024-05-17' IN (s, CAST(NULL AS STRING)) AS r2, s NOT IN (DATE '2024-05-17', CAST(NULL AS DATE)) AS r3, s IN (SELECT DATE '2024-05-17') AS r4 FROM date_strings",
+          "ordered": false,
+          "legacy_only": true,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "temporal_strings_UTC",
+          "id": "shared_casts_valid",
+          "issue_scope": 943,
+          "sql": "SELECT k AS r0, CAST(s AS TIMESTAMP) AS r1, TRY_CAST(s AS TIMESTAMP) AS r2, TO_TIMESTAMP(s) AS r3, TO_TIMESTAMP_NTZ(s) AS r4, CAST(s AS TIMESTAMP_NTZ) AS r5 FROM timestamp_strings WHERE k <> 8",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "temporal_strings_UTC",
+          "id": "shared_casts_legacy_malformed",
+          "issue_scope": 943,
+          "sql": "SELECT k AS r0, CAST(s AS TIMESTAMP) AS r1, TRY_CAST(s AS TIMESTAMP) AS r2, TO_TIMESTAMP(s) AS r3, TO_TIMESTAMP_NTZ(s) AS r4, CAST(s AS TIMESTAMP_NTZ) AS r5 FROM timestamp_strings",
+          "ordered": false,
+          "legacy_only": true,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "temporal_strings_UTC",
+          "id": "date_in_subquery_output",
+          "issue_scope": 942,
+          "sql": "SELECT DATE '2024-05-17' IN (SELECT s FROM date_strings WHERE k IN (0,1,2,3,4,5,8)) AS r0, DATE '2024-05-18' IN (SELECT s FROM date_strings WHERE k IN (0,1,2,3,4,5,8)) AS r1",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "temporal_strings_UTC",
+          "id": "typed_trim_fraction_0",
+          "issue_scope": 943,
+          "sql": "SELECT TIMESTAMP ' 2024-01-02 13:04:05 ' AS r0, TIMESTAMP_LTZ ' 2024-01-02 13:04:05 ' AS r1, TIMESTAMP_NTZ ' 2024-01-02 13:04:05 ' AS r2",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "temporal_strings_UTC",
+          "id": "typed_trim_fraction_1",
+          "issue_scope": 943,
+          "sql": "SELECT TIMESTAMP '\t2024-01-02 13:04:05\r\n' AS r0, TIMESTAMP_LTZ '\t2024-01-02 13:04:05\r\n' AS r1, TIMESTAMP_NTZ '\t2024-01-02 13:04:05\r\n' AS r2",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "temporal_strings_UTC",
+          "id": "typed_trim_fraction_2",
+          "issue_scope": 943,
+          "sql": "SELECT TIMESTAMP '1969-12-31 23:59:59.999999999123Z' AS r0, TIMESTAMP_LTZ '1969-12-31 23:59:59.999999999123Z' AS r1, TIMESTAMP_NTZ '1969-12-31 23:59:59.999999999123Z' AS r2",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "temporal_strings_UTC",
+          "id": "typed_trim_fraction_3",
+          "issue_scope": 943,
+          "sql": "SELECT TIMESTAMP '2024-01-02 00:30:00.123456789123+02:00' AS r0, TIMESTAMP_LTZ '2024-01-02 00:30:00.123456789123+02:00' AS r1, TIMESTAMP_NTZ '2024-01-02 00:30:00.123456789123+02:00' AS r2",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "temporal_strings_UTC",
+          "id": "default_ntz_time_routes",
+          "issue_scope": 942,
+          "sql": "SELECT k AS r0, HOUR(s) AS r1, MINUTE(s) AS r2, DATE_TRUNC('HOUR', s) AS r3, MONTHS_BETWEEN(TIMESTAMP_LTZ '2023-11-01 12:00:00Z', s) AS r4, EXTRACT(HOUR FROM s) AS r5, EXTRACT(MINUTE FROM s) AS r6 FROM timestamp_strings WHERE k <> 8",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_NTZ",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "temporal_strings_UTC",
+          "id": "non_string_controls",
+          "issue_scope": 942,
+          "sql": "SELECT YEAR(DATE '2024-01-02') AS r0, DATEDIFF(DATE '2024-01-15',DATE '2024-01-02') AS r1, LAST_DAY(DATE '2024-01-02') AS r2, ADD_MONTHS(DATE '2024-01-31',1) AS r3, NEXT_DAY(DATE '2024-01-02','MON') AS r4, HOUR(TIMESTAMP_NTZ '2024-01-02 13:04:05') AS r5, MINUTE(TIMESTAMP_LTZ '2024-01-02 13:04:05Z') AS r6, DATE_TRUNC('HOUR',TIMESTAMP_LTZ '2024-01-02 13:04:05Z') AS r7, MONTHS_BETWEEN(TIMESTAMP_LTZ '2024-01-15 12:00:00Z',TIMESTAMP_LTZ '2024-01-02 12:00:00Z') AS r8",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "UTC",
+          "ansi": false
+        }
+      ]
+    },
+    {
+      "corpus": "temporal_strings_America_Los_Angeles",
+      "source": "source-only paired #942 argument routes and #943 shared timestamp trim/fraction cases",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "date_strings",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                " 2024-01-02 "
+              ],
+              [
+                "1",
+                "2024"
+              ],
+              [
+                "2",
+                "2024-05"
+              ],
+              [
+                "3",
+                "\t2024-05-17\n"
+              ],
+              [
+                "4",
+                "2024-02-29T23:59:59"
+              ],
+              [
+                "5",
+                null
+              ],
+              [
+                "6",
+                "garbage"
+              ],
+              [
+                "7",
+                "2024-02-30"
+              ],
+              [
+                "8",
+                "2024-05"
+              ]
+            ]
+          },
+          {
+            "name": "timestamp_strings",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                " 2024-01-02 13:04:05 "
+              ],
+              [
+                "1",
+                "\t2024-01-02 13:04:05\r\n"
+              ],
+              [
+                "2",
+                "2024"
+              ],
+              [
+                "3",
+                "2024-05"
+              ],
+              [
+                "4",
+                "1969-12-31 23:59:59.999999999123Z"
+              ],
+              [
+                "5",
+                "2024-01-02 00:30:00.123456789123+02:00"
+              ],
+              [
+                "6",
+                "2024-03-10 03:00:00"
+              ],
+              [
+                "7",
+                null
+              ],
+              [
+                "8",
+                "garbage"
+              ],
+              [
+                "9",
+                "2024-05"
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "temporal_strings_America_Los_Angeles",
+          "id": "date_functions_valid",
+          "issue_scope": 942,
+          "sql": "SELECT k AS r0, DATEDIFF(s, DATE '2024-05-01') AS r1, YEAR(s) AS r2, MONTH(s) AS r3, DAY(s) AS r4, DAYOFYEAR(s) AS r5, QUARTER(s) AS r6, LAST_DAY(s) AS r7, ADD_MONTHS(s, 1) AS r8, NEXT_DAY(s, 'MON') AS r9, EXTRACT(YEAR FROM s) AS r10 FROM date_strings WHERE k IN (0,1,2,3,4,5,8)",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "temporal_strings_America_Los_Angeles",
+          "id": "time_functions_valid",
+          "issue_scope": 942,
+          "sql": "SELECT k AS r0, HOUR(s) AS r1, MINUTE(s) AS r2, DATE_TRUNC('HOUR', s) AS r3, MONTHS_BETWEEN(TIMESTAMP_LTZ '2023-11-01 12:00:00Z', s) AS r4, EXTRACT(HOUR FROM s) AS r5, EXTRACT(MINUTE FROM s) AS r6 FROM timestamp_strings WHERE k <> 8",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "temporal_strings_America_Los_Angeles",
+          "id": "date_in_valid",
+          "issue_scope": 942,
+          "sql": "SELECT k AS r0, s IN (DATE '2024-05-17', CAST(NULL AS DATE)) AS r1, DATE '2024-05-17' IN (s, CAST(NULL AS STRING)) AS r2, s NOT IN (DATE '2024-05-17', CAST(NULL AS DATE)) AS r3, s IN (SELECT DATE '2024-05-17') AS r4 FROM date_strings WHERE k IN (0,1,2,3,4,5,8)",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "temporal_strings_America_Los_Angeles",
+          "id": "shared_casts_valid",
+          "issue_scope": 943,
+          "sql": "SELECT k AS r0, CAST(s AS TIMESTAMP) AS r1, TRY_CAST(s AS TIMESTAMP) AS r2, TO_TIMESTAMP(s) AS r3, TO_TIMESTAMP_NTZ(s) AS r4, CAST(s AS TIMESTAMP_NTZ) AS r5 FROM timestamp_strings WHERE k <> 8",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "temporal_strings_America_Los_Angeles",
+          "id": "date_in_subquery_output",
+          "issue_scope": 942,
+          "sql": "SELECT DATE '2024-05-17' IN (SELECT s FROM date_strings WHERE k IN (0,1,2,3,4,5,8)) AS r0, DATE '2024-05-18' IN (SELECT s FROM date_strings WHERE k IN (0,1,2,3,4,5,8)) AS r1",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "temporal_strings_America_Los_Angeles",
+          "id": "typed_trim_fraction_0",
+          "issue_scope": 943,
+          "sql": "SELECT TIMESTAMP ' 2024-01-02 13:04:05 ' AS r0, TIMESTAMP_LTZ ' 2024-01-02 13:04:05 ' AS r1, TIMESTAMP_NTZ ' 2024-01-02 13:04:05 ' AS r2",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "temporal_strings_America_Los_Angeles",
+          "id": "typed_trim_fraction_1",
+          "issue_scope": 943,
+          "sql": "SELECT TIMESTAMP '\t2024-01-02 13:04:05\r\n' AS r0, TIMESTAMP_LTZ '\t2024-01-02 13:04:05\r\n' AS r1, TIMESTAMP_NTZ '\t2024-01-02 13:04:05\r\n' AS r2",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "temporal_strings_America_Los_Angeles",
+          "id": "typed_trim_fraction_2",
+          "issue_scope": 943,
+          "sql": "SELECT TIMESTAMP '1969-12-31 23:59:59.999999999123Z' AS r0, TIMESTAMP_LTZ '1969-12-31 23:59:59.999999999123Z' AS r1, TIMESTAMP_NTZ '1969-12-31 23:59:59.999999999123Z' AS r2",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "temporal_strings_America_Los_Angeles",
+          "id": "typed_trim_fraction_3",
+          "issue_scope": 943,
+          "sql": "SELECT TIMESTAMP '2024-01-02 00:30:00.123456789123+02:00' AS r0, TIMESTAMP_LTZ '2024-01-02 00:30:00.123456789123+02:00' AS r1, TIMESTAMP_NTZ '2024-01-02 00:30:00.123456789123+02:00' AS r2",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "temporal_strings_America_Los_Angeles",
+          "id": "default_ntz_time_routes",
+          "issue_scope": 942,
+          "sql": "SELECT k AS r0, HOUR(s) AS r1, MINUTE(s) AS r2, DATE_TRUNC('HOUR', s) AS r3, MONTHS_BETWEEN(TIMESTAMP_LTZ '2023-11-01 12:00:00Z', s) AS r4, EXTRACT(HOUR FROM s) AS r5, EXTRACT(MINUTE FROM s) AS r6 FROM timestamp_strings WHERE k <> 8",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_NTZ",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "temporal_strings_America_Los_Angeles",
+          "id": "non_string_controls",
+          "issue_scope": 942,
+          "sql": "SELECT YEAR(DATE '2024-01-02') AS r0, DATEDIFF(DATE '2024-01-15',DATE '2024-01-02') AS r1, LAST_DAY(DATE '2024-01-02') AS r2, ADD_MONTHS(DATE '2024-01-31',1) AS r3, NEXT_DAY(DATE '2024-01-02','MON') AS r4, HOUR(TIMESTAMP_NTZ '2024-01-02 13:04:05') AS r5, MINUTE(TIMESTAMP_LTZ '2024-01-02 13:04:05Z') AS r6, DATE_TRUNC('HOUR',TIMESTAMP_LTZ '2024-01-02 13:04:05Z') AS r7, MONTHS_BETWEEN(TIMESTAMP_LTZ '2024-01-15 12:00:00Z',TIMESTAMP_LTZ '2024-01-02 12:00:00Z') AS r8",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "temporal_strings_America_Los_Angeles",
+          "id": "date_functions_valid",
+          "issue_scope": 942,
+          "sql": "SELECT k AS r0, DATEDIFF(s, DATE '2024-05-01') AS r1, YEAR(s) AS r2, MONTH(s) AS r3, DAY(s) AS r4, DAYOFYEAR(s) AS r5, QUARTER(s) AS r6, LAST_DAY(s) AS r7, ADD_MONTHS(s, 1) AS r8, NEXT_DAY(s, 'MON') AS r9, EXTRACT(YEAR FROM s) AS r10 FROM date_strings WHERE k IN (0,1,2,3,4,5,8)",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "temporal_strings_America_Los_Angeles",
+          "id": "date_functions_legacy_malformed",
+          "issue_scope": 942,
+          "sql": "SELECT k AS r0, DATEDIFF(s, DATE '2024-05-01') AS r1, YEAR(s) AS r2, MONTH(s) AS r3, DAY(s) AS r4, DAYOFYEAR(s) AS r5, QUARTER(s) AS r6, LAST_DAY(s) AS r7, ADD_MONTHS(s, 1) AS r8, NEXT_DAY(s, 'MON') AS r9, EXTRACT(YEAR FROM s) AS r10 FROM date_strings",
+          "ordered": false,
+          "legacy_only": true,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "temporal_strings_America_Los_Angeles",
+          "id": "time_functions_valid",
+          "issue_scope": 942,
+          "sql": "SELECT k AS r0, HOUR(s) AS r1, MINUTE(s) AS r2, DATE_TRUNC('HOUR', s) AS r3, MONTHS_BETWEEN(TIMESTAMP_LTZ '2023-11-01 12:00:00Z', s) AS r4, EXTRACT(HOUR FROM s) AS r5, EXTRACT(MINUTE FROM s) AS r6 FROM timestamp_strings WHERE k <> 8",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "temporal_strings_America_Los_Angeles",
+          "id": "time_functions_legacy_malformed",
+          "issue_scope": 942,
+          "sql": "SELECT k AS r0, HOUR(s) AS r1, MINUTE(s) AS r2, DATE_TRUNC('HOUR', s) AS r3, MONTHS_BETWEEN(TIMESTAMP_LTZ '2023-11-01 12:00:00Z', s) AS r4, EXTRACT(HOUR FROM s) AS r5, EXTRACT(MINUTE FROM s) AS r6 FROM timestamp_strings",
+          "ordered": false,
+          "legacy_only": true,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "temporal_strings_America_Los_Angeles",
+          "id": "date_in_valid",
+          "issue_scope": 942,
+          "sql": "SELECT k AS r0, s IN (DATE '2024-05-17', CAST(NULL AS DATE)) AS r1, DATE '2024-05-17' IN (s, CAST(NULL AS STRING)) AS r2, s NOT IN (DATE '2024-05-17', CAST(NULL AS DATE)) AS r3, s IN (SELECT DATE '2024-05-17') AS r4 FROM date_strings WHERE k IN (0,1,2,3,4,5,8)",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "temporal_strings_America_Los_Angeles",
+          "id": "date_in_legacy_malformed",
+          "issue_scope": 942,
+          "sql": "SELECT k AS r0, s IN (DATE '2024-05-17', CAST(NULL AS DATE)) AS r1, DATE '2024-05-17' IN (s, CAST(NULL AS STRING)) AS r2, s NOT IN (DATE '2024-05-17', CAST(NULL AS DATE)) AS r3, s IN (SELECT DATE '2024-05-17') AS r4 FROM date_strings",
+          "ordered": false,
+          "legacy_only": true,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "temporal_strings_America_Los_Angeles",
+          "id": "shared_casts_valid",
+          "issue_scope": 943,
+          "sql": "SELECT k AS r0, CAST(s AS TIMESTAMP) AS r1, TRY_CAST(s AS TIMESTAMP) AS r2, TO_TIMESTAMP(s) AS r3, TO_TIMESTAMP_NTZ(s) AS r4, CAST(s AS TIMESTAMP_NTZ) AS r5 FROM timestamp_strings WHERE k <> 8",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "temporal_strings_America_Los_Angeles",
+          "id": "shared_casts_legacy_malformed",
+          "issue_scope": 943,
+          "sql": "SELECT k AS r0, CAST(s AS TIMESTAMP) AS r1, TRY_CAST(s AS TIMESTAMP) AS r2, TO_TIMESTAMP(s) AS r3, TO_TIMESTAMP_NTZ(s) AS r4, CAST(s AS TIMESTAMP_NTZ) AS r5 FROM timestamp_strings",
+          "ordered": false,
+          "legacy_only": true,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "temporal_strings_America_Los_Angeles",
+          "id": "date_in_subquery_output",
+          "issue_scope": 942,
+          "sql": "SELECT DATE '2024-05-17' IN (SELECT s FROM date_strings WHERE k IN (0,1,2,3,4,5,8)) AS r0, DATE '2024-05-18' IN (SELECT s FROM date_strings WHERE k IN (0,1,2,3,4,5,8)) AS r1",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "temporal_strings_America_Los_Angeles",
+          "id": "typed_trim_fraction_0",
+          "issue_scope": 943,
+          "sql": "SELECT TIMESTAMP ' 2024-01-02 13:04:05 ' AS r0, TIMESTAMP_LTZ ' 2024-01-02 13:04:05 ' AS r1, TIMESTAMP_NTZ ' 2024-01-02 13:04:05 ' AS r2",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "temporal_strings_America_Los_Angeles",
+          "id": "typed_trim_fraction_1",
+          "issue_scope": 943,
+          "sql": "SELECT TIMESTAMP '\t2024-01-02 13:04:05\r\n' AS r0, TIMESTAMP_LTZ '\t2024-01-02 13:04:05\r\n' AS r1, TIMESTAMP_NTZ '\t2024-01-02 13:04:05\r\n' AS r2",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "temporal_strings_America_Los_Angeles",
+          "id": "typed_trim_fraction_2",
+          "issue_scope": 943,
+          "sql": "SELECT TIMESTAMP '1969-12-31 23:59:59.999999999123Z' AS r0, TIMESTAMP_LTZ '1969-12-31 23:59:59.999999999123Z' AS r1, TIMESTAMP_NTZ '1969-12-31 23:59:59.999999999123Z' AS r2",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "temporal_strings_America_Los_Angeles",
+          "id": "typed_trim_fraction_3",
+          "issue_scope": 943,
+          "sql": "SELECT TIMESTAMP '2024-01-02 00:30:00.123456789123+02:00' AS r0, TIMESTAMP_LTZ '2024-01-02 00:30:00.123456789123+02:00' AS r1, TIMESTAMP_NTZ '2024-01-02 00:30:00.123456789123+02:00' AS r2",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "temporal_strings_America_Los_Angeles",
+          "id": "default_ntz_time_routes",
+          "issue_scope": 942,
+          "sql": "SELECT k AS r0, HOUR(s) AS r1, MINUTE(s) AS r2, DATE_TRUNC('HOUR', s) AS r3, MONTHS_BETWEEN(TIMESTAMP_LTZ '2023-11-01 12:00:00Z', s) AS r4, EXTRACT(HOUR FROM s) AS r5, EXTRACT(MINUTE FROM s) AS r6 FROM timestamp_strings WHERE k <> 8",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_NTZ",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "temporal_strings_America_Los_Angeles",
+          "id": "non_string_controls",
+          "issue_scope": 942,
+          "sql": "SELECT YEAR(DATE '2024-01-02') AS r0, DATEDIFF(DATE '2024-01-15',DATE '2024-01-02') AS r1, LAST_DAY(DATE '2024-01-02') AS r2, ADD_MONTHS(DATE '2024-01-31',1) AS r3, NEXT_DAY(DATE '2024-01-02','MON') AS r4, HOUR(TIMESTAMP_NTZ '2024-01-02 13:04:05') AS r5, MINUTE(TIMESTAMP_LTZ '2024-01-02 13:04:05Z') AS r6, DATE_TRUNC('HOUR',TIMESTAMP_LTZ '2024-01-02 13:04:05Z') AS r7, MONTHS_BETWEEN(TIMESTAMP_LTZ '2024-01-15 12:00:00Z',TIMESTAMP_LTZ '2024-01-02 12:00:00Z') AS r8",
+          "ordered": false,
+          "legacy_only": false,
+          "timestamp_type": "TIMESTAMP_LTZ",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        }
+      ]
+    }
+  ]
+}

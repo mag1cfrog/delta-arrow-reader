@@ -122,11 +122,14 @@ where
 
 /// Parses fractional seconds with configurable digit range.
 ///
-/// The parser accepts up to 9 digits (nanoseconds) for compatibility with Spark SQL syntax,
-/// but Spark stores timestamps with microsecond precision (6 digits). Nanosecond part is
-/// truncated during conversion to match Spark behavior.
+/// Retain `precision` digits, padding shorter fractions. Timestamp parsing can consume
+/// further digits without retaining them; TIME keeps its existing precision limit.
 #[expect(clippy::unwrap_used)]
-fn fraction<'a, T, E>(min_digits: usize, max_digits: usize) -> impl Parser<'a, &'a str, T, E>
+fn fraction<'a, T, E>(
+    min_digits: usize,
+    precision: usize,
+    truncate_extra: bool,
+) -> impl Parser<'a, &'a str, T, E>
 where
     T: FromStr,
     <T as FromStr>::Err: std::fmt::Debug,
@@ -135,12 +138,16 @@ where
     one_of('0'..='9')
         .repeated()
         .at_least(min_digits)
-        .at_most(max_digits)
+        .at_most(if truncate_extra {
+            usize::MAX
+        } else {
+            precision
+        })
         .to_slice()
         .map(move |s: &str| {
             s.chars()
                 .chain(std::iter::repeat('0'))
-                .take(max_digits)
+                .take(precision)
                 .collect::<String>()
                 .parse::<T>()
                 .unwrap()
@@ -175,14 +182,14 @@ where
         })
 }
 
-fn time<'a, E>() -> impl Parser<'a, &'a str, TimeValue, E>
+fn time<'a, E>(truncate_fraction: bool) -> impl Parser<'a, &'a str, TimeValue, E>
 where
     E: ParserExtra<'a, &'a str> + 'a,
 {
     let hour = unsigned(1, 2);
     let minute = unsigned(1, 2);
     let second = unsigned(1, 2);
-    let nanoseconds = fraction(0, 9);
+    let nanoseconds = fraction(0, 9, truncate_fraction);
 
     hour.then(just(':').ignore_then(minute).or_not())
         .then(just(':').ignore_then(second).or_not())
@@ -218,7 +225,7 @@ where
 {
     // Like Spark, exactly one space or uppercase T separates a time from a complete date.
     let time_suffix = one_of([' ', 'T'])
-        .ignore_then(time().then(timezone()))
+        .ignore_then(time(true).then(timezone()))
         .or_not();
     date(time_suffix)
         .then_ignore(just(' ').repeated())
@@ -253,5 +260,5 @@ pub fn create_time_parser<'a, E>() -> impl Parser<'a, &'a str, TimeValue, E>
 where
     E: ParserExtra<'a, &'a str> + 'a,
 {
-    time().then_ignore(end())
+    time(false).then_ignore(end())
 }

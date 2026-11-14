@@ -55,7 +55,7 @@ replaces only the owned part with the current DAR result, derived from other
 Spark records where possible, and checks each class's record count. A record can
 belong to several classes:
 
-- #943: 12 typed TIMESTAMP literals with second 60 roll over to the next minute;
+- #1236: 12 typed TIMESTAMP literals with second 60 roll over to the next minute;
   their fields are those of the same literal for a valid time.
 - #1010: 340 invalid-pattern or reserved-character cases retain DAR's error
   message or literal formatting. Strict ANSI formatted-parser literals fail

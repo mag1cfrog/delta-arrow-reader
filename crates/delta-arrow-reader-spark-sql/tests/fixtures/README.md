@@ -4871,3 +4871,11 @@ and both ANSI modes. It checks 1,076 exact contexts and 24 separate historical L
 name controls, with scalar/dynamic format, fixed-ID argument, configuration and
 pruning assertions. The original session-column, NTZ and epoch alias expectations
 are restored without changing their raw reference files.
+
+## STRING date/time arguments
+
+[`temporal-string-arguments/`](temporal-string-arguments/README.md) records shared
+Spark DATE and session-LTZ coercion for ordinary STRING function arguments and
+DATE membership, plus timestamp boundary trimming and long fractions. The replay
+checks final rows and executed types in both ANSI modes and UTC/Los Angeles,
+including literals, columns, NULLs and non-ANSI malformed strings.

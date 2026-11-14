@@ -48,8 +48,8 @@ their bits. A second test runs every record over Date64 copies of the DATE colum
 over dictionary-encoded, viewed and large copies of the STRING columns; both require the same
 results. Differences are retained in Los Angeles, where DAR counts the wall-clock seconds of a
 day, not the seconds since the instant of its midnight, so on a change day it differs by an
-hour: a STRING argument is cast to TIMESTAMP_NTZ (#942, 2 records of `ts` and `sn`), and a
-TIMESTAMP_NTZ argument is kept (#1228, the 4 change-day records). DAR also reads `roundOff`
+hour for a TIMESTAMP_NTZ argument (#1228, the 4 change-day records). STRING arguments
+now use the session TIMESTAMP parser and compare directly to Spark. DAR also reads `roundOff`
 beside a NULL argument, so with ANSI the division fails while collecting rows (#1229, 2
 records).
 

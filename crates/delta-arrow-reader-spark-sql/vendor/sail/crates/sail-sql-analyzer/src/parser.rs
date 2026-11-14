@@ -88,6 +88,7 @@ pub fn parse_date(s: &str) -> SqlResult<DateValue> {
 }
 
 pub fn parse_timestamp(s: &str) -> SqlResult<TimestampValue<'_>> {
+    let s = s.trim_matches(|c: char| c.is_ascii_control() || c == ' ');
     parse_simple!(s, create_timestamp_parser)
 }
 
@@ -101,7 +102,7 @@ mod tests {
     use sail_sql_parser::ast::statement::Statement;
 
     use crate::error::SqlResult;
-    use crate::parser::{parse_one_statement, parse_statements, parse_timestamp};
+    use crate::parser::{parse_one_statement, parse_statements, parse_time, parse_timestamp};
 
     #[test]
     fn test_timestamp_date_time_separators() -> SqlResult<()> {
@@ -142,6 +143,16 @@ mod tests {
         ] {
             assert!(parse_timestamp(text).is_err(), "{text:?}");
         }
+        Ok(())
+    }
+
+    #[test]
+    fn timestamp_trim_and_fraction_do_not_change_time_precision() -> SqlResult<()> {
+        let value = parse_timestamp("\t1969-12-31 23:59:59.123456789123Z\r\n")?;
+        assert_eq!(value.time.nanoseconds, 123_456_789);
+        assert_eq!(value.timezone, "UTC");
+        assert_eq!(parse_time("23:59:59.123456789")?.nanoseconds, 123_456_789);
+        assert!(parse_time("23:59:59.123456789123").is_err());
         Ok(())
     }
 

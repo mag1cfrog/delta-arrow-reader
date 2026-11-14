@@ -49,19 +49,11 @@ fn months_between_references() -> TestResult<Vec<Value>> {
     Ok(records)
 }
 
-/// Values DAR still gives in America/Los_Angeles, each owned by an issue: a record, the row of
-/// the value, Spark's value and DAR's. DAR casts a STRING argument to TIMESTAMP_NTZ (#942) and
-/// keeps a TIMESTAMP_NTZ (#1228), not a TIMESTAMP in the session zone, so on a change day it
-/// counts wall-clock seconds where Spark counts the instant's, an hour apart.
+/// #1228: retained TIMESTAMP_NTZ values count wall-clock seconds on Los Angeles change
+/// days, where Spark counts seconds since the instant of midnight.
 type RetainedValue = (&'static str, usize, &'static str, &'static str);
 
-const RETAINED_VALUES: [RetainedValue; 3] = [
-    (
-        "column_string_by_nullable",
-        1,
-        "c010a4791e4ef586",
-        "c010a5d976a954a3",
-    ),
+const RETAINED_VALUES: [RetainedValue; 2] = [
     (
         "literal_timestamp_ntz_spring_change_day",
         0,
@@ -478,7 +470,7 @@ async fn months_between_matches_spark() -> TestResult {
             .iter()
             .filter(|case| retained_value(case).is_some())
             .count(),
-        6
+        4
     );
     assert_eq!(
         cases
