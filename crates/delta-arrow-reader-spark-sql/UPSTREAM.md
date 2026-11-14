@@ -1039,7 +1039,13 @@ changes. A DATE instead starts at the first instant of its day, as Java's
 only to the end of the gap, such as 00:30 for Toronto's 1919-03-31, and days beyond Chrono's
 years take offsets from a nearer 400-year cycle (without DST after 2099, #1052), failing with
 `long overflow` past BIGINT (NULL under TRY_CAST). Legacy IDs such as `PST` name their
-regions, as in CONVERT_TIMEZONE. Explicit CAST and TRY_CAST from DATE to TIMESTAMP, and every caller
+regions, as in CONVERT_TIMEZONE. These functions share a resolved region/fixed-offset
+representation with DATE day-start conversion. Fixed zone arguments reuse the existing
+Spark datetime offset component parser with complete input consumption, including
+seconds and UTC/GMT prefixes; no second numeric-offset grammar is introduced. The
+[offset argument references](tests/fixtures/utc-offset-zones/README.md) cover values,
+executed types and invalid-zone causes while preserving named-zone GapInfo and lazy
+NULL evaluation. Explicit CAST and TRY_CAST from DATE to TIMESTAMP, and every caller
 of the shared builder, use this rule in fixed-offset and named zones; GREATEST and LEAST now
 widen mixed DATE, TIMESTAMP and TIMESTAMP_NTZ arguments through it too, where DataFusion's
 coercion to a zone-less nanosecond TIMESTAMP failed for year 1. Their nullability still

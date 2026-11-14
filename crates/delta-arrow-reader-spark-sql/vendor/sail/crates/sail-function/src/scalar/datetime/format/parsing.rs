@@ -353,6 +353,19 @@ fn starts_with_ignore_case(value: &str, prefix: &str) -> bool {
     })
 }
 
+/// Parse a complete fixed zone ID with the existing ISO offset component rules.
+pub(crate) fn parse_fixed_zone_offset(value: &str) -> Option<FixedOffset> {
+    let width = if value.contains(':') {
+        5
+    } else if value.len() == 3 {
+        1
+    } else {
+        4
+    };
+    let (end, offset) = parse_offset(value, 0, width, true).ok()?;
+    (end == value.len()).then_some(offset)
+}
+
 fn parse_offset(
     value: &str,
     position: usize,

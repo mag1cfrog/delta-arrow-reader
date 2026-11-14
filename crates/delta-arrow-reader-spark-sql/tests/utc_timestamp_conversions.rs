@@ -39,6 +39,101 @@ fn conversion_references() -> TestResult<Vec<Value>> {
     Ok(records)
 }
 
+fn offset_zone_references() -> TestResult<(Vec<Value>, Value)> {
+    let records = include_str!("fixtures/utc-offset-zones/spark.jsonl")
+        .lines()
+        .map(serde_json::from_str)
+        .collect::<Result<Vec<Value>, _>>()?;
+    let requests: Value =
+        serde_json::from_str(include_str!("fixtures/utc-offset-zones/requests.json"))?;
+    assert_eq!(records[0]["spark_version"], "4.2.0");
+    assert_eq!(
+        records[0]["spark_build"]["SPARK_REVISION"]["value"],
+        "32f7299601108917fb01920a54e084595b7b3bf8"
+    );
+    assert_eq!(records.len() - 1, 144);
+    let mut requested = Vec::new();
+    for corpus in requests["corpora"].as_array().ok_or("missing corpora")? {
+        requested.extend(corpus["cases"].as_array().ok_or("missing cases")?);
+    }
+    assert_eq!(requested.len(), 144);
+    for (case, request) in records[1..].iter().zip(requested) {
+        for key in [
+            "corpus", "id", "sql", "ansi", "timezone", "ordered", "scope",
+        ] {
+            assert_eq!(case[key], request[key], "case identity {key}");
+        }
+    }
+    Ok((records, requests))
+}
+
+/// Values and executed types on valid inputs; invalid controls require their zone cause.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn offset_zone_arguments_match_spark() -> TestResult {
+    let (records, requests) = offset_zone_references()?;
+    let executed_types = |schema: &Value| {
+        schema["fields"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|field| field["type"].clone())
+            .collect::<Vec<_>>()
+    };
+    let mut differences = Vec::new();
+    for batch_size in [1, 32] {
+        let session = SessionContext::new_with_state(
+            configure_spark_sql(
+                SessionStateBuilder::new()
+                    .with_default_features()
+                    .with_config(
+                        SessionConfig::new()
+                            .with_batch_size(batch_size)
+                            .with_target_partitions(1),
+                    ),
+            )
+            .build(),
+        );
+        register_recorded_inputs(&session, &requests["corpora"][0]["metadata"], batch_size)?;
+        for case in &records[1..] {
+            let observed = observe(&session, case).await;
+            println!(
+                "utc_offset_observation={}",
+                json!({"id":case["id"],"timezone":case["timezone"],"ansi":case["ansi"],
+                    "scope":case["scope"],"batch":batch_size,"actual":observed})
+            );
+            let matches = match case["expected"]["status"].as_str() {
+                Some("ok") => {
+                    observed["rows"] == case["expected"]["rows"]
+                        && executed_types(&observed["executed"])
+                            == executed_types(&case["schema_stages"]["executed"])
+                        && expected_zones(case)
+                            .is_some_and(|zones| observed["executed_zones"] == zones)
+                }
+                Some("error") => {
+                    assert_eq!(case["scope"], "invalid");
+                    assert_eq!(case["expected"]["condition"], "INVALID_TIMEZONE");
+                    observed["error"]
+                        .as_str()
+                        .is_some_and(|error| error.contains("[INVALID_TIMEZONE]"))
+                }
+                _ => return Err("unexpected reference status".into()),
+            };
+            if !matches {
+                differences.push(json!({"id":case["id"],"timezone":case["timezone"],
+                    "ansi":case["ansi"],"batch":batch_size,"spark":case["expected"],
+                    "actual":observed}));
+            }
+        }
+    }
+    assert!(
+        differences.is_empty(),
+        "{} differences: {}",
+        differences.len(),
+        json!(differences)
+    );
+    Ok(())
+}
+
 /// Encode one value by its typed Arrow representation, as the capture encodes Spark's
 /// internal rows: DATE days, TIMESTAMP UTC-epoch and TIMESTAMP_NTZ wall-clock microseconds.
 fn encode_typed_value(column: &dyn Array, row: usize) -> TestResult<Value> {
@@ -193,53 +288,18 @@ fn differing_parts(expectation: &Value, observation: &Value) -> Vec<&'static str
 /// issue.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum RetainedDifference {
-    /// #1024: a zone offset such as `+05:30` fails with INVALID_TIMEZONE while collecting rows.
-    RejectedZoneOffsets,
     /// #1025: an invalid constant zone fails while collecting rows instead of during
     /// optimization.
     LateConstantZoneErrors,
 }
 
-/// Whether a record converts with a zone offset: its literal zone, or the per-row zones of
-/// every registered row, one of which is an offset.
-fn uses_zone_offset(case: &Value, header: &Value) -> TestResult<bool> {
-    if let Some(zone) = case["zone"].as_str() {
-        return Ok(zone.starts_with(['+', '-']));
-    }
-    let sql = case["sql"].as_str().ok_or("missing SQL")?;
-    if !sql.contains("(ntz, z)") || sql.contains(" WHERE ") {
-        return Ok(false);
-    }
-    let rows = header["inputs"][0]["rows"]
-        .as_array()
-        .ok_or("missing registered rows")?;
-    Ok(rows.iter().any(|row| {
-        row[4]
-            .as_str()
-            .is_some_and(|zone| zone.starts_with(['+', '-']))
-    }))
-}
-
 /// Replace only the retained part of Spark's expectation with the current DAR result.
-fn current_expectation(
-    case: &Value,
-    header: &Value,
-) -> TestResult<(Value, Option<RetainedDifference>)> {
+fn current_expectation(case: &Value) -> TestResult<(Value, Option<RetainedDifference>)> {
     let mut current = case.clone();
     let literal = !case["sql"]
         .as_str()
         .ok_or("missing SQL")?
         .contains(" FROM ");
-    if case["expected"]["status"] == "ok" && uses_zone_offset(case, header)? {
-        // The whole query fails while collecting rows, after its optimized stage.
-        current["expected"] = json!({"status": "error", "condition": "INVALID_TIMEZONE"});
-        current["spark_error_phase"] = json!("collect");
-        current["schema_stages"]
-            .as_object_mut()
-            .ok_or("missing schema stages")?
-            .remove("executed");
-        return Ok((current, Some(RetainedDifference::RejectedZoneOffsets)));
-    }
     if literal
         && case["expected"]["condition"] == "INVALID_TIMEZONE"
         && case["spark_error_phase"] == "optimized"
@@ -256,7 +316,7 @@ async fn utc_timestamp_conversions_match_spark() -> TestResult {
     let mut expectations = Vec::new();
     let mut retained = BTreeMap::new();
     for case in &records[1..] {
-        let (expectation, difference) = current_expectation(case, &records[0])?;
+        let (expectation, difference) = current_expectation(case)?;
         if let Some(difference) = difference {
             *retained.entry(difference).or_insert(0) += 1;
         }
@@ -307,10 +367,7 @@ async fn utc_timestamp_conversions_match_spark() -> TestResult {
     );
     assert_eq!(
         retained,
-        [
-            (RetainedDifference::RejectedZoneOffsets, 1068),
-            (RetainedDifference::LateConstantZoneErrors, 24),
-        ]
+        [(RetainedDifference::LateConstantZoneErrors, 24),]
     );
     Ok(())
 }

@@ -5,10 +5,9 @@
 //! In UTC it also gives Spark's DATE to TIMESTAMP_NTZ cast, the midnight wall-clock time, which
 //! `with_nullable_result` declares nullable as Spark does.
 
-use std::str::FromStr;
 use std::sync::Arc;
 
-use chrono::{FixedOffset, LocalResult, NaiveDate, TimeZone};
+use chrono::{LocalResult, NaiveDate, TimeZone};
 use chrono_tz::{GapInfo, Tz};
 use datafusion::arrow::array::types::Date32Type;
 use datafusion::arrow::array::{AsArray, TimestampMicrosecondArray};
@@ -19,7 +18,7 @@ use datafusion_expr::{
     ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
 };
 
-use crate::scalar::datetime::convert_tz::legacy_time_zone;
+use crate::scalar::datetime::convert_tz::ResolvedTimeZone;
 
 /// Gregorian dates repeat every 400 years (146,097 days), and so do recurring time zone rules.
 const DAYS_PER_400_YEARS: i64 = 146_097;
@@ -57,8 +56,8 @@ impl SparkDateToTimestamp {
         }
     }
 
-    fn zone(&self) -> Result<SessionZone> {
-        match SessionZone::parse(&self.session_timezone) {
+    fn zone(&self) -> Result<ResolvedTimeZone> {
+        match ResolvedTimeZone::parse(&self.session_timezone) {
             Some(zone) => Ok(zone),
             None => exec_err!(
                 "[INVALID_TIMEZONE] The timezone: {:?} is invalid.",
@@ -68,7 +67,7 @@ impl SparkDateToTimestamp {
     }
 
     /// The start of `day`, in microseconds, which Spark cannot store beyond the BIGINT range.
-    fn convert(&self, day: i32, zone: &SessionZone) -> Result<Option<i64>> {
+    fn convert(&self, day: i32, zone: &ResolvedTimeZone) -> Result<Option<i64>> {
         match start_of_day(day, zone).and_then(|micros| i64::try_from(micros).ok()) {
             Some(micros) => Ok(Some(micros)),
             None if self.null_on_overflow => Ok(None),
@@ -112,38 +111,13 @@ impl SparkDateToTimestamp {
     }
 }
 
-/// A session zone: a region, with DST changes, or a fixed offset such as `+05:30`.
-pub(crate) enum SessionZone {
-    Region(Tz),
-    Fixed(FixedOffset),
-}
-
-impl SessionZone {
-    fn parse(zone: &str) -> Option<Self> {
-        if let Ok(region) = Tz::from_str(zone) {
-            return Some(Self::Region(region));
-        }
-        // Spark also accepts Java's legacy three-letter IDs, as CONVERT_TIMEZONE does.
-        if let Some(region) = legacy_time_zone(zone).and_then(|name| Tz::from_str(name).ok()) {
-            return Some(Self::Region(region));
-        }
-        // Spark also writes an offset as `+hh`.
-        let offset = if zone.len() == 3 {
-            format!("{zone}:00")
-        } else {
-            zone.to_owned()
-        };
-        offset.parse::<FixedOffset>().ok().map(Self::Fixed)
-    }
-}
-
 /// The first instant of `day` in `zone`, beyond the BIGINT range for the extreme days.
-pub(crate) fn start_of_day(day: i32, zone: &SessionZone) -> Option<i128> {
+pub(crate) fn start_of_day(day: i32, zone: &ResolvedTimeZone) -> Option<i128> {
     match zone {
-        SessionZone::Fixed(offset) => Some(
+        ResolvedTimeZone::Fixed(offset) => Some(
             i128::from(day) * MICROS_PER_DAY - i128::from(offset.local_minus_utc()) * 1_000_000,
         ),
-        SessionZone::Region(region) => region_start_of_day(day, region),
+        ResolvedTimeZone::Region(region) => region_start_of_day(day, region),
     }
 }
 
@@ -223,6 +197,8 @@ impl ScalarUDFImpl for SparkDateToTimestamp {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
 
     fn day(text: &str) -> i32 {
@@ -231,7 +207,7 @@ mod tests {
     }
 
     fn start(zone: &str, text: &str) -> Option<i128> {
-        start_of_day(day(text), &SessionZone::parse(zone)?)
+        start_of_day(day(text), &ResolvedTimeZone::parse(zone)?)
     }
 
     #[test]
@@ -268,7 +244,7 @@ mod tests {
 
     #[test]
     fn starts_beyond_bigint_overflow() -> Result<()> {
-        let utc = SessionZone::Region(Tz::UTC);
+        let utc = ResolvedTimeZone::Region(Tz::UTC);
         let conversion = SparkDateToTimestamp::new("UTC".into(), false);
         assert!(conversion.convert(i32::MAX, &utc).is_err());
         let conversion = SparkDateToTimestamp::new("UTC".into(), true);

@@ -1,0 +1,1588 @@
+{
+  "issue": "1024",
+  "expected_record_count": 144,
+  "corpora": [
+    {
+      "corpus": "utc_offsets_UTC",
+      "source": "source-only #1024 offset conversion SQL and logical input definitions",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "offset_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "ntz",
+                  "type": "timestamp_ntz",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "ts",
+                  "type": "timestamp",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "d",
+                  "type": "date",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "from_zone",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "to_zone",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "1704200645123456",
+                "1704200645123456",
+                "2024-01-02 13:04:05.123456",
+                "19724",
+                "+05:30",
+                "-08"
+              ],
+              [
+                "1",
+                "1710037800000000",
+                "1710037800000000",
+                "2024-03-10 02:30:00",
+                "19792",
+                "America/Los_Angeles",
+                "+05:30"
+              ],
+              [
+                "2",
+                "1730597400000000",
+                "1730597400000000",
+                "2024-11-03 01:30:00",
+                "20030",
+                "-00:30",
+                "America/Los_Angeles"
+              ],
+              [
+                "3",
+                "-876544",
+                "-876544",
+                "1969-12-31 23:59:59.123456",
+                "-1",
+                "UTC+05:30",
+                "GMT-08:00"
+              ],
+              [
+                "4",
+                "1719925445123456",
+                "1719925445123456",
+                "2024-07-02 13:04:05.123456",
+                "19906",
+                "Z",
+                "PST"
+              ],
+              [
+                "5",
+                "1704200645123456",
+                "1704200645123456",
+                "2024-01-02 13:04:05.123456",
+                "19724",
+                null,
+                "+18:00"
+              ],
+              [
+                "6",
+                "1704200645123456",
+                "1704200645123456",
+                "2024-01-02 13:04:05.123456",
+                "19724",
+                "-18:00",
+                null
+              ],
+              [
+                "7",
+                null,
+                null,
+                null,
+                null,
+                "+05:30",
+                "-08"
+              ],
+              [
+                "8",
+                "1719925445123456",
+                "1719925445123456",
+                "2024-07-02 13:04:05.123456",
+                "19906",
+                "Z",
+                "PST"
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "column_zone_0",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, '+05:30') AS r0, FROM_UTC_TIMESTAMP(ntz, '+05:30') AS r1, TO_UTC_TIMESTAMP(ts, '+05:30') AS r2, FROM_UTC_TIMESTAMP(ts, '+05:30') AS r3, TO_UTC_TIMESTAMP(s, '+05:30') AS r4, FROM_UTC_TIMESTAMP(s, '+05:30') AS r5, TO_UTC_TIMESTAMP(d, '+05:30') AS r6, FROM_UTC_TIMESTAMP(d, '+05:30') AS r7, CONVERT_TIMEZONE('+05:30', 'UTC', ntz) AS r8, CONVERT_TIMEZONE('UTC', '+05:30', ntz) AS r9 FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "literal_zone_0",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '+05:30') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '+05:30') AS r1, TO_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '+05:30') AS r2, FROM_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '+05:30') AS r3, TO_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '+05:30') AS r4, FROM_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '+05:30') AS r5, CONVERT_TIMEZONE('+05:30', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r6, CONVERT_TIMEZONE('UTC', '+05:30', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r7",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "column_zone_1",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, '-08') AS r0, FROM_UTC_TIMESTAMP(ntz, '-08') AS r1, TO_UTC_TIMESTAMP(ts, '-08') AS r2, FROM_UTC_TIMESTAMP(ts, '-08') AS r3, TO_UTC_TIMESTAMP(s, '-08') AS r4, FROM_UTC_TIMESTAMP(s, '-08') AS r5, TO_UTC_TIMESTAMP(d, '-08') AS r6, FROM_UTC_TIMESTAMP(d, '-08') AS r7, CONVERT_TIMEZONE('-08', 'UTC', ntz) AS r8, CONVERT_TIMEZONE('UTC', '-08', ntz) AS r9 FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "literal_zone_1",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '-08') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '-08') AS r1, TO_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '-08') AS r2, FROM_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '-08') AS r3, TO_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '-08') AS r4, FROM_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '-08') AS r5, CONVERT_TIMEZONE('-08', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r6, CONVERT_TIMEZONE('UTC', '-08', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r7",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "column_zone_2",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, '-00:30') AS r0, FROM_UTC_TIMESTAMP(ntz, '-00:30') AS r1, TO_UTC_TIMESTAMP(ts, '-00:30') AS r2, FROM_UTC_TIMESTAMP(ts, '-00:30') AS r3, TO_UTC_TIMESTAMP(s, '-00:30') AS r4, FROM_UTC_TIMESTAMP(s, '-00:30') AS r5, TO_UTC_TIMESTAMP(d, '-00:30') AS r6, FROM_UTC_TIMESTAMP(d, '-00:30') AS r7, CONVERT_TIMEZONE('-00:30', 'UTC', ntz) AS r8, CONVERT_TIMEZONE('UTC', '-00:30', ntz) AS r9 FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "literal_zone_2",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '-00:30') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '-00:30') AS r1, TO_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '-00:30') AS r2, FROM_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '-00:30') AS r3, TO_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '-00:30') AS r4, FROM_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '-00:30') AS r5, CONVERT_TIMEZONE('-00:30', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r6, CONVERT_TIMEZONE('UTC', '-00:30', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r7",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "column_zone_3",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, '+18:00') AS r0, FROM_UTC_TIMESTAMP(ntz, '+18:00') AS r1, TO_UTC_TIMESTAMP(ts, '+18:00') AS r2, FROM_UTC_TIMESTAMP(ts, '+18:00') AS r3, TO_UTC_TIMESTAMP(s, '+18:00') AS r4, FROM_UTC_TIMESTAMP(s, '+18:00') AS r5, TO_UTC_TIMESTAMP(d, '+18:00') AS r6, FROM_UTC_TIMESTAMP(d, '+18:00') AS r7, CONVERT_TIMEZONE('+18:00', 'UTC', ntz) AS r8, CONVERT_TIMEZONE('UTC', '+18:00', ntz) AS r9 FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "literal_zone_3",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '+18:00') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '+18:00') AS r1, TO_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '+18:00') AS r2, FROM_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '+18:00') AS r3, TO_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '+18:00') AS r4, FROM_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '+18:00') AS r5, CONVERT_TIMEZONE('+18:00', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r6, CONVERT_TIMEZONE('UTC', '+18:00', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r7",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "column_zone_4",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, '-18:00') AS r0, FROM_UTC_TIMESTAMP(ntz, '-18:00') AS r1, TO_UTC_TIMESTAMP(ts, '-18:00') AS r2, FROM_UTC_TIMESTAMP(ts, '-18:00') AS r3, TO_UTC_TIMESTAMP(s, '-18:00') AS r4, FROM_UTC_TIMESTAMP(s, '-18:00') AS r5, TO_UTC_TIMESTAMP(d, '-18:00') AS r6, FROM_UTC_TIMESTAMP(d, '-18:00') AS r7, CONVERT_TIMEZONE('-18:00', 'UTC', ntz) AS r8, CONVERT_TIMEZONE('UTC', '-18:00', ntz) AS r9 FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "literal_zone_4",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '-18:00') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '-18:00') AS r1, TO_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '-18:00') AS r2, FROM_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '-18:00') AS r3, TO_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '-18:00') AS r4, FROM_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '-18:00') AS r5, CONVERT_TIMEZONE('-18:00', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r6, CONVERT_TIMEZONE('UTC', '-18:00', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r7",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "column_zone_5",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, 'Z') AS r0, FROM_UTC_TIMESTAMP(ntz, 'Z') AS r1, TO_UTC_TIMESTAMP(ts, 'Z') AS r2, FROM_UTC_TIMESTAMP(ts, 'Z') AS r3, TO_UTC_TIMESTAMP(s, 'Z') AS r4, FROM_UTC_TIMESTAMP(s, 'Z') AS r5, TO_UTC_TIMESTAMP(d, 'Z') AS r6, FROM_UTC_TIMESTAMP(d, 'Z') AS r7, CONVERT_TIMEZONE('Z', 'UTC', ntz) AS r8, CONVERT_TIMEZONE('UTC', 'Z', ntz) AS r9 FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "literal_zone_5",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', 'Z') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', 'Z') AS r1, TO_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', 'Z') AS r2, FROM_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', 'Z') AS r3, TO_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', 'Z') AS r4, FROM_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', 'Z') AS r5, CONVERT_TIMEZONE('Z', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r6, CONVERT_TIMEZONE('UTC', 'Z', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r7",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "column_zone_6",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, 'UTC+05:30') AS r0, FROM_UTC_TIMESTAMP(ntz, 'UTC+05:30') AS r1, TO_UTC_TIMESTAMP(ts, 'UTC+05:30') AS r2, FROM_UTC_TIMESTAMP(ts, 'UTC+05:30') AS r3, TO_UTC_TIMESTAMP(s, 'UTC+05:30') AS r4, FROM_UTC_TIMESTAMP(s, 'UTC+05:30') AS r5, TO_UTC_TIMESTAMP(d, 'UTC+05:30') AS r6, FROM_UTC_TIMESTAMP(d, 'UTC+05:30') AS r7, CONVERT_TIMEZONE('UTC+05:30', 'UTC', ntz) AS r8, CONVERT_TIMEZONE('UTC', 'UTC+05:30', ntz) AS r9 FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "literal_zone_6",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', 'UTC+05:30') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', 'UTC+05:30') AS r1, TO_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', 'UTC+05:30') AS r2, FROM_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', 'UTC+05:30') AS r3, TO_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', 'UTC+05:30') AS r4, FROM_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', 'UTC+05:30') AS r5, CONVERT_TIMEZONE('UTC+05:30', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r6, CONVERT_TIMEZONE('UTC', 'UTC+05:30', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r7",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "column_zone_7",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, 'GMT-08:00') AS r0, FROM_UTC_TIMESTAMP(ntz, 'GMT-08:00') AS r1, TO_UTC_TIMESTAMP(ts, 'GMT-08:00') AS r2, FROM_UTC_TIMESTAMP(ts, 'GMT-08:00') AS r3, TO_UTC_TIMESTAMP(s, 'GMT-08:00') AS r4, FROM_UTC_TIMESTAMP(s, 'GMT-08:00') AS r5, TO_UTC_TIMESTAMP(d, 'GMT-08:00') AS r6, FROM_UTC_TIMESTAMP(d, 'GMT-08:00') AS r7, CONVERT_TIMEZONE('GMT-08:00', 'UTC', ntz) AS r8, CONVERT_TIMEZONE('UTC', 'GMT-08:00', ntz) AS r9 FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "literal_zone_7",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', 'GMT-08:00') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', 'GMT-08:00') AS r1, TO_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', 'GMT-08:00') AS r2, FROM_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', 'GMT-08:00') AS r3, TO_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', 'GMT-08:00') AS r4, FROM_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', 'GMT-08:00') AS r5, CONVERT_TIMEZONE('GMT-08:00', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r6, CONVERT_TIMEZONE('UTC', 'GMT-08:00', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r7",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "dynamic_ntz",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, from_zone) AS r, FROM_UTC_TIMESTAMP(ntz, to_zone) AS s FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "dynamic_ts",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ts, from_zone) AS r, FROM_UTC_TIMESTAMP(ts, to_zone) AS s FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "dynamic_s",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(s, from_zone) AS r, FROM_UTC_TIMESTAMP(s, to_zone) AS s FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "dynamic_d",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(d, from_zone) AS r, FROM_UTC_TIMESTAMP(d, to_zone) AS s FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "classic_source_column",
+          "sql": "SELECT k, CONVERT_TIMEZONE(from_zone, '+05:30', ntz) AS r FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "classic_target_column",
+          "sql": "SELECT k, CONVERT_TIMEZONE('-08', to_zone, ntz) AS r FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "classic_all_columns",
+          "sql": "SELECT k, CONVERT_TIMEZONE(from_zone, to_zone, ntz) AS r FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "classic_scalar_timestamp",
+          "sql": "SELECT k, CONVERT_TIMEZONE(from_zone, to_zone, TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "classic_session_source",
+          "sql": "SELECT k, CONVERT_TIMEZONE(to_zone, ntz) AS r FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "null_and_lazy",
+          "sql": "SELECT TO_UTC_TIMESTAMP(CAST(NULL AS TIMESTAMP_NTZ), '+05:30') AS a, FROM_UTC_TIMESTAMP(CAST(NULL AS TIMESTAMP), '-08') AS b, TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', CAST(NULL AS STRING)) AS c, CONVERT_TIMEZONE(CAST(NULL AS STRING), CAST(RAISE_ERROR('unreached-zone') AS STRING), TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS d",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "named_controls",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, 'America/Los_Angeles') AS a, FROM_UTC_TIMESTAMP(ntz, 'America/Havana') AS b, CONVERT_TIMEZONE('America/Los_Angeles', 'America/Havana', ntz) AS c FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "zero_aliases",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '+00') AS a, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', 'UTC') AS b, CONVERT_TIMEZONE('GMT', 'Z', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS c",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "invalid_utc_0",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '+18:01') AS r",
+          "ordered": false,
+          "scope": "invalid",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "invalid_classic_0",
+          "sql": "SELECT CONVERT_TIMEZONE('+18:01', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r",
+          "ordered": false,
+          "scope": "invalid",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "invalid_utc_1",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '+05:60') AS r",
+          "ordered": false,
+          "scope": "invalid",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "invalid_classic_1",
+          "sql": "SELECT CONVERT_TIMEZONE('+05:60', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r",
+          "ordered": false,
+          "scope": "invalid",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "invalid_utc_2",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', 'not/a-zone') AS r",
+          "ordered": false,
+          "scope": "invalid",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "invalid_classic_2",
+          "sql": "SELECT CONVERT_TIMEZONE('not/a-zone', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r",
+          "ordered": false,
+          "scope": "invalid",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "seconds_0",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '+05:30:15') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '+05:30:15') AS r1, CONVERT_TIMEZONE('+05:30:15', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r2, CONVERT_TIMEZONE('UTC', '+05:30:15', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r3",
+          "ordered": false,
+          "scope": "seconds",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "seconds_1",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '-00:30:15') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '-00:30:15') AS r1, CONVERT_TIMEZONE('-00:30:15', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r2, CONVERT_TIMEZONE('UTC', '-00:30:15', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r3",
+          "ordered": false,
+          "scope": "seconds",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "column_zone_0",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, '+05:30') AS r0, FROM_UTC_TIMESTAMP(ntz, '+05:30') AS r1, TO_UTC_TIMESTAMP(ts, '+05:30') AS r2, FROM_UTC_TIMESTAMP(ts, '+05:30') AS r3, TO_UTC_TIMESTAMP(s, '+05:30') AS r4, FROM_UTC_TIMESTAMP(s, '+05:30') AS r5, TO_UTC_TIMESTAMP(d, '+05:30') AS r6, FROM_UTC_TIMESTAMP(d, '+05:30') AS r7, CONVERT_TIMEZONE('+05:30', 'UTC', ntz) AS r8, CONVERT_TIMEZONE('UTC', '+05:30', ntz) AS r9 FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "literal_zone_0",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '+05:30') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '+05:30') AS r1, TO_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '+05:30') AS r2, FROM_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '+05:30') AS r3, TO_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '+05:30') AS r4, FROM_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '+05:30') AS r5, CONVERT_TIMEZONE('+05:30', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r6, CONVERT_TIMEZONE('UTC', '+05:30', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r7",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "column_zone_1",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, '-08') AS r0, FROM_UTC_TIMESTAMP(ntz, '-08') AS r1, TO_UTC_TIMESTAMP(ts, '-08') AS r2, FROM_UTC_TIMESTAMP(ts, '-08') AS r3, TO_UTC_TIMESTAMP(s, '-08') AS r4, FROM_UTC_TIMESTAMP(s, '-08') AS r5, TO_UTC_TIMESTAMP(d, '-08') AS r6, FROM_UTC_TIMESTAMP(d, '-08') AS r7, CONVERT_TIMEZONE('-08', 'UTC', ntz) AS r8, CONVERT_TIMEZONE('UTC', '-08', ntz) AS r9 FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "literal_zone_1",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '-08') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '-08') AS r1, TO_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '-08') AS r2, FROM_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '-08') AS r3, TO_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '-08') AS r4, FROM_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '-08') AS r5, CONVERT_TIMEZONE('-08', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r6, CONVERT_TIMEZONE('UTC', '-08', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r7",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "column_zone_2",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, '-00:30') AS r0, FROM_UTC_TIMESTAMP(ntz, '-00:30') AS r1, TO_UTC_TIMESTAMP(ts, '-00:30') AS r2, FROM_UTC_TIMESTAMP(ts, '-00:30') AS r3, TO_UTC_TIMESTAMP(s, '-00:30') AS r4, FROM_UTC_TIMESTAMP(s, '-00:30') AS r5, TO_UTC_TIMESTAMP(d, '-00:30') AS r6, FROM_UTC_TIMESTAMP(d, '-00:30') AS r7, CONVERT_TIMEZONE('-00:30', 'UTC', ntz) AS r8, CONVERT_TIMEZONE('UTC', '-00:30', ntz) AS r9 FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "literal_zone_2",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '-00:30') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '-00:30') AS r1, TO_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '-00:30') AS r2, FROM_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '-00:30') AS r3, TO_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '-00:30') AS r4, FROM_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '-00:30') AS r5, CONVERT_TIMEZONE('-00:30', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r6, CONVERT_TIMEZONE('UTC', '-00:30', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r7",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "column_zone_3",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, '+18:00') AS r0, FROM_UTC_TIMESTAMP(ntz, '+18:00') AS r1, TO_UTC_TIMESTAMP(ts, '+18:00') AS r2, FROM_UTC_TIMESTAMP(ts, '+18:00') AS r3, TO_UTC_TIMESTAMP(s, '+18:00') AS r4, FROM_UTC_TIMESTAMP(s, '+18:00') AS r5, TO_UTC_TIMESTAMP(d, '+18:00') AS r6, FROM_UTC_TIMESTAMP(d, '+18:00') AS r7, CONVERT_TIMEZONE('+18:00', 'UTC', ntz) AS r8, CONVERT_TIMEZONE('UTC', '+18:00', ntz) AS r9 FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "literal_zone_3",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '+18:00') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '+18:00') AS r1, TO_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '+18:00') AS r2, FROM_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '+18:00') AS r3, TO_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '+18:00') AS r4, FROM_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '+18:00') AS r5, CONVERT_TIMEZONE('+18:00', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r6, CONVERT_TIMEZONE('UTC', '+18:00', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r7",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "column_zone_4",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, '-18:00') AS r0, FROM_UTC_TIMESTAMP(ntz, '-18:00') AS r1, TO_UTC_TIMESTAMP(ts, '-18:00') AS r2, FROM_UTC_TIMESTAMP(ts, '-18:00') AS r3, TO_UTC_TIMESTAMP(s, '-18:00') AS r4, FROM_UTC_TIMESTAMP(s, '-18:00') AS r5, TO_UTC_TIMESTAMP(d, '-18:00') AS r6, FROM_UTC_TIMESTAMP(d, '-18:00') AS r7, CONVERT_TIMEZONE('-18:00', 'UTC', ntz) AS r8, CONVERT_TIMEZONE('UTC', '-18:00', ntz) AS r9 FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "literal_zone_4",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '-18:00') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '-18:00') AS r1, TO_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '-18:00') AS r2, FROM_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '-18:00') AS r3, TO_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '-18:00') AS r4, FROM_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '-18:00') AS r5, CONVERT_TIMEZONE('-18:00', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r6, CONVERT_TIMEZONE('UTC', '-18:00', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r7",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "column_zone_5",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, 'Z') AS r0, FROM_UTC_TIMESTAMP(ntz, 'Z') AS r1, TO_UTC_TIMESTAMP(ts, 'Z') AS r2, FROM_UTC_TIMESTAMP(ts, 'Z') AS r3, TO_UTC_TIMESTAMP(s, 'Z') AS r4, FROM_UTC_TIMESTAMP(s, 'Z') AS r5, TO_UTC_TIMESTAMP(d, 'Z') AS r6, FROM_UTC_TIMESTAMP(d, 'Z') AS r7, CONVERT_TIMEZONE('Z', 'UTC', ntz) AS r8, CONVERT_TIMEZONE('UTC', 'Z', ntz) AS r9 FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "literal_zone_5",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', 'Z') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', 'Z') AS r1, TO_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', 'Z') AS r2, FROM_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', 'Z') AS r3, TO_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', 'Z') AS r4, FROM_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', 'Z') AS r5, CONVERT_TIMEZONE('Z', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r6, CONVERT_TIMEZONE('UTC', 'Z', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r7",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "column_zone_6",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, 'UTC+05:30') AS r0, FROM_UTC_TIMESTAMP(ntz, 'UTC+05:30') AS r1, TO_UTC_TIMESTAMP(ts, 'UTC+05:30') AS r2, FROM_UTC_TIMESTAMP(ts, 'UTC+05:30') AS r3, TO_UTC_TIMESTAMP(s, 'UTC+05:30') AS r4, FROM_UTC_TIMESTAMP(s, 'UTC+05:30') AS r5, TO_UTC_TIMESTAMP(d, 'UTC+05:30') AS r6, FROM_UTC_TIMESTAMP(d, 'UTC+05:30') AS r7, CONVERT_TIMEZONE('UTC+05:30', 'UTC', ntz) AS r8, CONVERT_TIMEZONE('UTC', 'UTC+05:30', ntz) AS r9 FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "literal_zone_6",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', 'UTC+05:30') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', 'UTC+05:30') AS r1, TO_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', 'UTC+05:30') AS r2, FROM_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', 'UTC+05:30') AS r3, TO_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', 'UTC+05:30') AS r4, FROM_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', 'UTC+05:30') AS r5, CONVERT_TIMEZONE('UTC+05:30', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r6, CONVERT_TIMEZONE('UTC', 'UTC+05:30', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r7",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "column_zone_7",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, 'GMT-08:00') AS r0, FROM_UTC_TIMESTAMP(ntz, 'GMT-08:00') AS r1, TO_UTC_TIMESTAMP(ts, 'GMT-08:00') AS r2, FROM_UTC_TIMESTAMP(ts, 'GMT-08:00') AS r3, TO_UTC_TIMESTAMP(s, 'GMT-08:00') AS r4, FROM_UTC_TIMESTAMP(s, 'GMT-08:00') AS r5, TO_UTC_TIMESTAMP(d, 'GMT-08:00') AS r6, FROM_UTC_TIMESTAMP(d, 'GMT-08:00') AS r7, CONVERT_TIMEZONE('GMT-08:00', 'UTC', ntz) AS r8, CONVERT_TIMEZONE('UTC', 'GMT-08:00', ntz) AS r9 FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "literal_zone_7",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', 'GMT-08:00') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', 'GMT-08:00') AS r1, TO_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', 'GMT-08:00') AS r2, FROM_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', 'GMT-08:00') AS r3, TO_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', 'GMT-08:00') AS r4, FROM_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', 'GMT-08:00') AS r5, CONVERT_TIMEZONE('GMT-08:00', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r6, CONVERT_TIMEZONE('UTC', 'GMT-08:00', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r7",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "dynamic_ntz",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, from_zone) AS r, FROM_UTC_TIMESTAMP(ntz, to_zone) AS s FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "dynamic_ts",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ts, from_zone) AS r, FROM_UTC_TIMESTAMP(ts, to_zone) AS s FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "dynamic_s",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(s, from_zone) AS r, FROM_UTC_TIMESTAMP(s, to_zone) AS s FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "dynamic_d",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(d, from_zone) AS r, FROM_UTC_TIMESTAMP(d, to_zone) AS s FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "classic_source_column",
+          "sql": "SELECT k, CONVERT_TIMEZONE(from_zone, '+05:30', ntz) AS r FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "classic_target_column",
+          "sql": "SELECT k, CONVERT_TIMEZONE('-08', to_zone, ntz) AS r FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "classic_all_columns",
+          "sql": "SELECT k, CONVERT_TIMEZONE(from_zone, to_zone, ntz) AS r FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "classic_scalar_timestamp",
+          "sql": "SELECT k, CONVERT_TIMEZONE(from_zone, to_zone, TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "classic_session_source",
+          "sql": "SELECT k, CONVERT_TIMEZONE(to_zone, ntz) AS r FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "null_and_lazy",
+          "sql": "SELECT TO_UTC_TIMESTAMP(CAST(NULL AS TIMESTAMP_NTZ), '+05:30') AS a, FROM_UTC_TIMESTAMP(CAST(NULL AS TIMESTAMP), '-08') AS b, TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', CAST(NULL AS STRING)) AS c, CONVERT_TIMEZONE(CAST(NULL AS STRING), CAST(RAISE_ERROR('unreached-zone') AS STRING), TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS d",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "named_controls",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, 'America/Los_Angeles') AS a, FROM_UTC_TIMESTAMP(ntz, 'America/Havana') AS b, CONVERT_TIMEZONE('America/Los_Angeles', 'America/Havana', ntz) AS c FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "zero_aliases",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '+00') AS a, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', 'UTC') AS b, CONVERT_TIMEZONE('GMT', 'Z', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS c",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "invalid_utc_0",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '+18:01') AS r",
+          "ordered": false,
+          "scope": "invalid",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "invalid_classic_0",
+          "sql": "SELECT CONVERT_TIMEZONE('+18:01', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r",
+          "ordered": false,
+          "scope": "invalid",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "invalid_utc_1",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '+05:60') AS r",
+          "ordered": false,
+          "scope": "invalid",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "invalid_classic_1",
+          "sql": "SELECT CONVERT_TIMEZONE('+05:60', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r",
+          "ordered": false,
+          "scope": "invalid",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "invalid_utc_2",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', 'not/a-zone') AS r",
+          "ordered": false,
+          "scope": "invalid",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "invalid_classic_2",
+          "sql": "SELECT CONVERT_TIMEZONE('not/a-zone', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r",
+          "ordered": false,
+          "scope": "invalid",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "seconds_0",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '+05:30:15') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '+05:30:15') AS r1, CONVERT_TIMEZONE('+05:30:15', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r2, CONVERT_TIMEZONE('UTC', '+05:30:15', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r3",
+          "ordered": false,
+          "scope": "seconds",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_UTC",
+          "id": "seconds_1",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '-00:30:15') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '-00:30:15') AS r1, CONVERT_TIMEZONE('-00:30:15', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r2, CONVERT_TIMEZONE('UTC', '-00:30:15', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r3",
+          "ordered": false,
+          "scope": "seconds",
+          "timezone": "UTC",
+          "ansi": false
+        }
+      ]
+    },
+    {
+      "corpus": "utc_offsets_America_Los_Angeles",
+      "source": "source-only #1024 offset conversion SQL and logical input definitions",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "offset_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "ntz",
+                  "type": "timestamp_ntz",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "ts",
+                  "type": "timestamp",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "d",
+                  "type": "date",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "from_zone",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "to_zone",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "1704200645123456",
+                "1704200645123456",
+                "2024-01-02 13:04:05.123456",
+                "19724",
+                "+05:30",
+                "-08"
+              ],
+              [
+                "1",
+                "1710037800000000",
+                "1710037800000000",
+                "2024-03-10 02:30:00",
+                "19792",
+                "America/Los_Angeles",
+                "+05:30"
+              ],
+              [
+                "2",
+                "1730597400000000",
+                "1730597400000000",
+                "2024-11-03 01:30:00",
+                "20030",
+                "-00:30",
+                "America/Los_Angeles"
+              ],
+              [
+                "3",
+                "-876544",
+                "-876544",
+                "1969-12-31 23:59:59.123456",
+                "-1",
+                "UTC+05:30",
+                "GMT-08:00"
+              ],
+              [
+                "4",
+                "1719925445123456",
+                "1719925445123456",
+                "2024-07-02 13:04:05.123456",
+                "19906",
+                "Z",
+                "PST"
+              ],
+              [
+                "5",
+                "1704200645123456",
+                "1704200645123456",
+                "2024-01-02 13:04:05.123456",
+                "19724",
+                null,
+                "+18:00"
+              ],
+              [
+                "6",
+                "1704200645123456",
+                "1704200645123456",
+                "2024-01-02 13:04:05.123456",
+                "19724",
+                "-18:00",
+                null
+              ],
+              [
+                "7",
+                null,
+                null,
+                null,
+                null,
+                "+05:30",
+                "-08"
+              ],
+              [
+                "8",
+                "1719925445123456",
+                "1719925445123456",
+                "2024-07-02 13:04:05.123456",
+                "19906",
+                "Z",
+                "PST"
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "column_zone_0",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, '+05:30') AS r0, FROM_UTC_TIMESTAMP(ntz, '+05:30') AS r1, TO_UTC_TIMESTAMP(ts, '+05:30') AS r2, FROM_UTC_TIMESTAMP(ts, '+05:30') AS r3, TO_UTC_TIMESTAMP(s, '+05:30') AS r4, FROM_UTC_TIMESTAMP(s, '+05:30') AS r5, TO_UTC_TIMESTAMP(d, '+05:30') AS r6, FROM_UTC_TIMESTAMP(d, '+05:30') AS r7, CONVERT_TIMEZONE('+05:30', 'UTC', ntz) AS r8, CONVERT_TIMEZONE('UTC', '+05:30', ntz) AS r9 FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "literal_zone_0",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '+05:30') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '+05:30') AS r1, TO_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '+05:30') AS r2, FROM_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '+05:30') AS r3, TO_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '+05:30') AS r4, FROM_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '+05:30') AS r5, CONVERT_TIMEZONE('+05:30', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r6, CONVERT_TIMEZONE('UTC', '+05:30', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r7",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "column_zone_1",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, '-08') AS r0, FROM_UTC_TIMESTAMP(ntz, '-08') AS r1, TO_UTC_TIMESTAMP(ts, '-08') AS r2, FROM_UTC_TIMESTAMP(ts, '-08') AS r3, TO_UTC_TIMESTAMP(s, '-08') AS r4, FROM_UTC_TIMESTAMP(s, '-08') AS r5, TO_UTC_TIMESTAMP(d, '-08') AS r6, FROM_UTC_TIMESTAMP(d, '-08') AS r7, CONVERT_TIMEZONE('-08', 'UTC', ntz) AS r8, CONVERT_TIMEZONE('UTC', '-08', ntz) AS r9 FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "literal_zone_1",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '-08') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '-08') AS r1, TO_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '-08') AS r2, FROM_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '-08') AS r3, TO_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '-08') AS r4, FROM_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '-08') AS r5, CONVERT_TIMEZONE('-08', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r6, CONVERT_TIMEZONE('UTC', '-08', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r7",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "column_zone_2",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, '-00:30') AS r0, FROM_UTC_TIMESTAMP(ntz, '-00:30') AS r1, TO_UTC_TIMESTAMP(ts, '-00:30') AS r2, FROM_UTC_TIMESTAMP(ts, '-00:30') AS r3, TO_UTC_TIMESTAMP(s, '-00:30') AS r4, FROM_UTC_TIMESTAMP(s, '-00:30') AS r5, TO_UTC_TIMESTAMP(d, '-00:30') AS r6, FROM_UTC_TIMESTAMP(d, '-00:30') AS r7, CONVERT_TIMEZONE('-00:30', 'UTC', ntz) AS r8, CONVERT_TIMEZONE('UTC', '-00:30', ntz) AS r9 FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "literal_zone_2",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '-00:30') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '-00:30') AS r1, TO_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '-00:30') AS r2, FROM_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '-00:30') AS r3, TO_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '-00:30') AS r4, FROM_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '-00:30') AS r5, CONVERT_TIMEZONE('-00:30', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r6, CONVERT_TIMEZONE('UTC', '-00:30', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r7",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "column_zone_3",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, '+18:00') AS r0, FROM_UTC_TIMESTAMP(ntz, '+18:00') AS r1, TO_UTC_TIMESTAMP(ts, '+18:00') AS r2, FROM_UTC_TIMESTAMP(ts, '+18:00') AS r3, TO_UTC_TIMESTAMP(s, '+18:00') AS r4, FROM_UTC_TIMESTAMP(s, '+18:00') AS r5, TO_UTC_TIMESTAMP(d, '+18:00') AS r6, FROM_UTC_TIMESTAMP(d, '+18:00') AS r7, CONVERT_TIMEZONE('+18:00', 'UTC', ntz) AS r8, CONVERT_TIMEZONE('UTC', '+18:00', ntz) AS r9 FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "literal_zone_3",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '+18:00') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '+18:00') AS r1, TO_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '+18:00') AS r2, FROM_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '+18:00') AS r3, TO_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '+18:00') AS r4, FROM_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '+18:00') AS r5, CONVERT_TIMEZONE('+18:00', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r6, CONVERT_TIMEZONE('UTC', '+18:00', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r7",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "column_zone_4",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, '-18:00') AS r0, FROM_UTC_TIMESTAMP(ntz, '-18:00') AS r1, TO_UTC_TIMESTAMP(ts, '-18:00') AS r2, FROM_UTC_TIMESTAMP(ts, '-18:00') AS r3, TO_UTC_TIMESTAMP(s, '-18:00') AS r4, FROM_UTC_TIMESTAMP(s, '-18:00') AS r5, TO_UTC_TIMESTAMP(d, '-18:00') AS r6, FROM_UTC_TIMESTAMP(d, '-18:00') AS r7, CONVERT_TIMEZONE('-18:00', 'UTC', ntz) AS r8, CONVERT_TIMEZONE('UTC', '-18:00', ntz) AS r9 FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "literal_zone_4",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '-18:00') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '-18:00') AS r1, TO_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '-18:00') AS r2, FROM_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '-18:00') AS r3, TO_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '-18:00') AS r4, FROM_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '-18:00') AS r5, CONVERT_TIMEZONE('-18:00', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r6, CONVERT_TIMEZONE('UTC', '-18:00', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r7",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "column_zone_5",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, 'Z') AS r0, FROM_UTC_TIMESTAMP(ntz, 'Z') AS r1, TO_UTC_TIMESTAMP(ts, 'Z') AS r2, FROM_UTC_TIMESTAMP(ts, 'Z') AS r3, TO_UTC_TIMESTAMP(s, 'Z') AS r4, FROM_UTC_TIMESTAMP(s, 'Z') AS r5, TO_UTC_TIMESTAMP(d, 'Z') AS r6, FROM_UTC_TIMESTAMP(d, 'Z') AS r7, CONVERT_TIMEZONE('Z', 'UTC', ntz) AS r8, CONVERT_TIMEZONE('UTC', 'Z', ntz) AS r9 FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "literal_zone_5",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', 'Z') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', 'Z') AS r1, TO_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', 'Z') AS r2, FROM_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', 'Z') AS r3, TO_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', 'Z') AS r4, FROM_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', 'Z') AS r5, CONVERT_TIMEZONE('Z', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r6, CONVERT_TIMEZONE('UTC', 'Z', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r7",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "column_zone_6",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, 'UTC+05:30') AS r0, FROM_UTC_TIMESTAMP(ntz, 'UTC+05:30') AS r1, TO_UTC_TIMESTAMP(ts, 'UTC+05:30') AS r2, FROM_UTC_TIMESTAMP(ts, 'UTC+05:30') AS r3, TO_UTC_TIMESTAMP(s, 'UTC+05:30') AS r4, FROM_UTC_TIMESTAMP(s, 'UTC+05:30') AS r5, TO_UTC_TIMESTAMP(d, 'UTC+05:30') AS r6, FROM_UTC_TIMESTAMP(d, 'UTC+05:30') AS r7, CONVERT_TIMEZONE('UTC+05:30', 'UTC', ntz) AS r8, CONVERT_TIMEZONE('UTC', 'UTC+05:30', ntz) AS r9 FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "literal_zone_6",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', 'UTC+05:30') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', 'UTC+05:30') AS r1, TO_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', 'UTC+05:30') AS r2, FROM_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', 'UTC+05:30') AS r3, TO_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', 'UTC+05:30') AS r4, FROM_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', 'UTC+05:30') AS r5, CONVERT_TIMEZONE('UTC+05:30', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r6, CONVERT_TIMEZONE('UTC', 'UTC+05:30', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r7",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "column_zone_7",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, 'GMT-08:00') AS r0, FROM_UTC_TIMESTAMP(ntz, 'GMT-08:00') AS r1, TO_UTC_TIMESTAMP(ts, 'GMT-08:00') AS r2, FROM_UTC_TIMESTAMP(ts, 'GMT-08:00') AS r3, TO_UTC_TIMESTAMP(s, 'GMT-08:00') AS r4, FROM_UTC_TIMESTAMP(s, 'GMT-08:00') AS r5, TO_UTC_TIMESTAMP(d, 'GMT-08:00') AS r6, FROM_UTC_TIMESTAMP(d, 'GMT-08:00') AS r7, CONVERT_TIMEZONE('GMT-08:00', 'UTC', ntz) AS r8, CONVERT_TIMEZONE('UTC', 'GMT-08:00', ntz) AS r9 FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "literal_zone_7",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', 'GMT-08:00') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', 'GMT-08:00') AS r1, TO_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', 'GMT-08:00') AS r2, FROM_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', 'GMT-08:00') AS r3, TO_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', 'GMT-08:00') AS r4, FROM_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', 'GMT-08:00') AS r5, CONVERT_TIMEZONE('GMT-08:00', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r6, CONVERT_TIMEZONE('UTC', 'GMT-08:00', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r7",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "dynamic_ntz",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, from_zone) AS r, FROM_UTC_TIMESTAMP(ntz, to_zone) AS s FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "dynamic_ts",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ts, from_zone) AS r, FROM_UTC_TIMESTAMP(ts, to_zone) AS s FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "dynamic_s",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(s, from_zone) AS r, FROM_UTC_TIMESTAMP(s, to_zone) AS s FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "dynamic_d",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(d, from_zone) AS r, FROM_UTC_TIMESTAMP(d, to_zone) AS s FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "classic_source_column",
+          "sql": "SELECT k, CONVERT_TIMEZONE(from_zone, '+05:30', ntz) AS r FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "classic_target_column",
+          "sql": "SELECT k, CONVERT_TIMEZONE('-08', to_zone, ntz) AS r FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "classic_all_columns",
+          "sql": "SELECT k, CONVERT_TIMEZONE(from_zone, to_zone, ntz) AS r FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "classic_scalar_timestamp",
+          "sql": "SELECT k, CONVERT_TIMEZONE(from_zone, to_zone, TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "classic_session_source",
+          "sql": "SELECT k, CONVERT_TIMEZONE(to_zone, ntz) AS r FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "null_and_lazy",
+          "sql": "SELECT TO_UTC_TIMESTAMP(CAST(NULL AS TIMESTAMP_NTZ), '+05:30') AS a, FROM_UTC_TIMESTAMP(CAST(NULL AS TIMESTAMP), '-08') AS b, TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', CAST(NULL AS STRING)) AS c, CONVERT_TIMEZONE(CAST(NULL AS STRING), CAST(RAISE_ERROR('unreached-zone') AS STRING), TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS d",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "named_controls",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, 'America/Los_Angeles') AS a, FROM_UTC_TIMESTAMP(ntz, 'America/Havana') AS b, CONVERT_TIMEZONE('America/Los_Angeles', 'America/Havana', ntz) AS c FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "zero_aliases",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '+00') AS a, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', 'UTC') AS b, CONVERT_TIMEZONE('GMT', 'Z', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS c",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "invalid_utc_0",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '+18:01') AS r",
+          "ordered": false,
+          "scope": "invalid",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "invalid_classic_0",
+          "sql": "SELECT CONVERT_TIMEZONE('+18:01', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r",
+          "ordered": false,
+          "scope": "invalid",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "invalid_utc_1",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '+05:60') AS r",
+          "ordered": false,
+          "scope": "invalid",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "invalid_classic_1",
+          "sql": "SELECT CONVERT_TIMEZONE('+05:60', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r",
+          "ordered": false,
+          "scope": "invalid",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "invalid_utc_2",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', 'not/a-zone') AS r",
+          "ordered": false,
+          "scope": "invalid",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "invalid_classic_2",
+          "sql": "SELECT CONVERT_TIMEZONE('not/a-zone', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r",
+          "ordered": false,
+          "scope": "invalid",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "seconds_0",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '+05:30:15') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '+05:30:15') AS r1, CONVERT_TIMEZONE('+05:30:15', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r2, CONVERT_TIMEZONE('UTC', '+05:30:15', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r3",
+          "ordered": false,
+          "scope": "seconds",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "seconds_1",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '-00:30:15') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '-00:30:15') AS r1, CONVERT_TIMEZONE('-00:30:15', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r2, CONVERT_TIMEZONE('UTC', '-00:30:15', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r3",
+          "ordered": false,
+          "scope": "seconds",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "column_zone_0",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, '+05:30') AS r0, FROM_UTC_TIMESTAMP(ntz, '+05:30') AS r1, TO_UTC_TIMESTAMP(ts, '+05:30') AS r2, FROM_UTC_TIMESTAMP(ts, '+05:30') AS r3, TO_UTC_TIMESTAMP(s, '+05:30') AS r4, FROM_UTC_TIMESTAMP(s, '+05:30') AS r5, TO_UTC_TIMESTAMP(d, '+05:30') AS r6, FROM_UTC_TIMESTAMP(d, '+05:30') AS r7, CONVERT_TIMEZONE('+05:30', 'UTC', ntz) AS r8, CONVERT_TIMEZONE('UTC', '+05:30', ntz) AS r9 FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "literal_zone_0",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '+05:30') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '+05:30') AS r1, TO_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '+05:30') AS r2, FROM_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '+05:30') AS r3, TO_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '+05:30') AS r4, FROM_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '+05:30') AS r5, CONVERT_TIMEZONE('+05:30', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r6, CONVERT_TIMEZONE('UTC', '+05:30', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r7",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "column_zone_1",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, '-08') AS r0, FROM_UTC_TIMESTAMP(ntz, '-08') AS r1, TO_UTC_TIMESTAMP(ts, '-08') AS r2, FROM_UTC_TIMESTAMP(ts, '-08') AS r3, TO_UTC_TIMESTAMP(s, '-08') AS r4, FROM_UTC_TIMESTAMP(s, '-08') AS r5, TO_UTC_TIMESTAMP(d, '-08') AS r6, FROM_UTC_TIMESTAMP(d, '-08') AS r7, CONVERT_TIMEZONE('-08', 'UTC', ntz) AS r8, CONVERT_TIMEZONE('UTC', '-08', ntz) AS r9 FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "literal_zone_1",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '-08') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '-08') AS r1, TO_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '-08') AS r2, FROM_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '-08') AS r3, TO_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '-08') AS r4, FROM_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '-08') AS r5, CONVERT_TIMEZONE('-08', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r6, CONVERT_TIMEZONE('UTC', '-08', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r7",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "column_zone_2",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, '-00:30') AS r0, FROM_UTC_TIMESTAMP(ntz, '-00:30') AS r1, TO_UTC_TIMESTAMP(ts, '-00:30') AS r2, FROM_UTC_TIMESTAMP(ts, '-00:30') AS r3, TO_UTC_TIMESTAMP(s, '-00:30') AS r4, FROM_UTC_TIMESTAMP(s, '-00:30') AS r5, TO_UTC_TIMESTAMP(d, '-00:30') AS r6, FROM_UTC_TIMESTAMP(d, '-00:30') AS r7, CONVERT_TIMEZONE('-00:30', 'UTC', ntz) AS r8, CONVERT_TIMEZONE('UTC', '-00:30', ntz) AS r9 FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "literal_zone_2",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '-00:30') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '-00:30') AS r1, TO_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '-00:30') AS r2, FROM_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '-00:30') AS r3, TO_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '-00:30') AS r4, FROM_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '-00:30') AS r5, CONVERT_TIMEZONE('-00:30', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r6, CONVERT_TIMEZONE('UTC', '-00:30', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r7",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "column_zone_3",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, '+18:00') AS r0, FROM_UTC_TIMESTAMP(ntz, '+18:00') AS r1, TO_UTC_TIMESTAMP(ts, '+18:00') AS r2, FROM_UTC_TIMESTAMP(ts, '+18:00') AS r3, TO_UTC_TIMESTAMP(s, '+18:00') AS r4, FROM_UTC_TIMESTAMP(s, '+18:00') AS r5, TO_UTC_TIMESTAMP(d, '+18:00') AS r6, FROM_UTC_TIMESTAMP(d, '+18:00') AS r7, CONVERT_TIMEZONE('+18:00', 'UTC', ntz) AS r8, CONVERT_TIMEZONE('UTC', '+18:00', ntz) AS r9 FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "literal_zone_3",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '+18:00') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '+18:00') AS r1, TO_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '+18:00') AS r2, FROM_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '+18:00') AS r3, TO_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '+18:00') AS r4, FROM_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '+18:00') AS r5, CONVERT_TIMEZONE('+18:00', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r6, CONVERT_TIMEZONE('UTC', '+18:00', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r7",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "column_zone_4",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, '-18:00') AS r0, FROM_UTC_TIMESTAMP(ntz, '-18:00') AS r1, TO_UTC_TIMESTAMP(ts, '-18:00') AS r2, FROM_UTC_TIMESTAMP(ts, '-18:00') AS r3, TO_UTC_TIMESTAMP(s, '-18:00') AS r4, FROM_UTC_TIMESTAMP(s, '-18:00') AS r5, TO_UTC_TIMESTAMP(d, '-18:00') AS r6, FROM_UTC_TIMESTAMP(d, '-18:00') AS r7, CONVERT_TIMEZONE('-18:00', 'UTC', ntz) AS r8, CONVERT_TIMEZONE('UTC', '-18:00', ntz) AS r9 FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "literal_zone_4",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '-18:00') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '-18:00') AS r1, TO_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '-18:00') AS r2, FROM_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', '-18:00') AS r3, TO_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '-18:00') AS r4, FROM_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', '-18:00') AS r5, CONVERT_TIMEZONE('-18:00', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r6, CONVERT_TIMEZONE('UTC', '-18:00', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r7",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "column_zone_5",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, 'Z') AS r0, FROM_UTC_TIMESTAMP(ntz, 'Z') AS r1, TO_UTC_TIMESTAMP(ts, 'Z') AS r2, FROM_UTC_TIMESTAMP(ts, 'Z') AS r3, TO_UTC_TIMESTAMP(s, 'Z') AS r4, FROM_UTC_TIMESTAMP(s, 'Z') AS r5, TO_UTC_TIMESTAMP(d, 'Z') AS r6, FROM_UTC_TIMESTAMP(d, 'Z') AS r7, CONVERT_TIMEZONE('Z', 'UTC', ntz) AS r8, CONVERT_TIMEZONE('UTC', 'Z', ntz) AS r9 FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "literal_zone_5",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', 'Z') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', 'Z') AS r1, TO_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', 'Z') AS r2, FROM_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', 'Z') AS r3, TO_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', 'Z') AS r4, FROM_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', 'Z') AS r5, CONVERT_TIMEZONE('Z', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r6, CONVERT_TIMEZONE('UTC', 'Z', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r7",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "column_zone_6",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, 'UTC+05:30') AS r0, FROM_UTC_TIMESTAMP(ntz, 'UTC+05:30') AS r1, TO_UTC_TIMESTAMP(ts, 'UTC+05:30') AS r2, FROM_UTC_TIMESTAMP(ts, 'UTC+05:30') AS r3, TO_UTC_TIMESTAMP(s, 'UTC+05:30') AS r4, FROM_UTC_TIMESTAMP(s, 'UTC+05:30') AS r5, TO_UTC_TIMESTAMP(d, 'UTC+05:30') AS r6, FROM_UTC_TIMESTAMP(d, 'UTC+05:30') AS r7, CONVERT_TIMEZONE('UTC+05:30', 'UTC', ntz) AS r8, CONVERT_TIMEZONE('UTC', 'UTC+05:30', ntz) AS r9 FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "literal_zone_6",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', 'UTC+05:30') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', 'UTC+05:30') AS r1, TO_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', 'UTC+05:30') AS r2, FROM_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', 'UTC+05:30') AS r3, TO_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', 'UTC+05:30') AS r4, FROM_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', 'UTC+05:30') AS r5, CONVERT_TIMEZONE('UTC+05:30', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r6, CONVERT_TIMEZONE('UTC', 'UTC+05:30', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r7",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "column_zone_7",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, 'GMT-08:00') AS r0, FROM_UTC_TIMESTAMP(ntz, 'GMT-08:00') AS r1, TO_UTC_TIMESTAMP(ts, 'GMT-08:00') AS r2, FROM_UTC_TIMESTAMP(ts, 'GMT-08:00') AS r3, TO_UTC_TIMESTAMP(s, 'GMT-08:00') AS r4, FROM_UTC_TIMESTAMP(s, 'GMT-08:00') AS r5, TO_UTC_TIMESTAMP(d, 'GMT-08:00') AS r6, FROM_UTC_TIMESTAMP(d, 'GMT-08:00') AS r7, CONVERT_TIMEZONE('GMT-08:00', 'UTC', ntz) AS r8, CONVERT_TIMEZONE('UTC', 'GMT-08:00', ntz) AS r9 FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "literal_zone_7",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', 'GMT-08:00') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', 'GMT-08:00') AS r1, TO_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', 'GMT-08:00') AS r2, FROM_UTC_TIMESTAMP(TIMESTAMP '2024-01-02 13:04:05.123456', 'GMT-08:00') AS r3, TO_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', 'GMT-08:00') AS r4, FROM_UTC_TIMESTAMP('2024-01-02 13:04:05.123456', 'GMT-08:00') AS r5, CONVERT_TIMEZONE('GMT-08:00', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r6, CONVERT_TIMEZONE('UTC', 'GMT-08:00', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r7",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "dynamic_ntz",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, from_zone) AS r, FROM_UTC_TIMESTAMP(ntz, to_zone) AS s FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "dynamic_ts",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ts, from_zone) AS r, FROM_UTC_TIMESTAMP(ts, to_zone) AS s FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "dynamic_s",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(s, from_zone) AS r, FROM_UTC_TIMESTAMP(s, to_zone) AS s FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "dynamic_d",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(d, from_zone) AS r, FROM_UTC_TIMESTAMP(d, to_zone) AS s FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "classic_source_column",
+          "sql": "SELECT k, CONVERT_TIMEZONE(from_zone, '+05:30', ntz) AS r FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "classic_target_column",
+          "sql": "SELECT k, CONVERT_TIMEZONE('-08', to_zone, ntz) AS r FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "classic_all_columns",
+          "sql": "SELECT k, CONVERT_TIMEZONE(from_zone, to_zone, ntz) AS r FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "classic_scalar_timestamp",
+          "sql": "SELECT k, CONVERT_TIMEZONE(from_zone, to_zone, TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "classic_session_source",
+          "sql": "SELECT k, CONVERT_TIMEZONE(to_zone, ntz) AS r FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "null_and_lazy",
+          "sql": "SELECT TO_UTC_TIMESTAMP(CAST(NULL AS TIMESTAMP_NTZ), '+05:30') AS a, FROM_UTC_TIMESTAMP(CAST(NULL AS TIMESTAMP), '-08') AS b, TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', CAST(NULL AS STRING)) AS c, CONVERT_TIMEZONE(CAST(NULL AS STRING), CAST(RAISE_ERROR('unreached-zone') AS STRING), TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS d",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "named_controls",
+          "sql": "SELECT k, TO_UTC_TIMESTAMP(ntz, 'America/Los_Angeles') AS a, FROM_UTC_TIMESTAMP(ntz, 'America/Havana') AS b, CONVERT_TIMEZONE('America/Los_Angeles', 'America/Havana', ntz) AS c FROM offset_inputs",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "zero_aliases",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '+00') AS a, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', 'UTC') AS b, CONVERT_TIMEZONE('GMT', 'Z', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS c",
+          "ordered": false,
+          "scope": "common",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "invalid_utc_0",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '+18:01') AS r",
+          "ordered": false,
+          "scope": "invalid",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "invalid_classic_0",
+          "sql": "SELECT CONVERT_TIMEZONE('+18:01', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r",
+          "ordered": false,
+          "scope": "invalid",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "invalid_utc_1",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '+05:60') AS r",
+          "ordered": false,
+          "scope": "invalid",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "invalid_classic_1",
+          "sql": "SELECT CONVERT_TIMEZONE('+05:60', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r",
+          "ordered": false,
+          "scope": "invalid",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "invalid_utc_2",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', 'not/a-zone') AS r",
+          "ordered": false,
+          "scope": "invalid",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "invalid_classic_2",
+          "sql": "SELECT CONVERT_TIMEZONE('not/a-zone', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r",
+          "ordered": false,
+          "scope": "invalid",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "seconds_0",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '+05:30:15') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '+05:30:15') AS r1, CONVERT_TIMEZONE('+05:30:15', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r2, CONVERT_TIMEZONE('UTC', '+05:30:15', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r3",
+          "ordered": false,
+          "scope": "seconds",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "utc_offsets_America_Los_Angeles",
+          "id": "seconds_1",
+          "sql": "SELECT TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '-00:30:15') AS r0, FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', '-00:30:15') AS r1, CONVERT_TIMEZONE('-00:30:15', 'UTC', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r2, CONVERT_TIMEZONE('UTC', '-00:30:15', TIMESTAMP_NTZ '2024-01-02 13:04:05.123456') AS r3",
+          "ordered": false,
+          "scope": "seconds",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        }
+      ]
+    }
+  ]
+}
