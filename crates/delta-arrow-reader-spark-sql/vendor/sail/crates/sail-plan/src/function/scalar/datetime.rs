@@ -1141,7 +1141,19 @@ fn to_date_with_parser(input: ScalarFunctionInput, parser: DateParser) -> PlanRe
             Ok(_other) => expr,
             Err(_) => cast(expr, DataType::Utf8), // In case of error, cast to string
         };
-        Ok(ScalarUDF::from(SparkDate::new(null_on_error)).call(vec![expr, format]))
+        // shortcut: Unparsed session aliases retain legacy date parsing until #1029 normalizes them.
+        if session_timezone.parse::<Tz>().is_err() {
+            return Ok(ScalarUDF::from(SparkDate::new(null_on_error)).call(vec![expr, format]));
+        }
+        // Parse an instant using any offset/zone in the text, then take its date in the
+        // session zone. The shared timestamp parser also handles zone-free text there.
+        let timestamp = ScalarUDF::from(SparkTimestamp::try_new(
+            Some(Arc::clone(session_timezone)),
+            input.function_context.plan_config.ansi_mode,
+            parser == DateParser::TryToDate,
+        )?)
+        .call(vec![expr, format]);
+        Ok(cast(timestamp, DataType::Date32))
     } else {
         Err(PlanError::invalid(format!(
             "[WRONG_NUM_ARGS.WITHOUT_SUGGESTION] The `{function_name}` requires [1, 2] \

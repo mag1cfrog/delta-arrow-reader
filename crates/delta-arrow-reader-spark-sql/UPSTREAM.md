@@ -1102,8 +1102,15 @@ cast to UTF8 and untyped NULL cast to a NULL STRING, before either parser branch
 numeric, BOOLEAN, BINARY and NULL inputs. They share these open differences:
 - DAR's invalid-pattern messages (#1010) and parser messages (#1057);
 - strings beyond the date library's range (#1011);
-- an ignored parsed offset (#1015);
 - ARRAY rejection occurs after analysis (#1236).
+
+Formatted TO_DATE and TRY_TO_DATE parse string/coerced-scalar arguments through the existing
+LTZ timestamp parser, then extract the date in the session zone. Parsed offsets and supported
+region IDs therefore affect the instant before the DATE is taken; zone-free date and time
+formats keep their local date. Sessions the timestamp parser cannot interpret keep the prior
+date parser until #1029 supplies shared alias support. The
+[formatted date zone references](tests/fixtures/formatted-date-zones/README.md) cover the
+conversion and that preservation boundary.
 
 With a format over a DATE, TIMESTAMP or TIMESTAMP_NTZ, TO_DATE ignores the format, as Spark's
 does, and declares Spark's nullability at every stage: nullable outside ANSI mode, and in ANSI

@@ -4836,3 +4836,10 @@ The [temporal timestamp fixture](timestamp-temporal-arguments/README.md) records
 NULL formats and aggregate/window bindings, in both ANSI modes and UTC/Los_Angeles.
 It distinguishes formatted NTZ's stored UTC date-time from one-argument local-wall time,
 alongside unchanged STRING, DATE, NTZ and native SQL controls.
+
+## Formatted date zones
+
+The [formatted date zone fixture](formatted-date-zones/README.md) records 120 Spark 4.2.0
+observations for TO_DATE/TRY_TO_DATE offset and supported-region conversion in UTC and
+Los Angeles, both ANSI modes, plus 16 zone-free alias-session preservation observations.
+It reuses the timestamp parser and retains the unchanged historical date/coercion controls.
