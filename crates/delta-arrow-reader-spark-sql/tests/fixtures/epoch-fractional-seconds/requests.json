@@ -1,0 +1,1352 @@
+{
+  "issue": "1111",
+  "expected_record_count": 92,
+  "corpora": [
+    {
+      "corpus": "epoch_UTC",
+      "source": "source-only numeric epoch conversion inputs and SQL for #1111",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "epoch_values",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "long",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "ms",
+                  "type": "long",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "us",
+                  "type": "long",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "d",
+                  "type": "double",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "f",
+                  "type": "float",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "dec",
+                  "type": "decimal(20,6)",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "1704200645",
+                "1704200645123",
+                "1704200645123456",
+                "41d9650271500000",
+                "4ecb2814",
+                "1704200645.250000"
+              ],
+              [
+                "1",
+                "0",
+                "123",
+                "123456",
+                "bfec0ca600b02928",
+                "bf606530",
+                "-0.876544"
+              ],
+              [
+                "2",
+                "-1",
+                "-877",
+                "-876544",
+                "bff4000000000000",
+                "bfa00000",
+                "-1.250000"
+              ],
+              [
+                "3",
+                "0",
+                "123",
+                "123456",
+                "3eb0c6f7a0b5ed8d",
+                "358637bd",
+                "0.000001"
+              ],
+              [
+                "4",
+                "0",
+                "123",
+                "123456",
+                "beb0c6f7a0b5ed8d",
+                "b58637bd",
+                "-0.000001"
+              ],
+              [
+                "5",
+                "0",
+                "123",
+                "123456",
+                "0000000000000000",
+                "00000000",
+                "0.000000"
+              ],
+              [
+                "6",
+                "1710064799",
+                "1710064799123",
+                "1710064799123456",
+                "41d97b6127e00000",
+                "4ecbdb09",
+                "1710064799.500000"
+              ],
+              [
+                "7",
+                "1710064800",
+                "1710064800123",
+                "1710064800123456",
+                "41d97b6128200000",
+                "4ecbdb09",
+                "1710064800.500000"
+              ],
+              [
+                "8",
+                "0",
+                "123",
+                "123456",
+                "bfec0ca600b02928",
+                "bf606530",
+                "-0.876544"
+              ],
+              [
+                "9",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+              ],
+              [
+                "10",
+                null,
+                null,
+                null,
+                "7ff8000000000000",
+                "7fc00000",
+                null
+              ],
+              [
+                "11",
+                null,
+                null,
+                null,
+                "7ff0000000000000",
+                "7f800000",
+                null
+              ],
+              [
+                "12",
+                null,
+                null,
+                null,
+                "fff0000000000000",
+                "ff800000",
+                null
+              ],
+              [
+                "13",
+                null,
+                null,
+                null,
+                "4415af1d78b58c40",
+                "60ad78ec",
+                null
+              ],
+              [
+                "14",
+                null,
+                null,
+                null,
+                "c415af1d78b58c40",
+                "e0ad78ec",
+                null
+              ]
+            ]
+          },
+          {
+            "name": "epoch_bounds",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "long",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "ms",
+                  "type": "long",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "us",
+                  "type": "long",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "dec",
+                  "type": "decimal(20,6)",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "9223372036854",
+                "9223372036854775",
+                "9223372036854775807",
+                "9223372036854.775807"
+              ],
+              [
+                "1",
+                "-9223372036854",
+                "-9223372036854775",
+                "-9223372036854775808",
+                "-9223372036854.775808"
+              ],
+              [
+                "2",
+                null,
+                null,
+                null,
+                null
+              ]
+            ]
+          },
+          {
+            "name": "epoch_overflow",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "long",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "ms",
+                  "type": "long",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "dec",
+                  "type": "decimal(20,6)",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "9223372036855",
+                "9223372036854776",
+                "9223372036854.775808"
+              ],
+              [
+                "1",
+                "-9223372036855",
+                "-9223372036854776",
+                "-9223372036854.775809"
+              ]
+            ]
+          }
+        ],
+        "timezone": "UTC"
+      },
+      "cases": [
+        {
+          "corpus": "epoch_UTC",
+          "id": "double_column",
+          "sql": "SELECT k, timestamp_seconds(d) AS r FROM epoch_values",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "float_column",
+          "sql": "SELECT k, timestamp_seconds(f) AS r FROM epoch_values",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "decimal_column",
+          "sql": "SELECT k, timestamp_seconds(dec) AS r FROM epoch_values",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "decimal_scale7",
+          "sql": "SELECT k, timestamp_seconds(CAST(dec AS DECIMAL(21,7))) AS r FROM epoch_values",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "decimal_scale0",
+          "sql": "SELECT k, timestamp_seconds(CAST(s AS DECIMAL(20,0))) AS r FROM epoch_values",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "integer_seconds",
+          "sql": "SELECT k, timestamp_seconds(s) AS r FROM epoch_values",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "integer_millis",
+          "sql": "SELECT k, timestamp_millis(ms) AS r FROM epoch_values",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "integer_micros",
+          "sql": "SELECT k, timestamp_micros(us) AS r FROM epoch_values",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "double_consumer",
+          "sql": "SELECT k, unix_micros(t) AS r FROM (SELECT k, timestamp_seconds(d) AS t FROM epoch_values) WHERE t IS NOT NULL",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "bounds",
+          "sql": "SELECT k, timestamp_seconds(s) AS s, timestamp_millis(ms) AS ms, timestamp_micros(us) AS us, timestamp_seconds(dec) AS dec FROM epoch_bounds",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "literal_decimal_positive",
+          "sql": "SELECT timestamp_seconds(1704200645.25) AS r",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "literal_decimal_negative",
+          "sql": "SELECT timestamp_seconds(-0.876544) AS r",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "literal_double_positive",
+          "sql": "SELECT timestamp_seconds(CAST(1704200645.25 AS DOUBLE)) AS r",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "literal_double_negative",
+          "sql": "SELECT timestamp_seconds(CAST(-0.876544 AS DOUBLE)) AS r",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "literal_null",
+          "sql": "SELECT timestamp_seconds(NULL) AS r",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "small_integers",
+          "sql": "SELECT timestamp_seconds(CAST(-1 AS TINYINT)) AS s, timestamp_millis(CAST(2 AS SMALLINT)) AS ms, timestamp_micros(CAST(3 AS INT)) AS us",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "decimal_submicro",
+          "sql": "SELECT timestamp_seconds(0.0000001) AS r",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "s_overflow_positive",
+          "sql": "SELECT timestamp_seconds(s) AS r FROM epoch_overflow WHERE k = 0",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "s_overflow_negative",
+          "sql": "SELECT timestamp_seconds(s) AS r FROM epoch_overflow WHERE k = 1",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "ms_overflow_positive",
+          "sql": "SELECT timestamp_millis(ms) AS r FROM epoch_overflow WHERE k = 0",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "ms_overflow_negative",
+          "sql": "SELECT timestamp_millis(ms) AS r FROM epoch_overflow WHERE k = 1",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "dec_overflow_positive",
+          "sql": "SELECT timestamp_seconds(dec) AS r FROM epoch_overflow WHERE k = 0",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "dec_overflow_negative",
+          "sql": "SELECT timestamp_seconds(dec) AS r FROM epoch_overflow WHERE k = 1",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "double_column",
+          "sql": "SELECT k, timestamp_seconds(d) AS r FROM epoch_values",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "float_column",
+          "sql": "SELECT k, timestamp_seconds(f) AS r FROM epoch_values",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "decimal_column",
+          "sql": "SELECT k, timestamp_seconds(dec) AS r FROM epoch_values",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "decimal_scale7",
+          "sql": "SELECT k, timestamp_seconds(CAST(dec AS DECIMAL(21,7))) AS r FROM epoch_values",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "decimal_scale0",
+          "sql": "SELECT k, timestamp_seconds(CAST(s AS DECIMAL(20,0))) AS r FROM epoch_values",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "integer_seconds",
+          "sql": "SELECT k, timestamp_seconds(s) AS r FROM epoch_values",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "integer_millis",
+          "sql": "SELECT k, timestamp_millis(ms) AS r FROM epoch_values",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "integer_micros",
+          "sql": "SELECT k, timestamp_micros(us) AS r FROM epoch_values",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "double_consumer",
+          "sql": "SELECT k, unix_micros(t) AS r FROM (SELECT k, timestamp_seconds(d) AS t FROM epoch_values) WHERE t IS NOT NULL",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "bounds",
+          "sql": "SELECT k, timestamp_seconds(s) AS s, timestamp_millis(ms) AS ms, timestamp_micros(us) AS us, timestamp_seconds(dec) AS dec FROM epoch_bounds",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "literal_decimal_positive",
+          "sql": "SELECT timestamp_seconds(1704200645.25) AS r",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "literal_decimal_negative",
+          "sql": "SELECT timestamp_seconds(-0.876544) AS r",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "literal_double_positive",
+          "sql": "SELECT timestamp_seconds(CAST(1704200645.25 AS DOUBLE)) AS r",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "literal_double_negative",
+          "sql": "SELECT timestamp_seconds(CAST(-0.876544 AS DOUBLE)) AS r",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "literal_null",
+          "sql": "SELECT timestamp_seconds(NULL) AS r",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "small_integers",
+          "sql": "SELECT timestamp_seconds(CAST(-1 AS TINYINT)) AS s, timestamp_millis(CAST(2 AS SMALLINT)) AS ms, timestamp_micros(CAST(3 AS INT)) AS us",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "decimal_submicro",
+          "sql": "SELECT timestamp_seconds(0.0000001) AS r",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "s_overflow_positive",
+          "sql": "SELECT timestamp_seconds(s) AS r FROM epoch_overflow WHERE k = 0",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "s_overflow_negative",
+          "sql": "SELECT timestamp_seconds(s) AS r FROM epoch_overflow WHERE k = 1",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "ms_overflow_positive",
+          "sql": "SELECT timestamp_millis(ms) AS r FROM epoch_overflow WHERE k = 0",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "ms_overflow_negative",
+          "sql": "SELECT timestamp_millis(ms) AS r FROM epoch_overflow WHERE k = 1",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "dec_overflow_positive",
+          "sql": "SELECT timestamp_seconds(dec) AS r FROM epoch_overflow WHERE k = 0",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "UTC"
+        },
+        {
+          "corpus": "epoch_UTC",
+          "id": "dec_overflow_negative",
+          "sql": "SELECT timestamp_seconds(dec) AS r FROM epoch_overflow WHERE k = 1",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "UTC"
+        }
+      ]
+    },
+    {
+      "corpus": "epoch_America_Los_Angeles",
+      "source": "source-only numeric epoch conversion inputs and SQL for #1111",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "epoch_values",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "long",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "ms",
+                  "type": "long",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "us",
+                  "type": "long",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "d",
+                  "type": "double",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "f",
+                  "type": "float",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "dec",
+                  "type": "decimal(20,6)",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "1704200645",
+                "1704200645123",
+                "1704200645123456",
+                "41d9650271500000",
+                "4ecb2814",
+                "1704200645.250000"
+              ],
+              [
+                "1",
+                "0",
+                "123",
+                "123456",
+                "bfec0ca600b02928",
+                "bf606530",
+                "-0.876544"
+              ],
+              [
+                "2",
+                "-1",
+                "-877",
+                "-876544",
+                "bff4000000000000",
+                "bfa00000",
+                "-1.250000"
+              ],
+              [
+                "3",
+                "0",
+                "123",
+                "123456",
+                "3eb0c6f7a0b5ed8d",
+                "358637bd",
+                "0.000001"
+              ],
+              [
+                "4",
+                "0",
+                "123",
+                "123456",
+                "beb0c6f7a0b5ed8d",
+                "b58637bd",
+                "-0.000001"
+              ],
+              [
+                "5",
+                "0",
+                "123",
+                "123456",
+                "0000000000000000",
+                "00000000",
+                "0.000000"
+              ],
+              [
+                "6",
+                "1710064799",
+                "1710064799123",
+                "1710064799123456",
+                "41d97b6127e00000",
+                "4ecbdb09",
+                "1710064799.500000"
+              ],
+              [
+                "7",
+                "1710064800",
+                "1710064800123",
+                "1710064800123456",
+                "41d97b6128200000",
+                "4ecbdb09",
+                "1710064800.500000"
+              ],
+              [
+                "8",
+                "0",
+                "123",
+                "123456",
+                "bfec0ca600b02928",
+                "bf606530",
+                "-0.876544"
+              ],
+              [
+                "9",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+              ],
+              [
+                "10",
+                null,
+                null,
+                null,
+                "7ff8000000000000",
+                "7fc00000",
+                null
+              ],
+              [
+                "11",
+                null,
+                null,
+                null,
+                "7ff0000000000000",
+                "7f800000",
+                null
+              ],
+              [
+                "12",
+                null,
+                null,
+                null,
+                "fff0000000000000",
+                "ff800000",
+                null
+              ],
+              [
+                "13",
+                null,
+                null,
+                null,
+                "4415af1d78b58c40",
+                "60ad78ec",
+                null
+              ],
+              [
+                "14",
+                null,
+                null,
+                null,
+                "c415af1d78b58c40",
+                "e0ad78ec",
+                null
+              ]
+            ]
+          },
+          {
+            "name": "epoch_bounds",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "long",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "ms",
+                  "type": "long",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "us",
+                  "type": "long",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "dec",
+                  "type": "decimal(20,6)",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "9223372036854",
+                "9223372036854775",
+                "9223372036854775807",
+                "9223372036854.775807"
+              ],
+              [
+                "1",
+                "-9223372036854",
+                "-9223372036854775",
+                "-9223372036854775808",
+                "-9223372036854.775808"
+              ],
+              [
+                "2",
+                null,
+                null,
+                null,
+                null
+              ]
+            ]
+          },
+          {
+            "name": "epoch_overflow",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "long",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "ms",
+                  "type": "long",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "dec",
+                  "type": "decimal(20,6)",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "9223372036855",
+                "9223372036854776",
+                "9223372036854.775808"
+              ],
+              [
+                "1",
+                "-9223372036855",
+                "-9223372036854776",
+                "-9223372036854.775809"
+              ]
+            ]
+          }
+        ],
+        "timezone": "America/Los_Angeles"
+      },
+      "cases": [
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "double_column",
+          "sql": "SELECT k, timestamp_seconds(d) AS r FROM epoch_values",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "float_column",
+          "sql": "SELECT k, timestamp_seconds(f) AS r FROM epoch_values",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "decimal_column",
+          "sql": "SELECT k, timestamp_seconds(dec) AS r FROM epoch_values",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "decimal_scale7",
+          "sql": "SELECT k, timestamp_seconds(CAST(dec AS DECIMAL(21,7))) AS r FROM epoch_values",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "decimal_scale0",
+          "sql": "SELECT k, timestamp_seconds(CAST(s AS DECIMAL(20,0))) AS r FROM epoch_values",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "integer_seconds",
+          "sql": "SELECT k, timestamp_seconds(s) AS r FROM epoch_values",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "integer_millis",
+          "sql": "SELECT k, timestamp_millis(ms) AS r FROM epoch_values",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "integer_micros",
+          "sql": "SELECT k, timestamp_micros(us) AS r FROM epoch_values",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "double_consumer",
+          "sql": "SELECT k, unix_micros(t) AS r FROM (SELECT k, timestamp_seconds(d) AS t FROM epoch_values) WHERE t IS NOT NULL",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "bounds",
+          "sql": "SELECT k, timestamp_seconds(s) AS s, timestamp_millis(ms) AS ms, timestamp_micros(us) AS us, timestamp_seconds(dec) AS dec FROM epoch_bounds",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "literal_decimal_positive",
+          "sql": "SELECT timestamp_seconds(1704200645.25) AS r",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "literal_decimal_negative",
+          "sql": "SELECT timestamp_seconds(-0.876544) AS r",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "literal_double_positive",
+          "sql": "SELECT timestamp_seconds(CAST(1704200645.25 AS DOUBLE)) AS r",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "literal_double_negative",
+          "sql": "SELECT timestamp_seconds(CAST(-0.876544 AS DOUBLE)) AS r",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "literal_null",
+          "sql": "SELECT timestamp_seconds(NULL) AS r",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "small_integers",
+          "sql": "SELECT timestamp_seconds(CAST(-1 AS TINYINT)) AS s, timestamp_millis(CAST(2 AS SMALLINT)) AS ms, timestamp_micros(CAST(3 AS INT)) AS us",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "decimal_submicro",
+          "sql": "SELECT timestamp_seconds(0.0000001) AS r",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "s_overflow_positive",
+          "sql": "SELECT timestamp_seconds(s) AS r FROM epoch_overflow WHERE k = 0",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "s_overflow_negative",
+          "sql": "SELECT timestamp_seconds(s) AS r FROM epoch_overflow WHERE k = 1",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "ms_overflow_positive",
+          "sql": "SELECT timestamp_millis(ms) AS r FROM epoch_overflow WHERE k = 0",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "ms_overflow_negative",
+          "sql": "SELECT timestamp_millis(ms) AS r FROM epoch_overflow WHERE k = 1",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "dec_overflow_positive",
+          "sql": "SELECT timestamp_seconds(dec) AS r FROM epoch_overflow WHERE k = 0",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "dec_overflow_negative",
+          "sql": "SELECT timestamp_seconds(dec) AS r FROM epoch_overflow WHERE k = 1",
+          "ordered": false,
+          "ansi": true,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "double_column",
+          "sql": "SELECT k, timestamp_seconds(d) AS r FROM epoch_values",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "float_column",
+          "sql": "SELECT k, timestamp_seconds(f) AS r FROM epoch_values",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "decimal_column",
+          "sql": "SELECT k, timestamp_seconds(dec) AS r FROM epoch_values",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "decimal_scale7",
+          "sql": "SELECT k, timestamp_seconds(CAST(dec AS DECIMAL(21,7))) AS r FROM epoch_values",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "decimal_scale0",
+          "sql": "SELECT k, timestamp_seconds(CAST(s AS DECIMAL(20,0))) AS r FROM epoch_values",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "integer_seconds",
+          "sql": "SELECT k, timestamp_seconds(s) AS r FROM epoch_values",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "integer_millis",
+          "sql": "SELECT k, timestamp_millis(ms) AS r FROM epoch_values",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "integer_micros",
+          "sql": "SELECT k, timestamp_micros(us) AS r FROM epoch_values",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "double_consumer",
+          "sql": "SELECT k, unix_micros(t) AS r FROM (SELECT k, timestamp_seconds(d) AS t FROM epoch_values) WHERE t IS NOT NULL",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "bounds",
+          "sql": "SELECT k, timestamp_seconds(s) AS s, timestamp_millis(ms) AS ms, timestamp_micros(us) AS us, timestamp_seconds(dec) AS dec FROM epoch_bounds",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "literal_decimal_positive",
+          "sql": "SELECT timestamp_seconds(1704200645.25) AS r",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "literal_decimal_negative",
+          "sql": "SELECT timestamp_seconds(-0.876544) AS r",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "literal_double_positive",
+          "sql": "SELECT timestamp_seconds(CAST(1704200645.25 AS DOUBLE)) AS r",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "literal_double_negative",
+          "sql": "SELECT timestamp_seconds(CAST(-0.876544 AS DOUBLE)) AS r",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "literal_null",
+          "sql": "SELECT timestamp_seconds(NULL) AS r",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "small_integers",
+          "sql": "SELECT timestamp_seconds(CAST(-1 AS TINYINT)) AS s, timestamp_millis(CAST(2 AS SMALLINT)) AS ms, timestamp_micros(CAST(3 AS INT)) AS us",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "decimal_submicro",
+          "sql": "SELECT timestamp_seconds(0.0000001) AS r",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "s_overflow_positive",
+          "sql": "SELECT timestamp_seconds(s) AS r FROM epoch_overflow WHERE k = 0",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "s_overflow_negative",
+          "sql": "SELECT timestamp_seconds(s) AS r FROM epoch_overflow WHERE k = 1",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "ms_overflow_positive",
+          "sql": "SELECT timestamp_millis(ms) AS r FROM epoch_overflow WHERE k = 0",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "ms_overflow_negative",
+          "sql": "SELECT timestamp_millis(ms) AS r FROM epoch_overflow WHERE k = 1",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "dec_overflow_positive",
+          "sql": "SELECT timestamp_seconds(dec) AS r FROM epoch_overflow WHERE k = 0",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "corpus": "epoch_America_Los_Angeles",
+          "id": "dec_overflow_negative",
+          "sql": "SELECT timestamp_seconds(dec) AS r FROM epoch_overflow WHERE k = 1",
+          "ordered": false,
+          "ansi": false,
+          "timezone": "America/Los_Angeles"
+        }
+      ]
+    }
+  ]
+}

@@ -33,22 +33,21 @@ optimized and executed schemas and values read from Spark's internal rows, or th
 condition, Java exception class, first message line and failing stage.
 `ConvertToLocalRelation` is excluded.
 
-`timestamp_from_epoch.rs` compares names, type families, nullability, metadata and typed
-rows at batch sizes 1 and 32 in each record's session zone. A TIMESTAMP result must be
-annotated with the session zone. Spark fails each overflow with `ArithmeticException`, which
-DAR must match at Spark's stage with `long overflow`; until #1111 every such record is
-pinned, and only its analyzed schema is compared.
+`timestamp_from_epoch.rs` replays the records at batch sizes 1 and 32 in each record's
+session zone. A TIMESTAMP result must be annotated with the session zone. The repaired
+DOUBLE/DECIMAL conversions compare final rows and executed types; overflowing arguments
+must fail with an overflow diagnostic. They do not require matching nullability, metadata
+or error stages. The other records retain their existing schema checks.
 
 Existing differences keep their Spark expectation in the fixture. The test replaces only
 the retained part with the current DAR result and checks each count:
 - #1029: 6 HOUR records in `PST` sessions read UTC. Arrow cannot parse the zone. Each is
   replaced with the UTC session's record.
-- #1111: 100 records of DOUBLE and DECIMAL seconds are truncated to whole seconds toward
-  zero. The 88 column records take Spark's result for the same seconds cast to BIGINT.
-  The 12 literal records drop the fraction, and the DOUBLE literal is NOT NULL.
-- #1111: 12 overflowing literals wrap instead of failing with `long overflow`.
 - #939: 28 DATE_FORMAT records print year 0 as `0001` and year 10000 without its `+`.
 - #1016: 18 literal DATE_FORMAT and CAST to STRING records are nullable at analysis.
+
+The [fractional epoch references](../epoch-fractional-seconds/README.md) add signed
+fractions, nonfinite FLOAT/DOUBLE values, DECIMAL precision and column overflow checks.
 
 Recapture from the crate root:
 

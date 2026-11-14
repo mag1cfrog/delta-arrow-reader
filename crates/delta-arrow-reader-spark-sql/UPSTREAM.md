@@ -972,12 +972,15 @@ references](tests/fixtures/day-of-week-fields/README.md) record the checks.
 TIMESTAMP_SECONDS, TIMESTAMP_MILLIS and TIMESTAMP_MICROS annotate their result with the
 session time zone like any Spark TIMESTAMP, so HOUR, DATE_FORMAT and casts over it read the
 local date-time where they read UTC before; the instants are unchanged. A session zone Arrow
-cannot parse keeps UTC (#1029). Their arguments still convert as before: DOUBLE and DECIMAL
-seconds are truncated to whole seconds, an overflowing argument wraps instead of failing,
-a DOUBLE literal gives a NOT NULL result, and TIMESTAMP_MICROS accepts STRING and DATE
-arguments, which Spark rejects, reading them in UTC as before (#1111). The
-[epoch function references](tests/fixtures/timestamp-from-epoch/README.md) record the
-checks.
+cannot parse keeps UTC (#1029). Numeric epoch conversion preserves fractional DOUBLE and
+DECIMAL seconds before creating the TIMESTAMP. Integral seconds and milliseconds fail on
+BIGINT microsecond overflow; DECIMAL seconds must produce an exact BIGINT microsecond
+count. FLOAT first widens to DOUBLE. Nonfinite floating arguments give NULL, and finite
+out-of-range products saturate as Spark's float-to-long conversion does. The existing
+TIMESTAMP_MICROS STRING and DATE admission still reads in UTC, although Spark rejects those
+arguments (#1236). The [epoch function references](tests/fixtures/timestamp-from-epoch/README.md)
+and [fractional conversion references](tests/fixtures/epoch-fractional-seconds/README.md)
+record the checks.
 
 CAST and TRY_CAST from TIMESTAMP to TIMESTAMP_NTZ, one-argument TO_TIMESTAMP_NTZ and the
 TIMESTAMP argument of CONVERT_TIMEZONE take each instant's local date-time in the session
