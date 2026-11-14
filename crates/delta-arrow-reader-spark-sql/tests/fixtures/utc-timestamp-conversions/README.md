@@ -28,13 +28,15 @@ executed schemas, or the error condition, first message line and failing stage.
 `utc_timestamp_conversions.rs` compares every record at batch sizes 1 and 32. It also
 checks that every executed TIMESTAMP field carries the session zone.
 
-Two existing differences keep their Spark expectations in the fixture. The test
-replaces only the owned part with the current DAR result and checks each count:
+The remaining error-stage difference keeps its Spark expectation in the fixture.
+The test replaces only that stage with the current DAR result and checks its count:
 
-- #1024: 1,068 conversions with the `+05:30` zone, or with per-row zones that
-  include it, fail with `INVALID_TIMEZONE` while collecting rows.
 - #1025: 24 conversions with an invalid or empty constant zone fail while
   collecting rows instead of during optimization.
+
+Offset conversions now use the original Spark expectations. The
+[offset argument fixture](../utc-offset-zones/README.md) adds ordinary signed offsets,
+prefixes, seconds, dynamic source/target zones and NULL/evaluation controls.
 
 An explicit CAST from DATE to TIMESTAMP at a skipped or repeated midnight is recorded
 by the [DATE to TIMESTAMP references](../date-to-timestamp/README.md) (#1027).

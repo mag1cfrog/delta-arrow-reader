@@ -12,8 +12,9 @@ use datafusion_expr::{
 };
 use datafusion_functions::datetime::date_trunc::DateTruncFunc;
 
+use crate::scalar::datetime::convert_tz::ResolvedTimeZone;
 use crate::scalar::datetime::local_time::{MICROS_PER_DAY, TimestampZone, ZoneKind, local_micros};
-use crate::scalar::datetime::spark_date_to_timestamp::{SessionZone, start_of_day};
+use crate::scalar::datetime::spark_date_to_timestamp::start_of_day;
 use crate::scalar::datetime::spark_trunc_date::TruncUnit;
 
 const MICROS_PER_MINUTE: i128 = 60_000_000;
@@ -148,8 +149,8 @@ fn truncate_in_zone(
     // The same zone for the start of the day, with Java's fixed offsets for `EST`, `MST` and
     // `HST`.
     let session = match &parsed.kind {
-        ZoneKind::Region(region) => SessionZone::Region(*region),
-        ZoneKind::Fixed(offset) => SessionZone::Fixed(*offset),
+        ZoneKind::Region(region) => ResolvedTimeZone::Region(*region),
+        ZoneKind::Fixed(offset) => ResolvedTimeZone::Fixed(*offset),
     };
     let truncate = |micros: i64| {
         let truncated = match level {

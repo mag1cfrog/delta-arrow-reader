@@ -1,7 +1,7 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
-use chrono::{DateTime, MappedLocalTime, NaiveDateTime, TimeZone, Utc};
+use chrono::{DateTime, FixedOffset, MappedLocalTime, NaiveDateTime, TimeZone, Utc};
 use chrono_tz::{GapInfo, Tz};
 use datafusion::arrow::array::{Array, ArrayRef, AsArray, Int64Array, UInt64Array, new_null_array};
 use datafusion::arrow::compute::kernels::{cast, numeric, take};
@@ -18,6 +18,7 @@ use datafusion_expr_common::signature::Signature;
 use datafusion_functions::utils::make_scalar_function;
 
 use crate::functions_nested_utils::{evaluate_lambdas_until_null, scatter_active_rows};
+use crate::scalar::datetime::format::parse_fixed_zone_offset;
 
 /// A helper scalar UDF for converting time zones for timestamps.
 /// The timestamp must be NTZ timestamp, which should have [`None`] time zone
@@ -257,6 +258,56 @@ pub(crate) fn legacy_time_zone(name: &str) -> Option<&'static str> {
     })
 }
 
+/// A named region or fixed offset used by Spark timezone conversions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ResolvedTimeZone {
+    Region(Tz),
+    Fixed(FixedOffset),
+}
+
+impl ResolvedTimeZone {
+    pub(crate) fn parse(name: &str) -> Option<Self> {
+        if let Ok(region) = name.parse::<Tz>() {
+            return Some(Self::Region(region));
+        }
+        if let Some(region) = legacy_time_zone(name).and_then(|name| name.parse().ok()) {
+            return Some(Self::Region(region));
+        }
+        let offset = match name
+            .strip_prefix("UTC")
+            .or_else(|| name.strip_prefix("GMT"))
+            .or_else(|| name.strip_prefix("UT"))
+        {
+            Some("") => "Z",
+            Some(offset) => offset,
+            None => name,
+        };
+        parse_fixed_zone_offset(offset).map(Self::Fixed)
+    }
+
+    fn local_datetime_at_utc_micros(&self, micros: i64) -> Option<NaiveDateTime> {
+        match self {
+            Self::Region(zone) => zone
+                .timestamp_micros(micros)
+                .single()
+                .map(|dt| dt.naive_local()),
+            Self::Fixed(offset) => offset
+                .timestamp_micros(micros)
+                .single()
+                .map(|dt| dt.naive_local()),
+        }
+    }
+
+    fn resolve_local_datetime(&self, local: NaiveDateTime) -> Option<DateTime<FixedOffset>> {
+        match self {
+            Self::Region(zone) => {
+                disambiguate_local_datetime(local, zone).map(|dt| dt.fixed_offset())
+            }
+            Self::Fixed(offset) => local.and_local_timezone(*offset).single(),
+        }
+    }
+}
+
 fn convert_tz_inner(
     args: &[ArrayRef],
     classic: bool,
@@ -270,21 +321,15 @@ fn convert_tz_inner(
                         "[INVALID_TIMEZONE] The timezone: {tz_str:?} is invalid. \
         The timezone must be either a region-based zone ID or a zone offset. \
         Region IDs must have the form 'area/city', such as 'America/Los_Angeles'. \
-        Zone offsets must be in the format '(+|-)HH', '(+|-)HH:mm’ or '(+|-)HH:mm:ss', \
+        Zone offsets must be in the format '(+|-)HH', '(+|-)HH:mm' or '(+|-)HH:mm:ss', \
         e.g '-08' , '+01:00' or '-13:33:33', and must be in the range from -18:00 to +18:00. \
         'Z' and 'UTC' are accepted as synonyms for '+00:00'."
                     )
                 };
 
-                match tz_str_opt.parse::<Tz>() {
-                    Ok(tz) => Ok(Some(tz)),
-                    Err(_) => match legacy_time_zone(tz_str_opt) {
-                        Some(tz_str) => match tz_str.parse::<Tz>() {
-                            Ok(tz) => Ok(Some(tz)),
-                            Err(_) => tz_err(tz_str),
-                        },
-                        None => tz_err(tz_str_opt),
-                    },
+                match ResolvedTimeZone::parse(tz_str_opt) {
+                    Some(tz) => Ok(Some(tz)),
+                    None => tz_err(tz_str_opt),
                 }
             })
             .transpose()
@@ -308,14 +353,17 @@ fn convert_tz_inner(
             _ => Ok(None),
         };
 
-    let eager_from_to_utc_timestamp_func =
-        |inputs: (Option<i64>, Result<Option<Tz>>, Result<Option<Tz>>)| match inputs {
-            (Some(ts_micros), Ok(Some(from_tz)), Ok(Some(to_tz))) => {
-                Ok(convert(ts_micros, &from_tz, &to_tz))
-            }
-            (_, Err(e), _) | (_, _, Err(e)) => Err(e),
-            _ => Ok(None),
-        };
+    let eager_from_to_utc_timestamp_func = |inputs: (
+        Option<i64>,
+        Result<Option<ResolvedTimeZone>>,
+        Result<Option<ResolvedTimeZone>>,
+    )| match inputs {
+        (Some(ts_micros), Ok(Some(from_tz)), Ok(Some(to_tz))) => {
+            Ok(convert(ts_micros, &from_tz, &to_tz))
+        }
+        (_, Err(e), _) | (_, _, Err(e)) => Err(e),
+        _ => Ok(None),
+    };
 
     let from_tz_strs_arr = cast::cast(&args[0], &DataType::Utf8)?;
     let to_tz_strs_arr = cast::cast(&args[1], &DataType::Utf8)?;
@@ -391,7 +439,7 @@ fn convert_tz_inner(
                     .collect::<Result<Int64Array>>(),
             }
         } else {
-            let first = |iter: &mut dyn Iterator<Item = Result<Option<Tz>>>| {
+            let first = |iter: &mut dyn Iterator<Item = Result<Option<ResolvedTimeZone>>>| {
                 iter.next().transpose().map(|opt| opt.flatten())
             };
             let mut from_tzs = from_tz_strs.iter().map(parse_tz);
@@ -469,16 +517,20 @@ fn disambiguate_local_datetime(local: NaiveDateTime, tz: &Tz) -> Option<DateTime
 
 /// Reference:
 ///   `org.apache.spark.sql.catalyst.util.DateTimeUtils#convertTimestampNtzToAnotherTz`
-fn convert_tz_classic(ts_micros: i64, from_zone: &Tz, to_zone: &Tz) -> Option<i64> {
+fn convert_tz_classic(
+    ts_micros: i64,
+    from_zone: &ResolvedTimeZone,
+    to_zone: &ResolvedTimeZone,
+) -> Option<i64> {
     let local = match DateTime::<Utc>::from_timestamp_micros(ts_micros) {
         Some(datetime) => datetime.naive_utc(),
         None if from_zone == to_zone => return Some(ts_micros),
         None => return None,
     };
-    let dt = disambiguate_local_datetime(local, from_zone)?;
+    let dt = from_zone.resolve_local_datetime(local)?;
     Some(
-        dt.with_timezone(to_zone)
-            .naive_local()
+        to_zone
+            .local_datetime_at_utc_micros(dt.timestamp_micros())?
             .and_utc()
             .timestamp_micros(),
     )
@@ -486,13 +538,17 @@ fn convert_tz_classic(ts_micros: i64, from_zone: &Tz, to_zone: &Tz) -> Option<i6
 
 /// Reference:
 ///   `org.apache.spark.sql.catalyst.util.SparkDateTimeUtils#convertTz`
-fn convert_tz_non_classic(ts_micros: i64, from_zone: &Tz, to_zone: &Tz) -> Option<i64> {
-    let local = match to_zone.timestamp_micros(ts_micros).single() {
-        Some(datetime) => datetime.naive_local(),
+fn convert_tz_non_classic(
+    ts_micros: i64,
+    from_zone: &ResolvedTimeZone,
+    to_zone: &ResolvedTimeZone,
+) -> Option<i64> {
+    let local = match to_zone.local_datetime_at_utc_micros(ts_micros) {
+        Some(datetime) => datetime,
         None if from_zone == to_zone => return Some(ts_micros),
         None => return None,
     };
-    let dt = disambiguate_local_datetime(local, from_zone)?;
+    let dt = from_zone.resolve_local_datetime(local)?;
     Some(dt.timestamp_micros())
 }
 

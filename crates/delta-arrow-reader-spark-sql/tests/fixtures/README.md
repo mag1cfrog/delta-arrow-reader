@@ -4852,3 +4852,12 @@ observations for local DATE/NTZ interpretation, DST, short zone names and offset
 `temporal_contracts.rs` checks 208 exact row/type contexts and 36 separate localized-name
 fallback contexts at batch sizes 1 and 32, alongside the unchanged 6,020-record fixture.
 Ordinary zone-free alias behavior remains protected while #1029 owns alias normalization.
+
+
+## UTC conversion offset arguments
+
+The [offset argument fixture](utc-offset-zones/README.md) records 144 Spark 4.2.0
+observations across both ANSI modes in UTC and Los Angeles. It checks 240 successful
+row/type contexts and 48 invalid-zone cause controls at batch sizes 1 and 32.
+The existing 4,356-record UTC conversion fixture retains its raw offset results,
+with named-zone DST and lazy NULL behavior preserved.

@@ -7,6 +7,7 @@ mod pattern;
 
 pub use formatting::{DateTimeFormatInput, TimeZoneDisplay};
 pub use parsing::ParsedDateTime;
+pub(crate) use parsing::parse_fixed_zone_offset;
 pub use pattern::DateTimeFormat;
 
 #[cfg(test)]
@@ -90,6 +91,14 @@ mod tests {
         let offset = DateTimeFormat::for_parsing("yyyy-MM-dd HH:mm:ssXXX")?
             .parse_datetime_value("2024-02-29 13:05:09+05:30")?;
         assert_eq!(offset.offset.unwrap().local_minus_utc(), 19_800);
+        assert_eq!(
+            parse_fixed_zone_offset("+05:30:15").map(|offset| offset.local_minus_utc()),
+            Some(19_815)
+        );
+        for value in ["", "+05:30:15extra", "Zextra", "+18:00:01"] {
+            assert_eq!(parse_fixed_zone_offset(value), None, "{value}");
+        }
+
         for symbol in ['Y', 'W', 'w', 'u', 'e', 'c', 'A', 'B', 'n', 'N', 'p'] {
             for width in 1..=10 {
                 let pattern = symbol.to_string().repeat(width);
