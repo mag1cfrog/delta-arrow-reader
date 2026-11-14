@@ -60,10 +60,10 @@ an overflowing conversion with Java's `ArithmeticException`, during optimization
 literal; DAR must fail at the same stage with its `long overflow` message. Another test
 checks that native DataFusion SQL keeps Arrow's cast.
 
-Existing differences outside this conversion keep their Spark expectation in the fixture.
+Alias CAST records now use their original Spark values. The [session alias
+references](../session-zone-aliases/README.md) add fixed short IDs and formatted date
+consumers. Existing differences outside this conversion keep their Spark expectation in the fixture.
 The test replaces only the retained part with the current DAR result and checks each count:
-- #1029: 4 CAST records in `PST` and `GMT+08:00` sessions. Arrow cannot parse these zones,
-  so each instant keeps its UTC date-time.
 - #1030: 16 records give NULL for the out-of-range years. These are CONVERT_TIMEZONE in
   every session, and CAST back to TIMESTAMP in Los Angeles and Kathmandu.
 - #1103: 12 ARRAY, STRUCT and MAP casts in Los Angeles and Kathmandu keep the UTC

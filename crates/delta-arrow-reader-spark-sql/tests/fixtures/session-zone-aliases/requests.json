@@ -1,0 +1,3922 @@
+{
+  "issue": "1029",
+  "expected_record_count": 176,
+  "corpora": [
+    {
+      "corpus": "session_alias_UTC",
+      "source": "source-only #1029 session alias SQL and logical input definitions",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "alias_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "ts",
+                  "type": "timestamp",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "ntz",
+                  "type": "timestamp_ntz",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "d",
+                  "type": "date",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "offset_s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "b",
+                  "type": "binary",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "n",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "nested",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "t",
+                        "type": "timestamp",
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "1704180600000000",
+                "1704155400000000",
+                "19724",
+                "2024-01-02 00:30:00",
+                "2024-01-02 00:30:00+02:00",
+                "323032342d30312d3032",
+                "20240102",
+                [
+                  "1704180600000000"
+                ]
+              ],
+              [
+                "1",
+                "1719921600000000",
+                "1719880200000000",
+                "19906",
+                "2024-07-02 00:30:00",
+                "2024-07-02 00:30:00+02:00",
+                "323032342d30372d3032",
+                "20240702",
+                [
+                  "1719921600000000"
+                ]
+              ],
+              [
+                "2",
+                "1710066600000000",
+                "1710037800000000",
+                "19792",
+                "2024-03-10 02:30:00",
+                "2024-03-10 02:30:00+02:00",
+                "323032342d30332d3130",
+                "20240310",
+                [
+                  "1710066600000000"
+                ]
+              ],
+              [
+                "3",
+                "1730622600000000",
+                "1730597400000000",
+                "20030",
+                "2024-11-03 01:30:00",
+                "2024-11-03 01:30:00+02:00",
+                "323032342d31312d3033",
+                "20241103",
+                [
+                  "1730622600000000"
+                ]
+              ],
+              [
+                "4",
+                "1730626200000000",
+                "1730597400000000",
+                "20030",
+                "2024-11-03 01:30:00",
+                "2024-11-03 01:30:00+02:00",
+                "323032342d31312d3033",
+                "20241103",
+                [
+                  "1730626200000000"
+                ]
+              ],
+              [
+                "5",
+                "-5350363200000000",
+                "-5350404600000000",
+                "-61926",
+                "1800-06-15 00:30:00",
+                "1800-06-15 00:30:00+02:00",
+                "313830302d30362d3135",
+                "18000615",
+                [
+                  "-5350363200000000"
+                ]
+              ],
+              [
+                "6",
+                "-79012800000000",
+                "-79054200000000",
+                "-915",
+                "1967-07-01 00:30:00",
+                "1967-07-01 00:30:00+02:00",
+                "313936372d30372d3031",
+                "19670701",
+                [
+                  "-79012800000000"
+                ]
+              ],
+              [
+                "7",
+                "-931003200000000",
+                "-931044600000000",
+                "-10776",
+                "1940-07-01 00:30:00",
+                "1940-07-01 00:30:00+02:00",
+                "313934302d30372d3031",
+                "19400701",
+                [
+                  "-931003200000000"
+                ]
+              ],
+              [
+                "8",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+              ],
+              [
+                "9",
+                "1719921600000000",
+                "1719880200000000",
+                "19906",
+                "2024-07-02 00:30:00",
+                "2024-07-02 00:30:00+02:00",
+                "323032342d30372d3032",
+                "20240702",
+                [
+                  "1719921600000000"
+                ]
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "session_alias_UTC",
+          "id": "registered_and_nested",
+          "sql": "SELECT k AS r0, ts AS r1, nested.t AS r2, HOUR(ts) AS r3, HOUR(nested.t) AS r4, CAST(ts AS DATE) AS r5, CAST(ts AS TIMESTAMP_NTZ) AS r6, CAST(d AS TIMESTAMP) AS r7, CAST(ntz AS TIMESTAMP) AS r8, CAST(ts AS STRING) AS r9, HOUR(TIMESTAMP_SECONDS(1704200645.125)) AS r10, HOUR(TIMESTAMP_MILLIS(1704200645125)) AS r11, HOUR(TIMESTAMP_MICROS(1704200645125000)) AS r12 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_UTC",
+          "id": "utc_conversions",
+          "sql": "SELECT k AS r0, TO_UTC_TIMESTAMP(ntz, 'America/Los_Angeles') AS r1, FROM_UTC_TIMESTAMP(ntz, '+05:30') AS r2, TO_UTC_TIMESTAMP(d, 'America/Los_Angeles') AS r3, FROM_UTC_TIMESTAMP(s, '-08') AS r4, CONVERT_TIMEZONE('UTC', ts) AS r5, CONVERT_TIMEZONE('+05:30', ntz) AS r6 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_UTC",
+          "id": "formatted_dates",
+          "sql": "SELECT k AS r0, TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r1, TRY_TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r2, TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r3, TRY_TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r4, TO_DATE(n, 'yyyyMMdd') AS r5, TRY_TO_DATE(b, 'yyyy-MM-dd') AS r6, TO_DATE(ts, 'yyyy-MM-dd') AS r7, TRY_TO_DATE(ntz, 'yyyy-MM-dd') AS r8, TO_DATE(d, CAST(NULL AS STRING)) AS r9 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_UTC",
+          "id": "format_clocks_and_offsets",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r1, DATE_FORMAT(ntz, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r2, DATE_FORMAT(ts, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_UTC",
+          "id": "format_short_names",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'z') AS r1, DATE_FORMAT(ntz, 'z') AS r2, DATE_FORMAT(ts, 'z') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "labels",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_UTC",
+          "id": "literal_alias_consumers",
+          "sql": "SELECT CAST(TIMESTAMP '2024-01-02 00:30:00+00:00' AS DATE) AS r0, CAST(TIMESTAMP '1800-06-15 12:00:00+00:00' AS TIMESTAMP_NTZ) AS r1, HOUR(TIMESTAMP '1967-07-01 12:00:00+00:00') AS r2, CAST(DATE '1940-07-01' AS TIMESTAMP) AS r3, CAST(TIMESTAMP_NTZ '2024-03-10 02:30:00' AS TIMESTAMP) AS r4, DATE_FORMAT(TIMESTAMP_NTZ '2024-03-10 02:30:00', 'yyyy-MM-dd HH:mm:ss') AS r5, TO_DATE(TIMESTAMP_NTZ '2024-01-15 00:00:00', 'yyyy-MM-dd') AS r6, TRY_TO_DATE('2024-01-02 00:30:00+02:00', 'yyyy-MM-dd HH:mm:ssXXX') AS r7",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_UTC",
+          "id": "derived_fields",
+          "sql": "SELECT k AS r0, HOUR(t) AS r1, CAST(t AS TIMESTAMP_NTZ) AS r2, CAST(t AS DATE) AS r3 FROM (SELECT k, nested.t AS t FROM alias_inputs) q",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_UTC",
+          "id": "null_and_coercion_controls",
+          "sql": "SELECT TO_DATE(CAST(NULL AS STRING), 'yyyy-MM-dd') AS r0, TRY_TO_DATE(CAST(NULL AS BINARY), 'yyyy-MM-dd') AS r1, TO_DATE('2024-01-02', CAST(NULL AS STRING)) AS r2, TRY_TO_DATE('bad', 'yyyy-MM-dd') AS r3, DATE_FORMAT(CAST(NULL AS TIMESTAMP_NTZ), 'yyyy-MM-dd z O XXX') AS r4, TO_DATE(20240102, 'yyyyMMdd') AS r5, TRY_TO_DATE(X'323032342d30312d3032', 'yyyy-MM-dd') AS r6",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "UTC",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_UTC",
+          "id": "registered_and_nested",
+          "sql": "SELECT k AS r0, ts AS r1, nested.t AS r2, HOUR(ts) AS r3, HOUR(nested.t) AS r4, CAST(ts AS DATE) AS r5, CAST(ts AS TIMESTAMP_NTZ) AS r6, CAST(d AS TIMESTAMP) AS r7, CAST(ntz AS TIMESTAMP) AS r8, CAST(ts AS STRING) AS r9, HOUR(TIMESTAMP_SECONDS(1704200645.125)) AS r10, HOUR(TIMESTAMP_MILLIS(1704200645125)) AS r11, HOUR(TIMESTAMP_MICROS(1704200645125000)) AS r12 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_UTC",
+          "id": "utc_conversions",
+          "sql": "SELECT k AS r0, TO_UTC_TIMESTAMP(ntz, 'America/Los_Angeles') AS r1, FROM_UTC_TIMESTAMP(ntz, '+05:30') AS r2, TO_UTC_TIMESTAMP(d, 'America/Los_Angeles') AS r3, FROM_UTC_TIMESTAMP(s, '-08') AS r4, CONVERT_TIMEZONE('UTC', ts) AS r5, CONVERT_TIMEZONE('+05:30', ntz) AS r6 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_UTC",
+          "id": "formatted_dates",
+          "sql": "SELECT k AS r0, TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r1, TRY_TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r2, TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r3, TRY_TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r4, TO_DATE(n, 'yyyyMMdd') AS r5, TRY_TO_DATE(b, 'yyyy-MM-dd') AS r6, TO_DATE(ts, 'yyyy-MM-dd') AS r7, TRY_TO_DATE(ntz, 'yyyy-MM-dd') AS r8, TO_DATE(d, CAST(NULL AS STRING)) AS r9 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_UTC",
+          "id": "format_clocks_and_offsets",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r1, DATE_FORMAT(ntz, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r2, DATE_FORMAT(ts, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_UTC",
+          "id": "format_short_names",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'z') AS r1, DATE_FORMAT(ntz, 'z') AS r2, DATE_FORMAT(ts, 'z') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "labels",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_UTC",
+          "id": "literal_alias_consumers",
+          "sql": "SELECT CAST(TIMESTAMP '2024-01-02 00:30:00+00:00' AS DATE) AS r0, CAST(TIMESTAMP '1800-06-15 12:00:00+00:00' AS TIMESTAMP_NTZ) AS r1, HOUR(TIMESTAMP '1967-07-01 12:00:00+00:00') AS r2, CAST(DATE '1940-07-01' AS TIMESTAMP) AS r3, CAST(TIMESTAMP_NTZ '2024-03-10 02:30:00' AS TIMESTAMP) AS r4, DATE_FORMAT(TIMESTAMP_NTZ '2024-03-10 02:30:00', 'yyyy-MM-dd HH:mm:ss') AS r5, TO_DATE(TIMESTAMP_NTZ '2024-01-15 00:00:00', 'yyyy-MM-dd') AS r6, TRY_TO_DATE('2024-01-02 00:30:00+02:00', 'yyyy-MM-dd HH:mm:ssXXX') AS r7",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_UTC",
+          "id": "derived_fields",
+          "sql": "SELECT k AS r0, HOUR(t) AS r1, CAST(t AS TIMESTAMP_NTZ) AS r2, CAST(t AS DATE) AS r3 FROM (SELECT k, nested.t AS t FROM alias_inputs) q",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "UTC",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_UTC",
+          "id": "null_and_coercion_controls",
+          "sql": "SELECT TO_DATE(CAST(NULL AS STRING), 'yyyy-MM-dd') AS r0, TRY_TO_DATE(CAST(NULL AS BINARY), 'yyyy-MM-dd') AS r1, TO_DATE('2024-01-02', CAST(NULL AS STRING)) AS r2, TRY_TO_DATE('bad', 'yyyy-MM-dd') AS r3, DATE_FORMAT(CAST(NULL AS TIMESTAMP_NTZ), 'yyyy-MM-dd z O XXX') AS r4, TO_DATE(20240102, 'yyyyMMdd') AS r5, TRY_TO_DATE(X'323032342d30312d3032', 'yyyy-MM-dd') AS r6",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "UTC",
+          "ansi": false
+        }
+      ]
+    },
+    {
+      "corpus": "session_alias_America_Los_Angeles",
+      "source": "source-only #1029 session alias SQL and logical input definitions",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "alias_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "ts",
+                  "type": "timestamp",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "ntz",
+                  "type": "timestamp_ntz",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "d",
+                  "type": "date",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "offset_s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "b",
+                  "type": "binary",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "n",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "nested",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "t",
+                        "type": "timestamp",
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "1704180600000000",
+                "1704155400000000",
+                "19724",
+                "2024-01-02 00:30:00",
+                "2024-01-02 00:30:00+02:00",
+                "323032342d30312d3032",
+                "20240102",
+                [
+                  "1704180600000000"
+                ]
+              ],
+              [
+                "1",
+                "1719921600000000",
+                "1719880200000000",
+                "19906",
+                "2024-07-02 00:30:00",
+                "2024-07-02 00:30:00+02:00",
+                "323032342d30372d3032",
+                "20240702",
+                [
+                  "1719921600000000"
+                ]
+              ],
+              [
+                "2",
+                "1710066600000000",
+                "1710037800000000",
+                "19792",
+                "2024-03-10 02:30:00",
+                "2024-03-10 02:30:00+02:00",
+                "323032342d30332d3130",
+                "20240310",
+                [
+                  "1710066600000000"
+                ]
+              ],
+              [
+                "3",
+                "1730622600000000",
+                "1730597400000000",
+                "20030",
+                "2024-11-03 01:30:00",
+                "2024-11-03 01:30:00+02:00",
+                "323032342d31312d3033",
+                "20241103",
+                [
+                  "1730622600000000"
+                ]
+              ],
+              [
+                "4",
+                "1730626200000000",
+                "1730597400000000",
+                "20030",
+                "2024-11-03 01:30:00",
+                "2024-11-03 01:30:00+02:00",
+                "323032342d31312d3033",
+                "20241103",
+                [
+                  "1730626200000000"
+                ]
+              ],
+              [
+                "5",
+                "-5350363200000000",
+                "-5350404600000000",
+                "-61926",
+                "1800-06-15 00:30:00",
+                "1800-06-15 00:30:00+02:00",
+                "313830302d30362d3135",
+                "18000615",
+                [
+                  "-5350363200000000"
+                ]
+              ],
+              [
+                "6",
+                "-79012800000000",
+                "-79054200000000",
+                "-915",
+                "1967-07-01 00:30:00",
+                "1967-07-01 00:30:00+02:00",
+                "313936372d30372d3031",
+                "19670701",
+                [
+                  "-79012800000000"
+                ]
+              ],
+              [
+                "7",
+                "-931003200000000",
+                "-931044600000000",
+                "-10776",
+                "1940-07-01 00:30:00",
+                "1940-07-01 00:30:00+02:00",
+                "313934302d30372d3031",
+                "19400701",
+                [
+                  "-931003200000000"
+                ]
+              ],
+              [
+                "8",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+              ],
+              [
+                "9",
+                "1719921600000000",
+                "1719880200000000",
+                "19906",
+                "2024-07-02 00:30:00",
+                "2024-07-02 00:30:00+02:00",
+                "323032342d30372d3032",
+                "20240702",
+                [
+                  "1719921600000000"
+                ]
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "session_alias_America_Los_Angeles",
+          "id": "registered_and_nested",
+          "sql": "SELECT k AS r0, ts AS r1, nested.t AS r2, HOUR(ts) AS r3, HOUR(nested.t) AS r4, CAST(ts AS DATE) AS r5, CAST(ts AS TIMESTAMP_NTZ) AS r6, CAST(d AS TIMESTAMP) AS r7, CAST(ntz AS TIMESTAMP) AS r8, CAST(ts AS STRING) AS r9, HOUR(TIMESTAMP_SECONDS(1704200645.125)) AS r10, HOUR(TIMESTAMP_MILLIS(1704200645125)) AS r11, HOUR(TIMESTAMP_MICROS(1704200645125000)) AS r12 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_America_Los_Angeles",
+          "id": "utc_conversions",
+          "sql": "SELECT k AS r0, TO_UTC_TIMESTAMP(ntz, 'America/Los_Angeles') AS r1, FROM_UTC_TIMESTAMP(ntz, '+05:30') AS r2, TO_UTC_TIMESTAMP(d, 'America/Los_Angeles') AS r3, FROM_UTC_TIMESTAMP(s, '-08') AS r4, CONVERT_TIMEZONE('UTC', ts) AS r5, CONVERT_TIMEZONE('+05:30', ntz) AS r6 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_America_Los_Angeles",
+          "id": "formatted_dates",
+          "sql": "SELECT k AS r0, TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r1, TRY_TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r2, TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r3, TRY_TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r4, TO_DATE(n, 'yyyyMMdd') AS r5, TRY_TO_DATE(b, 'yyyy-MM-dd') AS r6, TO_DATE(ts, 'yyyy-MM-dd') AS r7, TRY_TO_DATE(ntz, 'yyyy-MM-dd') AS r8, TO_DATE(d, CAST(NULL AS STRING)) AS r9 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_America_Los_Angeles",
+          "id": "format_clocks_and_offsets",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r1, DATE_FORMAT(ntz, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r2, DATE_FORMAT(ts, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_America_Los_Angeles",
+          "id": "format_short_names",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'z') AS r1, DATE_FORMAT(ntz, 'z') AS r2, DATE_FORMAT(ts, 'z') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "labels",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_America_Los_Angeles",
+          "id": "literal_alias_consumers",
+          "sql": "SELECT CAST(TIMESTAMP '2024-01-02 00:30:00+00:00' AS DATE) AS r0, CAST(TIMESTAMP '1800-06-15 12:00:00+00:00' AS TIMESTAMP_NTZ) AS r1, HOUR(TIMESTAMP '1967-07-01 12:00:00+00:00') AS r2, CAST(DATE '1940-07-01' AS TIMESTAMP) AS r3, CAST(TIMESTAMP_NTZ '2024-03-10 02:30:00' AS TIMESTAMP) AS r4, DATE_FORMAT(TIMESTAMP_NTZ '2024-03-10 02:30:00', 'yyyy-MM-dd HH:mm:ss') AS r5, TO_DATE(TIMESTAMP_NTZ '2024-01-15 00:00:00', 'yyyy-MM-dd') AS r6, TRY_TO_DATE('2024-01-02 00:30:00+02:00', 'yyyy-MM-dd HH:mm:ssXXX') AS r7",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_America_Los_Angeles",
+          "id": "derived_fields",
+          "sql": "SELECT k AS r0, HOUR(t) AS r1, CAST(t AS TIMESTAMP_NTZ) AS r2, CAST(t AS DATE) AS r3 FROM (SELECT k, nested.t AS t FROM alias_inputs) q",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_America_Los_Angeles",
+          "id": "null_and_coercion_controls",
+          "sql": "SELECT TO_DATE(CAST(NULL AS STRING), 'yyyy-MM-dd') AS r0, TRY_TO_DATE(CAST(NULL AS BINARY), 'yyyy-MM-dd') AS r1, TO_DATE('2024-01-02', CAST(NULL AS STRING)) AS r2, TRY_TO_DATE('bad', 'yyyy-MM-dd') AS r3, DATE_FORMAT(CAST(NULL AS TIMESTAMP_NTZ), 'yyyy-MM-dd z O XXX') AS r4, TO_DATE(20240102, 'yyyyMMdd') AS r5, TRY_TO_DATE(X'323032342d30312d3032', 'yyyy-MM-dd') AS r6",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "America/Los_Angeles",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_America_Los_Angeles",
+          "id": "registered_and_nested",
+          "sql": "SELECT k AS r0, ts AS r1, nested.t AS r2, HOUR(ts) AS r3, HOUR(nested.t) AS r4, CAST(ts AS DATE) AS r5, CAST(ts AS TIMESTAMP_NTZ) AS r6, CAST(d AS TIMESTAMP) AS r7, CAST(ntz AS TIMESTAMP) AS r8, CAST(ts AS STRING) AS r9, HOUR(TIMESTAMP_SECONDS(1704200645.125)) AS r10, HOUR(TIMESTAMP_MILLIS(1704200645125)) AS r11, HOUR(TIMESTAMP_MICROS(1704200645125000)) AS r12 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_America_Los_Angeles",
+          "id": "utc_conversions",
+          "sql": "SELECT k AS r0, TO_UTC_TIMESTAMP(ntz, 'America/Los_Angeles') AS r1, FROM_UTC_TIMESTAMP(ntz, '+05:30') AS r2, TO_UTC_TIMESTAMP(d, 'America/Los_Angeles') AS r3, FROM_UTC_TIMESTAMP(s, '-08') AS r4, CONVERT_TIMEZONE('UTC', ts) AS r5, CONVERT_TIMEZONE('+05:30', ntz) AS r6 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_America_Los_Angeles",
+          "id": "formatted_dates",
+          "sql": "SELECT k AS r0, TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r1, TRY_TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r2, TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r3, TRY_TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r4, TO_DATE(n, 'yyyyMMdd') AS r5, TRY_TO_DATE(b, 'yyyy-MM-dd') AS r6, TO_DATE(ts, 'yyyy-MM-dd') AS r7, TRY_TO_DATE(ntz, 'yyyy-MM-dd') AS r8, TO_DATE(d, CAST(NULL AS STRING)) AS r9 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_America_Los_Angeles",
+          "id": "format_clocks_and_offsets",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r1, DATE_FORMAT(ntz, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r2, DATE_FORMAT(ts, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_America_Los_Angeles",
+          "id": "format_short_names",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'z') AS r1, DATE_FORMAT(ntz, 'z') AS r2, DATE_FORMAT(ts, 'z') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "labels",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_America_Los_Angeles",
+          "id": "literal_alias_consumers",
+          "sql": "SELECT CAST(TIMESTAMP '2024-01-02 00:30:00+00:00' AS DATE) AS r0, CAST(TIMESTAMP '1800-06-15 12:00:00+00:00' AS TIMESTAMP_NTZ) AS r1, HOUR(TIMESTAMP '1967-07-01 12:00:00+00:00') AS r2, CAST(DATE '1940-07-01' AS TIMESTAMP) AS r3, CAST(TIMESTAMP_NTZ '2024-03-10 02:30:00' AS TIMESTAMP) AS r4, DATE_FORMAT(TIMESTAMP_NTZ '2024-03-10 02:30:00', 'yyyy-MM-dd HH:mm:ss') AS r5, TO_DATE(TIMESTAMP_NTZ '2024-01-15 00:00:00', 'yyyy-MM-dd') AS r6, TRY_TO_DATE('2024-01-02 00:30:00+02:00', 'yyyy-MM-dd HH:mm:ssXXX') AS r7",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_America_Los_Angeles",
+          "id": "derived_fields",
+          "sql": "SELECT k AS r0, HOUR(t) AS r1, CAST(t AS TIMESTAMP_NTZ) AS r2, CAST(t AS DATE) AS r3 FROM (SELECT k, nested.t AS t FROM alias_inputs) q",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_America_Los_Angeles",
+          "id": "null_and_coercion_controls",
+          "sql": "SELECT TO_DATE(CAST(NULL AS STRING), 'yyyy-MM-dd') AS r0, TRY_TO_DATE(CAST(NULL AS BINARY), 'yyyy-MM-dd') AS r1, TO_DATE('2024-01-02', CAST(NULL AS STRING)) AS r2, TRY_TO_DATE('bad', 'yyyy-MM-dd') AS r3, DATE_FORMAT(CAST(NULL AS TIMESTAMP_NTZ), 'yyyy-MM-dd z O XXX') AS r4, TO_DATE(20240102, 'yyyyMMdd') AS r5, TRY_TO_DATE(X'323032342d30312d3032', 'yyyy-MM-dd') AS r6",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "America/Los_Angeles",
+          "ansi": false
+        }
+      ]
+    },
+    {
+      "corpus": "session_alias_Z",
+      "source": "source-only #1029 session alias SQL and logical input definitions",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "alias_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "ts",
+                  "type": "timestamp",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "ntz",
+                  "type": "timestamp_ntz",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "d",
+                  "type": "date",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "offset_s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "b",
+                  "type": "binary",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "n",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "nested",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "t",
+                        "type": "timestamp",
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "1704180600000000",
+                "1704155400000000",
+                "19724",
+                "2024-01-02 00:30:00",
+                "2024-01-02 00:30:00+02:00",
+                "323032342d30312d3032",
+                "20240102",
+                [
+                  "1704180600000000"
+                ]
+              ],
+              [
+                "1",
+                "1719921600000000",
+                "1719880200000000",
+                "19906",
+                "2024-07-02 00:30:00",
+                "2024-07-02 00:30:00+02:00",
+                "323032342d30372d3032",
+                "20240702",
+                [
+                  "1719921600000000"
+                ]
+              ],
+              [
+                "2",
+                "1710066600000000",
+                "1710037800000000",
+                "19792",
+                "2024-03-10 02:30:00",
+                "2024-03-10 02:30:00+02:00",
+                "323032342d30332d3130",
+                "20240310",
+                [
+                  "1710066600000000"
+                ]
+              ],
+              [
+                "3",
+                "1730622600000000",
+                "1730597400000000",
+                "20030",
+                "2024-11-03 01:30:00",
+                "2024-11-03 01:30:00+02:00",
+                "323032342d31312d3033",
+                "20241103",
+                [
+                  "1730622600000000"
+                ]
+              ],
+              [
+                "4",
+                "1730626200000000",
+                "1730597400000000",
+                "20030",
+                "2024-11-03 01:30:00",
+                "2024-11-03 01:30:00+02:00",
+                "323032342d31312d3033",
+                "20241103",
+                [
+                  "1730626200000000"
+                ]
+              ],
+              [
+                "5",
+                "-5350363200000000",
+                "-5350404600000000",
+                "-61926",
+                "1800-06-15 00:30:00",
+                "1800-06-15 00:30:00+02:00",
+                "313830302d30362d3135",
+                "18000615",
+                [
+                  "-5350363200000000"
+                ]
+              ],
+              [
+                "6",
+                "-79012800000000",
+                "-79054200000000",
+                "-915",
+                "1967-07-01 00:30:00",
+                "1967-07-01 00:30:00+02:00",
+                "313936372d30372d3031",
+                "19670701",
+                [
+                  "-79012800000000"
+                ]
+              ],
+              [
+                "7",
+                "-931003200000000",
+                "-931044600000000",
+                "-10776",
+                "1940-07-01 00:30:00",
+                "1940-07-01 00:30:00+02:00",
+                "313934302d30372d3031",
+                "19400701",
+                [
+                  "-931003200000000"
+                ]
+              ],
+              [
+                "8",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+              ],
+              [
+                "9",
+                "1719921600000000",
+                "1719880200000000",
+                "19906",
+                "2024-07-02 00:30:00",
+                "2024-07-02 00:30:00+02:00",
+                "323032342d30372d3032",
+                "20240702",
+                [
+                  "1719921600000000"
+                ]
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "session_alias_Z",
+          "id": "registered_and_nested",
+          "sql": "SELECT k AS r0, ts AS r1, nested.t AS r2, HOUR(ts) AS r3, HOUR(nested.t) AS r4, CAST(ts AS DATE) AS r5, CAST(ts AS TIMESTAMP_NTZ) AS r6, CAST(d AS TIMESTAMP) AS r7, CAST(ntz AS TIMESTAMP) AS r8, CAST(ts AS STRING) AS r9, HOUR(TIMESTAMP_SECONDS(1704200645.125)) AS r10, HOUR(TIMESTAMP_MILLIS(1704200645125)) AS r11, HOUR(TIMESTAMP_MICROS(1704200645125000)) AS r12 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "Z",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_Z",
+          "id": "utc_conversions",
+          "sql": "SELECT k AS r0, TO_UTC_TIMESTAMP(ntz, 'America/Los_Angeles') AS r1, FROM_UTC_TIMESTAMP(ntz, '+05:30') AS r2, TO_UTC_TIMESTAMP(d, 'America/Los_Angeles') AS r3, FROM_UTC_TIMESTAMP(s, '-08') AS r4, CONVERT_TIMEZONE('UTC', ts) AS r5, CONVERT_TIMEZONE('+05:30', ntz) AS r6 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "Z",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_Z",
+          "id": "formatted_dates",
+          "sql": "SELECT k AS r0, TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r1, TRY_TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r2, TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r3, TRY_TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r4, TO_DATE(n, 'yyyyMMdd') AS r5, TRY_TO_DATE(b, 'yyyy-MM-dd') AS r6, TO_DATE(ts, 'yyyy-MM-dd') AS r7, TRY_TO_DATE(ntz, 'yyyy-MM-dd') AS r8, TO_DATE(d, CAST(NULL AS STRING)) AS r9 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "Z",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_Z",
+          "id": "format_clocks_and_offsets",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r1, DATE_FORMAT(ntz, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r2, DATE_FORMAT(ts, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "Z",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_Z",
+          "id": "format_short_names",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'z') AS r1, DATE_FORMAT(ntz, 'z') AS r2, DATE_FORMAT(ts, 'z') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "labels",
+          "timezone": "Z",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_Z",
+          "id": "literal_alias_consumers",
+          "sql": "SELECT CAST(TIMESTAMP '2024-01-02 00:30:00+00:00' AS DATE) AS r0, CAST(TIMESTAMP '1800-06-15 12:00:00+00:00' AS TIMESTAMP_NTZ) AS r1, HOUR(TIMESTAMP '1967-07-01 12:00:00+00:00') AS r2, CAST(DATE '1940-07-01' AS TIMESTAMP) AS r3, CAST(TIMESTAMP_NTZ '2024-03-10 02:30:00' AS TIMESTAMP) AS r4, DATE_FORMAT(TIMESTAMP_NTZ '2024-03-10 02:30:00', 'yyyy-MM-dd HH:mm:ss') AS r5, TO_DATE(TIMESTAMP_NTZ '2024-01-15 00:00:00', 'yyyy-MM-dd') AS r6, TRY_TO_DATE('2024-01-02 00:30:00+02:00', 'yyyy-MM-dd HH:mm:ssXXX') AS r7",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "Z",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_Z",
+          "id": "derived_fields",
+          "sql": "SELECT k AS r0, HOUR(t) AS r1, CAST(t AS TIMESTAMP_NTZ) AS r2, CAST(t AS DATE) AS r3 FROM (SELECT k, nested.t AS t FROM alias_inputs) q",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "Z",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_Z",
+          "id": "null_and_coercion_controls",
+          "sql": "SELECT TO_DATE(CAST(NULL AS STRING), 'yyyy-MM-dd') AS r0, TRY_TO_DATE(CAST(NULL AS BINARY), 'yyyy-MM-dd') AS r1, TO_DATE('2024-01-02', CAST(NULL AS STRING)) AS r2, TRY_TO_DATE('bad', 'yyyy-MM-dd') AS r3, DATE_FORMAT(CAST(NULL AS TIMESTAMP_NTZ), 'yyyy-MM-dd z O XXX') AS r4, TO_DATE(20240102, 'yyyyMMdd') AS r5, TRY_TO_DATE(X'323032342d30312d3032', 'yyyy-MM-dd') AS r6",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "Z",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_Z",
+          "id": "registered_and_nested",
+          "sql": "SELECT k AS r0, ts AS r1, nested.t AS r2, HOUR(ts) AS r3, HOUR(nested.t) AS r4, CAST(ts AS DATE) AS r5, CAST(ts AS TIMESTAMP_NTZ) AS r6, CAST(d AS TIMESTAMP) AS r7, CAST(ntz AS TIMESTAMP) AS r8, CAST(ts AS STRING) AS r9, HOUR(TIMESTAMP_SECONDS(1704200645.125)) AS r10, HOUR(TIMESTAMP_MILLIS(1704200645125)) AS r11, HOUR(TIMESTAMP_MICROS(1704200645125000)) AS r12 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "Z",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_Z",
+          "id": "utc_conversions",
+          "sql": "SELECT k AS r0, TO_UTC_TIMESTAMP(ntz, 'America/Los_Angeles') AS r1, FROM_UTC_TIMESTAMP(ntz, '+05:30') AS r2, TO_UTC_TIMESTAMP(d, 'America/Los_Angeles') AS r3, FROM_UTC_TIMESTAMP(s, '-08') AS r4, CONVERT_TIMEZONE('UTC', ts) AS r5, CONVERT_TIMEZONE('+05:30', ntz) AS r6 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "Z",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_Z",
+          "id": "formatted_dates",
+          "sql": "SELECT k AS r0, TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r1, TRY_TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r2, TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r3, TRY_TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r4, TO_DATE(n, 'yyyyMMdd') AS r5, TRY_TO_DATE(b, 'yyyy-MM-dd') AS r6, TO_DATE(ts, 'yyyy-MM-dd') AS r7, TRY_TO_DATE(ntz, 'yyyy-MM-dd') AS r8, TO_DATE(d, CAST(NULL AS STRING)) AS r9 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "Z",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_Z",
+          "id": "format_clocks_and_offsets",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r1, DATE_FORMAT(ntz, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r2, DATE_FORMAT(ts, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "Z",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_Z",
+          "id": "format_short_names",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'z') AS r1, DATE_FORMAT(ntz, 'z') AS r2, DATE_FORMAT(ts, 'z') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "labels",
+          "timezone": "Z",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_Z",
+          "id": "literal_alias_consumers",
+          "sql": "SELECT CAST(TIMESTAMP '2024-01-02 00:30:00+00:00' AS DATE) AS r0, CAST(TIMESTAMP '1800-06-15 12:00:00+00:00' AS TIMESTAMP_NTZ) AS r1, HOUR(TIMESTAMP '1967-07-01 12:00:00+00:00') AS r2, CAST(DATE '1940-07-01' AS TIMESTAMP) AS r3, CAST(TIMESTAMP_NTZ '2024-03-10 02:30:00' AS TIMESTAMP) AS r4, DATE_FORMAT(TIMESTAMP_NTZ '2024-03-10 02:30:00', 'yyyy-MM-dd HH:mm:ss') AS r5, TO_DATE(TIMESTAMP_NTZ '2024-01-15 00:00:00', 'yyyy-MM-dd') AS r6, TRY_TO_DATE('2024-01-02 00:30:00+02:00', 'yyyy-MM-dd HH:mm:ssXXX') AS r7",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "Z",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_Z",
+          "id": "derived_fields",
+          "sql": "SELECT k AS r0, HOUR(t) AS r1, CAST(t AS TIMESTAMP_NTZ) AS r2, CAST(t AS DATE) AS r3 FROM (SELECT k, nested.t AS t FROM alias_inputs) q",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "Z",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_Z",
+          "id": "null_and_coercion_controls",
+          "sql": "SELECT TO_DATE(CAST(NULL AS STRING), 'yyyy-MM-dd') AS r0, TRY_TO_DATE(CAST(NULL AS BINARY), 'yyyy-MM-dd') AS r1, TO_DATE('2024-01-02', CAST(NULL AS STRING)) AS r2, TRY_TO_DATE('bad', 'yyyy-MM-dd') AS r3, DATE_FORMAT(CAST(NULL AS TIMESTAMP_NTZ), 'yyyy-MM-dd z O XXX') AS r4, TO_DATE(20240102, 'yyyyMMdd') AS r5, TRY_TO_DATE(X'323032342d30312d3032', 'yyyy-MM-dd') AS r6",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "Z",
+          "ansi": false
+        }
+      ]
+    },
+    {
+      "corpus": "session_alias_GMT",
+      "source": "source-only #1029 session alias SQL and logical input definitions",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "alias_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "ts",
+                  "type": "timestamp",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "ntz",
+                  "type": "timestamp_ntz",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "d",
+                  "type": "date",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "offset_s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "b",
+                  "type": "binary",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "n",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "nested",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "t",
+                        "type": "timestamp",
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "1704180600000000",
+                "1704155400000000",
+                "19724",
+                "2024-01-02 00:30:00",
+                "2024-01-02 00:30:00+02:00",
+                "323032342d30312d3032",
+                "20240102",
+                [
+                  "1704180600000000"
+                ]
+              ],
+              [
+                "1",
+                "1719921600000000",
+                "1719880200000000",
+                "19906",
+                "2024-07-02 00:30:00",
+                "2024-07-02 00:30:00+02:00",
+                "323032342d30372d3032",
+                "20240702",
+                [
+                  "1719921600000000"
+                ]
+              ],
+              [
+                "2",
+                "1710066600000000",
+                "1710037800000000",
+                "19792",
+                "2024-03-10 02:30:00",
+                "2024-03-10 02:30:00+02:00",
+                "323032342d30332d3130",
+                "20240310",
+                [
+                  "1710066600000000"
+                ]
+              ],
+              [
+                "3",
+                "1730622600000000",
+                "1730597400000000",
+                "20030",
+                "2024-11-03 01:30:00",
+                "2024-11-03 01:30:00+02:00",
+                "323032342d31312d3033",
+                "20241103",
+                [
+                  "1730622600000000"
+                ]
+              ],
+              [
+                "4",
+                "1730626200000000",
+                "1730597400000000",
+                "20030",
+                "2024-11-03 01:30:00",
+                "2024-11-03 01:30:00+02:00",
+                "323032342d31312d3033",
+                "20241103",
+                [
+                  "1730626200000000"
+                ]
+              ],
+              [
+                "5",
+                "-5350363200000000",
+                "-5350404600000000",
+                "-61926",
+                "1800-06-15 00:30:00",
+                "1800-06-15 00:30:00+02:00",
+                "313830302d30362d3135",
+                "18000615",
+                [
+                  "-5350363200000000"
+                ]
+              ],
+              [
+                "6",
+                "-79012800000000",
+                "-79054200000000",
+                "-915",
+                "1967-07-01 00:30:00",
+                "1967-07-01 00:30:00+02:00",
+                "313936372d30372d3031",
+                "19670701",
+                [
+                  "-79012800000000"
+                ]
+              ],
+              [
+                "7",
+                "-931003200000000",
+                "-931044600000000",
+                "-10776",
+                "1940-07-01 00:30:00",
+                "1940-07-01 00:30:00+02:00",
+                "313934302d30372d3031",
+                "19400701",
+                [
+                  "-931003200000000"
+                ]
+              ],
+              [
+                "8",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+              ],
+              [
+                "9",
+                "1719921600000000",
+                "1719880200000000",
+                "19906",
+                "2024-07-02 00:30:00",
+                "2024-07-02 00:30:00+02:00",
+                "323032342d30372d3032",
+                "20240702",
+                [
+                  "1719921600000000"
+                ]
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "session_alias_GMT",
+          "id": "registered_and_nested",
+          "sql": "SELECT k AS r0, ts AS r1, nested.t AS r2, HOUR(ts) AS r3, HOUR(nested.t) AS r4, CAST(ts AS DATE) AS r5, CAST(ts AS TIMESTAMP_NTZ) AS r6, CAST(d AS TIMESTAMP) AS r7, CAST(ntz AS TIMESTAMP) AS r8, CAST(ts AS STRING) AS r9, HOUR(TIMESTAMP_SECONDS(1704200645.125)) AS r10, HOUR(TIMESTAMP_MILLIS(1704200645125)) AS r11, HOUR(TIMESTAMP_MICROS(1704200645125000)) AS r12 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "GMT",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_GMT",
+          "id": "utc_conversions",
+          "sql": "SELECT k AS r0, TO_UTC_TIMESTAMP(ntz, 'America/Los_Angeles') AS r1, FROM_UTC_TIMESTAMP(ntz, '+05:30') AS r2, TO_UTC_TIMESTAMP(d, 'America/Los_Angeles') AS r3, FROM_UTC_TIMESTAMP(s, '-08') AS r4, CONVERT_TIMEZONE('UTC', ts) AS r5, CONVERT_TIMEZONE('+05:30', ntz) AS r6 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "GMT",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_GMT",
+          "id": "formatted_dates",
+          "sql": "SELECT k AS r0, TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r1, TRY_TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r2, TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r3, TRY_TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r4, TO_DATE(n, 'yyyyMMdd') AS r5, TRY_TO_DATE(b, 'yyyy-MM-dd') AS r6, TO_DATE(ts, 'yyyy-MM-dd') AS r7, TRY_TO_DATE(ntz, 'yyyy-MM-dd') AS r8, TO_DATE(d, CAST(NULL AS STRING)) AS r9 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "GMT",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_GMT",
+          "id": "format_clocks_and_offsets",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r1, DATE_FORMAT(ntz, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r2, DATE_FORMAT(ts, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "GMT",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_GMT",
+          "id": "format_short_names",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'z') AS r1, DATE_FORMAT(ntz, 'z') AS r2, DATE_FORMAT(ts, 'z') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "labels",
+          "timezone": "GMT",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_GMT",
+          "id": "literal_alias_consumers",
+          "sql": "SELECT CAST(TIMESTAMP '2024-01-02 00:30:00+00:00' AS DATE) AS r0, CAST(TIMESTAMP '1800-06-15 12:00:00+00:00' AS TIMESTAMP_NTZ) AS r1, HOUR(TIMESTAMP '1967-07-01 12:00:00+00:00') AS r2, CAST(DATE '1940-07-01' AS TIMESTAMP) AS r3, CAST(TIMESTAMP_NTZ '2024-03-10 02:30:00' AS TIMESTAMP) AS r4, DATE_FORMAT(TIMESTAMP_NTZ '2024-03-10 02:30:00', 'yyyy-MM-dd HH:mm:ss') AS r5, TO_DATE(TIMESTAMP_NTZ '2024-01-15 00:00:00', 'yyyy-MM-dd') AS r6, TRY_TO_DATE('2024-01-02 00:30:00+02:00', 'yyyy-MM-dd HH:mm:ssXXX') AS r7",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "GMT",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_GMT",
+          "id": "derived_fields",
+          "sql": "SELECT k AS r0, HOUR(t) AS r1, CAST(t AS TIMESTAMP_NTZ) AS r2, CAST(t AS DATE) AS r3 FROM (SELECT k, nested.t AS t FROM alias_inputs) q",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "GMT",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_GMT",
+          "id": "null_and_coercion_controls",
+          "sql": "SELECT TO_DATE(CAST(NULL AS STRING), 'yyyy-MM-dd') AS r0, TRY_TO_DATE(CAST(NULL AS BINARY), 'yyyy-MM-dd') AS r1, TO_DATE('2024-01-02', CAST(NULL AS STRING)) AS r2, TRY_TO_DATE('bad', 'yyyy-MM-dd') AS r3, DATE_FORMAT(CAST(NULL AS TIMESTAMP_NTZ), 'yyyy-MM-dd z O XXX') AS r4, TO_DATE(20240102, 'yyyyMMdd') AS r5, TRY_TO_DATE(X'323032342d30312d3032', 'yyyy-MM-dd') AS r6",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "GMT",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_GMT",
+          "id": "registered_and_nested",
+          "sql": "SELECT k AS r0, ts AS r1, nested.t AS r2, HOUR(ts) AS r3, HOUR(nested.t) AS r4, CAST(ts AS DATE) AS r5, CAST(ts AS TIMESTAMP_NTZ) AS r6, CAST(d AS TIMESTAMP) AS r7, CAST(ntz AS TIMESTAMP) AS r8, CAST(ts AS STRING) AS r9, HOUR(TIMESTAMP_SECONDS(1704200645.125)) AS r10, HOUR(TIMESTAMP_MILLIS(1704200645125)) AS r11, HOUR(TIMESTAMP_MICROS(1704200645125000)) AS r12 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "GMT",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_GMT",
+          "id": "utc_conversions",
+          "sql": "SELECT k AS r0, TO_UTC_TIMESTAMP(ntz, 'America/Los_Angeles') AS r1, FROM_UTC_TIMESTAMP(ntz, '+05:30') AS r2, TO_UTC_TIMESTAMP(d, 'America/Los_Angeles') AS r3, FROM_UTC_TIMESTAMP(s, '-08') AS r4, CONVERT_TIMEZONE('UTC', ts) AS r5, CONVERT_TIMEZONE('+05:30', ntz) AS r6 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "GMT",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_GMT",
+          "id": "formatted_dates",
+          "sql": "SELECT k AS r0, TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r1, TRY_TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r2, TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r3, TRY_TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r4, TO_DATE(n, 'yyyyMMdd') AS r5, TRY_TO_DATE(b, 'yyyy-MM-dd') AS r6, TO_DATE(ts, 'yyyy-MM-dd') AS r7, TRY_TO_DATE(ntz, 'yyyy-MM-dd') AS r8, TO_DATE(d, CAST(NULL AS STRING)) AS r9 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "GMT",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_GMT",
+          "id": "format_clocks_and_offsets",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r1, DATE_FORMAT(ntz, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r2, DATE_FORMAT(ts, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "GMT",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_GMT",
+          "id": "format_short_names",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'z') AS r1, DATE_FORMAT(ntz, 'z') AS r2, DATE_FORMAT(ts, 'z') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "labels",
+          "timezone": "GMT",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_GMT",
+          "id": "literal_alias_consumers",
+          "sql": "SELECT CAST(TIMESTAMP '2024-01-02 00:30:00+00:00' AS DATE) AS r0, CAST(TIMESTAMP '1800-06-15 12:00:00+00:00' AS TIMESTAMP_NTZ) AS r1, HOUR(TIMESTAMP '1967-07-01 12:00:00+00:00') AS r2, CAST(DATE '1940-07-01' AS TIMESTAMP) AS r3, CAST(TIMESTAMP_NTZ '2024-03-10 02:30:00' AS TIMESTAMP) AS r4, DATE_FORMAT(TIMESTAMP_NTZ '2024-03-10 02:30:00', 'yyyy-MM-dd HH:mm:ss') AS r5, TO_DATE(TIMESTAMP_NTZ '2024-01-15 00:00:00', 'yyyy-MM-dd') AS r6, TRY_TO_DATE('2024-01-02 00:30:00+02:00', 'yyyy-MM-dd HH:mm:ssXXX') AS r7",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "GMT",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_GMT",
+          "id": "derived_fields",
+          "sql": "SELECT k AS r0, HOUR(t) AS r1, CAST(t AS TIMESTAMP_NTZ) AS r2, CAST(t AS DATE) AS r3 FROM (SELECT k, nested.t AS t FROM alias_inputs) q",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "GMT",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_GMT",
+          "id": "null_and_coercion_controls",
+          "sql": "SELECT TO_DATE(CAST(NULL AS STRING), 'yyyy-MM-dd') AS r0, TRY_TO_DATE(CAST(NULL AS BINARY), 'yyyy-MM-dd') AS r1, TO_DATE('2024-01-02', CAST(NULL AS STRING)) AS r2, TRY_TO_DATE('bad', 'yyyy-MM-dd') AS r3, DATE_FORMAT(CAST(NULL AS TIMESTAMP_NTZ), 'yyyy-MM-dd z O XXX') AS r4, TO_DATE(20240102, 'yyyyMMdd') AS r5, TRY_TO_DATE(X'323032342d30312d3032', 'yyyy-MM-dd') AS r6",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "GMT",
+          "ansi": false
+        }
+      ]
+    },
+    {
+      "corpus": "session_alias_UT",
+      "source": "source-only #1029 session alias SQL and logical input definitions",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "alias_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "ts",
+                  "type": "timestamp",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "ntz",
+                  "type": "timestamp_ntz",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "d",
+                  "type": "date",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "offset_s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "b",
+                  "type": "binary",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "n",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "nested",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "t",
+                        "type": "timestamp",
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "1704180600000000",
+                "1704155400000000",
+                "19724",
+                "2024-01-02 00:30:00",
+                "2024-01-02 00:30:00+02:00",
+                "323032342d30312d3032",
+                "20240102",
+                [
+                  "1704180600000000"
+                ]
+              ],
+              [
+                "1",
+                "1719921600000000",
+                "1719880200000000",
+                "19906",
+                "2024-07-02 00:30:00",
+                "2024-07-02 00:30:00+02:00",
+                "323032342d30372d3032",
+                "20240702",
+                [
+                  "1719921600000000"
+                ]
+              ],
+              [
+                "2",
+                "1710066600000000",
+                "1710037800000000",
+                "19792",
+                "2024-03-10 02:30:00",
+                "2024-03-10 02:30:00+02:00",
+                "323032342d30332d3130",
+                "20240310",
+                [
+                  "1710066600000000"
+                ]
+              ],
+              [
+                "3",
+                "1730622600000000",
+                "1730597400000000",
+                "20030",
+                "2024-11-03 01:30:00",
+                "2024-11-03 01:30:00+02:00",
+                "323032342d31312d3033",
+                "20241103",
+                [
+                  "1730622600000000"
+                ]
+              ],
+              [
+                "4",
+                "1730626200000000",
+                "1730597400000000",
+                "20030",
+                "2024-11-03 01:30:00",
+                "2024-11-03 01:30:00+02:00",
+                "323032342d31312d3033",
+                "20241103",
+                [
+                  "1730626200000000"
+                ]
+              ],
+              [
+                "5",
+                "-5350363200000000",
+                "-5350404600000000",
+                "-61926",
+                "1800-06-15 00:30:00",
+                "1800-06-15 00:30:00+02:00",
+                "313830302d30362d3135",
+                "18000615",
+                [
+                  "-5350363200000000"
+                ]
+              ],
+              [
+                "6",
+                "-79012800000000",
+                "-79054200000000",
+                "-915",
+                "1967-07-01 00:30:00",
+                "1967-07-01 00:30:00+02:00",
+                "313936372d30372d3031",
+                "19670701",
+                [
+                  "-79012800000000"
+                ]
+              ],
+              [
+                "7",
+                "-931003200000000",
+                "-931044600000000",
+                "-10776",
+                "1940-07-01 00:30:00",
+                "1940-07-01 00:30:00+02:00",
+                "313934302d30372d3031",
+                "19400701",
+                [
+                  "-931003200000000"
+                ]
+              ],
+              [
+                "8",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+              ],
+              [
+                "9",
+                "1719921600000000",
+                "1719880200000000",
+                "19906",
+                "2024-07-02 00:30:00",
+                "2024-07-02 00:30:00+02:00",
+                "323032342d30372d3032",
+                "20240702",
+                [
+                  "1719921600000000"
+                ]
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "session_alias_UT",
+          "id": "registered_and_nested",
+          "sql": "SELECT k AS r0, ts AS r1, nested.t AS r2, HOUR(ts) AS r3, HOUR(nested.t) AS r4, CAST(ts AS DATE) AS r5, CAST(ts AS TIMESTAMP_NTZ) AS r6, CAST(d AS TIMESTAMP) AS r7, CAST(ntz AS TIMESTAMP) AS r8, CAST(ts AS STRING) AS r9, HOUR(TIMESTAMP_SECONDS(1704200645.125)) AS r10, HOUR(TIMESTAMP_MILLIS(1704200645125)) AS r11, HOUR(TIMESTAMP_MICROS(1704200645125000)) AS r12 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "UT",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_UT",
+          "id": "utc_conversions",
+          "sql": "SELECT k AS r0, TO_UTC_TIMESTAMP(ntz, 'America/Los_Angeles') AS r1, FROM_UTC_TIMESTAMP(ntz, '+05:30') AS r2, TO_UTC_TIMESTAMP(d, 'America/Los_Angeles') AS r3, FROM_UTC_TIMESTAMP(s, '-08') AS r4, CONVERT_TIMEZONE('UTC', ts) AS r5, CONVERT_TIMEZONE('+05:30', ntz) AS r6 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "UT",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_UT",
+          "id": "formatted_dates",
+          "sql": "SELECT k AS r0, TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r1, TRY_TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r2, TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r3, TRY_TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r4, TO_DATE(n, 'yyyyMMdd') AS r5, TRY_TO_DATE(b, 'yyyy-MM-dd') AS r6, TO_DATE(ts, 'yyyy-MM-dd') AS r7, TRY_TO_DATE(ntz, 'yyyy-MM-dd') AS r8, TO_DATE(d, CAST(NULL AS STRING)) AS r9 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "UT",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_UT",
+          "id": "format_clocks_and_offsets",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r1, DATE_FORMAT(ntz, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r2, DATE_FORMAT(ts, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "UT",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_UT",
+          "id": "format_short_names",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'z') AS r1, DATE_FORMAT(ntz, 'z') AS r2, DATE_FORMAT(ts, 'z') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "labels",
+          "timezone": "UT",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_UT",
+          "id": "literal_alias_consumers",
+          "sql": "SELECT CAST(TIMESTAMP '2024-01-02 00:30:00+00:00' AS DATE) AS r0, CAST(TIMESTAMP '1800-06-15 12:00:00+00:00' AS TIMESTAMP_NTZ) AS r1, HOUR(TIMESTAMP '1967-07-01 12:00:00+00:00') AS r2, CAST(DATE '1940-07-01' AS TIMESTAMP) AS r3, CAST(TIMESTAMP_NTZ '2024-03-10 02:30:00' AS TIMESTAMP) AS r4, DATE_FORMAT(TIMESTAMP_NTZ '2024-03-10 02:30:00', 'yyyy-MM-dd HH:mm:ss') AS r5, TO_DATE(TIMESTAMP_NTZ '2024-01-15 00:00:00', 'yyyy-MM-dd') AS r6, TRY_TO_DATE('2024-01-02 00:30:00+02:00', 'yyyy-MM-dd HH:mm:ssXXX') AS r7",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "UT",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_UT",
+          "id": "derived_fields",
+          "sql": "SELECT k AS r0, HOUR(t) AS r1, CAST(t AS TIMESTAMP_NTZ) AS r2, CAST(t AS DATE) AS r3 FROM (SELECT k, nested.t AS t FROM alias_inputs) q",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "UT",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_UT",
+          "id": "null_and_coercion_controls",
+          "sql": "SELECT TO_DATE(CAST(NULL AS STRING), 'yyyy-MM-dd') AS r0, TRY_TO_DATE(CAST(NULL AS BINARY), 'yyyy-MM-dd') AS r1, TO_DATE('2024-01-02', CAST(NULL AS STRING)) AS r2, TRY_TO_DATE('bad', 'yyyy-MM-dd') AS r3, DATE_FORMAT(CAST(NULL AS TIMESTAMP_NTZ), 'yyyy-MM-dd z O XXX') AS r4, TO_DATE(20240102, 'yyyyMMdd') AS r5, TRY_TO_DATE(X'323032342d30312d3032', 'yyyy-MM-dd') AS r6",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "UT",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_UT",
+          "id": "registered_and_nested",
+          "sql": "SELECT k AS r0, ts AS r1, nested.t AS r2, HOUR(ts) AS r3, HOUR(nested.t) AS r4, CAST(ts AS DATE) AS r5, CAST(ts AS TIMESTAMP_NTZ) AS r6, CAST(d AS TIMESTAMP) AS r7, CAST(ntz AS TIMESTAMP) AS r8, CAST(ts AS STRING) AS r9, HOUR(TIMESTAMP_SECONDS(1704200645.125)) AS r10, HOUR(TIMESTAMP_MILLIS(1704200645125)) AS r11, HOUR(TIMESTAMP_MICROS(1704200645125000)) AS r12 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "UT",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_UT",
+          "id": "utc_conversions",
+          "sql": "SELECT k AS r0, TO_UTC_TIMESTAMP(ntz, 'America/Los_Angeles') AS r1, FROM_UTC_TIMESTAMP(ntz, '+05:30') AS r2, TO_UTC_TIMESTAMP(d, 'America/Los_Angeles') AS r3, FROM_UTC_TIMESTAMP(s, '-08') AS r4, CONVERT_TIMEZONE('UTC', ts) AS r5, CONVERT_TIMEZONE('+05:30', ntz) AS r6 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "UT",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_UT",
+          "id": "formatted_dates",
+          "sql": "SELECT k AS r0, TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r1, TRY_TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r2, TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r3, TRY_TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r4, TO_DATE(n, 'yyyyMMdd') AS r5, TRY_TO_DATE(b, 'yyyy-MM-dd') AS r6, TO_DATE(ts, 'yyyy-MM-dd') AS r7, TRY_TO_DATE(ntz, 'yyyy-MM-dd') AS r8, TO_DATE(d, CAST(NULL AS STRING)) AS r9 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "UT",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_UT",
+          "id": "format_clocks_and_offsets",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r1, DATE_FORMAT(ntz, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r2, DATE_FORMAT(ts, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "UT",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_UT",
+          "id": "format_short_names",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'z') AS r1, DATE_FORMAT(ntz, 'z') AS r2, DATE_FORMAT(ts, 'z') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "labels",
+          "timezone": "UT",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_UT",
+          "id": "literal_alias_consumers",
+          "sql": "SELECT CAST(TIMESTAMP '2024-01-02 00:30:00+00:00' AS DATE) AS r0, CAST(TIMESTAMP '1800-06-15 12:00:00+00:00' AS TIMESTAMP_NTZ) AS r1, HOUR(TIMESTAMP '1967-07-01 12:00:00+00:00') AS r2, CAST(DATE '1940-07-01' AS TIMESTAMP) AS r3, CAST(TIMESTAMP_NTZ '2024-03-10 02:30:00' AS TIMESTAMP) AS r4, DATE_FORMAT(TIMESTAMP_NTZ '2024-03-10 02:30:00', 'yyyy-MM-dd HH:mm:ss') AS r5, TO_DATE(TIMESTAMP_NTZ '2024-01-15 00:00:00', 'yyyy-MM-dd') AS r6, TRY_TO_DATE('2024-01-02 00:30:00+02:00', 'yyyy-MM-dd HH:mm:ssXXX') AS r7",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "UT",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_UT",
+          "id": "derived_fields",
+          "sql": "SELECT k AS r0, HOUR(t) AS r1, CAST(t AS TIMESTAMP_NTZ) AS r2, CAST(t AS DATE) AS r3 FROM (SELECT k, nested.t AS t FROM alias_inputs) q",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "UT",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_UT",
+          "id": "null_and_coercion_controls",
+          "sql": "SELECT TO_DATE(CAST(NULL AS STRING), 'yyyy-MM-dd') AS r0, TRY_TO_DATE(CAST(NULL AS BINARY), 'yyyy-MM-dd') AS r1, TO_DATE('2024-01-02', CAST(NULL AS STRING)) AS r2, TRY_TO_DATE('bad', 'yyyy-MM-dd') AS r3, DATE_FORMAT(CAST(NULL AS TIMESTAMP_NTZ), 'yyyy-MM-dd z O XXX') AS r4, TO_DATE(20240102, 'yyyyMMdd') AS r5, TRY_TO_DATE(X'323032342d30312d3032', 'yyyy-MM-dd') AS r6",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "UT",
+          "ansi": false
+        }
+      ]
+    },
+    {
+      "corpus": "session_alias_PST",
+      "source": "source-only #1029 session alias SQL and logical input definitions",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "alias_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "ts",
+                  "type": "timestamp",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "ntz",
+                  "type": "timestamp_ntz",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "d",
+                  "type": "date",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "offset_s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "b",
+                  "type": "binary",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "n",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "nested",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "t",
+                        "type": "timestamp",
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "1704180600000000",
+                "1704155400000000",
+                "19724",
+                "2024-01-02 00:30:00",
+                "2024-01-02 00:30:00+02:00",
+                "323032342d30312d3032",
+                "20240102",
+                [
+                  "1704180600000000"
+                ]
+              ],
+              [
+                "1",
+                "1719921600000000",
+                "1719880200000000",
+                "19906",
+                "2024-07-02 00:30:00",
+                "2024-07-02 00:30:00+02:00",
+                "323032342d30372d3032",
+                "20240702",
+                [
+                  "1719921600000000"
+                ]
+              ],
+              [
+                "2",
+                "1710066600000000",
+                "1710037800000000",
+                "19792",
+                "2024-03-10 02:30:00",
+                "2024-03-10 02:30:00+02:00",
+                "323032342d30332d3130",
+                "20240310",
+                [
+                  "1710066600000000"
+                ]
+              ],
+              [
+                "3",
+                "1730622600000000",
+                "1730597400000000",
+                "20030",
+                "2024-11-03 01:30:00",
+                "2024-11-03 01:30:00+02:00",
+                "323032342d31312d3033",
+                "20241103",
+                [
+                  "1730622600000000"
+                ]
+              ],
+              [
+                "4",
+                "1730626200000000",
+                "1730597400000000",
+                "20030",
+                "2024-11-03 01:30:00",
+                "2024-11-03 01:30:00+02:00",
+                "323032342d31312d3033",
+                "20241103",
+                [
+                  "1730626200000000"
+                ]
+              ],
+              [
+                "5",
+                "-5350363200000000",
+                "-5350404600000000",
+                "-61926",
+                "1800-06-15 00:30:00",
+                "1800-06-15 00:30:00+02:00",
+                "313830302d30362d3135",
+                "18000615",
+                [
+                  "-5350363200000000"
+                ]
+              ],
+              [
+                "6",
+                "-79012800000000",
+                "-79054200000000",
+                "-915",
+                "1967-07-01 00:30:00",
+                "1967-07-01 00:30:00+02:00",
+                "313936372d30372d3031",
+                "19670701",
+                [
+                  "-79012800000000"
+                ]
+              ],
+              [
+                "7",
+                "-931003200000000",
+                "-931044600000000",
+                "-10776",
+                "1940-07-01 00:30:00",
+                "1940-07-01 00:30:00+02:00",
+                "313934302d30372d3031",
+                "19400701",
+                [
+                  "-931003200000000"
+                ]
+              ],
+              [
+                "8",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+              ],
+              [
+                "9",
+                "1719921600000000",
+                "1719880200000000",
+                "19906",
+                "2024-07-02 00:30:00",
+                "2024-07-02 00:30:00+02:00",
+                "323032342d30372d3032",
+                "20240702",
+                [
+                  "1719921600000000"
+                ]
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "session_alias_PST",
+          "id": "registered_and_nested",
+          "sql": "SELECT k AS r0, ts AS r1, nested.t AS r2, HOUR(ts) AS r3, HOUR(nested.t) AS r4, CAST(ts AS DATE) AS r5, CAST(ts AS TIMESTAMP_NTZ) AS r6, CAST(d AS TIMESTAMP) AS r7, CAST(ntz AS TIMESTAMP) AS r8, CAST(ts AS STRING) AS r9, HOUR(TIMESTAMP_SECONDS(1704200645.125)) AS r10, HOUR(TIMESTAMP_MILLIS(1704200645125)) AS r11, HOUR(TIMESTAMP_MICROS(1704200645125000)) AS r12 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "PST",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_PST",
+          "id": "utc_conversions",
+          "sql": "SELECT k AS r0, TO_UTC_TIMESTAMP(ntz, 'America/Los_Angeles') AS r1, FROM_UTC_TIMESTAMP(ntz, '+05:30') AS r2, TO_UTC_TIMESTAMP(d, 'America/Los_Angeles') AS r3, FROM_UTC_TIMESTAMP(s, '-08') AS r4, CONVERT_TIMEZONE('UTC', ts) AS r5, CONVERT_TIMEZONE('+05:30', ntz) AS r6 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "PST",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_PST",
+          "id": "formatted_dates",
+          "sql": "SELECT k AS r0, TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r1, TRY_TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r2, TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r3, TRY_TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r4, TO_DATE(n, 'yyyyMMdd') AS r5, TRY_TO_DATE(b, 'yyyy-MM-dd') AS r6, TO_DATE(ts, 'yyyy-MM-dd') AS r7, TRY_TO_DATE(ntz, 'yyyy-MM-dd') AS r8, TO_DATE(d, CAST(NULL AS STRING)) AS r9 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "PST",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_PST",
+          "id": "format_clocks_and_offsets",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r1, DATE_FORMAT(ntz, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r2, DATE_FORMAT(ts, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "PST",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_PST",
+          "id": "format_short_names",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'z') AS r1, DATE_FORMAT(ntz, 'z') AS r2, DATE_FORMAT(ts, 'z') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "labels",
+          "timezone": "PST",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_PST",
+          "id": "literal_alias_consumers",
+          "sql": "SELECT CAST(TIMESTAMP '2024-01-02 00:30:00+00:00' AS DATE) AS r0, CAST(TIMESTAMP '1800-06-15 12:00:00+00:00' AS TIMESTAMP_NTZ) AS r1, HOUR(TIMESTAMP '1967-07-01 12:00:00+00:00') AS r2, CAST(DATE '1940-07-01' AS TIMESTAMP) AS r3, CAST(TIMESTAMP_NTZ '2024-03-10 02:30:00' AS TIMESTAMP) AS r4, DATE_FORMAT(TIMESTAMP_NTZ '2024-03-10 02:30:00', 'yyyy-MM-dd HH:mm:ss') AS r5, TO_DATE(TIMESTAMP_NTZ '2024-01-15 00:00:00', 'yyyy-MM-dd') AS r6, TRY_TO_DATE('2024-01-02 00:30:00+02:00', 'yyyy-MM-dd HH:mm:ssXXX') AS r7",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "PST",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_PST",
+          "id": "derived_fields",
+          "sql": "SELECT k AS r0, HOUR(t) AS r1, CAST(t AS TIMESTAMP_NTZ) AS r2, CAST(t AS DATE) AS r3 FROM (SELECT k, nested.t AS t FROM alias_inputs) q",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "PST",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_PST",
+          "id": "null_and_coercion_controls",
+          "sql": "SELECT TO_DATE(CAST(NULL AS STRING), 'yyyy-MM-dd') AS r0, TRY_TO_DATE(CAST(NULL AS BINARY), 'yyyy-MM-dd') AS r1, TO_DATE('2024-01-02', CAST(NULL AS STRING)) AS r2, TRY_TO_DATE('bad', 'yyyy-MM-dd') AS r3, DATE_FORMAT(CAST(NULL AS TIMESTAMP_NTZ), 'yyyy-MM-dd z O XXX') AS r4, TO_DATE(20240102, 'yyyyMMdd') AS r5, TRY_TO_DATE(X'323032342d30312d3032', 'yyyy-MM-dd') AS r6",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "PST",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_PST",
+          "id": "registered_and_nested",
+          "sql": "SELECT k AS r0, ts AS r1, nested.t AS r2, HOUR(ts) AS r3, HOUR(nested.t) AS r4, CAST(ts AS DATE) AS r5, CAST(ts AS TIMESTAMP_NTZ) AS r6, CAST(d AS TIMESTAMP) AS r7, CAST(ntz AS TIMESTAMP) AS r8, CAST(ts AS STRING) AS r9, HOUR(TIMESTAMP_SECONDS(1704200645.125)) AS r10, HOUR(TIMESTAMP_MILLIS(1704200645125)) AS r11, HOUR(TIMESTAMP_MICROS(1704200645125000)) AS r12 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "PST",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_PST",
+          "id": "utc_conversions",
+          "sql": "SELECT k AS r0, TO_UTC_TIMESTAMP(ntz, 'America/Los_Angeles') AS r1, FROM_UTC_TIMESTAMP(ntz, '+05:30') AS r2, TO_UTC_TIMESTAMP(d, 'America/Los_Angeles') AS r3, FROM_UTC_TIMESTAMP(s, '-08') AS r4, CONVERT_TIMEZONE('UTC', ts) AS r5, CONVERT_TIMEZONE('+05:30', ntz) AS r6 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "PST",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_PST",
+          "id": "formatted_dates",
+          "sql": "SELECT k AS r0, TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r1, TRY_TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r2, TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r3, TRY_TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r4, TO_DATE(n, 'yyyyMMdd') AS r5, TRY_TO_DATE(b, 'yyyy-MM-dd') AS r6, TO_DATE(ts, 'yyyy-MM-dd') AS r7, TRY_TO_DATE(ntz, 'yyyy-MM-dd') AS r8, TO_DATE(d, CAST(NULL AS STRING)) AS r9 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "PST",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_PST",
+          "id": "format_clocks_and_offsets",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r1, DATE_FORMAT(ntz, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r2, DATE_FORMAT(ts, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "PST",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_PST",
+          "id": "format_short_names",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'z') AS r1, DATE_FORMAT(ntz, 'z') AS r2, DATE_FORMAT(ts, 'z') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "labels",
+          "timezone": "PST",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_PST",
+          "id": "literal_alias_consumers",
+          "sql": "SELECT CAST(TIMESTAMP '2024-01-02 00:30:00+00:00' AS DATE) AS r0, CAST(TIMESTAMP '1800-06-15 12:00:00+00:00' AS TIMESTAMP_NTZ) AS r1, HOUR(TIMESTAMP '1967-07-01 12:00:00+00:00') AS r2, CAST(DATE '1940-07-01' AS TIMESTAMP) AS r3, CAST(TIMESTAMP_NTZ '2024-03-10 02:30:00' AS TIMESTAMP) AS r4, DATE_FORMAT(TIMESTAMP_NTZ '2024-03-10 02:30:00', 'yyyy-MM-dd HH:mm:ss') AS r5, TO_DATE(TIMESTAMP_NTZ '2024-01-15 00:00:00', 'yyyy-MM-dd') AS r6, TRY_TO_DATE('2024-01-02 00:30:00+02:00', 'yyyy-MM-dd HH:mm:ssXXX') AS r7",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "PST",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_PST",
+          "id": "derived_fields",
+          "sql": "SELECT k AS r0, HOUR(t) AS r1, CAST(t AS TIMESTAMP_NTZ) AS r2, CAST(t AS DATE) AS r3 FROM (SELECT k, nested.t AS t FROM alias_inputs) q",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "PST",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_PST",
+          "id": "null_and_coercion_controls",
+          "sql": "SELECT TO_DATE(CAST(NULL AS STRING), 'yyyy-MM-dd') AS r0, TRY_TO_DATE(CAST(NULL AS BINARY), 'yyyy-MM-dd') AS r1, TO_DATE('2024-01-02', CAST(NULL AS STRING)) AS r2, TRY_TO_DATE('bad', 'yyyy-MM-dd') AS r3, DATE_FORMAT(CAST(NULL AS TIMESTAMP_NTZ), 'yyyy-MM-dd z O XXX') AS r4, TO_DATE(20240102, 'yyyyMMdd') AS r5, TRY_TO_DATE(X'323032342d30312d3032', 'yyyy-MM-dd') AS r6",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "PST",
+          "ansi": false
+        }
+      ]
+    },
+    {
+      "corpus": "session_alias_EST",
+      "source": "source-only #1029 session alias SQL and logical input definitions",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "alias_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "ts",
+                  "type": "timestamp",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "ntz",
+                  "type": "timestamp_ntz",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "d",
+                  "type": "date",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "offset_s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "b",
+                  "type": "binary",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "n",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "nested",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "t",
+                        "type": "timestamp",
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "1704180600000000",
+                "1704155400000000",
+                "19724",
+                "2024-01-02 00:30:00",
+                "2024-01-02 00:30:00+02:00",
+                "323032342d30312d3032",
+                "20240102",
+                [
+                  "1704180600000000"
+                ]
+              ],
+              [
+                "1",
+                "1719921600000000",
+                "1719880200000000",
+                "19906",
+                "2024-07-02 00:30:00",
+                "2024-07-02 00:30:00+02:00",
+                "323032342d30372d3032",
+                "20240702",
+                [
+                  "1719921600000000"
+                ]
+              ],
+              [
+                "2",
+                "1710066600000000",
+                "1710037800000000",
+                "19792",
+                "2024-03-10 02:30:00",
+                "2024-03-10 02:30:00+02:00",
+                "323032342d30332d3130",
+                "20240310",
+                [
+                  "1710066600000000"
+                ]
+              ],
+              [
+                "3",
+                "1730622600000000",
+                "1730597400000000",
+                "20030",
+                "2024-11-03 01:30:00",
+                "2024-11-03 01:30:00+02:00",
+                "323032342d31312d3033",
+                "20241103",
+                [
+                  "1730622600000000"
+                ]
+              ],
+              [
+                "4",
+                "1730626200000000",
+                "1730597400000000",
+                "20030",
+                "2024-11-03 01:30:00",
+                "2024-11-03 01:30:00+02:00",
+                "323032342d31312d3033",
+                "20241103",
+                [
+                  "1730626200000000"
+                ]
+              ],
+              [
+                "5",
+                "-5350363200000000",
+                "-5350404600000000",
+                "-61926",
+                "1800-06-15 00:30:00",
+                "1800-06-15 00:30:00+02:00",
+                "313830302d30362d3135",
+                "18000615",
+                [
+                  "-5350363200000000"
+                ]
+              ],
+              [
+                "6",
+                "-79012800000000",
+                "-79054200000000",
+                "-915",
+                "1967-07-01 00:30:00",
+                "1967-07-01 00:30:00+02:00",
+                "313936372d30372d3031",
+                "19670701",
+                [
+                  "-79012800000000"
+                ]
+              ],
+              [
+                "7",
+                "-931003200000000",
+                "-931044600000000",
+                "-10776",
+                "1940-07-01 00:30:00",
+                "1940-07-01 00:30:00+02:00",
+                "313934302d30372d3031",
+                "19400701",
+                [
+                  "-931003200000000"
+                ]
+              ],
+              [
+                "8",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+              ],
+              [
+                "9",
+                "1719921600000000",
+                "1719880200000000",
+                "19906",
+                "2024-07-02 00:30:00",
+                "2024-07-02 00:30:00+02:00",
+                "323032342d30372d3032",
+                "20240702",
+                [
+                  "1719921600000000"
+                ]
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "session_alias_EST",
+          "id": "registered_and_nested",
+          "sql": "SELECT k AS r0, ts AS r1, nested.t AS r2, HOUR(ts) AS r3, HOUR(nested.t) AS r4, CAST(ts AS DATE) AS r5, CAST(ts AS TIMESTAMP_NTZ) AS r6, CAST(d AS TIMESTAMP) AS r7, CAST(ntz AS TIMESTAMP) AS r8, CAST(ts AS STRING) AS r9, HOUR(TIMESTAMP_SECONDS(1704200645.125)) AS r10, HOUR(TIMESTAMP_MILLIS(1704200645125)) AS r11, HOUR(TIMESTAMP_MICROS(1704200645125000)) AS r12 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "EST",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_EST",
+          "id": "utc_conversions",
+          "sql": "SELECT k AS r0, TO_UTC_TIMESTAMP(ntz, 'America/Los_Angeles') AS r1, FROM_UTC_TIMESTAMP(ntz, '+05:30') AS r2, TO_UTC_TIMESTAMP(d, 'America/Los_Angeles') AS r3, FROM_UTC_TIMESTAMP(s, '-08') AS r4, CONVERT_TIMEZONE('UTC', ts) AS r5, CONVERT_TIMEZONE('+05:30', ntz) AS r6 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "EST",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_EST",
+          "id": "formatted_dates",
+          "sql": "SELECT k AS r0, TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r1, TRY_TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r2, TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r3, TRY_TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r4, TO_DATE(n, 'yyyyMMdd') AS r5, TRY_TO_DATE(b, 'yyyy-MM-dd') AS r6, TO_DATE(ts, 'yyyy-MM-dd') AS r7, TRY_TO_DATE(ntz, 'yyyy-MM-dd') AS r8, TO_DATE(d, CAST(NULL AS STRING)) AS r9 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "EST",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_EST",
+          "id": "format_clocks_and_offsets",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r1, DATE_FORMAT(ntz, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r2, DATE_FORMAT(ts, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "EST",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_EST",
+          "id": "format_short_names",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'z') AS r1, DATE_FORMAT(ntz, 'z') AS r2, DATE_FORMAT(ts, 'z') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "labels",
+          "timezone": "EST",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_EST",
+          "id": "literal_alias_consumers",
+          "sql": "SELECT CAST(TIMESTAMP '2024-01-02 00:30:00+00:00' AS DATE) AS r0, CAST(TIMESTAMP '1800-06-15 12:00:00+00:00' AS TIMESTAMP_NTZ) AS r1, HOUR(TIMESTAMP '1967-07-01 12:00:00+00:00') AS r2, CAST(DATE '1940-07-01' AS TIMESTAMP) AS r3, CAST(TIMESTAMP_NTZ '2024-03-10 02:30:00' AS TIMESTAMP) AS r4, DATE_FORMAT(TIMESTAMP_NTZ '2024-03-10 02:30:00', 'yyyy-MM-dd HH:mm:ss') AS r5, TO_DATE(TIMESTAMP_NTZ '2024-01-15 00:00:00', 'yyyy-MM-dd') AS r6, TRY_TO_DATE('2024-01-02 00:30:00+02:00', 'yyyy-MM-dd HH:mm:ssXXX') AS r7",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "EST",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_EST",
+          "id": "derived_fields",
+          "sql": "SELECT k AS r0, HOUR(t) AS r1, CAST(t AS TIMESTAMP_NTZ) AS r2, CAST(t AS DATE) AS r3 FROM (SELECT k, nested.t AS t FROM alias_inputs) q",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "EST",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_EST",
+          "id": "null_and_coercion_controls",
+          "sql": "SELECT TO_DATE(CAST(NULL AS STRING), 'yyyy-MM-dd') AS r0, TRY_TO_DATE(CAST(NULL AS BINARY), 'yyyy-MM-dd') AS r1, TO_DATE('2024-01-02', CAST(NULL AS STRING)) AS r2, TRY_TO_DATE('bad', 'yyyy-MM-dd') AS r3, DATE_FORMAT(CAST(NULL AS TIMESTAMP_NTZ), 'yyyy-MM-dd z O XXX') AS r4, TO_DATE(20240102, 'yyyyMMdd') AS r5, TRY_TO_DATE(X'323032342d30312d3032', 'yyyy-MM-dd') AS r6",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "EST",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_EST",
+          "id": "registered_and_nested",
+          "sql": "SELECT k AS r0, ts AS r1, nested.t AS r2, HOUR(ts) AS r3, HOUR(nested.t) AS r4, CAST(ts AS DATE) AS r5, CAST(ts AS TIMESTAMP_NTZ) AS r6, CAST(d AS TIMESTAMP) AS r7, CAST(ntz AS TIMESTAMP) AS r8, CAST(ts AS STRING) AS r9, HOUR(TIMESTAMP_SECONDS(1704200645.125)) AS r10, HOUR(TIMESTAMP_MILLIS(1704200645125)) AS r11, HOUR(TIMESTAMP_MICROS(1704200645125000)) AS r12 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "EST",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_EST",
+          "id": "utc_conversions",
+          "sql": "SELECT k AS r0, TO_UTC_TIMESTAMP(ntz, 'America/Los_Angeles') AS r1, FROM_UTC_TIMESTAMP(ntz, '+05:30') AS r2, TO_UTC_TIMESTAMP(d, 'America/Los_Angeles') AS r3, FROM_UTC_TIMESTAMP(s, '-08') AS r4, CONVERT_TIMEZONE('UTC', ts) AS r5, CONVERT_TIMEZONE('+05:30', ntz) AS r6 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "EST",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_EST",
+          "id": "formatted_dates",
+          "sql": "SELECT k AS r0, TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r1, TRY_TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r2, TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r3, TRY_TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r4, TO_DATE(n, 'yyyyMMdd') AS r5, TRY_TO_DATE(b, 'yyyy-MM-dd') AS r6, TO_DATE(ts, 'yyyy-MM-dd') AS r7, TRY_TO_DATE(ntz, 'yyyy-MM-dd') AS r8, TO_DATE(d, CAST(NULL AS STRING)) AS r9 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "EST",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_EST",
+          "id": "format_clocks_and_offsets",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r1, DATE_FORMAT(ntz, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r2, DATE_FORMAT(ts, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "EST",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_EST",
+          "id": "format_short_names",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'z') AS r1, DATE_FORMAT(ntz, 'z') AS r2, DATE_FORMAT(ts, 'z') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "labels",
+          "timezone": "EST",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_EST",
+          "id": "literal_alias_consumers",
+          "sql": "SELECT CAST(TIMESTAMP '2024-01-02 00:30:00+00:00' AS DATE) AS r0, CAST(TIMESTAMP '1800-06-15 12:00:00+00:00' AS TIMESTAMP_NTZ) AS r1, HOUR(TIMESTAMP '1967-07-01 12:00:00+00:00') AS r2, CAST(DATE '1940-07-01' AS TIMESTAMP) AS r3, CAST(TIMESTAMP_NTZ '2024-03-10 02:30:00' AS TIMESTAMP) AS r4, DATE_FORMAT(TIMESTAMP_NTZ '2024-03-10 02:30:00', 'yyyy-MM-dd HH:mm:ss') AS r5, TO_DATE(TIMESTAMP_NTZ '2024-01-15 00:00:00', 'yyyy-MM-dd') AS r6, TRY_TO_DATE('2024-01-02 00:30:00+02:00', 'yyyy-MM-dd HH:mm:ssXXX') AS r7",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "EST",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_EST",
+          "id": "derived_fields",
+          "sql": "SELECT k AS r0, HOUR(t) AS r1, CAST(t AS TIMESTAMP_NTZ) AS r2, CAST(t AS DATE) AS r3 FROM (SELECT k, nested.t AS t FROM alias_inputs) q",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "EST",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_EST",
+          "id": "null_and_coercion_controls",
+          "sql": "SELECT TO_DATE(CAST(NULL AS STRING), 'yyyy-MM-dd') AS r0, TRY_TO_DATE(CAST(NULL AS BINARY), 'yyyy-MM-dd') AS r1, TO_DATE('2024-01-02', CAST(NULL AS STRING)) AS r2, TRY_TO_DATE('bad', 'yyyy-MM-dd') AS r3, DATE_FORMAT(CAST(NULL AS TIMESTAMP_NTZ), 'yyyy-MM-dd z O XXX') AS r4, TO_DATE(20240102, 'yyyyMMdd') AS r5, TRY_TO_DATE(X'323032342d30312d3032', 'yyyy-MM-dd') AS r6",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "EST",
+          "ansi": false
+        }
+      ]
+    },
+    {
+      "corpus": "session_alias_MST",
+      "source": "source-only #1029 session alias SQL and logical input definitions",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "alias_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "ts",
+                  "type": "timestamp",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "ntz",
+                  "type": "timestamp_ntz",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "d",
+                  "type": "date",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "offset_s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "b",
+                  "type": "binary",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "n",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "nested",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "t",
+                        "type": "timestamp",
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "1704180600000000",
+                "1704155400000000",
+                "19724",
+                "2024-01-02 00:30:00",
+                "2024-01-02 00:30:00+02:00",
+                "323032342d30312d3032",
+                "20240102",
+                [
+                  "1704180600000000"
+                ]
+              ],
+              [
+                "1",
+                "1719921600000000",
+                "1719880200000000",
+                "19906",
+                "2024-07-02 00:30:00",
+                "2024-07-02 00:30:00+02:00",
+                "323032342d30372d3032",
+                "20240702",
+                [
+                  "1719921600000000"
+                ]
+              ],
+              [
+                "2",
+                "1710066600000000",
+                "1710037800000000",
+                "19792",
+                "2024-03-10 02:30:00",
+                "2024-03-10 02:30:00+02:00",
+                "323032342d30332d3130",
+                "20240310",
+                [
+                  "1710066600000000"
+                ]
+              ],
+              [
+                "3",
+                "1730622600000000",
+                "1730597400000000",
+                "20030",
+                "2024-11-03 01:30:00",
+                "2024-11-03 01:30:00+02:00",
+                "323032342d31312d3033",
+                "20241103",
+                [
+                  "1730622600000000"
+                ]
+              ],
+              [
+                "4",
+                "1730626200000000",
+                "1730597400000000",
+                "20030",
+                "2024-11-03 01:30:00",
+                "2024-11-03 01:30:00+02:00",
+                "323032342d31312d3033",
+                "20241103",
+                [
+                  "1730626200000000"
+                ]
+              ],
+              [
+                "5",
+                "-5350363200000000",
+                "-5350404600000000",
+                "-61926",
+                "1800-06-15 00:30:00",
+                "1800-06-15 00:30:00+02:00",
+                "313830302d30362d3135",
+                "18000615",
+                [
+                  "-5350363200000000"
+                ]
+              ],
+              [
+                "6",
+                "-79012800000000",
+                "-79054200000000",
+                "-915",
+                "1967-07-01 00:30:00",
+                "1967-07-01 00:30:00+02:00",
+                "313936372d30372d3031",
+                "19670701",
+                [
+                  "-79012800000000"
+                ]
+              ],
+              [
+                "7",
+                "-931003200000000",
+                "-931044600000000",
+                "-10776",
+                "1940-07-01 00:30:00",
+                "1940-07-01 00:30:00+02:00",
+                "313934302d30372d3031",
+                "19400701",
+                [
+                  "-931003200000000"
+                ]
+              ],
+              [
+                "8",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+              ],
+              [
+                "9",
+                "1719921600000000",
+                "1719880200000000",
+                "19906",
+                "2024-07-02 00:30:00",
+                "2024-07-02 00:30:00+02:00",
+                "323032342d30372d3032",
+                "20240702",
+                [
+                  "1719921600000000"
+                ]
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "session_alias_MST",
+          "id": "registered_and_nested",
+          "sql": "SELECT k AS r0, ts AS r1, nested.t AS r2, HOUR(ts) AS r3, HOUR(nested.t) AS r4, CAST(ts AS DATE) AS r5, CAST(ts AS TIMESTAMP_NTZ) AS r6, CAST(d AS TIMESTAMP) AS r7, CAST(ntz AS TIMESTAMP) AS r8, CAST(ts AS STRING) AS r9, HOUR(TIMESTAMP_SECONDS(1704200645.125)) AS r10, HOUR(TIMESTAMP_MILLIS(1704200645125)) AS r11, HOUR(TIMESTAMP_MICROS(1704200645125000)) AS r12 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "MST",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_MST",
+          "id": "utc_conversions",
+          "sql": "SELECT k AS r0, TO_UTC_TIMESTAMP(ntz, 'America/Los_Angeles') AS r1, FROM_UTC_TIMESTAMP(ntz, '+05:30') AS r2, TO_UTC_TIMESTAMP(d, 'America/Los_Angeles') AS r3, FROM_UTC_TIMESTAMP(s, '-08') AS r4, CONVERT_TIMEZONE('UTC', ts) AS r5, CONVERT_TIMEZONE('+05:30', ntz) AS r6 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "MST",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_MST",
+          "id": "formatted_dates",
+          "sql": "SELECT k AS r0, TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r1, TRY_TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r2, TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r3, TRY_TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r4, TO_DATE(n, 'yyyyMMdd') AS r5, TRY_TO_DATE(b, 'yyyy-MM-dd') AS r6, TO_DATE(ts, 'yyyy-MM-dd') AS r7, TRY_TO_DATE(ntz, 'yyyy-MM-dd') AS r8, TO_DATE(d, CAST(NULL AS STRING)) AS r9 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "MST",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_MST",
+          "id": "format_clocks_and_offsets",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r1, DATE_FORMAT(ntz, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r2, DATE_FORMAT(ts, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "MST",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_MST",
+          "id": "format_short_names",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'z') AS r1, DATE_FORMAT(ntz, 'z') AS r2, DATE_FORMAT(ts, 'z') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "labels",
+          "timezone": "MST",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_MST",
+          "id": "literal_alias_consumers",
+          "sql": "SELECT CAST(TIMESTAMP '2024-01-02 00:30:00+00:00' AS DATE) AS r0, CAST(TIMESTAMP '1800-06-15 12:00:00+00:00' AS TIMESTAMP_NTZ) AS r1, HOUR(TIMESTAMP '1967-07-01 12:00:00+00:00') AS r2, CAST(DATE '1940-07-01' AS TIMESTAMP) AS r3, CAST(TIMESTAMP_NTZ '2024-03-10 02:30:00' AS TIMESTAMP) AS r4, DATE_FORMAT(TIMESTAMP_NTZ '2024-03-10 02:30:00', 'yyyy-MM-dd HH:mm:ss') AS r5, TO_DATE(TIMESTAMP_NTZ '2024-01-15 00:00:00', 'yyyy-MM-dd') AS r6, TRY_TO_DATE('2024-01-02 00:30:00+02:00', 'yyyy-MM-dd HH:mm:ssXXX') AS r7",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "MST",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_MST",
+          "id": "derived_fields",
+          "sql": "SELECT k AS r0, HOUR(t) AS r1, CAST(t AS TIMESTAMP_NTZ) AS r2, CAST(t AS DATE) AS r3 FROM (SELECT k, nested.t AS t FROM alias_inputs) q",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "MST",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_MST",
+          "id": "null_and_coercion_controls",
+          "sql": "SELECT TO_DATE(CAST(NULL AS STRING), 'yyyy-MM-dd') AS r0, TRY_TO_DATE(CAST(NULL AS BINARY), 'yyyy-MM-dd') AS r1, TO_DATE('2024-01-02', CAST(NULL AS STRING)) AS r2, TRY_TO_DATE('bad', 'yyyy-MM-dd') AS r3, DATE_FORMAT(CAST(NULL AS TIMESTAMP_NTZ), 'yyyy-MM-dd z O XXX') AS r4, TO_DATE(20240102, 'yyyyMMdd') AS r5, TRY_TO_DATE(X'323032342d30312d3032', 'yyyy-MM-dd') AS r6",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "MST",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_MST",
+          "id": "registered_and_nested",
+          "sql": "SELECT k AS r0, ts AS r1, nested.t AS r2, HOUR(ts) AS r3, HOUR(nested.t) AS r4, CAST(ts AS DATE) AS r5, CAST(ts AS TIMESTAMP_NTZ) AS r6, CAST(d AS TIMESTAMP) AS r7, CAST(ntz AS TIMESTAMP) AS r8, CAST(ts AS STRING) AS r9, HOUR(TIMESTAMP_SECONDS(1704200645.125)) AS r10, HOUR(TIMESTAMP_MILLIS(1704200645125)) AS r11, HOUR(TIMESTAMP_MICROS(1704200645125000)) AS r12 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "MST",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_MST",
+          "id": "utc_conversions",
+          "sql": "SELECT k AS r0, TO_UTC_TIMESTAMP(ntz, 'America/Los_Angeles') AS r1, FROM_UTC_TIMESTAMP(ntz, '+05:30') AS r2, TO_UTC_TIMESTAMP(d, 'America/Los_Angeles') AS r3, FROM_UTC_TIMESTAMP(s, '-08') AS r4, CONVERT_TIMEZONE('UTC', ts) AS r5, CONVERT_TIMEZONE('+05:30', ntz) AS r6 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "MST",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_MST",
+          "id": "formatted_dates",
+          "sql": "SELECT k AS r0, TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r1, TRY_TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r2, TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r3, TRY_TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r4, TO_DATE(n, 'yyyyMMdd') AS r5, TRY_TO_DATE(b, 'yyyy-MM-dd') AS r6, TO_DATE(ts, 'yyyy-MM-dd') AS r7, TRY_TO_DATE(ntz, 'yyyy-MM-dd') AS r8, TO_DATE(d, CAST(NULL AS STRING)) AS r9 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "MST",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_MST",
+          "id": "format_clocks_and_offsets",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r1, DATE_FORMAT(ntz, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r2, DATE_FORMAT(ts, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "MST",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_MST",
+          "id": "format_short_names",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'z') AS r1, DATE_FORMAT(ntz, 'z') AS r2, DATE_FORMAT(ts, 'z') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "labels",
+          "timezone": "MST",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_MST",
+          "id": "literal_alias_consumers",
+          "sql": "SELECT CAST(TIMESTAMP '2024-01-02 00:30:00+00:00' AS DATE) AS r0, CAST(TIMESTAMP '1800-06-15 12:00:00+00:00' AS TIMESTAMP_NTZ) AS r1, HOUR(TIMESTAMP '1967-07-01 12:00:00+00:00') AS r2, CAST(DATE '1940-07-01' AS TIMESTAMP) AS r3, CAST(TIMESTAMP_NTZ '2024-03-10 02:30:00' AS TIMESTAMP) AS r4, DATE_FORMAT(TIMESTAMP_NTZ '2024-03-10 02:30:00', 'yyyy-MM-dd HH:mm:ss') AS r5, TO_DATE(TIMESTAMP_NTZ '2024-01-15 00:00:00', 'yyyy-MM-dd') AS r6, TRY_TO_DATE('2024-01-02 00:30:00+02:00', 'yyyy-MM-dd HH:mm:ssXXX') AS r7",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "MST",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_MST",
+          "id": "derived_fields",
+          "sql": "SELECT k AS r0, HOUR(t) AS r1, CAST(t AS TIMESTAMP_NTZ) AS r2, CAST(t AS DATE) AS r3 FROM (SELECT k, nested.t AS t FROM alias_inputs) q",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "MST",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_MST",
+          "id": "null_and_coercion_controls",
+          "sql": "SELECT TO_DATE(CAST(NULL AS STRING), 'yyyy-MM-dd') AS r0, TRY_TO_DATE(CAST(NULL AS BINARY), 'yyyy-MM-dd') AS r1, TO_DATE('2024-01-02', CAST(NULL AS STRING)) AS r2, TRY_TO_DATE('bad', 'yyyy-MM-dd') AS r3, DATE_FORMAT(CAST(NULL AS TIMESTAMP_NTZ), 'yyyy-MM-dd z O XXX') AS r4, TO_DATE(20240102, 'yyyyMMdd') AS r5, TRY_TO_DATE(X'323032342d30312d3032', 'yyyy-MM-dd') AS r6",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "MST",
+          "ansi": false
+        }
+      ]
+    },
+    {
+      "corpus": "session_alias_HST",
+      "source": "source-only #1029 session alias SQL and logical input definitions",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "alias_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "ts",
+                  "type": "timestamp",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "ntz",
+                  "type": "timestamp_ntz",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "d",
+                  "type": "date",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "offset_s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "b",
+                  "type": "binary",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "n",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "nested",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "t",
+                        "type": "timestamp",
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "1704180600000000",
+                "1704155400000000",
+                "19724",
+                "2024-01-02 00:30:00",
+                "2024-01-02 00:30:00+02:00",
+                "323032342d30312d3032",
+                "20240102",
+                [
+                  "1704180600000000"
+                ]
+              ],
+              [
+                "1",
+                "1719921600000000",
+                "1719880200000000",
+                "19906",
+                "2024-07-02 00:30:00",
+                "2024-07-02 00:30:00+02:00",
+                "323032342d30372d3032",
+                "20240702",
+                [
+                  "1719921600000000"
+                ]
+              ],
+              [
+                "2",
+                "1710066600000000",
+                "1710037800000000",
+                "19792",
+                "2024-03-10 02:30:00",
+                "2024-03-10 02:30:00+02:00",
+                "323032342d30332d3130",
+                "20240310",
+                [
+                  "1710066600000000"
+                ]
+              ],
+              [
+                "3",
+                "1730622600000000",
+                "1730597400000000",
+                "20030",
+                "2024-11-03 01:30:00",
+                "2024-11-03 01:30:00+02:00",
+                "323032342d31312d3033",
+                "20241103",
+                [
+                  "1730622600000000"
+                ]
+              ],
+              [
+                "4",
+                "1730626200000000",
+                "1730597400000000",
+                "20030",
+                "2024-11-03 01:30:00",
+                "2024-11-03 01:30:00+02:00",
+                "323032342d31312d3033",
+                "20241103",
+                [
+                  "1730626200000000"
+                ]
+              ],
+              [
+                "5",
+                "-5350363200000000",
+                "-5350404600000000",
+                "-61926",
+                "1800-06-15 00:30:00",
+                "1800-06-15 00:30:00+02:00",
+                "313830302d30362d3135",
+                "18000615",
+                [
+                  "-5350363200000000"
+                ]
+              ],
+              [
+                "6",
+                "-79012800000000",
+                "-79054200000000",
+                "-915",
+                "1967-07-01 00:30:00",
+                "1967-07-01 00:30:00+02:00",
+                "313936372d30372d3031",
+                "19670701",
+                [
+                  "-79012800000000"
+                ]
+              ],
+              [
+                "7",
+                "-931003200000000",
+                "-931044600000000",
+                "-10776",
+                "1940-07-01 00:30:00",
+                "1940-07-01 00:30:00+02:00",
+                "313934302d30372d3031",
+                "19400701",
+                [
+                  "-931003200000000"
+                ]
+              ],
+              [
+                "8",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+              ],
+              [
+                "9",
+                "1719921600000000",
+                "1719880200000000",
+                "19906",
+                "2024-07-02 00:30:00",
+                "2024-07-02 00:30:00+02:00",
+                "323032342d30372d3032",
+                "20240702",
+                [
+                  "1719921600000000"
+                ]
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "session_alias_HST",
+          "id": "registered_and_nested",
+          "sql": "SELECT k AS r0, ts AS r1, nested.t AS r2, HOUR(ts) AS r3, HOUR(nested.t) AS r4, CAST(ts AS DATE) AS r5, CAST(ts AS TIMESTAMP_NTZ) AS r6, CAST(d AS TIMESTAMP) AS r7, CAST(ntz AS TIMESTAMP) AS r8, CAST(ts AS STRING) AS r9, HOUR(TIMESTAMP_SECONDS(1704200645.125)) AS r10, HOUR(TIMESTAMP_MILLIS(1704200645125)) AS r11, HOUR(TIMESTAMP_MICROS(1704200645125000)) AS r12 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "HST",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_HST",
+          "id": "utc_conversions",
+          "sql": "SELECT k AS r0, TO_UTC_TIMESTAMP(ntz, 'America/Los_Angeles') AS r1, FROM_UTC_TIMESTAMP(ntz, '+05:30') AS r2, TO_UTC_TIMESTAMP(d, 'America/Los_Angeles') AS r3, FROM_UTC_TIMESTAMP(s, '-08') AS r4, CONVERT_TIMEZONE('UTC', ts) AS r5, CONVERT_TIMEZONE('+05:30', ntz) AS r6 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "HST",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_HST",
+          "id": "formatted_dates",
+          "sql": "SELECT k AS r0, TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r1, TRY_TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r2, TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r3, TRY_TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r4, TO_DATE(n, 'yyyyMMdd') AS r5, TRY_TO_DATE(b, 'yyyy-MM-dd') AS r6, TO_DATE(ts, 'yyyy-MM-dd') AS r7, TRY_TO_DATE(ntz, 'yyyy-MM-dd') AS r8, TO_DATE(d, CAST(NULL AS STRING)) AS r9 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "HST",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_HST",
+          "id": "format_clocks_and_offsets",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r1, DATE_FORMAT(ntz, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r2, DATE_FORMAT(ts, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "HST",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_HST",
+          "id": "format_short_names",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'z') AS r1, DATE_FORMAT(ntz, 'z') AS r2, DATE_FORMAT(ts, 'z') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "labels",
+          "timezone": "HST",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_HST",
+          "id": "literal_alias_consumers",
+          "sql": "SELECT CAST(TIMESTAMP '2024-01-02 00:30:00+00:00' AS DATE) AS r0, CAST(TIMESTAMP '1800-06-15 12:00:00+00:00' AS TIMESTAMP_NTZ) AS r1, HOUR(TIMESTAMP '1967-07-01 12:00:00+00:00') AS r2, CAST(DATE '1940-07-01' AS TIMESTAMP) AS r3, CAST(TIMESTAMP_NTZ '2024-03-10 02:30:00' AS TIMESTAMP) AS r4, DATE_FORMAT(TIMESTAMP_NTZ '2024-03-10 02:30:00', 'yyyy-MM-dd HH:mm:ss') AS r5, TO_DATE(TIMESTAMP_NTZ '2024-01-15 00:00:00', 'yyyy-MM-dd') AS r6, TRY_TO_DATE('2024-01-02 00:30:00+02:00', 'yyyy-MM-dd HH:mm:ssXXX') AS r7",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "HST",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_HST",
+          "id": "derived_fields",
+          "sql": "SELECT k AS r0, HOUR(t) AS r1, CAST(t AS TIMESTAMP_NTZ) AS r2, CAST(t AS DATE) AS r3 FROM (SELECT k, nested.t AS t FROM alias_inputs) q",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "HST",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_HST",
+          "id": "null_and_coercion_controls",
+          "sql": "SELECT TO_DATE(CAST(NULL AS STRING), 'yyyy-MM-dd') AS r0, TRY_TO_DATE(CAST(NULL AS BINARY), 'yyyy-MM-dd') AS r1, TO_DATE('2024-01-02', CAST(NULL AS STRING)) AS r2, TRY_TO_DATE('bad', 'yyyy-MM-dd') AS r3, DATE_FORMAT(CAST(NULL AS TIMESTAMP_NTZ), 'yyyy-MM-dd z O XXX') AS r4, TO_DATE(20240102, 'yyyyMMdd') AS r5, TRY_TO_DATE(X'323032342d30312d3032', 'yyyy-MM-dd') AS r6",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "HST",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_HST",
+          "id": "registered_and_nested",
+          "sql": "SELECT k AS r0, ts AS r1, nested.t AS r2, HOUR(ts) AS r3, HOUR(nested.t) AS r4, CAST(ts AS DATE) AS r5, CAST(ts AS TIMESTAMP_NTZ) AS r6, CAST(d AS TIMESTAMP) AS r7, CAST(ntz AS TIMESTAMP) AS r8, CAST(ts AS STRING) AS r9, HOUR(TIMESTAMP_SECONDS(1704200645.125)) AS r10, HOUR(TIMESTAMP_MILLIS(1704200645125)) AS r11, HOUR(TIMESTAMP_MICROS(1704200645125000)) AS r12 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "HST",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_HST",
+          "id": "utc_conversions",
+          "sql": "SELECT k AS r0, TO_UTC_TIMESTAMP(ntz, 'America/Los_Angeles') AS r1, FROM_UTC_TIMESTAMP(ntz, '+05:30') AS r2, TO_UTC_TIMESTAMP(d, 'America/Los_Angeles') AS r3, FROM_UTC_TIMESTAMP(s, '-08') AS r4, CONVERT_TIMEZONE('UTC', ts) AS r5, CONVERT_TIMEZONE('+05:30', ntz) AS r6 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "HST",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_HST",
+          "id": "formatted_dates",
+          "sql": "SELECT k AS r0, TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r1, TRY_TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r2, TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r3, TRY_TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r4, TO_DATE(n, 'yyyyMMdd') AS r5, TRY_TO_DATE(b, 'yyyy-MM-dd') AS r6, TO_DATE(ts, 'yyyy-MM-dd') AS r7, TRY_TO_DATE(ntz, 'yyyy-MM-dd') AS r8, TO_DATE(d, CAST(NULL AS STRING)) AS r9 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "HST",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_HST",
+          "id": "format_clocks_and_offsets",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r1, DATE_FORMAT(ntz, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r2, DATE_FORMAT(ts, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "HST",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_HST",
+          "id": "format_short_names",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'z') AS r1, DATE_FORMAT(ntz, 'z') AS r2, DATE_FORMAT(ts, 'z') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "labels",
+          "timezone": "HST",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_HST",
+          "id": "literal_alias_consumers",
+          "sql": "SELECT CAST(TIMESTAMP '2024-01-02 00:30:00+00:00' AS DATE) AS r0, CAST(TIMESTAMP '1800-06-15 12:00:00+00:00' AS TIMESTAMP_NTZ) AS r1, HOUR(TIMESTAMP '1967-07-01 12:00:00+00:00') AS r2, CAST(DATE '1940-07-01' AS TIMESTAMP) AS r3, CAST(TIMESTAMP_NTZ '2024-03-10 02:30:00' AS TIMESTAMP) AS r4, DATE_FORMAT(TIMESTAMP_NTZ '2024-03-10 02:30:00', 'yyyy-MM-dd HH:mm:ss') AS r5, TO_DATE(TIMESTAMP_NTZ '2024-01-15 00:00:00', 'yyyy-MM-dd') AS r6, TRY_TO_DATE('2024-01-02 00:30:00+02:00', 'yyyy-MM-dd HH:mm:ssXXX') AS r7",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "HST",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_HST",
+          "id": "derived_fields",
+          "sql": "SELECT k AS r0, HOUR(t) AS r1, CAST(t AS TIMESTAMP_NTZ) AS r2, CAST(t AS DATE) AS r3 FROM (SELECT k, nested.t AS t FROM alias_inputs) q",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "HST",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_HST",
+          "id": "null_and_coercion_controls",
+          "sql": "SELECT TO_DATE(CAST(NULL AS STRING), 'yyyy-MM-dd') AS r0, TRY_TO_DATE(CAST(NULL AS BINARY), 'yyyy-MM-dd') AS r1, TO_DATE('2024-01-02', CAST(NULL AS STRING)) AS r2, TRY_TO_DATE('bad', 'yyyy-MM-dd') AS r3, DATE_FORMAT(CAST(NULL AS TIMESTAMP_NTZ), 'yyyy-MM-dd z O XXX') AS r4, TO_DATE(20240102, 'yyyyMMdd') AS r5, TRY_TO_DATE(X'323032342d30312d3032', 'yyyy-MM-dd') AS r6",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "HST",
+          "ansi": false
+        }
+      ]
+    },
+    {
+      "corpus": "session_alias_GMT+08:00",
+      "source": "source-only #1029 session alias SQL and logical input definitions",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "alias_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "ts",
+                  "type": "timestamp",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "ntz",
+                  "type": "timestamp_ntz",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "d",
+                  "type": "date",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "offset_s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "b",
+                  "type": "binary",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "n",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "nested",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "t",
+                        "type": "timestamp",
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "1704180600000000",
+                "1704155400000000",
+                "19724",
+                "2024-01-02 00:30:00",
+                "2024-01-02 00:30:00+02:00",
+                "323032342d30312d3032",
+                "20240102",
+                [
+                  "1704180600000000"
+                ]
+              ],
+              [
+                "1",
+                "1719921600000000",
+                "1719880200000000",
+                "19906",
+                "2024-07-02 00:30:00",
+                "2024-07-02 00:30:00+02:00",
+                "323032342d30372d3032",
+                "20240702",
+                [
+                  "1719921600000000"
+                ]
+              ],
+              [
+                "2",
+                "1710066600000000",
+                "1710037800000000",
+                "19792",
+                "2024-03-10 02:30:00",
+                "2024-03-10 02:30:00+02:00",
+                "323032342d30332d3130",
+                "20240310",
+                [
+                  "1710066600000000"
+                ]
+              ],
+              [
+                "3",
+                "1730622600000000",
+                "1730597400000000",
+                "20030",
+                "2024-11-03 01:30:00",
+                "2024-11-03 01:30:00+02:00",
+                "323032342d31312d3033",
+                "20241103",
+                [
+                  "1730622600000000"
+                ]
+              ],
+              [
+                "4",
+                "1730626200000000",
+                "1730597400000000",
+                "20030",
+                "2024-11-03 01:30:00",
+                "2024-11-03 01:30:00+02:00",
+                "323032342d31312d3033",
+                "20241103",
+                [
+                  "1730626200000000"
+                ]
+              ],
+              [
+                "5",
+                "-5350363200000000",
+                "-5350404600000000",
+                "-61926",
+                "1800-06-15 00:30:00",
+                "1800-06-15 00:30:00+02:00",
+                "313830302d30362d3135",
+                "18000615",
+                [
+                  "-5350363200000000"
+                ]
+              ],
+              [
+                "6",
+                "-79012800000000",
+                "-79054200000000",
+                "-915",
+                "1967-07-01 00:30:00",
+                "1967-07-01 00:30:00+02:00",
+                "313936372d30372d3031",
+                "19670701",
+                [
+                  "-79012800000000"
+                ]
+              ],
+              [
+                "7",
+                "-931003200000000",
+                "-931044600000000",
+                "-10776",
+                "1940-07-01 00:30:00",
+                "1940-07-01 00:30:00+02:00",
+                "313934302d30372d3031",
+                "19400701",
+                [
+                  "-931003200000000"
+                ]
+              ],
+              [
+                "8",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+              ],
+              [
+                "9",
+                "1719921600000000",
+                "1719880200000000",
+                "19906",
+                "2024-07-02 00:30:00",
+                "2024-07-02 00:30:00+02:00",
+                "323032342d30372d3032",
+                "20240702",
+                [
+                  "1719921600000000"
+                ]
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "session_alias_GMT+08:00",
+          "id": "registered_and_nested",
+          "sql": "SELECT k AS r0, ts AS r1, nested.t AS r2, HOUR(ts) AS r3, HOUR(nested.t) AS r4, CAST(ts AS DATE) AS r5, CAST(ts AS TIMESTAMP_NTZ) AS r6, CAST(d AS TIMESTAMP) AS r7, CAST(ntz AS TIMESTAMP) AS r8, CAST(ts AS STRING) AS r9, HOUR(TIMESTAMP_SECONDS(1704200645.125)) AS r10, HOUR(TIMESTAMP_MILLIS(1704200645125)) AS r11, HOUR(TIMESTAMP_MICROS(1704200645125000)) AS r12 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "GMT+08:00",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_GMT+08:00",
+          "id": "utc_conversions",
+          "sql": "SELECT k AS r0, TO_UTC_TIMESTAMP(ntz, 'America/Los_Angeles') AS r1, FROM_UTC_TIMESTAMP(ntz, '+05:30') AS r2, TO_UTC_TIMESTAMP(d, 'America/Los_Angeles') AS r3, FROM_UTC_TIMESTAMP(s, '-08') AS r4, CONVERT_TIMEZONE('UTC', ts) AS r5, CONVERT_TIMEZONE('+05:30', ntz) AS r6 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "GMT+08:00",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_GMT+08:00",
+          "id": "formatted_dates",
+          "sql": "SELECT k AS r0, TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r1, TRY_TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r2, TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r3, TRY_TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r4, TO_DATE(n, 'yyyyMMdd') AS r5, TRY_TO_DATE(b, 'yyyy-MM-dd') AS r6, TO_DATE(ts, 'yyyy-MM-dd') AS r7, TRY_TO_DATE(ntz, 'yyyy-MM-dd') AS r8, TO_DATE(d, CAST(NULL AS STRING)) AS r9 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "GMT+08:00",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_GMT+08:00",
+          "id": "format_clocks_and_offsets",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r1, DATE_FORMAT(ntz, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r2, DATE_FORMAT(ts, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "GMT+08:00",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_GMT+08:00",
+          "id": "format_short_names",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'z') AS r1, DATE_FORMAT(ntz, 'z') AS r2, DATE_FORMAT(ts, 'z') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "labels",
+          "timezone": "GMT+08:00",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_GMT+08:00",
+          "id": "literal_alias_consumers",
+          "sql": "SELECT CAST(TIMESTAMP '2024-01-02 00:30:00+00:00' AS DATE) AS r0, CAST(TIMESTAMP '1800-06-15 12:00:00+00:00' AS TIMESTAMP_NTZ) AS r1, HOUR(TIMESTAMP '1967-07-01 12:00:00+00:00') AS r2, CAST(DATE '1940-07-01' AS TIMESTAMP) AS r3, CAST(TIMESTAMP_NTZ '2024-03-10 02:30:00' AS TIMESTAMP) AS r4, DATE_FORMAT(TIMESTAMP_NTZ '2024-03-10 02:30:00', 'yyyy-MM-dd HH:mm:ss') AS r5, TO_DATE(TIMESTAMP_NTZ '2024-01-15 00:00:00', 'yyyy-MM-dd') AS r6, TRY_TO_DATE('2024-01-02 00:30:00+02:00', 'yyyy-MM-dd HH:mm:ssXXX') AS r7",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "GMT+08:00",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_GMT+08:00",
+          "id": "derived_fields",
+          "sql": "SELECT k AS r0, HOUR(t) AS r1, CAST(t AS TIMESTAMP_NTZ) AS r2, CAST(t AS DATE) AS r3 FROM (SELECT k, nested.t AS t FROM alias_inputs) q",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "GMT+08:00",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_GMT+08:00",
+          "id": "null_and_coercion_controls",
+          "sql": "SELECT TO_DATE(CAST(NULL AS STRING), 'yyyy-MM-dd') AS r0, TRY_TO_DATE(CAST(NULL AS BINARY), 'yyyy-MM-dd') AS r1, TO_DATE('2024-01-02', CAST(NULL AS STRING)) AS r2, TRY_TO_DATE('bad', 'yyyy-MM-dd') AS r3, DATE_FORMAT(CAST(NULL AS TIMESTAMP_NTZ), 'yyyy-MM-dd z O XXX') AS r4, TO_DATE(20240102, 'yyyyMMdd') AS r5, TRY_TO_DATE(X'323032342d30312d3032', 'yyyy-MM-dd') AS r6",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "GMT+08:00",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_GMT+08:00",
+          "id": "registered_and_nested",
+          "sql": "SELECT k AS r0, ts AS r1, nested.t AS r2, HOUR(ts) AS r3, HOUR(nested.t) AS r4, CAST(ts AS DATE) AS r5, CAST(ts AS TIMESTAMP_NTZ) AS r6, CAST(d AS TIMESTAMP) AS r7, CAST(ntz AS TIMESTAMP) AS r8, CAST(ts AS STRING) AS r9, HOUR(TIMESTAMP_SECONDS(1704200645.125)) AS r10, HOUR(TIMESTAMP_MILLIS(1704200645125)) AS r11, HOUR(TIMESTAMP_MICROS(1704200645125000)) AS r12 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "GMT+08:00",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_GMT+08:00",
+          "id": "utc_conversions",
+          "sql": "SELECT k AS r0, TO_UTC_TIMESTAMP(ntz, 'America/Los_Angeles') AS r1, FROM_UTC_TIMESTAMP(ntz, '+05:30') AS r2, TO_UTC_TIMESTAMP(d, 'America/Los_Angeles') AS r3, FROM_UTC_TIMESTAMP(s, '-08') AS r4, CONVERT_TIMEZONE('UTC', ts) AS r5, CONVERT_TIMEZONE('+05:30', ntz) AS r6 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "GMT+08:00",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_GMT+08:00",
+          "id": "formatted_dates",
+          "sql": "SELECT k AS r0, TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r1, TRY_TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r2, TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r3, TRY_TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r4, TO_DATE(n, 'yyyyMMdd') AS r5, TRY_TO_DATE(b, 'yyyy-MM-dd') AS r6, TO_DATE(ts, 'yyyy-MM-dd') AS r7, TRY_TO_DATE(ntz, 'yyyy-MM-dd') AS r8, TO_DATE(d, CAST(NULL AS STRING)) AS r9 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "GMT+08:00",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_GMT+08:00",
+          "id": "format_clocks_and_offsets",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r1, DATE_FORMAT(ntz, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r2, DATE_FORMAT(ts, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "GMT+08:00",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_GMT+08:00",
+          "id": "format_short_names",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'z') AS r1, DATE_FORMAT(ntz, 'z') AS r2, DATE_FORMAT(ts, 'z') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "labels",
+          "timezone": "GMT+08:00",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_GMT+08:00",
+          "id": "literal_alias_consumers",
+          "sql": "SELECT CAST(TIMESTAMP '2024-01-02 00:30:00+00:00' AS DATE) AS r0, CAST(TIMESTAMP '1800-06-15 12:00:00+00:00' AS TIMESTAMP_NTZ) AS r1, HOUR(TIMESTAMP '1967-07-01 12:00:00+00:00') AS r2, CAST(DATE '1940-07-01' AS TIMESTAMP) AS r3, CAST(TIMESTAMP_NTZ '2024-03-10 02:30:00' AS TIMESTAMP) AS r4, DATE_FORMAT(TIMESTAMP_NTZ '2024-03-10 02:30:00', 'yyyy-MM-dd HH:mm:ss') AS r5, TO_DATE(TIMESTAMP_NTZ '2024-01-15 00:00:00', 'yyyy-MM-dd') AS r6, TRY_TO_DATE('2024-01-02 00:30:00+02:00', 'yyyy-MM-dd HH:mm:ssXXX') AS r7",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "GMT+08:00",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_GMT+08:00",
+          "id": "derived_fields",
+          "sql": "SELECT k AS r0, HOUR(t) AS r1, CAST(t AS TIMESTAMP_NTZ) AS r2, CAST(t AS DATE) AS r3 FROM (SELECT k, nested.t AS t FROM alias_inputs) q",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "GMT+08:00",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_GMT+08:00",
+          "id": "null_and_coercion_controls",
+          "sql": "SELECT TO_DATE(CAST(NULL AS STRING), 'yyyy-MM-dd') AS r0, TRY_TO_DATE(CAST(NULL AS BINARY), 'yyyy-MM-dd') AS r1, TO_DATE('2024-01-02', CAST(NULL AS STRING)) AS r2, TRY_TO_DATE('bad', 'yyyy-MM-dd') AS r3, DATE_FORMAT(CAST(NULL AS TIMESTAMP_NTZ), 'yyyy-MM-dd z O XXX') AS r4, TO_DATE(20240102, 'yyyyMMdd') AS r5, TRY_TO_DATE(X'323032342d30312d3032', 'yyyy-MM-dd') AS r6",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "GMT+08:00",
+          "ansi": false
+        }
+      ]
+    },
+    {
+      "corpus": "session_alias_+05:30",
+      "source": "source-only #1029 session alias SQL and logical input definitions",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "alias_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "ts",
+                  "type": "timestamp",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "ntz",
+                  "type": "timestamp_ntz",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "d",
+                  "type": "date",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "offset_s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "b",
+                  "type": "binary",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "n",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "nested",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "t",
+                        "type": "timestamp",
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "1704180600000000",
+                "1704155400000000",
+                "19724",
+                "2024-01-02 00:30:00",
+                "2024-01-02 00:30:00+02:00",
+                "323032342d30312d3032",
+                "20240102",
+                [
+                  "1704180600000000"
+                ]
+              ],
+              [
+                "1",
+                "1719921600000000",
+                "1719880200000000",
+                "19906",
+                "2024-07-02 00:30:00",
+                "2024-07-02 00:30:00+02:00",
+                "323032342d30372d3032",
+                "20240702",
+                [
+                  "1719921600000000"
+                ]
+              ],
+              [
+                "2",
+                "1710066600000000",
+                "1710037800000000",
+                "19792",
+                "2024-03-10 02:30:00",
+                "2024-03-10 02:30:00+02:00",
+                "323032342d30332d3130",
+                "20240310",
+                [
+                  "1710066600000000"
+                ]
+              ],
+              [
+                "3",
+                "1730622600000000",
+                "1730597400000000",
+                "20030",
+                "2024-11-03 01:30:00",
+                "2024-11-03 01:30:00+02:00",
+                "323032342d31312d3033",
+                "20241103",
+                [
+                  "1730622600000000"
+                ]
+              ],
+              [
+                "4",
+                "1730626200000000",
+                "1730597400000000",
+                "20030",
+                "2024-11-03 01:30:00",
+                "2024-11-03 01:30:00+02:00",
+                "323032342d31312d3033",
+                "20241103",
+                [
+                  "1730626200000000"
+                ]
+              ],
+              [
+                "5",
+                "-5350363200000000",
+                "-5350404600000000",
+                "-61926",
+                "1800-06-15 00:30:00",
+                "1800-06-15 00:30:00+02:00",
+                "313830302d30362d3135",
+                "18000615",
+                [
+                  "-5350363200000000"
+                ]
+              ],
+              [
+                "6",
+                "-79012800000000",
+                "-79054200000000",
+                "-915",
+                "1967-07-01 00:30:00",
+                "1967-07-01 00:30:00+02:00",
+                "313936372d30372d3031",
+                "19670701",
+                [
+                  "-79012800000000"
+                ]
+              ],
+              [
+                "7",
+                "-931003200000000",
+                "-931044600000000",
+                "-10776",
+                "1940-07-01 00:30:00",
+                "1940-07-01 00:30:00+02:00",
+                "313934302d30372d3031",
+                "19400701",
+                [
+                  "-931003200000000"
+                ]
+              ],
+              [
+                "8",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+              ],
+              [
+                "9",
+                "1719921600000000",
+                "1719880200000000",
+                "19906",
+                "2024-07-02 00:30:00",
+                "2024-07-02 00:30:00+02:00",
+                "323032342d30372d3032",
+                "20240702",
+                [
+                  "1719921600000000"
+                ]
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "session_alias_+05:30",
+          "id": "registered_and_nested",
+          "sql": "SELECT k AS r0, ts AS r1, nested.t AS r2, HOUR(ts) AS r3, HOUR(nested.t) AS r4, CAST(ts AS DATE) AS r5, CAST(ts AS TIMESTAMP_NTZ) AS r6, CAST(d AS TIMESTAMP) AS r7, CAST(ntz AS TIMESTAMP) AS r8, CAST(ts AS STRING) AS r9, HOUR(TIMESTAMP_SECONDS(1704200645.125)) AS r10, HOUR(TIMESTAMP_MILLIS(1704200645125)) AS r11, HOUR(TIMESTAMP_MICROS(1704200645125000)) AS r12 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "+05:30",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_+05:30",
+          "id": "utc_conversions",
+          "sql": "SELECT k AS r0, TO_UTC_TIMESTAMP(ntz, 'America/Los_Angeles') AS r1, FROM_UTC_TIMESTAMP(ntz, '+05:30') AS r2, TO_UTC_TIMESTAMP(d, 'America/Los_Angeles') AS r3, FROM_UTC_TIMESTAMP(s, '-08') AS r4, CONVERT_TIMEZONE('UTC', ts) AS r5, CONVERT_TIMEZONE('+05:30', ntz) AS r6 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "+05:30",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_+05:30",
+          "id": "formatted_dates",
+          "sql": "SELECT k AS r0, TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r1, TRY_TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r2, TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r3, TRY_TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r4, TO_DATE(n, 'yyyyMMdd') AS r5, TRY_TO_DATE(b, 'yyyy-MM-dd') AS r6, TO_DATE(ts, 'yyyy-MM-dd') AS r7, TRY_TO_DATE(ntz, 'yyyy-MM-dd') AS r8, TO_DATE(d, CAST(NULL AS STRING)) AS r9 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "+05:30",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_+05:30",
+          "id": "format_clocks_and_offsets",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r1, DATE_FORMAT(ntz, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r2, DATE_FORMAT(ts, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "+05:30",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_+05:30",
+          "id": "format_short_names",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'z') AS r1, DATE_FORMAT(ntz, 'z') AS r2, DATE_FORMAT(ts, 'z') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "labels",
+          "timezone": "+05:30",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_+05:30",
+          "id": "literal_alias_consumers",
+          "sql": "SELECT CAST(TIMESTAMP '2024-01-02 00:30:00+00:00' AS DATE) AS r0, CAST(TIMESTAMP '1800-06-15 12:00:00+00:00' AS TIMESTAMP_NTZ) AS r1, HOUR(TIMESTAMP '1967-07-01 12:00:00+00:00') AS r2, CAST(DATE '1940-07-01' AS TIMESTAMP) AS r3, CAST(TIMESTAMP_NTZ '2024-03-10 02:30:00' AS TIMESTAMP) AS r4, DATE_FORMAT(TIMESTAMP_NTZ '2024-03-10 02:30:00', 'yyyy-MM-dd HH:mm:ss') AS r5, TO_DATE(TIMESTAMP_NTZ '2024-01-15 00:00:00', 'yyyy-MM-dd') AS r6, TRY_TO_DATE('2024-01-02 00:30:00+02:00', 'yyyy-MM-dd HH:mm:ssXXX') AS r7",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "+05:30",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_+05:30",
+          "id": "derived_fields",
+          "sql": "SELECT k AS r0, HOUR(t) AS r1, CAST(t AS TIMESTAMP_NTZ) AS r2, CAST(t AS DATE) AS r3 FROM (SELECT k, nested.t AS t FROM alias_inputs) q",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "+05:30",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_+05:30",
+          "id": "null_and_coercion_controls",
+          "sql": "SELECT TO_DATE(CAST(NULL AS STRING), 'yyyy-MM-dd') AS r0, TRY_TO_DATE(CAST(NULL AS BINARY), 'yyyy-MM-dd') AS r1, TO_DATE('2024-01-02', CAST(NULL AS STRING)) AS r2, TRY_TO_DATE('bad', 'yyyy-MM-dd') AS r3, DATE_FORMAT(CAST(NULL AS TIMESTAMP_NTZ), 'yyyy-MM-dd z O XXX') AS r4, TO_DATE(20240102, 'yyyyMMdd') AS r5, TRY_TO_DATE(X'323032342d30312d3032', 'yyyy-MM-dd') AS r6",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "+05:30",
+          "ansi": true
+        },
+        {
+          "corpus": "session_alias_+05:30",
+          "id": "registered_and_nested",
+          "sql": "SELECT k AS r0, ts AS r1, nested.t AS r2, HOUR(ts) AS r3, HOUR(nested.t) AS r4, CAST(ts AS DATE) AS r5, CAST(ts AS TIMESTAMP_NTZ) AS r6, CAST(d AS TIMESTAMP) AS r7, CAST(ntz AS TIMESTAMP) AS r8, CAST(ts AS STRING) AS r9, HOUR(TIMESTAMP_SECONDS(1704200645.125)) AS r10, HOUR(TIMESTAMP_MILLIS(1704200645125)) AS r11, HOUR(TIMESTAMP_MICROS(1704200645125000)) AS r12 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "+05:30",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_+05:30",
+          "id": "utc_conversions",
+          "sql": "SELECT k AS r0, TO_UTC_TIMESTAMP(ntz, 'America/Los_Angeles') AS r1, FROM_UTC_TIMESTAMP(ntz, '+05:30') AS r2, TO_UTC_TIMESTAMP(d, 'America/Los_Angeles') AS r3, FROM_UTC_TIMESTAMP(s, '-08') AS r4, CONVERT_TIMEZONE('UTC', ts) AS r5, CONVERT_TIMEZONE('+05:30', ntz) AS r6 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "+05:30",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_+05:30",
+          "id": "formatted_dates",
+          "sql": "SELECT k AS r0, TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r1, TRY_TO_DATE(s, 'yyyy-MM-dd HH:mm:ss') AS r2, TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r3, TRY_TO_DATE(offset_s, 'yyyy-MM-dd HH:mm:ssXXX') AS r4, TO_DATE(n, 'yyyyMMdd') AS r5, TRY_TO_DATE(b, 'yyyy-MM-dd') AS r6, TO_DATE(ts, 'yyyy-MM-dd') AS r7, TRY_TO_DATE(ntz, 'yyyy-MM-dd') AS r8, TO_DATE(d, CAST(NULL AS STRING)) AS r9 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "+05:30",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_+05:30",
+          "id": "format_clocks_and_offsets",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r1, DATE_FORMAT(ntz, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r2, DATE_FORMAT(ts, 'yyyy-MM-dd HH:mm:ss|O|OOOO|X|XX|XXX') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "+05:30",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_+05:30",
+          "id": "format_short_names",
+          "sql": "SELECT k AS r0, DATE_FORMAT(d, 'z') AS r1, DATE_FORMAT(ntz, 'z') AS r2, DATE_FORMAT(ts, 'z') AS r3 FROM alias_inputs",
+          "ordered": false,
+          "scope": "labels",
+          "timezone": "+05:30",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_+05:30",
+          "id": "literal_alias_consumers",
+          "sql": "SELECT CAST(TIMESTAMP '2024-01-02 00:30:00+00:00' AS DATE) AS r0, CAST(TIMESTAMP '1800-06-15 12:00:00+00:00' AS TIMESTAMP_NTZ) AS r1, HOUR(TIMESTAMP '1967-07-01 12:00:00+00:00') AS r2, CAST(DATE '1940-07-01' AS TIMESTAMP) AS r3, CAST(TIMESTAMP_NTZ '2024-03-10 02:30:00' AS TIMESTAMP) AS r4, DATE_FORMAT(TIMESTAMP_NTZ '2024-03-10 02:30:00', 'yyyy-MM-dd HH:mm:ss') AS r5, TO_DATE(TIMESTAMP_NTZ '2024-01-15 00:00:00', 'yyyy-MM-dd') AS r6, TRY_TO_DATE('2024-01-02 00:30:00+02:00', 'yyyy-MM-dd HH:mm:ssXXX') AS r7",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "+05:30",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_+05:30",
+          "id": "derived_fields",
+          "sql": "SELECT k AS r0, HOUR(t) AS r1, CAST(t AS TIMESTAMP_NTZ) AS r2, CAST(t AS DATE) AS r3 FROM (SELECT k, nested.t AS t FROM alias_inputs) q",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "+05:30",
+          "ansi": false
+        },
+        {
+          "corpus": "session_alias_+05:30",
+          "id": "null_and_coercion_controls",
+          "sql": "SELECT TO_DATE(CAST(NULL AS STRING), 'yyyy-MM-dd') AS r0, TRY_TO_DATE(CAST(NULL AS BINARY), 'yyyy-MM-dd') AS r1, TO_DATE('2024-01-02', CAST(NULL AS STRING)) AS r2, TRY_TO_DATE('bad', 'yyyy-MM-dd') AS r3, DATE_FORMAT(CAST(NULL AS TIMESTAMP_NTZ), 'yyyy-MM-dd z O XXX') AS r4, TO_DATE(20240102, 'yyyyMMdd') AS r5, TRY_TO_DATE(X'323032342d30312d3032', 'yyyy-MM-dd') AS r6",
+          "ordered": false,
+          "scope": "values",
+          "timezone": "+05:30",
+          "ansi": false
+        }
+      ]
+    }
+  ]
+}

@@ -4851,7 +4851,7 @@ The [DATE_FORMAT zone fixture](date-format-zones/README.md) records 122 Spark 4.
 observations for local DATE/NTZ interpretation, DST, short zone names and offsets.
 `temporal_contracts.rs` checks 208 exact row/type contexts and 36 separate localized-name
 fallback contexts at batch sizes 1 and 32, alongside the unchanged 6,020-record fixture.
-Ordinary zone-free alias behavior remains protected while #1029 owns alias normalization.
+Ordinary zone-free alias behavior remains protected by the session alias references.
 
 
 ## UTC conversion offset arguments
@@ -4861,3 +4861,13 @@ observations across both ANSI modes in UTC and Los Angeles. It checks 240 succes
 row/type contexts and 48 invalid-zone cause controls at batch sizes 1 and 32.
 The existing 4,356-record UTC conversion fixture retains its raw offset results,
 with named-zone DST and lazy NULL behavior preserved.
+
+
+## Session timezone aliases
+
+The [session alias fixture](session-zone-aliases/README.md) records 176 Spark 4.2.0
+value/format observations and 22 configured-spelling observations across 11 sessions
+and both ANSI modes. It checks 1,076 exact contexts and 24 separate historical LMT
+name controls, with scalar/dynamic format, fixed-ID argument, configuration and
+pruning assertions. The original session-column, NTZ and epoch alias expectations
+are restored without changing their raw reference files.

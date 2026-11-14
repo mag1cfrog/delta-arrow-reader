@@ -12,8 +12,9 @@ literals, columns, NULLs, duplicate temporal values, scalar and per-row formats,
 DST gaps and overlaps, short `z` names and `O`/`X` offsets. DATE and NTZ formatting
 interprets local values in the session zone; ordinary NTZ CAST to STRING keeps its
 stored wall time. STRING, TO_CHAR and FROM_UNIXTIME controls retain their existing
-paths. Alias controls preserve existing zone-free behavior; #1029 owns full alias
-normalization.
+paths. Alias controls preserve zone-free behavior; the [session alias
+references](../session-zone-aliases/README.md) add normalization, gap and fixed-prefix
+name controls.
 
 The other 18 observations record display-name differences under #1236. Long
 `zzzz` names retain region IDs instead of Java's localized names. For modern

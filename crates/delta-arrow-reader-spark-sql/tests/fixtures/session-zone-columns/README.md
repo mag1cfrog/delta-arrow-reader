@@ -38,7 +38,7 @@ cover:
 Eight more read the struct field, array element and map value. Eleven statements group by
 date and filter, read through a CTE, an alias and a join, combine the column with a
 literal in UNION ALL, aggregate, and read the empty table. HOUR and CAST to STRING also run
-in the zone IDs `Z`, `PST` and `GMT+08:00`, which Spark accepts and Arrow cannot parse, and
+in the aliases `Z`, `PST` and `GMT+08:00`, normalized before planning, and
 in `Asia/Kathmandu` and `+05:45`.
 
 Each record keeps the analyzed, optimized and executed schemas and values read from Spark's
@@ -59,12 +59,12 @@ annotation in both ANSI modes, also with a scan that refuses filters reading a c
 Delta provider does. Each predicate must reach the scan once, without the cast, and keep the
 rows of the registered instants it selects (#1096).
 
-Existing differences outside the session zone keep their Spark expectation in the
+The repaired alias records use the original Spark expectations. The
+[alias references](../session-zone-aliases/README.md) add configured spelling, fixed
+legacy offsets and the formatted date paths. Existing differences outside the session
+zone keep their Spark expectation in the
 fixture. The test replaces only the retained part with the current DAR result and checks
 each count:
-- #1029: 12 records in `Z`, `PST` and `GMT+08:00` sessions. Arrow cannot parse these
-  zones, so a column keeps its own zone and gives the result of the same record in a
-  session in that zone.
 - #1052: 2 DATE_TRUNC to QUARTER records in Los Angeles, whose 9999-12-31 row starts its
   quarter at 9999-10-01 00:00, which Java reads in PDT and the date library, whose rules end
   in 2099, in PST, an hour later.

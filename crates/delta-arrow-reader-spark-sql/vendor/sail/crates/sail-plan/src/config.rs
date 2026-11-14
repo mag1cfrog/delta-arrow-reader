@@ -19,8 +19,12 @@ pub enum MapKeyDedupPolicy {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd)]
 pub struct PlanConfig {
-    /// The time zone of the session.
+    /// The configured session zone. Public planning normalizes aliases on a cloned config
+    /// and rejects zones that cannot be represented in Arrow timestamp annotations.
     pub session_timezone: Arc<str>,
+    /// Configured spelling retained when the resolver normalizes its operational zone.
+    /// Used by CURRENT_TIMEZONE and fixed-zone display names; callers normally leave None.
+    pub original_session_timezone: Option<Arc<str>>,
     /// The default timestamp type.
     pub default_timestamp_type: DefaultTimestampType,
     /// Whether to use large variable types in Arrow.
@@ -49,6 +53,7 @@ impl Default for PlanConfig {
     fn default() -> Self {
         Self {
             session_timezone: Arc::from("UTC"),
+            original_session_timezone: None,
             default_timestamp_type: DefaultTimestampType::TimestampLtz,
             arrow_use_large_var_types: false,
             session_user_id: "".to_string(),

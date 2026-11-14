@@ -17,10 +17,10 @@ time-containing formats, malformed TRY input, unformatted parsing, numeric/BINAR
 and existing DATE/NTZ/TIMESTAMP argument branches.
 
 The parsed offset or region determines the instant; the session zone determines its date.
-Zone-free formats keep their local date. Session aliases the reused timestamp parser
-cannot interpret retain the prior date parser, preserving zone-free and NULL behavior.
-Parsed-offset conversion in those alias sessions remains part of #1029. These alias
-references cover zone-free preservation, not full alias timezone parity. No datetime
+Zone-free formats keep their local date. Accepted session aliases now use the same
+normalized zone for parsed-offset conversion and date extraction. The original
+zone-free alias controls remain unchanged; the [session alias references](../session-zone-aliases/README.md)
+add explicit-offset, NULL and coercion checks for those sessions. No datetime
 grammar or additional region-name policy is introduced.
 
 The header keeps the runtime, settings, source hashes and registered schemas/inputs.

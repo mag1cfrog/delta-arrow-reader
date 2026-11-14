@@ -1,0 +1,191 @@
+{
+  "issue": "1029",
+  "expected_record_count": 22,
+  "corpora": [
+    {
+      "corpus": "session_config_display",
+      "source": "source-only CURRENT_TIMEZONE configuration spelling preservation",
+      "metadata": {
+        "inputs": []
+      },
+      "cases": [
+        {
+          "corpus": "session_config_display",
+          "id": "current_timezone_0",
+          "sql": "SELECT CURRENT_TIMEZONE() AS configured_zone",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "session_config_display",
+          "id": "current_timezone_0",
+          "sql": "SELECT CURRENT_TIMEZONE() AS configured_zone",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "session_config_display",
+          "id": "current_timezone_1",
+          "sql": "SELECT CURRENT_TIMEZONE() AS configured_zone",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "session_config_display",
+          "id": "current_timezone_1",
+          "sql": "SELECT CURRENT_TIMEZONE() AS configured_zone",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "session_config_display",
+          "id": "current_timezone_2",
+          "sql": "SELECT CURRENT_TIMEZONE() AS configured_zone",
+          "timezone": "Z",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "session_config_display",
+          "id": "current_timezone_2",
+          "sql": "SELECT CURRENT_TIMEZONE() AS configured_zone",
+          "timezone": "Z",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "session_config_display",
+          "id": "current_timezone_3",
+          "sql": "SELECT CURRENT_TIMEZONE() AS configured_zone",
+          "timezone": "GMT",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "session_config_display",
+          "id": "current_timezone_3",
+          "sql": "SELECT CURRENT_TIMEZONE() AS configured_zone",
+          "timezone": "GMT",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "session_config_display",
+          "id": "current_timezone_4",
+          "sql": "SELECT CURRENT_TIMEZONE() AS configured_zone",
+          "timezone": "UT",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "session_config_display",
+          "id": "current_timezone_4",
+          "sql": "SELECT CURRENT_TIMEZONE() AS configured_zone",
+          "timezone": "UT",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "session_config_display",
+          "id": "current_timezone_5",
+          "sql": "SELECT CURRENT_TIMEZONE() AS configured_zone",
+          "timezone": "PST",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "session_config_display",
+          "id": "current_timezone_5",
+          "sql": "SELECT CURRENT_TIMEZONE() AS configured_zone",
+          "timezone": "PST",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "session_config_display",
+          "id": "current_timezone_6",
+          "sql": "SELECT CURRENT_TIMEZONE() AS configured_zone",
+          "timezone": "EST",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "session_config_display",
+          "id": "current_timezone_6",
+          "sql": "SELECT CURRENT_TIMEZONE() AS configured_zone",
+          "timezone": "EST",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "session_config_display",
+          "id": "current_timezone_7",
+          "sql": "SELECT CURRENT_TIMEZONE() AS configured_zone",
+          "timezone": "MST",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "session_config_display",
+          "id": "current_timezone_7",
+          "sql": "SELECT CURRENT_TIMEZONE() AS configured_zone",
+          "timezone": "MST",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "session_config_display",
+          "id": "current_timezone_8",
+          "sql": "SELECT CURRENT_TIMEZONE() AS configured_zone",
+          "timezone": "HST",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "session_config_display",
+          "id": "current_timezone_8",
+          "sql": "SELECT CURRENT_TIMEZONE() AS configured_zone",
+          "timezone": "HST",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "session_config_display",
+          "id": "current_timezone_9",
+          "sql": "SELECT CURRENT_TIMEZONE() AS configured_zone",
+          "timezone": "GMT+08:00",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "session_config_display",
+          "id": "current_timezone_9",
+          "sql": "SELECT CURRENT_TIMEZONE() AS configured_zone",
+          "timezone": "GMT+08:00",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "session_config_display",
+          "id": "current_timezone_10",
+          "sql": "SELECT CURRENT_TIMEZONE() AS configured_zone",
+          "timezone": "+05:30",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "session_config_display",
+          "id": "current_timezone_10",
+          "sql": "SELECT CURRENT_TIMEZONE() AS configured_zone",
+          "timezone": "+05:30",
+          "ansi": false,
+          "ordered": false
+        }
+      ]
+    }
+  ]
+}

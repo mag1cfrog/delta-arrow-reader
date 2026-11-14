@@ -16,6 +16,26 @@ impl DateTimeFormat {
     pub fn for_formatting(pattern: &str) -> Result<Self> {
         parse_datetime_pattern(pattern, PatternUse::Formatting)
     }
+    /// Bind a fixed zone's name and ID after pattern validation; offsets stay numeric.
+    pub(crate) fn with_fixed_zone_name(mut self, name: Option<&str>) -> Self {
+        fn bind(items: &mut [DateTimeItem], name: &str) {
+            for item in items {
+                match item {
+                    DateTimeItem::Zone(spec)
+                        if matches!(spec.kind, ZoneField::ZoneName | ZoneField::ZoneId) =>
+                    {
+                        *item = DateTimeItem::Literal(name.to_owned());
+                    }
+                    DateTimeItem::Optional(items) => bind(items, name),
+                    _ => {}
+                }
+            }
+        }
+        if let Some(name) = name {
+            bind(&mut self.items, name);
+        }
+        self
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

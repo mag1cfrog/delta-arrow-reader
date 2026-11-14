@@ -358,10 +358,9 @@ async fn grouping_set_to_date_matches_spark() -> TestResult {
     Ok(())
 }
 
-/// Spark 4.2.0 in a `Z` session, which Arrow cannot parse: TO_DATE with a format of a
-/// TIMESTAMP_NTZ gives its date, 2024-01-15, as in UTC (#1029 owns such zones).
+/// The UTC alias Z preserves formatted TIMESTAMP_NTZ date extraction.
 #[tokio::test]
-async fn timestamp_ntz_keeps_its_date_in_a_session_zone_arrow_cannot_parse() -> TestResult {
+async fn timestamp_ntz_keeps_its_date_in_the_utc_alias() -> TestResult {
     let session = session_context(1);
     let options = SparkSqlOptions {
         ansi_mode: true,

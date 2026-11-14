@@ -2,7 +2,6 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use datafusion::arrow::array::timezone::Tz;
 use datafusion::arrow::datatypes::{DataType, FieldRef};
 use datafusion::catalog::TableFunctionArgs;
 use datafusion::datasource::{TableProvider, provider_as_source, source_as_provider};
@@ -320,11 +319,6 @@ impl PlanResolver<'_> {
     /// do not change.
     fn annotate_with_session_time_zone(&self, plan: LogicalPlan) -> PlanResult<LogicalPlan> {
         let timezone = &self.config.session_timezone;
-        // Spark also accepts zone IDs such as `Z`, `PST` and `GMT+08:00` that Arrow cannot
-        // parse (#1029); a column keeps its own zone in such a session.
-        if timezone.parse::<Tz>().is_err() {
-            return Ok(plan);
-        }
         let mut annotated = false;
         let expr = plan
             .schema()

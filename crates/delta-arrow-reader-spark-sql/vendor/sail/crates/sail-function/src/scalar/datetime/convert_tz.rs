@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use chrono::{DateTime, FixedOffset, MappedLocalTime, NaiveDateTime, TimeZone, Utc};
 use chrono_tz::{GapInfo, Tz};
+use datafusion::arrow::array::timezone::Tz as ArrowTz;
 use datafusion::arrow::array::{Array, ArrayRef, AsArray, Int64Array, UInt64Array, new_null_array};
 use datafusion::arrow::compute::kernels::{cast, numeric, take};
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef, TimeUnit};
@@ -221,9 +222,7 @@ impl ScalarUDFImpl for ConvertTz {
     }
 }
 
-/// The region for a legacy three-letter zone ID, such as `PST`, that the date library does not
-/// know. Java's `ZoneId.SHORT_IDS` maps EST, MST and HST to fixed offsets instead, but the date
-/// library reads those three as regions (#1029).
+/// Java's legacy short IDs, resolved to region names or fixed offsets.
 pub(crate) fn legacy_time_zone(name: &str) -> Option<&'static str> {
     Some(match name {
         "ACT" => "Australia/Darwin",
@@ -239,13 +238,13 @@ pub(crate) fn legacy_time_zone(name: &str) -> Option<&'static str> {
         "CTT" => "Asia/Shanghai",
         "EAT" => "Africa/Addis_Ababa",
         "ECT" => "Europe/Paris",
-        "EST" => "America/New_York",
-        "HST" => "Pacific/Honolulu",
+        "EST" => "-05:00",
+        "HST" => "-10:00",
         "IET" => "America/Indianapolis",
         "IST" => "Asia/Calcutta",
         "JST" => "Asia/Tokyo",
         "MIT" => "Pacific/Apia",
-        "MST" => "America/Denver",
+        "MST" => "-07:00",
         "NET" => "Asia/Yerevan",
         "NST" => "Pacific/Auckland",
         "PLT" => "Asia/Karachi",
@@ -267,17 +266,11 @@ pub(crate) enum ResolvedTimeZone {
 
 impl ResolvedTimeZone {
     pub(crate) fn parse(name: &str) -> Option<Self> {
+        let name = legacy_time_zone(name).unwrap_or(name);
         if let Ok(region) = name.parse::<Tz>() {
             return Some(Self::Region(region));
         }
-        if let Some(region) = legacy_time_zone(name).and_then(|name| name.parse().ok()) {
-            return Some(Self::Region(region));
-        }
-        let offset = match name
-            .strip_prefix("UTC")
-            .or_else(|| name.strip_prefix("GMT"))
-            .or_else(|| name.strip_prefix("UT"))
-        {
+        let offset = match fixed_zone_prefix(name).map(|(_, offset)| offset) {
             Some("") => "Z",
             Some(offset) => offset,
             None => name,
@@ -306,6 +299,38 @@ impl ResolvedTimeZone {
             Self::Fixed(offset) => local.and_local_timezone(*offset).single(),
         }
     }
+}
+
+fn fixed_zone_prefix(name: &str) -> Option<(&str, &str)> {
+    ["UTC", "GMT", "UT"]
+        .into_iter()
+        .find_map(|prefix| name.strip_prefix(prefix).map(|offset| (prefix, offset)))
+}
+
+/// Resolve a configured Spark zone to an Arrow-compatible operational label.
+pub fn normalize_session_timezone(name: &str) -> Option<Arc<str>> {
+    let name: Arc<str> = match ResolvedTimeZone::parse(name)? {
+        ResolvedTimeZone::Region(region) => region.name().into(),
+        ResolvedTimeZone::Fixed(offset) => offset.to_string().into(),
+    };
+    name.parse::<ArrowTz>().ok()?;
+    Some(name)
+}
+
+/// Preserve Java's fixed-zone name when normalization removed a UTC/GMT/UT prefix.
+pub fn fixed_zone_display_name(configured: &str, normalized: &str) -> Option<Arc<str>> {
+    if !normalized.starts_with(['+', '-']) {
+        return None;
+    }
+    if configured == "Z" {
+        return Some("Z".into());
+    }
+    let (prefix, _) = fixed_zone_prefix(configured)?;
+    Some(if normalized == "+00:00" {
+        prefix.into()
+    } else {
+        format!("{prefix}{normalized}").into()
+    })
 }
 
 fn convert_tz_inner(

@@ -110,6 +110,8 @@ impl SparkSqlQuery {
 /// the query. This function does not create or modify catalog objects.
 /// SQL configuration references are expanded before parsing according to
 /// [`SparkSqlOptions::variable_substitution_enabled`] and its explicit values.
+/// Accepted session timezone aliases are normalized before resolution. Invalid or
+/// unrepresentable session zones fail before query resolution, including zone-independent SQL.
 /// This does not alter provider values or native `SessionContext::sql`.
 pub async fn plan_query(
     session: &SessionContext,
