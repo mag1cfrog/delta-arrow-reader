@@ -2,6 +2,7 @@
 pub mod convert_tz;
 pub mod format;
 pub mod interval_text;
+pub mod local_datetime_to_ltz;
 pub(crate) mod local_time;
 pub mod negate_duration;
 pub mod spark_date;

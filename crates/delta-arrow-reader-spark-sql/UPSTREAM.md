@@ -682,6 +682,17 @@ Native DataFusion SQL keeps each column's own annotation. The
 [session-zone column references](tests/fixtures/session-zone-columns/README.md) cover
 these functions in UTC and Los Angeles over UTC, named-zone and fixed-offset annotations.
 
+DATE_FORMAT interprets DATE and TIMESTAMP_NTZ values in the session zone using the
+shared runtime local-to-LTZ conversion, including Spark's DST gap/overlap rules.
+Ordinary NTZ CAST/STRING rendering keeps its existing wall-time behavior. Formatting
+uses installed TZDB abbreviations for short `z` and Arrow's named/fixed offsets for
+`O`/`X`. Long localized names and short names that differ from TZDB remain a #1236
+boundary: region IDs, numeric offsets or historical LMT labels can differ from Java's
+localized names. Unparsed session aliases retain their prior zone-free formatting
+until #1029 normalizes them. The [DATE_FORMAT references](tests/fixtures/date-format-zones/README.md)
+separate exact values/types from those display-name fallbacks. JSON/CSV/XML retain
+their existing supplied zone-name behavior.
+
 DATE_TRUNC of a TIMESTAMP to a constant unit works on microseconds across the BIGINT range,
 like Spark's `truncTimestamp` (#1087); a DATE, TIMESTAMP_NTZ or STRING argument, or a unit
 column, keeps DataFusion's nanosecond truncation (#1236). SECOND and finer units truncate the

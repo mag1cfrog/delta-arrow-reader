@@ -268,7 +268,7 @@ enum RetainedDifference {
     /// #1122: an IN list of TIMESTAMP values fails with Arrow's cast of a DATE in a zone that
     /// skips a midnight.
     ArrowCastInList,
-    /// #1122: HOUR and DATE_FORMAT read a DATE as its midnight, not its first local instant.
+    /// #1122: HOUR reads a DATE as its midnight, not its first local instant.
     MidnightDateFields,
 }
 
@@ -362,7 +362,7 @@ fn current_expectation(case: &Value) -> TestResult<(Value, Vec<RetainedDifferenc
             fail_while_collecting(&mut current, "Cannot cast timezone to different timezone");
             retained.push(RetainedDifference::ArrowCastInList);
         }
-        "column_hour" | "column_date_format" if skips_midnight => {
+        "column_hour" if skips_midnight => {
             let mut changed = false;
             for row in current["expected"]["rows"]
                 .as_array_mut()
@@ -447,6 +447,13 @@ async fn dates_convert_to_timestamps_like_spark() -> TestResult {
         register_inputs(&session, &records[0], batch_size)?;
         for (case, expectation) in records[1..].iter().zip(&expectations) {
             let observation = observe(&session, case).await;
+            if case["id"] == "column_date_format" {
+                println!(
+                    "date_format_day_start_observation={}",
+                    json!({"id":case["id"],"timezone":case["timezone"],
+                        "ansi":case["ansi"],"batch":batch_size,"actual":observation})
+                );
+            }
             let differing = differing_parts(expectation, &observation)?;
             if !differing.is_empty() {
                 differences.push(json!({
@@ -475,7 +482,7 @@ async fn dates_convert_to_timestamps_like_spark() -> TestResult {
             (RetainedDifference::NullableExtremum, 40),
             (RetainedDifference::NanosecondDateCoercion, 40),
             (RetainedDifference::ArrowCastInList, 6),
-            (RetainedDifference::MidnightDateFields, 10),
+            (RetainedDifference::MidnightDateFields, 4),
         ])
     );
     Ok(())

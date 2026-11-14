@@ -2,12 +2,12 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use chrono::FixedOffset;
-use datafusion::arrow::array::timezone::Tz;
 use datafusion::catalog::TableFunction;
 use datafusion_common::utils::expr::COUNT_STAR_EXPANSION;
 use datafusion_expr::expr::Expr;
 use lazy_static::lazy_static;
+
+pub use sail_function::scalar::datetime::local_datetime_to_ltz::is_spark_compatible_arrow_fixed_offset;
 
 use crate::error::{PlanError, PlanResult};
 use crate::function::common::ScalarFunction;
@@ -86,21 +86,6 @@ pub(super) fn transform_count_star_wildcard_expr(arguments: Vec<Expr>) -> Vec<Ex
         }
         _ => arguments,
     }
-}
-
-pub fn is_spark_compatible_arrow_fixed_offset(timezone: &str) -> bool {
-    if !timezone.starts_with('+') && !timezone.starts_with('-') {
-        return false;
-    }
-    if timezone.parse::<Tz>().is_err() {
-        return false;
-    }
-    let normalized = (timezone.len() == 3).then(|| format!("{timezone}:00"));
-    normalized
-        .as_deref()
-        .unwrap_or(timezone)
-        .parse::<FixedOffset>()
-        .is_ok_and(|offset| offset.local_minus_utc().unsigned_abs() <= 18 * 60 * 60)
 }
 
 #[cfg(test)]

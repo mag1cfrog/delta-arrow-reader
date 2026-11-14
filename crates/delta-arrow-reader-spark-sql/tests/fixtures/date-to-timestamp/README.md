@@ -47,8 +47,8 @@ retained part with the current DAR result and checks each count:
   TIMESTAMP without a zone and fail for year 1 or 9999 while collecting rows, and VALUES
   gives the DATE's UTC midnight that way.
 - #1122: 6 IN list records fail with Arrow's cast in Havana, Santiago and Toronto.
-- #1122: 10 HOUR and DATE_FORMAT records read the DATE at midnight where the day starts
-  later.
+- #1122: 4 HOUR records read the DATE at midnight where the day starts later.
+  DATE_FORMAT now uses the original Spark values, including skipped midnights.
 
 Recapture from the crate root:
 

@@ -4843,3 +4843,12 @@ The [formatted date zone fixture](formatted-date-zones/README.md) records 120 Sp
 observations for TO_DATE/TRY_TO_DATE offset and supported-region conversion in UTC and
 Los Angeles, both ANSI modes, plus 16 zone-free alias-session preservation observations.
 It reuses the timestamp parser and retains the unchanged historical date/coercion controls.
+
+
+## DATE_FORMAT session zones
+
+The [DATE_FORMAT zone fixture](date-format-zones/README.md) records 122 Spark 4.2.0
+observations for local DATE/NTZ interpretation, DST, short zone names and offsets.
+`temporal_contracts.rs` checks 208 exact row/type contexts and 36 separate localized-name
+fallback contexts at batch sizes 1 and 32, alongside the unchanged 6,020-record fixture.
+Ordinary zone-free alias behavior remains protected while #1029 owns alias normalization.

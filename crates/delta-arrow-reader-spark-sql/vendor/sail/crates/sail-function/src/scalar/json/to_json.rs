@@ -554,6 +554,7 @@ fn format_timestamp(value: i64, tz: Option<&str>, format: &DateTimeFormat) -> St
                     Some(TimeZoneDisplay {
                         offset,
                         name: Some(tz_str),
+                        abbreviation: None,
                     }),
                 )
             } else {

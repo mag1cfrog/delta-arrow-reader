@@ -1,0 +1,2144 @@
+{
+  "issue": "1014",
+  "expected_record_count": 122,
+  "corpora": [
+    {
+      "corpus": "date_format_common_UTC",
+      "source": "source-only #1014 common date-format zone definitions",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "format_zone_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "d",
+                  "type": "date",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "ts",
+                  "type": "timestamp",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "ntz",
+                  "type": "timestamp_ntz",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "fmt",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "19724",
+                "1704200645123456",
+                "1704200645123456",
+                "2024-01-02 13:04:05.123456",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "1",
+                "19906",
+                "1719925445123456",
+                "1719925445123456",
+                "2024-07-02 13:04:05.123456",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "2",
+                "19792",
+                "1710066600000000",
+                "1710037800000000",
+                "2024-03-10 02:30:00.000000",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "3",
+                "20030",
+                "1730622600000000",
+                "1730597400000000",
+                "2024-11-03 01:30:00.000000",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "4",
+                "20030",
+                "1730626200000000",
+                "1730597400000000",
+                "2024-11-03 01:30:00.000000",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "5",
+                "-1",
+                "-876544",
+                "-876544",
+                "1969-12-31 23:59:59.123456",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "6",
+                "19724",
+                "1704200645123456",
+                "1704200645123456",
+                "2024-01-02 13:04:05.123456",
+                null
+              ],
+              [
+                "7",
+                null,
+                null,
+                null,
+                null,
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "8",
+                "19906",
+                "1719925445123456",
+                "1719925445123456",
+                "2024-07-02 13:04:05.123456",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ]
+            ]
+          }
+        ],
+        "timezone": "UTC",
+        "scope": "common"
+      },
+      "cases": [
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "date_column",
+          "sql": "SELECT k, date_format(d, 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS r FROM format_zone_inputs",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "date_column_pattern",
+          "sql": "SELECT k, date_format(d, fmt) AS r FROM format_zone_inputs",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "date_scalar_input",
+          "sql": "SELECT k, date_format(DATE '2024-01-02', fmt) AS r FROM format_zone_inputs",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "date_literals",
+          "sql": "SELECT date_format(DATE '2024-01-02', 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS winter, date_format(DATE '2024-07-02', 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS summer",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "date_nulls",
+          "sql": "SELECT date_format(CAST(NULL AS DATE), 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS null_input, date_format(DATE '2024-01-02', NULL) AS null_format",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "ltz_column",
+          "sql": "SELECT k, date_format(ts, 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS r FROM format_zone_inputs",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "ltz_column_pattern",
+          "sql": "SELECT k, date_format(ts, fmt) AS r FROM format_zone_inputs",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "ltz_scalar_input",
+          "sql": "SELECT k, date_format(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', fmt) AS r FROM format_zone_inputs",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "ltz_literals",
+          "sql": "SELECT date_format(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS winter, date_format(TIMESTAMP '2024-07-02 13:04:05.123456+00:00', 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS summer",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "ltz_nulls",
+          "sql": "SELECT date_format(CAST(NULL AS TIMESTAMP), 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS null_input, date_format(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', NULL) AS null_format",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "ntz_column",
+          "sql": "SELECT k, date_format(ntz, 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS r FROM format_zone_inputs",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "ntz_column_pattern",
+          "sql": "SELECT k, date_format(ntz, fmt) AS r FROM format_zone_inputs",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "ntz_scalar_input",
+          "sql": "SELECT k, date_format(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', fmt) AS r FROM format_zone_inputs",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "ntz_literals",
+          "sql": "SELECT date_format(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS winter, date_format(TIMESTAMP_NTZ '2024-07-02 13:04:05.123456', 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS summer",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "ntz_nulls",
+          "sql": "SELECT date_format(CAST(NULL AS TIMESTAMP_NTZ), 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS null_input, date_format(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', NULL) AS null_format",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "string_column",
+          "sql": "SELECT k, date_format(s, 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS r FROM format_zone_inputs",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "string_column_pattern",
+          "sql": "SELECT k, date_format(s, fmt) AS r FROM format_zone_inputs",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "string_scalar_input",
+          "sql": "SELECT k, date_format('2024-01-02 13:04:05.123456', fmt) AS r FROM format_zone_inputs",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "string_literals",
+          "sql": "SELECT date_format('2024-01-02 13:04:05.123456', 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS winter, date_format('2024-07-02 13:04:05.123456', 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS summer",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "string_nulls",
+          "sql": "SELECT date_format(CAST(NULL AS STRING), 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS null_input, date_format('2024-01-02 13:04:05.123456', NULL) AS null_format",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "ntz_cast_control",
+          "sql": "SELECT k, date_format(ntz, 'yyyy-MM-dd HH:mm:ss') AS formatted, CAST(ntz AS STRING) AS cast_text FROM format_zone_inputs",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "to_char_control",
+          "sql": "SELECT k, to_char(ntz, 'yyyy-MM-dd HH:mm:ss') AS r FROM format_zone_inputs",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "from_unixtime_control",
+          "sql": "SELECT from_unixtime(1704200645, 'yyyy-MM-dd HH:mm:ss z O XXX') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "date_column",
+          "sql": "SELECT k, date_format(d, 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS r FROM format_zone_inputs",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "date_column_pattern",
+          "sql": "SELECT k, date_format(d, fmt) AS r FROM format_zone_inputs",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "date_scalar_input",
+          "sql": "SELECT k, date_format(DATE '2024-01-02', fmt) AS r FROM format_zone_inputs",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "date_literals",
+          "sql": "SELECT date_format(DATE '2024-01-02', 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS winter, date_format(DATE '2024-07-02', 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS summer",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "date_nulls",
+          "sql": "SELECT date_format(CAST(NULL AS DATE), 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS null_input, date_format(DATE '2024-01-02', NULL) AS null_format",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "ltz_column",
+          "sql": "SELECT k, date_format(ts, 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS r FROM format_zone_inputs",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "ltz_column_pattern",
+          "sql": "SELECT k, date_format(ts, fmt) AS r FROM format_zone_inputs",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "ltz_scalar_input",
+          "sql": "SELECT k, date_format(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', fmt) AS r FROM format_zone_inputs",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "ltz_literals",
+          "sql": "SELECT date_format(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS winter, date_format(TIMESTAMP '2024-07-02 13:04:05.123456+00:00', 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS summer",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "ltz_nulls",
+          "sql": "SELECT date_format(CAST(NULL AS TIMESTAMP), 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS null_input, date_format(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', NULL) AS null_format",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "ntz_column",
+          "sql": "SELECT k, date_format(ntz, 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS r FROM format_zone_inputs",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "ntz_column_pattern",
+          "sql": "SELECT k, date_format(ntz, fmt) AS r FROM format_zone_inputs",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "ntz_scalar_input",
+          "sql": "SELECT k, date_format(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', fmt) AS r FROM format_zone_inputs",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "ntz_literals",
+          "sql": "SELECT date_format(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS winter, date_format(TIMESTAMP_NTZ '2024-07-02 13:04:05.123456', 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS summer",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "ntz_nulls",
+          "sql": "SELECT date_format(CAST(NULL AS TIMESTAMP_NTZ), 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS null_input, date_format(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', NULL) AS null_format",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "string_column",
+          "sql": "SELECT k, date_format(s, 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS r FROM format_zone_inputs",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "string_column_pattern",
+          "sql": "SELECT k, date_format(s, fmt) AS r FROM format_zone_inputs",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "string_scalar_input",
+          "sql": "SELECT k, date_format('2024-01-02 13:04:05.123456', fmt) AS r FROM format_zone_inputs",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "string_literals",
+          "sql": "SELECT date_format('2024-01-02 13:04:05.123456', 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS winter, date_format('2024-07-02 13:04:05.123456', 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS summer",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "string_nulls",
+          "sql": "SELECT date_format(CAST(NULL AS STRING), 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS null_input, date_format('2024-01-02 13:04:05.123456', NULL) AS null_format",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "ntz_cast_control",
+          "sql": "SELECT k, date_format(ntz, 'yyyy-MM-dd HH:mm:ss') AS formatted, CAST(ntz AS STRING) AS cast_text FROM format_zone_inputs",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "to_char_control",
+          "sql": "SELECT k, to_char(ntz, 'yyyy-MM-dd HH:mm:ss') AS r FROM format_zone_inputs",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_UTC",
+          "id": "from_unixtime_control",
+          "sql": "SELECT from_unixtime(1704200645, 'yyyy-MM-dd HH:mm:ss z O XXX') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        }
+      ]
+    },
+    {
+      "corpus": "date_format_long_boundary_UTC",
+      "source": "source-only #1014 long_boundary date-format zone definitions",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "format_zone_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "d",
+                  "type": "date",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "ts",
+                  "type": "timestamp",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "ntz",
+                  "type": "timestamp_ntz",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "fmt",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "19724",
+                "1704200645123456",
+                "1704200645123456",
+                "2024-01-02 13:04:05.123456",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "1",
+                "19906",
+                "1719925445123456",
+                "1719925445123456",
+                "2024-07-02 13:04:05.123456",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "2",
+                "19792",
+                "1710066600000000",
+                "1710037800000000",
+                "2024-03-10 02:30:00.000000",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "3",
+                "20030",
+                "1730622600000000",
+                "1730597400000000",
+                "2024-11-03 01:30:00.000000",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "4",
+                "20030",
+                "1730626200000000",
+                "1730597400000000",
+                "2024-11-03 01:30:00.000000",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "5",
+                "-1",
+                "-876544",
+                "-876544",
+                "1969-12-31 23:59:59.123456",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "6",
+                "19724",
+                "1704200645123456",
+                "1704200645123456",
+                "2024-01-02 13:04:05.123456",
+                null
+              ],
+              [
+                "7",
+                null,
+                null,
+                null,
+                null,
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "8",
+                "19906",
+                "1719925445123456",
+                "1719925445123456",
+                "2024-07-02 13:04:05.123456",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ]
+            ]
+          }
+        ],
+        "timezone": "UTC",
+        "scope": "long_boundary"
+      },
+      "cases": [
+        {
+          "corpus": "date_format_long_boundary_UTC",
+          "id": "date_long_names",
+          "sql": "SELECT k, date_format(d, 'zzzz') AS r FROM format_zone_inputs",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false,
+          "scope": "long_boundary"
+        },
+        {
+          "corpus": "date_format_long_boundary_UTC",
+          "id": "ltz_long_names",
+          "sql": "SELECT k, date_format(ts, 'zzzz') AS r FROM format_zone_inputs",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false,
+          "scope": "long_boundary"
+        },
+        {
+          "corpus": "date_format_long_boundary_UTC",
+          "id": "ntz_long_names",
+          "sql": "SELECT k, date_format(ntz, 'zzzz') AS r FROM format_zone_inputs",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false,
+          "scope": "long_boundary"
+        },
+        {
+          "corpus": "date_format_long_boundary_UTC",
+          "id": "string_long_names",
+          "sql": "SELECT k, date_format(s, 'zzzz') AS r FROM format_zone_inputs",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false,
+          "scope": "long_boundary"
+        },
+        {
+          "corpus": "date_format_long_boundary_UTC",
+          "id": "date_long_names",
+          "sql": "SELECT k, date_format(d, 'zzzz') AS r FROM format_zone_inputs",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false,
+          "scope": "long_boundary"
+        },
+        {
+          "corpus": "date_format_long_boundary_UTC",
+          "id": "ltz_long_names",
+          "sql": "SELECT k, date_format(ts, 'zzzz') AS r FROM format_zone_inputs",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false,
+          "scope": "long_boundary"
+        },
+        {
+          "corpus": "date_format_long_boundary_UTC",
+          "id": "ntz_long_names",
+          "sql": "SELECT k, date_format(ntz, 'zzzz') AS r FROM format_zone_inputs",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false,
+          "scope": "long_boundary"
+        },
+        {
+          "corpus": "date_format_long_boundary_UTC",
+          "id": "string_long_names",
+          "sql": "SELECT k, date_format(s, 'zzzz') AS r FROM format_zone_inputs",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false,
+          "scope": "long_boundary"
+        }
+      ]
+    },
+    {
+      "corpus": "date_format_common_America_Los_Angeles",
+      "source": "source-only #1014 common date-format zone definitions",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "format_zone_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "d",
+                  "type": "date",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "ts",
+                  "type": "timestamp",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "ntz",
+                  "type": "timestamp_ntz",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "fmt",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "19724",
+                "1704200645123456",
+                "1704200645123456",
+                "2024-01-02 13:04:05.123456",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "1",
+                "19906",
+                "1719925445123456",
+                "1719925445123456",
+                "2024-07-02 13:04:05.123456",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "2",
+                "19792",
+                "1710066600000000",
+                "1710037800000000",
+                "2024-03-10 02:30:00.000000",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "3",
+                "20030",
+                "1730622600000000",
+                "1730597400000000",
+                "2024-11-03 01:30:00.000000",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "4",
+                "20030",
+                "1730626200000000",
+                "1730597400000000",
+                "2024-11-03 01:30:00.000000",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "5",
+                "-1",
+                "-876544",
+                "-876544",
+                "1969-12-31 23:59:59.123456",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "6",
+                "19724",
+                "1704200645123456",
+                "1704200645123456",
+                "2024-01-02 13:04:05.123456",
+                null
+              ],
+              [
+                "7",
+                null,
+                null,
+                null,
+                null,
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "8",
+                "19906",
+                "1719925445123456",
+                "1719925445123456",
+                "2024-07-02 13:04:05.123456",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ]
+            ]
+          }
+        ],
+        "timezone": "America/Los_Angeles",
+        "scope": "common"
+      },
+      "cases": [
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "date_column",
+          "sql": "SELECT k, date_format(d, 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS r FROM format_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "date_column_pattern",
+          "sql": "SELECT k, date_format(d, fmt) AS r FROM format_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "date_scalar_input",
+          "sql": "SELECT k, date_format(DATE '2024-01-02', fmt) AS r FROM format_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "date_literals",
+          "sql": "SELECT date_format(DATE '2024-01-02', 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS winter, date_format(DATE '2024-07-02', 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS summer",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "date_nulls",
+          "sql": "SELECT date_format(CAST(NULL AS DATE), 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS null_input, date_format(DATE '2024-01-02', NULL) AS null_format",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "ltz_column",
+          "sql": "SELECT k, date_format(ts, 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS r FROM format_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "ltz_column_pattern",
+          "sql": "SELECT k, date_format(ts, fmt) AS r FROM format_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "ltz_scalar_input",
+          "sql": "SELECT k, date_format(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', fmt) AS r FROM format_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "ltz_literals",
+          "sql": "SELECT date_format(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS winter, date_format(TIMESTAMP '2024-07-02 13:04:05.123456+00:00', 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS summer",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "ltz_nulls",
+          "sql": "SELECT date_format(CAST(NULL AS TIMESTAMP), 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS null_input, date_format(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', NULL) AS null_format",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "ntz_column",
+          "sql": "SELECT k, date_format(ntz, 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS r FROM format_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "ntz_column_pattern",
+          "sql": "SELECT k, date_format(ntz, fmt) AS r FROM format_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "ntz_scalar_input",
+          "sql": "SELECT k, date_format(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', fmt) AS r FROM format_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "ntz_literals",
+          "sql": "SELECT date_format(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS winter, date_format(TIMESTAMP_NTZ '2024-07-02 13:04:05.123456', 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS summer",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "ntz_nulls",
+          "sql": "SELECT date_format(CAST(NULL AS TIMESTAMP_NTZ), 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS null_input, date_format(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', NULL) AS null_format",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "string_column",
+          "sql": "SELECT k, date_format(s, 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS r FROM format_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "string_column_pattern",
+          "sql": "SELECT k, date_format(s, fmt) AS r FROM format_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "string_scalar_input",
+          "sql": "SELECT k, date_format('2024-01-02 13:04:05.123456', fmt) AS r FROM format_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "string_literals",
+          "sql": "SELECT date_format('2024-01-02 13:04:05.123456', 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS winter, date_format('2024-07-02 13:04:05.123456', 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS summer",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "string_nulls",
+          "sql": "SELECT date_format(CAST(NULL AS STRING), 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS null_input, date_format('2024-01-02 13:04:05.123456', NULL) AS null_format",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "ntz_cast_control",
+          "sql": "SELECT k, date_format(ntz, 'yyyy-MM-dd HH:mm:ss') AS formatted, CAST(ntz AS STRING) AS cast_text FROM format_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "to_char_control",
+          "sql": "SELECT k, to_char(ntz, 'yyyy-MM-dd HH:mm:ss') AS r FROM format_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "from_unixtime_control",
+          "sql": "SELECT from_unixtime(1704200645, 'yyyy-MM-dd HH:mm:ss z O XXX') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "date_column",
+          "sql": "SELECT k, date_format(d, 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS r FROM format_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "date_column_pattern",
+          "sql": "SELECT k, date_format(d, fmt) AS r FROM format_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "date_scalar_input",
+          "sql": "SELECT k, date_format(DATE '2024-01-02', fmt) AS r FROM format_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "date_literals",
+          "sql": "SELECT date_format(DATE '2024-01-02', 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS winter, date_format(DATE '2024-07-02', 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS summer",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "date_nulls",
+          "sql": "SELECT date_format(CAST(NULL AS DATE), 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS null_input, date_format(DATE '2024-01-02', NULL) AS null_format",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "ltz_column",
+          "sql": "SELECT k, date_format(ts, 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS r FROM format_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "ltz_column_pattern",
+          "sql": "SELECT k, date_format(ts, fmt) AS r FROM format_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "ltz_scalar_input",
+          "sql": "SELECT k, date_format(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', fmt) AS r FROM format_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "ltz_literals",
+          "sql": "SELECT date_format(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS winter, date_format(TIMESTAMP '2024-07-02 13:04:05.123456+00:00', 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS summer",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "ltz_nulls",
+          "sql": "SELECT date_format(CAST(NULL AS TIMESTAMP), 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS null_input, date_format(TIMESTAMP '2024-01-02 13:04:05.123456+00:00', NULL) AS null_format",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "ntz_column",
+          "sql": "SELECT k, date_format(ntz, 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS r FROM format_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "ntz_column_pattern",
+          "sql": "SELECT k, date_format(ntz, fmt) AS r FROM format_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "ntz_scalar_input",
+          "sql": "SELECT k, date_format(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', fmt) AS r FROM format_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "ntz_literals",
+          "sql": "SELECT date_format(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS winter, date_format(TIMESTAMP_NTZ '2024-07-02 13:04:05.123456', 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS summer",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "ntz_nulls",
+          "sql": "SELECT date_format(CAST(NULL AS TIMESTAMP_NTZ), 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS null_input, date_format(TIMESTAMP_NTZ '2024-01-02 13:04:05.123456', NULL) AS null_format",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "string_column",
+          "sql": "SELECT k, date_format(s, 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS r FROM format_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "string_column_pattern",
+          "sql": "SELECT k, date_format(s, fmt) AS r FROM format_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "string_scalar_input",
+          "sql": "SELECT k, date_format('2024-01-02 13:04:05.123456', fmt) AS r FROM format_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "string_literals",
+          "sql": "SELECT date_format('2024-01-02 13:04:05.123456', 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS winter, date_format('2024-07-02 13:04:05.123456', 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS summer",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "string_nulls",
+          "sql": "SELECT date_format(CAST(NULL AS STRING), 'yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV') AS null_input, date_format('2024-01-02 13:04:05.123456', NULL) AS null_format",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "ntz_cast_control",
+          "sql": "SELECT k, date_format(ntz, 'yyyy-MM-dd HH:mm:ss') AS formatted, CAST(ntz AS STRING) AS cast_text FROM format_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "to_char_control",
+          "sql": "SELECT k, to_char(ntz, 'yyyy-MM-dd HH:mm:ss') AS r FROM format_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_common_America_Los_Angeles",
+          "id": "from_unixtime_control",
+          "sql": "SELECT from_unixtime(1704200645, 'yyyy-MM-dd HH:mm:ss z O XXX') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        }
+      ]
+    },
+    {
+      "corpus": "date_format_long_boundary_America_Los_Angeles",
+      "source": "source-only #1014 long_boundary date-format zone definitions",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "format_zone_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "d",
+                  "type": "date",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "ts",
+                  "type": "timestamp",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "ntz",
+                  "type": "timestamp_ntz",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "fmt",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "19724",
+                "1704200645123456",
+                "1704200645123456",
+                "2024-01-02 13:04:05.123456",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "1",
+                "19906",
+                "1719925445123456",
+                "1719925445123456",
+                "2024-07-02 13:04:05.123456",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "2",
+                "19792",
+                "1710066600000000",
+                "1710037800000000",
+                "2024-03-10 02:30:00.000000",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "3",
+                "20030",
+                "1730622600000000",
+                "1730597400000000",
+                "2024-11-03 01:30:00.000000",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "4",
+                "20030",
+                "1730626200000000",
+                "1730597400000000",
+                "2024-11-03 01:30:00.000000",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "5",
+                "-1",
+                "-876544",
+                "-876544",
+                "1969-12-31 23:59:59.123456",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "6",
+                "19724",
+                "1704200645123456",
+                "1704200645123456",
+                "2024-01-02 13:04:05.123456",
+                null
+              ],
+              [
+                "7",
+                null,
+                null,
+                null,
+                null,
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "8",
+                "19906",
+                "1719925445123456",
+                "1719925445123456",
+                "2024-07-02 13:04:05.123456",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ]
+            ]
+          }
+        ],
+        "timezone": "America/Los_Angeles",
+        "scope": "long_boundary"
+      },
+      "cases": [
+        {
+          "corpus": "date_format_long_boundary_America_Los_Angeles",
+          "id": "date_long_names",
+          "sql": "SELECT k, date_format(d, 'zzzz') AS r FROM format_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false,
+          "scope": "long_boundary"
+        },
+        {
+          "corpus": "date_format_long_boundary_America_Los_Angeles",
+          "id": "ltz_long_names",
+          "sql": "SELECT k, date_format(ts, 'zzzz') AS r FROM format_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false,
+          "scope": "long_boundary"
+        },
+        {
+          "corpus": "date_format_long_boundary_America_Los_Angeles",
+          "id": "ntz_long_names",
+          "sql": "SELECT k, date_format(ntz, 'zzzz') AS r FROM format_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false,
+          "scope": "long_boundary"
+        },
+        {
+          "corpus": "date_format_long_boundary_America_Los_Angeles",
+          "id": "string_long_names",
+          "sql": "SELECT k, date_format(s, 'zzzz') AS r FROM format_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false,
+          "scope": "long_boundary"
+        },
+        {
+          "corpus": "date_format_long_boundary_America_Los_Angeles",
+          "id": "date_long_names",
+          "sql": "SELECT k, date_format(d, 'zzzz') AS r FROM format_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false,
+          "scope": "long_boundary"
+        },
+        {
+          "corpus": "date_format_long_boundary_America_Los_Angeles",
+          "id": "ltz_long_names",
+          "sql": "SELECT k, date_format(ts, 'zzzz') AS r FROM format_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false,
+          "scope": "long_boundary"
+        },
+        {
+          "corpus": "date_format_long_boundary_America_Los_Angeles",
+          "id": "ntz_long_names",
+          "sql": "SELECT k, date_format(ntz, 'zzzz') AS r FROM format_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false,
+          "scope": "long_boundary"
+        },
+        {
+          "corpus": "date_format_long_boundary_America_Los_Angeles",
+          "id": "string_long_names",
+          "sql": "SELECT k, date_format(s, 'zzzz') AS r FROM format_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false,
+          "scope": "long_boundary"
+        }
+      ]
+    },
+    {
+      "corpus": "date_format_alias_Z",
+      "source": "source-only #1029 existing zone-free alias preservation",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "format_zone_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "d",
+                  "type": "date",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "ts",
+                  "type": "timestamp",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "ntz",
+                  "type": "timestamp_ntz",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "fmt",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "19724",
+                "1704200645123456",
+                "1704200645123456",
+                "2024-01-02 13:04:05.123456",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "1",
+                "19906",
+                "1719925445123456",
+                "1719925445123456",
+                "2024-07-02 13:04:05.123456",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "2",
+                "19792",
+                "1710066600000000",
+                "1710037800000000",
+                "2024-03-10 02:30:00.000000",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "3",
+                "20030",
+                "1730622600000000",
+                "1730597400000000",
+                "2024-11-03 01:30:00.000000",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "4",
+                "20030",
+                "1730626200000000",
+                "1730597400000000",
+                "2024-11-03 01:30:00.000000",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "5",
+                "-1",
+                "-876544",
+                "-876544",
+                "1969-12-31 23:59:59.123456",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "6",
+                "19724",
+                "1704200645123456",
+                "1704200645123456",
+                "2024-01-02 13:04:05.123456",
+                null
+              ],
+              [
+                "7",
+                null,
+                null,
+                null,
+                null,
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "8",
+                "19906",
+                "1719925445123456",
+                "1719925445123456",
+                "2024-07-02 13:04:05.123456",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ]
+            ]
+          }
+        ],
+        "timezone": "Z",
+        "scope": "alias"
+      },
+      "cases": [
+        {
+          "corpus": "date_format_alias_Z",
+          "id": "alias_date",
+          "sql": "SELECT date_format(DATE '2024-01-02', 'yyyy-MM-dd HH:mm:ss') AS r",
+          "timezone": "Z",
+          "ansi": true,
+          "ordered": false,
+          "scope": "alias"
+        },
+        {
+          "corpus": "date_format_alias_Z",
+          "id": "alias_ntz",
+          "sql": "SELECT date_format(TIMESTAMP_NTZ '2024-01-02 13:04:05', 'yyyy-MM-dd HH:mm:ss') AS r",
+          "timezone": "Z",
+          "ansi": true,
+          "ordered": false,
+          "scope": "alias"
+        },
+        {
+          "corpus": "date_format_alias_Z",
+          "id": "alias_date",
+          "sql": "SELECT date_format(DATE '2024-01-02', 'yyyy-MM-dd HH:mm:ss') AS r",
+          "timezone": "Z",
+          "ansi": false,
+          "ordered": false,
+          "scope": "alias"
+        },
+        {
+          "corpus": "date_format_alias_Z",
+          "id": "alias_ntz",
+          "sql": "SELECT date_format(TIMESTAMP_NTZ '2024-01-02 13:04:05', 'yyyy-MM-dd HH:mm:ss') AS r",
+          "timezone": "Z",
+          "ansi": false,
+          "ordered": false,
+          "scope": "alias"
+        }
+      ]
+    },
+    {
+      "corpus": "date_format_alias_PST",
+      "source": "source-only #1029 existing zone-free alias preservation",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "format_zone_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "d",
+                  "type": "date",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "ts",
+                  "type": "timestamp",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "ntz",
+                  "type": "timestamp_ntz",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "fmt",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "19724",
+                "1704200645123456",
+                "1704200645123456",
+                "2024-01-02 13:04:05.123456",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "1",
+                "19906",
+                "1719925445123456",
+                "1719925445123456",
+                "2024-07-02 13:04:05.123456",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "2",
+                "19792",
+                "1710066600000000",
+                "1710037800000000",
+                "2024-03-10 02:30:00.000000",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "3",
+                "20030",
+                "1730622600000000",
+                "1730597400000000",
+                "2024-11-03 01:30:00.000000",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "4",
+                "20030",
+                "1730626200000000",
+                "1730597400000000",
+                "2024-11-03 01:30:00.000000",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "5",
+                "-1",
+                "-876544",
+                "-876544",
+                "1969-12-31 23:59:59.123456",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "6",
+                "19724",
+                "1704200645123456",
+                "1704200645123456",
+                "2024-01-02 13:04:05.123456",
+                null
+              ],
+              [
+                "7",
+                null,
+                null,
+                null,
+                null,
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "8",
+                "19906",
+                "1719925445123456",
+                "1719925445123456",
+                "2024-07-02 13:04:05.123456",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ]
+            ]
+          }
+        ],
+        "timezone": "PST",
+        "scope": "alias"
+      },
+      "cases": [
+        {
+          "corpus": "date_format_alias_PST",
+          "id": "alias_date",
+          "sql": "SELECT date_format(DATE '2024-01-02', 'yyyy-MM-dd HH:mm:ss') AS r",
+          "timezone": "PST",
+          "ansi": true,
+          "ordered": false,
+          "scope": "alias"
+        },
+        {
+          "corpus": "date_format_alias_PST",
+          "id": "alias_ntz",
+          "sql": "SELECT date_format(TIMESTAMP_NTZ '2024-01-02 13:04:05', 'yyyy-MM-dd HH:mm:ss') AS r",
+          "timezone": "PST",
+          "ansi": true,
+          "ordered": false,
+          "scope": "alias"
+        },
+        {
+          "corpus": "date_format_alias_PST",
+          "id": "alias_date",
+          "sql": "SELECT date_format(DATE '2024-01-02', 'yyyy-MM-dd HH:mm:ss') AS r",
+          "timezone": "PST",
+          "ansi": false,
+          "ordered": false,
+          "scope": "alias"
+        },
+        {
+          "corpus": "date_format_alias_PST",
+          "id": "alias_ntz",
+          "sql": "SELECT date_format(TIMESTAMP_NTZ '2024-01-02 13:04:05', 'yyyy-MM-dd HH:mm:ss') AS r",
+          "timezone": "PST",
+          "ansi": false,
+          "ordered": false,
+          "scope": "alias"
+        }
+      ]
+    },
+    {
+      "corpus": "date_format_numeric_abbreviation",
+      "source": "source-only bounded numeric TZDB abbreviation and offset controls",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "format_zone_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "d",
+                  "type": "date",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "ts",
+                  "type": "timestamp",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "ntz",
+                  "type": "timestamp_ntz",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "fmt",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "19724",
+                "1704200645123456",
+                "1704200645123456",
+                "2024-01-02 13:04:05.123456",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "1",
+                "19906",
+                "1719925445123456",
+                "1719925445123456",
+                "2024-07-02 13:04:05.123456",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "2",
+                "19792",
+                "1710066600000000",
+                "1710037800000000",
+                "2024-03-10 02:30:00.000000",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "3",
+                "20030",
+                "1730622600000000",
+                "1730597400000000",
+                "2024-11-03 01:30:00.000000",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "4",
+                "20030",
+                "1730626200000000",
+                "1730597400000000",
+                "2024-11-03 01:30:00.000000",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "5",
+                "-1",
+                "-876544",
+                "-876544",
+                "1969-12-31 23:59:59.123456",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "6",
+                "19724",
+                "1704200645123456",
+                "1704200645123456",
+                "2024-01-02 13:04:05.123456",
+                null
+              ],
+              [
+                "7",
+                null,
+                null,
+                null,
+                null,
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "8",
+                "19906",
+                "1719925445123456",
+                "1719925445123456",
+                "2024-07-02 13:04:05.123456",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ]
+            ]
+          }
+        ],
+        "timezone": "Asia/Kathmandu",
+        "scope": "mixed"
+      },
+      "cases": [
+        {
+          "corpus": "date_format_numeric_abbreviation",
+          "id": "numeric_abbreviation",
+          "sql": "SELECT k, date_format(d, 'z') AS d, date_format(ts, 'z') AS t, date_format(ntz, 'z') AS n FROM format_zone_inputs WHERE k <> 5",
+          "timezone": "Asia/Kathmandu",
+          "ansi": true,
+          "ordered": false,
+          "scope": "short_boundary"
+        },
+        {
+          "corpus": "date_format_numeric_abbreviation",
+          "id": "positive_offset_control",
+          "sql": "SELECT date_format(TIMESTAMP_NTZ '2024-01-02 13:04:05', 'O OOOO X XX XXX') AS r",
+          "timezone": "Asia/Kathmandu",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_numeric_abbreviation",
+          "id": "numeric_abbreviation",
+          "sql": "SELECT k, date_format(d, 'z') AS d, date_format(ts, 'z') AS t, date_format(ntz, 'z') AS n FROM format_zone_inputs WHERE k <> 5",
+          "timezone": "Asia/Kathmandu",
+          "ansi": false,
+          "ordered": false,
+          "scope": "short_boundary"
+        },
+        {
+          "corpus": "date_format_numeric_abbreviation",
+          "id": "positive_offset_control",
+          "sql": "SELECT date_format(TIMESTAMP_NTZ '2024-01-02 13:04:05', 'O OOOO X XX XXX') AS r",
+          "timezone": "Asia/Kathmandu",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        }
+      ]
+    },
+    {
+      "corpus": "date_format_fixed_offset",
+      "source": "source-only ordinary fixed-offset session projection",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "format_zone_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "d",
+                  "type": "date",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "ts",
+                  "type": "timestamp",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "ntz",
+                  "type": "timestamp_ntz",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "fmt",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "19724",
+                "1704200645123456",
+                "1704200645123456",
+                "2024-01-02 13:04:05.123456",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "1",
+                "19906",
+                "1719925445123456",
+                "1719925445123456",
+                "2024-07-02 13:04:05.123456",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "2",
+                "19792",
+                "1710066600000000",
+                "1710037800000000",
+                "2024-03-10 02:30:00.000000",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "3",
+                "20030",
+                "1730622600000000",
+                "1730597400000000",
+                "2024-11-03 01:30:00.000000",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "4",
+                "20030",
+                "1730626200000000",
+                "1730597400000000",
+                "2024-11-03 01:30:00.000000",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "5",
+                "-1",
+                "-876544",
+                "-876544",
+                "1969-12-31 23:59:59.123456",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "6",
+                "19724",
+                "1704200645123456",
+                "1704200645123456",
+                "2024-01-02 13:04:05.123456",
+                null
+              ],
+              [
+                "7",
+                null,
+                null,
+                null,
+                null,
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ],
+              [
+                "8",
+                "19906",
+                "1719925445123456",
+                "1719925445123456",
+                "2024-07-02 13:04:05.123456",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS|z|zz|zzz|O|OOOO|X|XX|XXX|VV"
+              ]
+            ]
+          }
+        ],
+        "timezone": "+05:30",
+        "scope": "common"
+      },
+      "cases": [
+        {
+          "corpus": "date_format_fixed_offset",
+          "id": "fixed_offset_projection",
+          "sql": "SELECT k, date_format(d, 'yyyy-MM-dd HH:mm:ss z O OOOO X XX XXX') AS d, date_format(ts, 'yyyy-MM-dd HH:mm:ss z O OOOO X XX XXX') AS t, date_format(ntz, 'yyyy-MM-dd HH:mm:ss z O OOOO X XX XXX') AS n FROM format_zone_inputs",
+          "timezone": "+05:30",
+          "ansi": true,
+          "ordered": false,
+          "scope": "common"
+        },
+        {
+          "corpus": "date_format_fixed_offset",
+          "id": "fixed_offset_projection",
+          "sql": "SELECT k, date_format(d, 'yyyy-MM-dd HH:mm:ss z O OOOO X XX XXX') AS d, date_format(ts, 'yyyy-MM-dd HH:mm:ss z O OOOO X XX XXX') AS t, date_format(ntz, 'yyyy-MM-dd HH:mm:ss z O OOOO X XX XXX') AS n FROM format_zone_inputs",
+          "timezone": "+05:30",
+          "ansi": false,
+          "ordered": false,
+          "scope": "common"
+        }
+      ]
+    }
+  ]
+}

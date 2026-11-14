@@ -4,6 +4,7 @@ use std::collections::hash_map::Entry;
 use std::sync::Arc;
 
 use chrono::{Offset, TimeZone};
+use chrono_tz::OffsetName;
 use datafusion::arrow::array::timezone::Tz;
 use datafusion::arrow::array::{
     Array, Date32Array, Date64Array, StringArray, TimestampMicrosecondArray,
@@ -21,6 +22,7 @@ use sail_common_datafusion::utils::items::ItemTaker;
 use sail_sql_analyzer::parser::parse_timestamp;
 
 use crate::scalar::datetime::format::{DateTimeFormat, DateTimeFormatInput, TimeZoneDisplay};
+use crate::scalar::datetime::local_datetime_to_ltz::cast_local_timestamp_value_to_ltz;
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkDateFormat {
@@ -50,8 +52,22 @@ impl ScalarUDFImpl for SparkDateFormat {
         Ok(DataType::Utf8)
     }
 
-    fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
-        let ScalarFunctionArgs { args, .. } = args;
+    fn invoke_with_args(&self, mut input: ScalarFunctionArgs) -> Result<ColumnarValue> {
+        // shortcut: Keep legacy DATE/NTZ formatting for unparsed session aliases until #1029.
+        if input.args.len() == 2
+            && !matches!(&input.args[1], ColumnarValue::Scalar(value) if value.is_null())
+            && self.session_timezone.parse::<Tz>().is_ok()
+            && matches!(
+                input.args[0].data_type(),
+                DataType::Date32 | DataType::Date64 | DataType::Timestamp(_, None)
+            )
+        {
+            let mut local = input.clone();
+            local.args.truncate(1);
+            local.arg_fields.truncate(1);
+            input.args[0] = cast_local_timestamp_value_to_ltz(local, &self.session_timezone)?;
+        }
+        let ScalarFunctionArgs { args, .. } = input;
         if args.len() != 2 {
             return exec_err!("spark_date_format requires 2 arguments");
         }
@@ -549,14 +565,28 @@ fn format_timestamp_value(
     match tz {
         Some(tz_str) => {
             let tz = tz_str
-                .parse::<chrono_tz::Tz>()
+                .parse::<Tz>()
                 .map_err(|e| exec_datafusion_err!("Invalid timezone '{}': {}", tz_str, e))?;
             let datetime = tz.from_utc_datetime(&naive_datetime);
+            let named = tz_str
+                .parse::<chrono_tz::Tz>()
+                .ok()
+                .map(|zone| zone.from_utc_datetime(&naive_datetime));
+            let named_abbreviation = named.as_ref().and_then(|date| date.offset().abbreviation());
+            let fixed_name = named_abbreviation.is_none().then(|| {
+                if datetime.offset().fix().local_minus_utc() == 0 {
+                    "Z".to_owned()
+                } else {
+                    datetime.offset().fix().to_string()
+                }
+            });
+            let abbreviation = named_abbreviation.or(fixed_name.as_deref());
             format.format(DateTimeFormatInput {
                 datetime: datetime.naive_local(),
                 timezone: Some(TimeZoneDisplay {
                     offset: datetime.offset().fix(),
                     name: Some(tz_str),
+                    abbreviation,
                 }),
                 zone_id: Some(tz_str),
             })

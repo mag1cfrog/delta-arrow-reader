@@ -62,17 +62,19 @@ belong to several classes:
   during optimization; the other retained errors occur during collection.
   `#`, `{` and `}` are still formatted as text.
 - #1011: 236 strings beyond the date library's range behave like `'bad'`.
-- #1014: 96 DATE_FORMAT results print other zone names and `O` offsets, including
-  the Los Angeles local mean time offset without its seconds, or UTC zone tokens
-  for DATE and TIMESTAMP_NTZ inputs; 24 keep the hour of the
-  registered TIMESTAMP_NTZ local time skipped by the Los Angeles spring change,
-  two of them also with zone tokens.
+- #1236: 16 DATE_FORMAT records retain localized-name differences: long `zzzz`
+  names use region IDs, and the historical Los Angeles short name uses TZDB `LMT`
+  instead of Java's `PST`. Modern short names, offsets and DATE/NTZ local-time
+  interpretation use the original Spark expectations.
 - #1016: 712 DATE_FORMAT, ANSI formatted parsing and temporal-to-STRING literals
   are nullable at analysis.
 
 The 8 parsed-offset TO_DATE/TRY_TO_DATE records now use their original Spark values. The
 [formatted date zone fixture](../formatted-date-zones/README.md) adds offset rollover,
-region/DST and preservation controls; these 6,020 raw observations remain unchanged.
+region/DST and preservation controls; these 6,020 raw observations remain unchanged. The [DATE_FORMAT zone
+fixture](../date-format-zones/README.md) adds modern names, fixed offsets, local
+DATE/NTZ values and DST preservation controls, with localized-name fallbacks
+checked separately.
 
 Recapture from the crate root:
 
