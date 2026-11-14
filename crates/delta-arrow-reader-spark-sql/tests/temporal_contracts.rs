@@ -25,7 +25,6 @@ use spark_results::{TestResult, capture_schema, validate_batch};
 
 const UTC: &str = "UTC";
 const LOS_ANGELES: &str = "America/Los_Angeles";
-const MICROS_PER_DAY: i64 = 86_400_000_000;
 /// The registered TIMESTAMP_NTZ value 2024-03-10 02:30:00, a local time Los Angeles skips.
 const SKIPPED_LOCAL_TIME: &str = "1710037800000000";
 
@@ -279,8 +278,6 @@ enum RetainedDifference {
     /// #1014: DATE_FORMAT keeps the hour of a TIMESTAMP_NTZ local time skipped by a DST
     /// change instead of moving it past the gap.
     SkippedLocalTimeAsWritten,
-    /// #1015: formatted TO_DATE and TRY_TO_DATE ignore a parsed zone offset.
-    IgnoredParsedOffset,
     /// #1016: DATE_FORMAT, ANSI formatted parsing and temporal-to-STRING casts are nullable
     /// at analysis, where Spark declares them required.
     NullableFormattingResults,
@@ -643,31 +640,6 @@ fn current_expectation(
             retained.insert(RetainedDifference::NullableFormattingResults);
         }
     }
-    if section == "formatted"
-        && input == "offset"
-        && matches!(operator, "to_date" | "try_to_date")
-        && current["expected"]["status"] == "ok"
-    {
-        // DAR keeps the local date, which is the date of TO_TIMESTAMP_NTZ for the string.
-        let id = text(case, "id")?.replacen(&format!("_{operator}_"), "_to_timestamp_ntz_", 1);
-        let mut rows = references.sibling(case, &id, timezone)?["expected"]["rows"].clone();
-        for row in rows.as_array_mut().ok_or("missing rows")? {
-            let row = row.as_array_mut().ok_or("missing row")?;
-            let last = row.last_mut().ok_or("empty row")?;
-            if let Some(micros) = last.as_str() {
-                *last = json!(
-                    micros
-                        .parse::<i64>()?
-                        .div_euclid(MICROS_PER_DAY)
-                        .to_string()
-                );
-            }
-        }
-        if current["expected"]["rows"] != rows {
-            current["expected"]["rows"] = rows;
-            retained.insert(RetainedDifference::IgnoredParsedOffset);
-        }
-    }
     if section == "format" && case["expected"]["status"] == "ok" {
         rewrite_formatted_zones(&mut current, case, references, &mut retained)?;
     }
@@ -738,7 +710,6 @@ async fn temporal_contracts_match_spark() -> TestResult {
             (RetainedDifference::OutOfRangeStrings, 236),
             (RetainedDifference::ZoneTokenText, 96),
             (RetainedDifference::SkippedLocalTimeAsWritten, 24),
-            (RetainedDifference::IgnoredParsedOffset, 8),
             (RetainedDifference::NullableFormattingResults, 712),
         ]
     );

@@ -67,10 +67,12 @@ belong to several classes:
   for DATE and TIMESTAMP_NTZ inputs; 24 keep the hour of the
   registered TIMESTAMP_NTZ local time skipped by the Los Angeles spring change,
   two of them also with zone tokens.
-- #1015: 8 formatted TO_DATE and TRY_TO_DATE calls ignore the parsed offset and
-  keep the local date of TO_TIMESTAMP_NTZ.
 - #1016: 712 DATE_FORMAT, ANSI formatted parsing and temporal-to-STRING literals
   are nullable at analysis.
+
+The 8 parsed-offset TO_DATE/TRY_TO_DATE records now use their original Spark values. The
+[formatted date zone fixture](../formatted-date-zones/README.md) adds offset rollover,
+region/DST and preservation controls; these 6,020 raw observations remain unchanged.
 
 Recapture from the crate root:
 

@@ -1,0 +1,1706 @@
+{
+  "issue": "1015",
+  "expected_record_count": 136,
+  "corpora": [
+    {
+      "corpus": "formatted_date_UTC",
+      "source": "source-only #1015 formatted dates with parsed zones and existing-path controls",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "date_zone_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "fmt",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "kind",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "2024-01-02 00:15:00+05:30",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "1",
+                "2024-01-01 23:45:00-08:00",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "2",
+                "2024-01-02 00:15:00Z",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "3",
+                "2024-01-01 23:45:00Z",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "4",
+                "2024-01-02 00:15:00+14:00",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "5",
+                "2024-01-01 23:45:00-12:00",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "6",
+                "2024-01-01 23:59:59.123456-03:30",
+                "yyyy-MM-dd HH:mm:ss.SSSSSSXXX",
+                "fraction"
+              ],
+              [
+                "7",
+                "2024-01-02 00:15:00",
+                "yyyy-MM-dd HH:mm:ss",
+                "plain"
+              ],
+              [
+                "8",
+                "2024-02-29",
+                "yyyy-MM-dd",
+                "date"
+              ],
+              [
+                "9",
+                "2024-01-01 23:45:00 America/Los_Angeles",
+                "yyyy-MM-dd HH:mm:ss VV",
+                "region"
+              ],
+              [
+                "10",
+                "2024-03-10 02:30:00 America/New_York",
+                "yyyy-MM-dd HH:mm:ss VV",
+                "region"
+              ],
+              [
+                "11",
+                "2024-11-03 01:30:00 America/New_York",
+                "yyyy-MM-dd HH:mm:ss VV",
+                "region"
+              ],
+              [
+                "12",
+                "2024-03-10 07:30:00Z",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "13",
+                "2024-11-03 06:30:00Z",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "14",
+                "1969-12-31 23:45:00-03:30",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "15",
+                null,
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "16",
+                "2024-01-02 00:15:00+05:30",
+                null,
+                "offset"
+              ],
+              [
+                "17",
+                "2024-01-02 00:15:00+05:30",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ]
+            ]
+          }
+        ],
+        "timezone": "UTC"
+      },
+      "cases": [
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "to_date_columns",
+          "sql": "SELECT k, to_date(s, fmt) AS r FROM date_zone_inputs",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "to_date_scalar_format",
+          "sql": "SELECT k, to_date(s, 'yyyy-MM-dd HH:mm:ssXXX') AS r FROM date_zone_inputs WHERE kind = 'offset'",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "to_date_scalar_input",
+          "sql": "SELECT k, to_date('2024-01-02 00:15:00+05:30', fmt) AS r FROM date_zone_inputs WHERE kind = 'offset'",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "to_date_positive",
+          "sql": "SELECT to_date('2024-01-02 00:15:00+05:30', 'yyyy-MM-dd HH:mm:ssXXX') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "to_date_negative",
+          "sql": "SELECT to_date('2024-01-01 23:45:00-12:00', 'yyyy-MM-dd HH:mm:ssXXX') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "to_date_zero",
+          "sql": "SELECT to_date('2024-01-02 00:15:00Z', 'yyyy-MM-dd HH:mm:ssXXX') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "to_date_issue",
+          "sql": "SELECT to_date('2024-01-02T01:04:05+05:30', 'yyyy-MM-dd''T''HH:mm:ssXXX') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "to_date_region_gap",
+          "sql": "SELECT to_date('2024-03-10 02:30:00 America/New_York', 'yyyy-MM-dd HH:mm:ss VV') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "to_date_zone_free_date",
+          "sql": "SELECT to_date('2024-02-29', 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "to_date_zone_free_time",
+          "sql": "SELECT to_date('2024-01-02 00:15:00', 'yyyy-MM-dd HH:mm:ss') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "to_date_null_input",
+          "sql": "SELECT to_date(NULL, 'yyyy-MM-dd HH:mm:ssXXX') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "to_date_null_format",
+          "sql": "SELECT to_date('2024-01-02 00:15:00+05:30', NULL) AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "to_date_coercion_controls",
+          "sql": "SELECT to_date(20240102, 'yyyyMMdd') AS numeric_date, to_date(X'323032342d30312d30322030303a31353a30302b30353a3330', 'yyyy-MM-dd HH:mm:ssXXX') AS binary_date",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "to_date_temporal_controls",
+          "sql": "SELECT to_date(DATE '2024-01-02', 'ignored q') AS d, to_date(TIMESTAMP_NTZ '2024-01-03 03:00:00', 'ignored q') AS n, to_date(TIMESTAMP '2024-01-03 03:00:00+00:00', 'ignored q') AS t",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "try_to_date_columns",
+          "sql": "SELECT k, try_to_date(s, fmt) AS r FROM date_zone_inputs",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "try_to_date_scalar_format",
+          "sql": "SELECT k, try_to_date(s, 'yyyy-MM-dd HH:mm:ssXXX') AS r FROM date_zone_inputs WHERE kind = 'offset'",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "try_to_date_scalar_input",
+          "sql": "SELECT k, try_to_date('2024-01-02 00:15:00+05:30', fmt) AS r FROM date_zone_inputs WHERE kind = 'offset'",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "try_to_date_positive",
+          "sql": "SELECT try_to_date('2024-01-02 00:15:00+05:30', 'yyyy-MM-dd HH:mm:ssXXX') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "try_to_date_negative",
+          "sql": "SELECT try_to_date('2024-01-01 23:45:00-12:00', 'yyyy-MM-dd HH:mm:ssXXX') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "try_to_date_zero",
+          "sql": "SELECT try_to_date('2024-01-02 00:15:00Z', 'yyyy-MM-dd HH:mm:ssXXX') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "try_to_date_issue",
+          "sql": "SELECT try_to_date('2024-01-02T01:04:05+05:30', 'yyyy-MM-dd''T''HH:mm:ssXXX') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "try_to_date_region_gap",
+          "sql": "SELECT try_to_date('2024-03-10 02:30:00 America/New_York', 'yyyy-MM-dd HH:mm:ss VV') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "try_to_date_zone_free_date",
+          "sql": "SELECT try_to_date('2024-02-29', 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "try_to_date_zone_free_time",
+          "sql": "SELECT try_to_date('2024-01-02 00:15:00', 'yyyy-MM-dd HH:mm:ss') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "try_to_date_null_input",
+          "sql": "SELECT try_to_date(NULL, 'yyyy-MM-dd HH:mm:ssXXX') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "try_to_date_null_format",
+          "sql": "SELECT try_to_date('2024-01-02 00:15:00+05:30', NULL) AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "try_to_date_coercion_controls",
+          "sql": "SELECT try_to_date(20240102, 'yyyyMMdd') AS numeric_date, try_to_date(X'323032342d30312d30322030303a31353a30302b30353a3330', 'yyyy-MM-dd HH:mm:ssXXX') AS binary_date",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "try_to_date_temporal_controls",
+          "sql": "SELECT try_to_date(DATE '2024-01-02', 'ignored q') AS d, try_to_date(TIMESTAMP_NTZ '2024-01-03 03:00:00', 'ignored q') AS n, try_to_date(TIMESTAMP '2024-01-03 03:00:00+00:00', 'ignored q') AS t",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "try_malformed",
+          "sql": "SELECT try_to_date('not a date', 'yyyy-MM-dd HH:mm:ssXXX') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "unformatted_control",
+          "sql": "SELECT to_date('2024-01-02 00:15:00+05:30') AS d, try_to_date('2024-01-02 00:15:00+05:30') AS t",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "to_date_columns",
+          "sql": "SELECT k, to_date(s, fmt) AS r FROM date_zone_inputs",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "to_date_scalar_format",
+          "sql": "SELECT k, to_date(s, 'yyyy-MM-dd HH:mm:ssXXX') AS r FROM date_zone_inputs WHERE kind = 'offset'",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "to_date_scalar_input",
+          "sql": "SELECT k, to_date('2024-01-02 00:15:00+05:30', fmt) AS r FROM date_zone_inputs WHERE kind = 'offset'",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "to_date_positive",
+          "sql": "SELECT to_date('2024-01-02 00:15:00+05:30', 'yyyy-MM-dd HH:mm:ssXXX') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "to_date_negative",
+          "sql": "SELECT to_date('2024-01-01 23:45:00-12:00', 'yyyy-MM-dd HH:mm:ssXXX') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "to_date_zero",
+          "sql": "SELECT to_date('2024-01-02 00:15:00Z', 'yyyy-MM-dd HH:mm:ssXXX') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "to_date_issue",
+          "sql": "SELECT to_date('2024-01-02T01:04:05+05:30', 'yyyy-MM-dd''T''HH:mm:ssXXX') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "to_date_region_gap",
+          "sql": "SELECT to_date('2024-03-10 02:30:00 America/New_York', 'yyyy-MM-dd HH:mm:ss VV') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "to_date_zone_free_date",
+          "sql": "SELECT to_date('2024-02-29', 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "to_date_zone_free_time",
+          "sql": "SELECT to_date('2024-01-02 00:15:00', 'yyyy-MM-dd HH:mm:ss') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "to_date_null_input",
+          "sql": "SELECT to_date(NULL, 'yyyy-MM-dd HH:mm:ssXXX') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "to_date_null_format",
+          "sql": "SELECT to_date('2024-01-02 00:15:00+05:30', NULL) AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "to_date_coercion_controls",
+          "sql": "SELECT to_date(20240102, 'yyyyMMdd') AS numeric_date, to_date(X'323032342d30312d30322030303a31353a30302b30353a3330', 'yyyy-MM-dd HH:mm:ssXXX') AS binary_date",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "to_date_temporal_controls",
+          "sql": "SELECT to_date(DATE '2024-01-02', 'ignored q') AS d, to_date(TIMESTAMP_NTZ '2024-01-03 03:00:00', 'ignored q') AS n, to_date(TIMESTAMP '2024-01-03 03:00:00+00:00', 'ignored q') AS t",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "try_to_date_columns",
+          "sql": "SELECT k, try_to_date(s, fmt) AS r FROM date_zone_inputs",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "try_to_date_scalar_format",
+          "sql": "SELECT k, try_to_date(s, 'yyyy-MM-dd HH:mm:ssXXX') AS r FROM date_zone_inputs WHERE kind = 'offset'",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "try_to_date_scalar_input",
+          "sql": "SELECT k, try_to_date('2024-01-02 00:15:00+05:30', fmt) AS r FROM date_zone_inputs WHERE kind = 'offset'",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "try_to_date_positive",
+          "sql": "SELECT try_to_date('2024-01-02 00:15:00+05:30', 'yyyy-MM-dd HH:mm:ssXXX') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "try_to_date_negative",
+          "sql": "SELECT try_to_date('2024-01-01 23:45:00-12:00', 'yyyy-MM-dd HH:mm:ssXXX') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "try_to_date_zero",
+          "sql": "SELECT try_to_date('2024-01-02 00:15:00Z', 'yyyy-MM-dd HH:mm:ssXXX') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "try_to_date_issue",
+          "sql": "SELECT try_to_date('2024-01-02T01:04:05+05:30', 'yyyy-MM-dd''T''HH:mm:ssXXX') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "try_to_date_region_gap",
+          "sql": "SELECT try_to_date('2024-03-10 02:30:00 America/New_York', 'yyyy-MM-dd HH:mm:ss VV') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "try_to_date_zone_free_date",
+          "sql": "SELECT try_to_date('2024-02-29', 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "try_to_date_zone_free_time",
+          "sql": "SELECT try_to_date('2024-01-02 00:15:00', 'yyyy-MM-dd HH:mm:ss') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "try_to_date_null_input",
+          "sql": "SELECT try_to_date(NULL, 'yyyy-MM-dd HH:mm:ssXXX') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "try_to_date_null_format",
+          "sql": "SELECT try_to_date('2024-01-02 00:15:00+05:30', NULL) AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "try_to_date_coercion_controls",
+          "sql": "SELECT try_to_date(20240102, 'yyyyMMdd') AS numeric_date, try_to_date(X'323032342d30312d30322030303a31353a30302b30353a3330', 'yyyy-MM-dd HH:mm:ssXXX') AS binary_date",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "try_to_date_temporal_controls",
+          "sql": "SELECT try_to_date(DATE '2024-01-02', 'ignored q') AS d, try_to_date(TIMESTAMP_NTZ '2024-01-03 03:00:00', 'ignored q') AS n, try_to_date(TIMESTAMP '2024-01-03 03:00:00+00:00', 'ignored q') AS t",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "try_malformed",
+          "sql": "SELECT try_to_date('not a date', 'yyyy-MM-dd HH:mm:ssXXX') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_UTC",
+          "id": "unformatted_control",
+          "sql": "SELECT to_date('2024-01-02 00:15:00+05:30') AS d, try_to_date('2024-01-02 00:15:00+05:30') AS t",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        }
+      ]
+    },
+    {
+      "corpus": "formatted_date_America_Los_Angeles",
+      "source": "source-only #1015 formatted dates with parsed zones and existing-path controls",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "date_zone_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "fmt",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "kind",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "2024-01-02 00:15:00+05:30",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "1",
+                "2024-01-01 23:45:00-08:00",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "2",
+                "2024-01-02 00:15:00Z",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "3",
+                "2024-01-01 23:45:00Z",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "4",
+                "2024-01-02 00:15:00+14:00",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "5",
+                "2024-01-01 23:45:00-12:00",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "6",
+                "2024-01-01 23:59:59.123456-03:30",
+                "yyyy-MM-dd HH:mm:ss.SSSSSSXXX",
+                "fraction"
+              ],
+              [
+                "7",
+                "2024-01-02 00:15:00",
+                "yyyy-MM-dd HH:mm:ss",
+                "plain"
+              ],
+              [
+                "8",
+                "2024-02-29",
+                "yyyy-MM-dd",
+                "date"
+              ],
+              [
+                "9",
+                "2024-01-01 23:45:00 America/Los_Angeles",
+                "yyyy-MM-dd HH:mm:ss VV",
+                "region"
+              ],
+              [
+                "10",
+                "2024-03-10 02:30:00 America/New_York",
+                "yyyy-MM-dd HH:mm:ss VV",
+                "region"
+              ],
+              [
+                "11",
+                "2024-11-03 01:30:00 America/New_York",
+                "yyyy-MM-dd HH:mm:ss VV",
+                "region"
+              ],
+              [
+                "12",
+                "2024-03-10 07:30:00Z",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "13",
+                "2024-11-03 06:30:00Z",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "14",
+                "1969-12-31 23:45:00-03:30",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "15",
+                null,
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "16",
+                "2024-01-02 00:15:00+05:30",
+                null,
+                "offset"
+              ],
+              [
+                "17",
+                "2024-01-02 00:15:00+05:30",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ]
+            ]
+          }
+        ],
+        "timezone": "America/Los_Angeles"
+      },
+      "cases": [
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "to_date_columns",
+          "sql": "SELECT k, to_date(s, fmt) AS r FROM date_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "to_date_scalar_format",
+          "sql": "SELECT k, to_date(s, 'yyyy-MM-dd HH:mm:ssXXX') AS r FROM date_zone_inputs WHERE kind = 'offset'",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "to_date_scalar_input",
+          "sql": "SELECT k, to_date('2024-01-02 00:15:00+05:30', fmt) AS r FROM date_zone_inputs WHERE kind = 'offset'",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "to_date_positive",
+          "sql": "SELECT to_date('2024-01-02 00:15:00+05:30', 'yyyy-MM-dd HH:mm:ssXXX') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "to_date_negative",
+          "sql": "SELECT to_date('2024-01-01 23:45:00-12:00', 'yyyy-MM-dd HH:mm:ssXXX') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "to_date_zero",
+          "sql": "SELECT to_date('2024-01-02 00:15:00Z', 'yyyy-MM-dd HH:mm:ssXXX') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "to_date_issue",
+          "sql": "SELECT to_date('2024-01-02T01:04:05+05:30', 'yyyy-MM-dd''T''HH:mm:ssXXX') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "to_date_region_gap",
+          "sql": "SELECT to_date('2024-03-10 02:30:00 America/New_York', 'yyyy-MM-dd HH:mm:ss VV') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "to_date_zone_free_date",
+          "sql": "SELECT to_date('2024-02-29', 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "to_date_zone_free_time",
+          "sql": "SELECT to_date('2024-01-02 00:15:00', 'yyyy-MM-dd HH:mm:ss') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "to_date_null_input",
+          "sql": "SELECT to_date(NULL, 'yyyy-MM-dd HH:mm:ssXXX') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "to_date_null_format",
+          "sql": "SELECT to_date('2024-01-02 00:15:00+05:30', NULL) AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "to_date_coercion_controls",
+          "sql": "SELECT to_date(20240102, 'yyyyMMdd') AS numeric_date, to_date(X'323032342d30312d30322030303a31353a30302b30353a3330', 'yyyy-MM-dd HH:mm:ssXXX') AS binary_date",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "to_date_temporal_controls",
+          "sql": "SELECT to_date(DATE '2024-01-02', 'ignored q') AS d, to_date(TIMESTAMP_NTZ '2024-01-03 03:00:00', 'ignored q') AS n, to_date(TIMESTAMP '2024-01-03 03:00:00+00:00', 'ignored q') AS t",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "try_to_date_columns",
+          "sql": "SELECT k, try_to_date(s, fmt) AS r FROM date_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "try_to_date_scalar_format",
+          "sql": "SELECT k, try_to_date(s, 'yyyy-MM-dd HH:mm:ssXXX') AS r FROM date_zone_inputs WHERE kind = 'offset'",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "try_to_date_scalar_input",
+          "sql": "SELECT k, try_to_date('2024-01-02 00:15:00+05:30', fmt) AS r FROM date_zone_inputs WHERE kind = 'offset'",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "try_to_date_positive",
+          "sql": "SELECT try_to_date('2024-01-02 00:15:00+05:30', 'yyyy-MM-dd HH:mm:ssXXX') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "try_to_date_negative",
+          "sql": "SELECT try_to_date('2024-01-01 23:45:00-12:00', 'yyyy-MM-dd HH:mm:ssXXX') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "try_to_date_zero",
+          "sql": "SELECT try_to_date('2024-01-02 00:15:00Z', 'yyyy-MM-dd HH:mm:ssXXX') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "try_to_date_issue",
+          "sql": "SELECT try_to_date('2024-01-02T01:04:05+05:30', 'yyyy-MM-dd''T''HH:mm:ssXXX') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "try_to_date_region_gap",
+          "sql": "SELECT try_to_date('2024-03-10 02:30:00 America/New_York', 'yyyy-MM-dd HH:mm:ss VV') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "try_to_date_zone_free_date",
+          "sql": "SELECT try_to_date('2024-02-29', 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "try_to_date_zone_free_time",
+          "sql": "SELECT try_to_date('2024-01-02 00:15:00', 'yyyy-MM-dd HH:mm:ss') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "try_to_date_null_input",
+          "sql": "SELECT try_to_date(NULL, 'yyyy-MM-dd HH:mm:ssXXX') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "try_to_date_null_format",
+          "sql": "SELECT try_to_date('2024-01-02 00:15:00+05:30', NULL) AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "try_to_date_coercion_controls",
+          "sql": "SELECT try_to_date(20240102, 'yyyyMMdd') AS numeric_date, try_to_date(X'323032342d30312d30322030303a31353a30302b30353a3330', 'yyyy-MM-dd HH:mm:ssXXX') AS binary_date",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "try_to_date_temporal_controls",
+          "sql": "SELECT try_to_date(DATE '2024-01-02', 'ignored q') AS d, try_to_date(TIMESTAMP_NTZ '2024-01-03 03:00:00', 'ignored q') AS n, try_to_date(TIMESTAMP '2024-01-03 03:00:00+00:00', 'ignored q') AS t",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "try_malformed",
+          "sql": "SELECT try_to_date('not a date', 'yyyy-MM-dd HH:mm:ssXXX') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "unformatted_control",
+          "sql": "SELECT to_date('2024-01-02 00:15:00+05:30') AS d, try_to_date('2024-01-02 00:15:00+05:30') AS t",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "to_date_columns",
+          "sql": "SELECT k, to_date(s, fmt) AS r FROM date_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "to_date_scalar_format",
+          "sql": "SELECT k, to_date(s, 'yyyy-MM-dd HH:mm:ssXXX') AS r FROM date_zone_inputs WHERE kind = 'offset'",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "to_date_scalar_input",
+          "sql": "SELECT k, to_date('2024-01-02 00:15:00+05:30', fmt) AS r FROM date_zone_inputs WHERE kind = 'offset'",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "to_date_positive",
+          "sql": "SELECT to_date('2024-01-02 00:15:00+05:30', 'yyyy-MM-dd HH:mm:ssXXX') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "to_date_negative",
+          "sql": "SELECT to_date('2024-01-01 23:45:00-12:00', 'yyyy-MM-dd HH:mm:ssXXX') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "to_date_zero",
+          "sql": "SELECT to_date('2024-01-02 00:15:00Z', 'yyyy-MM-dd HH:mm:ssXXX') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "to_date_issue",
+          "sql": "SELECT to_date('2024-01-02T01:04:05+05:30', 'yyyy-MM-dd''T''HH:mm:ssXXX') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "to_date_region_gap",
+          "sql": "SELECT to_date('2024-03-10 02:30:00 America/New_York', 'yyyy-MM-dd HH:mm:ss VV') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "to_date_zone_free_date",
+          "sql": "SELECT to_date('2024-02-29', 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "to_date_zone_free_time",
+          "sql": "SELECT to_date('2024-01-02 00:15:00', 'yyyy-MM-dd HH:mm:ss') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "to_date_null_input",
+          "sql": "SELECT to_date(NULL, 'yyyy-MM-dd HH:mm:ssXXX') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "to_date_null_format",
+          "sql": "SELECT to_date('2024-01-02 00:15:00+05:30', NULL) AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "to_date_coercion_controls",
+          "sql": "SELECT to_date(20240102, 'yyyyMMdd') AS numeric_date, to_date(X'323032342d30312d30322030303a31353a30302b30353a3330', 'yyyy-MM-dd HH:mm:ssXXX') AS binary_date",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "to_date_temporal_controls",
+          "sql": "SELECT to_date(DATE '2024-01-02', 'ignored q') AS d, to_date(TIMESTAMP_NTZ '2024-01-03 03:00:00', 'ignored q') AS n, to_date(TIMESTAMP '2024-01-03 03:00:00+00:00', 'ignored q') AS t",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "try_to_date_columns",
+          "sql": "SELECT k, try_to_date(s, fmt) AS r FROM date_zone_inputs",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "try_to_date_scalar_format",
+          "sql": "SELECT k, try_to_date(s, 'yyyy-MM-dd HH:mm:ssXXX') AS r FROM date_zone_inputs WHERE kind = 'offset'",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "try_to_date_scalar_input",
+          "sql": "SELECT k, try_to_date('2024-01-02 00:15:00+05:30', fmt) AS r FROM date_zone_inputs WHERE kind = 'offset'",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "try_to_date_positive",
+          "sql": "SELECT try_to_date('2024-01-02 00:15:00+05:30', 'yyyy-MM-dd HH:mm:ssXXX') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "try_to_date_negative",
+          "sql": "SELECT try_to_date('2024-01-01 23:45:00-12:00', 'yyyy-MM-dd HH:mm:ssXXX') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "try_to_date_zero",
+          "sql": "SELECT try_to_date('2024-01-02 00:15:00Z', 'yyyy-MM-dd HH:mm:ssXXX') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "try_to_date_issue",
+          "sql": "SELECT try_to_date('2024-01-02T01:04:05+05:30', 'yyyy-MM-dd''T''HH:mm:ssXXX') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "try_to_date_region_gap",
+          "sql": "SELECT try_to_date('2024-03-10 02:30:00 America/New_York', 'yyyy-MM-dd HH:mm:ss VV') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "try_to_date_zone_free_date",
+          "sql": "SELECT try_to_date('2024-02-29', 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "try_to_date_zone_free_time",
+          "sql": "SELECT try_to_date('2024-01-02 00:15:00', 'yyyy-MM-dd HH:mm:ss') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "try_to_date_null_input",
+          "sql": "SELECT try_to_date(NULL, 'yyyy-MM-dd HH:mm:ssXXX') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "try_to_date_null_format",
+          "sql": "SELECT try_to_date('2024-01-02 00:15:00+05:30', NULL) AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "try_to_date_coercion_controls",
+          "sql": "SELECT try_to_date(20240102, 'yyyyMMdd') AS numeric_date, try_to_date(X'323032342d30312d30322030303a31353a30302b30353a3330', 'yyyy-MM-dd HH:mm:ssXXX') AS binary_date",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "try_to_date_temporal_controls",
+          "sql": "SELECT try_to_date(DATE '2024-01-02', 'ignored q') AS d, try_to_date(TIMESTAMP_NTZ '2024-01-03 03:00:00', 'ignored q') AS n, try_to_date(TIMESTAMP '2024-01-03 03:00:00+00:00', 'ignored q') AS t",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "try_malformed",
+          "sql": "SELECT try_to_date('not a date', 'yyyy-MM-dd HH:mm:ssXXX') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_America_Los_Angeles",
+          "id": "unformatted_control",
+          "sql": "SELECT to_date('2024-01-02 00:15:00+05:30') AS d, try_to_date('2024-01-02 00:15:00+05:30') AS t",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        }
+      ]
+    },
+    {
+      "corpus": "formatted_date_alias_Z",
+      "source": "source-only preservation controls for existing zone-free alias sessions (#1029 boundary)",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "date_zone_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "fmt",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "kind",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "2024-01-02 00:15:00+05:30",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "1",
+                "2024-01-01 23:45:00-08:00",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "2",
+                "2024-01-02 00:15:00Z",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "3",
+                "2024-01-01 23:45:00Z",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "4",
+                "2024-01-02 00:15:00+14:00",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "5",
+                "2024-01-01 23:45:00-12:00",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "6",
+                "2024-01-01 23:59:59.123456-03:30",
+                "yyyy-MM-dd HH:mm:ss.SSSSSSXXX",
+                "fraction"
+              ],
+              [
+                "7",
+                "2024-01-02 00:15:00",
+                "yyyy-MM-dd HH:mm:ss",
+                "plain"
+              ],
+              [
+                "8",
+                "2024-02-29",
+                "yyyy-MM-dd",
+                "date"
+              ],
+              [
+                "9",
+                "2024-01-01 23:45:00 America/Los_Angeles",
+                "yyyy-MM-dd HH:mm:ss VV",
+                "region"
+              ],
+              [
+                "10",
+                "2024-03-10 02:30:00 America/New_York",
+                "yyyy-MM-dd HH:mm:ss VV",
+                "region"
+              ],
+              [
+                "11",
+                "2024-11-03 01:30:00 America/New_York",
+                "yyyy-MM-dd HH:mm:ss VV",
+                "region"
+              ],
+              [
+                "12",
+                "2024-03-10 07:30:00Z",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "13",
+                "2024-11-03 06:30:00Z",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "14",
+                "1969-12-31 23:45:00-03:30",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "15",
+                null,
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "16",
+                "2024-01-02 00:15:00+05:30",
+                null,
+                "offset"
+              ],
+              [
+                "17",
+                "2024-01-02 00:15:00+05:30",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ]
+            ]
+          }
+        ],
+        "timezone": "Z"
+      },
+      "cases": [
+        {
+          "corpus": "formatted_date_alias_Z",
+          "id": "to_date_zone_free_date",
+          "sql": "SELECT to_date('2024-02-29', 'yyyy-MM-dd') AS r",
+          "timezone": "Z",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_alias_Z",
+          "id": "to_date_zone_free_time",
+          "sql": "SELECT to_date('2024-01-02 00:15:00', 'yyyy-MM-dd HH:mm:ss') AS r",
+          "timezone": "Z",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_alias_Z",
+          "id": "try_to_date_zone_free_date",
+          "sql": "SELECT try_to_date('2024-02-29', 'yyyy-MM-dd') AS r",
+          "timezone": "Z",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_alias_Z",
+          "id": "try_to_date_zone_free_time",
+          "sql": "SELECT try_to_date('2024-01-02 00:15:00', 'yyyy-MM-dd HH:mm:ss') AS r",
+          "timezone": "Z",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_alias_Z",
+          "id": "to_date_zone_free_date",
+          "sql": "SELECT to_date('2024-02-29', 'yyyy-MM-dd') AS r",
+          "timezone": "Z",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_alias_Z",
+          "id": "to_date_zone_free_time",
+          "sql": "SELECT to_date('2024-01-02 00:15:00', 'yyyy-MM-dd HH:mm:ss') AS r",
+          "timezone": "Z",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_alias_Z",
+          "id": "try_to_date_zone_free_date",
+          "sql": "SELECT try_to_date('2024-02-29', 'yyyy-MM-dd') AS r",
+          "timezone": "Z",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_alias_Z",
+          "id": "try_to_date_zone_free_time",
+          "sql": "SELECT try_to_date('2024-01-02 00:15:00', 'yyyy-MM-dd HH:mm:ss') AS r",
+          "timezone": "Z",
+          "ansi": false,
+          "ordered": false
+        }
+      ]
+    },
+    {
+      "corpus": "formatted_date_alias_PST",
+      "source": "source-only preservation controls for existing zone-free alias sessions (#1029 boundary)",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "date_zone_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "fmt",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "kind",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "2024-01-02 00:15:00+05:30",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "1",
+                "2024-01-01 23:45:00-08:00",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "2",
+                "2024-01-02 00:15:00Z",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "3",
+                "2024-01-01 23:45:00Z",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "4",
+                "2024-01-02 00:15:00+14:00",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "5",
+                "2024-01-01 23:45:00-12:00",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "6",
+                "2024-01-01 23:59:59.123456-03:30",
+                "yyyy-MM-dd HH:mm:ss.SSSSSSXXX",
+                "fraction"
+              ],
+              [
+                "7",
+                "2024-01-02 00:15:00",
+                "yyyy-MM-dd HH:mm:ss",
+                "plain"
+              ],
+              [
+                "8",
+                "2024-02-29",
+                "yyyy-MM-dd",
+                "date"
+              ],
+              [
+                "9",
+                "2024-01-01 23:45:00 America/Los_Angeles",
+                "yyyy-MM-dd HH:mm:ss VV",
+                "region"
+              ],
+              [
+                "10",
+                "2024-03-10 02:30:00 America/New_York",
+                "yyyy-MM-dd HH:mm:ss VV",
+                "region"
+              ],
+              [
+                "11",
+                "2024-11-03 01:30:00 America/New_York",
+                "yyyy-MM-dd HH:mm:ss VV",
+                "region"
+              ],
+              [
+                "12",
+                "2024-03-10 07:30:00Z",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "13",
+                "2024-11-03 06:30:00Z",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "14",
+                "1969-12-31 23:45:00-03:30",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "15",
+                null,
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ],
+              [
+                "16",
+                "2024-01-02 00:15:00+05:30",
+                null,
+                "offset"
+              ],
+              [
+                "17",
+                "2024-01-02 00:15:00+05:30",
+                "yyyy-MM-dd HH:mm:ssXXX",
+                "offset"
+              ]
+            ]
+          }
+        ],
+        "timezone": "PST"
+      },
+      "cases": [
+        {
+          "corpus": "formatted_date_alias_PST",
+          "id": "to_date_zone_free_date",
+          "sql": "SELECT to_date('2024-02-29', 'yyyy-MM-dd') AS r",
+          "timezone": "PST",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_alias_PST",
+          "id": "to_date_zone_free_time",
+          "sql": "SELECT to_date('2024-01-02 00:15:00', 'yyyy-MM-dd HH:mm:ss') AS r",
+          "timezone": "PST",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_alias_PST",
+          "id": "try_to_date_zone_free_date",
+          "sql": "SELECT try_to_date('2024-02-29', 'yyyy-MM-dd') AS r",
+          "timezone": "PST",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_alias_PST",
+          "id": "try_to_date_zone_free_time",
+          "sql": "SELECT try_to_date('2024-01-02 00:15:00', 'yyyy-MM-dd HH:mm:ss') AS r",
+          "timezone": "PST",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_alias_PST",
+          "id": "to_date_zone_free_date",
+          "sql": "SELECT to_date('2024-02-29', 'yyyy-MM-dd') AS r",
+          "timezone": "PST",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_alias_PST",
+          "id": "to_date_zone_free_time",
+          "sql": "SELECT to_date('2024-01-02 00:15:00', 'yyyy-MM-dd HH:mm:ss') AS r",
+          "timezone": "PST",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_alias_PST",
+          "id": "try_to_date_zone_free_date",
+          "sql": "SELECT try_to_date('2024-02-29', 'yyyy-MM-dd') AS r",
+          "timezone": "PST",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "formatted_date_alias_PST",
+          "id": "try_to_date_zone_free_time",
+          "sql": "SELECT try_to_date('2024-01-02 00:15:00', 'yyyy-MM-dd HH:mm:ss') AS r",
+          "timezone": "PST",
+          "ansi": false,
+          "ordered": false
+        }
+      ]
+    }
+  ]
+}

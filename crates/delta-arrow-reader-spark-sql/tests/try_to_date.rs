@@ -258,12 +258,9 @@ fn optimize(session: &SessionContext, plan: &LogicalPlan) -> TestResult<LogicalP
     Ok(state.optimize(plan)?)
 }
 
-/// #1194 requires final rows and executed types. Parser failures need a parser diagnostic,
+/// Final rows and executed DATE types. Parser failures need a parser diagnostic,
 /// without requiring the same error wording or stage as Spark.
-fn argument_coercion_differences(
-    case: &Value,
-    observation: &Value,
-) -> TestResult<Vec<&'static str>> {
+fn final_date_differences(case: &Value, observation: &Value) -> TestResult<Vec<&'static str>> {
     let mut differing = Vec::new();
     if case["expected"]["status"] == "error" {
         let markers: &[&str] = if case["expected"]["condition"] == "CAST_INVALID_INPUT" {
@@ -342,7 +339,59 @@ async fn date_argument_coercion_matches_spark() -> TestResult {
                 "expected":case["expected"], "executed":case["schema_stages"]["executed"],
                 "actual":observation})
             );
-            let differing = argument_coercion_differences(case, &observation)?;
+            let differing = final_date_differences(case, &observation)?;
+            if !differing.is_empty() {
+                differences.push(json!({"id":case["id"], "timezone":case["timezone"],
+                    "ansi":case["ansi"], "batch":batch_size,"differing":differing,
+                    "expected":case["expected"], "actual":observation}));
+            }
+        }
+    }
+    assert!(
+        differences.is_empty(),
+        "{} differences: {}",
+        differences.len(),
+        json!(differences)
+    );
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn formatted_date_zones_match_spark() -> TestResult {
+    let records = include_str!("fixtures/formatted-date-zones/spark.jsonl")
+        .lines()
+        .map(serde_json::from_str)
+        .collect::<Result<Vec<Value>, _>>()?;
+    let request: Value =
+        serde_json::from_str(include_str!("fixtures/formatted-date-zones/requests.json"))?;
+    assert_eq!(records[0]["spark_version"], "4.2.0");
+    assert_eq!(records.len() - 1, 136);
+    let requested: Vec<_> = request["corpora"]
+        .as_array()
+        .ok_or("missing corpora")?
+        .iter()
+        .flat_map(|corpus| corpus["cases"].as_array().unwrap())
+        .collect();
+    assert_eq!(requested.len(), 136);
+    for (case, definition) in records[1..].iter().zip(requested) {
+        for key in ["corpus", "id", "sql", "ansi", "timezone", "ordered"] {
+            assert_eq!(case[key], definition[key], "case identity {key}");
+        }
+    }
+    let mut differences = Vec::new();
+    for batch_size in [1, 32] {
+        let session = session_context(batch_size);
+        register_inputs(&session, &request["corpora"][0]["metadata"], batch_size)?;
+        for case in &records[1..] {
+            let observation = observe(&session, case).await;
+            println!(
+                "date_zone_observation={}",
+                json!({"id":case["id"],
+                "timezone":case["timezone"], "ansi":case["ansi"], "batch":batch_size,
+                "expected":case["expected"], "executed":case["schema_stages"]["executed"],
+                "actual":observation})
+            );
+            let differing = final_date_differences(case, &observation)?;
             if !differing.is_empty() {
                 differences.push(json!({"id":case["id"], "timezone":case["timezone"],
                     "ansi":case["ansi"], "batch":batch_size,"differing":differing,
@@ -402,7 +451,7 @@ fn differing_parts(case: &Value, observation: &Value) -> TestResult<Vec<&'static
                 | "literal_try_to_date_null_format"
         )
     ) {
-        return argument_coercion_differences(case, observation);
+        return final_date_differences(case, observation);
     }
     let mut differing = Vec::new();
     for stage in ["analyzed", "optimized", "executed"] {
