@@ -1,0 +1,346 @@
+{
+  "issue": "942+943",
+  "expected_record_count": 8,
+  "corpora": [
+    {
+      "corpus": "temporal_strings_UTC_literal_seconds",
+      "source": "source-only bounded literal function and Decimal SECOND addendum",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "date_strings",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                " 2024-01-02 "
+              ],
+              [
+                "1",
+                "2024"
+              ],
+              [
+                "2",
+                "2024-05"
+              ],
+              [
+                "3",
+                "\t2024-05-17\n"
+              ],
+              [
+                "4",
+                "2024-02-29T23:59:59"
+              ],
+              [
+                "5",
+                null
+              ],
+              [
+                "6",
+                "garbage"
+              ],
+              [
+                "7",
+                "2024-02-30"
+              ],
+              [
+                "8",
+                "2024-05"
+              ]
+            ]
+          },
+          {
+            "name": "timestamp_strings",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                " 2024-01-02 13:04:05 "
+              ],
+              [
+                "1",
+                "\t2024-01-02 13:04:05\r\n"
+              ],
+              [
+                "2",
+                "2024"
+              ],
+              [
+                "3",
+                "2024-05"
+              ],
+              [
+                "4",
+                "1969-12-31 23:59:59.999999999123Z"
+              ],
+              [
+                "5",
+                "2024-01-02 00:30:00.123456789123+02:00"
+              ],
+              [
+                "6",
+                "2024-03-10 03:00:00"
+              ],
+              [
+                "7",
+                null
+              ],
+              [
+                "8",
+                "garbage"
+              ],
+              [
+                "9",
+                "2024-05"
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "temporal_strings_UTC_literal_seconds",
+          "id": "literal_functions",
+          "issue_scope": 942,
+          "sql": "SELECT DATEDIFF(DATE '2024-05-17','2024') AS r0, YEAR(' 2024-01-02 ') AS r1, MONTH('2024-05') AS r2, DAY('2024') AS r3, DAYOFYEAR(' 2024-01-02 ') AS r4, QUARTER('2024-05') AS r5, LAST_DAY('2024') AS r6, ADD_MONTHS('2024-05',1) AS r7, NEXT_DAY(' 2024-01-02 ','MON') AS r8, HOUR(' 2024-01-02 13:04:05 ') AS r9, MINUTE('2024-01-02 13:04:05.123456789123Z') AS r10, DATE_TRUNC('HOUR',' 1969-12-31 23:59:59.999999999123Z ') AS r11, MONTHS_BETWEEN(' 2024-03-10 03:00:00 ',TIMESTAMP_LTZ '2023-11-01 12:00:00Z') AS r12, EXTRACT(SECOND FROM '1969-12-31 23:59:59.123456789123Z') AS r13",
+          "ordered": false,
+          "timezone": "UTC",
+          "ansi": true,
+          "timestamp_type": "TIMESTAMP_LTZ"
+        },
+        {
+          "corpus": "temporal_strings_UTC_literal_seconds",
+          "id": "column_seconds",
+          "issue_scope": 942,
+          "sql": "SELECT k, EXTRACT(SECOND FROM s) AS second_part FROM timestamp_strings WHERE k <> 8",
+          "ordered": false,
+          "timezone": "UTC",
+          "ansi": true,
+          "timestamp_type": "TIMESTAMP_NTZ"
+        },
+        {
+          "corpus": "temporal_strings_UTC_literal_seconds",
+          "id": "literal_functions",
+          "issue_scope": 942,
+          "sql": "SELECT DATEDIFF(DATE '2024-05-17','2024') AS r0, YEAR(' 2024-01-02 ') AS r1, MONTH('2024-05') AS r2, DAY('2024') AS r3, DAYOFYEAR(' 2024-01-02 ') AS r4, QUARTER('2024-05') AS r5, LAST_DAY('2024') AS r6, ADD_MONTHS('2024-05',1) AS r7, NEXT_DAY(' 2024-01-02 ','MON') AS r8, HOUR(' 2024-01-02 13:04:05 ') AS r9, MINUTE('2024-01-02 13:04:05.123456789123Z') AS r10, DATE_TRUNC('HOUR',' 1969-12-31 23:59:59.999999999123Z ') AS r11, MONTHS_BETWEEN(' 2024-03-10 03:00:00 ',TIMESTAMP_LTZ '2023-11-01 12:00:00Z') AS r12, EXTRACT(SECOND FROM '1969-12-31 23:59:59.123456789123Z') AS r13",
+          "ordered": false,
+          "timezone": "UTC",
+          "ansi": false,
+          "timestamp_type": "TIMESTAMP_LTZ"
+        },
+        {
+          "corpus": "temporal_strings_UTC_literal_seconds",
+          "id": "column_seconds",
+          "issue_scope": 942,
+          "sql": "SELECT k, EXTRACT(SECOND FROM s) AS second_part FROM timestamp_strings WHERE k <> 8",
+          "ordered": false,
+          "timezone": "UTC",
+          "ansi": false,
+          "timestamp_type": "TIMESTAMP_NTZ"
+        }
+      ]
+    },
+    {
+      "corpus": "temporal_strings_America_Los_Angeles_literal_seconds",
+      "source": "source-only bounded literal function and Decimal SECOND addendum",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "date_strings",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                " 2024-01-02 "
+              ],
+              [
+                "1",
+                "2024"
+              ],
+              [
+                "2",
+                "2024-05"
+              ],
+              [
+                "3",
+                "\t2024-05-17\n"
+              ],
+              [
+                "4",
+                "2024-02-29T23:59:59"
+              ],
+              [
+                "5",
+                null
+              ],
+              [
+                "6",
+                "garbage"
+              ],
+              [
+                "7",
+                "2024-02-30"
+              ],
+              [
+                "8",
+                "2024-05"
+              ]
+            ]
+          },
+          {
+            "name": "timestamp_strings",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                " 2024-01-02 13:04:05 "
+              ],
+              [
+                "1",
+                "\t2024-01-02 13:04:05\r\n"
+              ],
+              [
+                "2",
+                "2024"
+              ],
+              [
+                "3",
+                "2024-05"
+              ],
+              [
+                "4",
+                "1969-12-31 23:59:59.999999999123Z"
+              ],
+              [
+                "5",
+                "2024-01-02 00:30:00.123456789123+02:00"
+              ],
+              [
+                "6",
+                "2024-03-10 03:00:00"
+              ],
+              [
+                "7",
+                null
+              ],
+              [
+                "8",
+                "garbage"
+              ],
+              [
+                "9",
+                "2024-05"
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "temporal_strings_America_Los_Angeles_literal_seconds",
+          "id": "literal_functions",
+          "issue_scope": 942,
+          "sql": "SELECT DATEDIFF(DATE '2024-05-17','2024') AS r0, YEAR(' 2024-01-02 ') AS r1, MONTH('2024-05') AS r2, DAY('2024') AS r3, DAYOFYEAR(' 2024-01-02 ') AS r4, QUARTER('2024-05') AS r5, LAST_DAY('2024') AS r6, ADD_MONTHS('2024-05',1) AS r7, NEXT_DAY(' 2024-01-02 ','MON') AS r8, HOUR(' 2024-01-02 13:04:05 ') AS r9, MINUTE('2024-01-02 13:04:05.123456789123Z') AS r10, DATE_TRUNC('HOUR',' 1969-12-31 23:59:59.999999999123Z ') AS r11, MONTHS_BETWEEN(' 2024-03-10 03:00:00 ',TIMESTAMP_LTZ '2023-11-01 12:00:00Z') AS r12, EXTRACT(SECOND FROM '1969-12-31 23:59:59.123456789123Z') AS r13",
+          "ordered": false,
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "timestamp_type": "TIMESTAMP_LTZ"
+        },
+        {
+          "corpus": "temporal_strings_America_Los_Angeles_literal_seconds",
+          "id": "column_seconds",
+          "issue_scope": 942,
+          "sql": "SELECT k, EXTRACT(SECOND FROM s) AS second_part FROM timestamp_strings WHERE k <> 8",
+          "ordered": false,
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "timestamp_type": "TIMESTAMP_NTZ"
+        },
+        {
+          "corpus": "temporal_strings_America_Los_Angeles_literal_seconds",
+          "id": "literal_functions",
+          "issue_scope": 942,
+          "sql": "SELECT DATEDIFF(DATE '2024-05-17','2024') AS r0, YEAR(' 2024-01-02 ') AS r1, MONTH('2024-05') AS r2, DAY('2024') AS r3, DAYOFYEAR(' 2024-01-02 ') AS r4, QUARTER('2024-05') AS r5, LAST_DAY('2024') AS r6, ADD_MONTHS('2024-05',1) AS r7, NEXT_DAY(' 2024-01-02 ','MON') AS r8, HOUR(' 2024-01-02 13:04:05 ') AS r9, MINUTE('2024-01-02 13:04:05.123456789123Z') AS r10, DATE_TRUNC('HOUR',' 1969-12-31 23:59:59.999999999123Z ') AS r11, MONTHS_BETWEEN(' 2024-03-10 03:00:00 ',TIMESTAMP_LTZ '2023-11-01 12:00:00Z') AS r12, EXTRACT(SECOND FROM '1969-12-31 23:59:59.123456789123Z') AS r13",
+          "ordered": false,
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "timestamp_type": "TIMESTAMP_LTZ"
+        },
+        {
+          "corpus": "temporal_strings_America_Los_Angeles_literal_seconds",
+          "id": "column_seconds",
+          "issue_scope": 942,
+          "sql": "SELECT k, EXTRACT(SECOND FROM s) AS second_part FROM timestamp_strings WHERE k <> 8",
+          "ordered": false,
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "timestamp_type": "TIMESTAMP_NTZ"
+        }
+      ]
+    }
+  ]
+}

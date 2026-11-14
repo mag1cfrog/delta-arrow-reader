@@ -14,9 +14,9 @@ years, pre-epoch values and New York's 2026 DST gap and overlap.
 
 Each string is converted by CAST and TRY_CAST to TIMESTAMP and TIMESTAMP_NTZ,
 TO_TIMESTAMP, TO_TIMESTAMP_NTZ, DATE_FORMAT, comparison with a TIMESTAMP literal
-and CAST to DATE. Functions that convert STRING arguments with DataFusion's
-native cast (#942) and mixed STRING/TIMESTAMP IN or GREATEST operands (#944)
-do not use this parser and are outside these references.
+and CAST to DATE. Implicit timestamp function arguments also use this parser (#942). Mixed
+STRING/TIMESTAMP IN or GREATEST operands (#944) retain separate coercion paths
+and are outside these references.
 
 Constant inputs use `decode(unhex(...))`; column inputs read
 the registered table with a NULL row. Printable strings are also used as

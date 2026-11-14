@@ -216,42 +216,14 @@ fn optimize(session: &SessionContext, plan: &LogicalPlan) -> TestResult<LogicalP
     Ok(state.optimize(plan)?)
 }
 
-/// #943: DAR does not trim the padding of ` 2024-01-02 ` in `sv` (row 1) before reading it as a
-/// TIMESTAMP or TIMESTAMP_NTZ, so it gives NULL there, also through DATE_FORMAT and TO_TIMESTAMP,
-/// and CAST, the comparison with a TIMESTAMP, NULLIF with one and TO_TIMESTAMP fail with ANSI
-/// enabled; Spark reads the date's first instant. Without ANSI, NULLIF keeps its left value where
-/// the comparison gives NULL, as Spark's result does.
-const PADDED_TIMESTAMP_RECORDS: [&str; 11] = [
-    "cast_valid_timestamp",
-    "try_cast_valid_timestamp",
-    "cast_valid_timestamp_ntz",
-    "try_cast_valid_timestamp_ntz",
-    "equal_timestamp_valid",
-    "nullif_timestamp_valid",
-    "nullif_timestamp_ntz_valid",
-    "date_format_valid",
-    "to_timestamp_valid",
-    "try_to_timestamp_valid",
-    "to_timestamp_ntz_valid",
-];
-
 /// #1236 (#938): with ANSI enabled, DATE_FORMAT of a malformed STRING gives NULL where Spark fails.
 const LAXER_DATE_FORMAT_RECORD: &str = "date_format_malformed";
-
-fn is_padded_timestamp_record(case: &Value) -> bool {
-    case["id"].as_str().is_some_and(|id| {
-        PADDED_TIMESTAMP_RECORDS.contains(&id)
-            && (!id.starts_with("nullif_") || case["ansi"] == true)
-    })
-}
 
 fn is_laxer_date_format_record(case: &Value) -> bool {
     case["id"] == LAXER_DATE_FORMAT_RECORD && case["ansi"] == true
 }
 
-/// The expectation for a record: Spark's; for a #943 record DAR's result, Spark's rows with row 1
-/// NULL, or a failure for CAST, the comparison, NULLIF and TO_TIMESTAMP with ANSI enabled; or for
-/// the #1236 record DAR's rows, the first date and NULLs.
+/// Spark's expectation, except for the separately retained lax DATE_FORMAT malformed input.
 fn expectation(case: &Value) -> TestResult<Value> {
     if is_laxer_date_format_record(case) {
         if case["expected"]["status"] != "error"
@@ -264,32 +236,7 @@ fn expectation(case: &Value) -> TestResult<Value> {
             ["0", "2024-05-17 00:00"], ["1", null], ["2", null], ["3", null]]});
         return Ok(current);
     }
-    if !is_padded_timestamp_record(case) {
-        return Ok(case.clone());
-    }
-    let rows = case["expected"]["rows"]
-        .as_array()
-        .filter(|rows| case["expected"]["status"] == "ok" && rows.len() == 4)
-        .filter(|rows| rows[1][0] == "1" && !rows[1][1].is_null())
-        .ok_or_else(|| format!("expected Spark's value for row 1: {case}"))?;
-    let mut current = case.clone();
-    let fails = case["id"].as_str().is_some_and(|id| {
-        ["cast_", "equal_", "nullif_", "to_timestamp_"]
-            .iter()
-            .any(|kind| id.starts_with(kind))
-    });
-    if fails && case["ansi"] == true {
-        current["expected"] = json!({"status": "error"});
-        current["schema_stages"]
-            .as_object_mut()
-            .ok_or("missing schema stages")?
-            .remove("executed");
-    } else {
-        let mut rows = rows.clone();
-        rows[1][1] = Value::Null;
-        current["expected"]["rows"] = json!(rows);
-    }
-    Ok(current)
+    Ok(case.clone())
 }
 
 /// `fields` without their nullability.
@@ -465,13 +412,6 @@ fn assert_no_differences(differences: &[Value]) {
 async fn string_temporal_casts_match_spark() -> TestResult {
     let records = string_temporal_cast_references()?;
     let cases = records[1..].iter().collect::<Vec<_>>();
-    assert_eq!(
-        cases
-            .iter()
-            .filter(|case| is_padded_timestamp_record(case))
-            .count(),
-        40
-    );
     assert_eq!(
         cases
             .iter()

@@ -867,6 +867,39 @@ pub(crate) fn spark_in_list(
         .map(|operand| operand.get_type(schema))
         .collect::<Result<Vec<_>, _>>()?;
     reject_calendar_interval_ordering(&operand_types, "in", "DATATYPE_MISMATCH.DATA_DIFF_TYPES")?;
+    if operand_types
+        .iter()
+        .any(|t| matches!(t, DataType::Date32 | DataType::Date64))
+        && operand_types
+            .iter()
+            .any(|t| t.is_string() || dictionary_string_type(t).is_some())
+        && operand_types.iter().all(|t| {
+            matches!(t, DataType::Date32 | DataType::Date64 | DataType::Null)
+                || t.is_string()
+                || dictionary_string_type(t).is_some()
+        })
+    {
+        // ANSI compares DATE values; legacy IN promotes dates to STRING.
+        let parser = ansi_mode
+            .then(|| string_comparison_cast(&DataType::Date32, true))
+            .transpose()?;
+        let convert = |operand: expr::Expr| -> PlanResult<expr::Expr> {
+            let operand = dictionary_string_values(operand, schema)?;
+            let data_type = operand.get_type(schema)?;
+            Ok(match &parser {
+                Some(parser) if data_type.is_string() => parser.call(vec![operand]),
+                None if matches!(data_type, DataType::Date32 | DataType::Date64) => {
+                    cast(operand, DataType::Utf8)
+                }
+                _ => operand,
+            })
+        };
+        return Ok(expr::Expr::InList(expr::InList::new(
+            Box::new(convert(value)?),
+            list.into_iter().map(convert).collect::<PlanResult<_>>()?,
+            negated,
+        )));
+    }
     if only_dates_and_timestamp_ntz(&operand_types) {
         let ntz = DataType::Timestamp(TimeUnit::Microsecond, None);
         let mut operands =

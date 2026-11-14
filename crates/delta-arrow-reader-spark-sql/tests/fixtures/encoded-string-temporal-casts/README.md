@@ -36,12 +36,9 @@ dictionary-encoded STRING result counting as a STRING, metadata and typed rows a
 and 32, and nullability in the executed schema; the analyzed and optimized nullability is not
 compared (#1236). Where Spark fails, DAR must fail; the error condition, message and stage are
 not compared (#1236). A second test runs every record over dictionary-encoded, viewed and large
-copies of the STRING columns and requires the same results. Two differences are retained: DAR
-does not trim the padding of ` 2024-01-02 ` before reading it as a TIMESTAMP or TIMESTAMP_NTZ,
-so it gives NULL there, also through DATE_FORMAT and TO_TIMESTAMP, and CAST, the comparison with
-a TIMESTAMP, NULLIF with one and TO_TIMESTAMP fail with ANSI enabled (#943, 40 records); and
-with ANSI enabled DATE_FORMAT of a malformed STRING gives NULL where Spark fails (#1236, from
-#938, 2 records).
+copies of the STRING columns and requires the same results. Padded timestamp values now
+compare directly with Spark (#943). With ANSI enabled DATE_FORMAT of a malformed STRING
+still gives NULL where Spark fails (#1236, from #938, 2 records).
 
 Recapture from the crate root:
 
