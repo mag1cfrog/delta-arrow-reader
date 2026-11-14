@@ -1088,12 +1088,15 @@ column is nullable at every stage, as Spark declares it, through a local functio
 `SparkKnownNullable`, that the optimizer cannot simplify away over a column; over a literal it
 folds to NOT NULL, as in Spark. TO_DATE and TRY_TO_DATE parse a dictionary-encoded STRING, such
 as a Delta partition column, as its STRING values, and report Spark's
-`WRONG_NUM_ARGS.WITHOUT_SUGGESTION` for the wrong number of arguments. They share these open
-differences:
+`WRONG_NUM_ARGS.WITHOUT_SUGGESTION` for the wrong number of arguments. Other scalar
+arguments first convert to STRING using the existing Spark text formatter, with BINARY bytes
+cast to UTF8 and untyped NULL cast to a NULL STRING, before either parser branch. The
+[date argument references](tests/fixtures/date-argument-coercion/README.md) cover ordinary
+numeric, BOOLEAN, BINARY and NULL inputs. They share these open differences:
 - DAR's invalid-pattern messages (#1010) and parser messages (#1057);
 - strings beyond the date library's range (#1011);
 - an ignored parsed offset (#1015);
-- arguments of other types cast to DATE or failing, where Spark converts them to STRING (#1194).
+- ARRAY rejection occurs after analysis (#1236).
 
 With a format over a DATE, TIMESTAMP or TIMESTAMP_NTZ, TO_DATE ignores the format, as Spark's
 does, and declares Spark's nullability at every stage: nullable outside ANSI mode, and in ANSI

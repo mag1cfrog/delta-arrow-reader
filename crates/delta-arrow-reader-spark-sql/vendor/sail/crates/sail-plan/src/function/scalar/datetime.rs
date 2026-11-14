@@ -59,6 +59,7 @@ use sail_function::scalar::spark_cast_string_to_integer::{
 use sail_function::scalar::spark_decimal_cast::{DecimalCastMode, SparkDecimalCast};
 use sail_function::scalar::spark_known_not_null::SparkKnownNotNull;
 use sail_function::scalar::spark_known_nullable::SparkKnownNullable;
+use sail_function::scalar::spark_to_string::SparkToUtf8;
 use sail_function::scalar::spark_with_inputs::SparkWithInputs;
 use sail_sql_analyzer::literal::interval::IntervalValue;
 use sail_sql_analyzer::parser::parse_interval;
@@ -1054,13 +1055,35 @@ fn try_to_date(input: ScalarFunctionInput) -> PlanResult<Expr> {
     to_date_with_parser(input, DateParser::TryToDate)
 }
 
+/// Preserve temporal casts and string encodings; other scalar arguments parse their Spark
+/// string form. Binary bytes use the existing UTF8 cast, not the display formatter's hex text.
+fn coerce_date_parser_argument(argument: Expr, schema: &DFSchemaRef) -> PlanResult<Expr> {
+    let argument = dictionary_string_values(argument, schema)?;
+    Ok(match argument.get_type(schema)? {
+        DataType::Utf8
+        | DataType::LargeUtf8
+        | DataType::Utf8View
+        | DataType::Date32
+        | DataType::Date64
+        | DataType::Timestamp(_, _) => argument,
+        DataType::Null
+        | DataType::Binary
+        | DataType::LargeBinary
+        | DataType::BinaryView
+        | DataType::FixedSizeBinary(_) => cast(argument, DataType::Utf8),
+        // Keep unsupported collections on their existing validation path.
+        other if other.is_nested() => argument,
+        _ => ScalarUDF::from(SparkToUtf8::new()).call(vec![argument]),
+    })
+}
+
 fn to_date_with_parser(input: ScalarFunctionInput, parser: DateParser) -> PlanResult<Expr> {
     let function_name = parser.name();
     let null_on_error = parser.null_on_error(input.function_context.plan_config.ansi_mode);
     if input.arguments.len() == 1 {
-        // If format is not supplied, the function is a synonym for cast(expr AS DATE).
+        // Without a format, strings parse as DATE and temporal inputs keep their DATE cast.
         let expr =
-            dictionary_string_values(input.arguments[0].clone(), input.function_context.schema)?;
+            coerce_date_parser_argument(input.arguments[0].clone(), input.function_context.schema)?;
         let data_type = expr.get_type(input.function_context.schema)?;
         if data_type.is_string() {
             Ok(ScalarUDF::from(SparkDate::new(null_on_error)).call(vec![expr]))
@@ -1073,7 +1096,7 @@ fn to_date_with_parser(input: ScalarFunctionInput, parser: DateParser) -> PlanRe
         }
     } else if input.arguments.len() == 2 {
         let expr =
-            dictionary_string_values(input.arguments[0].clone(), input.function_context.schema)?;
+            coerce_date_parser_argument(input.arguments[0].clone(), input.function_context.schema)?;
         let format = coerce_datetime_format(
             function_name,
             input.arguments[1].clone(),

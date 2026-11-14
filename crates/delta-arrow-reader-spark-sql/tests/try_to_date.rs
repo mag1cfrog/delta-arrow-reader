@@ -55,9 +55,8 @@ enum RetainedDifference {
     /// first varies with the batch size and, at batch size 1, between runs, so either message
     /// holds.
     ParserMessage,
-    /// #1194: an INT, BOOLEAN, untyped NULL with a format or ARRAY argument is cast to DATE or
-    /// fails, where Spark converts it to STRING or rejects it during analysis.
-    NonStringArgument,
+    /// #1236: an ARRAY argument still fails after analysis, where Spark rejects it earlier.
+    ArrayArgument,
 }
 
 /// DAR's parser messages for the strings `s` holds that TO_DATE cannot parse with a format.
@@ -70,43 +69,9 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
     let ansi = case["ansi"].as_bool()?;
     Some(match case["id"].as_str()? {
         "nullable_to_date_string_format" if ansi => RetainedDifference::ParserMessage,
-        "literal_try_to_date_int"
-        | "literal_try_to_date_boolean"
-        | "literal_try_to_date_null_format"
-        | "literal_try_to_date_array" => RetainedDifference::NonStringArgument,
+        "literal_try_to_date_array" => RetainedDifference::ArrayArgument,
         _ => return None,
     })
-}
-
-/// Set the result field's nullability at the given stages.
-fn set_nullable(current: &mut Value, stages: &[&str], nullable: bool) -> TestResult {
-    for stage in stages {
-        let fields = current["schema_stages"][*stage]["fields"]
-            .as_array_mut()
-            .ok_or("missing fields")?;
-        let field = fields.last_mut().ok_or("missing result field")?;
-        field["nullable"] = json!(nullable);
-    }
-    Ok(())
-}
-
-/// DAR's current failure at `phase`, with text its error must contain; Spark's later stages are
-/// dropped.
-fn fail_at(current: &mut Value, phase: &str, message: &str) -> TestResult {
-    current["expected"] = json!({"status": "error", "dar_messages": [message]});
-    current["spark_error_phase"] = json!(phase);
-    let stages = current["schema_stages"]
-        .as_object_mut()
-        .ok_or("missing schema stages")?;
-    let later: &[&str] = match phase {
-        "optimized" => &["optimized", "executed"],
-        "collect" => &["executed"],
-        _ => return Err(format!("unexpected phase {phase}").into()),
-    };
-    for stage in later {
-        stages.remove(*stage);
-    }
-    Ok(())
 }
 
 /// The expectation for a record: Spark's, or DAR's current result for a retained record.
@@ -115,7 +80,6 @@ fn expectation(case: &Value) -> TestResult<Value> {
         return Ok(case.clone());
     };
     let mut current = case.clone();
-    let spark_ok = case["expected"]["status"] == "ok";
     match difference {
         RetainedDifference::ParserMessage => {
             if case["expected"]["condition"] != "CANNOT_PARSE_TIMESTAMP"
@@ -125,31 +89,14 @@ fn expectation(case: &Value) -> TestResult<Value> {
             }
             current["expected"] = json!({"status": "error", "dar_messages": PARSER_MESSAGES});
         }
-        RetainedDifference::NonStringArgument => match case["id"].as_str() {
-            Some("literal_try_to_date_int") if spark_ok => {
-                current["expected"] = json!({"status": "ok", "rows": [["1"]]});
-                set_nullable(&mut current, &["analyzed", "optimized", "executed"], false)?;
+        RetainedDifference::ArrayArgument => {
+            if case["expected"]["condition"] != "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE" {
+                return Err(format!("expected Spark array rejection: {case}").into());
             }
-            Some("literal_try_to_date_boolean") if spark_ok => {
-                fail_at(
-                    &mut current,
-                    "optimized",
-                    "Unsupported CAST from Boolean to Date32",
-                )?;
-                set_nullable(&mut current, &["analyzed"], false)?;
-            }
-            Some("literal_try_to_date_null_format") if spark_ok => {
-                fail_at(&mut current, "collect", "expected string scalar for `date`")?;
-            }
-            Some("literal_try_to_date_array")
-                if case["expected"]["condition"] == "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE" =>
-            {
-                current["expected"] = json!({"status": "error",
-                    "dar_messages": ["Unsupported CAST from List(non-null Utf8) to Date32"]});
-                current["spark_error_phase"] = json!("optimized");
-            }
-            _ => return Err(format!("expected Spark's converted argument: {case}").into()),
-        },
+            current["expected"] = json!({"status": "error",
+                "dar_messages": ["Unsupported CAST from List(non-null Utf8) to Date32"]});
+            current["spark_error_phase"] = json!("optimized");
+        }
     }
     Ok(current)
 }
@@ -311,6 +258,123 @@ fn optimize(session: &SessionContext, plan: &LogicalPlan) -> TestResult<LogicalP
     Ok(state.optimize(plan)?)
 }
 
+/// #1194 requires final rows and executed types. Parser failures need a parser diagnostic,
+/// without requiring the same error wording or stage as Spark.
+fn argument_coercion_differences(
+    case: &Value,
+    observation: &Value,
+) -> TestResult<Vec<&'static str>> {
+    let mut differing = Vec::new();
+    if case["expected"]["status"] == "error" {
+        let markers: &[&str] = if case["expected"]["condition"] == "CAST_INVALID_INPUT" {
+            &["[CAST_INVALID_INPUT]"]
+        } else {
+            &[
+                "[CANNOT_PARSE_TIMESTAMP]",
+                "invalid parsed date",
+                "expected numeric datetime field",
+                "expected datetime literal",
+                "datetime value does not match format",
+            ]
+        };
+        if !observation["error"]
+            .as_str()
+            .is_some_and(|error| markers.iter().any(|marker| error.contains(marker)))
+        {
+            differing.push("parse failure");
+        }
+    } else {
+        let expected: Vec<_> = spark_fields(&case["schema_stages"]["executed"])?
+            .as_array()
+            .ok_or("missing executed fields")?
+            .iter()
+            .map(|field| field["type"].clone())
+            .collect();
+        let actual: Vec<_> = observation["executed"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|field| field["type"].clone())
+            .collect();
+        if expected != actual {
+            differing.push("executed types");
+        }
+        if observation["rows"] != case["expected"]["rows"] {
+            differing.push("rows");
+        }
+    }
+    Ok(differing)
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn date_argument_coercion_matches_spark() -> TestResult {
+    let records = include_str!("fixtures/date-argument-coercion/spark.jsonl")
+        .lines()
+        .map(serde_json::from_str)
+        .collect::<Result<Vec<Value>, _>>()?;
+    let request: Value = serde_json::from_str(include_str!(
+        "fixtures/date-argument-coercion/requests.json"
+    ))?;
+    assert_eq!(records[0]["spark_version"], "4.2.0");
+    assert_eq!(records.len() - 1, 296);
+    let requested: Vec<_> = request["corpora"]
+        .as_array()
+        .ok_or("missing corpora")?
+        .iter()
+        .flat_map(|corpus| corpus["cases"].as_array().unwrap())
+        .collect();
+    assert_eq!(requested.len(), 296);
+    for (case, definition) in records[1..].iter().zip(requested) {
+        for key in ["corpus", "id", "sql", "ansi", "timezone", "ordered"] {
+            assert_eq!(case[key], definition[key], "case identity {key}");
+        }
+    }
+    let mut differences = Vec::new();
+    for batch_size in [1, 32] {
+        let session = session_context(batch_size);
+        register_inputs(&session, &request["corpora"][0]["metadata"], batch_size)?;
+        for case in &records[1..] {
+            let observation = observe(&session, case).await;
+            println!(
+                "date_argument_observation={}",
+                json!({"id":case["id"],
+                "timezone":case["timezone"], "ansi":case["ansi"], "batch":batch_size,
+                "expected":case["expected"], "executed":case["schema_stages"]["executed"],
+                "actual":observation})
+            );
+            let differing = argument_coercion_differences(case, &observation)?;
+            if !differing.is_empty() {
+                differences.push(json!({"id":case["id"], "timezone":case["timezone"],
+                    "ansi":case["ansi"], "batch":batch_size,"differing":differing,
+                    "expected":case["expected"], "actual":observation}));
+            }
+        }
+    }
+    assert!(
+        differences.is_empty(),
+        "{} differences: {}",
+        differences.len(),
+        json!(differences)
+    );
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn native_numeric_date_casts_keep_day_counts() -> TestResult {
+    let session = session_context(32);
+    let batches = session
+        .sql("SELECT CAST(1 AS DATE) AS d")
+        .await?
+        .collect()
+        .await?;
+    assert_eq!(batches.len(), 1);
+    assert_eq!(batches[0].num_rows(), 1);
+    assert_eq!(batches[0].schema().field(0).data_type(), &DataType::Date32);
+    validate_batch(batches[0].schema().as_ref(), &batches[0])?;
+    assert_eq!(encode_value(batches[0].column(0).as_ref(), 0)?, json!("1"));
+    Ok(())
+}
+
 /// The texts one of which DAR's error must contain for a recorded failure: a retained record's
 /// pinned texts, or Spark's error condition. Spark's message quotes its plan.
 fn expected_error_texts(case: &Value) -> Vec<String> {
@@ -327,9 +391,19 @@ fn expected_error_texts(case: &Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// The recorded stages and outcome that differ from the observation. A failure must occur
-/// at Spark's stage with DAR's message for it.
+/// Preserve the original schema/error controls. Repaired scalar arguments use #1194's
+/// narrower final-value and executed-type comparison.
 fn differing_parts(case: &Value, observation: &Value) -> TestResult<Vec<&'static str>> {
+    if matches!(
+        case["id"].as_str(),
+        Some(
+            "literal_try_to_date_int"
+                | "literal_try_to_date_boolean"
+                | "literal_try_to_date_null_format"
+        )
+    ) {
+        return argument_coercion_differences(case, observation);
+    }
     let mut differing = Vec::new();
     for stage in ["analyzed", "optimized", "executed"] {
         if let Some(expected) = case["schema_stages"].get(stage)
@@ -520,7 +594,7 @@ async fn try_to_date_matches_spark() -> TestResult {
         retained,
         std::collections::BTreeMap::from([
             (RetainedDifference::ParserMessage, 2),
-            (RetainedDifference::NonStringArgument, 16),
+            (RetainedDifference::ArrayArgument, 4),
         ])
     );
     let mut differences = Vec::new();
