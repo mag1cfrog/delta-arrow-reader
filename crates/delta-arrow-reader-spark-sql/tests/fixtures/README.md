@@ -4812,3 +4812,11 @@ python tests/fixtures/approx-percentile-ranks/capture_spark.py \
 cargo +1.96.0 test --locked --test approx_percentile_ranks
 cargo +1.96.0 test --locked -p sail-function aggregate::approx_percentile
 ```
+
+## Fractional epoch conversions
+
+The [fractional epoch fixture](epoch-fractional-seconds/README.md) records 92 Spark 4.2.0
+observations of DOUBLE/DECIMAL seconds and checked integral epoch scaling in UTC and
+America/Los_Angeles, in both ANSI modes. The replay checks final values and executed types,
+including NULL/nonfinite inputs and arithmetic failures, alongside the existing
+[session-zone epoch references](timestamp-from-epoch/README.md).

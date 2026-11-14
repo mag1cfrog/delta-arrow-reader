@@ -11,6 +11,7 @@ pub mod spark_date_part;
 pub mod spark_date_timestamp_ntz_cast;
 pub mod spark_date_to_timestamp;
 pub mod spark_date_trunc;
+pub mod spark_epoch_to_micros;
 pub mod spark_interval;
 pub mod spark_interval_to_number;
 pub mod spark_interval_truncate;

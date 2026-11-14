@@ -4,15 +4,17 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use arrow::array::{Array, AsArray};
+use arrow::array::{Array, AsArray, TimestampMicrosecondArray};
 use arrow::datatypes::{
-    DataType, Date32Type, Decimal128Type, DecimalType, Fields, Float64Type, Int32Type, Int64Type,
-    TimeUnit, TimestampMicrosecondType,
+    DataType, Date32Type, Decimal128Type, DecimalType, Field, Fields, Float64Type, Int32Type,
+    Int64Type, Schema, TimeUnit, TimestampMicrosecondType,
 };
 use arrow::record_batch::RecordBatch;
+use datafusion::common::ScalarValue;
+use datafusion::common::tree_node::{TreeNode, TreeNodeRecursion};
 use datafusion::datasource::MemTable;
 use datafusion::execution::SessionStateBuilder;
-use datafusion::logical_expr::LogicalPlan;
+use datafusion::logical_expr::{Expr, LogicalPlan};
 use datafusion::physical_optimizer::aggregate_statistics::PreserveAggregateStatisticsSchema;
 use datafusion::physical_plan::collect;
 use datafusion::prelude::{SessionConfig, SessionContext};
@@ -218,6 +220,14 @@ fn dar_message(case: &Value) -> Option<&str> {
 /// The recorded stages and outcome that differ from the observation. A failure must occur
 /// at Spark's stage with DAR's message for it.
 fn differing_parts(case: &Value, observation: &Value) -> TestResult<Vec<&'static str>> {
+    let id = text(case, "id")?;
+    if id.starts_with("seconds_double_")
+        || id.starts_with("seconds_decimal_")
+        || matches!(id, "literal_seconds_fraction" | "literal_seconds_double")
+        || id.ends_with("_overflow")
+    {
+        return numeric_conversion_differences(case, observation);
+    }
     let mut differing = Vec::new();
     for stage in ["analyzed", "optimized", "executed"] {
         if let Some(expected) = case["schema_stages"].get(stage)
@@ -248,11 +258,6 @@ fn differing_parts(case: &Value, observation: &Value) -> TestResult<Vec<&'static
 enum RetainedDifference {
     /// #1029: in a session zone Arrow cannot parse, such as `PST`, the result keeps UTC.
     UnparsedSessionZone,
-    /// #1111: DOUBLE and DECIMAL seconds are truncated to whole seconds toward zero, and a
-    /// DOUBLE literal gives a NOT NULL result.
-    WholeSecondArguments,
-    /// #1111: an overflowing argument wraps instead of failing with `long overflow`.
-    WrappedOverflow,
     /// #939: DATE_FORMAT prints year 0 as 0001 and year 10000 without its sign.
     YearOfEraText,
     /// #1016: a literal formatted or cast to STRING is nullable at analysis.
@@ -280,12 +285,6 @@ fn sibling<'r>(
         .ok_or_else(|| format!("missing {id} in {timezone}").into())
 }
 
-/// The literal arguments of the overflow records and their units in microseconds.
-const OVERFLOW_ARGUMENTS: [(&str, i64, i64); 2] = [
-    ("literal_seconds_overflow", 9_223_372_036_855, 1_000_000),
-    ("literal_millis_overflow", 9_223_372_036_854_776, 1_000),
-];
-
 /// DAR's current result for a record: Spark's record with each retained part replaced by
 /// DAR's result, and the differences that changed it.
 fn current_expectation(
@@ -301,44 +300,6 @@ fn current_expectation(
             current["expected"] = utc.clone();
             retained.push(RetainedDifference::UnparsedSessionZone);
         }
-    }
-    let whole = id
-        .strip_prefix("seconds_double_")
-        .map(|rest| format!("whole_double_{rest}"))
-        .or_else(|| {
-            id.strip_prefix("seconds_decimal_")
-                .map(|rest| format!("whole_decimal_{rest}"))
-        });
-    if let Some(whole) = whole {
-        // Spark's result for the same seconds cast to BIGINT first.
-        let timezone = text(case, "timezone")?;
-        let rows = &sibling(records, case, &whole, timezone)?["expected"]["rows"];
-        if current["expected"]["rows"] != *rows {
-            current["expected"]["rows"] = rows.clone();
-            retained.push(RetainedDifference::WholeSecondArguments);
-        }
-    }
-    if matches!(id, "literal_seconds_fraction" | "literal_seconds_double") {
-        for row in current["expected"]["rows"]
-            .as_array_mut()
-            .ok_or("missing rows")?
-        {
-            let micros = row[0].as_str().ok_or("missing value")?.parse::<i64>()?;
-            row[0] = json!((micros / 1_000_000 * 1_000_000).to_string());
-        }
-        if id == "literal_seconds_double" {
-            set_result_nullable(&mut current, "analyzed", false);
-        }
-        retained.push(RetainedDifference::WholeSecondArguments);
-    }
-    if let Some((_, argument, unit)) = OVERFLOW_ARGUMENTS.iter().find(|(name, ..)| *name == id) {
-        current["expected"] =
-            json!({"status": "ok", "rows": [[argument.wrapping_mul(*unit).to_string()]]});
-        current
-            .as_object_mut()
-            .ok_or("record")?
-            .remove("spark_error_phase");
-        retained.push(RetainedDifference::WrappedOverflow);
     }
     if id.ends_with("date_format")
         && let Some(rows) = current["expected"]["rows"].as_array_mut()
@@ -423,6 +384,136 @@ fn register_inputs(session: &SessionContext, metadata: &Value, batch_size: usize
     Ok(())
 }
 
+/// #1111 compares final values and executed types; schema metadata and failure stages are
+/// outside its acceptance. Overflow must fail instead of producing a wrapped timestamp.
+fn numeric_conversion_differences(
+    case: &Value,
+    observation: &Value,
+) -> TestResult<Vec<&'static str>> {
+    let mut differing = Vec::new();
+    if case["expected"]["status"] == "error" {
+        let marker = if case["id"] == "decimal_submicro" {
+            "fractional microseconds"
+        } else {
+            "overflow"
+        };
+        if !observation["error"]
+            .as_str()
+            .is_some_and(|error| error.contains(marker))
+        {
+            differing.push("numeric failure");
+        }
+    } else {
+        let expected: Vec<_> = spark_fields(&case["schema_stages"]["executed"])?
+            .as_array()
+            .ok_or("missing expected fields")?
+            .iter()
+            .map(|field| field["type"].clone())
+            .collect();
+        let actual: Vec<_> = observation["executed"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|field| field["type"].clone())
+            .collect();
+        if actual != expected {
+            differing.push("executed types");
+        }
+        if observation["rows"] != case["expected"]["rows"] {
+            differing.push("rows");
+        }
+    }
+    Ok(differing)
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn numeric_epoch_conversions_match_spark() -> TestResult {
+    let records = include_str!("fixtures/epoch-fractional-seconds/spark.jsonl")
+        .lines()
+        .map(serde_json::from_str)
+        .collect::<Result<Vec<Value>, _>>()?;
+    let requests: Value = serde_json::from_str(include_str!(
+        "fixtures/epoch-fractional-seconds/requests.json"
+    ))?;
+    assert_eq!(records[0]["spark_version"], "4.2.0");
+    assert_eq!(records.len() - 1, 92);
+    let requested: Vec<_> = requests["corpora"]
+        .as_array()
+        .ok_or("missing corpora")?
+        .iter()
+        .flat_map(|corpus| corpus["cases"].as_array().unwrap())
+        .collect();
+    assert_eq!(requested.len(), 92);
+    for (case, request) in records[1..].iter().zip(requested) {
+        for key in ["corpus", "id", "sql", "ansi", "timezone", "ordered"] {
+            assert_eq!(case[key], request[key], "case identity {key}");
+        }
+    }
+    let mut differences = Vec::new();
+    for batch_size in [1, 32] {
+        let session = session_context(batch_size);
+        register_inputs(&session, &requests["corpora"][0]["metadata"], batch_size)?;
+        for case in &records[1..] {
+            let observation = observe(&session, case).await;
+            println!(
+                "epoch_observation={}",
+                json!({"id": case["id"],
+                "timezone": case["timezone"], "ansi": case["ansi"], "batch": batch_size,
+                "expected": case["expected"], "executed": case["schema_stages"]["executed"],
+                "actual": observation})
+            );
+            let differing = numeric_conversion_differences(case, &observation)?;
+            if !differing.is_empty() {
+                differences.push(json!({"id":case["id"], "timezone":case["timezone"],
+                    "ansi":case["ansi"], "batch":batch_size,"differing":differing,
+                    "expected":case["expected"], "actual":observation}));
+            }
+        }
+    }
+    assert!(
+        differences.is_empty(),
+        "{} differences: {}",
+        differences.len(),
+        json!(differences)
+    );
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn fractional_epoch_literal_bounds_remain_folded() -> TestResult {
+    let session = session_context(32);
+    let data_type = DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into()));
+    let schema = Arc::new(Schema::new(vec![Field::new("t", data_type, false)]));
+    let batch = RecordBatch::try_new(
+        schema,
+        vec![Arc::new(
+            TimestampMicrosecondArray::from(vec![1_704_200_645_250_000]).with_timezone("UTC"),
+        )],
+    )?;
+    register(&session, "events", &batch, 32)?;
+    for argument in ["1704200645.25", "CAST(1704200645.25 AS DOUBLE)"] {
+        let query = plan_query(
+            &session,
+            &format!("SELECT t FROM events WHERE t >= timestamp_seconds({argument})"),
+            &SparkSqlOptions::default(),
+        )
+        .await?;
+        let optimized = optimize(&session, &query.logical_plan)?;
+        let mut bounds = Vec::new();
+        optimized.apply(|plan| {
+            if let LogicalPlan::Filter(filter) = plan {
+                bounds.push(matches!(&filter.predicate, Expr::BinaryExpr(binary)
+                    if matches!(binary.right.as_ref(),
+                        Expr::Literal(ScalarValue::TimestampMicrosecond(
+                            Some(1_704_200_645_250_000), Some(zone)), _) if zone.as_ref() == "UTC")));
+            }
+            Ok(TreeNodeRecursion::Continue)
+        })?;
+        assert_eq!(bounds, vec![true], "literal timestamp bound: {optimized}");
+    }
+    Ok(())
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn epoch_timestamps_follow_the_session_zone_like_spark() -> TestResult {
     let records = epoch_references()?;
@@ -467,8 +558,6 @@ async fn epoch_timestamps_follow_the_session_zone_like_spark() -> TestResult {
         retained,
         BTreeMap::from([
             (RetainedDifference::UnparsedSessionZone, 6),
-            (RetainedDifference::WholeSecondArguments, 100),
-            (RetainedDifference::WrappedOverflow, 12),
             (RetainedDifference::YearOfEraText, 28),
             (RetainedDifference::NullableTextLiterals, 18),
         ])

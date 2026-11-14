@@ -28,6 +28,7 @@ use sail_function::scalar::datetime::spark_date_format::SparkDateFormat;
 use sail_function::scalar::datetime::spark_date_part::SparkDatePart;
 use sail_function::scalar::datetime::spark_date_timestamp_ntz_cast::SparkDateTimestampNtzCast;
 use sail_function::scalar::datetime::spark_date_trunc::SparkDateTrunc;
+use sail_function::scalar::datetime::spark_epoch_to_micros::SparkEpochToMicros;
 use sail_function::scalar::datetime::spark_last_day::SparkLastDay;
 use sail_function::scalar::datetime::spark_make_interval::{
     MAKE_INTERVAL_SECONDS_TYPE, SparkMakeInterval,
@@ -1423,8 +1424,14 @@ fn timestamp_from_epoch(input: ScalarFunctionInput, micros_per_unit: i64) -> Pla
     };
     let data_type = DataType::Timestamp(TimeUnit::Microsecond, Some(zone));
     if micros_per_unit != 1 {
+        let argument_type = argument.get_type(input.function_context.schema)?;
+        let argument = match (micros_per_unit, argument_type) {
+            (1_000_000, DataType::Float32 | DataType::Float64) => cast(argument, DataType::Float64),
+            (1_000_000, DataType::Decimal128(_, _)) => argument,
+            _ => cast(argument, DataType::Int64),
+        };
         return Ok(cast(
-            cast(argument, DataType::Int64) * lit(micros_per_unit),
+            ScalarUDF::from(SparkEpochToMicros::new(micros_per_unit)).call(vec![argument]),
             data_type,
         ));
     }
