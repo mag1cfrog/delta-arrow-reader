@@ -141,6 +141,11 @@ async fn observe(session: &SessionContext, case: &Value) -> Value {
     let mut phase = "sql";
     let result: TestResult<Vec<Vec<Value>>> = async {
         let timezone = case["timezone"].as_str().ok_or("missing time zone")?;
+        let arrow_timezone = if timezone == "EST" {
+            "-05:00"
+        } else {
+            timezone
+        };
         let query = plan_query(
             session,
             case["sql"].as_str().ok_or("missing SQL")?,
@@ -150,20 +155,20 @@ async fn observe(session: &SessionContext, case: &Value) -> Value {
         observation["analyzed"] = dar_fields(
             query.logical_plan.schema().fields(),
             Some(&query.column_names),
-            timezone,
+            arrow_timezone,
         );
         phase = "optimized";
         let optimized = optimize(session, &query.logical_plan)?;
         observation["optimized"] = dar_fields(
             optimized.schema().fields(),
             Some(&query.column_names),
-            timezone,
+            arrow_timezone,
         );
         let physical = query.create_physical_plan(session).await?;
         phase = "collect";
         let batches = collect(physical.clone(), session.task_ctx()).await?;
         let schema = physical.schema();
-        observation["executed"] = dar_fields(schema.fields(), None, timezone);
+        observation["executed"] = dar_fields(schema.fields(), None, arrow_timezone);
         let mut rows = Vec::new();
         for batch in batches {
             validate_batch(schema.as_ref(), &batch)?;

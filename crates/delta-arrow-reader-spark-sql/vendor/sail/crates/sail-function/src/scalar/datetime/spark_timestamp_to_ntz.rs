@@ -26,7 +26,8 @@ pub struct SparkTimestampToNtz {
 }
 
 impl SparkTimestampToNtz {
-    /// The conversion in `session_timezone`, or `None` when Arrow cannot parse that zone.
+    /// The conversion in an Arrow-compatible zone. Public planning normalizes its session
+    /// configuration before constructing expressions.
     pub fn for_session_zone(session_timezone: Arc<str>, null_on_overflow: bool) -> Option<Self> {
         Tz::from_str(&session_timezone).ok()?;
         Some(Self {

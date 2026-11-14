@@ -27,6 +27,7 @@ use crate::scalar::datetime::local_datetime_to_ltz::cast_local_timestamp_value_t
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkDateFormat {
     session_timezone: Arc<str>,
+    fixed_zone_name: Option<Arc<str>>,
     signature: Signature,
 }
 
@@ -34,8 +35,13 @@ impl SparkDateFormat {
     pub fn new(session_timezone: Arc<str>) -> Self {
         Self {
             session_timezone,
+            fixed_zone_name: None,
             signature: Signature::variadic_any(Volatility::Immutable),
         }
+    }
+    pub fn with_fixed_zone_name(mut self, name: Option<Arc<str>>) -> Self {
+        self.fixed_zone_name = name;
+        self
     }
 }
 
@@ -53,10 +59,8 @@ impl ScalarUDFImpl for SparkDateFormat {
     }
 
     fn invoke_with_args(&self, mut input: ScalarFunctionArgs) -> Result<ColumnarValue> {
-        // shortcut: Keep legacy DATE/NTZ formatting for unparsed session aliases until #1029.
         if input.args.len() == 2
             && !matches!(&input.args[1], ColumnarValue::Scalar(value) if value.is_null())
-            && self.session_timezone.parse::<Tz>().is_ok()
             && matches!(
                 input.args[0].data_type(),
                 DataType::Date32 | DataType::Date64 | DataType::Timestamp(_, None)
@@ -80,7 +84,8 @@ impl ScalarUDFImpl for SparkDateFormat {
                     None => return Ok(null_string_array(array.len())),
                 };
 
-                let format = DateTimeFormat::for_formatting(format_str)?;
+                let format = DateTimeFormat::for_formatting(format_str)?
+                    .with_fixed_zone_name(self.fixed_zone_name.as_deref());
 
                 let result: StringArray = match array.data_type() {
                     DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => {
@@ -127,7 +132,12 @@ impl ScalarUDFImpl for SparkDateFormat {
                     DataType::Timestamp(_, tz) => (timestamp_array, tz.clone()),
                     _ => (timestamp_array, None),
                 };
-                format_timestamp_array_dynamic(&timestamp_array, &format_array, tz.as_ref())
+                format_timestamp_array_dynamic(
+                    &timestamp_array,
+                    &format_array,
+                    tz.as_ref(),
+                    self.fixed_zone_name.as_deref(),
+                )
             }
             (ColumnarValue::Scalar(scalar), ColumnarValue::Scalar(format_scalar)) => {
                 let format_str = match format_scalar.try_as_str().flatten() {
@@ -135,7 +145,8 @@ impl ScalarUDFImpl for SparkDateFormat {
                     None => return Ok(ColumnarValue::Scalar(ScalarValue::Utf8(None))),
                 };
 
-                let format = DateTimeFormat::for_formatting(format_str)?;
+                let format = DateTimeFormat::for_formatting(format_str)?
+                    .with_fixed_zone_name(self.fixed_zone_name.as_deref());
 
                 let result = match scalar {
                     ScalarValue::Utf8(Some(value))
@@ -218,7 +229,12 @@ impl ScalarUDFImpl for SparkDateFormat {
                     | ScalarValue::TimestampNanosecond(_, tz) => tz.clone(),
                     _ => Some(self.session_timezone.clone()),
                 };
-                format_timestamp_array_dynamic(&timestamp_array, &format_array, tz.as_ref())
+                format_timestamp_array_dynamic(
+                    &timestamp_array,
+                    &format_array,
+                    tz.as_ref(),
+                    self.fixed_zone_name.as_deref(),
+                )
             }
         }
     }
@@ -328,6 +344,7 @@ fn format_timestamp_array_dynamic(
     timestamp_array: &Arc<dyn datafusion::arrow::array::Array>,
     format_array: &Arc<dyn datafusion::arrow::array::Array>,
     tz: Option<&Arc<str>>,
+    fixed_zone_name: Option<&str>,
 ) -> Result<ColumnarValue> {
     if timestamp_array.len() != format_array.len() {
         return exec_err!(
@@ -338,15 +355,33 @@ fn format_timestamp_array_dynamic(
     let result = match format_array.data_type() {
         DataType::Utf8 => {
             let formats = as_string_array(format_array)?;
-            format_timestamp_array_with_formats(timestamp_array, formats.iter(), tz, &mut cache)?
+            format_timestamp_array_with_formats(
+                timestamp_array,
+                formats.iter(),
+                tz,
+                &mut cache,
+                fixed_zone_name,
+            )?
         }
         DataType::LargeUtf8 => {
             let formats = as_large_string_array(format_array)?;
-            format_timestamp_array_with_formats(timestamp_array, formats.iter(), tz, &mut cache)?
+            format_timestamp_array_with_formats(
+                timestamp_array,
+                formats.iter(),
+                tz,
+                &mut cache,
+                fixed_zone_name,
+            )?
         }
         DataType::Utf8View => {
             let formats = as_string_view_array(format_array)?;
-            format_timestamp_array_with_formats(timestamp_array, formats.iter(), tz, &mut cache)?
+            format_timestamp_array_with_formats(
+                timestamp_array,
+                formats.iter(),
+                tz,
+                &mut cache,
+                fixed_zone_name,
+            )?
         }
         _ => return exec_err!("spark_date_format: expected string array for format argument"),
     };
@@ -358,6 +393,7 @@ fn format_timestamp_array_with_formats<'f>(
     formats: impl Iterator<Item = Option<&'f str>>,
     tz: Option<&Arc<str>>,
     cache: &mut HashMap<String, DateTimeFormat>,
+    fixed_zone_name: Option<&str>,
 ) -> Result<StringArray> {
     match timestamp_array.data_type() {
         DataType::Date32 => {
@@ -367,7 +403,7 @@ fn format_timestamp_array_with_formats<'f>(
                 .ok_or_else(|| {
                     exec_datafusion_err!("spark_date_format: failed to downcast to Date32Array")
                 })?;
-            format_date32_values(values.iter(), formats, cache)
+            format_date32_values(values.iter(), formats, cache, fixed_zone_name)
         }
         DataType::Date64 => {
             let values = timestamp_array
@@ -376,7 +412,7 @@ fn format_timestamp_array_with_formats<'f>(
                 .ok_or_else(|| {
                     exec_datafusion_err!("spark_date_format: failed to downcast to Date64Array")
                 })?;
-            format_date64_values(values.iter(), formats, cache)
+            format_date64_values(values.iter(), formats, cache, fixed_zone_name)
         }
         DataType::Timestamp(TimeUnit::Microsecond, array_tz) => {
             let values = timestamp_array
@@ -395,6 +431,7 @@ fn format_timestamp_array_with_formats<'f>(
                 &TimeUnit::Microsecond,
                 effective_tz,
                 cache,
+                fixed_zone_name,
             )
         }
         DataType::Timestamp(TimeUnit::Millisecond, array_tz) => {
@@ -414,6 +451,7 @@ fn format_timestamp_array_with_formats<'f>(
                 &TimeUnit::Millisecond,
                 effective_tz,
                 cache,
+                fixed_zone_name,
             )
         }
         DataType::Timestamp(TimeUnit::Second, array_tz) => {
@@ -433,6 +471,7 @@ fn format_timestamp_array_with_formats<'f>(
                 &TimeUnit::Second,
                 effective_tz,
                 cache,
+                fixed_zone_name,
             )
         }
         DataType::Timestamp(TimeUnit::Nanosecond, array_tz) => {
@@ -452,6 +491,7 @@ fn format_timestamp_array_with_formats<'f>(
                 &TimeUnit::Nanosecond,
                 effective_tz,
                 cache,
+                fixed_zone_name,
             )
         }
         DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => {
@@ -465,7 +505,13 @@ fn format_timestamp_array_with_formats<'f>(
             let timestamp_array: Arc<dyn datafusion::arrow::array::Array> =
                 Arc::new(timestamp_array);
             // Recursively call with the parsed timestamp array
-            format_timestamp_array_with_formats(&timestamp_array, formats, tz, cache)
+            format_timestamp_array_with_formats(
+                &timestamp_array,
+                formats,
+                tz,
+                cache,
+                fixed_zone_name,
+            )
         }
         _ => exec_err!(
             "spark_date_format: expected date or timestamp array, got {:?}",
@@ -478,12 +524,13 @@ fn format_date32_values<'v, 'f>(
     values: impl Iterator<Item = Option<i32>>,
     formats: impl Iterator<Item = Option<&'f str>>,
     cache: &mut HashMap<String, DateTimeFormat>,
+    fixed_zone_name: Option<&str>,
 ) -> Result<StringArray> {
     values
         .zip(formats)
         .map(|(value, format)| match (value, format) {
             (Some(value), Some(format)) => {
-                let format = get_or_parse_format(cache, format)?;
+                let format = get_or_parse_format(cache, format, fixed_zone_name)?;
                 format_date32_value(value, format).map(Some)
             }
             _ => Ok(None),
@@ -495,12 +542,13 @@ fn format_date64_values<'v, 'f>(
     values: impl Iterator<Item = Option<i64>>,
     formats: impl Iterator<Item = Option<&'f str>>,
     cache: &mut HashMap<String, DateTimeFormat>,
+    fixed_zone_name: Option<&str>,
 ) -> Result<StringArray> {
     values
         .zip(formats)
         .map(|(value, format)| match (value, format) {
             (Some(value), Some(format)) => {
-                let format = get_or_parse_format(cache, format)?;
+                let format = get_or_parse_format(cache, format, fixed_zone_name)?;
                 format_date64_value(value, format).map(Some)
             }
             _ => Ok(None),
@@ -514,12 +562,13 @@ fn format_timestamp_values<'v, 'f>(
     time_unit: &TimeUnit,
     tz: Option<&Arc<str>>,
     cache: &mut HashMap<String, DateTimeFormat>,
+    fixed_zone_name: Option<&str>,
 ) -> Result<StringArray> {
     values
         .zip(formats)
         .map(|(value, format)| match (value, format) {
             (Some(value), Some(format)) => {
-                let format = get_or_parse_format(cache, format)?;
+                let format = get_or_parse_format(cache, format, fixed_zone_name)?;
                 format_timestamp_value(value, time_unit, tz, format).map(Some)
             }
             _ => Ok(None),
@@ -530,10 +579,13 @@ fn format_timestamp_values<'v, 'f>(
 fn get_or_parse_format<'a>(
     cache: &'a mut HashMap<String, DateTimeFormat>,
     pattern: &str,
+    fixed_zone_name: Option<&str>,
 ) -> Result<&'a DateTimeFormat> {
     match cache.entry(pattern.to_string()) {
         Entry::Occupied(entry) => Ok(entry.into_mut()),
-        Entry::Vacant(entry) => Ok(entry.insert(DateTimeFormat::for_formatting(pattern)?)),
+        Entry::Vacant(entry) => Ok(entry.insert(
+            DateTimeFormat::for_formatting(pattern)?.with_fixed_zone_name(fixed_zone_name),
+        )),
     }
 }
 

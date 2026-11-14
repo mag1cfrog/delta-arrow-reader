@@ -256,8 +256,6 @@ fn differing_parts(case: &Value, observation: &Value) -> TestResult<Vec<&'static
 /// an issue. A record can have several.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum RetainedDifference {
-    /// #1029: in a session zone Arrow cannot parse, such as `PST`, the result keeps UTC.
-    UnparsedSessionZone,
     /// #939: DATE_FORMAT prints year 0 as 0001 and year 10000 without its sign.
     YearOfEraText,
     /// #1016: a literal formatted or cast to STRING is nullable at analysis.
@@ -270,37 +268,12 @@ fn text<'v>(value: &'v Value, name: &str) -> TestResult<&'v str> {
         .ok_or_else(|| format!("missing {name}").into())
 }
 
-/// The record for `id` in the same ANSI mode and session zone `timezone`.
-fn sibling<'r>(
-    records: &'r [Value],
-    case: &Value,
-    id: &str,
-    timezone: &str,
-) -> TestResult<&'r Value> {
-    records[1..]
-        .iter()
-        .find(|record| {
-            record["id"] == id && record["timezone"] == timezone && record["ansi"] == case["ansi"]
-        })
-        .ok_or_else(|| format!("missing {id} in {timezone}").into())
-}
-
 /// DAR's current result for a record: Spark's record with each retained part replaced by
 /// DAR's result, and the differences that changed it.
-fn current_expectation(
-    case: &Value,
-    records: &[Value],
-) -> TestResult<(Value, Vec<RetainedDifference>)> {
+fn current_expectation(case: &Value) -> TestResult<(Value, Vec<RetainedDifference>)> {
     let mut current = case.clone();
     let mut retained = Vec::new();
     let id = text(case, "id")?;
-    if case["timezone"] == "PST" {
-        let utc = &sibling(records, case, id, "UTC")?["expected"];
-        if current["expected"] != *utc {
-            current["expected"] = utc.clone();
-            retained.push(RetainedDifference::UnparsedSessionZone);
-        }
-    }
     if id.ends_with("date_format")
         && let Some(rows) = current["expected"]["rows"].as_array_mut()
     {
@@ -520,7 +493,7 @@ async fn epoch_timestamps_follow_the_session_zone_like_spark() -> TestResult {
     let mut retained = BTreeMap::new();
     let mut expectations = Vec::new();
     for case in &records[1..] {
-        let (expectation, differences) = current_expectation(case, &records)?;
+        let (expectation, differences) = current_expectation(case)?;
         for difference in differences {
             *retained.entry(difference).or_insert(0) += 1;
         }
@@ -557,7 +530,6 @@ async fn epoch_timestamps_follow_the_session_zone_like_spark() -> TestResult {
     assert_eq!(
         retained,
         BTreeMap::from([
-            (RetainedDifference::UnparsedSessionZone, 6),
             (RetainedDifference::YearOfEraText, 28),
             (RetainedDifference::NullableTextLiterals, 18),
         ])

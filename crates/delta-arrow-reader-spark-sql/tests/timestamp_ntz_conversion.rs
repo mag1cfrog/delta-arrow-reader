@@ -272,9 +272,6 @@ fn differing_parts(case: &Value, observation: &Value) -> TestResult<Vec<&'static
 /// Differences outside this conversion, each owned by an issue.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum RetainedDifference {
-    /// #1029: in a session zone Arrow cannot parse, such as `PST` or `GMT+08:00`, a cast
-    /// keeps each instant's UTC date-time.
-    UnparsedSessionZone,
     /// #1103: a cast of an ARRAY, STRUCT or MAP keeps the UTC date-time of its TIMESTAMP
     /// values.
     NestedUtcDateTime,
@@ -349,9 +346,6 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
         return Some(RetainedDifference::NullInRequiredTryCast);
     }
     match id {
-        "column_cast" if matches!(case["timezone"].as_str(), Some("PST" | "GMT+08:00")) => {
-            Some(RetainedDifference::UnparsedSessionZone)
-        }
         "column_array_cast" | "column_struct_cast" | "column_map_cast" if named_zone => {
             Some(RetainedDifference::NestedUtcDateTime)
         }
@@ -447,7 +441,7 @@ fn current_expectation(
         let instant = instants.get(&key).ok_or("unregistered key")?;
         let value = &mut row[1];
         match difference {
-            RetainedDifference::UnparsedSessionZone | RetainedDifference::NestedUtcDateTime => {
+            RetainedDifference::NestedUtcDateTime => {
                 // The UTC date-time in microseconds is the instant itself.
                 *value = instant.clone();
             }
@@ -675,7 +669,6 @@ async fn timestamp_ntz_conversions_follow_the_session_zone_like_spark() -> TestR
     assert_eq!(
         retained,
         BTreeMap::from([
-            (RetainedDifference::UnparsedSessionZone, 4),
             (RetainedDifference::NestedUtcDateTime, 12),
             (RetainedDifference::OutOfRangeZoneConversion, 16),
             (RetainedDifference::OutOfRangeCalendar, 18),

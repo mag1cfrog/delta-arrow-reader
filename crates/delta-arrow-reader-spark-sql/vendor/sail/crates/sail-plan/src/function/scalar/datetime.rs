@@ -1,7 +1,6 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
-use datafusion::arrow::array::timezone::Tz;
 use datafusion::arrow::compute::can_cast_types;
 use datafusion::arrow::datatypes::{
     DataType, IntervalDayTimeType, IntervalUnit, IntervalYearMonthType, TimeUnit,
@@ -942,10 +941,11 @@ fn timediff(input: ScalarFunctionInput) -> PlanResult<Expr> {
 }
 
 fn session_timezone(input: &ScalarFunctionInput) -> Expr {
-    lit(input
-        .function_context
-        .plan_config
-        .session_timezone
+    let config = input.function_context.plan_config;
+    lit(config
+        .original_session_timezone
+        .as_ref()
+        .unwrap_or(&config.session_timezone)
         .to_string())
 }
 
@@ -1107,16 +1107,13 @@ fn to_date_with_parser(input: ScalarFunctionInput, parser: DateParser) -> PlanRe
         // nullability, so a grouping set that makes the key NULL makes the result nullable
         // (#1222); `to_local_time` was declared nullable whatever its argument. Spark parses a
         // TIMESTAMP_NTZ with a format as the TIMESTAMP of the same microseconds, so its DATE is
-        // that instant's date in the session zone, not its wall-clock date. A session zone Arrow
-        // cannot parse, such as `Z` or `PST`, keeps the wall-clock date (#1029).
+        // that instant's date in the normalized session zone, not its wall-clock date.
         let session_timezone = &input.function_context.plan_config.session_timezone;
         let date = match &expr_type {
-            Ok(DataType::Timestamp(unit, None)) if session_timezone.parse::<Tz>().is_ok() => {
-                Some(cast(
-                    cast(expr.clone(), DataType::Int64),
-                    DataType::Timestamp(*unit, Some(Arc::clone(session_timezone))),
-                ))
-            }
+            Ok(DataType::Timestamp(unit, None)) => Some(cast(
+                cast(expr.clone(), DataType::Int64),
+                DataType::Timestamp(*unit, Some(Arc::clone(session_timezone))),
+            )),
             Ok(DataType::Timestamp(_, _) | DataType::Date32 | DataType::Date64) => {
                 Some(expr.clone())
             }
@@ -1141,10 +1138,6 @@ fn to_date_with_parser(input: ScalarFunctionInput, parser: DateParser) -> PlanRe
             Ok(_other) => expr,
             Err(_) => cast(expr, DataType::Utf8), // In case of error, cast to string
         };
-        // shortcut: Unparsed session aliases retain legacy date parsing until #1029 normalizes them.
-        if session_timezone.parse::<Tz>().is_err() {
-            return Ok(ScalarUDF::from(SparkDate::new(null_on_error)).call(vec![expr, format]));
-        }
         // Parse an instant using any offset/zone in the text, then take its date in the
         // session zone. The shared timestamp parser also handles zone-free text there.
         let timestamp = ScalarUDF::from(SparkTimestamp::try_new(
@@ -1239,12 +1232,25 @@ fn next_day(input: ScalarFunctionInput) -> PlanResult<Expr> {
     Ok(udf.call(input.arguments))
 }
 
-pub(super) fn date_format(expr: Expr, format: Expr, timezone: String) -> Expr {
-    date_format_with_args(vec![expr, format], timezone)
+pub(super) fn date_format(expr: Expr, format: Expr, config: &crate::config::PlanConfig) -> Expr {
+    date_format_with_args(vec![expr, format], config)
 }
 
-fn date_format_with_args(arguments: Vec<Expr>, timezone: String) -> Expr {
-    ScalarUDF::from(SparkDateFormat::new(timezone.into())).call(arguments)
+fn date_format_with_args(arguments: Vec<Expr>, config: &crate::config::PlanConfig) -> Expr {
+    let display_name = config
+        .original_session_timezone
+        .as_deref()
+        .and_then(|configured| {
+            sail_function::scalar::datetime::convert_tz::fixed_zone_display_name(
+                configured,
+                &config.session_timezone,
+            )
+        });
+    ScalarUDF::from(
+        SparkDateFormat::new(Arc::clone(&config.session_timezone))
+            .with_fixed_zone_name(display_name),
+    )
+    .call(arguments)
 }
 
 fn timestamp_data_type(input: &ScalarFunctionInput, timestamp_ntz: bool) -> DataType {
@@ -1359,8 +1365,8 @@ fn timestamp_with_try(
             {
                 return Ok(local);
             }
-            // Spark also accepts session zones that Arrow cannot parse (#1029). A TIMESTAMP
-            // result keeps the instant; other types cast.
+            // The resolver has normalized the session zone. A TIMESTAMP result keeps the
+            // instant; other types cast.
             let expr = match expr_type {
                 DataType::Timestamp(_, Some(_)) if timestamp_ntz => {
                     expr_fn::to_local_time(vec![expr])
@@ -1444,7 +1450,11 @@ fn from_unixtime(input: ScalarFunctionInput) -> PlanResult<Expr> {
         expr,
         DataType::Timestamp(TimeUnit::Second, Some(timezone.clone())),
     );
-    Ok(date_format(expr, format, timezone.to_string()))
+    Ok(date_format(
+        expr,
+        format,
+        input.function_context.plan_config,
+    ))
 }
 
 fn unix_time_unit(input: ScalarFunctionInput, time_unit: TimeUnit) -> PlanResult<Expr> {
@@ -1463,16 +1473,11 @@ fn unix_time_unit(input: ScalarFunctionInput, time_unit: TimeUnit) -> PlanResult
 
 /// TIMESTAMP_SECONDS, TIMESTAMP_MILLIS and TIMESTAMP_MICROS: the instant `argument` units of
 /// `micros_per_unit` microseconds after the epoch. Like every Spark TIMESTAMP, it is annotated
-/// with the session time zone, so zone-dependent functions read its local date-time there. A
-/// session zone Arrow cannot parse, such as `PST`, keeps UTC (#1029).
+/// with the normalized session zone, so zone-dependent functions read its local date-time there.
 fn timestamp_from_epoch(input: ScalarFunctionInput, micros_per_unit: i64) -> PlanResult<Expr> {
     let argument = input.arguments.one()?;
     let session_timezone = &input.function_context.plan_config.session_timezone;
-    let zone = if session_timezone.parse::<Tz>().is_ok() {
-        Arc::clone(session_timezone)
-    } else {
-        "UTC".into()
-    };
+    let zone = Arc::clone(session_timezone);
     let data_type = DataType::Timestamp(TimeUnit::Microsecond, Some(zone));
     if micros_per_unit != 1 {
         let argument_type = argument.get_type(input.function_context.schema)?;
@@ -1580,7 +1585,7 @@ fn ntz_timestamp_and_unit(
         return Ok((local, TimeUnit::Microsecond));
     }
     match data_type {
-        // Spark also accepts session zones that Arrow cannot parse (#1029).
+        // Direct expression helpers may receive a zone outside public planning validation.
         DataType::Timestamp(unit, Some(_)) => Ok((expr_fn::to_local_time(vec![ts]), unit)),
         DataType::Timestamp(unit, None) => Ok((ts, unit)),
         DataType::Null => {
@@ -2184,14 +2189,16 @@ pub(super) fn list_built_in_datetime_functions() -> Vec<(&'static str, ScalarFun
             "date_format",
             F::custom(|input| match input.arguments.len() {
                 2 => {
-                    let timezone = input.function_context.plan_config.session_timezone.clone();
                     // A dictionary-encoded STRING formats as its STRING values do.
                     let arguments = input
                         .arguments
                         .into_iter()
                         .map(|arg| dictionary_string_values(arg, input.function_context.schema))
                         .collect::<PlanResult<Vec<_>>>()?;
-                    Ok(date_format_with_args(arguments, timezone.to_string()))
+                    Ok(date_format_with_args(
+                        arguments,
+                        input.function_context.plan_config,
+                    ))
                 }
                 _ => Err(PlanError::invalid("date_format requires 2 arguments")),
             }),

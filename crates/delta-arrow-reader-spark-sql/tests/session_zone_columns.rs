@@ -128,6 +128,288 @@ fn dar_fields(fields: &Fields, names: Option<&[String]>, timezone: &str) -> Test
         .map(Value::from)
 }
 
+/// Arrow-compatible labels expected for the aliases exercised by these fixtures.
+fn expected_arrow_zone(zone: &str) -> &str {
+    match zone {
+        "Z" | "UT" => "+00:00",
+        "PST" => "America/Los_Angeles",
+        "EST" => "-05:00",
+        "MST" => "-07:00",
+        "HST" => "-10:00",
+        "GMT+08:00" => "+08:00",
+        other => other,
+    }
+}
+
+fn alias_references() -> TestResult<(Vec<Value>, Value)> {
+    let mut cases = Vec::new();
+    let mut main_requests = Value::Null;
+    for (raw, source) in [
+        (
+            include_str!("fixtures/session-zone-aliases/spark.jsonl"),
+            include_str!("fixtures/session-zone-aliases/requests.json"),
+        ),
+        (
+            include_str!("fixtures/session-zone-aliases/display-spark.jsonl"),
+            include_str!("fixtures/session-zone-aliases/display-requests.json"),
+        ),
+    ] {
+        let records = raw
+            .lines()
+            .map(serde_json::from_str)
+            .collect::<Result<Vec<Value>, _>>()?;
+        let requests: Value = serde_json::from_str(source)?;
+        assert_eq!(records[0]["spark_version"], "4.2.0");
+        assert_eq!(
+            records[0]["spark_build"]["SPARK_REVISION"]["value"],
+            "32f7299601108917fb01920a54e084595b7b3bf8"
+        );
+        let requested: Vec<_> = requests["corpora"]
+            .as_array()
+            .ok_or("missing corpora")?
+            .iter()
+            .flat_map(|corpus| corpus["cases"].as_array().into_iter().flatten())
+            .collect();
+        assert_eq!(records.len() - 1, requested.len());
+        for (case, request) in records[1..].iter().zip(requested) {
+            for key in [
+                "corpus", "id", "sql", "ansi", "timezone", "ordered", "scope",
+            ] {
+                assert_eq!(case[key], request[key], "case identity {key}");
+            }
+        }
+        if main_requests.is_null() {
+            main_requests = requests;
+        }
+        cases.extend(records.into_iter().skip(1));
+    }
+    assert_eq!(cases.len(), 198);
+    Ok((cases, main_requests))
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn session_aliases_match_spark() -> TestResult {
+    let (cases, requests) = alias_references()?;
+    let mut differences = Vec::new();
+    let mut exact = 0;
+    let mut retained_names = 0;
+    for annotation in ["UTC", "Asia/Kathmandu", "+05:45"] {
+        for batch_size in [1, 32] {
+            let session = session_context(batch_size);
+            let input = &requests["corpora"][0]["metadata"]["inputs"][0];
+            let batch = annotated_input(input, annotation)?;
+            register(&session, "alias_inputs", &batch, batch_size)?;
+            for case in &cases {
+                if case["corpus"] == "session_config_display" && annotation != "UTC" {
+                    continue;
+                }
+                let mut expected_rows = case["expected"]["rows"].clone();
+                let retained = case["scope"] == "labels"
+                    && matches!(
+                        case["timezone"].as_str(),
+                        Some("America/Los_Angeles" | "PST")
+                    );
+                if retained {
+                    // #1236: this one historical source row keeps the installed LMT label.
+                    for row in expected_rows.as_array_mut().ok_or("missing rows")? {
+                        if row[0] == "5" {
+                            for value in row.as_array_mut().ok_or("missing row")?.iter_mut().skip(1)
+                            {
+                                if !value.is_null() {
+                                    *value = json!("LMT");
+                                }
+                            }
+                        }
+                    }
+                    retained_names += 1;
+                } else {
+                    exact += 1;
+                }
+                let observed = observe(&session, case).await;
+                println!(
+                    "session_alias_observation={}",
+                    json!({"id":case["id"],
+                    "timezone":case["timezone"],"ansi":case["ansi"],"annotation":annotation,
+                    "batch":batch_size,"retained_name":retained,"actual":observed})
+                );
+                let status = if case["corpus"] == "session_config_display" {
+                    &case["status"]
+                } else {
+                    &case["expected"]["status"]
+                };
+                assert_eq!(status, "ok");
+                let expected_fields = spark_fields(&case["schema_stages"]["executed"])?;
+                let types = |fields: &Value| {
+                    fields
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .map(|field| field["type"].clone())
+                        .collect::<Vec<_>>()
+                };
+                if observed["rows"] != expected_rows
+                    || types(&observed["executed"]) != types(&expected_fields)
+                {
+                    differences.push(json!({"id":case["id"],"timezone":case["timezone"],
+                        "ansi":case["ansi"],"annotation":annotation,"batch":batch_size,
+                        "expected_rows":expected_rows,"actual":observed}));
+                }
+            }
+        }
+    }
+    assert_eq!((exact, retained_names), (1076, 24));
+    assert!(
+        differences.is_empty(),
+        "{} differences: {}",
+        differences.len(),
+        json!(differences)
+    );
+    Ok(())
+}
+
+/// Reuse captured fixed-zone labels across scalar-input and per-row format shapes.
+#[tokio::test]
+async fn fixed_alias_names_keep_dynamic_format_shapes() -> TestResult {
+    let (cases, requests) = alias_references()?;
+    for batch_size in [1, 32] {
+        let session = session_context(batch_size);
+        register(
+            &session,
+            "alias_inputs",
+            &annotated_input(&requests["corpora"][0]["metadata"]["inputs"][0], "UTC")?,
+            batch_size,
+        )?;
+        for source in cases.iter().filter(|case| {
+            case["id"] == "format_short_names"
+                && matches!(case["timezone"].as_str(), Some("UT" | "GMT+08:00"))
+        }) {
+            let expected: Vec<_> = source["expected"]["rows"]
+                .as_array()
+                .ok_or("missing rows")?
+                .iter()
+                .map(|row| json!([row[0], row[3]]))
+                .collect();
+            for (shape, sql) in [
+                (
+                    "scalar_input",
+                    "SELECT k AS r0, DATE_FORMAT(TIMESTAMP_NTZ '2024-01-02 00:30:00', CASE WHEN k = 8 THEN CAST(NULL AS STRING) ELSE 'z' END) AS r1 FROM alias_inputs",
+                ),
+                (
+                    "dynamic_formats",
+                    "SELECT k AS r0, DATE_FORMAT(ts, CASE WHEN k % 2 = 0 THEN 'z' ELSE 'zz' END) AS r1 FROM alias_inputs",
+                ),
+            ] {
+                let mut case = source.clone();
+                case["sql"] = json!(sql);
+                let observed = observe(&session, &case).await;
+                println!(
+                    "session_alias_format_control={}",
+                    json!({"shape":shape,
+                    "timezone":case["timezone"],"ansi":case["ansi"],"batch":batch_size,
+                    "actual":observed})
+                );
+                assert_eq!(
+                    observed["rows"],
+                    json!(expected),
+                    "{shape}: {case}; {observed}"
+                );
+                let types: Vec<_> = observed["executed"]
+                    .as_array()
+                    .ok_or("missing executed fields")?
+                    .iter()
+                    .map(|field| field["type"].clone())
+                    .collect();
+                assert_eq!(types, vec![json!("int32"), json!("string")]);
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn legacy_fixed_arguments_use_the_captured_offsets() -> TestResult {
+    let (cases, requests) = alias_references()?;
+    let base = requests["corpora"][0]["metadata"]["inputs"][0]["rows"][5][1]
+        .as_str()
+        .ok_or("missing source instant")?
+        .parse::<i64>()?;
+    let mut expressions = Vec::new();
+    let mut expected = Vec::new();
+    let mut expected_types = Vec::new();
+    for name in ["EST", "MST", "HST"] {
+        // The same instant's local ticks independently establish each fixed offset.
+        let reference = cases
+            .iter()
+            .find(|case| {
+                case["id"] == "literal_alias_consumers"
+                    && case["timezone"] == name
+                    && case["ansi"] == true
+            })
+            .ok_or("missing fixed-zone reference")?;
+        let local = reference["expected"]["rows"][0][1]
+            .as_str()
+            .ok_or("missing local ticks")?
+            .parse::<i64>()?;
+        expressions.extend([
+            format!("TO_UTC_TIMESTAMP(TIMESTAMP_NTZ '1800-06-15 12:00:00', '{name}')"),
+            format!("FROM_UTC_TIMESTAMP(TIMESTAMP_NTZ '1800-06-15 12:00:00', '{name}')"),
+            format!("CONVERT_TIMEZONE('{name}', 'UTC', TIMESTAMP_NTZ '1800-06-15 12:00:00')"),
+        ]);
+        expected.extend([
+            json!((2 * base - local).to_string()),
+            json!(local.to_string()),
+            json!((2 * base - local).to_string()),
+        ]);
+        expected_types.extend([
+            json!("timestamp"),
+            json!("timestamp"),
+            json!("timestamp_ntz"),
+        ]);
+    }
+    let session = session_context(1);
+    let case =
+        json!({"sql":format!("SELECT {}",expressions.join(", ")),"timezone":"UTC","ansi":true});
+    let observed = observe(&session, &case).await;
+    println!(
+        "session_legacy_argument_control={}",
+        json!({"actual":observed})
+    );
+    assert_eq!(observed["rows"], json!([expected]));
+    let types: Vec<_> = observed["executed"]
+        .as_array()
+        .ok_or("missing executed fields")?
+        .iter()
+        .map(|field| field["type"].clone())
+        .collect();
+    assert_eq!(types, expected_types);
+    Ok(())
+}
+
+#[tokio::test]
+async fn invalid_session_configuration_preserves_native_sql() -> TestResult {
+    let session = session_context(1);
+    let native = session.sql("SELECT 1 AS value").await?.collect().await?;
+    for zone in ["not/a-zone", ""] {
+        for ansi_mode in [true, false] {
+            let options = SparkSqlOptions {
+                session_timezone: zone.into(),
+                ansi_mode,
+                ..SparkSqlOptions::default()
+            };
+            let error = match plan_query(&session, "SELECT 1 AS value", &options).await {
+                Err(error) => error,
+                Ok(_) => return Err("invalid configuration accepted zone-free SQL".into()),
+            };
+            assert!(error.to_string().contains("[INVALID_TIMEZONE]"), "{error}");
+        }
+    }
+    assert_eq!(
+        session.sql("SELECT 1 AS value").await?.collect().await?,
+        native
+    );
+    Ok(())
+}
+
 /// Encode a value as the capture does: TIMESTAMP as UTC-epoch microseconds, DOUBLE as its
 /// IEEE 754 bits and DECIMAL as plain text.
 fn encode_value(column: &dyn Array, row: usize) -> TestResult<Value> {
@@ -181,7 +463,7 @@ async fn observe(session: &SessionContext, case: &Value) -> Value {
     let mut observation = json!({});
     let mut phase = "resolve";
     let result: TestResult<Vec<Vec<Value>>> = async {
-        let timezone = case["timezone"].as_str().ok_or("missing time zone")?;
+        let timezone = expected_arrow_zone(case["timezone"].as_str().ok_or("missing time zone")?);
         let query = plan_query(
             session,
             case["sql"].as_str().ok_or("missing SQL")?,
@@ -277,23 +559,15 @@ enum RetainedDifference {
     /// 9999-10-01 00:00 local time, which Java's recurring rules read in PDT and the date
     /// library, whose Los Angeles rules end in 2099, in PST, an hour later.
     RecurringDstAfter2099,
-    /// #1029: in a session zone Spark accepts but Arrow cannot parse, such as `PST`, a
-    /// column keeps its own zone, so DAR evaluates it as a session in that zone would.
-    UnparsedSessionZone,
     /// #1094: TO_JSON prints TIMESTAMP fractions in microseconds where Spark prints
     /// milliseconds, and the Los Angeles local mean time offset without its seconds.
     JsonTimestampText,
 }
 
-/// Session zones Spark accepts that Arrow cannot parse.
-const UNPARSED_ZONES: [&str; 3] = ["Z", "PST", "GMT+08:00"];
-
 fn retained_difference(case: &Value) -> Option<RetainedDifference> {
     let id = case["id"].as_str()?;
     let timezone = case["timezone"].as_str()?;
-    if UNPARSED_ZONES.contains(&timezone) {
-        Some(RetainedDifference::UnparsedSessionZone)
-    } else if id == "to_json" {
+    if id == "to_json" {
         Some(RetainedDifference::JsonTimestampText)
     } else if id == "date_trunc_quarter" && timezone == "America/Los_Angeles" {
         Some(RetainedDifference::RecurringDstAfter2099)
@@ -347,7 +621,6 @@ fn row_instants<'r>(
 fn current_expectation(
     case: &Value,
     difference: RetainedDifference,
-    annotation: &str,
     records: &[Value],
 ) -> TestResult<Value> {
     let metadata = &records[0];
@@ -356,18 +629,6 @@ fn current_expectation(
         return Err(format!("expected a Spark result: {case}").into());
     }
     match difference {
-        RetainedDifference::UnparsedSessionZone => {
-            // The record of the same query in a session in the column's own zone.
-            let own_zone = records[1..]
-                .iter()
-                .find(|record| {
-                    record["id"] == case["id"]
-                        && record["ansi"] == case["ansi"]
-                        && record["timezone"] == annotation
-                })
-                .ok_or("missing record in the annotation's zone")?;
-            current["expected"] = own_zone["expected"].clone();
-        }
         RetainedDifference::JsonTimestampText => {
             let instants = registered_instants(metadata)?;
             let rows = current["expected"]["rows"]
@@ -455,6 +716,22 @@ fn annotated_input(input: &Value, annotation: &str) -> TestResult<RecordBatch> {
         if matches!(field.data_type(), DataType::Timestamp(_, Some(_))) {
             fields.push(Field::clone(field).with_data_type(annotated.clone()));
             columns.push(cast(column, &annotated)?);
+        } else if let DataType::Struct(children) = field.data_type() {
+            let children: Fields = children
+                .iter()
+                .map(|child| {
+                    let data_type = if matches!(child.data_type(), DataType::Timestamp(_, Some(_)))
+                    {
+                        annotated.clone()
+                    } else {
+                        child.data_type().clone()
+                    };
+                    Arc::new(child.as_ref().clone().with_data_type(data_type))
+                })
+                .collect();
+            let data_type = DataType::Struct(children);
+            fields.push(Field::clone(field).with_data_type(data_type.clone()));
+            columns.push(cast(column, &data_type)?);
         } else {
             fields.push(Field::clone(field));
             columns.push(Arc::clone(column));
@@ -595,7 +872,6 @@ async fn timestamp_columns_follow_the_session_zone_like_spark() -> TestResult {
         BTreeMap::from([
             (RetainedDifference::NullableGreatest, 4),
             (RetainedDifference::RecurringDstAfter2099, 2),
-            (RetainedDifference::UnparsedSessionZone, 12),
             (RetainedDifference::JsonTimestampText, 4),
         ])
     );
@@ -607,9 +883,7 @@ async fn timestamp_columns_follow_the_session_zone_like_spark() -> TestResult {
             register_inputs(&session, &records[0], annotation, batch_size)?;
             for case in &records[1..] {
                 let expectation = match retained_difference(case) {
-                    Some(difference) => {
-                        current_expectation(case, difference, annotation, &records)?
-                    }
+                    Some(difference) => current_expectation(case, difference, &records)?,
                     None => case.clone(),
                 };
                 let encoded = list_encoding_cases(case)?;
@@ -752,6 +1026,7 @@ async fn session_zone_filters_reach_the_scan_on_the_stored_column() -> TestResul
     for (timezone, seconds) in [
         ("UTC", 1_704_153_600_i64),
         ("America/Los_Angeles", 1_704_182_400),
+        ("PST", 1_704_182_400),
     ] {
         let case = json!({"ansi": true, "timezone": timezone});
         let sql = "SELECT k FROM pruned_inputs WHERE ts >= TIMESTAMP '2024-01-02 00:00:00'";

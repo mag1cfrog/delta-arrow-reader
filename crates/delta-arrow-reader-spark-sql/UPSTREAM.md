@@ -663,8 +663,10 @@ structs, lists and maps are annotated the same way. The cast changes only the an
 and reuses the value buffers, so the stored instants do not change. Field extraction,
 DATE_FORMAT, casts, truncation and date functions then follow the session zone as for
 literals, and TIMESTAMP results carry the session zone, as in Spark's Arrow output. A
-session zone Spark accepts but Arrow cannot parse, such as `Z` or `PST`, leaves columns
-with their own zone until #1029 resolves such IDs. Predicates on a relabeled column reach
+configured zone is normalized once at the public resolver boundary. Accepted aliases
+such as `Z`, `PST` and `GMT+08:00` become Arrow-compatible operational labels; invalid or
+unrepresentable configurations fail before query resolution. CURRENT_TIMEZONE preserves
+the original spelling, and fixed UTC/GMT/UT names retain their display labels. Predicates on a relabeled column reach
 the scan as predicates on the stored column, so the Delta provider, which prunes only with
 bare columns, can use them (#1096). DataFusion's filter pushdown replaces the column with the
 cast when it moves a filter below the projection. Its simplifier removes the cast from a
@@ -688,8 +690,8 @@ Ordinary NTZ CAST/STRING rendering keeps its existing wall-time behavior. Format
 uses installed TZDB abbreviations for short `z` and Arrow's named/fixed offsets for
 `O`/`X`. Long localized names and short names that differ from TZDB remain a #1236
 boundary: region IDs, numeric offsets or historical LMT labels can differ from Java's
-localized names. Unparsed session aliases retain their prior zone-free formatting
-until #1029 normalizes them. The [DATE_FORMAT references](tests/fixtures/date-format-zones/README.md)
+localized names. Accepted aliases use their normalized zone for clock fields; fixed
+UTC/GMT/UT names bind only validated name/ID tokens, leaving numeric offsets intact. The [DATE_FORMAT references](tests/fixtures/date-format-zones/README.md)
 separate exact values/types from those display-name fallbacks. JSON/CSV/XML retain
 their existing supplied zone-name behavior.
 
@@ -705,8 +707,9 @@ and YEAR truncate the local date as TRUNC does and take the start of that day in
 `LocalDate.atStartOfDay`. DataFusion worked in nanoseconds, so it failed outside 1677 to 2262,
 as did MONTHS_BETWEEN, whose start of the local day is now Spark's `atStartOfDay`, and
 WEEKOFYEAR, which now reads the ISO week with `date_part` where `to_char` formatted
-nanoseconds. Zones parse as in Arrow, except that `EST`, `MST` and `HST` are Java's fixed
-offsets (#1029), and instants beyond Chrono's years take offsets from a nearer 400-year cycle,
+nanoseconds. The shared Java alias mapping reads `EST`, `MST` and `HST` as fixed offsets.
+Full-BIGINT TimestampZone arithmetic remains separate from the ordinary converter, and
+instants beyond Chrono's years take offsets from a nearer 400-year cycle,
 without DST after 2099 (#1052). The [local truncation
 references](tests/fixtures/local-truncation/README.md) and the [TIMESTAMP calendar range
 references](tests/fixtures/timestamp-calendar-range/README.md) record the checks.
@@ -982,8 +985,8 @@ references](tests/fixtures/day-of-week-fields/README.md) record the checks.
 
 TIMESTAMP_SECONDS, TIMESTAMP_MILLIS and TIMESTAMP_MICROS annotate their result with the
 session time zone like any Spark TIMESTAMP, so HOUR, DATE_FORMAT and casts over it read the
-local date-time where they read UTC before; the instants are unchanged. A session zone Arrow
-cannot parse keeps UTC (#1029). Numeric epoch conversion preserves fractional DOUBLE and
+local date-time where they read UTC before; the instants are unchanged. Accepted aliases
+use the same normalized label as registered TIMESTAMP columns. Numeric epoch conversion preserves fractional DOUBLE and
 DECIMAL seconds before creating the TIMESTAMP. Integral seconds and milliseconds fail on
 BIGINT microsecond overflow; DECIMAL seconds must produce an exact BIGINT microsecond
 count. FLOAT first widens to DOUBLE. Nonfinite floating arguments give NULL, and finite
@@ -1005,9 +1008,9 @@ lazy arguments defer it (#1106). Under TRY_CAST it is NULL. Spark declares the r
 nullable only for a nullable input, so a NOT NULL input fails the query instead, where
 Spark returns -1 (#1106). TO_TIMESTAMP, TRY_TO_TIMESTAMP and TO_TIMESTAMP_LTZ of a
 TIMESTAMP now keep the instant. They used to convert it to local time and back, which
-failed on the reference instants. A session zone Arrow cannot parse keeps the previous
-conversion, and `EST`, `MST` and `HST` parse as regions where Spark uses fixed offsets
-(#1029).
+failed on the reference instants. The common resolver normalizes accepted aliases first,
+including Java's fixed EST/MST/HST offsets. The [session alias references](tests/fixtures/session-zone-aliases/README.md)
+cover source annotations, nested fields, configured spelling and the formatted date paths.
 
 Related cases are still open:
 - casts of arrays, structs and maps convert their TIMESTAMP values with Arrow's cast
@@ -1124,10 +1127,10 @@ numeric, BOOLEAN, BINARY and NULL inputs. They share these open differences:
 Formatted TO_DATE and TRY_TO_DATE parse string/coerced-scalar arguments through the existing
 LTZ timestamp parser, then extract the date in the session zone. Parsed offsets and supported
 region IDs therefore affect the instant before the DATE is taken; zone-free date and time
-formats keep their local date. Sessions the timestamp parser cannot interpret keep the prior
-date parser until #1029 supplies shared alias support. The
+formats keep their local date. Accepted aliases use the normalized operational zone for
+both parsing and date extraction. The
 [formatted date zone references](tests/fixtures/formatted-date-zones/README.md) cover the
-conversion and that preservation boundary.
+conversion and zone-free preservation controls.
 
 With a format over a DATE, TIMESTAMP or TIMESTAMP_NTZ, TO_DATE ignores the format, as Spark's
 does, and declares Spark's nullability at every stage: nullable outside ANSI mode, and in ANSI
@@ -1141,8 +1144,8 @@ NULL in its subtotal rows makes the result nullable, as in Spark; it used DataFu
 `to_local_time`, nullable whatever its argument, which `SparkKnownNotNull` declared NOT NULL and
 then failed on those rows (#1222). A TIMESTAMP_NTZ is read as the TIMESTAMP of the same
 microseconds, so its DATE is that instant's date in the session zone, as Spark parses it, where
-DAR gave its wall-clock date (#1195); a session zone Arrow cannot parse, such as `Z` or `PST`,
-keeps the wall-clock date (#1029). UNIX_TIMESTAMP and
+DAR gave its wall-clock date (#1195). This also applies to normalized aliases.
+UNIX_TIMESTAMP and
 TO_UNIX_TIMESTAMP with a format over these arguments declare their results the same way, and
 give the declaration the ignored format's columns, aggregates and window functions as unused
 inputs. Spark computes those inputs although it does not evaluate the format, so an aggregate in

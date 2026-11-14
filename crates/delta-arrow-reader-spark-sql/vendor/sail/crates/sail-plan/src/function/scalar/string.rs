@@ -1246,8 +1246,7 @@ fn to_char(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         .map_err(|_| PlanError::invalid("to_char requires 2 arguments"))?;
     match value.get_type(function_context.schema)? {
         DataType::Date32 | DataType::Date64 | DataType::Timestamp(_, _) => {
-            let timezone = function_context.plan_config.session_timezone.clone();
-            Ok(date_format(value, format, timezone.to_string()))
+            Ok(date_format(value, format, function_context.plan_config))
         }
         DataType::Binary
         | DataType::LargeBinary

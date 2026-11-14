@@ -9,6 +9,8 @@ use chrono::{DateTime, FixedOffset, LocalResult, Months, NaiveDateTime, Offset, 
 use chrono_tz::{GapInfo, Tz};
 use datafusion::arrow::array::timezone::Tz as ArrowTz;
 
+use super::convert_tz::legacy_time_zone;
+
 /// Gregorian dates repeat every 400 years (146,097 days, a whole number of weeks), and so do
 /// fixed offsets and recurring time zone rules.
 pub(crate) const MICROS_PER_400_YEARS: i64 = 146_097 * 86_400_000_000;
@@ -56,16 +58,9 @@ pub(crate) enum ZoneKind {
 }
 
 impl TimestampZone {
-    /// The zone `zone` names, accepting exactly what Arrow accepts. Java maps the legacy IDs
-    /// `EST`, `MST` and `HST` to fixed offsets, where the date library names regions with
-    /// local mean time (#1029).
+    /// Share alias resolution while retaining this type's full-range offset arithmetic.
     pub(crate) fn parse(zone: &str) -> Option<Self> {
-        let zone = match zone {
-            "EST" => "-05:00",
-            "MST" => "-07:00",
-            "HST" => "-10:00",
-            other => other,
-        };
+        let zone = legacy_time_zone(zone).unwrap_or(zone);
         let arrow = ArrowTz::from_str(zone).ok()?;
         let kind = match Tz::from_str(zone) {
             Ok(region) => ZoneKind::Region(region),

@@ -1,10 +1,13 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
+use std::sync::Arc;
+
 use datafusion::logical_expr::LogicalPlan;
 use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion};
 use datafusion_expr::Expr;
 use datafusion_expr::expr::AggregateFunction;
 use datafusion_expr::utils::{find_aggregate_exprs, find_window_exprs};
 use sail_common::spec;
+use sail_function::scalar::datetime::convert_tz::normalize_session_timezone;
 
 use crate::error::{PlanError, PlanResult};
 use crate::function::expression_is_nondeterministic;
@@ -21,11 +24,20 @@ pub struct NamedPlan {
 impl PlanResolver<'_> {
     /// Resolves a query into a named plan.
     pub async fn resolve_named_plan(&self, query: spec::QueryPlan) -> PlanResult<NamedPlan> {
+        let mut config = self.config.as_ref().clone();
+        let configured = Arc::clone(&config.session_timezone);
+        config.session_timezone = normalize_session_timezone(&configured).ok_or_else(|| {
+            PlanError::invalid(format!(
+                "[INVALID_TIMEZONE] Invalid session timezone {configured:?}"
+            ))
+        })?;
+        config.original_session_timezone.get_or_insert(configured);
+        let resolver = PlanResolver::new(self.ctx, Arc::new(config));
         let mut state = PlanResolverState::new();
-        let plan = self.resolve_query_plan(query, &mut state).await?;
+        let plan = resolver.resolve_query_plan(query, &mut state).await?;
         Self::validate_aggregate_arguments(&plan)?;
         let plan = Self::lower_distinct_percentiles(plan, &mut state)?;
-        let plan = self.lower_resolved_set_operations(plan, &mut state)?;
+        let plan = resolver.lower_resolved_set_operations(plan, &mut state)?;
         let plan = Self::preserve_order_sensitive_aggregate_sorts(plan)?;
         let fields = Self::get_field_names(plan.schema(), &state)?;
         Ok(NamedPlan { plan, fields })

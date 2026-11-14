@@ -39,10 +39,11 @@ DOUBLE/DECIMAL conversions compare final rows and executed types; overflowing ar
 must fail with an overflow diagnostic. They do not require matching nullability, metadata
 or error stages. The other records retain their existing schema checks.
 
-Existing differences keep their Spark expectation in the fixture. The test replaces only
+The six repaired PST HOUR records use their original Spark values.
+[Session alias references](../session-zone-aliases/README.md) cover the shared
+normalization and configured spelling. Existing differences keep their Spark
+expectation in the fixture. The test replaces only
 the retained part with the current DAR result and checks each count:
-- #1029: 6 HOUR records in `PST` sessions read UTC. Arrow cannot parse the zone. Each is
-  replaced with the UTC session's record.
 - #939: 28 DATE_FORMAT records print year 0 as `0001` and year 10000 without its `+`.
 - #1016: 18 literal DATE_FORMAT and CAST to STRING records are nullable at analysis.
 

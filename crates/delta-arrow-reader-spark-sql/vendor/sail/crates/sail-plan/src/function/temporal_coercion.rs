@@ -50,8 +50,8 @@ pub(crate) fn cast_local_timestamp_expr_to_ltz(
 /// Spark's TIMESTAMP to TIMESTAMP_NTZ conversion of `argument`, a TIMESTAMP in `unit` annotated
 /// with `argument_zone`: each instant's local date-time in `session_timezone`, whatever zone
 /// the annotation names. A local date-time beyond the BIGINT range fails, or is NULL for
-/// `null_on_overflow`. `None` when Arrow cannot parse the session zone, such as `Z` or `PST`
-/// (#1029); the caller then keeps its previous conversion.
+/// `null_on_overflow`. `None` for a non-Arrow zone supplied by a direct expression caller;
+/// public planning validates and normalizes the configured zone first.
 pub(crate) fn ltz_expr_to_local_timestamp(
     argument: expr::Expr,
     unit: TimeUnit,
