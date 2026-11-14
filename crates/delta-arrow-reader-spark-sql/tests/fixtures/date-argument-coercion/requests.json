@@ -1,0 +1,2634 @@
+{
+  "issue": "1194",
+  "expected_record_count": 296,
+  "corpora": [
+    {
+      "corpus": "date_args_UTC",
+      "source": "source-only #1194 ordinary scalar date argument definitions",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "date_args",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "i",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "l",
+                  "type": "long",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "dec",
+                  "type": "decimal(12,1)",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "d",
+                  "type": "double",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "f",
+                  "type": "float",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "b",
+                  "type": "boolean",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "bytes",
+                  "type": "binary",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "n",
+                  "type": "void",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "20240102",
+                "20240102",
+                "2024.0",
+                "409fa00000000000",
+                "44fd0000",
+                "True",
+                "323032342d30312d3032",
+                null
+              ],
+              [
+                "1",
+                "20240229",
+                "20240229",
+                "1999.0",
+                "409f3c0000000000",
+                "44f9e000",
+                "False",
+                "3230323430323239",
+                null
+              ],
+              [
+                "2",
+                "1",
+                "1",
+                "1.0",
+                "3ff0000000000000",
+                "3f800000",
+                "True",
+                "6e6f7420612064617465",
+                null
+              ],
+              [
+                "3",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+              ],
+              [
+                "4",
+                "20240102",
+                "20240102",
+                "2024.0",
+                "409fa00000000000",
+                "44fd0000",
+                "True",
+                "323032342d30312d3032",
+                null
+              ]
+            ]
+          }
+        ],
+        "timezone": "UTC"
+      },
+      "cases": [
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_column_i",
+          "sql": "SELECT k, to_date(i) AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_column_i_format",
+          "sql": "SELECT k, to_date(i, 'yyyyMMdd') AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_column_l",
+          "sql": "SELECT k, to_date(l) AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_column_l_format",
+          "sql": "SELECT k, to_date(l, 'yyyyMMdd') AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_column_dec",
+          "sql": "SELECT k, to_date(dec) AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_column_dec_format",
+          "sql": "SELECT k, to_date(dec, 'yyyy''.0''') AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_column_d",
+          "sql": "SELECT k, to_date(d) AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_column_d_format",
+          "sql": "SELECT k, to_date(d, 'yyyy''.0''') AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_column_f",
+          "sql": "SELECT k, to_date(f) AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_column_f_format",
+          "sql": "SELECT k, to_date(f, 'yyyy''.0''') AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_column_b",
+          "sql": "SELECT k, to_date(b) AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_column_b_format",
+          "sql": "SELECT k, to_date(b, 'yyyy-MM-dd') AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_column_bytes",
+          "sql": "SELECT k, to_date(bytes) AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_column_bytes_format",
+          "sql": "SELECT k, to_date(bytes, 'yyyyMMdd') AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_column_n",
+          "sql": "SELECT k, to_date(n) AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_column_n_format",
+          "sql": "SELECT k, to_date(n, 'yyyy-MM-dd') AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_literal_integer",
+          "sql": "SELECT to_date(20240102) AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_literal_integer_format",
+          "sql": "SELECT to_date(20240102, 'yyyyMMdd') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_literal_decimal",
+          "sql": "SELECT to_date(2024.0) AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_literal_decimal_format",
+          "sql": "SELECT to_date(2024.0, 'yyyy''.0''') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_literal_double",
+          "sql": "SELECT to_date(CAST(2024.0 AS DOUBLE)) AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_literal_double_format",
+          "sql": "SELECT to_date(CAST(2024.0 AS DOUBLE), 'yyyy''.0''') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_literal_boolean",
+          "sql": "SELECT to_date(true) AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_literal_boolean_format",
+          "sql": "SELECT to_date(true, 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_literal_binary",
+          "sql": "SELECT to_date(X'323032342D30312D3032') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_literal_binary_format",
+          "sql": "SELECT to_date(X'323032342D30312D3032', 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_literal_null",
+          "sql": "SELECT to_date(NULL) AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_literal_null_format",
+          "sql": "SELECT to_date(NULL, 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_control_string",
+          "sql": "SELECT to_date('2024-01-02') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_control_string_format",
+          "sql": "SELECT to_date('2024-01-02', 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_control_date",
+          "sql": "SELECT to_date(DATE '2024-01-02') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_control_date_format",
+          "sql": "SELECT to_date(DATE '2024-01-02', 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_control_timestamp",
+          "sql": "SELECT to_date(TIMESTAMP '2024-01-03 03:00:00') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_control_timestamp_format",
+          "sql": "SELECT to_date(TIMESTAMP '2024-01-03 03:00:00', 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_control_timestamp_ntz",
+          "sql": "SELECT to_date(TIMESTAMP_NTZ '2024-01-03 03:00:00') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_control_timestamp_ntz_format",
+          "sql": "SELECT to_date(TIMESTAMP_NTZ '2024-01-03 03:00:00', 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_column_i",
+          "sql": "SELECT k, try_to_date(i) AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_column_i_format",
+          "sql": "SELECT k, try_to_date(i, 'yyyyMMdd') AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_column_l",
+          "sql": "SELECT k, try_to_date(l) AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_column_l_format",
+          "sql": "SELECT k, try_to_date(l, 'yyyyMMdd') AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_column_dec",
+          "sql": "SELECT k, try_to_date(dec) AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_column_dec_format",
+          "sql": "SELECT k, try_to_date(dec, 'yyyy''.0''') AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_column_d",
+          "sql": "SELECT k, try_to_date(d) AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_column_d_format",
+          "sql": "SELECT k, try_to_date(d, 'yyyy''.0''') AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_column_f",
+          "sql": "SELECT k, try_to_date(f) AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_column_f_format",
+          "sql": "SELECT k, try_to_date(f, 'yyyy''.0''') AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_column_b",
+          "sql": "SELECT k, try_to_date(b) AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_column_b_format",
+          "sql": "SELECT k, try_to_date(b, 'yyyy-MM-dd') AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_column_bytes",
+          "sql": "SELECT k, try_to_date(bytes) AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_column_bytes_format",
+          "sql": "SELECT k, try_to_date(bytes, 'yyyyMMdd') AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_column_n",
+          "sql": "SELECT k, try_to_date(n) AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_column_n_format",
+          "sql": "SELECT k, try_to_date(n, 'yyyy-MM-dd') AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_literal_integer",
+          "sql": "SELECT try_to_date(20240102) AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_literal_integer_format",
+          "sql": "SELECT try_to_date(20240102, 'yyyyMMdd') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_literal_decimal",
+          "sql": "SELECT try_to_date(2024.0) AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_literal_decimal_format",
+          "sql": "SELECT try_to_date(2024.0, 'yyyy''.0''') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_literal_double",
+          "sql": "SELECT try_to_date(CAST(2024.0 AS DOUBLE)) AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_literal_double_format",
+          "sql": "SELECT try_to_date(CAST(2024.0 AS DOUBLE), 'yyyy''.0''') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_literal_boolean",
+          "sql": "SELECT try_to_date(true) AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_literal_boolean_format",
+          "sql": "SELECT try_to_date(true, 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_literal_binary",
+          "sql": "SELECT try_to_date(X'323032342D30312D3032') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_literal_binary_format",
+          "sql": "SELECT try_to_date(X'323032342D30312D3032', 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_literal_null",
+          "sql": "SELECT try_to_date(NULL) AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_literal_null_format",
+          "sql": "SELECT try_to_date(NULL, 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_control_string",
+          "sql": "SELECT try_to_date('2024-01-02') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_control_string_format",
+          "sql": "SELECT try_to_date('2024-01-02', 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_control_date",
+          "sql": "SELECT try_to_date(DATE '2024-01-02') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_control_date_format",
+          "sql": "SELECT try_to_date(DATE '2024-01-02', 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_control_timestamp",
+          "sql": "SELECT try_to_date(TIMESTAMP '2024-01-03 03:00:00') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_control_timestamp_format",
+          "sql": "SELECT try_to_date(TIMESTAMP '2024-01-03 03:00:00', 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_control_timestamp_ntz",
+          "sql": "SELECT try_to_date(TIMESTAMP_NTZ '2024-01-03 03:00:00') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_control_timestamp_ntz_format",
+          "sql": "SELECT try_to_date(TIMESTAMP_NTZ '2024-01-03 03:00:00', 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_column_i",
+          "sql": "SELECT k, to_date(i) AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_column_i_format",
+          "sql": "SELECT k, to_date(i, 'yyyyMMdd') AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_column_l",
+          "sql": "SELECT k, to_date(l) AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_column_l_format",
+          "sql": "SELECT k, to_date(l, 'yyyyMMdd') AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_column_dec",
+          "sql": "SELECT k, to_date(dec) AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_column_dec_format",
+          "sql": "SELECT k, to_date(dec, 'yyyy''.0''') AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_column_d",
+          "sql": "SELECT k, to_date(d) AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_column_d_format",
+          "sql": "SELECT k, to_date(d, 'yyyy''.0''') AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_column_f",
+          "sql": "SELECT k, to_date(f) AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_column_f_format",
+          "sql": "SELECT k, to_date(f, 'yyyy''.0''') AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_column_b",
+          "sql": "SELECT k, to_date(b) AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_column_b_format",
+          "sql": "SELECT k, to_date(b, 'yyyy-MM-dd') AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_column_bytes",
+          "sql": "SELECT k, to_date(bytes) AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_column_bytes_format",
+          "sql": "SELECT k, to_date(bytes, 'yyyyMMdd') AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_column_n",
+          "sql": "SELECT k, to_date(n) AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_column_n_format",
+          "sql": "SELECT k, to_date(n, 'yyyy-MM-dd') AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_literal_integer",
+          "sql": "SELECT to_date(20240102) AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_literal_integer_format",
+          "sql": "SELECT to_date(20240102, 'yyyyMMdd') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_literal_decimal",
+          "sql": "SELECT to_date(2024.0) AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_literal_decimal_format",
+          "sql": "SELECT to_date(2024.0, 'yyyy''.0''') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_literal_double",
+          "sql": "SELECT to_date(CAST(2024.0 AS DOUBLE)) AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_literal_double_format",
+          "sql": "SELECT to_date(CAST(2024.0 AS DOUBLE), 'yyyy''.0''') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_literal_boolean",
+          "sql": "SELECT to_date(true) AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_literal_boolean_format",
+          "sql": "SELECT to_date(true, 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_literal_binary",
+          "sql": "SELECT to_date(X'323032342D30312D3032') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_literal_binary_format",
+          "sql": "SELECT to_date(X'323032342D30312D3032', 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_literal_null",
+          "sql": "SELECT to_date(NULL) AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_literal_null_format",
+          "sql": "SELECT to_date(NULL, 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_control_string",
+          "sql": "SELECT to_date('2024-01-02') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_control_string_format",
+          "sql": "SELECT to_date('2024-01-02', 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_control_date",
+          "sql": "SELECT to_date(DATE '2024-01-02') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_control_date_format",
+          "sql": "SELECT to_date(DATE '2024-01-02', 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_control_timestamp",
+          "sql": "SELECT to_date(TIMESTAMP '2024-01-03 03:00:00') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_control_timestamp_format",
+          "sql": "SELECT to_date(TIMESTAMP '2024-01-03 03:00:00', 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_control_timestamp_ntz",
+          "sql": "SELECT to_date(TIMESTAMP_NTZ '2024-01-03 03:00:00') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_control_timestamp_ntz_format",
+          "sql": "SELECT to_date(TIMESTAMP_NTZ '2024-01-03 03:00:00', 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_column_i",
+          "sql": "SELECT k, try_to_date(i) AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_column_i_format",
+          "sql": "SELECT k, try_to_date(i, 'yyyyMMdd') AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_column_l",
+          "sql": "SELECT k, try_to_date(l) AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_column_l_format",
+          "sql": "SELECT k, try_to_date(l, 'yyyyMMdd') AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_column_dec",
+          "sql": "SELECT k, try_to_date(dec) AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_column_dec_format",
+          "sql": "SELECT k, try_to_date(dec, 'yyyy''.0''') AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_column_d",
+          "sql": "SELECT k, try_to_date(d) AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_column_d_format",
+          "sql": "SELECT k, try_to_date(d, 'yyyy''.0''') AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_column_f",
+          "sql": "SELECT k, try_to_date(f) AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_column_f_format",
+          "sql": "SELECT k, try_to_date(f, 'yyyy''.0''') AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_column_b",
+          "sql": "SELECT k, try_to_date(b) AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_column_b_format",
+          "sql": "SELECT k, try_to_date(b, 'yyyy-MM-dd') AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_column_bytes",
+          "sql": "SELECT k, try_to_date(bytes) AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_column_bytes_format",
+          "sql": "SELECT k, try_to_date(bytes, 'yyyyMMdd') AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_column_n",
+          "sql": "SELECT k, try_to_date(n) AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_column_n_format",
+          "sql": "SELECT k, try_to_date(n, 'yyyy-MM-dd') AS r FROM date_args",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_literal_integer",
+          "sql": "SELECT try_to_date(20240102) AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_literal_integer_format",
+          "sql": "SELECT try_to_date(20240102, 'yyyyMMdd') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_literal_decimal",
+          "sql": "SELECT try_to_date(2024.0) AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_literal_decimal_format",
+          "sql": "SELECT try_to_date(2024.0, 'yyyy''.0''') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_literal_double",
+          "sql": "SELECT try_to_date(CAST(2024.0 AS DOUBLE)) AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_literal_double_format",
+          "sql": "SELECT try_to_date(CAST(2024.0 AS DOUBLE), 'yyyy''.0''') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_literal_boolean",
+          "sql": "SELECT try_to_date(true) AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_literal_boolean_format",
+          "sql": "SELECT try_to_date(true, 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_literal_binary",
+          "sql": "SELECT try_to_date(X'323032342D30312D3032') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_literal_binary_format",
+          "sql": "SELECT try_to_date(X'323032342D30312D3032', 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_literal_null",
+          "sql": "SELECT try_to_date(NULL) AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_literal_null_format",
+          "sql": "SELECT try_to_date(NULL, 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_control_string",
+          "sql": "SELECT try_to_date('2024-01-02') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_control_string_format",
+          "sql": "SELECT try_to_date('2024-01-02', 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_control_date",
+          "sql": "SELECT try_to_date(DATE '2024-01-02') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_control_date_format",
+          "sql": "SELECT try_to_date(DATE '2024-01-02', 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_control_timestamp",
+          "sql": "SELECT try_to_date(TIMESTAMP '2024-01-03 03:00:00') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_control_timestamp_format",
+          "sql": "SELECT try_to_date(TIMESTAMP '2024-01-03 03:00:00', 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_control_timestamp_ntz",
+          "sql": "SELECT try_to_date(TIMESTAMP_NTZ '2024-01-03 03:00:00') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_control_timestamp_ntz_format",
+          "sql": "SELECT try_to_date(TIMESTAMP_NTZ '2024-01-03 03:00:00', 'yyyy-MM-dd') AS r",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_valid_columns",
+          "sql": "SELECT k, to_date(i, 'yyyyMMdd') AS i, to_date(l, 'yyyyMMdd') AS l, to_date(dec, 'yyyy''.0''') AS dec, to_date(d, 'yyyy''.0''') AS d, to_date(f, 'yyyy''.0''') AS f, to_date(bytes) AS bare_binary, to_date(bytes, 'yyyy-MM-dd') AS formatted_binary, to_date(n, 'yyyy-MM-dd') AS null_date FROM date_args WHERE k IN (0, 4)",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_valid_columns",
+          "sql": "SELECT k, try_to_date(i, 'yyyyMMdd') AS i, try_to_date(l, 'yyyyMMdd') AS l, try_to_date(dec, 'yyyy''.0''') AS dec, try_to_date(d, 'yyyy''.0''') AS d, try_to_date(f, 'yyyy''.0''') AS f, try_to_date(bytes) AS bare_binary, try_to_date(bytes, 'yyyy-MM-dd') AS formatted_binary, try_to_date(n, 'yyyy-MM-dd') AS null_date FROM date_args WHERE k IN (0, 4)",
+          "timezone": "UTC",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "to_date_valid_columns",
+          "sql": "SELECT k, to_date(i, 'yyyyMMdd') AS i, to_date(l, 'yyyyMMdd') AS l, to_date(dec, 'yyyy''.0''') AS dec, to_date(d, 'yyyy''.0''') AS d, to_date(f, 'yyyy''.0''') AS f, to_date(bytes) AS bare_binary, to_date(bytes, 'yyyy-MM-dd') AS formatted_binary, to_date(n, 'yyyy-MM-dd') AS null_date FROM date_args WHERE k IN (0, 4)",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_UTC",
+          "id": "try_to_date_valid_columns",
+          "sql": "SELECT k, try_to_date(i, 'yyyyMMdd') AS i, try_to_date(l, 'yyyyMMdd') AS l, try_to_date(dec, 'yyyy''.0''') AS dec, try_to_date(d, 'yyyy''.0''') AS d, try_to_date(f, 'yyyy''.0''') AS f, try_to_date(bytes) AS bare_binary, try_to_date(bytes, 'yyyy-MM-dd') AS formatted_binary, try_to_date(n, 'yyyy-MM-dd') AS null_date FROM date_args WHERE k IN (0, 4)",
+          "timezone": "UTC",
+          "ansi": false,
+          "ordered": false
+        }
+      ]
+    },
+    {
+      "corpus": "date_args_America_Los_Angeles",
+      "source": "source-only #1194 ordinary scalar date argument definitions",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "date_args",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "i",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "l",
+                  "type": "long",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "dec",
+                  "type": "decimal(12,1)",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "d",
+                  "type": "double",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "f",
+                  "type": "float",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "b",
+                  "type": "boolean",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "bytes",
+                  "type": "binary",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "n",
+                  "type": "void",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "20240102",
+                "20240102",
+                "2024.0",
+                "409fa00000000000",
+                "44fd0000",
+                "True",
+                "323032342d30312d3032",
+                null
+              ],
+              [
+                "1",
+                "20240229",
+                "20240229",
+                "1999.0",
+                "409f3c0000000000",
+                "44f9e000",
+                "False",
+                "3230323430323239",
+                null
+              ],
+              [
+                "2",
+                "1",
+                "1",
+                "1.0",
+                "3ff0000000000000",
+                "3f800000",
+                "True",
+                "6e6f7420612064617465",
+                null
+              ],
+              [
+                "3",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+              ],
+              [
+                "4",
+                "20240102",
+                "20240102",
+                "2024.0",
+                "409fa00000000000",
+                "44fd0000",
+                "True",
+                "323032342d30312d3032",
+                null
+              ]
+            ]
+          }
+        ],
+        "timezone": "America/Los_Angeles"
+      },
+      "cases": [
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_column_i",
+          "sql": "SELECT k, to_date(i) AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_column_i_format",
+          "sql": "SELECT k, to_date(i, 'yyyyMMdd') AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_column_l",
+          "sql": "SELECT k, to_date(l) AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_column_l_format",
+          "sql": "SELECT k, to_date(l, 'yyyyMMdd') AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_column_dec",
+          "sql": "SELECT k, to_date(dec) AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_column_dec_format",
+          "sql": "SELECT k, to_date(dec, 'yyyy''.0''') AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_column_d",
+          "sql": "SELECT k, to_date(d) AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_column_d_format",
+          "sql": "SELECT k, to_date(d, 'yyyy''.0''') AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_column_f",
+          "sql": "SELECT k, to_date(f) AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_column_f_format",
+          "sql": "SELECT k, to_date(f, 'yyyy''.0''') AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_column_b",
+          "sql": "SELECT k, to_date(b) AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_column_b_format",
+          "sql": "SELECT k, to_date(b, 'yyyy-MM-dd') AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_column_bytes",
+          "sql": "SELECT k, to_date(bytes) AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_column_bytes_format",
+          "sql": "SELECT k, to_date(bytes, 'yyyyMMdd') AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_column_n",
+          "sql": "SELECT k, to_date(n) AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_column_n_format",
+          "sql": "SELECT k, to_date(n, 'yyyy-MM-dd') AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_literal_integer",
+          "sql": "SELECT to_date(20240102) AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_literal_integer_format",
+          "sql": "SELECT to_date(20240102, 'yyyyMMdd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_literal_decimal",
+          "sql": "SELECT to_date(2024.0) AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_literal_decimal_format",
+          "sql": "SELECT to_date(2024.0, 'yyyy''.0''') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_literal_double",
+          "sql": "SELECT to_date(CAST(2024.0 AS DOUBLE)) AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_literal_double_format",
+          "sql": "SELECT to_date(CAST(2024.0 AS DOUBLE), 'yyyy''.0''') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_literal_boolean",
+          "sql": "SELECT to_date(true) AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_literal_boolean_format",
+          "sql": "SELECT to_date(true, 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_literal_binary",
+          "sql": "SELECT to_date(X'323032342D30312D3032') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_literal_binary_format",
+          "sql": "SELECT to_date(X'323032342D30312D3032', 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_literal_null",
+          "sql": "SELECT to_date(NULL) AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_literal_null_format",
+          "sql": "SELECT to_date(NULL, 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_control_string",
+          "sql": "SELECT to_date('2024-01-02') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_control_string_format",
+          "sql": "SELECT to_date('2024-01-02', 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_control_date",
+          "sql": "SELECT to_date(DATE '2024-01-02') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_control_date_format",
+          "sql": "SELECT to_date(DATE '2024-01-02', 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_control_timestamp",
+          "sql": "SELECT to_date(TIMESTAMP '2024-01-03 03:00:00') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_control_timestamp_format",
+          "sql": "SELECT to_date(TIMESTAMP '2024-01-03 03:00:00', 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_control_timestamp_ntz",
+          "sql": "SELECT to_date(TIMESTAMP_NTZ '2024-01-03 03:00:00') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_control_timestamp_ntz_format",
+          "sql": "SELECT to_date(TIMESTAMP_NTZ '2024-01-03 03:00:00', 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_column_i",
+          "sql": "SELECT k, try_to_date(i) AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_column_i_format",
+          "sql": "SELECT k, try_to_date(i, 'yyyyMMdd') AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_column_l",
+          "sql": "SELECT k, try_to_date(l) AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_column_l_format",
+          "sql": "SELECT k, try_to_date(l, 'yyyyMMdd') AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_column_dec",
+          "sql": "SELECT k, try_to_date(dec) AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_column_dec_format",
+          "sql": "SELECT k, try_to_date(dec, 'yyyy''.0''') AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_column_d",
+          "sql": "SELECT k, try_to_date(d) AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_column_d_format",
+          "sql": "SELECT k, try_to_date(d, 'yyyy''.0''') AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_column_f",
+          "sql": "SELECT k, try_to_date(f) AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_column_f_format",
+          "sql": "SELECT k, try_to_date(f, 'yyyy''.0''') AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_column_b",
+          "sql": "SELECT k, try_to_date(b) AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_column_b_format",
+          "sql": "SELECT k, try_to_date(b, 'yyyy-MM-dd') AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_column_bytes",
+          "sql": "SELECT k, try_to_date(bytes) AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_column_bytes_format",
+          "sql": "SELECT k, try_to_date(bytes, 'yyyyMMdd') AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_column_n",
+          "sql": "SELECT k, try_to_date(n) AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_column_n_format",
+          "sql": "SELECT k, try_to_date(n, 'yyyy-MM-dd') AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_literal_integer",
+          "sql": "SELECT try_to_date(20240102) AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_literal_integer_format",
+          "sql": "SELECT try_to_date(20240102, 'yyyyMMdd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_literal_decimal",
+          "sql": "SELECT try_to_date(2024.0) AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_literal_decimal_format",
+          "sql": "SELECT try_to_date(2024.0, 'yyyy''.0''') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_literal_double",
+          "sql": "SELECT try_to_date(CAST(2024.0 AS DOUBLE)) AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_literal_double_format",
+          "sql": "SELECT try_to_date(CAST(2024.0 AS DOUBLE), 'yyyy''.0''') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_literal_boolean",
+          "sql": "SELECT try_to_date(true) AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_literal_boolean_format",
+          "sql": "SELECT try_to_date(true, 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_literal_binary",
+          "sql": "SELECT try_to_date(X'323032342D30312D3032') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_literal_binary_format",
+          "sql": "SELECT try_to_date(X'323032342D30312D3032', 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_literal_null",
+          "sql": "SELECT try_to_date(NULL) AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_literal_null_format",
+          "sql": "SELECT try_to_date(NULL, 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_control_string",
+          "sql": "SELECT try_to_date('2024-01-02') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_control_string_format",
+          "sql": "SELECT try_to_date('2024-01-02', 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_control_date",
+          "sql": "SELECT try_to_date(DATE '2024-01-02') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_control_date_format",
+          "sql": "SELECT try_to_date(DATE '2024-01-02', 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_control_timestamp",
+          "sql": "SELECT try_to_date(TIMESTAMP '2024-01-03 03:00:00') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_control_timestamp_format",
+          "sql": "SELECT try_to_date(TIMESTAMP '2024-01-03 03:00:00', 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_control_timestamp_ntz",
+          "sql": "SELECT try_to_date(TIMESTAMP_NTZ '2024-01-03 03:00:00') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_control_timestamp_ntz_format",
+          "sql": "SELECT try_to_date(TIMESTAMP_NTZ '2024-01-03 03:00:00', 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_column_i",
+          "sql": "SELECT k, to_date(i) AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_column_i_format",
+          "sql": "SELECT k, to_date(i, 'yyyyMMdd') AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_column_l",
+          "sql": "SELECT k, to_date(l) AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_column_l_format",
+          "sql": "SELECT k, to_date(l, 'yyyyMMdd') AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_column_dec",
+          "sql": "SELECT k, to_date(dec) AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_column_dec_format",
+          "sql": "SELECT k, to_date(dec, 'yyyy''.0''') AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_column_d",
+          "sql": "SELECT k, to_date(d) AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_column_d_format",
+          "sql": "SELECT k, to_date(d, 'yyyy''.0''') AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_column_f",
+          "sql": "SELECT k, to_date(f) AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_column_f_format",
+          "sql": "SELECT k, to_date(f, 'yyyy''.0''') AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_column_b",
+          "sql": "SELECT k, to_date(b) AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_column_b_format",
+          "sql": "SELECT k, to_date(b, 'yyyy-MM-dd') AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_column_bytes",
+          "sql": "SELECT k, to_date(bytes) AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_column_bytes_format",
+          "sql": "SELECT k, to_date(bytes, 'yyyyMMdd') AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_column_n",
+          "sql": "SELECT k, to_date(n) AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_column_n_format",
+          "sql": "SELECT k, to_date(n, 'yyyy-MM-dd') AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_literal_integer",
+          "sql": "SELECT to_date(20240102) AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_literal_integer_format",
+          "sql": "SELECT to_date(20240102, 'yyyyMMdd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_literal_decimal",
+          "sql": "SELECT to_date(2024.0) AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_literal_decimal_format",
+          "sql": "SELECT to_date(2024.0, 'yyyy''.0''') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_literal_double",
+          "sql": "SELECT to_date(CAST(2024.0 AS DOUBLE)) AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_literal_double_format",
+          "sql": "SELECT to_date(CAST(2024.0 AS DOUBLE), 'yyyy''.0''') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_literal_boolean",
+          "sql": "SELECT to_date(true) AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_literal_boolean_format",
+          "sql": "SELECT to_date(true, 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_literal_binary",
+          "sql": "SELECT to_date(X'323032342D30312D3032') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_literal_binary_format",
+          "sql": "SELECT to_date(X'323032342D30312D3032', 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_literal_null",
+          "sql": "SELECT to_date(NULL) AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_literal_null_format",
+          "sql": "SELECT to_date(NULL, 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_control_string",
+          "sql": "SELECT to_date('2024-01-02') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_control_string_format",
+          "sql": "SELECT to_date('2024-01-02', 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_control_date",
+          "sql": "SELECT to_date(DATE '2024-01-02') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_control_date_format",
+          "sql": "SELECT to_date(DATE '2024-01-02', 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_control_timestamp",
+          "sql": "SELECT to_date(TIMESTAMP '2024-01-03 03:00:00') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_control_timestamp_format",
+          "sql": "SELECT to_date(TIMESTAMP '2024-01-03 03:00:00', 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_control_timestamp_ntz",
+          "sql": "SELECT to_date(TIMESTAMP_NTZ '2024-01-03 03:00:00') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_control_timestamp_ntz_format",
+          "sql": "SELECT to_date(TIMESTAMP_NTZ '2024-01-03 03:00:00', 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_column_i",
+          "sql": "SELECT k, try_to_date(i) AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_column_i_format",
+          "sql": "SELECT k, try_to_date(i, 'yyyyMMdd') AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_column_l",
+          "sql": "SELECT k, try_to_date(l) AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_column_l_format",
+          "sql": "SELECT k, try_to_date(l, 'yyyyMMdd') AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_column_dec",
+          "sql": "SELECT k, try_to_date(dec) AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_column_dec_format",
+          "sql": "SELECT k, try_to_date(dec, 'yyyy''.0''') AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_column_d",
+          "sql": "SELECT k, try_to_date(d) AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_column_d_format",
+          "sql": "SELECT k, try_to_date(d, 'yyyy''.0''') AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_column_f",
+          "sql": "SELECT k, try_to_date(f) AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_column_f_format",
+          "sql": "SELECT k, try_to_date(f, 'yyyy''.0''') AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_column_b",
+          "sql": "SELECT k, try_to_date(b) AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_column_b_format",
+          "sql": "SELECT k, try_to_date(b, 'yyyy-MM-dd') AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_column_bytes",
+          "sql": "SELECT k, try_to_date(bytes) AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_column_bytes_format",
+          "sql": "SELECT k, try_to_date(bytes, 'yyyyMMdd') AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_column_n",
+          "sql": "SELECT k, try_to_date(n) AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_column_n_format",
+          "sql": "SELECT k, try_to_date(n, 'yyyy-MM-dd') AS r FROM date_args",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_literal_integer",
+          "sql": "SELECT try_to_date(20240102) AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_literal_integer_format",
+          "sql": "SELECT try_to_date(20240102, 'yyyyMMdd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_literal_decimal",
+          "sql": "SELECT try_to_date(2024.0) AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_literal_decimal_format",
+          "sql": "SELECT try_to_date(2024.0, 'yyyy''.0''') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_literal_double",
+          "sql": "SELECT try_to_date(CAST(2024.0 AS DOUBLE)) AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_literal_double_format",
+          "sql": "SELECT try_to_date(CAST(2024.0 AS DOUBLE), 'yyyy''.0''') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_literal_boolean",
+          "sql": "SELECT try_to_date(true) AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_literal_boolean_format",
+          "sql": "SELECT try_to_date(true, 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_literal_binary",
+          "sql": "SELECT try_to_date(X'323032342D30312D3032') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_literal_binary_format",
+          "sql": "SELECT try_to_date(X'323032342D30312D3032', 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_literal_null",
+          "sql": "SELECT try_to_date(NULL) AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_literal_null_format",
+          "sql": "SELECT try_to_date(NULL, 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_control_string",
+          "sql": "SELECT try_to_date('2024-01-02') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_control_string_format",
+          "sql": "SELECT try_to_date('2024-01-02', 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_control_date",
+          "sql": "SELECT try_to_date(DATE '2024-01-02') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_control_date_format",
+          "sql": "SELECT try_to_date(DATE '2024-01-02', 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_control_timestamp",
+          "sql": "SELECT try_to_date(TIMESTAMP '2024-01-03 03:00:00') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_control_timestamp_format",
+          "sql": "SELECT try_to_date(TIMESTAMP '2024-01-03 03:00:00', 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_control_timestamp_ntz",
+          "sql": "SELECT try_to_date(TIMESTAMP_NTZ '2024-01-03 03:00:00') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_control_timestamp_ntz_format",
+          "sql": "SELECT try_to_date(TIMESTAMP_NTZ '2024-01-03 03:00:00', 'yyyy-MM-dd') AS r",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_valid_columns",
+          "sql": "SELECT k, to_date(i, 'yyyyMMdd') AS i, to_date(l, 'yyyyMMdd') AS l, to_date(dec, 'yyyy''.0''') AS dec, to_date(d, 'yyyy''.0''') AS d, to_date(f, 'yyyy''.0''') AS f, to_date(bytes) AS bare_binary, to_date(bytes, 'yyyy-MM-dd') AS formatted_binary, to_date(n, 'yyyy-MM-dd') AS null_date FROM date_args WHERE k IN (0, 4)",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_valid_columns",
+          "sql": "SELECT k, try_to_date(i, 'yyyyMMdd') AS i, try_to_date(l, 'yyyyMMdd') AS l, try_to_date(dec, 'yyyy''.0''') AS dec, try_to_date(d, 'yyyy''.0''') AS d, try_to_date(f, 'yyyy''.0''') AS f, try_to_date(bytes) AS bare_binary, try_to_date(bytes, 'yyyy-MM-dd') AS formatted_binary, try_to_date(n, 'yyyy-MM-dd') AS null_date FROM date_args WHERE k IN (0, 4)",
+          "timezone": "America/Los_Angeles",
+          "ansi": true,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "to_date_valid_columns",
+          "sql": "SELECT k, to_date(i, 'yyyyMMdd') AS i, to_date(l, 'yyyyMMdd') AS l, to_date(dec, 'yyyy''.0''') AS dec, to_date(d, 'yyyy''.0''') AS d, to_date(f, 'yyyy''.0''') AS f, to_date(bytes) AS bare_binary, to_date(bytes, 'yyyy-MM-dd') AS formatted_binary, to_date(n, 'yyyy-MM-dd') AS null_date FROM date_args WHERE k IN (0, 4)",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        },
+        {
+          "corpus": "date_args_America_Los_Angeles",
+          "id": "try_to_date_valid_columns",
+          "sql": "SELECT k, try_to_date(i, 'yyyyMMdd') AS i, try_to_date(l, 'yyyyMMdd') AS l, try_to_date(dec, 'yyyy''.0''') AS dec, try_to_date(d, 'yyyy''.0''') AS d, try_to_date(f, 'yyyy''.0''') AS f, try_to_date(bytes) AS bare_binary, try_to_date(bytes, 'yyyy-MM-dd') AS formatted_binary, try_to_date(n, 'yyyy-MM-dd') AS null_date FROM date_args WHERE k IN (0, 4)",
+          "timezone": "America/Los_Angeles",
+          "ansi": false,
+          "ordered": false
+        }
+      ]
+    }
+  ]
+}

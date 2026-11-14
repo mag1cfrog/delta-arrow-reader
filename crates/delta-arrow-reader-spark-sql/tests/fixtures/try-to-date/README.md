@@ -32,8 +32,9 @@ Each record keeps the analyzed, optimized and executed schemas and values read f
 internal rows, collected through the Dataset API. `ConvertToLocalRelation` is excluded.
 
 `try_to_date.rs` compares names, type families with the session zone, nullability, metadata and
-typed rows at batch sizes 1 and 32. A failure must occur at Spark's stage with Spark's
-condition. A second test runs the STRING and DATE column records over encoded copies of the
+typed rows at batch sizes 1 and 32. Repaired INT, BOOLEAN and untyped NULL records compare
+final values and executed types, without nullable flags, metadata or error-stage matching.
+Other failures retain their existing checks. A second test runs the STRING and DATE column records over encoded copies of the
 inputs and requires the same results: dictionary-encoded STRING columns, as Delta's provider
 gives partition columns; STRING columns as string views, as Delta's reader gives data columns,
 and as large strings; and DATE columns as Arrow's Date64. Two differences are retained, each at
@@ -41,9 +42,13 @@ DAR's current result:
 - #1057: TO_DATE of `s` with the format in ANSI mode reports DAR's parser message without
   Spark's condition, for whichever failing row reports first (2 records, and their encoded
   copies);
-- #1194: TRY_TO_DATE of an INT gives 1970-01-02, of a BOOLEAN or an ARRAY fails while
-  optimizing, and of an untyped NULL with a format fails while collecting rows (16 records).
+- #1236: TRY_TO_DATE of an ARRAY fails while optimizing, where Spark rejects it during
+  analysis (4 records).
 TRY_TO_DATE of a TIMESTAMP_NTZ with the format in Los Angeles gives Spark's DATE since #1222.
+
+The [date argument fixture](../date-argument-coercion/README.md) adds ordinary numeric,
+BOOLEAN, BINARY and NULL literals/columns for both functions. The original 116 raw records
+remain unchanged.
 
 Recapture from the crate root:
 

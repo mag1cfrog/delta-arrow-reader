@@ -4820,3 +4820,11 @@ observations of DOUBLE/DECIMAL seconds and checked integral epoch scaling in UTC
 America/Los_Angeles, in both ANSI modes. The replay checks final values and executed types,
 including NULL/nonfinite inputs and arithmetic failures, alongside the existing
 [session-zone epoch references](timestamp-from-epoch/README.md).
+
+## Date argument coercion
+
+The [date argument fixture](date-argument-coercion/README.md) records 296 Spark 4.2.0
+observations of TO_DATE and TRY_TO_DATE over ordinary numeric, BOOLEAN, BINARY and NULL
+arguments, with and without formats, in both ANSI modes and UTC/Los_Angeles sessions.
+It checks final rows and executed types alongside the unchanged
+[TRY_TO_DATE temporal references](try-to-date/README.md) and encoded input controls.
