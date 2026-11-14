@@ -12,6 +12,7 @@ use super::pattern::{
 pub struct TimeZoneDisplay<'a> {
     pub offset: FixedOffset,
     pub name: Option<&'a str>,
+    pub abbreviation: Option<&'a str>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -133,6 +134,20 @@ fn format_localized_offset(
     let seconds = timezone.map(|tz| tz.offset.local_minus_utc()).unwrap_or(0);
     output.push_str("GMT");
     if seconds == 0 {
+        return;
+    }
+    if count == 1 {
+        let magnitude = seconds.abs();
+        output.push(if seconds < 0 { '-' } else { '+' });
+        output.push_str(&(magnitude / 3600).to_string());
+        if magnitude % 3600 != 0 {
+            output.push(':');
+            push_exact_padded((magnitude % 3600 / 60) as i64, 2, output);
+            if magnitude % 60 != 0 {
+                output.push(':');
+                push_exact_padded((magnitude % 60) as i64, 2, output);
+            }
+        }
         return;
     }
     push_offset(
@@ -320,7 +335,19 @@ fn format_zone_spec(spec: &ZoneSpec, input: DateTimeFormatInput<'_>, output: &mu
             );
         }
         ZoneField::ZoneName => {
-            output.push_str(input.timezone.and_then(|tz| tz.name).unwrap_or("UTC"));
+            // shortcut: Localized names beyond installed TZDB labels remain under #1236.
+            output.push_str(
+                input
+                    .timezone
+                    .and_then(|tz| {
+                        if spec.width <= 3 {
+                            tz.abbreviation.or(tz.name)
+                        } else {
+                            tz.name
+                        }
+                    })
+                    .unwrap_or("UTC"),
+            );
         }
     }
 }

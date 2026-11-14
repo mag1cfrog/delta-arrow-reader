@@ -431,6 +431,7 @@ fn format_timestamp_field(
             timezone: Some(TimeZoneDisplay {
                 offset: local_dt.offset().fix(),
                 name: Some(session_timezone),
+                abbreviation: None,
             }),
             zone_id: Some(session_timezone),
         };

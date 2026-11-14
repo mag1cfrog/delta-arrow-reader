@@ -27,6 +27,7 @@ mod tests {
             timezone: Some(TimeZoneDisplay {
                 offset: FixedOffset::east_opt(0).unwrap(),
                 name: Some("UTC"),
+                abbreviation: None,
             }),
             zone_id: Some("UTC"),
         };

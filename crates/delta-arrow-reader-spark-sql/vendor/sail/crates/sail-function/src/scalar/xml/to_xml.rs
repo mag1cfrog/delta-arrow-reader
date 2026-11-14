@@ -867,6 +867,7 @@ fn format_timestamp_field(
             timezone: Some(TimeZoneDisplay {
                 offset,
                 name: Some(&options.session_timezone),
+                abbreviation: None,
             }),
             zone_id: Some(&options.session_timezone),
         };

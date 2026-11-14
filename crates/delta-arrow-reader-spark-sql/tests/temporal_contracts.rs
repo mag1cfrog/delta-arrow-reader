@@ -23,10 +23,7 @@ use spark_inputs::register_recorded_inputs;
 mod spark_results;
 use spark_results::{TestResult, capture_schema, validate_batch};
 
-const UTC: &str = "UTC";
 const LOS_ANGELES: &str = "America/Los_Angeles";
-/// The registered TIMESTAMP_NTZ value 2024-03-10 02:30:00, a local time Los Angeles skips.
-const SKIPPED_LOCAL_TIME: &str = "1710037800000000";
 
 fn temporal_references() -> TestResult<Vec<Value>> {
     let records = include_str!("fixtures/temporal-contracts/temporal-contracts-spark.jsonl")
@@ -41,6 +38,157 @@ fn temporal_references() -> TestResult<Vec<Value>> {
     );
     assert_eq!(records.len() - 1, 6020);
     Ok(records)
+}
+
+fn date_format_zone_references() -> TestResult<(Vec<Value>, Value)> {
+    let records = include_str!("fixtures/date-format-zones/spark.jsonl")
+        .lines()
+        .map(serde_json::from_str)
+        .collect::<Result<Vec<Value>, _>>()?;
+    let requests: Value =
+        serde_json::from_str(include_str!("fixtures/date-format-zones/requests.json"))?;
+    assert_eq!(records[0]["spark_version"], "4.2.0");
+    assert_eq!(records.len() - 1, 122);
+    let mut requested = Vec::new();
+    for corpus in requests["corpora"].as_array().ok_or("missing corpora")? {
+        requested.extend(corpus["cases"].as_array().ok_or("missing cases")?);
+    }
+    assert_eq!(requested.len(), 122);
+    for (case, request) in records[1..].iter().zip(requested) {
+        for key in [
+            "corpus", "id", "sql", "ansi", "timezone", "ordered", "scope",
+        ] {
+            assert_eq!(case[key], request[key], "case identity {key}");
+        }
+    }
+    Ok((records, requests))
+}
+
+fn date_format_session(batch_size: usize) -> SessionContext {
+    SessionContext::new_with_state(
+        configure_spark_sql(
+            SessionStateBuilder::new()
+                .with_default_features()
+                .with_config(
+                    SessionConfig::new()
+                        .with_batch_size(batch_size)
+                        .with_target_partitions(1),
+                ),
+        )
+        .build(),
+    )
+}
+
+fn date_format_result_differences(
+    case: &Value,
+    observed: &Value,
+    expected_rows: &Value,
+) -> Vec<&'static str> {
+    assert_eq!(case["expected"]["status"], "ok");
+    let executed_types = |schema: &Value| {
+        schema["fields"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|field| field["type"].clone())
+            .collect::<Vec<_>>()
+    };
+    let mut differing = Vec::new();
+    if executed_types(&case["schema_stages"]["executed"]) != executed_types(&observed["executed"]) {
+        differing.push("executed types");
+    }
+    if observed["rows"] != *expected_rows {
+        differing.push("rows");
+    }
+    differing
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn date_format_common_zones_match_spark() -> TestResult {
+    let (records, requests) = date_format_zone_references()?;
+    let cases: Vec<_> = records[1..]
+        .iter()
+        .filter(|case| matches!(case["scope"].as_str(), Some("common" | "alias")))
+        .collect();
+    assert_eq!(cases.len(), 104);
+    let mut differences = Vec::new();
+    for batch_size in [1, 32] {
+        let session = date_format_session(batch_size);
+        register_recorded_inputs(&session, &requests["corpora"][0]["metadata"], batch_size)?;
+        for case in &cases {
+            let observed = observe(&session, case).await;
+            println!(
+                "format_zone_observation={}",
+                json!({"id":case["id"],
+                "timezone":case["timezone"], "ansi":case["ansi"], "scope":case["scope"],
+                "batch":batch_size,"expected":case["expected"],
+                "executed":case["schema_stages"]["executed"], "actual":observed})
+            );
+            let differing =
+                date_format_result_differences(case, &observed, &case["expected"]["rows"]);
+            if !differing.is_empty() {
+                differences.push(json!({"id":case["id"], "timezone":case["timezone"],
+                    "ansi":case["ansi"],"batch":batch_size,"differing":differing,
+                    "expected":case["expected"],"actual":observed}));
+            }
+        }
+    }
+    assert!(
+        differences.is_empty(),
+        "{} differences: {}",
+        differences.len(),
+        json!(differences)
+    );
+    Ok(())
+}
+
+/// Recorded display-name differences, separate from exact Spark comparisons: long zone
+/// names keep region IDs and Kathmandu's short name falls back to its numeric offset.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn localized_zone_names_keep_documented_fallbacks() -> TestResult {
+    let (records, requests) = date_format_zone_references()?;
+    let cases: Vec<_> = records[1..]
+        .iter()
+        .filter(|case| {
+            matches!(
+                case["scope"].as_str(),
+                Some("long_boundary" | "short_boundary")
+            )
+        })
+        .collect();
+    assert_eq!(cases.len(), 18);
+    for batch_size in [1, 32] {
+        let session = date_format_session(batch_size);
+        register_recorded_inputs(&session, &requests["corpora"][0]["metadata"], batch_size)?;
+        for case in &cases {
+            let fallback = if case["scope"] == "short_boundary" {
+                "+05:45"
+            } else {
+                text(case, "timezone")?
+            };
+            let mut rows = case["expected"]["rows"].clone();
+            for row in rows.as_array_mut().ok_or("missing rows")? {
+                for value in row.as_array_mut().ok_or("missing row")?.iter_mut().skip(1) {
+                    if !value.is_null() {
+                        *value = json!(fallback);
+                    }
+                }
+            }
+            let observed = observe(&session, case).await;
+            println!(
+                "format_zone_boundary_observation={}",
+                json!({"id":case["id"],
+                "timezone":case["timezone"],"ansi":case["ansi"],"scope":case["scope"],
+                "batch":batch_size,"spark":case["expected"],"fallback_rows":rows,
+                "executed":case["schema_stages"]["executed"],"actual":observed})
+            );
+            assert!(
+                date_format_result_differences(case, &observed, &rows).is_empty(),
+                "zone fallback: {case}; {observed}"
+            );
+        }
+    }
+    Ok(())
 }
 
 /// Spark records by id, session time zone and ANSI mode, and the registered rows that
@@ -272,12 +420,8 @@ enum RetainedDifference {
     /// #1011: DATE and TIMESTAMP strings with years beyond the date library's range behave
     /// like the invalid string 'bad'.
     OutOfRangeStrings,
-    /// #1014: DATE_FORMAT zone names and `O` offsets differ, and DATE and TIMESTAMP_NTZ
-    /// inputs show UTC zone tokens.
-    ZoneTokenText,
-    /// #1014: DATE_FORMAT keeps the hour of a TIMESTAMP_NTZ local time skipped by a DST
-    /// change instead of moving it past the gap.
-    SkippedLocalTimeAsWritten,
+    /// #1236: long localized names use region IDs, and historical short names use TZDB LMT.
+    LocalizedZoneNames,
     /// #1016: DATE_FORMAT, ANSI formatted parsing and temporal-to-STRING casts are nullable
     /// at analysis, where Spark declares them required.
     NullableFormattingResults,
@@ -373,32 +517,6 @@ const ZONE_LETTERS: &[char] = &['z', 'V', 'O', 'X', 'x', 'Z'];
 /// Pattern letters that print an hour.
 const HOUR_LETTERS: &[char] = &['H', 'h', 'K', 'k'];
 
-/// #1014: the zone names and `O` offsets DAR prints for a value Spark formats in `timezone`.
-/// DAR prints the Los Angeles local mean time offset without its seconds.
-fn dar_zone_text(value: &Value, timezone: &str) -> TestResult<Value> {
-    let Some(text) = value.as_str() else {
-        return Ok(value.clone());
-    };
-    Ok(json!(match timezone {
-        UTC => text.replace("Coordinated Universal Time", "UTC"),
-        LOS_ANGELES => {
-            let mut text = text.to_owned();
-            for name in [
-                "Pacific Standard Time",
-                "Pacific Daylight Time",
-                "PST",
-                "PDT",
-            ] {
-                text = text.replace(name, LOS_ANGELES);
-            }
-            text.replace("GMT-7:52:58", "GMT-0752")
-                .replace("GMT-8", "GMT-0800")
-                .replace("GMT-7", "GMT-0700")
-        }
-        other => return Err(format!("unexpected time zone {other}").into()),
-    }))
-}
-
 /// The input kinds a DATE_FORMAT record formats in each output column.
 fn input_kinds(case: &Value) -> TestResult<Vec<&str>> {
     case["inputs"]
@@ -427,10 +545,10 @@ fn row_pattern<'a>(
         .ok_or_else(|| "missing registered pattern".into())
 }
 
-/// #1014: DAR formats every DATE and TIMESTAMP_NTZ input as a UTC value, so in Los Angeles
-/// they print the Spark UTC session's text; TIMESTAMP literals and columns follow the session
-/// zone. Zone names then use DAR's text.
-fn rewrite_formatted_zones(
+/// Keep only the localized-name boundary: modern short names, offsets and local-time
+/// interpretation use the raw Spark results. This corpus has long `zzzz` patterns and
+/// Los Angeles local-mean-time rows whose installed TZDB short name is LMT rather than PST.
+fn rewrite_localized_zone_names(
     current: &mut Value,
     case: &Value,
     references: &References,
@@ -438,53 +556,80 @@ fn rewrite_formatted_zones(
 ) -> TestResult {
     let timezone = text(case, "timezone")?;
     let kinds = input_kinds(case)?;
-    let utc_rows = references.sibling(case, text(case, "id")?, UTC)?["expected"]["rows"]
-        .as_array()
-        .ok_or("missing UTC rows")?;
+    let literal = reads_only_literals(case)?;
     let rows = current["expected"]["rows"]
         .as_array_mut()
         .ok_or("missing rows")?;
-    if rows.len() != utc_rows.len() {
-        return Err("UTC rows differ in count".into());
-    }
-    for (row, utc_row) in rows.iter_mut().zip(utc_rows) {
+    for row in rows {
+        if row
+            .as_array()
+            .ok_or("missing row")?
+            .iter()
+            .skip(1)
+            .all(Value::is_null)
+        {
+            continue;
+        }
+        let pattern = if let Some(pattern) = case["pattern"].as_str() {
+            pattern
+        } else if case["id"] == "format_column_pattern" {
+            row_pattern(case, row.as_array().ok_or("missing row")?, references)?
+        } else {
+            continue;
+        };
+        let long_name = pattern == "zzzz";
+        let short_name = !long_name && has_pattern_letter(pattern, &['z']);
+        if !long_name && !short_name {
+            continue;
+        }
+        let inputs = if !literal {
+            Some(references.values_row(&row[0])?)
+        } else {
+            None
+        };
         let row = row.as_array_mut().ok_or("missing row")?;
-        let utc_row = utc_row.as_array().ok_or("missing UTC row")?;
         for (index, kind) in kinds.iter().enumerate() {
-            let value = match (*kind, timezone) {
-                ("key" | "null", _) => continue,
-                ("date" | "timestamp_ntz", LOS_ANGELES) => dar_zone_text(&utc_row[index], UTC)?,
-                ("date" | "timestamp_literal" | "timestamp_column" | "timestamp_ntz", _) => {
-                    dar_zone_text(&row[index], timezone)?
-                }
-                (other, _) => return Err(format!("unexpected input kind {other}").into()),
-            };
-            if value == row[index] {
+            if matches!(*kind, "key" | "null") {
                 continue;
             }
-            match (*kind, timezone) {
-                ("date" | "timestamp_ntz", LOS_ANGELES) => {
-                    let pattern = row_pattern(case, row, references)?;
-                    let zone_letter = has_pattern_letter(pattern, ZONE_LETTERS);
-                    let skipped = *kind == "timestamp_ntz"
-                        && !reads_only_literals(case)?
-                        && references.values_row(&row[0])?[3] == SKIPPED_LOCAL_TIME
-                        && has_pattern_letter(pattern, HOUR_LETTERS);
-                    if !zone_letter && !skipped {
-                        return Err(format!("unexpected local-time value in {}", case["id"]).into());
-                    }
-                    if zone_letter {
-                        retained.insert(RetainedDifference::ZoneTokenText);
-                    }
-                    if skipped {
-                        retained.insert(RetainedDifference::SkippedLocalTimeAsWritten);
-                    }
+            let Some(value) = row[index].as_str() else {
+                continue;
+            };
+            let mut replaced = value.to_owned();
+            if long_name {
+                for name in [
+                    "Coordinated Universal Time",
+                    "Pacific Standard Time",
+                    "Pacific Daylight Time",
+                ] {
+                    replaced = replaced.replace(name, timezone);
                 }
-                _ => {
-                    retained.insert(RetainedDifference::ZoneTokenText);
+            } else if timezone == LOS_ANGELES
+                && let Some(inputs) = inputs
+            {
+                let source_index = match *kind {
+                    "date" => 1,
+                    "timestamp_column" => 2,
+                    "timestamp_ntz" => 3,
+                    other => return Err(format!("unexpected historical input {other}").into()),
+                };
+                if let Some(stored) = inputs[source_index].as_str() {
+                    let stored = stored.parse::<i128>()?;
+                    let micros = if *kind == "date" {
+                        stored * 86_400_000_000
+                    } else {
+                        stored
+                    };
+                    // Los Angeles standardized its local mean time on 1883-11-18 at 20:00 UTC.
+                    if micros < -2_717_640_000_000_000 {
+                        replaced = replaced.replace("PST", "LMT");
+                    }
                 }
             }
-            row[index] = value;
+            if replaced != value {
+                row[index] = json!(replaced);
+                retained.insert(RetainedDifference::LocalizedZoneNames);
+            }
         }
     }
     Ok(())
@@ -641,7 +786,7 @@ fn current_expectation(
         }
     }
     if section == "format" && case["expected"]["status"] == "ok" {
-        rewrite_formatted_zones(&mut current, case, references, &mut retained)?;
+        rewrite_localized_zone_names(&mut current, case, references, &mut retained)?;
     }
     Ok((current, retained))
 }
@@ -708,8 +853,7 @@ async fn temporal_contracts_match_spark() -> TestResult {
             (RetainedDifference::RolledOverLeapSecond, 12),
             (RetainedDifference::DarPatternErrors, 340),
             (RetainedDifference::OutOfRangeStrings, 236),
-            (RetainedDifference::ZoneTokenText, 96),
-            (RetainedDifference::SkippedLocalTimeAsWritten, 24),
+            (RetainedDifference::LocalizedZoneNames, 16),
             (RetainedDifference::NullableFormattingResults, 712),
         ]
     );
