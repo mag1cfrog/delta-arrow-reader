@@ -19,7 +19,7 @@ use crate::data_type::from_ast_data_type;
 use crate::error::{SqlError, SqlResult};
 use crate::literal::interval::{IntervalValue, from_ast_signed_interval};
 use crate::literal::utils::Signed;
-use crate::query::{from_ast_named_expression, from_ast_query};
+use crate::query::{from_ast_named_expression, from_ast_query, reject_direct_format_path};
 use crate::value::{
     from_ast_boolean_literal, from_ast_number_literal, from_ast_string, from_ast_string_literal,
 };
@@ -779,8 +779,10 @@ fn from_ast_atom_expression(atom: AtomExpr) -> SqlResult<spec::Expr> {
         AtomExpr::Table(_, expr) => {
             let expr = match expr {
                 TableExpr::Name(x) | TableExpr::NestedName(_, x, _) => {
+                    let name = from_ast_object_name(x)?;
+                    reject_direct_format_path(&name)?;
                     spec::Expr::UnresolvedAttribute {
-                        name: from_ast_object_name(x)?,
+                        name,
                         plan_id: None,
                         is_metadata_column: false,
                     }

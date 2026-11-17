@@ -12,7 +12,7 @@ use sail_sql_parser::parser::{
     create_data_type_parser, create_interval_literal_parser, create_object_name_parser,
     create_parser,
 };
-use sail_sql_parser::token::Token;
+use sail_sql_parser::token::{Punctuation, Token};
 
 use crate::error::{SqlError, SqlResult};
 use crate::literal::datetime::{
@@ -61,11 +61,94 @@ pub fn parse_statements(s: &str) -> SqlResult<Vec<Statement>> {
 
 /// Parses a SQL string containing exactly one statement into an AST.
 pub fn parse_one_statement(s: &str) -> SqlResult<Statement> {
-    let mut plan = parse_statements(s)?;
+    let mut plan = parse_statements(s).map_err(|error| {
+        unsupported_statement_kind(s).map_or(error, |kind| {
+            SqlError::unsupported(format!("{kind}; only read-only queries are supported"))
+        })
+    })?;
     match (plan.pop(), plan.is_empty()) {
         (Some(x), true) => Ok(x),
         _ => Err(SqlError::invalid("expected one statement")),
     }
+}
+
+/// Give unparsed commands and external scripts an admission-specific diagnostic.
+fn unsupported_statement_kind(sql: &str) -> Option<String> {
+    let options = ParserOptions::default();
+    let lexer = create_lexer::<_, chumsky::extra::Err<chumsky::error::Rich<_, _>>>(&options);
+    let tokens = lexer.parse(sql).into_result().ok()?;
+    let code = tokens
+        .iter()
+        .map(|(token, _)| token)
+        .filter(|token| {
+            !token.is_whitespace() && !matches!(token, Token::Punctuation(Punctuation::Semicolon))
+        })
+        .collect::<Vec<_>>();
+    if let Some(Token::Word { raw, .. }) = code.first() {
+        let kind = raw.to_ascii_uppercase();
+        if matches!(
+            kind.as_str(),
+            "INSERT"
+                | "UPDATE"
+                | "DELETE"
+                | "MERGE"
+                | "TRUNCATE"
+                | "COPY"
+                | "CREATE"
+                | "ALTER"
+                | "DROP"
+                | "OPTIMIZE"
+                | "VACUUM"
+                | "ANALYZE"
+                | "REFRESH"
+                | "CACHE"
+                | "UNCACHE"
+                | "CLEAR"
+                | "SET"
+                | "RESET"
+                | "USE"
+                | "EXPLAIN"
+                | "DESC"
+                | "DESCRIBE"
+                | "SHOW"
+        ) {
+            return Some(format!("{kind} statements"));
+        }
+        if kind == "WITH" {
+            let mut depth = 0_usize;
+            let mut after_group = false;
+            for token in code.iter().skip(1) {
+                match token {
+                    Token::Punctuation(Punctuation::LeftParenthesis) => depth += 1,
+                    Token::Punctuation(Punctuation::RightParenthesis) => {
+                        depth = depth.saturating_sub(1);
+                        after_group = depth == 0;
+                    }
+                    Token::Punctuation(Punctuation::Comma) if depth == 0 => after_group = false,
+                    Token::Word { raw, .. } if depth == 0 && after_group => {
+                        let command = raw.to_ascii_uppercase();
+                        if matches!(command.as_str(), "SELECT" | "TABLE" | "VALUES") {
+                            break;
+                        }
+                        if matches!(command.as_str(), "INSERT" | "UPDATE" | "DELETE" | "MERGE") {
+                            return Some(format!("{command} statements"));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+    if code.windows(2).any(|tokens| matches!(tokens,
+        [Token::Word { raw: select, .. }, Token::Word { raw: transform, .. }]
+        if select.eq_ignore_ascii_case("SELECT") && transform.eq_ignore_ascii_case("TRANSFORM")))
+        && code.windows(3).any(|tokens| matches!(tokens,
+            [Token::Punctuation(Punctuation::RightParenthesis), Token::Word { raw, .. }, Token::String { .. }]
+            if raw.eq_ignore_ascii_case("USING")))
+    {
+        return Some("external script queries".to_string());
+    }
+    None
 }
 
 pub fn parse_object_name(s: &str) -> SqlResult<ObjectName> {

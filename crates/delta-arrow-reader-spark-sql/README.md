@@ -40,6 +40,27 @@ The public API provides session configuration, query resolution and physical
 planning. Its crate-level example shows how to execute a query using the host
 session. The host must install `configure_spark_sql` before using `plan_query`.
 
+The frontend admits one read-only query: `SELECT`, `WITH`, `VALUES` or `TABLE`,
+including supported nested queries and set operations over registered providers.
+It rejects writes, DDL, maintenance commands, session changes and the metadata
+commands `EXPLAIN`, `DESCRIBE` and `SHOW`. Direct format paths such as
+``parquet.`/path/to/data` `` must be replaced with a host-registered table provider.
+Ordinary qualified catalog names and quoted names such as ``public.`events.json` ``
+remain available.
+
+Static table names and literal `IDENTIFIER` names are checked before resolution,
+including inside nested queries. Computed `IDENTIFIER` names are checked after
+their expressions are evaluated, before catalog lookup. An earlier host table
+function can already have performed I/O by then. See
+[known differences](https://github.com/mag1cfrog/delta-arrow-reader/issues/1248)
+for this computed-name boundary.
+
+SQL cannot install or invoke external Python/JVM function implementations. The
+host can register native scalar and table functions, which keep their existing
+execution contract. The [admission references](tests/fixtures/read-only-admission/README.md)
+cover ordinary query results and the tested rejection paths through the public
+API, with actual Delta scans, file reads and writes observed.
+
 SQL configuration references such as `${name}` are expanded before parsing by
 default. Supply explicit values in `SparkSqlOptions::variable_substitution_values`
 or set `variable_substitution_enabled` to false to preserve the original text.
