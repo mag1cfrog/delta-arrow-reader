@@ -1,13 +1,13 @@
 //! Observe real Delta provider requests and physical local-store reads.
 
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     fmt,
     ops::Range,
     path::Path,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
 };
 
@@ -31,6 +31,8 @@ use futures_util::{
     TryStreamExt,
     stream::{self, BoxStream},
 };
+use tokio::sync::Semaphore;
+
 use parquet::file::{
     reader::FileReader,
     serialized_reader::{ReadOptionsBuilder, SerializedFileReader},
@@ -40,6 +42,7 @@ pub(super) type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
 #[derive(Debug, Clone)]
 pub(super) struct ScanRequest {
+    pub session_target_partitions: usize,
     pub projected_columns: BTreeSet<String>,
     pub filters: Vec<Expr>,
 }
@@ -108,6 +111,7 @@ impl TableProvider for RecordingDeltaProvider {
             })?
             .scans
             .push(ScanRequest {
+                session_target_partitions: state.config_options().execution.target_partitions,
                 projected_columns: columns,
                 filters: filters.to_vec(),
             });
@@ -121,16 +125,156 @@ pub(super) struct ReadRange {
     pub range: Range<u64>,
 }
 
+/// Selects the real Parquet requests to block or fail in lifecycle tests.
+#[derive(Debug)]
+pub(super) enum ParquetReadAction {
+    Observe,
+    GateAll,
+    GateFile(String),
+    FailFileOnce(String),
+}
+
+#[derive(Debug, Default, Clone)]
+pub(super) struct ParquetReadState {
+    pub requests_started: usize,
+    pub requests_finished: usize,
+    pub requests_cancelled: usize,
+    pub active_requests: usize,
+    pub peak_active_files: usize,
+    pub files_started: BTreeSet<String>,
+    active_files: BTreeMap<String, usize>,
+}
+
+/// Acknowledges request start/finish and holds selected reads until released.
+#[derive(Debug)]
+pub(super) struct ParquetReadControl {
+    action: ParquetReadAction,
+    state: Mutex<ParquetReadState>,
+    pub request_started: Semaphore,
+    pub request_finished: Semaphore,
+    release: Semaphore,
+    failure_fired: AtomicBool,
+    pub store_dropped: Semaphore,
+}
+
+impl ParquetReadControl {
+    pub fn new(action: ParquetReadAction) -> Arc<Self> {
+        Arc::new(Self {
+            action,
+            state: Mutex::new(ParquetReadState::default()),
+            request_started: Semaphore::new(0),
+            request_finished: Semaphore::new(0),
+            release: Semaphore::new(0),
+            failure_fired: AtomicBool::new(false),
+            store_dropped: Semaphore::new(0),
+        })
+    }
+
+    pub fn snapshot(&self) -> TestResult<ParquetReadState> {
+        Ok(self
+            .state
+            .lock()
+            .map_err(|_| "read control lock poisoned")?
+            .clone())
+    }
+
+    pub fn release_all(&self) {
+        self.release.close();
+    }
+
+    async fn begin(self: &Arc<Self>, path: &StorePath) -> StoreResult<ParquetReadGuard> {
+        let path = path.to_string();
+        {
+            let mut state = self
+                .state
+                .lock()
+                .map_err(|_| control_error("read control lock poisoned"))?;
+            state.requests_started += 1;
+            state.active_requests += 1;
+            state.files_started.insert(path.clone());
+            *state.active_files.entry(path.clone()).or_default() += 1;
+            state.peak_active_files = state.peak_active_files.max(state.active_files.len());
+        }
+        let mut guard = ParquetReadGuard {
+            control: Arc::clone(self),
+            path,
+            finished: false,
+        };
+        self.request_started.add_permits(1);
+        match &self.action {
+            ParquetReadAction::FailFileOnce(file)
+                if file == &guard.path && !self.failure_fired.swap(true, Ordering::AcqRel) =>
+            {
+                guard.finished = true;
+                return Err(control_error("injected late Parquet read failure"));
+            }
+            ParquetReadAction::GateAll => {
+                let _ = self.release.acquire().await;
+            }
+            ParquetReadAction::GateFile(file) if file == &guard.path => {
+                let _ = self.release.acquire().await;
+            }
+            _ => {}
+        }
+        Ok(guard)
+    }
+}
+
+fn control_error(message: &str) -> datafusion::object_store::Error {
+    datafusion::object_store::Error::Generic {
+        store: "spark-delta-read-control",
+        source: std::io::Error::other(message).into(),
+    }
+}
+
+struct ParquetReadGuard {
+    control: Arc<ParquetReadControl>,
+    path: String,
+    finished: bool,
+}
+
+impl Drop for ParquetReadGuard {
+    fn drop(&mut self) {
+        // Recover only to signal cleanup; a subsequent snapshot reports lock poisoning.
+        let mut state = self
+            .control
+            .state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        state.active_requests -= 1;
+        if self.finished {
+            state.requests_finished += 1;
+        } else {
+            state.requests_cancelled += 1;
+        }
+        if let Some(active) = state.active_files.get_mut(&self.path) {
+            *active -= 1;
+            if *active == 0 {
+                state.active_files.remove(&self.path);
+            }
+        }
+        self.control.request_finished.add_permits(1);
+    }
+}
+
 #[derive(Debug)]
 pub(super) struct RecordingLocalStore {
     inner: LocalFileSystem,
     pub reads: Mutex<Vec<ReadRange>>,
     pub read_calls: AtomicUsize,
     pub write_calls: AtomicUsize,
+    control: Option<Arc<ParquetReadControl>>,
 }
 
 impl RecordingLocalStore {
     pub fn register(root: &Path) -> TestResult<(String, Arc<Self>)> {
+        Self::register_with_control(root, None)
+    }
+
+    pub fn register_with_control(
+        root: &Path,
+        control: Option<Arc<ParquetReadControl>>,
+    ) -> TestResult<(String, Arc<Self>)> {
         static NEXT: AtomicUsize = AtomicUsize::new(0);
         let scheme = format!(
             "sparkdelta{}x{}",
@@ -142,6 +286,7 @@ impl RecordingLocalStore {
             reads: Mutex::new(vec![]),
             read_calls: AtomicUsize::new(0),
             write_calls: AtomicUsize::new(0),
+            control,
         });
         let weak = Arc::downgrade(&store);
         delta_kernel_default_engine::storage::insert_url_handler(
@@ -159,6 +304,15 @@ impl RecordingLocalStore {
         Ok((format!("{scheme}://table/"), store))
     }
 
+    async fn begin_read(&self, path: &StorePath) -> StoreResult<Option<ParquetReadGuard>> {
+        match &self.control {
+            Some(control) if path.as_ref().ends_with(".parquet") => {
+                control.begin(path).await.map(Some)
+            }
+            _ => Ok(None),
+        }
+    }
+
     fn record(&self, path: &StorePath, range: Range<u64>) -> StoreResult<()> {
         if path.as_ref().ends_with(".parquet") {
             self.reads
@@ -173,6 +327,14 @@ impl RecordingLocalStore {
                 });
         }
         Ok(())
+    }
+}
+
+impl Drop for RecordingLocalStore {
+    fn drop(&mut self) {
+        if let Some(control) = &self.control {
+            control.store_dropped.add_permits(1);
+        }
     }
 }
 
@@ -204,7 +366,16 @@ impl ObjectStore for RecordingLocalStore {
     async fn get_opts(&self, path: &StorePath, options: GetOptions) -> StoreResult<GetResult> {
         self.read_calls.fetch_add(1, Ordering::Relaxed);
         let head = options.head;
-        let result = self.inner.get_opts(path, options).await?;
+        let mut guard = if head {
+            None
+        } else {
+            self.begin_read(path).await?
+        };
+        let result = self.inner.get_opts(path, options).await;
+        if let Some(guard) = &mut guard {
+            guard.finished = true;
+        }
+        let result = result?;
         if !head {
             self.record(path, result.range.clone())?;
         }
@@ -212,7 +383,12 @@ impl ObjectStore for RecordingLocalStore {
     }
     async fn get_ranges(&self, path: &StorePath, ranges: &[Range<u64>]) -> StoreResult<Vec<Bytes>> {
         self.read_calls.fetch_add(1, Ordering::Relaxed);
-        let result = self.inner.get_ranges(path, ranges).await?;
+        let mut guard = self.begin_read(path).await?;
+        let result = self.inner.get_ranges(path, ranges).await;
+        if let Some(guard) = &mut guard {
+            guard.finished = true;
+        }
+        let result = result?;
         assert_eq!(result.len(), ranges.len());
         for (range, bytes) in ranges.iter().zip(&result) {
             assert_eq!(range.end - range.start, bytes.len() as u64);
