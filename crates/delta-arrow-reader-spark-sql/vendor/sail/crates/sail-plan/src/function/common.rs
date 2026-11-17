@@ -19,6 +19,8 @@ use datafusion_expr::{
 };
 use sail_common_datafusion::utils::items::ItemTaker;
 use sail_function::scalar::datetime::spark_date_timestamp_ntz_cast::SparkDateTimestampNtzCast;
+use sail_function::scalar::datetime::spark_date_to_timestamp::SparkDateToTimestamp;
+use sail_function::scalar::datetime::spark_timestamp_to_ntz::SparkTimestampToNtz;
 use sail_function::scalar::spark_cast_numeric_to_integer::SparkCastNumericToInteger;
 use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
 use sail_function::scalar::spark_cast_string_to_integer::{
@@ -1082,6 +1084,93 @@ pub(crate) fn cast_with_date_ntz_nullability(
     }
 }
 
+/// A stored timestamp column, optionally relabeled with the session zone.
+fn direct_timestamp_column(value: &expr::Expr, schema: &DFSchemaRef) -> Option<expr::Expr> {
+    let value = without_metadata_annotations(value);
+    let column = match value {
+        expr::Expr::Column(_) => value,
+        expr::Expr::Cast(cast) => {
+            let column = without_metadata_annotations(&cast.expr);
+            if !matches!(column, expr::Expr::Column(_))
+                || !matches!(
+                    (column.get_type(schema).ok()?, cast.field.data_type()),
+                    (
+                        DataType::Timestamp(TimeUnit::Microsecond, Some(_)),
+                        DataType::Timestamp(TimeUnit::Microsecond, Some(_))
+                    )
+                )
+            {
+                return None;
+            }
+            column
+        }
+        _ => return None,
+    };
+    matches!(
+        column.get_type(schema).ok()?,
+        DataType::Timestamp(TimeUnit::Microsecond, _)
+    )
+    .then(|| value.clone())
+}
+
+/// Expose CAST(timestamp AS DATE) comparisons as bounds on the stored column.
+fn date_cast_literal_comparison(
+    left: &expr::Expr,
+    op: Operator,
+    right: &expr::Expr,
+    schema: &DFSchemaRef,
+) -> Option<expr::Expr> {
+    let ScalarValue::Date32(Some(day)) = literal_value_without_evaluation(right)? else {
+        return None;
+    };
+    let input = match without_metadata_annotations(left) {
+        expr::Expr::Cast(cast) if cast.field.data_type() == &DataType::Date32 => &cast.expr,
+        expr::Expr::ScalarFunction(function)
+            if function.func.inner().is::<SparkDateTimestampNtzCast>()
+                && left.get_type(schema).ok()? == DataType::Date32 =>
+        {
+            let [input] = function.args.as_slice() else {
+                return None;
+            };
+            input
+        }
+        _ => return None,
+    };
+    let column = direct_timestamp_column(input, schema)?;
+    let data_type = column.get_type(schema).ok()?;
+    let DataType::Timestamp(_, zone) = &data_type else {
+        return None;
+    };
+    let bound = |day| {
+        let date = ScalarValue::Date32(Some(day));
+        let value = match zone {
+            Some(zone) => {
+                let ColumnarValue::Scalar(value) = SparkDateToTimestamp::new(zone.clone(), false)
+                    .convert_dates(&ColumnarValue::Scalar(date))
+                    .ok()?
+                else {
+                    return None;
+                };
+                value
+            }
+            None => date.cast_to(&data_type).ok()?,
+        };
+        Some(lit(value))
+    };
+    // Convert each day independently: a session day may contain 23 or 25 hours.
+    let start = bound(day)?;
+    let next = bound(day.checked_add(1)?)?;
+    Some(match op {
+        Operator::Eq => column.clone().gt_eq(start).and(column.lt(next)),
+        Operator::NotEq => column.clone().lt(start).or(column.gt_eq(next)),
+        Operator::Lt => column.lt(start),
+        Operator::LtEq => column.lt(next),
+        Operator::Gt => column.gt_eq(next),
+        Operator::GtEq => column.gt_eq(start),
+        _ => return None,
+    })
+}
+
 pub(crate) fn spark_binary_expr(
     mut left: expr::Expr,
     op: Operator,
@@ -1089,6 +1178,15 @@ pub(crate) fn spark_binary_expr(
     schema: &DFSchemaRef,
     config: &PlanConfig,
 ) -> PlanResult<expr::Expr> {
+    let unwrap = |left, op, right| {
+        date_cast_literal_comparison(left, op, right, schema)
+            .or_else(|| fixed_ntz_cast_literal_comparison(left, op, right, schema))
+    };
+    if let Some(comparison) =
+        unwrap(&left, op, &right).or_else(|| op.swap().and_then(|op| unwrap(&right, op, &left)))
+    {
+        return Ok(comparison);
+    }
     let ansi_mode = config.ansi_mode;
     if matches!(
         op,
@@ -1207,6 +1305,102 @@ pub(crate) fn spark_binary_expr(
         op,
         Box::new(right),
     )))
+}
+
+/// Invert only UTC/fixed-offset NTZ conversions; named-zone overlaps stay under #1105.
+fn fixed_ntz_cast_literal_comparison(
+    left: &expr::Expr,
+    op: Operator,
+    right: &expr::Expr,
+    schema: &DFSchemaRef,
+) -> Option<expr::Expr> {
+    if !matches!(
+        op,
+        Operator::Eq
+            | Operator::NotEq
+            | Operator::Lt
+            | Operator::LtEq
+            | Operator::Gt
+            | Operator::GtEq
+    ) {
+        return None;
+    }
+    let expr::Expr::ScalarFunction(function) = without_metadata_annotations(left) else {
+        return None;
+    };
+    let conversion = function
+        .func
+        .inner()
+        .downcast_ref::<SparkTimestampToNtz>()?;
+    let offset = conversion.fixed_offset_micros()?;
+    let ScalarValue::TimestampMicrosecond(Some(local), None) =
+        literal_value_without_evaluation(right)?
+    else {
+        return None;
+    };
+    let [argument] = function.args.as_slice() else {
+        return None;
+    };
+    let column = direct_timestamp_column(argument, schema)?;
+    let DataType::Timestamp(_, Some(zone)) = column.get_type(schema).ok()? else {
+        return None;
+    };
+    let instant = lit(ScalarValue::TimestampMicrosecond(
+        Some(local.checked_sub(offset)?),
+        Some(zone),
+    ));
+    Some(expr::Expr::BinaryExpr(BinaryExpr::new(
+        Box::new(column),
+        op,
+        Box::new(instant),
+    )))
+}
+
+#[test]
+fn temporal_cast_literal_rewrites_keep_computed_inputs_and_overflow_guards()
+-> datafusion_common::Result<()> {
+    use datafusion_expr::col;
+
+    let schema = Arc::new(DFSchema::try_from(
+        datafusion::arrow::datatypes::Schema::new(vec![
+            Field::new(
+                "ts",
+                DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
+                true,
+            ),
+            Field::new("tn", DataType::Timestamp(TimeUnit::Microsecond, None), true),
+        ]),
+    )?);
+    let ntz = |zone: &str, input| -> Option<expr::Expr> {
+        Some(
+            ScalarUDF::from(SparkTimestampToNtz::for_session_zone(zone.into(), false)?)
+                .call(vec![input]),
+        )
+    };
+    let zero = lit(ScalarValue::TimestampMicrosecond(Some(0), None));
+    let unwrap = |left, right: &expr::Expr| {
+        fixed_ntz_cast_literal_comparison(&left, Operator::Eq, right, &schema)
+    };
+    assert!(unwrap(ntz("UTC", col("ts")).unwrap(), &zero).is_some());
+    assert!(unwrap(ntz("America/Los_Angeles", col("ts")).unwrap(), &zero).is_none());
+    assert!(unwrap(ntz("UTC", col("ts") + lit(1_i64)).unwrap(), &zero).is_none());
+    assert!(
+        unwrap(
+            ntz("+05:45", col("ts")).unwrap(),
+            &lit(ScalarValue::TimestampMicrosecond(Some(i64::MIN), None))
+        )
+        .is_none()
+    );
+    assert!(
+        date_cast_literal_comparison(
+            &cast(col("tn"), DataType::Date32),
+            Operator::Eq,
+            &lit(ScalarValue::Date32(Some(i32::MAX))),
+            &schema
+        )
+        .is_none()
+    );
+    Ok(())
 }
 
 #[test]

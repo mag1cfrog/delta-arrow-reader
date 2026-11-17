@@ -14,6 +14,8 @@ use datafusion_expr::{
     ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
 };
 
+use crate::scalar::datetime::format::parse_fixed_zone_offset;
+use crate::scalar::datetime::local_datetime_to_ltz::is_spark_compatible_arrow_fixed_offset;
 use crate::scalar::datetime::local_time::local_micros;
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -35,6 +37,18 @@ impl SparkTimestampToNtz {
             null_on_overflow,
             signature: Signature::any(1, Volatility::Immutable),
         })
+    }
+
+    /// UTC or a supported fixed offset, in microseconds. Named regions keep their conversion.
+    pub fn fixed_offset_micros(&self) -> Option<i64> {
+        if self.session_timezone.as_ref() == "UTC" {
+            return Some(0);
+        }
+        if !is_spark_compatible_arrow_fixed_offset(&self.session_timezone) {
+            return None;
+        }
+        let offset = parse_fixed_zone_offset(&self.session_timezone)?;
+        Some(i64::from(offset.local_minus_utc()) * 1_000_000)
     }
 
     /// The local date-time of `micros`, which Spark cannot store beyond the BIGINT range.

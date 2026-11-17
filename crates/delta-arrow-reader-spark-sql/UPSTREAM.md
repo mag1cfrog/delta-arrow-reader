@@ -807,11 +807,18 @@ so these results are nullable over a column, and over a literal until constant f
   COALESCE, UNION, ARRAY and IN lists.
 
 They were NOT NULL for a NOT NULL input (#1003). TRY_CAST of a DATE to TIMESTAMP_NTZ cannot
-fail and keeps its input's nullability. Values are unchanged. Still open: Spark's
-optimizer rewrites a column compared with a literal without the cast, NOT NULL once optimized,
-which DAR does not do (#1197); and a constant over an input proven empty stays nullable after
-optimization (#1190). EXTRACT of DAYOFWEEK, DOW_ISO and YEAROFWEEK works since #1116.
+fail and keeps its input's nullability. Direct microsecond TIMESTAMP and TIMESTAMP_NTZ
+columns cast to DATE, including TO_DATE, compare with DATE literals through timestamp
+bounds (#1197). Equality, ordering and BETWEEN retain the Delta provider's native file
+pruning; `<>` retains its existing OR-range pruning limit. Each LTZ day starts in its
+session zone, including 23-hour and 25-hour DST days. The frontend rewrites these casts
+during resolution, so their analyzed nullability can differ from Spark. A DATE column
+compared with an NTZ literal can still stay nullable after optimization (#1236).
+A constant over an input proven empty stays nullable after optimization (#1190).
+EXTRACT of DAYOFWEEK, DOW_ISO and YEAROFWEEK works since #1116.
 The [cast references](tests/fixtures/date-ntz-casts/README.md) record the checks.
+The [pruning references](tests/fixtures/date-cast-pruning/README.md) check values, executed
+types and actual file counts against equivalent native timestamp predicates.
 
 DATE and TIMESTAMP_NTZ values, with only NULLs beside them, in ARRAY, VALUES or an IN list,
 combine as microsecond TIMESTAMP_NTZ values, each DATE at its midnight, like Spark (#1191).
@@ -1012,12 +1019,16 @@ failed on the reference instants. The common resolver normalizes accepted aliase
 including Java's fixed EST/MST/HST offsets. The [session alias references](tests/fixtures/session-zone-aliases/README.md)
 cover source annotations, nested fields, configured spelling and the formatted date paths.
 
-Related cases are still open:
+Related limitations remain:
 - casts of arrays, structs and maps convert their TIMESTAMP values with Arrow's cast
   (#1103);
 - TIMESTAMP_NTZ values beyond Chrono's years are read wrongly (#1104);
 - Spark's optimizer compares a converted value with a TIMESTAMP_NTZ literal by the
-  literal's instant, which DAR does not yet do (#1105).
+  literal's instant in named zones. That policy remains deferred under #1105/#1236.
+  UTC and supported
+  fixed-offset comparisons now invert the literal with checked arithmetic and expose the
+  stored TIMESTAMP column for the provider's existing equality and ordering pruning
+  (#1197's transferred pruning note). Named-zone gap and overlap behavior stays unchanged.
 
 Formatted TO_TIMESTAMP, TRY_TO_TIMESTAMP and the explicit LTZ/NTZ forms accept TIMESTAMP
 arguments without parsing them. The LTZ forms keep the instant; formatted TO_TIMESTAMP_NTZ
