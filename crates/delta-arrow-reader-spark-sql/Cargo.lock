@@ -1570,10 +1570,12 @@ version = "0.1.0"
 dependencies = [
  "arrow",
  "async-trait",
+ "bytes",
  "datafusion",
  "datasketches",
  "delta-arrow-reader",
  "delta_kernel",
+ "delta_kernel_default_engine",
  "flate2",
  "futures-util",
  "parquet",

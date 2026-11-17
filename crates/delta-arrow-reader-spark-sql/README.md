@@ -63,6 +63,12 @@ See [source provenance](UPSTREAM.md) for the retained implementation and depende
 forks. The accepted-runtime test checks preservation of recorded outcomes; some
 of those outcomes have known Spark differences and are not compatibility passes.
 
+The [real Delta integration references](tests/fixtures/real-delta-integration/README.md)
+compare public Spark SQL planning with equivalent DAR native SQL over real Delta
+snapshots in both ANSI modes. They also record provider requests and physical
+reads. Shared core limits remain for data-column IN and nullable OR file pruning,
+and for unreferenced bytes included in the default metadata prefetch.
+
 Floating DISTINCT set results can differ from Spark in their `0.0`/`-0.0` text
 after projection and LIMIT optimization. The [set-result references](tests/fixtures/README.md#floating-intersect-and-except-results)
 record this limitation separately from equality, row counts and NULL behavior.

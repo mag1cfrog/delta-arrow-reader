@@ -125,9 +125,11 @@ sail-sql-analyzer = { path = "vendor/sail/crates/sail-sql-analyzer" }
 [dev-dependencies]
 async-trait = { workspace = true }
 arrow = "=58.4.0"
+bytes = "1"
 datasketches = { workspace = true }
 delta-arrow-reader = { path = "../delta-arrow-reader-core", features = ["datafusion"] }
 delta_kernel = { version = "=0.25.0", default-features = false, features = ["arrow", "internal-api"] }
+delta_kernel_default_engine = { version = "=0.25.0", default-features = false, features = ["arrow", "rustls"] }
 flate2 = "1"
 futures-util = "0.3"
 parquet = "=58.4.0"
