@@ -41,23 +41,22 @@ use super::lambda::lambda_with_fresh_parameter;
 use crate::error::{PlanError, PlanResult};
 use crate::function::common::{
     NormalizeFloatArrayForSparkComparison, ScalarFunction, ScalarFunctionInput,
-    SparkComparisonFloat, cast_with_date_ntz_nullability,
+    SparkComparisonFloat,
 };
 use crate::function::float_keys::normalize_spark_float_array_comparison;
 use crate::function::numeric_coercion::common_numeric_type;
 use crate::function::result_coercion::{
-    align_struct_constructor_arguments, cast_nested_value, common_array_element_type,
-    nested_result_cast_input, same_positional_logical_type,
+    align_struct_constructor_arguments, cast_nested_value, coerce_to_temporal,
+    common_array_element_type, nested_result_cast_input, same_positional_logical_type,
 };
 use crate::function::temporal_coercion::{
-    cast_local_timestamp_expr_to_ltz, only_dates_and_timestamp_ntz,
+    cast_local_timestamp_expr_to_ltz, date_timestamp_common_type,
 };
 
-/// ARRAY. Spark combines DATE and TIMESTAMP_NTZ elements, with only NULLs beside them, as
-/// microsecond TIMESTAMP_NTZ elements, each DATE at its midnight through its nullable cast, where
-/// `SparkArray`'s coercion picks nanoseconds and fails outside 1677 to 2262 (#1191). An argument
-/// whose type is not known yet, such as GROUPING_ID() before the aggregation, leaves the
-/// arguments to `SparkArray`.
+/// With both DATE and timestamp arguments, and otherwise only NULLs, ARRAY selects LTZ if any
+/// timestamp is zoned, NTZ otherwise. LTZ uses the session zone; DATE-to-NTZ retains its nullable
+/// midnight cast (#1191). Nanosecond LTZ inputs and arguments whose type is not known yet, such
+/// as GROUPING_ID() before aggregation, keep `SparkArray`'s existing coercion.
 fn array(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let schema = input.function_context.schema;
     let types = input
@@ -66,19 +65,23 @@ fn array(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         .map(|argument| argument.get_type(schema))
         .collect::<Result<Vec<_>, _>>()
         .unwrap_or_default();
-    let arguments = if only_dates_and_timestamp_ntz(&types) {
-        let ntz = DataType::Timestamp(TimeUnit::Microsecond, None);
+    let arguments = if let Some(target) =
+        date_timestamp_common_type(&types, &input.function_context.plan_config.session_timezone)
+    {
         input
             .arguments
             .into_iter()
             .zip(&types)
-            .map(|(argument, source)| match source {
-                DataType::Date32 | DataType::Date64 => {
-                    cast_with_date_ntz_nullability(argument, source, &ntz)
+            .map(|(argument, source)| {
+                if matches!(&target, DataType::Timestamp(_, None))
+                    && !matches!(source, DataType::Date32 | DataType::Date64)
+                {
+                    Ok(argument)
+                } else {
+                    coerce_to_temporal(argument, source, &target)
                 }
-                _ => argument,
             })
-            .collect()
+            .collect::<PlanResult<_>>()?
     } else {
         align_struct_constructor_arguments(input.arguments, &input.function_context)?
     };

@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use datafusion::arrow::datatypes::{DataType, TimeUnit};
+use datafusion::arrow::datatypes::DataType;
 use datafusion::optimizer::simplify_expressions::ExprSimplifier;
 use datafusion::physical_expr::create_physical_expr;
 use datafusion_common::tree_node::TreeNode;
@@ -17,7 +17,8 @@ use crate::error::{PlanError, PlanResult};
 use crate::expression_errors::{is_locally_evaluable, prune_null_divisor};
 use crate::function::common::without_metadata_annotations;
 use crate::function::numeric_coercion::common_numeric_type;
-use crate::function::temporal_coercion::only_dates_and_timestamp_ntz;
+use crate::function::result_coercion::coerce_to_temporal;
+use crate::function::temporal_coercion::date_timestamp_common_type;
 use crate::resolver::PlanResolver;
 use crate::resolver::interval_qualifier::{IntervalOperand, IntervalQualifier};
 use crate::resolver::state::PlanResolverState;
@@ -60,7 +61,7 @@ impl PlanResolver<'_> {
                 }
             }
             Self::coerce_values_decimal_columns(&mut results, &schema)?;
-            Self::coerce_values_date_timestamp_ntz_columns(&mut results, &schema)?;
+            self.coerce_values_date_timestamp_columns(&mut results, &schema)?;
             let _nan_column_indices = Self::resolve_values_nan_types(&mut results, &schema)?;
             let _map_column_indices = Self::resolve_values_map_types(&mut results, &schema)?;
             Ok::<_, PlanError>(results)
@@ -181,26 +182,30 @@ impl PlanResolver<'_> {
         Ok(())
     }
 
-    /// A column of DATE and TIMESTAMP_NTZ values, with NULLs, is a microsecond TIMESTAMP_NTZ
-    /// column, each DATE at its midnight, as in Spark (#1191). Spark evaluates the cells, so a
-    /// column is nullable only for a NULL cell.
-    fn coerce_values_date_timestamp_ntz_columns(
+    /// Combine DATE and timestamp cells at session midnight for LTZ, local midnight for NTZ.
+    /// VALUES keeps its plain NTZ casts: a column is nullable only for a NULL cell (#1191).
+    fn coerce_values_date_timestamp_columns(
+        &self,
         values: &mut [Vec<Expr>],
         schema: &DFSchemaRef,
     ) -> PlanResult<()> {
-        let ntz = DataType::Timestamp(TimeUnit::Microsecond, None);
         let columns = values.first().map_or(0, Vec::len);
         for column in 0..columns {
             let types = values
                 .iter()
                 .map(|row| row[column].get_type(schema))
                 .collect::<Result<Vec<_>, _>>()?;
-            if !only_dates_and_timestamp_ntz(&types) {
+            let Some(target) = date_timestamp_common_type(&types, &self.config.session_timezone)
+            else {
                 continue;
-            }
+            };
             for (row, source) in values.iter_mut().zip(types) {
-                if source != ntz {
-                    row[column] = cast(row[column].clone(), ntz.clone());
+                if source != target {
+                    row[column] = if matches!(&target, DataType::Timestamp(_, None)) {
+                        cast(row[column].clone(), target.clone())
+                    } else {
+                        coerce_to_temporal(row[column].clone(), &source, &target)?
+                    };
                 }
             }
         }

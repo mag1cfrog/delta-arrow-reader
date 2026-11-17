@@ -64,7 +64,7 @@ impl PlanResolver<'_> {
                 vec![output.clone()],
                 negated,
                 &comparison_schema,
-                self.config.ansi_mode,
+                &self.config,
             )?
             else {
                 unreachable!("spark_in_list returns an IN expression")
