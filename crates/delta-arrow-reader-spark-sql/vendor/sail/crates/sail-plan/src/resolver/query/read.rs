@@ -46,6 +46,7 @@ impl PlanResolver<'_> {
         if temporal.is_some() || sample.is_some() || !options.is_empty() {
             return Err(PlanError::unsupported("table modifiers"));
         }
+        sail_sql_analyzer::query::reject_direct_format_path(&name)?;
         let table_reference = self.resolve_table_reference(&name)?;
         if let Some(cte) = state.get_cte(&table_reference) {
             return Ok(cte.clone());

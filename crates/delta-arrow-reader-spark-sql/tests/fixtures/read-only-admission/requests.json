@@ -1,0 +1,211 @@
+{
+  "issue": 1314,
+  "base": "e22c264fb0f37c8a4929616fc670acbffaa70d94",
+  "expected_record_count": 20,
+  "corpora": [
+    {
+      "corpus": "read_only_admission",
+      "source": "Ordinary query controls; global_temp.registered_table aliases source in the Spark capture. Host-native and disabled-substitution controls use explicitly equivalent reference SQL.",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "source",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "customer_name",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                "alice"
+              ],
+              [
+                "2",
+                "bob"
+              ],
+              [
+                "3",
+                null
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "read_only_admission",
+          "id": "select",
+          "sql": "SELECT id,customer_name FROM source WHERE id>=2 ORDER BY id",
+          "ansi": false,
+          "ordered": true,
+          "reads_delta": true
+        },
+        {
+          "corpus": "read_only_admission",
+          "id": "select",
+          "sql": "SELECT id,customer_name FROM source WHERE id>=2 ORDER BY id",
+          "ansi": true,
+          "ordered": true,
+          "reads_delta": true
+        },
+        {
+          "corpus": "read_only_admission",
+          "id": "with",
+          "sql": "WITH selected AS (SELECT id,customer_name FROM source WHERE id>=2) SELECT id,customer_name FROM selected ORDER BY id",
+          "ansi": false,
+          "ordered": true,
+          "reads_delta": true
+        },
+        {
+          "corpus": "read_only_admission",
+          "id": "with",
+          "sql": "WITH selected AS (SELECT id,customer_name FROM source WHERE id>=2) SELECT id,customer_name FROM selected ORDER BY id",
+          "ansi": true,
+          "ordered": true,
+          "reads_delta": true
+        },
+        {
+          "corpus": "read_only_admission",
+          "id": "values",
+          "sql": "VALUES (1,'SELECT; DROP'),(2,NULL)",
+          "ansi": false,
+          "ordered": true,
+          "reads_delta": false
+        },
+        {
+          "corpus": "read_only_admission",
+          "id": "values",
+          "sql": "VALUES (1,'SELECT; DROP'),(2,NULL)",
+          "ansi": true,
+          "ordered": true,
+          "reads_delta": false
+        },
+        {
+          "corpus": "read_only_admission",
+          "id": "qualified",
+          "sql": "SELECT id FROM global_temp.registered_table ORDER BY id",
+          "ansi": false,
+          "ordered": true,
+          "reads_delta": true
+        },
+        {
+          "corpus": "read_only_admission",
+          "id": "qualified",
+          "sql": "SELECT id FROM global_temp.registered_table ORDER BY id",
+          "ansi": true,
+          "ordered": true,
+          "reads_delta": true
+        },
+        {
+          "corpus": "read_only_admission",
+          "id": "transform",
+          "sql": "SELECT transform(array(1,2),x->x+1) AS result",
+          "ansi": false,
+          "ordered": true,
+          "reads_delta": false
+        },
+        {
+          "corpus": "read_only_admission",
+          "id": "transform",
+          "sql": "SELECT transform(array(1,2),x->x+1) AS result",
+          "ansi": true,
+          "ordered": true,
+          "reads_delta": false
+        },
+        {
+          "corpus": "read_only_admission",
+          "id": "table",
+          "sql": "TABLE source ORDER BY id",
+          "ansi": false,
+          "ordered": true,
+          "reads_delta": true
+        },
+        {
+          "corpus": "read_only_admission",
+          "id": "table",
+          "sql": "TABLE source ORDER BY id",
+          "ansi": true,
+          "ordered": true,
+          "reads_delta": true
+        },
+        {
+          "corpus": "read_only_admission",
+          "id": "parenthesized",
+          "sql": "(SELECT id FROM source WHERE id<=2) ORDER BY id",
+          "ansi": false,
+          "ordered": true,
+          "reads_delta": true
+        },
+        {
+          "corpus": "read_only_admission",
+          "id": "parenthesized",
+          "sql": "(SELECT id FROM source WHERE id<=2) ORDER BY id",
+          "ansi": true,
+          "ordered": true,
+          "reads_delta": true
+        },
+        {
+          "corpus": "read_only_admission",
+          "id": "comment_literal",
+          "sql": "/* COPY INTO */ SeLeCt 'DROP TABLE source; VACUUM source' AS marker; -- SELECT 2",
+          "ansi": false,
+          "ordered": true,
+          "reads_delta": false
+        },
+        {
+          "corpus": "read_only_admission",
+          "id": "comment_literal",
+          "sql": "/* COPY INTO */ SeLeCt 'DROP TABLE source; VACUUM source' AS marker; -- SELECT 2",
+          "ansi": true,
+          "ordered": true,
+          "reads_delta": false
+        },
+        {
+          "corpus": "read_only_admission",
+          "id": "host_arithmetic_reference",
+          "sql": "SELECT id+1 AS value FROM source ORDER BY id",
+          "ansi": false,
+          "ordered": true,
+          "reads_delta": true
+        },
+        {
+          "corpus": "read_only_admission",
+          "id": "host_arithmetic_reference",
+          "sql": "SELECT id+1 AS value FROM source ORDER BY id",
+          "ansi": true,
+          "ordered": true,
+          "reads_delta": true
+        },
+        {
+          "corpus": "read_only_admission",
+          "id": "disabled_substitution_literal",
+          "sql": "SELECT concat('$','{payload}') AS marker",
+          "ansi": false,
+          "ordered": true,
+          "reads_delta": false
+        },
+        {
+          "corpus": "read_only_admission",
+          "id": "disabled_substitution_literal",
+          "sql": "SELECT concat('$','{payload}') AS marker",
+          "ansi": true,
+          "ordered": true,
+          "reads_delta": false
+        }
+      ]
+    }
+  ]
+}

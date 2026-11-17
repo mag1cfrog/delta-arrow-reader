@@ -53,6 +53,7 @@ pub(super) struct ProviderCalls {
 pub(super) struct RecordingDeltaProvider {
     pub inner: DeltaTableProvider,
     pub calls: Arc<Mutex<ProviderCalls>>,
+    pub schema_calls: Arc<AtomicUsize>,
 }
 
 impl fmt::Debug for RecordingDeltaProvider {
@@ -65,6 +66,7 @@ impl fmt::Debug for RecordingDeltaProvider {
 #[async_trait]
 impl TableProvider for RecordingDeltaProvider {
     fn schema(&self) -> SchemaRef {
+        self.schema_calls.fetch_add(1, Ordering::Relaxed);
         self.inner.schema()
     }
     fn table_type(&self) -> TableType {
@@ -123,6 +125,8 @@ pub(super) struct ReadRange {
 pub(super) struct RecordingLocalStore {
     inner: LocalFileSystem,
     pub reads: Mutex<Vec<ReadRange>>,
+    pub read_calls: AtomicUsize,
+    pub write_calls: AtomicUsize,
 }
 
 impl RecordingLocalStore {
@@ -136,6 +140,8 @@ impl RecordingLocalStore {
         let store = Arc::new(Self {
             inner: LocalFileSystem::new_with_prefix(root)?,
             reads: Mutex::new(vec![]),
+            read_calls: AtomicUsize::new(0),
+            write_calls: AtomicUsize::new(0),
         });
         let weak = Arc::downgrade(&store);
         delta_kernel_default_engine::storage::insert_url_handler(
@@ -184,6 +190,7 @@ impl ObjectStore for RecordingLocalStore {
         payload: PutPayload,
         options: PutOptions,
     ) -> StoreResult<PutResult> {
+        self.write_calls.fetch_add(1, Ordering::Relaxed);
         self.inner.put_opts(path, payload, options).await
     }
     async fn put_multipart_opts(
@@ -191,9 +198,11 @@ impl ObjectStore for RecordingLocalStore {
         path: &StorePath,
         options: PutMultipartOptions,
     ) -> StoreResult<Box<dyn MultipartUpload>> {
+        self.write_calls.fetch_add(1, Ordering::Relaxed);
         self.inner.put_multipart_opts(path, options).await
     }
     async fn get_opts(&self, path: &StorePath, options: GetOptions) -> StoreResult<GetResult> {
+        self.read_calls.fetch_add(1, Ordering::Relaxed);
         let head = options.head;
         let result = self.inner.get_opts(path, options).await?;
         if !head {
@@ -202,6 +211,7 @@ impl ObjectStore for RecordingLocalStore {
         Ok(result)
     }
     async fn get_ranges(&self, path: &StorePath, ranges: &[Range<u64>]) -> StoreResult<Vec<Bytes>> {
+        self.read_calls.fetch_add(1, Ordering::Relaxed);
         let result = self.inner.get_ranges(path, ranges).await?;
         assert_eq!(result.len(), ranges.len());
         for (range, bytes) in ranges.iter().zip(&result) {
@@ -214,13 +224,16 @@ impl ObjectStore for RecordingLocalStore {
         &self,
         paths: BoxStream<'static, StoreResult<StorePath>>,
     ) -> BoxStream<'static, StoreResult<StorePath>> {
+        self.write_calls.fetch_add(1, Ordering::Relaxed);
         self.inner.delete_stream(paths)
     }
     fn list(&self, prefix: Option<&StorePath>) -> BoxStream<'static, StoreResult<ObjectMeta>> {
+        self.read_calls.fetch_add(1, Ordering::Relaxed);
         let entries = self.inner.list(prefix);
         Box::pin(
             stream::once(async move {
                 let mut entries = entries.try_collect::<Vec<_>>().await?;
+                // Kernel assumes custom schemes are ordered; match its sorted file:// listing.
                 entries.sort_unstable_by(|left, right| left.location.cmp(&right.location));
                 Ok::<_, datafusion::object_store::Error>(stream::iter(entries.into_iter().map(Ok)))
             })
@@ -228,6 +241,7 @@ impl ObjectStore for RecordingLocalStore {
         )
     }
     async fn list_with_delimiter(&self, prefix: Option<&StorePath>) -> StoreResult<ListResult> {
+        self.read_calls.fetch_add(1, Ordering::Relaxed);
         self.inner.list_with_delimiter(prefix).await
     }
     async fn copy_opts(
@@ -236,6 +250,7 @@ impl ObjectStore for RecordingLocalStore {
         to: &StorePath,
         options: CopyOptions,
     ) -> StoreResult<()> {
+        self.write_calls.fetch_add(1, Ordering::Relaxed);
         self.inner.copy_opts(from, to, options).await
     }
 }

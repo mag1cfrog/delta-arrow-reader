@@ -140,6 +140,7 @@ async fn execute(
             Arc::new(RecordingDeltaProvider {
                 inner,
                 calls: Arc::clone(&calls),
+                schema_calls: Default::default(),
             }),
         )?;
         store

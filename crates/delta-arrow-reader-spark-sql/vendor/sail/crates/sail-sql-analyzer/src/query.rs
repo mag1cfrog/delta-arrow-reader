@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use either::Either;
 use sail_common::spec;
 use sail_sql_parser::ast::expression::{AtomExpr, DuplicateTreatment, Expr, OrderByExpr};
@@ -370,11 +371,36 @@ fn from_ast_query_body(body: QueryBody) -> SqlResult<spec::QueryPlan> {
     }
 }
 
+/// Reject direct file-format paths before resolving registered catalog objects.
+pub fn reject_direct_format_path(name: &spec::ObjectName) -> SqlResult<()> {
+    if let [format, path] = name.parts()
+        && matches!(
+            format.as_ref().to_ascii_lowercase().as_str(),
+            "parquet" | "delta" | "orc" | "csv" | "json" | "avro" | "text" | "binaryfile" | "image"
+        )
+    {
+        let path = path.as_ref().to_ascii_lowercase();
+        if path.contains(['/', '\\', ':'])
+            || path.starts_with('.')
+            || [".parquet", ".orc", ".csv", ".json", ".avro", ".txt"]
+                .iter()
+                .any(|extension| path.ends_with(extension))
+        {
+            return Err(SqlError::unsupported(
+                "direct format paths; register a table provider instead",
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn from_ast_query_table(name: ObjectName) -> SqlResult<spec::QueryPlan> {
+    let name = from_ast_object_name(name)?;
+    reject_direct_format_path(&name)?;
     Ok(spec::QueryPlan::new(spec::QueryNode::Read {
         is_streaming: false,
         read_type: spec::ReadType::NamedTable(Box::new(spec::ReadNamedTable {
-            name: from_ast_object_name(name)?,
+            name,
             temporal: None,
             sample: None,
             options: Default::default(),
@@ -473,12 +499,14 @@ fn from_ast_table_factor(table: TableFactor) -> SqlResult<spec::QueryPlan> {
             sample,
             alias,
         } => {
+            let name = from_ast_object_name(name)?;
+            reject_direct_format_path(&name)?;
             let temporal = temporal.map(|t| from_ast_temporal(*t)).transpose()?;
             let sample = sample.map(|s| from_ast_table_sample(*s)).transpose()?;
             let plan = spec::QueryPlan::new(spec::QueryNode::Read {
                 is_streaming: false,
                 read_type: spec::ReadType::NamedTable(Box::new(spec::ReadNamedTable {
-                    name: from_ast_object_name(name)?,
+                    name,
                     temporal,
                     sample,
                     options: Default::default(),
@@ -547,10 +575,15 @@ fn from_ast_table_factor(table: TableFactor) -> SqlResult<spec::QueryPlan> {
             right: _,
             alias,
         } => {
+            let name = from_ast_expression(expr)?;
+            if let spec::Expr::Literal(spec::Literal::Utf8 { value: Some(value) }) = &name {
+                let table_name = from_ast_object_name(crate::parser::parse_object_name(value)?)?;
+                reject_direct_format_path(&table_name)?;
+            }
             let plan = spec::QueryPlan::new(spec::QueryNode::Read {
                 is_streaming: false,
                 read_type: spec::ReadType::DynamicTable(Box::new(spec::ReadDynamicTable {
-                    name: from_ast_expression(expr)?,
+                    name,
                     sample: None,
                     options: Default::default(),
                 })),
