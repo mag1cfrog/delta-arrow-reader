@@ -103,6 +103,17 @@ DAR's automatic resource caps; explicit targets separately prove two-file
 overlap. Memory checks measure DataFusion operator reservations in the supplied
 pool.
 
+The [execution-feature references](tests/fixtures/execution-features/README.md)
+cover bounded `range` values and BIGINT result types. `SORT BY` orders each output
+partition. `DISTRIBUTE BY` and `CLUSTER BY` are unsupported. Partition IDs refer to
+the execution layout; monotonic IDs are unique and increase within a partition.
+Unordered `first`, `last` and `collect_list` checks use membership and counts.
+
+`input_file_name()` is unsupported. Registered Delta providers do not inject a
+`_metadata.file_path` column from file origin; referencing that absent field
+reports a missing-field error. Stored columns and query aliases named `_metadata`
+remain available as ordinary user data.
+
 Floating DISTINCT set results can differ from Spark in their `0.0`/`-0.0` text
 after projection and LIMIT optimization. The [set-result references](tests/fixtures/README.md#floating-intersect-and-except-results)
 record this limitation separately from equality, row counts and NULL behavior.

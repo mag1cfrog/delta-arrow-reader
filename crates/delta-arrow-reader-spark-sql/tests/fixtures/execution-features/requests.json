@@ -1,0 +1,407 @@
+{
+  "issue": 1316,
+  "base": "db442d872e99a11aae513a642d13c9b99f2ca4f1",
+  "expected_record_count": 40,
+  "corpora": [
+    {
+      "corpus": "execution_features",
+      "source": "Bounded deterministic range and ordinary stored/aliased field controls. Partition-dependent cases preserve raw Spark observations; candidate assertions use invariants and executed types, not Spark partition assignments or aggregate order.",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "source",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "customer_name",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                "alice"
+              ],
+              [
+                "2",
+                "bob"
+              ],
+              [
+                "3",
+                null
+              ]
+            ]
+          },
+          {
+            "name": "stored_source",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "_metadata",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "file_path",
+                        "type": "string",
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                [
+                  "ordinary-a"
+                ]
+              ],
+              [
+                "2",
+                null
+              ],
+              [
+                "3",
+                [
+                  "ordinary-c"
+                ]
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "id": "range_one_arg",
+          "sql": "SELECT id FROM range(7) ORDER BY id",
+          "ordered": true,
+          "range_partitions": null,
+          "corpus": "execution_features",
+          "ansi": false
+        },
+        {
+          "id": "range_one_arg",
+          "sql": "SELECT id FROM range(7) ORDER BY id",
+          "ordered": true,
+          "range_partitions": null,
+          "corpus": "execution_features",
+          "ansi": true
+        },
+        {
+          "id": "range_start_end",
+          "sql": "SELECT id FROM range(3,11) ORDER BY id",
+          "ordered": true,
+          "range_partitions": null,
+          "corpus": "execution_features",
+          "ansi": false
+        },
+        {
+          "id": "range_start_end",
+          "sql": "SELECT id FROM range(3,11) ORDER BY id",
+          "ordered": true,
+          "range_partitions": null,
+          "corpus": "execution_features",
+          "ansi": true
+        },
+        {
+          "id": "range_positive_step",
+          "sql": "SELECT id FROM range(-4,9,3) ORDER BY id",
+          "ordered": true,
+          "range_partitions": null,
+          "corpus": "execution_features",
+          "ansi": false
+        },
+        {
+          "id": "range_positive_step",
+          "sql": "SELECT id FROM range(-4,9,3) ORDER BY id",
+          "ordered": true,
+          "range_partitions": null,
+          "corpus": "execution_features",
+          "ansi": true
+        },
+        {
+          "id": "range_negative_step",
+          "sql": "SELECT id FROM range(12,-3,-4) ORDER BY id",
+          "ordered": true,
+          "range_partitions": null,
+          "corpus": "execution_features",
+          "ansi": false
+        },
+        {
+          "id": "range_negative_step",
+          "sql": "SELECT id FROM range(12,-3,-4) ORDER BY id",
+          "ordered": true,
+          "range_partitions": null,
+          "corpus": "execution_features",
+          "ansi": true
+        },
+        {
+          "id": "range_two_partitions",
+          "sql": "SELECT id FROM range(0,13,2,2) ORDER BY id",
+          "ordered": true,
+          "range_partitions": 2,
+          "corpus": "execution_features",
+          "ansi": false
+        },
+        {
+          "id": "range_two_partitions",
+          "sql": "SELECT id FROM range(0,13,2,2) ORDER BY id",
+          "ordered": true,
+          "range_partitions": 2,
+          "corpus": "execution_features",
+          "ansi": true
+        },
+        {
+          "id": "range_five_partitions",
+          "sql": "SELECT id FROM range(-7,8,3,5) ORDER BY id",
+          "ordered": true,
+          "range_partitions": 5,
+          "corpus": "execution_features",
+          "ansi": false
+        },
+        {
+          "id": "range_five_partitions",
+          "sql": "SELECT id FROM range(-7,8,3,5) ORDER BY id",
+          "ordered": true,
+          "range_partitions": 5,
+          "corpus": "execution_features",
+          "ansi": true
+        },
+        {
+          "id": "range_sparse_partitions",
+          "sql": "SELECT id FROM range(0,2,1,5) ORDER BY id",
+          "ordered": true,
+          "range_partitions": 5,
+          "corpus": "execution_features",
+          "ansi": false
+        },
+        {
+          "id": "range_sparse_partitions",
+          "sql": "SELECT id FROM range(0,2,1,5) ORDER BY id",
+          "ordered": true,
+          "range_partitions": 5,
+          "corpus": "execution_features",
+          "ansi": true
+        },
+        {
+          "id": "range_empty_equal",
+          "sql": "SELECT id FROM range(5,5,1,3) ORDER BY id",
+          "ordered": true,
+          "range_partitions": 3,
+          "corpus": "execution_features",
+          "ansi": false
+        },
+        {
+          "id": "range_empty_equal",
+          "sql": "SELECT id FROM range(5,5,1,3) ORDER BY id",
+          "ordered": true,
+          "range_partitions": 3,
+          "corpus": "execution_features",
+          "ansi": true
+        },
+        {
+          "id": "range_empty_forward",
+          "sql": "SELECT id FROM range(8,2,1,2) ORDER BY id",
+          "ordered": true,
+          "range_partitions": 2,
+          "corpus": "execution_features",
+          "ansi": false
+        },
+        {
+          "id": "range_empty_forward",
+          "sql": "SELECT id FROM range(8,2,1,2) ORDER BY id",
+          "ordered": true,
+          "range_partitions": 2,
+          "corpus": "execution_features",
+          "ansi": true
+        },
+        {
+          "id": "range_empty_negative",
+          "sql": "SELECT id FROM range(2,8,-1,2) ORDER BY id",
+          "ordered": true,
+          "range_partitions": 2,
+          "corpus": "execution_features",
+          "ansi": false
+        },
+        {
+          "id": "range_empty_negative",
+          "sql": "SELECT id FROM range(2,8,-1,2) ORDER BY id",
+          "ordered": true,
+          "range_partitions": 2,
+          "corpus": "execution_features",
+          "ansi": true
+        },
+        {
+          "id": "range_negative_bounds",
+          "sql": "SELECT id FROM range(-12,-2,2,3) ORDER BY id",
+          "ordered": true,
+          "range_partitions": 3,
+          "corpus": "execution_features",
+          "ansi": false
+        },
+        {
+          "id": "range_negative_bounds",
+          "sql": "SELECT id FROM range(-12,-2,2,3) ORDER BY id",
+          "ordered": true,
+          "range_partitions": 3,
+          "corpus": "execution_features",
+          "ansi": true
+        },
+        {
+          "id": "range_big_positive",
+          "sql": "SELECT id FROM range(4294967296L,4294967306L,2L,3) ORDER BY id",
+          "ordered": true,
+          "range_partitions": 3,
+          "corpus": "execution_features",
+          "ansi": false
+        },
+        {
+          "id": "range_big_positive",
+          "sql": "SELECT id FROM range(4294967296L,4294967306L,2L,3) ORDER BY id",
+          "ordered": true,
+          "range_partitions": 3,
+          "corpus": "execution_features",
+          "ansi": true
+        },
+        {
+          "id": "range_big_negative",
+          "sql": "SELECT id FROM range(-4294967300L,-4294967290L,3L,2) ORDER BY id",
+          "ordered": true,
+          "range_partitions": 2,
+          "corpus": "execution_features",
+          "ansi": false
+        },
+        {
+          "id": "range_big_negative",
+          "sql": "SELECT id FROM range(-4294967300L,-4294967290L,3L,2) ORDER BY id",
+          "ordered": true,
+          "range_partitions": 2,
+          "corpus": "execution_features",
+          "ansi": true
+        },
+        {
+          "id": "range_big_negative_step",
+          "sql": "SELECT id FROM range(4294967305L,4294967295L,-3L,3) ORDER BY id",
+          "ordered": true,
+          "range_partitions": 3,
+          "corpus": "execution_features",
+          "ansi": false
+        },
+        {
+          "id": "range_big_negative_step",
+          "sql": "SELECT id FROM range(4294967305L,4294967295L,-3L,3) ORDER BY id",
+          "ordered": true,
+          "range_partitions": 3,
+          "corpus": "execution_features",
+          "ansi": true
+        },
+        {
+          "id": "stored_metadata",
+          "sql": "SELECT id,_metadata.file_path AS user_path FROM stored_source ORDER BY id",
+          "ordered": true,
+          "corpus": "execution_features",
+          "ansi": false
+        },
+        {
+          "id": "stored_metadata",
+          "sql": "SELECT id,_metadata.file_path AS user_path FROM stored_source ORDER BY id",
+          "ordered": true,
+          "corpus": "execution_features",
+          "ansi": true
+        },
+        {
+          "id": "alias_metadata",
+          "sql": "SELECT id,named_struct('file_path',customer_name) AS _metadata,_metadata.file_path AS user_path FROM source ORDER BY id",
+          "ordered": true,
+          "corpus": "execution_features",
+          "ansi": false
+        },
+        {
+          "id": "alias_metadata",
+          "sql": "SELECT id,named_struct('file_path',customer_name) AS _metadata,_metadata.file_path AS user_path FROM source ORDER BY id",
+          "ordered": true,
+          "corpus": "execution_features",
+          "ansi": true
+        },
+        {
+          "id": "table_alias_metadata",
+          "sql": "SELECT _metadata.file_path FROM (SELECT id,customer_name AS file_path FROM source) _metadata ORDER BY id",
+          "ordered": true,
+          "corpus": "execution_features",
+          "ansi": false
+        },
+        {
+          "id": "table_alias_metadata",
+          "sql": "SELECT _metadata.file_path FROM (SELECT id,customer_name AS file_path FROM source) _metadata ORDER BY id",
+          "ordered": true,
+          "corpus": "execution_features",
+          "ansi": true
+        },
+        {
+          "id": "partition_id_types",
+          "sql": "SELECT id,spark_partition_id() AS pid,monotonically_increasing_id() AS mid FROM source",
+          "ordered": false,
+          "corpus": "execution_features",
+          "ansi": false
+        },
+        {
+          "id": "partition_id_types",
+          "sql": "SELECT id,spark_partition_id() AS pid,monotonically_increasing_id() AS mid FROM source",
+          "ordered": false,
+          "corpus": "execution_features",
+          "ansi": true
+        },
+        {
+          "id": "sort_key_types",
+          "sql": "SELECT CASE WHEN id % 5 = 0 THEN NULL ELSE id % 7 END AS sort_key,id FROM source SORT BY sort_key DESC NULLS FIRST,id ASC",
+          "ordered": false,
+          "corpus": "execution_features",
+          "ansi": false
+        },
+        {
+          "id": "sort_key_types",
+          "sql": "SELECT CASE WHEN id % 5 = 0 THEN NULL ELSE id % 7 END AS sort_key,id FROM source SORT BY sort_key DESC NULLS FIRST,id ASC",
+          "ordered": false,
+          "corpus": "execution_features",
+          "ansi": true
+        },
+        {
+          "id": "aggregate_types",
+          "sql": "SELECT id % 5 AS g,first(100 * (id % 5) + id % 7) AS first_value,last(100 * (id % 5) + id % 7) AS last_value,collect_list(100 * (id % 5) + id % 7) AS members,count(*) AS n FROM source GROUP BY id % 5",
+          "ordered": false,
+          "corpus": "execution_features",
+          "ansi": false
+        },
+        {
+          "id": "aggregate_types",
+          "sql": "SELECT id % 5 AS g,first(100 * (id % 5) + id % 7) AS first_value,last(100 * (id % 5) + id % 7) AS last_value,collect_list(100 * (id % 5) + id % 7) AS members,count(*) AS n FROM source GROUP BY id % 5",
+          "ordered": false,
+          "corpus": "execution_features",
+          "ansi": true
+        }
+      ]
+    }
+  ]
+}
