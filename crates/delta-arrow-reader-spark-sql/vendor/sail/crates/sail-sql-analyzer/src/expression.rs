@@ -333,9 +333,24 @@ pub fn from_ast_expression(expr: Expr) -> SqlResult<spec::Expr> {
                 value.value.insert(0, '-');
                 return from_ast_expression(*expr);
             }
+            let mut expr = from_ast_expression(*expr)?;
+            // Negate tuple membership before EXISTS discards UNKNOWN comparisons.
+            if matches!(op, UnaryOperator::Not(_) | UnaryOperator::LogicalNot(_))
+                && let spec::Expr::InSubquery {
+                    expr: value,
+                    negated,
+                    ..
+                } = &mut expr
+                && matches!(value.as_ref(), spec::Expr::UnresolvedFunction(function)
+                    if function.function_name.parts() == [spec::Identifier::from("struct")]
+                        && function.arguments.len() > 1)
+            {
+                *negated = !*negated;
+                return Ok(expr);
+            }
             Ok(spec::Expr::UnresolvedFunction(spec::UnresolvedFunction {
                 function_name: spec::ObjectName::bare(from_ast_unary_operator(op)?),
-                arguments: vec![from_ast_expression(*expr)?],
+                arguments: vec![expr],
                 named_arguments: vec![],
                 is_distinct: false,
                 is_user_defined_function: false,

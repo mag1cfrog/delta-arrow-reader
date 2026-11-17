@@ -1,0 +1,734 @@
+{
+  "issue": 1332,
+  "base": "d6ac56496f4a4414c9c2658b72ef485af6a406de",
+  "expected_record_count": 56,
+  "corpora": [
+    {
+      "corpus": "tuple_not_in_null",
+      "source": "Ordinary nullable registered INT tuples and connected membership consumers; Spark-only capture reads no expected output.",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "pairs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "a",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "x",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                null,
+                "10"
+              ],
+              [
+                "1",
+                null
+              ],
+              [
+                "1",
+                "10"
+              ],
+              [
+                "2",
+                "20"
+              ],
+              [
+                "2",
+                "20"
+              ],
+              [
+                "3",
+                "30"
+              ]
+            ]
+          },
+          {
+            "name": "rhs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "a",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "x",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                "10"
+              ],
+              [
+                "2",
+                "20"
+              ],
+              [
+                "2",
+                "20"
+              ],
+              [
+                null,
+                "40"
+              ],
+              [
+                "4",
+                null
+              ]
+            ]
+          },
+          {
+            "name": "partial_rhs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "a",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "x",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                null,
+                "40"
+              ]
+            ]
+          },
+          {
+            "name": "null_rhs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "a",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "x",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                null,
+                null
+              ]
+            ]
+          },
+          {
+            "name": "empty_rhs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "a",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "x",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": []
+          },
+          {
+            "name": "required_rhs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "a",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "x",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                "10"
+              ],
+              [
+                "2",
+                "20"
+              ]
+            ]
+          },
+          {
+            "name": "required_pairs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "a",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "x",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                "10"
+              ],
+              [
+                "2",
+                "20"
+              ],
+              [
+                "2",
+                "20"
+              ],
+              [
+                "3",
+                "30"
+              ]
+            ]
+          },
+          {
+            "name": "triples",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "a",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "x",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "z",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                "10",
+                "1"
+              ],
+              [
+                "1",
+                null,
+                "1"
+              ],
+              [
+                null,
+                "10",
+                "2"
+              ],
+              [
+                "2",
+                "20",
+                null
+              ],
+              [
+                "3",
+                "30",
+                "3"
+              ]
+            ]
+          },
+          {
+            "name": "triple_rhs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "a",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "x",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "z",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                "10",
+                "1"
+              ],
+              [
+                "2",
+                "20",
+                "2"
+              ],
+              [
+                null,
+                "40",
+                "4"
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "mixed_in",
+          "ansi": false,
+          "sql": "SELECT a,x FROM pairs WHERE (a,x) IN (SELECT a,x FROM rhs)",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "mixed_in",
+          "ansi": true,
+          "sql": "SELECT a,x FROM pairs WHERE (a,x) IN (SELECT a,x FROM rhs)",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "mixed_not_in",
+          "ansi": false,
+          "sql": "SELECT a,x FROM pairs WHERE (a,x) NOT IN (SELECT a,x FROM rhs)",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "mixed_not_in",
+          "ansi": true,
+          "sql": "SELECT a,x FROM pairs WHERE (a,x) NOT IN (SELECT a,x FROM rhs)",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "not_of_in",
+          "ansi": false,
+          "sql": "SELECT a,x FROM pairs WHERE NOT ((a,x) IN (SELECT a,x FROM rhs))",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "not_of_in",
+          "ansi": true,
+          "sql": "SELECT a,x FROM pairs WHERE NOT ((a,x) IN (SELECT a,x FROM rhs))",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "bang_of_in",
+          "ansi": false,
+          "sql": "SELECT a,x FROM pairs WHERE !((a,x) IN (SELECT a,x FROM rhs))",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "bang_of_in",
+          "ansi": true,
+          "sql": "SELECT a,x FROM pairs WHERE !((a,x) IN (SELECT a,x FROM rhs))",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "double_not_in",
+          "ansi": false,
+          "sql": "SELECT a,x FROM pairs WHERE NOT NOT ((a,x) IN (SELECT a,x FROM rhs))",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "double_not_in",
+          "ansi": true,
+          "sql": "SELECT a,x FROM pairs WHERE NOT NOT ((a,x) IN (SELECT a,x FROM rhs))",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "not_of_not_in",
+          "ansi": false,
+          "sql": "SELECT a,x FROM pairs WHERE NOT ((a,x) NOT IN (SELECT a,x FROM rhs))",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "not_of_not_in",
+          "ansi": true,
+          "sql": "SELECT a,x FROM pairs WHERE NOT ((a,x) NOT IN (SELECT a,x FROM rhs))",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "projected_in",
+          "ansi": false,
+          "sql": "SELECT a,x,(a,x) IN (SELECT a,x FROM rhs) AS r FROM pairs",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "projected_in",
+          "ansi": true,
+          "sql": "SELECT a,x,(a,x) IN (SELECT a,x FROM rhs) AS r FROM pairs",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "projected_not_in",
+          "ansi": false,
+          "sql": "SELECT a,x,(a,x) NOT IN (SELECT a,x FROM rhs) AS r FROM pairs",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "projected_not_in",
+          "ansi": true,
+          "sql": "SELECT a,x,(a,x) NOT IN (SELECT a,x FROM rhs) AS r FROM pairs",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "projected_not_of_in",
+          "ansi": false,
+          "sql": "SELECT a,x,NOT ((a,x) IN (SELECT a,x FROM rhs)) AS r FROM pairs",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "projected_not_of_in",
+          "ansi": true,
+          "sql": "SELECT a,x,NOT ((a,x) IN (SELECT a,x FROM rhs)) AS r FROM pairs",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "projected_not_of_not_in",
+          "ansi": false,
+          "sql": "SELECT a,x,NOT ((a,x) NOT IN (SELECT a,x FROM rhs)) AS r FROM pairs",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "projected_not_of_not_in",
+          "ansi": true,
+          "sql": "SELECT a,x,NOT ((a,x) NOT IN (SELECT a,x FROM rhs)) AS r FROM pairs",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "projected_isnull",
+          "ansi": false,
+          "sql": "SELECT a,x,((a,x) NOT IN (SELECT a,x FROM rhs)) IS NULL AS r FROM pairs",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "projected_isnull",
+          "ansi": true,
+          "sql": "SELECT a,x,((a,x) NOT IN (SELECT a,x FROM rhs)) IS NULL AS r FROM pairs",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "filter_isnull",
+          "ansi": false,
+          "sql": "SELECT a,x FROM pairs WHERE ((a,x) NOT IN (SELECT a,x FROM rhs)) IS NULL",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "filter_isnull",
+          "ansi": true,
+          "sql": "SELECT a,x FROM pairs WHERE ((a,x) NOT IN (SELECT a,x FROM rhs)) IS NULL",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "filter_isnotnull",
+          "ansi": false,
+          "sql": "SELECT a,x FROM pairs WHERE ((a,x) NOT IN (SELECT a,x FROM rhs)) IS NOT NULL",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "filter_isnotnull",
+          "ansi": true,
+          "sql": "SELECT a,x FROM pairs WHERE ((a,x) NOT IN (SELECT a,x FROM rhs)) IS NOT NULL",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "filter_or",
+          "ansi": false,
+          "sql": "SELECT a,x FROM pairs WHERE ((a,x) NOT IN (SELECT a,x FROM rhs)) OR a=1",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "filter_or",
+          "ansi": true,
+          "sql": "SELECT a,x FROM pairs WHERE ((a,x) NOT IN (SELECT a,x FROM rhs)) OR a=1",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "projected_or",
+          "ansi": false,
+          "sql": "SELECT a,x,((a,x) NOT IN (SELECT a,x FROM rhs)) OR a=1 AS r FROM pairs",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "projected_or",
+          "ansi": true,
+          "sql": "SELECT a,x,((a,x) NOT IN (SELECT a,x FROM rhs)) OR a=1 AS r FROM pairs",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "empty_in",
+          "ansi": false,
+          "sql": "SELECT a,x FROM pairs WHERE (a,x) IN (SELECT a,x FROM empty_rhs)",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "empty_in",
+          "ansi": true,
+          "sql": "SELECT a,x FROM pairs WHERE (a,x) IN (SELECT a,x FROM empty_rhs)",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "empty_not_in",
+          "ansi": false,
+          "sql": "SELECT a,x FROM pairs WHERE (a,x) NOT IN (SELECT a,x FROM empty_rhs)",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "empty_not_in",
+          "ansi": true,
+          "sql": "SELECT a,x FROM pairs WHERE (a,x) NOT IN (SELECT a,x FROM empty_rhs)",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "partial_rhs_not_in",
+          "ansi": false,
+          "sql": "SELECT a,x FROM pairs WHERE (a,x) NOT IN (SELECT a,x FROM partial_rhs)",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "partial_rhs_not_in",
+          "ansi": true,
+          "sql": "SELECT a,x FROM pairs WHERE (a,x) NOT IN (SELECT a,x FROM partial_rhs)",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "null_rhs_not_in",
+          "ansi": false,
+          "sql": "SELECT a,x FROM pairs WHERE (a,x) NOT IN (SELECT a,x FROM null_rhs)",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "null_rhs_not_in",
+          "ansi": true,
+          "sql": "SELECT a,x FROM pairs WHERE (a,x) NOT IN (SELECT a,x FROM null_rhs)",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "required_not_in",
+          "ansi": false,
+          "sql": "SELECT a,x FROM required_pairs WHERE (a,x) NOT IN (SELECT a,x FROM required_rhs)",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "required_not_in",
+          "ansi": true,
+          "sql": "SELECT a,x FROM required_pairs WHERE (a,x) NOT IN (SELECT a,x FROM required_rhs)",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "nullable_lhs_required_rhs",
+          "ansi": false,
+          "sql": "SELECT a,x FROM pairs WHERE (a,x) NOT IN (SELECT a,x FROM required_rhs)",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "nullable_lhs_required_rhs",
+          "ansi": true,
+          "sql": "SELECT a,x FROM pairs WHERE (a,x) NOT IN (SELECT a,x FROM required_rhs)",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "computed_not_in",
+          "ansi": false,
+          "sql": "SELECT a,x FROM pairs WHERE (a+1,x*2) NOT IN (SELECT a+1,x*2 FROM rhs)",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "computed_not_in",
+          "ansi": true,
+          "sql": "SELECT a,x FROM pairs WHERE (a+1,x*2) NOT IN (SELECT a+1,x*2 FROM rhs)",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "triple_not_in",
+          "ansi": false,
+          "sql": "SELECT a,x,z FROM triples WHERE (a,x,z) NOT IN (SELECT a,x,z FROM triple_rhs)",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "triple_not_in",
+          "ansi": true,
+          "sql": "SELECT a,x,z FROM triples WHERE (a,x,z) NOT IN (SELECT a,x,z FROM triple_rhs)",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "scalar_filter_not_in",
+          "ansi": false,
+          "sql": "SELECT a,x FROM pairs WHERE a NOT IN (SELECT a FROM rhs)",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "scalar_filter_not_in",
+          "ansi": true,
+          "sql": "SELECT a,x FROM pairs WHERE a NOT IN (SELECT a FROM rhs)",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "scalar_projected_in",
+          "ansi": false,
+          "sql": "SELECT a,x,a IN (SELECT a FROM rhs) AS r FROM pairs",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "scalar_projected_in",
+          "ansi": true,
+          "sql": "SELECT a,x,a IN (SELECT a FROM rhs) AS r FROM pairs",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "scalar_projected_not_in",
+          "ansi": false,
+          "sql": "SELECT a,x,a NOT IN (SELECT a FROM rhs) AS r FROM pairs",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "scalar_projected_not_in",
+          "ansi": true,
+          "sql": "SELECT a,x,a NOT IN (SELECT a FROM rhs) AS r FROM pairs",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "mixed_type_rhs",
+          "ansi": false,
+          "sql": "SELECT a,x FROM pairs WHERE (a,x) NOT IN (SELECT CAST(a AS BIGINT),CAST(x AS DECIMAL(12,2)) FROM rhs)",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "mixed_type_rhs",
+          "ansi": true,
+          "sql": "SELECT a,x FROM pairs WHERE (a,x) NOT IN (SELECT CAST(a AS BIGINT),CAST(x AS DECIMAL(12,2)) FROM rhs)",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "computed_nullable_required_input",
+          "ansi": false,
+          "sql": "SELECT a,x FROM required_pairs WHERE (TRY_CAST(CASE WHEN a=1 THEN 'bad' ELSE CAST(a AS STRING) END AS INT),x) NOT IN (SELECT a,x FROM required_rhs)",
+          "ordered": false
+        },
+        {
+          "corpus": "tuple_not_in_null",
+          "id": "computed_nullable_required_input",
+          "ansi": true,
+          "sql": "SELECT a,x FROM required_pairs WHERE (TRY_CAST(CASE WHEN a=1 THEN 'bad' ELSE CAST(a AS STRING) END AS INT),x) NOT IN (SELECT a,x FROM required_rhs)",
+          "ordered": false
+        }
+      ]
+    }
+  ]
+}
