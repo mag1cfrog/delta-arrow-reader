@@ -90,6 +90,19 @@ snapshots in both ANSI modes. They also record provider requests and physical
 reads. Shared core limits remain for data-column IN and nullable OR file pruning,
 and for unreferenced bytes included in the default metadata prefetch.
 
+The [Delta streaming tests](tests/delta_streaming.rs) and
+[snapshot checks](tests/delta_provider.rs) run native SQL and both Spark ANSI
+modes over the same real Delta files. They check metadata-only planning and
+incremental results for plain scans, filters, projections and LIMIT. Other checks
+cover independent executions, retained snapshots, stream drop, task abort and
+late read failures. Read gates acknowledge cancellation and resource release;
+reexecuting the same plan checks that its shared read permits remain usable.
+Separate controls exercise session partition targets, file-read concurrency and
+the host memory pool's operator limits. Session target expectations include
+DAR's automatic resource caps; explicit targets separately prove two-file
+overlap. Memory checks measure DataFusion operator reservations in the supplied
+pool.
+
 Floating DISTINCT set results can differ from Spark in their `0.0`/`-0.0` text
 after projection and LIMIT optimization. The [set-result references](tests/fixtures/README.md#floating-intersect-and-except-results)
 record this limitation separately from equality, row counts and NULL behavior.

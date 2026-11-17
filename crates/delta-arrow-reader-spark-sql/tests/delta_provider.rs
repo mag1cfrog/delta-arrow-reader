@@ -26,6 +26,10 @@ use std::{error::Error, fs, sync::Arc};
 mod reader_support;
 use reader_support::RealParquetDeltaTable;
 
+#[path = "support/delta_query.rs"]
+mod delta_query;
+use delta_query::QueryPath;
+
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
 fn context(partitions: usize) -> SessionContext {
@@ -44,8 +48,7 @@ fn context(partitions: usize) -> SessionContext {
 }
 
 async fn plan(ctx: &SessionContext, sql: &str) -> TestResult<Arc<dyn ExecutionPlan>> {
-    let query = plan_query(ctx, sql, &SparkSqlOptions::default()).await?;
-    Ok(query.create_physical_plan(ctx).await?)
+    Ok(QueryPath::Spark { ansi_mode: false }.plan(ctx, sql).await?)
 }
 
 fn ids(batch: &RecordBatch) -> TestResult<&[i32]> {
@@ -226,6 +229,13 @@ async fn spark_delta_deletion_vectors_preserve_rows_and_schema() -> TestResult {
 
 #[tokio::test]
 async fn spark_delta_refresh_keeps_retained_plans_and_streams() -> TestResult {
+    for path in QueryPath::ALL {
+        check_retained_snapshots(path).await?;
+    }
+    Ok(())
+}
+
+async fn check_retained_snapshots(path: QueryPath) -> TestResult {
     let fixture = RealParquetDeltaTable::new_with_two_files("spark-snapshots")?;
     let uri = fixture.path().to_string_lossy().into_owned();
     let empty = DeltaTableBuilder::new(&uri)
@@ -241,7 +251,7 @@ async fn spark_delta_refresh_keeps_retained_plans_and_streams() -> TestResult {
     let provider = Arc::new(DeltaTableProvider::try_new(old, ScanOptions::default())?);
     let ctx = context(1);
     ctx.register_table("versions", provider.clone())?;
-    let retained = plan(&ctx, "SELECT id AS row_id FROM versions").await?;
+    let retained = path.plan(&ctx, "SELECT id AS row_id FROM versions").await?;
     assert_idle(retained.as_ref());
     let log = fixture.path().join("_delta_log");
     let mut metadata: Value = fs::read_to_string(log.join("00000000000000000000.json"))?
@@ -283,11 +293,12 @@ async fn spark_delta_refresh_keeps_retained_plans_and_streams() -> TestResult {
     )?;
     // Eager snapshots and existing plans must survive refresh, registration replacement and log removal.
     fs::rename(&log, fixture.path().join("disabled-log"))?;
-    let latest = plan(
-        &ctx,
-        "SELECT id AS row_id, note AS added_column FROM versions",
-    )
-    .await?;
+    let latest = path
+        .plan(
+            &ctx,
+            "SELECT id AS row_id, note AS added_column FROM versions",
+        )
+        .await?;
     assert_idle(latest.as_ref());
     assert_eq!(
         collect_scan_metrics(retained.as_ref())[0]
@@ -320,7 +331,7 @@ async fn spark_delta_refresh_keeps_retained_plans_and_streams() -> TestResult {
     actual.sort_unstable();
     assert_eq!(actual, [3, 4]);
     assert!(
-        read_ids(&ctx, plan(&ctx, "SELECT id FROM empty_version").await?)
+        read_ids(&ctx, path.plan(&ctx, "SELECT id FROM empty_version").await?)
             .await?
             .is_empty()
     );
@@ -334,7 +345,7 @@ async fn spark_delta_refresh_keeps_retained_plans_and_streams() -> TestResult {
 }
 
 #[tokio::test]
-async fn spark_delta_stream_drop_and_late_failure_keep_partial_results() -> TestResult {
+async fn spark_delta_late_failure_keeps_partition_ids_and_partial_results() -> TestResult {
     let fixture =
         RealParquetDeltaTable::new_with_two_large_files("spark-stream-lifecycle", 20_000)?;
     let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
@@ -371,27 +382,6 @@ async fn spark_delta_stream_drop_and_late_failure_keep_partial_results() -> Test
     let hidden = data.with_extension("unavailable");
     fs::rename(&data, &hidden)?;
     let sql = "SELECT id AS row_id, spark_partition_id() AS pid, monotonically_increasing_id() AS mid FROM streaming";
-    let physical = plan(&ctx, sql).await?;
-    assert_idle(physical.as_ref());
-    let metrics = collect_scan_metrics(physical.as_ref());
-    let mut stream = execute_stream(physical, ctx.task_ctx())?;
-    let first = stream.next().await.ok_or("missing first batch")??;
-    assert_eq!(ids(&first)?[0], 1);
-    assert_eq!(array_value_to_string(first.column(2).as_ref(), 0)?, "0");
-    drop(stream);
-    // The reader updates delivery metrics after the consumer receives the batch.
-    for _ in 0..1000 {
-        if metrics[0].snapshot().reader_metrics.scheduler_rows_emitted > 0 {
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(1)).await;
-    }
-    let partial = metrics[0].snapshot().reader_metrics;
-    assert_eq!(partial.file_tasks_started, 1);
-    assert_eq!(partial.file_tasks_completed, 0);
-    assert_eq!(partial.scan_partitions_completed, 0);
-    assert!((1..=512).contains(&partial.scheduler_rows_emitted));
-
     let failing = plan(&ctx, sql).await?;
     assert_idle(failing.as_ref());
     let metrics = collect_scan_metrics(failing.as_ref());

@@ -31,6 +31,7 @@ use parquet::{
 };
 use serde_json::{Value, json};
 
+#[allow(dead_code)]
 #[path = "support/delta_reads.rs"]
 mod delta_reads;
 #[allow(dead_code)]
