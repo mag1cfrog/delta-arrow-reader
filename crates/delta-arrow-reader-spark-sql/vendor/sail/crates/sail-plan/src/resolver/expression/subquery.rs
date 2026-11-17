@@ -2,8 +2,8 @@
 use std::sync::Arc;
 
 use datafusion::arrow::datatypes::{DataType, Field};
-use datafusion_common::DFSchemaRef;
 use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode};
+use datafusion_common::{Column, DFSchemaRef, internal_datafusion_err};
 use datafusion_expr::logical_plan::{Filter, Projection};
 use datafusion_expr::{Expr, ExprSchemable, LogicalPlan, LogicalPlanBuilder, expr_fn};
 use sail_common::spec;
@@ -148,7 +148,7 @@ impl PlanResolver<'_> {
             // Recursively convert column references to OuterReferenceColumn so
             // DataFusion's decorrelation pass recognizes them as correlated
             // references. This handles both bare columns (e.g. `a`) and
-            // expressions containing columns (e.g. `a + 1`).
+            // expressions containing columns (e.g. `a + 1`) and materialized aliases.
             let outer_ref = expr
                 .transform(|e| match e {
                     Expr::Column(ref col) => {
@@ -156,6 +156,19 @@ impl PlanResolver<'_> {
                         Ok(Transformed::yes(Expr::OuterReferenceColumn(
                             field.clone(),
                             col.clone(),
+                        )))
+                    }
+                    Expr::Placeholder(reference)
+                        if state
+                            .get_field_info(&reference.id)
+                            .is_ok_and(|field| field.is_hidden()) =>
+                    {
+                        let field = reference.field.ok_or_else(|| {
+                            internal_datafusion_err!("missing SELECT alias field")
+                        })?;
+                        Ok(Transformed::yes(Expr::OuterReferenceColumn(
+                            field,
+                            Column::new_unqualified(reference.id),
                         )))
                     }
                     _ => Ok(Transformed::no(e)),

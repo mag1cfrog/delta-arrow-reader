@@ -39,6 +39,25 @@ impl PlanResolver<'_> {
         let plan = Self::lower_distinct_percentiles(plan, &mut state)?;
         let plan = resolver.lower_resolved_set_operations(plan, &mut state)?;
         let plan = Self::preserve_order_sensitive_aggregate_sorts(plan)?;
+        let mut pending_alias = false;
+        plan.apply_with_subqueries(|node| {
+            node.apply_expressions(|expr| {
+                expr.apply(|expr| {
+                    if let Expr::Placeholder(reference) = expr {
+                        pending_alias |= state
+                            .get_field_info(&reference.id)
+                            .is_ok_and(|field| field.is_hidden());
+                    }
+                    Ok(TreeNodeRecursion::Continue)
+                })
+            })?;
+            Ok(TreeNodeRecursion::Continue)
+        })?;
+        if pending_alias {
+            return Err(PlanError::unsupported(
+                "SELECT alias in this expression context",
+            ));
+        }
         let fields = Self::get_field_names(plan.schema(), &state)?;
         Ok(NamedPlan { plan, fields })
     }

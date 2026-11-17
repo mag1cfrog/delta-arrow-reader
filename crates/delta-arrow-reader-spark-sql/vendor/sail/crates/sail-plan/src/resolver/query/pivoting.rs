@@ -211,6 +211,7 @@ impl PlanResolver<'_> {
                     format!("{value_name}_{}", agg.name.join("_"))
                 };
                 projections.push(NamedExpr {
+                    lateral_alias_id: None,
                     name: vec![name],
                     expression_name: None,
                     expr,
@@ -482,6 +483,7 @@ impl PlanResolver<'_> {
             .into_iter()
             .chain(std::iter::once((inline_expr, inline_name)))
             .map(|(expr, name)| NamedExpr {
+                lateral_alias_id: None,
                 name: vec![name.to_string()],
                 expression_name: None,
                 expr: expr.clone(),

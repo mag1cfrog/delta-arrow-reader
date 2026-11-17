@@ -416,6 +416,50 @@ impl PlanResolver<'_> {
         } else {
             having
         };
+        let (plan, projections, having) = if let Some(having) = having {
+            let mut required = HashSet::new();
+            having.apply(|expr| {
+                if let Expr::Placeholder(reference) = expr {
+                    required.insert(reference.id.clone());
+                }
+                Ok(TreeNodeRecursion::Continue)
+            })?;
+            // Dependencies precede their consumers, so one reverse pass closes the set.
+            for named in projections.iter().rev() {
+                if named
+                    .lateral_alias_id
+                    .as_ref()
+                    .is_some_and(|id| required.contains(id))
+                {
+                    named.expr.apply(|expr| {
+                        if let Expr::Placeholder(reference) = expr {
+                            required.insert(reference.id.clone());
+                        }
+                        Ok(TreeNodeRecursion::Continue)
+                    })?;
+                }
+            }
+            required.retain(|id| {
+                projections
+                    .iter()
+                    .any(|named| named.lateral_alias_id.as_ref() == Some(id))
+            });
+            let (plan, projections) =
+                self.materialize_projection_aliases(plan, projections, Some(&required))?;
+            let having = having
+                .transform_up(|expr| {
+                    if let Expr::Placeholder(reference) = &expr
+                        && required.contains(&reference.id)
+                    {
+                        return Ok(Transformed::yes(ident(&reference.id)));
+                    }
+                    Ok(Transformed::no(expr))
+                })?
+                .data;
+            (plan, projections, Some(having))
+        } else {
+            (plan, projections, None)
+        };
         let plan = match having {
             Some(having) => LogicalPlanBuilder::from(plan).having(having)?.build()?,
             None => plan,
@@ -428,6 +472,7 @@ impl PlanResolver<'_> {
             self.rewrite_projection::<ExplodeRewriter>(plan, projections, state)?;
         let (plan, projections) =
             self.rewrite_projection::<WindowRewriter>(plan, projections, state)?;
+        let (plan, projections) = self.materialize_projection_aliases(plan, projections, None)?;
         // Aggregate references use aggregate-schema names before output IDs are registered.
         let projections = self.register_named_expressions(projections, state)?;
         Ok(LogicalPlanBuilder::from(plan)
@@ -1128,6 +1173,7 @@ impl PlanResolver<'_> {
             expression_name,
             interval_qualifier,
             column_origin,
+            lateral_alias_id,
         } in grouping
         {
             let exprs = match expr {
@@ -1146,6 +1192,7 @@ impl PlanResolver<'_> {
                 expression_name: expression_name.clone(),
                 interval_qualifier,
                 column_origin: column_origin.clone(),
+                lateral_alias_id: lateral_alias_id.clone(),
             }));
         }
         Ok(result)

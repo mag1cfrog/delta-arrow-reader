@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use datafusion_common::arrow::datatypes::{Field, FieldRef};
 use datafusion_common::{Column, DFSchemaRef, TableReference};
-use datafusion_expr::LogicalPlan;
+use datafusion_expr::{Expr, ExprSchemable, LogicalPlan, expr::Placeholder};
 use sail_common::spec;
 
 use crate::error::{PlanError, PlanResult};
@@ -66,6 +66,13 @@ pub(super) enum AggregateState {
 }
 
 #[derive(Debug)]
+struct ProjectionAlias {
+    index: usize,
+    producer: NamedExpr,
+    reference: Option<Placeholder>,
+}
+
+#[derive(Debug)]
 pub(super) struct PlanResolverState {
     next_id: usize,
     /// A map from the generated opaque field ID to field information.
@@ -86,6 +93,7 @@ pub(super) struct PlanResolverState {
     lambda_param_scopes: Vec<Vec<(String, Option<FieldRef>)>>,
     /// The named windows defined in the current query, keyed by window name.
     windows: HashMap<String, spec::Window>,
+    projection_aliases: Vec<ProjectionAlias>,
 }
 
 impl Default for PlanResolverState {
@@ -106,6 +114,7 @@ impl PlanResolverState {
             config: PlanResolverStateConfig::default(),
             lambda_param_scopes: Vec::new(),
             windows: HashMap::new(),
+            projection_aliases: Vec::new(),
         }
     }
 
@@ -257,6 +266,59 @@ impl PlanResolverState {
         QueryScope::new(self, schema)
     }
 
+    pub fn enter_projection_scope(&mut self) -> ProjectionScope<'_> {
+        ProjectionScope::new(self)
+    }
+
+    pub fn register_projection_alias(&mut self, index: usize, producer: NamedExpr) {
+        self.projection_aliases.push(ProjectionAlias {
+            index,
+            producer,
+            reference: None,
+        });
+    }
+
+    pub fn referenced_projection_aliases(&self) -> impl Iterator<Item = (usize, &str)> {
+        self.projection_aliases.iter().filter_map(|alias| {
+            alias
+                .reference
+                .as_ref()
+                .map(|reference| (alias.index, reference.id.as_str()))
+        })
+    }
+
+    pub fn resolve_projection_alias(
+        &mut self,
+        name: &str,
+        schema: &DFSchemaRef,
+    ) -> PlanResult<Option<NamedExpr>> {
+        let mut matches = self.projection_aliases.iter().enumerate().filter(|(_, alias)| {
+            matches!(alias.producer.name.as_slice(), [alias] if alias.eq_ignore_ascii_case(name))
+        });
+        let Some((index, _)) = matches.next() else {
+            return Ok(None);
+        };
+        if matches.next().is_some() {
+            return Err(crate::error::PlanError::analysis(format!(
+                "ambiguous SELECT alias: {name:?}"
+            )));
+        }
+        if self.projection_aliases[index].reference.is_none() {
+            let id = self.register_hidden_field_name(name);
+            let producer = &self.projection_aliases[index].producer;
+            let field = producer.clone().into_alias(id.clone()).to_field(schema)?.1;
+            let qualifier = producer.interval_qualifier;
+            self.set_interval_qualifier(&id, qualifier);
+            self.projection_aliases[index].reference =
+                Some(Placeholder::new_with_field(id, Some(field)));
+        }
+        let alias = &self.projection_aliases[index];
+        Ok(alias.reference.as_ref().map(|reference| {
+            NamedExpr::new(vec![name.to_string()], Expr::Placeholder(reference.clone()))
+                .with_interval_qualifier(alias.producer.interval_qualifier)
+        }))
+    }
+
     pub fn enter_aggregate_scope(&mut self, aggregate_state: AggregateState) -> AggregateScope<'_> {
         AggregateScope::new(self, aggregate_state)
     }
@@ -332,14 +394,17 @@ impl PlanResolverState {
 pub(crate) struct QueryScope<'a> {
     state: &'a mut PlanResolverState,
     previous_outer_query_schema: Option<DFSchemaRef>,
+    previous_projection_aliases: Vec<ProjectionAlias>,
 }
 
 impl<'a> QueryScope<'a> {
     fn new(state: &'a mut PlanResolverState, schema: DFSchemaRef) -> Self {
         let previous_outer_query_schema = state.outer_query_schema.replace(schema);
+        let previous_projection_aliases = std::mem::take(&mut state.projection_aliases);
         Self {
             state,
             previous_outer_query_schema,
+            previous_projection_aliases,
         }
     }
 
@@ -351,6 +416,32 @@ impl<'a> QueryScope<'a> {
 impl Drop for QueryScope<'_> {
     fn drop(&mut self) {
         self.state.outer_query_schema = self.previous_outer_query_schema.take();
+        self.state.projection_aliases = std::mem::take(&mut self.previous_projection_aliases);
+    }
+}
+
+pub(crate) struct ProjectionScope<'a> {
+    state: &'a mut PlanResolverState,
+    previous_aliases: Vec<ProjectionAlias>,
+}
+
+impl<'a> ProjectionScope<'a> {
+    fn new(state: &'a mut PlanResolverState) -> Self {
+        let previous_aliases = std::mem::take(&mut state.projection_aliases);
+        Self {
+            state,
+            previous_aliases,
+        }
+    }
+
+    pub(crate) fn state(&mut self) -> &mut PlanResolverState {
+        self.state
+    }
+}
+
+impl Drop for ProjectionScope<'_> {
+    fn drop(&mut self) {
+        self.state.projection_aliases = std::mem::take(&mut self.previous_aliases);
     }
 }
 
