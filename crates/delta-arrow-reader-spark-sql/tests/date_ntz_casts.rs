@@ -55,8 +55,8 @@ enum RetainedDifference {
     /// #1190: a constant over an input proven empty keeps its analyzed nullability after
     /// optimization, where Spark folds it first.
     EmptyInputNullability,
-    /// #1197: a column compared with a literal through the cast stays nullable after
-    /// optimization, where Spark's optimizer rewrites the comparison without the cast.
+    /// #1236: comparison nullability differs when DAR unwraps a DATE cast during resolution,
+    /// or keeps the DATE-to-NTZ cast that Spark's optimizer removes.
     ComparisonWithLiteral,
 }
 
@@ -104,7 +104,11 @@ fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResu
             {
                 return Err(format!("expected Spark's unwrapped comparison: {case}").into());
             }
-            set_nullable(&mut current, &["optimized", "executed"], true)?;
+            if case["id"] == "required_cast_to_date_equals_date_literal" {
+                set_nullable(&mut current, &["analyzed"], false)?;
+            } else {
+                set_nullable(&mut current, &["optimized", "executed"], true)?;
+            }
         }
     }
     Ok(current)

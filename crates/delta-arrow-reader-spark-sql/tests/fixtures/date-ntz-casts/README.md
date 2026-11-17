@@ -49,7 +49,10 @@ test runs the DATE to TIMESTAMP_NTZ cast, TO_TIMESTAMP_NTZ, TO_TIMESTAMP and TRY
 column records over Date64 copies of the DATE columns, which Spark lacks, and requires Spark's
 results. Two differences are retained:
 - #1190: the constant cast over `WHERE false` stays nullable after optimization (4 records);
-- #1197: the comparisons with a literal stay nullable after optimization (8 records).
+- #1236: four DATE-cast comparisons become NOT NULL during resolution, while Spark changes
+  them during optimization; four DATE-to-NTZ comparisons stay nullable after optimization.
+  Values and executed types match. The [pruning checks](../date-cast-pruning/README.md)
+  cover #1197's current scope independently of these nullability differences.
 
 Recapture from the crate root:
 
