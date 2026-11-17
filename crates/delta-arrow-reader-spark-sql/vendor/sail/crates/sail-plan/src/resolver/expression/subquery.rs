@@ -130,9 +130,8 @@ impl PlanResolver<'_> {
         Ok(NamedExpr::new(vec!["exists".to_string()], exists))
     }
 
-    /// Resolves a multi-column IN subquery by converting it to a correlated EXISTS.
-    /// `(e1, e2, ...) IN (SELECT c1, c2, ... FROM sub)` becomes
-    /// `[NOT] EXISTS (SELECT ... FROM sub WHERE c1 = e1 AND c2 = e2 AND ...)`
+    /// Resolves multi-column IN as EXISTS over exact tuple matches.
+    /// NOT IN excludes possible matches where every comparison is TRUE or UNKNOWN.
     pub(super) async fn resolve_multi_column_in_subquery(
         &self,
         in_subquery_values: Vec<spec::Expr>,
@@ -205,7 +204,17 @@ impl PlanResolver<'_> {
         let filter_expr = outer_refs
             .into_iter()
             .zip(subquery_cols)
-            .map(|(outer, inner_col)| Expr::eq(Expr::Column(inner_col), outer))
+            .map(|(outer, inner_col)| {
+                let comparison = Expr::eq(Expr::Column(inner_col), outer);
+                // Keep nonnullable equality keys available for native hash joins.
+                Ok(if negated && comparison.nullable(subquery_plan.schema())? {
+                    comparison.is_not_false()
+                } else {
+                    comparison
+                })
+            })
+            .collect::<PlanResult<Vec<_>>>()?
+            .into_iter()
             .reduce(Expr::and)
             .ok_or_else(|| PlanError::invalid("empty IN subquery values"))?;
         let filtered = LogicalPlan::Filter(Filter::try_new(filter_expr, Arc::new(subquery_plan))?);
