@@ -1,8 +1,8 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use datafusion_common::tree_node::{TreeNode, TreeNodeRewriter};
+use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode, TreeNodeRewriter};
 use datafusion_common::{Column, DFSchemaRef, TableReference};
 use datafusion_expr::expr::ScalarFunction;
 use datafusion_expr::expr_rewriter::normalize_col;
@@ -55,12 +55,71 @@ impl PlanResolver<'_> {
         if has_aggregate {
             self.rewrite_aggregate(input, expr, vec![], None, false, state)
         } else {
+            let (input, expr) = self.materialize_projection_aliases(input, expr, None)?;
             let expr = self.rewrite_named_expressions(expr, state)?;
             Ok(LogicalPlan::Projection(Projection::try_new(
                 expr,
                 Arc::new(input),
             )?))
         }
+    }
+
+    /// A subset lowers filter prerequisites; None lowers all remaining referenced producers.
+    pub(super) fn materialize_projection_aliases(
+        &self,
+        mut input: LogicalPlan,
+        mut expressions: Vec<NamedExpr>,
+        required_alias_ids: Option<&HashSet<String>>,
+    ) -> PlanResult<(LogicalPlan, Vec<NamedExpr>)> {
+        if !expressions
+            .iter()
+            .any(|named| named.lateral_alias_id.is_some())
+        {
+            return Ok((input, expressions));
+        }
+        let mut materialized = HashSet::new();
+        for named in &mut expressions {
+            let reused_alias = matches!(&named.expr, Expr::Placeholder(reference) if materialized.contains(&reference.id));
+            named.expr = named
+                .expr
+                .clone()
+                .transform_up(|expr| {
+                    if let Expr::Placeholder(reference) = &expr
+                        && materialized.contains(&reference.id)
+                    {
+                        return Ok(Transformed::yes(Expr::Column(Column::new_unqualified(
+                            &reference.id,
+                        ))));
+                    }
+                    Ok(Transformed::no(expr))
+                })
+                .data()?;
+            if named
+                .lateral_alias_id
+                .as_ref()
+                .is_some_and(|id| required_alias_ids.is_none_or(|required| required.contains(id)))
+            {
+                let id = named
+                    .lateral_alias_id
+                    .take()
+                    .ok_or_else(|| PlanError::internal("missing alias slot"))?;
+                let mut projected = input
+                    .schema()
+                    .columns()
+                    .into_iter()
+                    .map(Expr::Column)
+                    .collect::<Vec<_>>();
+                projected.push(named.clone().into_alias(id.clone()));
+                input = LogicalPlan::Projection(Projection::try_new(projected, Arc::new(input))?);
+                named.expr = Expr::Column(Column::new_unqualified(&id));
+                named.column_origin = Some(ColumnOrigin::Attribute(Column::new_unqualified(&id)));
+                materialized.insert(id);
+            }
+            if reused_alias && let Expr::Column(column) = &named.expr {
+                named.column_origin = Some(ColumnOrigin::Attribute(column.clone()));
+            }
+        }
+        Ok((input, expressions))
     }
 
     pub(in crate::resolver) fn rewrite_wildcard(
@@ -217,6 +276,7 @@ impl PlanResolver<'_> {
                 expression_name,
                 interval_qualifier,
                 column_origin,
+                lateral_alias_id,
             } = e;
             match expr {
                 Expr::ScalarFunction(ScalarFunction { func, args }) => {
@@ -243,6 +303,7 @@ impl PlanResolver<'_> {
                             expression_name,
                             interval_qualifier,
                             column_origin,
+                            lateral_alias_id,
                         });
                     }
                 }
@@ -254,6 +315,7 @@ impl PlanResolver<'_> {
                         expression_name,
                         interval_qualifier,
                         column_origin,
+                        lateral_alias_id,
                     });
                 }
             };

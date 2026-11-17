@@ -98,6 +98,31 @@ impl PlanResolver<'_> {
         if let Some((name, expr)) = self.resolve_hidden_field(&name, schema, state)? {
             return Ok(NamedExpr::new(vec![name], expr).with_column_origin());
         }
+        if let [first, tail @ ..] = name.parts()
+            && let Some(mut alias) = state.resolve_projection_alias(first.as_ref(), schema)?
+        {
+            if !tail.is_empty() {
+                let data_type = alias.expr.get_type(schema)?;
+                let mut display = first.as_ref().to_string();
+                alias.expr = Self::resolve_nested_field_and_append_display(
+                    alias.expr,
+                    &data_type,
+                    tail,
+                    schema,
+                    true,
+                    &mut display,
+                )?;
+                alias.expr = Self::guard_nested_parent_nulls(alias.expr, schema)?;
+                alias.name = vec![
+                    tail.last()
+                        .ok_or_else(|| PlanError::internal("missing alias tail"))?
+                        .as_ref()
+                        .to_string(),
+                ];
+                alias.expression_name = Some(display);
+            }
+            return Ok(alias);
+        }
         if let Some(outer_schema) = state.get_outer_query_schema().cloned()
             && let Some(named) =
                 self.resolve_field_or_nested_field(&name, &outer_schema, state, true)?

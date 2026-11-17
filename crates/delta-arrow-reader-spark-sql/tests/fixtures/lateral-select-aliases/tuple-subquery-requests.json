@@ -1,0 +1,164 @@
+{
+  "issue": 1334,
+  "base": "5662c60f4e63e6270ac96eb129e6bf37e4bfe1a4",
+  "expected_record_count": 4,
+  "corpora": [
+    {
+      "corpus": "lateral_select_aliases",
+      "source": "Tuple IN and NOT IN with a preceding SELECT alias; source-only Spark capture.",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "numbers",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "a",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                null
+              ],
+              [
+                "1"
+              ],
+              [
+                "2"
+              ],
+              [
+                "3"
+              ]
+            ]
+          },
+          {
+            "name": "source_columns",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "a",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "b",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                null,
+                "100"
+              ],
+              [
+                "1",
+                "200"
+              ],
+              [
+                "2",
+                null
+              ],
+              [
+                "3",
+                "400"
+              ]
+            ]
+          },
+          {
+            "name": "grouped",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "g",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "a",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                null
+              ],
+              [
+                "1",
+                "1"
+              ],
+              [
+                "2",
+                "2"
+              ],
+              [
+                "2",
+                "3"
+              ]
+            ]
+          },
+          {
+            "name": "empty_numbers",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "a",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": []
+          }
+        ]
+      },
+      "cases": [
+        {
+          "id": "tuple_in",
+          "sql": "SELECT a+1 AS b,(b,a) IN (SELECT a+1 AS x,a FROM numbers) AS r FROM numbers",
+          "ansi": false,
+          "ordered": false,
+          "corpus": "lateral_select_aliases"
+        },
+        {
+          "id": "tuple_in",
+          "sql": "SELECT a+1 AS b,(b,a) IN (SELECT a+1 AS x,a FROM numbers) AS r FROM numbers",
+          "ansi": true,
+          "ordered": false,
+          "corpus": "lateral_select_aliases"
+        },
+        {
+          "id": "tuple_not_in",
+          "sql": "SELECT a+1 AS b,(b,a) NOT IN (SELECT a+1 AS x,a FROM numbers) AS r FROM numbers",
+          "ansi": false,
+          "ordered": false,
+          "corpus": "lateral_select_aliases"
+        },
+        {
+          "id": "tuple_not_in",
+          "sql": "SELECT a+1 AS b,(b,a) NOT IN (SELECT a+1 AS x,a FROM numbers) AS r FROM numbers",
+          "ansi": true,
+          "ordered": false,
+          "corpus": "lateral_select_aliases"
+        }
+      ]
+    }
+  ]
+}

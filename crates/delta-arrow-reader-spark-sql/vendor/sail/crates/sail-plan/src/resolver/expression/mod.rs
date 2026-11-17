@@ -54,6 +54,8 @@ pub(super) struct NamedExpr {
     pub interval_qualifier: Option<IntervalQualifier>,
     /// Set before rewriting only for bare input columns and star expansion.
     pub column_origin: Option<ColumnOrigin>,
+    /// Slot to materialize after aggregate and window producers have been lowered.
+    pub lateral_alias_id: Option<String>,
 }
 
 impl NamedExpr {
@@ -87,6 +89,7 @@ impl NamedExpr {
             metadata,
             interval_qualifier: None,
             column_origin: None,
+            lateral_alias_id: None,
         }
     }
 
@@ -102,6 +105,7 @@ impl NamedExpr {
                     .unwrap_or(vec![]),
                 interval_qualifier: None,
                 column_origin: None,
+                lateral_alias_id: None,
             }),
             _ => Err(PlanError::invalid(
                 "alias expected to create named expression",
@@ -517,11 +521,15 @@ impl PlanResolver<'_> {
         schema: &DFSchemaRef,
         state: &mut PlanResolverState,
     ) -> PlanResult<Vec<NamedExpr>> {
+        let mut projection_scope = state.enter_projection_scope();
+        let state = projection_scope.state();
         let mut scope = state.enter_config_scope();
         let state = scope.state();
         state.config_mut().include_cast_in_expression_name = false;
         let mut results = Vec::with_capacity(expressions.len());
         for expression in expressions {
+            let explicit_alias =
+                matches!(&expression, spec::Expr::Alias { name, .. } if name.len() == 1);
             let column_or_star = matches!(
                 &expression,
                 spec::Expr::UnresolvedAttribute { .. }
@@ -575,7 +583,13 @@ impl PlanResolver<'_> {
                     named.expr = drop_inherited_column_metadata(named.expr);
                 }
             }
+            if explicit_alias {
+                state.register_projection_alias(results.len(), named.clone());
+            }
             results.push(named);
+        }
+        for (index, id) in state.referenced_projection_aliases() {
+            results[index].lateral_alias_id = Some(id.to_string());
         }
         Ok(results)
     }
@@ -850,6 +864,7 @@ mod tests {
             .await?,
             NamedExpr {
                 name: vec!["(NOT true)".to_string()],
+                lateral_alias_id: None,
                 expression_name: None,
                 expr: Expr::Not(Box::new(Expr::Literal(
                     ScalarValue::Boolean(Some(true)),
@@ -902,6 +917,7 @@ mod tests {
             .await?,
             NamedExpr {
                 name: vec!["c".to_string()],
+                lateral_alias_id: None,
                 expression_name: None,
                 expr: Expr::Alias(Alias {
                     expr: Box::new(Expr::Alias(Alias {

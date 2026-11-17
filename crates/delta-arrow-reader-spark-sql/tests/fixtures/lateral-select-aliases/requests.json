@@ -1,0 +1,500 @@
+{
+  "issue": 1334,
+  "base": "5662c60f4e63e6270ac96eb129e6bf37e4bfe1a4",
+  "expected_record_count": 52,
+  "corpora": [
+    {
+      "corpus": "lateral_select_aliases",
+      "source": "Ordinary SELECT aliases and bounded aggregate/window/star/nested-field controls; source-only Spark capture.",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "numbers",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "a",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                null
+              ],
+              [
+                "1"
+              ],
+              [
+                "2"
+              ],
+              [
+                "3"
+              ]
+            ]
+          },
+          {
+            "name": "source_columns",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "a",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "b",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                null,
+                "100"
+              ],
+              [
+                "1",
+                "200"
+              ],
+              [
+                "2",
+                null
+              ],
+              [
+                "3",
+                "400"
+              ]
+            ]
+          },
+          {
+            "name": "grouped",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "g",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "a",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                null
+              ],
+              [
+                "1",
+                "1"
+              ],
+              [
+                "2",
+                "2"
+              ],
+              [
+                "2",
+                "3"
+              ]
+            ]
+          },
+          {
+            "name": "empty_numbers",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "a",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": []
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "basic",
+          "ansi": false,
+          "sql": "SELECT a+1 AS b,b*2 AS c FROM numbers",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "basic",
+          "ansi": true,
+          "sql": "SELECT a+1 AS b,b*2 AS c FROM numbers",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "direct",
+          "ansi": false,
+          "sql": "SELECT a AS b,b AS c FROM numbers",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "direct",
+          "ansi": true,
+          "sql": "SELECT a AS b,b AS c FROM numbers",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "chain",
+          "ansi": false,
+          "sql": "SELECT a+1 AS b,b*2 AS c,c+1 AS d FROM numbers",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "chain",
+          "ansi": true,
+          "sql": "SELECT a+1 AS b,b*2 AS c,c+1 AS d FROM numbers",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "case_insensitive",
+          "ansi": false,
+          "sql": "SELECT a+1 AS `B`,b*2 AS c FROM numbers",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "case_insensitive",
+          "ansi": true,
+          "sql": "SELECT a+1 AS `B`,b*2 AS c FROM numbers",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "source_precedence",
+          "ansi": false,
+          "sql": "SELECT a+1 AS b,b*2 AS c FROM source_columns",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "source_precedence",
+          "ansi": true,
+          "sql": "SELECT a+1 AS b,b*2 AS c FROM source_columns",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "qualified_source",
+          "ansi": false,
+          "sql": "SELECT a+1 AS b,s.b*2 AS c FROM source_columns s",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "qualified_source",
+          "ansi": true,
+          "sql": "SELECT a+1 AS b,s.b*2 AS c FROM source_columns s",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "star",
+          "ansi": false,
+          "sql": "SELECT a+1 AS b,*,b*2 AS c FROM numbers",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "star",
+          "ansi": true,
+          "sql": "SELECT a+1 AS b,*,b*2 AS c FROM numbers",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "qualified_star",
+          "ansi": false,
+          "sql": "SELECT a+1 AS b,n.*,b*2 AS c FROM numbers n",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "qualified_star",
+          "ansi": true,
+          "sql": "SELECT a+1 AS b,n.*,b*2 AS c FROM numbers n",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "struct_alias",
+          "ansi": false,
+          "sql": "SELECT named_struct('v',a) AS b,b.v+1 AS c FROM numbers",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "struct_alias",
+          "ansi": true,
+          "sql": "SELECT named_struct('v',a) AS b,b.v+1 AS c FROM numbers",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "nullable_struct_alias",
+          "ansi": false,
+          "sql": "SELECT CASE WHEN a IS NULL THEN CAST(NULL AS STRUCT<v:INT>) ELSE named_struct('v',a) END AS b,b.v+1 AS c FROM numbers",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "nullable_struct_alias",
+          "ansi": true,
+          "sql": "SELECT CASE WHEN a IS NULL THEN CAST(NULL AS STRUCT<v:INT>) ELSE named_struct('v',a) END AS b,b.v+1 AS c FROM numbers",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "struct_source_precedence",
+          "ansi": false,
+          "sql": "SELECT named_struct('v',a) AS b,b.v AS c FROM (SELECT a,named_struct('v',a+100) AS b FROM numbers) q",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "struct_source_precedence",
+          "ansi": true,
+          "sql": "SELECT named_struct('v',a) AS b,b.v AS c FROM (SELECT a,named_struct('v',a+100) AS b FROM numbers) q",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "global_aggregate",
+          "ansi": false,
+          "sql": "SELECT sum(a) AS b,b*2 AS c FROM numbers",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "global_aggregate",
+          "ansi": true,
+          "sql": "SELECT sum(a) AS b,b*2 AS c FROM numbers",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "grouped_aggregate",
+          "ansi": false,
+          "sql": "SELECT g,sum(a) AS b,b*2 AS c FROM grouped GROUP BY g",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "grouped_aggregate",
+          "ansi": true,
+          "sql": "SELECT g,sum(a) AS b,b*2 AS c FROM grouped GROUP BY g",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "aggregate_chain",
+          "ansi": false,
+          "sql": "SELECT sum(a) AS b,b+1 AS c,c*2 AS d FROM numbers",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "aggregate_chain",
+          "ansi": true,
+          "sql": "SELECT sum(a) AS b,b+1 AS c,c*2 AS d FROM numbers",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "window_output",
+          "ansi": false,
+          "sql": "SELECT a,row_number() OVER (ORDER BY a NULLS FIRST) AS b,b*2 AS c FROM numbers",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "window_output",
+          "ansi": true,
+          "sql": "SELECT a,row_number() OVER (ORDER BY a NULLS FIRST) AS b,b*2 AS c FROM numbers",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "window_sum",
+          "ansi": false,
+          "sql": "SELECT a,sum(a) OVER () AS b,b+1 AS c FROM numbers",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "window_sum",
+          "ansi": true,
+          "sql": "SELECT a,sum(a) OVER () AS b,b+1 AS c FROM numbers",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "aggregate_control",
+          "ansi": false,
+          "sql": "SELECT sum(a) AS b,sum(a)*2 AS c FROM numbers",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "aggregate_control",
+          "ansi": true,
+          "sql": "SELECT sum(a) AS b,sum(a)*2 AS c FROM numbers",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "window_control",
+          "ansi": false,
+          "sql": "SELECT a,row_number() OVER (ORDER BY a NULLS FIRST) AS b FROM numbers",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "window_control",
+          "ansi": true,
+          "sql": "SELECT a,row_number() OVER (ORDER BY a NULLS FIRST) AS b FROM numbers",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "star_control",
+          "ansi": false,
+          "sql": "SELECT * FROM numbers",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "star_control",
+          "ansi": true,
+          "sql": "SELECT * FROM numbers",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "scalar_subquery_alias",
+          "ansi": false,
+          "sql": "SELECT (SELECT max(a) FROM numbers) AS b,b+1 AS c FROM numbers",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "scalar_subquery_alias",
+          "ansi": true,
+          "sql": "SELECT (SELECT max(a) FROM numbers) AS b,b+1 AS c FROM numbers",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "empty_alias",
+          "ansi": false,
+          "sql": "SELECT a+1 AS b,b*2 AS c FROM empty_numbers",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "empty_alias",
+          "ansi": true,
+          "sql": "SELECT a+1 AS b,b*2 AS c FROM empty_numbers",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "rand_reuse",
+          "ansi": false,
+          "sql": "SELECT a,rand(17) AS b,b AS c,b*2 AS d FROM numbers",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "rand_reuse",
+          "ansi": true,
+          "sql": "SELECT a,rand(17) AS b,b AS c,b*2 AS d FROM numbers",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "outer_collision",
+          "ansi": false,
+          "sql": "SELECT o.b,(SELECT c FROM (SELECT n.a+1 AS b,b*2 AS c FROM VALUES(1) n(a)) q) AS r FROM source_columns o",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "outer_collision",
+          "ansi": true,
+          "sql": "SELECT o.b,(SELECT c FROM (SELECT n.a+1 AS b,b*2 AS c FROM VALUES(1) n(a)) q) AS r FROM source_columns o",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "having_alias",
+          "ansi": false,
+          "sql": "SELECT sum(a) AS b,b+1 AS c FROM numbers HAVING c>0",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "having_alias",
+          "ansi": true,
+          "sql": "SELECT sum(a) AS b,b+1 AS c FROM numbers HAVING c>0",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "having_window_outer",
+          "ansi": false,
+          "sql": "SELECT g,b,c,row_number() OVER (ORDER BY g) AS r FROM (SELECT g,sum(a) AS b,b+1 AS c FROM grouped GROUP BY g HAVING g>1 AND c>0) q",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "having_window_outer",
+          "ansi": true,
+          "sql": "SELECT g,b,c,row_number() OVER (ORDER BY g) AS r FROM (SELECT g,sum(a) AS b,b+1 AS c FROM grouped GROUP BY g HAVING g>1 AND c>0) q",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "chained_having_alias",
+          "ansi": false,
+          "sql": "SELECT sum(a) AS b,b+1 AS c,c*2 AS d FROM numbers HAVING d>0",
+          "ordered": false
+        },
+        {
+          "corpus": "lateral_select_aliases",
+          "id": "chained_having_alias",
+          "ansi": true,
+          "sql": "SELECT sum(a) AS b,b+1 AS c,c*2 AS d FROM numbers HAVING d>0",
+          "ordered": false
+        }
+      ]
+    }
+  ]
+}
