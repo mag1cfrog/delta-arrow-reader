@@ -261,13 +261,9 @@ enum RetainedDifference {
     /// #1090: GREATEST and LEAST are always nullable, where Spark declares them NOT NULL when
     /// any argument is NOT NULL.
     NullableExtremum,
-    /// #1122: arrays, DATE_TRUNC and IN subqueries coerce a DATE to a TIMESTAMP in nanoseconds
-    /// without a zone, which fails for years 1 and 9999, and VALUES gives its UTC midnight that
-    /// way.
+    /// #1122: DATE_TRUNC coerces a DATE to nanosecond TIMESTAMP_NTZ, which fails for years 1
+    /// and 9999.
     NanosecondDateCoercion,
-    /// #1122: an IN list of TIMESTAMP values fails with Arrow's cast of a DATE in a zone that
-    /// skips a midnight.
-    ArrowCastInList,
     /// #1122: HOUR reads a DATE as its midnight, not its first local instant.
     MidnightDateFields,
 }
@@ -275,8 +271,6 @@ enum RetainedDifference {
 /// DAR's failure for a DATE of year 1 or 9999 coerced to a nanosecond TIMESTAMP; which one
 /// fails first depends on the batch.
 const NANOSECOND_RANGE: &str = "to Timestamp(ns): converted value exceeds the representable";
-/// 2024-03-10 00:00 UTC, the midnight DAR's VALUES gives `DATE '2024-03-10'`.
-const VALUES_DATE_MIDNIGHT: &str = "1710028800000000";
 
 /// Set `key` of the result field `r` in each recorded schema stage.
 fn set_result_field(case: &mut Value, key: &str, value: &Value) {
@@ -329,38 +323,10 @@ fn current_expectation(case: &Value) -> TestResult<(Value, Vec<RetainedDifferenc
         "America/Havana" | "America/Santiago" | "America/Toronto"
     );
     match id {
-        "column_array" => {
-            set_result_field(&mut current, "type", &json!("dar_timestamp_ns"));
-            fail_while_collecting(&mut current, NANOSECOND_RANGE);
-            retained.push(RetainedDifference::NanosecondDateCoercion);
-        }
         "column_date_trunc_hour" => {
             set_result_field(&mut current, "type", &json!("timestamp_ntz"));
             fail_while_collecting(&mut current, NANOSECOND_RANGE);
             retained.push(RetainedDifference::NanosecondDateCoercion);
-        }
-        "in_subquery" => {
-            fail_while_collecting(&mut current, NANOSECOND_RANGE);
-            retained.push(RetainedDifference::NanosecondDateCoercion);
-        }
-        "values" => {
-            // The TIMESTAMP literal, 01:30 local, follows the day's start in every zone.
-            let rows = current["expected"]["rows"]
-                .as_array()
-                .ok_or("missing rows")?;
-            let literal = rows
-                .iter()
-                .map(|row| row[0].clone())
-                .max_by_key(|value| value.as_str().and_then(|text| text.parse::<i64>().ok()));
-            let mut rows = vec![json!([VALUES_DATE_MIDNIGHT]), json!([literal])];
-            rows.sort_by_key(|row| row.to_string());
-            current["expected"]["rows"] = json!(rows);
-            set_result_field(&mut current, "type", &json!("dar_timestamp_ns"));
-            retained.push(RetainedDifference::NanosecondDateCoercion);
-        }
-        "column_in_list" if skips_midnight => {
-            fail_while_collecting(&mut current, "Cannot cast timezone to different timezone");
-            retained.push(RetainedDifference::ArrowCastInList);
         }
         "column_hour" if skips_midnight => {
             let mut changed = false;
@@ -480,8 +446,7 @@ async fn dates_convert_to_timestamps_like_spark() -> TestResult {
         retained,
         BTreeMap::from([
             (RetainedDifference::NullableExtremum, 40),
-            (RetainedDifference::NanosecondDateCoercion, 40),
-            (RetainedDifference::ArrowCastInList, 6),
+            (RetainedDifference::NanosecondDateCoercion, 10),
             (RetainedDifference::MidnightDateFields, 4),
         ])
     );

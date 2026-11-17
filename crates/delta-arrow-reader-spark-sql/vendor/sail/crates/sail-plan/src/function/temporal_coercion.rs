@@ -88,22 +88,38 @@ pub(crate) fn cast_date_expr_to_ltz(
     .call(vec![argument])
 }
 
-/// Whether `data_types` hold a DATE and a TIMESTAMP_NTZ, and otherwise only DATE, TIMESTAMP_NTZ
-/// or NULL types. Spark combines such values as microsecond TIMESTAMP_NTZ values, each DATE at its
-/// midnight, where DataFusion's coercion picks nanoseconds and fails outside 1677 to 2262 (#1191).
-pub(crate) fn only_dates_and_timestamp_ntz(data_types: &[DataType]) -> bool {
-    data_types
+/// The common type of a DATE beside a timestamp, with only DATE, TIMESTAMP and NULL values.
+/// A zoned timestamp selects LTZ in the session zone; otherwise the result is microsecond NTZ.
+pub(crate) fn date_timestamp_common_type(
+    data_types: &[DataType],
+    session_timezone: &Arc<str>,
+) -> Option<DataType> {
+    let compatible = data_types
         .iter()
         .any(|data_type| matches!(data_type, DataType::Date32 | DataType::Date64))
         && data_types
             .iter()
-            .any(|data_type| matches!(data_type, DataType::Timestamp(_, None)))
+            .any(|data_type| matches!(data_type, DataType::Timestamp(_, _)))
         && data_types.iter().all(|data_type| {
             matches!(
                 data_type,
-                DataType::Date32 | DataType::Date64 | DataType::Timestamp(_, None) | DataType::Null
+                DataType::Date32 | DataType::Date64 | DataType::Timestamp(_, _) | DataType::Null
             )
-        })
+        });
+    if !compatible {
+        return None;
+    }
+    // Keep the existing coercion for LTZ inputs with nanosecond ticks.
+    if data_types
+        .iter()
+        .any(|t| matches!(t, DataType::Timestamp(_, Some(_))))
+        && data_types
+            .iter()
+            .any(|t| matches!(t, DataType::Timestamp(TimeUnit::Nanosecond, _)))
+    {
+        return None;
+    }
+    common_temporal_type(data_types, session_timezone)
 }
 
 pub(crate) fn common_temporal_type(
@@ -139,6 +155,54 @@ mod tests {
     };
     use arrow::datatypes::TimestampMicrosecondType;
     use datafusion_common::config::ConfigOptions;
+
+    #[test]
+    fn date_timestamp_groups_keep_narrow_admission_and_precision_fallback() {
+        let session: Arc<str> = "America/Los_Angeles".into();
+        let ltz = DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into()));
+        let ntz = DataType::Timestamp(TimeUnit::Microsecond, None);
+        assert_eq!(
+            date_timestamp_common_type(&[DataType::Date32, ltz.clone(), DataType::Null], &session),
+            Some(DataType::Timestamp(
+                TimeUnit::Microsecond,
+                Some(session.clone())
+            ))
+        );
+        assert_eq!(
+            date_timestamp_common_type(
+                &[
+                    DataType::Date32,
+                    DataType::Timestamp(TimeUnit::Nanosecond, Some("UTC".into()))
+                ],
+                &session
+            ),
+            None
+        );
+        assert_eq!(
+            date_timestamp_common_type(
+                &[
+                    DataType::Date32,
+                    DataType::Timestamp(TimeUnit::Nanosecond, None)
+                ],
+                &session
+            ),
+            Some(ntz)
+        );
+        for extra in [
+            DataType::Utf8,
+            DataType::Int64,
+            DataType::List(Arc::new(Field::new("item", DataType::Date32, true))),
+        ] {
+            assert_eq!(
+                date_timestamp_common_type(&[DataType::Date32, ltz.clone(), extra], &session),
+                None
+            );
+        }
+        assert_eq!(
+            date_timestamp_common_type(&[ltz, DataType::Null], &session),
+            None
+        );
+    }
 
     #[test]
     fn local_timestamp_values_keep_slices_scalars_nulls_and_empty_inputs()

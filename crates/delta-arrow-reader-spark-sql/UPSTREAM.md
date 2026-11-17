@@ -824,8 +824,16 @@ DATE and TIMESTAMP_NTZ values, with only NULLs beside them, in ARRAY, VALUES or 
 combine as microsecond TIMESTAMP_NTZ values, each DATE at its midnight, like Spark (#1191).
 DataFusion's coercion picked nanosecond timestamps, which changed the type and failed outside
 1677 to 2262. ARRAY and IN lists take Spark's nullable DATE cast; VALUES evaluates its cells,
-so a column is nullable only for a NULL cell, as in Spark. NVL2 is Spark's `IF(expr1 IS NOT
-NULL, expr2, expr3)`, with IF's result coercion for every type, where DataFusion's `nvl2`
+so a column is nullable only for a NULL cell, as in Spark.
+
+DATE beside an LTZ TIMESTAMP in these same forms, including one-item IN, selects microsecond
+LTZ values in the session zone (#1255). Each DATE uses the existing start-of-day conversion,
+including winter, summer and DST dates. The [LTZ combination references](tests/fixtures/date-timestamp-combination/README.md)
+check rows, ARRAY elements, executed types, native SQL and nanosecond ticks. Nanosecond LTZ
+provider inputs retain their existing coercion to preserve their ticks.
+
+NVL2 is Spark's `IF(expr1 IS NOT NULL, expr2, expr3)`, with IF's result coercion for every type,
+where DataFusion's `nvl2`
 coerced differently; a result whose type is not known yet, such as GROUPING_ID(), keeps
 DataFusion's NVL2. Nested values, such as arrays of arrays or of structs, and array functions
 and comparisons over an ARRAY<DATE> beside an ARRAY<TIMESTAMP_NTZ>, still combine through

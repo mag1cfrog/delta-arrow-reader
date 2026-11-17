@@ -1,0 +1,398 @@
+{
+  "issue": "1255",
+  "expected_record_count": 20,
+  "corpora": [
+    {
+      "corpus": "date_timestamp_UTC",
+      "source": "source-only ordinary DATE plus LTZ TIMESTAMP IN/ARRAY/VALUES comparisons and NTZ controls for #1255",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "d",
+                  "type": "date",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "t",
+                  "type": "timestamp",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "tn",
+                  "type": "timestamp_ntz",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "19724",
+                "1704153600000000",
+                "1704153600000000"
+              ],
+              [
+                "1",
+                "19724",
+                "1704182400000000",
+                "1704153600000000"
+              ],
+              [
+                "2",
+                "19908",
+                "1720051200000000",
+                "1720051200000000"
+              ],
+              [
+                "3",
+                "19908",
+                "1720076400000000",
+                "1720051200000000"
+              ],
+              [
+                "4",
+                "19792",
+                "1710057600000000",
+                "1710028800000000"
+              ],
+              [
+                "5",
+                "19793",
+                "1710140400000000",
+                "1710115200000000"
+              ],
+              [
+                "6",
+                "20030",
+                "1730617200000000",
+                "1730592000000000"
+              ],
+              [
+                "7",
+                "20031",
+                "1730707200000000",
+                "1730678400000000"
+              ],
+              [
+                "8",
+                "-1",
+                "-57600000000",
+                "-86400000000"
+              ],
+              [
+                "9",
+                null,
+                "1704182400000000",
+                null
+              ],
+              [
+                "10",
+                "19724",
+                null,
+                "1704153600000000"
+              ],
+              [
+                "11",
+                null,
+                null,
+                null
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "date_timestamp_UTC",
+          "id": "in_columns",
+          "sql": "SELECT k, d IN (t) AS single, d IN (t, TIMESTAMP '2000-01-01 00:00:00') AS multiple, t IN (d) AS reverse, d = t AS direct, d IN (t, NULL) AS with_null, d IN (CAST(NULL AS TIMESTAMP)) AS typed_null_list, CAST(NULL AS DATE) IN (t) AS typed_null_left, NULL IN (t, d) AS untyped_null_left, d NOT IN (t) AS not_single, d IN (tn) AS ntz_single, d = tn AS ntz_direct FROM inputs",
+          "ansi": false,
+          "timezone": "UTC",
+          "ordered": false
+        },
+        {
+          "corpus": "date_timestamp_UTC",
+          "id": "array_columns",
+          "sql": "SELECT k, ARRAY(d,t) AS forward, ARRAY(t,d,NULL) AS reverse, ARRAY(CAST(NULL AS DATE),t) AS typed_null_date, ARRAY(d,CAST(NULL AS TIMESTAMP)) AS typed_null_timestamp, ARRAY(NULL,d,t) AS untyped_null, ARRAY(d,tn) AS ntz_control, ARRAY(d,d) AS date_control, ARRAY(t,t) AS timestamp_control FROM inputs",
+          "ansi": false,
+          "timezone": "UTC",
+          "ordered": false
+        },
+        {
+          "corpus": "date_timestamp_UTC",
+          "id": "literals",
+          "sql": "SELECT DATE '2024-01-02' IN (TIMESTAMP '2024-01-02 00:00:00') AS winter_in, DATE '2024-01-02' IN (TIMESTAMP '2024-01-02 00:00:00', NULL) AS winter_multi, DATE '2024-01-02' = TIMESTAMP '2024-01-02 00:00:00' AS winter_direct, TIMESTAMP '2024-07-04 00:00:00' IN (DATE '2024-07-04') AS summer_reverse, ARRAY(DATE '2024-07-04',TIMESTAMP '2024-07-04 00:00:00', NULL) AS summer_array, ARRAY(TIMESTAMP '2024-03-10 00:00:00',DATE '2024-03-10') AS spring_array, DATE '2024-03-11' IN (TIMESTAMP '2024-03-11 00:00:00') AS spring_after, ARRAY(DATE '2024-11-03',TIMESTAMP '2024-11-03 00:00:00') AS fall_array, DATE '2024-11-04' IN (TIMESTAMP '2024-11-04 00:00:00') AS fall_after, ARRAY(CAST(NULL AS DATE),TIMESTAMP '2024-01-02 00:00:00') AS null_array, DATE '2024-01-02' IN (CAST(NULL AS TIMESTAMP)) AS null_in, ARRAY(DATE '2024-01-02',TIMESTAMP_NTZ '2024-01-02 00:00:00') AS ntz_control",
+          "ansi": false,
+          "timezone": "UTC",
+          "ordered": false
+        },
+        {
+          "corpus": "date_timestamp_UTC",
+          "id": "values_date_first",
+          "sql": "SELECT k,r FROM VALUES (0,DATE '2024-01-02'), (1,TIMESTAMP '2024-01-02 00:00:00'), (2,DATE '2024-07-04'), (3,TIMESTAMP '2024-07-04 00:00:00'), (4,DATE '2024-03-10'), (5,TIMESTAMP '2024-03-10 00:00:00'), (6,DATE '2024-03-11'), (7,TIMESTAMP '2024-03-11 00:00:00'), (8,DATE '2024-11-03'), (9,TIMESTAMP '2024-11-03 00:00:00'), (10,DATE '2024-11-04'), (11,TIMESTAMP '2024-11-04 00:00:00'), (12,NULL), (13,CAST(NULL AS DATE)), (14,CAST(NULL AS TIMESTAMP)) AS v(k,r)",
+          "ansi": false,
+          "timezone": "UTC",
+          "ordered": false
+        },
+        {
+          "corpus": "date_timestamp_UTC",
+          "id": "values_timestamp_first",
+          "sql": "SELECT k,r FROM VALUES (0,TIMESTAMP '2024-01-02 00:00:00'), (1,DATE '2024-01-02'), (2,TIMESTAMP '2024-07-04 00:00:00'), (3,DATE '2024-07-04'), (4,TIMESTAMP '2024-03-10 00:00:00'), (5,DATE '2024-03-10'), (6,TIMESTAMP '2024-03-11 00:00:00'), (7,DATE '2024-03-11'), (8,TIMESTAMP '2024-11-03 00:00:00'), (9,DATE '2024-11-03'), (10,TIMESTAMP '2024-11-04 00:00:00'), (11,DATE '2024-11-04'), (12,NULL), (13,CAST(NULL AS DATE)), (14,CAST(NULL AS TIMESTAMP)) AS v(k,r)",
+          "ansi": false,
+          "timezone": "UTC",
+          "ordered": false
+        },
+        {
+          "corpus": "date_timestamp_UTC",
+          "id": "in_columns",
+          "sql": "SELECT k, d IN (t) AS single, d IN (t, TIMESTAMP '2000-01-01 00:00:00') AS multiple, t IN (d) AS reverse, d = t AS direct, d IN (t, NULL) AS with_null, d IN (CAST(NULL AS TIMESTAMP)) AS typed_null_list, CAST(NULL AS DATE) IN (t) AS typed_null_left, NULL IN (t, d) AS untyped_null_left, d NOT IN (t) AS not_single, d IN (tn) AS ntz_single, d = tn AS ntz_direct FROM inputs",
+          "ansi": true,
+          "timezone": "UTC",
+          "ordered": false
+        },
+        {
+          "corpus": "date_timestamp_UTC",
+          "id": "array_columns",
+          "sql": "SELECT k, ARRAY(d,t) AS forward, ARRAY(t,d,NULL) AS reverse, ARRAY(CAST(NULL AS DATE),t) AS typed_null_date, ARRAY(d,CAST(NULL AS TIMESTAMP)) AS typed_null_timestamp, ARRAY(NULL,d,t) AS untyped_null, ARRAY(d,tn) AS ntz_control, ARRAY(d,d) AS date_control, ARRAY(t,t) AS timestamp_control FROM inputs",
+          "ansi": true,
+          "timezone": "UTC",
+          "ordered": false
+        },
+        {
+          "corpus": "date_timestamp_UTC",
+          "id": "literals",
+          "sql": "SELECT DATE '2024-01-02' IN (TIMESTAMP '2024-01-02 00:00:00') AS winter_in, DATE '2024-01-02' IN (TIMESTAMP '2024-01-02 00:00:00', NULL) AS winter_multi, DATE '2024-01-02' = TIMESTAMP '2024-01-02 00:00:00' AS winter_direct, TIMESTAMP '2024-07-04 00:00:00' IN (DATE '2024-07-04') AS summer_reverse, ARRAY(DATE '2024-07-04',TIMESTAMP '2024-07-04 00:00:00', NULL) AS summer_array, ARRAY(TIMESTAMP '2024-03-10 00:00:00',DATE '2024-03-10') AS spring_array, DATE '2024-03-11' IN (TIMESTAMP '2024-03-11 00:00:00') AS spring_after, ARRAY(DATE '2024-11-03',TIMESTAMP '2024-11-03 00:00:00') AS fall_array, DATE '2024-11-04' IN (TIMESTAMP '2024-11-04 00:00:00') AS fall_after, ARRAY(CAST(NULL AS DATE),TIMESTAMP '2024-01-02 00:00:00') AS null_array, DATE '2024-01-02' IN (CAST(NULL AS TIMESTAMP)) AS null_in, ARRAY(DATE '2024-01-02',TIMESTAMP_NTZ '2024-01-02 00:00:00') AS ntz_control",
+          "ansi": true,
+          "timezone": "UTC",
+          "ordered": false
+        },
+        {
+          "corpus": "date_timestamp_UTC",
+          "id": "values_date_first",
+          "sql": "SELECT k,r FROM VALUES (0,DATE '2024-01-02'), (1,TIMESTAMP '2024-01-02 00:00:00'), (2,DATE '2024-07-04'), (3,TIMESTAMP '2024-07-04 00:00:00'), (4,DATE '2024-03-10'), (5,TIMESTAMP '2024-03-10 00:00:00'), (6,DATE '2024-03-11'), (7,TIMESTAMP '2024-03-11 00:00:00'), (8,DATE '2024-11-03'), (9,TIMESTAMP '2024-11-03 00:00:00'), (10,DATE '2024-11-04'), (11,TIMESTAMP '2024-11-04 00:00:00'), (12,NULL), (13,CAST(NULL AS DATE)), (14,CAST(NULL AS TIMESTAMP)) AS v(k,r)",
+          "ansi": true,
+          "timezone": "UTC",
+          "ordered": false
+        },
+        {
+          "corpus": "date_timestamp_UTC",
+          "id": "values_timestamp_first",
+          "sql": "SELECT k,r FROM VALUES (0,TIMESTAMP '2024-01-02 00:00:00'), (1,DATE '2024-01-02'), (2,TIMESTAMP '2024-07-04 00:00:00'), (3,DATE '2024-07-04'), (4,TIMESTAMP '2024-03-10 00:00:00'), (5,DATE '2024-03-10'), (6,TIMESTAMP '2024-03-11 00:00:00'), (7,DATE '2024-03-11'), (8,TIMESTAMP '2024-11-03 00:00:00'), (9,DATE '2024-11-03'), (10,TIMESTAMP '2024-11-04 00:00:00'), (11,DATE '2024-11-04'), (12,NULL), (13,CAST(NULL AS DATE)), (14,CAST(NULL AS TIMESTAMP)) AS v(k,r)",
+          "ansi": true,
+          "timezone": "UTC",
+          "ordered": false
+        }
+      ]
+    },
+    {
+      "corpus": "date_timestamp_America_Los_Angeles",
+      "source": "source-only ordinary DATE plus LTZ TIMESTAMP IN/ARRAY/VALUES comparisons and NTZ controls for #1255",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "d",
+                  "type": "date",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "t",
+                  "type": "timestamp",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "tn",
+                  "type": "timestamp_ntz",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "0",
+                "19724",
+                "1704153600000000",
+                "1704153600000000"
+              ],
+              [
+                "1",
+                "19724",
+                "1704182400000000",
+                "1704153600000000"
+              ],
+              [
+                "2",
+                "19908",
+                "1720051200000000",
+                "1720051200000000"
+              ],
+              [
+                "3",
+                "19908",
+                "1720076400000000",
+                "1720051200000000"
+              ],
+              [
+                "4",
+                "19792",
+                "1710057600000000",
+                "1710028800000000"
+              ],
+              [
+                "5",
+                "19793",
+                "1710140400000000",
+                "1710115200000000"
+              ],
+              [
+                "6",
+                "20030",
+                "1730617200000000",
+                "1730592000000000"
+              ],
+              [
+                "7",
+                "20031",
+                "1730707200000000",
+                "1730678400000000"
+              ],
+              [
+                "8",
+                "-1",
+                "-57600000000",
+                "-86400000000"
+              ],
+              [
+                "9",
+                null,
+                "1704182400000000",
+                null
+              ],
+              [
+                "10",
+                "19724",
+                null,
+                "1704153600000000"
+              ],
+              [
+                "11",
+                null,
+                null,
+                null
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "date_timestamp_America_Los_Angeles",
+          "id": "in_columns",
+          "sql": "SELECT k, d IN (t) AS single, d IN (t, TIMESTAMP '2000-01-01 00:00:00') AS multiple, t IN (d) AS reverse, d = t AS direct, d IN (t, NULL) AS with_null, d IN (CAST(NULL AS TIMESTAMP)) AS typed_null_list, CAST(NULL AS DATE) IN (t) AS typed_null_left, NULL IN (t, d) AS untyped_null_left, d NOT IN (t) AS not_single, d IN (tn) AS ntz_single, d = tn AS ntz_direct FROM inputs",
+          "ansi": false,
+          "timezone": "America/Los_Angeles",
+          "ordered": false
+        },
+        {
+          "corpus": "date_timestamp_America_Los_Angeles",
+          "id": "array_columns",
+          "sql": "SELECT k, ARRAY(d,t) AS forward, ARRAY(t,d,NULL) AS reverse, ARRAY(CAST(NULL AS DATE),t) AS typed_null_date, ARRAY(d,CAST(NULL AS TIMESTAMP)) AS typed_null_timestamp, ARRAY(NULL,d,t) AS untyped_null, ARRAY(d,tn) AS ntz_control, ARRAY(d,d) AS date_control, ARRAY(t,t) AS timestamp_control FROM inputs",
+          "ansi": false,
+          "timezone": "America/Los_Angeles",
+          "ordered": false
+        },
+        {
+          "corpus": "date_timestamp_America_Los_Angeles",
+          "id": "literals",
+          "sql": "SELECT DATE '2024-01-02' IN (TIMESTAMP '2024-01-02 00:00:00') AS winter_in, DATE '2024-01-02' IN (TIMESTAMP '2024-01-02 00:00:00', NULL) AS winter_multi, DATE '2024-01-02' = TIMESTAMP '2024-01-02 00:00:00' AS winter_direct, TIMESTAMP '2024-07-04 00:00:00' IN (DATE '2024-07-04') AS summer_reverse, ARRAY(DATE '2024-07-04',TIMESTAMP '2024-07-04 00:00:00', NULL) AS summer_array, ARRAY(TIMESTAMP '2024-03-10 00:00:00',DATE '2024-03-10') AS spring_array, DATE '2024-03-11' IN (TIMESTAMP '2024-03-11 00:00:00') AS spring_after, ARRAY(DATE '2024-11-03',TIMESTAMP '2024-11-03 00:00:00') AS fall_array, DATE '2024-11-04' IN (TIMESTAMP '2024-11-04 00:00:00') AS fall_after, ARRAY(CAST(NULL AS DATE),TIMESTAMP '2024-01-02 00:00:00') AS null_array, DATE '2024-01-02' IN (CAST(NULL AS TIMESTAMP)) AS null_in, ARRAY(DATE '2024-01-02',TIMESTAMP_NTZ '2024-01-02 00:00:00') AS ntz_control",
+          "ansi": false,
+          "timezone": "America/Los_Angeles",
+          "ordered": false
+        },
+        {
+          "corpus": "date_timestamp_America_Los_Angeles",
+          "id": "values_date_first",
+          "sql": "SELECT k,r FROM VALUES (0,DATE '2024-01-02'), (1,TIMESTAMP '2024-01-02 00:00:00'), (2,DATE '2024-07-04'), (3,TIMESTAMP '2024-07-04 00:00:00'), (4,DATE '2024-03-10'), (5,TIMESTAMP '2024-03-10 00:00:00'), (6,DATE '2024-03-11'), (7,TIMESTAMP '2024-03-11 00:00:00'), (8,DATE '2024-11-03'), (9,TIMESTAMP '2024-11-03 00:00:00'), (10,DATE '2024-11-04'), (11,TIMESTAMP '2024-11-04 00:00:00'), (12,NULL), (13,CAST(NULL AS DATE)), (14,CAST(NULL AS TIMESTAMP)) AS v(k,r)",
+          "ansi": false,
+          "timezone": "America/Los_Angeles",
+          "ordered": false
+        },
+        {
+          "corpus": "date_timestamp_America_Los_Angeles",
+          "id": "values_timestamp_first",
+          "sql": "SELECT k,r FROM VALUES (0,TIMESTAMP '2024-01-02 00:00:00'), (1,DATE '2024-01-02'), (2,TIMESTAMP '2024-07-04 00:00:00'), (3,DATE '2024-07-04'), (4,TIMESTAMP '2024-03-10 00:00:00'), (5,DATE '2024-03-10'), (6,TIMESTAMP '2024-03-11 00:00:00'), (7,DATE '2024-03-11'), (8,TIMESTAMP '2024-11-03 00:00:00'), (9,DATE '2024-11-03'), (10,TIMESTAMP '2024-11-04 00:00:00'), (11,DATE '2024-11-04'), (12,NULL), (13,CAST(NULL AS DATE)), (14,CAST(NULL AS TIMESTAMP)) AS v(k,r)",
+          "ansi": false,
+          "timezone": "America/Los_Angeles",
+          "ordered": false
+        },
+        {
+          "corpus": "date_timestamp_America_Los_Angeles",
+          "id": "in_columns",
+          "sql": "SELECT k, d IN (t) AS single, d IN (t, TIMESTAMP '2000-01-01 00:00:00') AS multiple, t IN (d) AS reverse, d = t AS direct, d IN (t, NULL) AS with_null, d IN (CAST(NULL AS TIMESTAMP)) AS typed_null_list, CAST(NULL AS DATE) IN (t) AS typed_null_left, NULL IN (t, d) AS untyped_null_left, d NOT IN (t) AS not_single, d IN (tn) AS ntz_single, d = tn AS ntz_direct FROM inputs",
+          "ansi": true,
+          "timezone": "America/Los_Angeles",
+          "ordered": false
+        },
+        {
+          "corpus": "date_timestamp_America_Los_Angeles",
+          "id": "array_columns",
+          "sql": "SELECT k, ARRAY(d,t) AS forward, ARRAY(t,d,NULL) AS reverse, ARRAY(CAST(NULL AS DATE),t) AS typed_null_date, ARRAY(d,CAST(NULL AS TIMESTAMP)) AS typed_null_timestamp, ARRAY(NULL,d,t) AS untyped_null, ARRAY(d,tn) AS ntz_control, ARRAY(d,d) AS date_control, ARRAY(t,t) AS timestamp_control FROM inputs",
+          "ansi": true,
+          "timezone": "America/Los_Angeles",
+          "ordered": false
+        },
+        {
+          "corpus": "date_timestamp_America_Los_Angeles",
+          "id": "literals",
+          "sql": "SELECT DATE '2024-01-02' IN (TIMESTAMP '2024-01-02 00:00:00') AS winter_in, DATE '2024-01-02' IN (TIMESTAMP '2024-01-02 00:00:00', NULL) AS winter_multi, DATE '2024-01-02' = TIMESTAMP '2024-01-02 00:00:00' AS winter_direct, TIMESTAMP '2024-07-04 00:00:00' IN (DATE '2024-07-04') AS summer_reverse, ARRAY(DATE '2024-07-04',TIMESTAMP '2024-07-04 00:00:00', NULL) AS summer_array, ARRAY(TIMESTAMP '2024-03-10 00:00:00',DATE '2024-03-10') AS spring_array, DATE '2024-03-11' IN (TIMESTAMP '2024-03-11 00:00:00') AS spring_after, ARRAY(DATE '2024-11-03',TIMESTAMP '2024-11-03 00:00:00') AS fall_array, DATE '2024-11-04' IN (TIMESTAMP '2024-11-04 00:00:00') AS fall_after, ARRAY(CAST(NULL AS DATE),TIMESTAMP '2024-01-02 00:00:00') AS null_array, DATE '2024-01-02' IN (CAST(NULL AS TIMESTAMP)) AS null_in, ARRAY(DATE '2024-01-02',TIMESTAMP_NTZ '2024-01-02 00:00:00') AS ntz_control",
+          "ansi": true,
+          "timezone": "America/Los_Angeles",
+          "ordered": false
+        },
+        {
+          "corpus": "date_timestamp_America_Los_Angeles",
+          "id": "values_date_first",
+          "sql": "SELECT k,r FROM VALUES (0,DATE '2024-01-02'), (1,TIMESTAMP '2024-01-02 00:00:00'), (2,DATE '2024-07-04'), (3,TIMESTAMP '2024-07-04 00:00:00'), (4,DATE '2024-03-10'), (5,TIMESTAMP '2024-03-10 00:00:00'), (6,DATE '2024-03-11'), (7,TIMESTAMP '2024-03-11 00:00:00'), (8,DATE '2024-11-03'), (9,TIMESTAMP '2024-11-03 00:00:00'), (10,DATE '2024-11-04'), (11,TIMESTAMP '2024-11-04 00:00:00'), (12,NULL), (13,CAST(NULL AS DATE)), (14,CAST(NULL AS TIMESTAMP)) AS v(k,r)",
+          "ansi": true,
+          "timezone": "America/Los_Angeles",
+          "ordered": false
+        },
+        {
+          "corpus": "date_timestamp_America_Los_Angeles",
+          "id": "values_timestamp_first",
+          "sql": "SELECT k,r FROM VALUES (0,TIMESTAMP '2024-01-02 00:00:00'), (1,DATE '2024-01-02'), (2,TIMESTAMP '2024-07-04 00:00:00'), (3,DATE '2024-07-04'), (4,TIMESTAMP '2024-03-10 00:00:00'), (5,DATE '2024-03-10'), (6,TIMESTAMP '2024-03-11 00:00:00'), (7,DATE '2024-03-11'), (8,TIMESTAMP '2024-11-03 00:00:00'), (9,DATE '2024-11-03'), (10,TIMESTAMP '2024-11-04 00:00:00'), (11,DATE '2024-11-04'), (12,NULL), (13,CAST(NULL AS DATE)), (14,CAST(NULL AS TIMESTAMP)) AS v(k,r)",
+          "ansi": true,
+          "timezone": "America/Los_Angeles",
+          "ordered": false
+        }
+      ]
+    }
+  ]
+}

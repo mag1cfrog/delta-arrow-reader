@@ -37,8 +37,9 @@ use crate::function::comparison::{
     comparison_string_type, nanosecond_comparison_cast, string_comparison_cast,
     string_comparison_type, temporal_comparison_type,
 };
+use crate::function::result_coercion::coerce_to_temporal;
 use crate::function::temporal_coercion::{
-    cast_local_timestamp_expr_to_ltz, only_dates_and_timestamp_ntz,
+    cast_local_timestamp_expr_to_ltz, date_timestamp_common_type,
 };
 
 /// Spark's `UNRESOLVED_ROUTINE` error for a routine named `function_name`, as written, on the
@@ -862,8 +863,9 @@ pub(crate) fn spark_in_list(
     list: Vec<expr::Expr>,
     negated: bool,
     schema: &DFSchemaRef,
-    ansi_mode: bool,
+    config: &PlanConfig,
 ) -> PlanResult<expr::Expr> {
+    let ansi_mode = config.ansi_mode;
     let operand_types = std::iter::once(&value)
         .chain(&list)
         .map(|operand| operand.get_type(schema))
@@ -902,16 +904,13 @@ pub(crate) fn spark_in_list(
             negated,
         )));
     }
-    if only_dates_and_timestamp_ntz(&operand_types) {
-        let ntz = DataType::Timestamp(TimeUnit::Microsecond, None);
-        let mut operands =
-            std::iter::once(value)
-                .chain(list)
-                .zip(&operand_types)
-                .map(|(operand, source)| match source {
-                    source if source == &ntz => operand,
-                    source => cast_with_date_ntz_nullability(operand, source, &ntz),
-                });
+    if let Some(target) = date_timestamp_common_type(&operand_types, &config.session_timezone) {
+        let mut operands = std::iter::once(value)
+            .chain(list)
+            .zip(&operand_types)
+            .map(|(operand, source)| coerce_to_temporal(operand, source, &target))
+            .collect::<PlanResult<Vec<_>>>()?
+            .into_iter();
         let value = operands
             .next()
             .ok_or_else(|| PlanError::invalid("missing IN operand"))?;
@@ -1418,7 +1417,17 @@ fn in_list_skips_only_irrelevant_float_normalization() -> datafusion_common::Res
         DataType::Float16,
         true,
     )]))?);
-    let half = spark_in_list(col("v"), vec![lit(1.25_f32)], false, &half_schema, false).unwrap();
+    let half = spark_in_list(
+        col("v"),
+        vec![lit(1.25_f32)],
+        false,
+        &half_schema,
+        &PlanConfig {
+            ansi_mode: false,
+            ..Default::default()
+        },
+    )
+    .unwrap();
     let expr::Expr::InList(half) = half else {
         unreachable!()
     };
@@ -1435,7 +1444,10 @@ fn in_list_skips_only_irrelevant_float_normalization() -> datafusion_common::Res
             vec![lit(0.0_f64), lit(1.25_f64)],
             false,
             &cast_schema,
-            false,
+            &PlanConfig {
+                ansi_mode: false,
+                ..Default::default()
+            },
         )
         .unwrap() else {
             unreachable!()
@@ -1677,8 +1689,17 @@ fn in_list_skips_only_irrelevant_float_normalization() -> datafusion_common::Res
             let wide = arrow::compute::cast(&input, &DataType::Float64)?;
             for (name, list, expected, skip) in &cases {
                 for negated in [false, true] {
-                    let candidate =
-                        spark_in_list(col("v"), list.clone(), negated, &schema, false).unwrap();
+                    let candidate = spark_in_list(
+                        col("v"),
+                        list.clone(),
+                        negated,
+                        &schema,
+                        &PlanConfig {
+                            ansi_mode: false,
+                            ..Default::default()
+                        },
+                    )
+                    .unwrap();
                     let expr::Expr::InList(in_list) = &candidate else {
                         unreachable!()
                     };
@@ -1721,8 +1742,17 @@ fn in_list_skips_only_irrelevant_float_normalization() -> datafusion_common::Res
                     }
                     let normalized =
                         ScalarUDF::from(SparkComparisonFloat { widen: false }).call(vec![col("v")]);
-                    let baseline =
-                        spark_in_list(normalized, list.clone(), negated, &schema, false).unwrap();
+                    let baseline = spark_in_list(
+                        normalized,
+                        list.clone(),
+                        negated,
+                        &schema,
+                        &PlanConfig {
+                            ansi_mode: false,
+                            ..Default::default()
+                        },
+                    )
+                    .unwrap();
                     assert_eq!(baseline.get_type(&schema)?, candidate.get_type(&schema)?);
                     assert_eq!(baseline.nullable(&schema)?, candidate.nullable(&schema)?);
                     for expression in [baseline, candidate] {
@@ -2699,7 +2729,16 @@ fn ansi_float_integer_predicates_preserve_the_single_precision_boundary() -> Pla
                         ..Default::default()
                     },
                 )?,
-                spark_in_list(left, vec![right], false, &schema, ansi_mode)?,
+                spark_in_list(
+                    left,
+                    vec![right],
+                    false,
+                    &schema,
+                    &PlanConfig {
+                        ansi_mode,
+                        ..Default::default()
+                    },
+                )?,
             ] {
                 let simplifier = ExprSimplifier::new(
                     SimplifyContext::builder()
@@ -2859,8 +2898,13 @@ fn exact_integer_predicates_match_explicit_double_coercion() -> PlanResult<()> {
                 );
             }
             for negated in [false, true] {
-                let candidate =
-                    spark_in_list(left.clone(), vec![right.clone()], negated, &schema, true)?;
+                let candidate = spark_in_list(
+                    left.clone(),
+                    vec![right.clone()],
+                    negated,
+                    &schema,
+                    &PlanConfig::default(),
+                )?;
                 let reference = expr::Expr::InList(expr::InList::new(
                     Box::new(wide_left.clone()),
                     vec![wide_right.clone()],

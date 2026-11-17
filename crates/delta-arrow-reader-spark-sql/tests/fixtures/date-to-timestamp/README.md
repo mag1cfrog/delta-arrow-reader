@@ -43,12 +43,13 @@ Existing differences keep their Spark expectation in the fixture. The test repla
 retained part with the current DAR result and checks each count:
 - #1090: 40 GREATEST and LEAST records are nullable. Spark declares them NOT NULL because
   one argument is a NOT NULL literal.
-- #1122: 40 records of arrays, DATE_TRUNC and IN subqueries coerce DATE to a nanosecond
-  TIMESTAMP without a zone and fail for year 1 or 9999 while collecting rows, and VALUES
-  gives the DATE's UTC midnight that way.
-- #1122: 6 IN list records fail with Arrow's cast in Havana, Santiago and Toronto.
+- #1122: 10 DATE_TRUNC records coerce DATE to nanosecond TIMESTAMP_NTZ and fail for year 1
+  or 9999 while collecting rows.
 - #1122: 4 HOUR records read the DATE at midnight where the day starts later.
   DATE_FORMAT now uses the original Spark values, including skipped midnights.
+
+The ARRAY, IN-subquery, VALUES and IN-list records compare directly with Spark after
+the shared DATE/TIMESTAMP coercion repair (#1255). Their raw captured records are unchanged.
 
 Recapture from the crate root:
 

@@ -26,7 +26,7 @@ impl PlanResolver<'_> {
         let list = self.resolve_expressions(list, schema, state).await?;
         Ok(NamedExpr::new(
             vec!["in_list".to_string()],
-            spark_in_list(expr, list, negated, schema, self.config.ansi_mode)?,
+            spark_in_list(expr, list, negated, schema, &self.config)?,
         ))
     }
 

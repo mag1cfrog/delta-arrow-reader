@@ -140,7 +140,7 @@ fn is_in_list(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         list,
         false,
         function_context.schema,
-        function_context.plan_config.ansi_mode,
+        function_context.plan_config,
     )
 }
 
@@ -199,7 +199,16 @@ fn numeric_in_preserves_nan_zero_and_null_semantics() -> PlanResult<()> {
             };
             for negated in [false, true] {
                 let expression = if negated {
-                    spark_in_list(col("v"), list.clone(), true, &schema, false)?
+                    spark_in_list(
+                        col("v"),
+                        list.clone(),
+                        true,
+                        &schema,
+                        &PlanConfig {
+                            ansi_mode: false,
+                            ..Default::default()
+                        },
+                    )?
                 } else {
                     is_in_list(ScalarFunctionInput {
                         arguments: std::iter::once(col("v")).chain(list.clone()).collect(),
@@ -221,7 +230,16 @@ fn numeric_in_preserves_nan_zero_and_null_semantics() -> PlanResult<()> {
         let list = vec![lit(ScalarValue::Decimal128(Some(0), 10, 2)), lit("0")];
         let original = col("v").in_list(list.clone(), false);
         assert_eq!(
-            spark_in_list(col("v"), list, false, &schema, false)?,
+            spark_in_list(
+                col("v"),
+                list,
+                false,
+                &schema,
+                &PlanConfig {
+                    ansi_mode: false,
+                    ..Default::default()
+                }
+            )?,
             original
         );
     }
