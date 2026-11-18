@@ -103,9 +103,12 @@ fn element_at(input: ScalarFunctionInput, is_try: bool) -> PlanResult<expr::Expr
     } else {
         (
             "element_at",
-            // TODO: respect spark.sql.ansi.enabled=false: https://spark.apache.org/docs/latest/api/sql/index.html#element_at
-            ScalarUDF::from(RaiseError::new())
-                .call(vec![lit("element_at: the index is out of bounds")]),
+            if input.function_context.plan_config.ansi_mode {
+                ScalarUDF::from(RaiseError::new())
+                    .call(vec![lit("element_at: the index is out of bounds")])
+            } else {
+                lit(ScalarValue::Null)
+            },
         )
     };
 
