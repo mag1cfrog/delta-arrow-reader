@@ -8,12 +8,7 @@ use datafusion::prelude::{SessionConfig, SessionContext};
 use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
 use serde_json::{Value, json};
 
-#[allow(dead_code)]
-#[path = "../support/spark_inputs.rs"]
-mod spark_inputs;
-#[allow(dead_code)]
-#[path = "../support/spark_results.rs"]
-mod spark_results;
+use super::{spark_inputs, spark_results};
 use spark_results::{TestResult, capture_executed_query_result, capture_native_query_observation};
 
 fn references() -> TestResult<Vec<Value>> {

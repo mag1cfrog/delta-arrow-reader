@@ -1,0 +1,2286 @@
+{
+  "issue": 1358,
+  "base": "328ad4e672c3df9ee19c5c69dc9254475595563c",
+  "expected_record_count": 182,
+  "specs": [
+    {
+      "id": 1,
+      "name": "duplicate_first",
+      "document": "{\"a\":1,\"a\":2}",
+      "path": "$.a"
+    },
+    {
+      "id": 2,
+      "name": "duplicate_null_first",
+      "document": "{\"a\":null,\"a\":2}",
+      "path": "$.a"
+    },
+    {
+      "id": 3,
+      "name": "duplicate_nested",
+      "document": "{\"a\":{\"x\":null},\"a\":{\"x\":2}}",
+      "path": "$.a.x"
+    },
+    {
+      "id": 4,
+      "name": "duplicate_root",
+      "document": "{ \"a\" : 1, \"a\" : 2, \"b\" : 3 }",
+      "path": "$"
+    },
+    {
+      "id": 5,
+      "name": "number_exponent",
+      "document": "{\"n\":1.2300e+2}",
+      "path": "$.n"
+    },
+    {
+      "id": 6,
+      "name": "number_small",
+      "document": "{\"n\":1e-7}",
+      "path": "$.n"
+    },
+    {
+      "id": 7,
+      "name": "number_large_float",
+      "document": "{\"n\":1e20}",
+      "path": "$.n"
+    },
+    {
+      "id": 8,
+      "name": "number_negative_zero",
+      "document": "{\"n\":-0.0}",
+      "path": "$.n"
+    },
+    {
+      "id": 9,
+      "name": "number_huge_int",
+      "document": "{\"n\":123456789012345678901234567890}",
+      "path": "$.n"
+    },
+    {
+      "id": 10,
+      "name": "number_compact_root",
+      "document": "{ \"n\" : 1.2300e+2, \"small\" : 1e-7, \"negativeZero\" : -0.0 }",
+      "path": "$"
+    },
+    {
+      "id": 11,
+      "name": "wildcard_empty",
+      "document": "[]",
+      "path": "$[*]"
+    },
+    {
+      "id": 12,
+      "name": "wildcard_one_number",
+      "document": "[1]",
+      "path": "$[*]"
+    },
+    {
+      "id": 13,
+      "name": "wildcard_one_string",
+      "document": "[\"a\"]",
+      "path": "$[*]"
+    },
+    {
+      "id": 14,
+      "name": "wildcard_many_strings",
+      "document": "[\"a\",\"b\"]",
+      "path": "$[*]"
+    },
+    {
+      "id": 15,
+      "name": "wildcard_null",
+      "document": "[null]",
+      "path": "$[*]"
+    },
+    {
+      "id": 16,
+      "name": "wildcard_array",
+      "document": "[[1,2],[3]]",
+      "path": "$[*]"
+    },
+    {
+      "id": 17,
+      "name": "wildcard_missing",
+      "document": "{\"items\":[{},{}]}",
+      "path": "$.items[*].name"
+    },
+    {
+      "id": 18,
+      "name": "wildcard_one_match",
+      "document": "{\"items\":[{}, {\"name\":\"a\"}]}",
+      "path": "$.items[*].name"
+    },
+    {
+      "id": 19,
+      "name": "wildcard_null_member",
+      "document": "{\"items\":[{\"name\":null},{\"name\":\"a\"}]}",
+      "path": "$.items[*].name"
+    },
+    {
+      "id": 20,
+      "name": "wildcard_nested",
+      "document": "{\"items\":[[{\"name\":\"a\"}],[{\"name\":\"b\"}]]}",
+      "path": "$.items[*][*].name"
+    },
+    {
+      "id": 21,
+      "name": "wildcard_double_one",
+      "document": "[[1]]",
+      "path": "$[*][*]"
+    },
+    {
+      "id": 22,
+      "name": "wildcard_deep",
+      "document": "[[[1],[2]],[[3]]]",
+      "path": "$[*][*][*]"
+    },
+    {
+      "id": 23,
+      "name": "wildcard_index",
+      "document": "[[\"a\",\"b\"],[\"c\"]]",
+      "path": "$[0][*]"
+    },
+    {
+      "id": 24,
+      "name": "object_wildcard",
+      "document": "{\"first\":1,\"second\":2}",
+      "path": "$.*"
+    },
+    {
+      "id": 25,
+      "name": "string_escapes",
+      "document": "{\"s\":\"a\\nb\\t\\\"c\\\\d\"}",
+      "path": "$.s"
+    },
+    {
+      "id": 26,
+      "name": "string_json_text",
+      "document": "{\"s\":\"{ \\\"x\\\" : 1 }\"}",
+      "path": "$.s"
+    },
+    {
+      "id": 27,
+      "name": "string_unicode",
+      "document": "{\"s\":\"\\u00e9\\/x\"}",
+      "path": "$.s"
+    },
+    {
+      "id": 28,
+      "name": "string_array",
+      "document": "[ \"a\\nb\", \"c\" ]",
+      "path": "$"
+    },
+    {
+      "id": 29,
+      "name": "pretty_object",
+      "document": "{ \"o\" : { \"x\" : 1, \"items\" : [ 2, 3 ] } }",
+      "path": "$.o"
+    },
+    {
+      "id": 30,
+      "name": "quoted_key",
+      "document": "{\"a.b\":{\"x\":1}}",
+      "path": "$['a.b'].x"
+    },
+    {
+      "id": 31,
+      "name": "scalar_root",
+      "document": "\"hello\"",
+      "path": "$"
+    },
+    {
+      "id": 32,
+      "name": "null_root",
+      "document": "null",
+      "path": "$"
+    },
+    {
+      "id": 33,
+      "name": "empty_document",
+      "document": "",
+      "path": "$"
+    },
+    {
+      "id": 34,
+      "name": "malformed",
+      "document": "{\"a\":",
+      "path": "$.a"
+    },
+    {
+      "id": 35,
+      "name": "null_document",
+      "document": null,
+      "path": "$.a"
+    },
+    {
+      "id": 36,
+      "name": "null_path",
+      "document": "{\"a\":1}",
+      "path": null
+    },
+    {
+      "id": 37,
+      "name": "single_quotes",
+      "document": "{'a':1}",
+      "path": "$.a"
+    },
+    {
+      "id": 38,
+      "name": "unquoted_key",
+      "document": "{a:1}",
+      "path": "$.a"
+    },
+    {
+      "id": 39,
+      "name": "literal_wildcard",
+      "document": "{\"items\":[{\"name\":\"a\"},{\"name\":\"b\"}]}",
+      "path": "$.items[*].name"
+    },
+    {
+      "id": 40,
+      "name": "literal_index",
+      "document": "{\"items\":[{\"name\":\"a\"},{\"name\":\"b\"}]}",
+      "path": "$.items[1].name"
+    },
+    {
+      "id": 41,
+      "name": "nested",
+      "document": "{\"outer\":{\"name\":\"a\"}}",
+      "path": "$.outer.name"
+    },
+    {
+      "id": 42,
+      "name": "empty_array",
+      "document": "[]",
+      "path": "$"
+    },
+    {
+      "id": 43,
+      "name": "empty_object",
+      "document": "{}",
+      "path": "$"
+    },
+    {
+      "id": 44,
+      "name": "boolean",
+      "document": "true",
+      "path": "$"
+    },
+    {
+      "id": 45,
+      "name": "empty_path",
+      "document": "{\"a\":1}",
+      "path": ""
+    },
+    {
+      "id": 46,
+      "name": "invalid_path",
+      "document": "{\"a\":1}",
+      "path": "a"
+    },
+    {
+      "id": 47,
+      "name": "negative_index",
+      "document": "[1]",
+      "path": "$[-1]"
+    },
+    {
+      "id": 48,
+      "name": "out_of_bounds",
+      "document": "[1]",
+      "path": "$[2]"
+    },
+    {
+      "id": 49,
+      "name": "quoted_empty_key",
+      "document": "{\"\":1}",
+      "path": "$['']"
+    },
+    {
+      "id": 50,
+      "name": "one_index_wildcard",
+      "document": "[[\"a\"]]",
+      "path": "$[0][*]"
+    },
+    {
+      "id": 51,
+      "name": "nested_member_wildcard",
+      "document": "{\"items\":[{\"names\":[\"a\",\"b\"]},{\"names\":[\"c\"]}]}",
+      "path": "$.items[*].names[*]"
+    },
+    {
+      "id": 52,
+      "name": "long_document",
+      "document": "{\"items\":[{\"name\":\"item-0\",\"value\":0},{\"name\":\"item-1\",\"value\":1},{\"name\":\"item-2\",\"value\":2},{\"name\":\"item-3\",\"value\":3},{\"name\":\"item-4\",\"value\":4},{\"name\":\"item-5\",\"value\":5},{\"name\":\"item-6\",\"value\":6},{\"name\":\"item-7\",\"value\":7},{\"name\":\"item-8\",\"value\":8},{\"name\":\"item-9\",\"value\":9},{\"name\":\"item-10\",\"value\":10},{\"name\":\"item-11\",\"value\":11},{\"name\":\"item-12\",\"value\":12},{\"name\":\"item-13\",\"value\":13},{\"name\":\"item-14\",\"value\":14},{\"name\":\"item-15\",\"value\":15},{\"name\":\"item-16\",\"value\":16},{\"name\":\"item-17\",\"value\":17},{\"name\":\"item-18\",\"value\":18},{\"name\":\"item-19\",\"value\":19},{\"name\":\"item-20\",\"value\":20},{\"name\":\"item-21\",\"value\":21},{\"name\":\"item-22\",\"value\":22},{\"name\":\"item-23\",\"value\":23},{\"name\":\"item-24\",\"value\":24},{\"name\":\"item-25\",\"value\":25},{\"name\":\"item-26\",\"value\":26},{\"name\":\"item-27\",\"value\":27},{\"name\":\"item-28\",\"value\":28},{\"name\":\"item-29\",\"value\":29},{\"name\":\"item-30\",\"value\":30},{\"name\":\"item-31\",\"value\":31},{\"name\":\"item-32\",\"value\":32},{\"name\":\"item-33\",\"value\":33},{\"name\":\"item-34\",\"value\":34},{\"name\":\"item-35\",\"value\":35},{\"name\":\"item-36\",\"value\":36},{\"name\":\"item-37\",\"value\":37},{\"name\":\"item-38\",\"value\":38},{\"name\":\"item-39\",\"value\":39},{\"name\":\"item-40\",\"value\":40},{\"name\":\"item-41\",\"value\":41},{\"name\":\"item-42\",\"value\":42},{\"name\":\"item-43\",\"value\":43},{\"name\":\"item-44\",\"value\":44},{\"name\":\"item-45\",\"value\":45},{\"name\":\"item-46\",\"value\":46},{\"name\":\"item-47\",\"value\":47},{\"name\":\"item-48\",\"value\":48},{\"name\":\"item-49\",\"value\":49},{\"name\":\"item-50\",\"value\":50},{\"name\":\"item-51\",\"value\":51},{\"name\":\"item-52\",\"value\":52},{\"name\":\"item-53\",\"value\":53},{\"name\":\"item-54\",\"value\":54},{\"name\":\"item-55\",\"value\":55},{\"name\":\"item-56\",\"value\":56},{\"name\":\"item-57\",\"value\":57},{\"name\":\"item-58\",\"value\":58},{\"name\":\"item-59\",\"value\":59},{\"name\":\"item-60\",\"value\":60},{\"name\":\"item-61\",\"value\":61},{\"name\":\"item-62\",\"value\":62},{\"name\":\"item-63\",\"value\":63},{\"name\":\"item-64\",\"value\":64},{\"name\":\"item-65\",\"value\":65},{\"name\":\"item-66\",\"value\":66},{\"name\":\"item-67\",\"value\":67},{\"name\":\"item-68\",\"value\":68},{\"name\":\"item-69\",\"value\":69},{\"name\":\"item-70\",\"value\":70},{\"name\":\"item-71\",\"value\":71},{\"name\":\"item-72\",\"value\":72},{\"name\":\"item-73\",\"value\":73},{\"name\":\"item-74\",\"value\":74},{\"name\":\"item-75\",\"value\":75},{\"name\":\"item-76\",\"value\":76},{\"name\":\"item-77\",\"value\":77},{\"name\":\"item-78\",\"value\":78},{\"name\":\"item-79\",\"value\":79},{\"name\":\"item-80\",\"value\":80},{\"name\":\"item-81\",\"value\":81},{\"name\":\"item-82\",\"value\":82},{\"name\":\"item-83\",\"value\":83},{\"name\":\"item-84\",\"value\":84},{\"name\":\"item-85\",\"value\":85},{\"name\":\"item-86\",\"value\":86},{\"name\":\"item-87\",\"value\":87},{\"name\":\"item-88\",\"value\":88},{\"name\":\"item-89\",\"value\":89},{\"name\":\"item-90\",\"value\":90},{\"name\":\"item-91\",\"value\":91},{\"name\":\"item-92\",\"value\":92},{\"name\":\"item-93\",\"value\":93},{\"name\":\"item-94\",\"value\":94},{\"name\":\"item-95\",\"value\":95},{\"name\":\"item-96\",\"value\":96},{\"name\":\"item-97\",\"value\":97},{\"name\":\"item-98\",\"value\":98},{\"name\":\"item-99\",\"value\":99},{\"name\":\"item-100\",\"value\":100},{\"name\":\"item-101\",\"value\":101},{\"name\":\"item-102\",\"value\":102},{\"name\":\"item-103\",\"value\":103},{\"name\":\"item-104\",\"value\":104},{\"name\":\"item-105\",\"value\":105},{\"name\":\"item-106\",\"value\":106},{\"name\":\"item-107\",\"value\":107},{\"name\":\"item-108\",\"value\":108},{\"name\":\"item-109\",\"value\":109},{\"name\":\"item-110\",\"value\":110},{\"name\":\"item-111\",\"value\":111},{\"name\":\"item-112\",\"value\":112},{\"name\":\"item-113\",\"value\":113},{\"name\":\"item-114\",\"value\":114},{\"name\":\"item-115\",\"value\":115},{\"name\":\"item-116\",\"value\":116},{\"name\":\"item-117\",\"value\":117},{\"name\":\"item-118\",\"value\":118},{\"name\":\"item-119\",\"value\":119},{\"name\":\"item-120\",\"value\":120},{\"name\":\"item-121\",\"value\":121},{\"name\":\"item-122\",\"value\":122},{\"name\":\"item-123\",\"value\":123},{\"name\":\"item-124\",\"value\":124},{\"name\":\"item-125\",\"value\":125},{\"name\":\"item-126\",\"value\":126},{\"name\":\"item-127\",\"value\":127}]}",
+      "path": "$.items[120].name"
+    }
+  ],
+  "corpora": [
+    {
+      "corpus": "get_json_object_extraction",
+      "source": "Source-only GET_JSON_OBJECT documents and paths; no expected output read by capture.",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "path_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "j",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "p",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                "{\"a\":1,\"a\":2}",
+                "$.a"
+              ],
+              [
+                "2",
+                "{\"a\":null,\"a\":2}",
+                "$.a"
+              ],
+              [
+                "3",
+                "{\"a\":{\"x\":null},\"a\":{\"x\":2}}",
+                "$.a.x"
+              ],
+              [
+                "4",
+                "{ \"a\" : 1, \"a\" : 2, \"b\" : 3 }",
+                "$"
+              ],
+              [
+                "5",
+                "{\"n\":1.2300e+2}",
+                "$.n"
+              ],
+              [
+                "6",
+                "{\"n\":1e-7}",
+                "$.n"
+              ],
+              [
+                "7",
+                "{\"n\":1e20}",
+                "$.n"
+              ],
+              [
+                "8",
+                "{\"n\":-0.0}",
+                "$.n"
+              ],
+              [
+                "9",
+                "{\"n\":123456789012345678901234567890}",
+                "$.n"
+              ],
+              [
+                "10",
+                "{ \"n\" : 1.2300e+2, \"small\" : 1e-7, \"negativeZero\" : -0.0 }",
+                "$"
+              ],
+              [
+                "11",
+                "[]",
+                "$[*]"
+              ],
+              [
+                "12",
+                "[1]",
+                "$[*]"
+              ],
+              [
+                "13",
+                "[\"a\"]",
+                "$[*]"
+              ],
+              [
+                "14",
+                "[\"a\",\"b\"]",
+                "$[*]"
+              ],
+              [
+                "15",
+                "[null]",
+                "$[*]"
+              ],
+              [
+                "16",
+                "[[1,2],[3]]",
+                "$[*]"
+              ],
+              [
+                "17",
+                "{\"items\":[{},{}]}",
+                "$.items[*].name"
+              ],
+              [
+                "18",
+                "{\"items\":[{}, {\"name\":\"a\"}]}",
+                "$.items[*].name"
+              ],
+              [
+                "19",
+                "{\"items\":[{\"name\":null},{\"name\":\"a\"}]}",
+                "$.items[*].name"
+              ],
+              [
+                "20",
+                "{\"items\":[[{\"name\":\"a\"}],[{\"name\":\"b\"}]]}",
+                "$.items[*][*].name"
+              ],
+              [
+                "21",
+                "[[1]]",
+                "$[*][*]"
+              ],
+              [
+                "22",
+                "[[[1],[2]],[[3]]]",
+                "$[*][*][*]"
+              ],
+              [
+                "23",
+                "[[\"a\",\"b\"],[\"c\"]]",
+                "$[0][*]"
+              ],
+              [
+                "24",
+                "{\"first\":1,\"second\":2}",
+                "$.*"
+              ],
+              [
+                "25",
+                "{\"s\":\"a\\nb\\t\\\"c\\\\d\"}",
+                "$.s"
+              ],
+              [
+                "26",
+                "{\"s\":\"{ \\\"x\\\" : 1 }\"}",
+                "$.s"
+              ],
+              [
+                "27",
+                "{\"s\":\"\\u00e9\\/x\"}",
+                "$.s"
+              ],
+              [
+                "28",
+                "[ \"a\\nb\", \"c\" ]",
+                "$"
+              ],
+              [
+                "29",
+                "{ \"o\" : { \"x\" : 1, \"items\" : [ 2, 3 ] } }",
+                "$.o"
+              ],
+              [
+                "30",
+                "{\"a.b\":{\"x\":1}}",
+                "$['a.b'].x"
+              ],
+              [
+                "31",
+                "\"hello\"",
+                "$"
+              ],
+              [
+                "32",
+                "null",
+                "$"
+              ],
+              [
+                "33",
+                "",
+                "$"
+              ],
+              [
+                "34",
+                "{\"a\":",
+                "$.a"
+              ],
+              [
+                "35",
+                null,
+                "$.a"
+              ],
+              [
+                "36",
+                "{\"a\":1}",
+                null
+              ],
+              [
+                "37",
+                "{'a':1}",
+                "$.a"
+              ],
+              [
+                "38",
+                "{a:1}",
+                "$.a"
+              ],
+              [
+                "39",
+                "{\"items\":[{\"name\":\"a\"},{\"name\":\"b\"}]}",
+                "$.items[*].name"
+              ],
+              [
+                "40",
+                "{\"items\":[{\"name\":\"a\"},{\"name\":\"b\"}]}",
+                "$.items[1].name"
+              ],
+              [
+                "41",
+                "{\"outer\":{\"name\":\"a\"}}",
+                "$.outer.name"
+              ],
+              [
+                "42",
+                "[]",
+                "$"
+              ],
+              [
+                "43",
+                "{}",
+                "$"
+              ],
+              [
+                "44",
+                "true",
+                "$"
+              ],
+              [
+                "45",
+                "{\"a\":1}",
+                ""
+              ],
+              [
+                "46",
+                "{\"a\":1}",
+                "a"
+              ],
+              [
+                "47",
+                "[1]",
+                "$[-1]"
+              ],
+              [
+                "48",
+                "[1]",
+                "$[2]"
+              ],
+              [
+                "49",
+                "{\"\":1}",
+                "$['']"
+              ],
+              [
+                "50",
+                "[[\"a\"]]",
+                "$[0][*]"
+              ],
+              [
+                "51",
+                "{\"items\":[{\"names\":[\"a\",\"b\"]},{\"names\":[\"c\"]}]}",
+                "$.items[*].names[*]"
+              ],
+              [
+                "52",
+                "{\"items\":[{\"name\":\"item-0\",\"value\":0},{\"name\":\"item-1\",\"value\":1},{\"name\":\"item-2\",\"value\":2},{\"name\":\"item-3\",\"value\":3},{\"name\":\"item-4\",\"value\":4},{\"name\":\"item-5\",\"value\":5},{\"name\":\"item-6\",\"value\":6},{\"name\":\"item-7\",\"value\":7},{\"name\":\"item-8\",\"value\":8},{\"name\":\"item-9\",\"value\":9},{\"name\":\"item-10\",\"value\":10},{\"name\":\"item-11\",\"value\":11},{\"name\":\"item-12\",\"value\":12},{\"name\":\"item-13\",\"value\":13},{\"name\":\"item-14\",\"value\":14},{\"name\":\"item-15\",\"value\":15},{\"name\":\"item-16\",\"value\":16},{\"name\":\"item-17\",\"value\":17},{\"name\":\"item-18\",\"value\":18},{\"name\":\"item-19\",\"value\":19},{\"name\":\"item-20\",\"value\":20},{\"name\":\"item-21\",\"value\":21},{\"name\":\"item-22\",\"value\":22},{\"name\":\"item-23\",\"value\":23},{\"name\":\"item-24\",\"value\":24},{\"name\":\"item-25\",\"value\":25},{\"name\":\"item-26\",\"value\":26},{\"name\":\"item-27\",\"value\":27},{\"name\":\"item-28\",\"value\":28},{\"name\":\"item-29\",\"value\":29},{\"name\":\"item-30\",\"value\":30},{\"name\":\"item-31\",\"value\":31},{\"name\":\"item-32\",\"value\":32},{\"name\":\"item-33\",\"value\":33},{\"name\":\"item-34\",\"value\":34},{\"name\":\"item-35\",\"value\":35},{\"name\":\"item-36\",\"value\":36},{\"name\":\"item-37\",\"value\":37},{\"name\":\"item-38\",\"value\":38},{\"name\":\"item-39\",\"value\":39},{\"name\":\"item-40\",\"value\":40},{\"name\":\"item-41\",\"value\":41},{\"name\":\"item-42\",\"value\":42},{\"name\":\"item-43\",\"value\":43},{\"name\":\"item-44\",\"value\":44},{\"name\":\"item-45\",\"value\":45},{\"name\":\"item-46\",\"value\":46},{\"name\":\"item-47\",\"value\":47},{\"name\":\"item-48\",\"value\":48},{\"name\":\"item-49\",\"value\":49},{\"name\":\"item-50\",\"value\":50},{\"name\":\"item-51\",\"value\":51},{\"name\":\"item-52\",\"value\":52},{\"name\":\"item-53\",\"value\":53},{\"name\":\"item-54\",\"value\":54},{\"name\":\"item-55\",\"value\":55},{\"name\":\"item-56\",\"value\":56},{\"name\":\"item-57\",\"value\":57},{\"name\":\"item-58\",\"value\":58},{\"name\":\"item-59\",\"value\":59},{\"name\":\"item-60\",\"value\":60},{\"name\":\"item-61\",\"value\":61},{\"name\":\"item-62\",\"value\":62},{\"name\":\"item-63\",\"value\":63},{\"name\":\"item-64\",\"value\":64},{\"name\":\"item-65\",\"value\":65},{\"name\":\"item-66\",\"value\":66},{\"name\":\"item-67\",\"value\":67},{\"name\":\"item-68\",\"value\":68},{\"name\":\"item-69\",\"value\":69},{\"name\":\"item-70\",\"value\":70},{\"name\":\"item-71\",\"value\":71},{\"name\":\"item-72\",\"value\":72},{\"name\":\"item-73\",\"value\":73},{\"name\":\"item-74\",\"value\":74},{\"name\":\"item-75\",\"value\":75},{\"name\":\"item-76\",\"value\":76},{\"name\":\"item-77\",\"value\":77},{\"name\":\"item-78\",\"value\":78},{\"name\":\"item-79\",\"value\":79},{\"name\":\"item-80\",\"value\":80},{\"name\":\"item-81\",\"value\":81},{\"name\":\"item-82\",\"value\":82},{\"name\":\"item-83\",\"value\":83},{\"name\":\"item-84\",\"value\":84},{\"name\":\"item-85\",\"value\":85},{\"name\":\"item-86\",\"value\":86},{\"name\":\"item-87\",\"value\":87},{\"name\":\"item-88\",\"value\":88},{\"name\":\"item-89\",\"value\":89},{\"name\":\"item-90\",\"value\":90},{\"name\":\"item-91\",\"value\":91},{\"name\":\"item-92\",\"value\":92},{\"name\":\"item-93\",\"value\":93},{\"name\":\"item-94\",\"value\":94},{\"name\":\"item-95\",\"value\":95},{\"name\":\"item-96\",\"value\":96},{\"name\":\"item-97\",\"value\":97},{\"name\":\"item-98\",\"value\":98},{\"name\":\"item-99\",\"value\":99},{\"name\":\"item-100\",\"value\":100},{\"name\":\"item-101\",\"value\":101},{\"name\":\"item-102\",\"value\":102},{\"name\":\"item-103\",\"value\":103},{\"name\":\"item-104\",\"value\":104},{\"name\":\"item-105\",\"value\":105},{\"name\":\"item-106\",\"value\":106},{\"name\":\"item-107\",\"value\":107},{\"name\":\"item-108\",\"value\":108},{\"name\":\"item-109\",\"value\":109},{\"name\":\"item-110\",\"value\":110},{\"name\":\"item-111\",\"value\":111},{\"name\":\"item-112\",\"value\":112},{\"name\":\"item-113\",\"value\":113},{\"name\":\"item-114\",\"value\":114},{\"name\":\"item-115\",\"value\":115},{\"name\":\"item-116\",\"value\":116},{\"name\":\"item-117\",\"value\":117},{\"name\":\"item-118\",\"value\":118},{\"name\":\"item-119\",\"value\":119},{\"name\":\"item-120\",\"value\":120},{\"name\":\"item-121\",\"value\":121},{\"name\":\"item-122\",\"value\":122},{\"name\":\"item-123\",\"value\":123},{\"name\":\"item-124\",\"value\":124},{\"name\":\"item-125\",\"value\":125},{\"name\":\"item-126\",\"value\":126},{\"name\":\"item-127\",\"value\":127}]}",
+                "$.items[120].name"
+              ]
+            ]
+          },
+          {
+            "name": "writer_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "j",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "p",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                "{\"items\":[{\"names\":[]},{\"names\":[\"a\"]}]}",
+                "$.items[*].names[*]"
+              ],
+              [
+                "2",
+                "{\"items\":[{\"names\":[\"a\"]},{\"names\":[]}]}",
+                "$.items[*].names[*]"
+              ],
+              [
+                "3",
+                "{\"items\":[{\"names\":[]},{\"names\":[\"a\"]},{\"names\":[\"b\"]}]}",
+                "$.items[*].names[*]"
+              ],
+              [
+                "4",
+                "{\"items\":[{\"names\":[\"a\"]},{\"names\":[\"b\"]},{\"names\":[]}]}",
+                "$.items[*].names[*]"
+              ],
+              [
+                "5",
+                "{\"items\":[{\"names\":[\"a\"]},{\"names\":[]},{\"names\":[\"b\"]}]}",
+                "$.items[*].names[*]"
+              ],
+              [
+                "6",
+                "{\"items\":[{\"names\":[{}]},{\"names\":[{\"x\":\"a\"}]}]}",
+                "$.items[*].names[*].x"
+              ],
+              [
+                "7",
+                "{\"items\":[{\"names\":[null]},{\"names\":[{\"x\":\"a\"}]}]}",
+                "$.items[*].names[*].x"
+              ],
+              [
+                "8",
+                "{\"items\":[{},{\"names\":[{\"x\":\"a\"}]}]}",
+                "$.items[*].names[*].x"
+              ],
+              [
+                "9",
+                "{\"items\":[{\"names\":null},{\"names\":[{\"x\":\"a\"}]}]}",
+                "$.items[*].names[*].x"
+              ],
+              [
+                "10",
+                "{\"items\":[{\"names\":[]},{\"names\":[{\"x\":\"a\"}]}]}",
+                "$.items[*].names[*].x"
+              ],
+              [
+                "11",
+                "{\"items\":[{\"names\":[]},{\"names\":[[\"a\"]]}]}",
+                "$.items[*].names[*][*]"
+              ],
+              [
+                "12",
+                "{\"a\":[],\"a\":[[1]]}",
+                "$.a[*][*]"
+              ],
+              [
+                "13",
+                "[{\"a\":[],\"a\":[[1]]}]",
+                "$[*].a[*][*]"
+              ],
+              [
+                "14",
+                "[\"\\ud83d\\ude00\"]",
+                "$"
+              ],
+              [
+                "15",
+                "[\"\\ud83d\\ude00\"]",
+                "$[0]"
+              ],
+              [
+                "16",
+                "[\"\\ud83d\\ude00\"]",
+                "$[*]"
+              ],
+              [
+                "17",
+                "[[\"\\ud83d\\ude00\"]]",
+                "$"
+              ],
+              [
+                "18",
+                "[[\"\\ud83d\\ude00\"]]",
+                "$[0][*]"
+              ],
+              [
+                "19",
+                "[[\"\\ud83d\\ude00\"]]",
+                "$[*][*]"
+              ],
+              [
+                "20",
+                "[[\"\\ud83d\\ude00\"]]",
+                "$[0][0]"
+              ],
+              [
+                "21",
+                "[[\"\\ud83d\\ude00\"]]",
+                "$[*]"
+              ],
+              [
+                "22",
+                "{\"items\":[{\"name\":\"\\ud83d\\ude00\"}]}",
+                "$.items[*].name"
+              ],
+              [
+                "23",
+                "{\"\\ud83d\\ude00\":\"\\ud83d\\ude00\"}",
+                "$"
+              ],
+              [
+                "24",
+                "{\"outer\":{\"\\ud83d\\ude00\":\"\\ud83d\\ude00\"}}",
+                "$.outer"
+              ],
+              [
+                "25",
+                "[{\"\\ud83d\\ude00\":\"\\ud83d\\ude00\"}]",
+                "$[*]"
+              ],
+              [
+                "26",
+                "[\"\\u000b\"]",
+                "$"
+              ],
+              [
+                "27",
+                "[\"\\u000B\"]",
+                "$"
+              ],
+              [
+                "28",
+                "[\"\\u000b\"]",
+                "$[0]"
+              ],
+              [
+                "29",
+                "[\"\\u000B\"]",
+                "$[0]"
+              ],
+              [
+                "30",
+                "[\"\\n\"]",
+                "$"
+              ],
+              [
+                "31",
+                "[\"\\t\"]",
+                "$"
+              ],
+              [
+                "32",
+                "{\"\\\"\\\\\\u0000\\u000b\": \"\\\"\\\\\\b\\f\\n\\r\\t\\u0000\\u000b\\u001f e\\u00e9\"}",
+                "$"
+              ],
+              [
+                "33",
+                "[\"\\\"\\\\\\b\\f\\n\\r\\t\\u0000\\u000b\\u001f e\\u00e9\"]",
+                "$[*]"
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "duplicate_first",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"a\":1,\"a\":2}', '$.a') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "duplicate_null_first",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"a\":null,\"a\":2}', '$.a') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "duplicate_nested",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"a\":{\"x\":null},\"a\":{\"x\":2}}', '$.a.x') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "duplicate_root",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{ \"a\" : 1, \"a\" : 2, \"b\" : 3 }', '$') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "number_exponent",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"n\":1.2300e+2}', '$.n') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "number_small",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"n\":1e-7}', '$.n') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "number_large_float",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"n\":1e20}', '$.n') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "number_negative_zero",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"n\":-0.0}', '$.n') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "number_huge_int",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"n\":123456789012345678901234567890}', '$.n') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "number_compact_root",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{ \"n\" : 1.2300e+2, \"small\" : 1e-7, \"negativeZero\" : -0.0 }', '$') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "wildcard_empty",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[]', '$[*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "wildcard_one_number",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[1]', '$[*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "wildcard_one_string",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[\"a\"]', '$[*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "wildcard_many_strings",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[\"a\",\"b\"]', '$[*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "wildcard_null",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[null]', '$[*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "wildcard_array",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[[1,2],[3]]', '$[*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "wildcard_missing",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{},{}]}', '$.items[*].name') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "wildcard_one_match",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{}, {\"name\":\"a\"}]}', '$.items[*].name') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "wildcard_null_member",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{\"name\":null},{\"name\":\"a\"}]}', '$.items[*].name') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "wildcard_nested",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[[{\"name\":\"a\"}],[{\"name\":\"b\"}]]}', '$.items[*][*].name') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "wildcard_double_one",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[[1]]', '$[*][*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "wildcard_deep",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[[[1],[2]],[[3]]]', '$[*][*][*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "wildcard_index",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[[\"a\",\"b\"],[\"c\"]]', '$[0][*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "object_wildcard",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"first\":1,\"second\":2}', '$.*') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "string_escapes",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"s\":\"a\\\\nb\\\\t\\\\\"c\\\\\\\\d\"}', '$.s') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "string_json_text",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"s\":\"{ \\\\\"x\\\\\" : 1 }\"}', '$.s') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "string_unicode",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"s\":\"\\\\u00e9\\\\/x\"}', '$.s') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "string_array",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[ \"a\\\\nb\", \"c\" ]', '$') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "pretty_object",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{ \"o\" : { \"x\" : 1, \"items\" : [ 2, 3 ] } }', '$.o') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "quoted_key",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"a.b\":{\"x\":1}}', '$[\\'a.b\\'].x') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "scalar_root",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('\"hello\"', '$') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "null_root",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('null', '$') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "empty_document",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('', '$') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "malformed",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"a\":', '$.a') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "null_document",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object(CAST(NULL AS STRING), '$.a') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "null_path",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"a\":1}', CAST(NULL AS STRING)) AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "single_quotes",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\\'a\\':1}', '$.a') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "unquoted_key",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{a:1}', '$.a') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "literal_wildcard",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{\"name\":\"a\"},{\"name\":\"b\"}]}', '$.items[*].name') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "literal_index",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{\"name\":\"a\"},{\"name\":\"b\"}]}', '$.items[1].name') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "nested",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"outer\":{\"name\":\"a\"}}', '$.outer.name') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "empty_array",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[]', '$') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "empty_object",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{}', '$') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "boolean",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('true', '$') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "empty_path",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"a\":1}', '') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "invalid_path",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"a\":1}', 'a') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "negative_index",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[1]', '$[-1]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "out_of_bounds",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[1]', '$[2]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "quoted_empty_key",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"\":1}', '$[\\'\\']') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "one_index_wildcard",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[[\"a\"]]', '$[0][*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "nested_member_wildcard",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{\"names\":[\"a\",\"b\"]},{\"names\":[\"c\"]}]}', '$.items[*].names[*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "long_document",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{\"name\":\"item-0\",\"value\":0},{\"name\":\"item-1\",\"value\":1},{\"name\":\"item-2\",\"value\":2},{\"name\":\"item-3\",\"value\":3},{\"name\":\"item-4\",\"value\":4},{\"name\":\"item-5\",\"value\":5},{\"name\":\"item-6\",\"value\":6},{\"name\":\"item-7\",\"value\":7},{\"name\":\"item-8\",\"value\":8},{\"name\":\"item-9\",\"value\":9},{\"name\":\"item-10\",\"value\":10},{\"name\":\"item-11\",\"value\":11},{\"name\":\"item-12\",\"value\":12},{\"name\":\"item-13\",\"value\":13},{\"name\":\"item-14\",\"value\":14},{\"name\":\"item-15\",\"value\":15},{\"name\":\"item-16\",\"value\":16},{\"name\":\"item-17\",\"value\":17},{\"name\":\"item-18\",\"value\":18},{\"name\":\"item-19\",\"value\":19},{\"name\":\"item-20\",\"value\":20},{\"name\":\"item-21\",\"value\":21},{\"name\":\"item-22\",\"value\":22},{\"name\":\"item-23\",\"value\":23},{\"name\":\"item-24\",\"value\":24},{\"name\":\"item-25\",\"value\":25},{\"name\":\"item-26\",\"value\":26},{\"name\":\"item-27\",\"value\":27},{\"name\":\"item-28\",\"value\":28},{\"name\":\"item-29\",\"value\":29},{\"name\":\"item-30\",\"value\":30},{\"name\":\"item-31\",\"value\":31},{\"name\":\"item-32\",\"value\":32},{\"name\":\"item-33\",\"value\":33},{\"name\":\"item-34\",\"value\":34},{\"name\":\"item-35\",\"value\":35},{\"name\":\"item-36\",\"value\":36},{\"name\":\"item-37\",\"value\":37},{\"name\":\"item-38\",\"value\":38},{\"name\":\"item-39\",\"value\":39},{\"name\":\"item-40\",\"value\":40},{\"name\":\"item-41\",\"value\":41},{\"name\":\"item-42\",\"value\":42},{\"name\":\"item-43\",\"value\":43},{\"name\":\"item-44\",\"value\":44},{\"name\":\"item-45\",\"value\":45},{\"name\":\"item-46\",\"value\":46},{\"name\":\"item-47\",\"value\":47},{\"name\":\"item-48\",\"value\":48},{\"name\":\"item-49\",\"value\":49},{\"name\":\"item-50\",\"value\":50},{\"name\":\"item-51\",\"value\":51},{\"name\":\"item-52\",\"value\":52},{\"name\":\"item-53\",\"value\":53},{\"name\":\"item-54\",\"value\":54},{\"name\":\"item-55\",\"value\":55},{\"name\":\"item-56\",\"value\":56},{\"name\":\"item-57\",\"value\":57},{\"name\":\"item-58\",\"value\":58},{\"name\":\"item-59\",\"value\":59},{\"name\":\"item-60\",\"value\":60},{\"name\":\"item-61\",\"value\":61},{\"name\":\"item-62\",\"value\":62},{\"name\":\"item-63\",\"value\":63},{\"name\":\"item-64\",\"value\":64},{\"name\":\"item-65\",\"value\":65},{\"name\":\"item-66\",\"value\":66},{\"name\":\"item-67\",\"value\":67},{\"name\":\"item-68\",\"value\":68},{\"name\":\"item-69\",\"value\":69},{\"name\":\"item-70\",\"value\":70},{\"name\":\"item-71\",\"value\":71},{\"name\":\"item-72\",\"value\":72},{\"name\":\"item-73\",\"value\":73},{\"name\":\"item-74\",\"value\":74},{\"name\":\"item-75\",\"value\":75},{\"name\":\"item-76\",\"value\":76},{\"name\":\"item-77\",\"value\":77},{\"name\":\"item-78\",\"value\":78},{\"name\":\"item-79\",\"value\":79},{\"name\":\"item-80\",\"value\":80},{\"name\":\"item-81\",\"value\":81},{\"name\":\"item-82\",\"value\":82},{\"name\":\"item-83\",\"value\":83},{\"name\":\"item-84\",\"value\":84},{\"name\":\"item-85\",\"value\":85},{\"name\":\"item-86\",\"value\":86},{\"name\":\"item-87\",\"value\":87},{\"name\":\"item-88\",\"value\":88},{\"name\":\"item-89\",\"value\":89},{\"name\":\"item-90\",\"value\":90},{\"name\":\"item-91\",\"value\":91},{\"name\":\"item-92\",\"value\":92},{\"name\":\"item-93\",\"value\":93},{\"name\":\"item-94\",\"value\":94},{\"name\":\"item-95\",\"value\":95},{\"name\":\"item-96\",\"value\":96},{\"name\":\"item-97\",\"value\":97},{\"name\":\"item-98\",\"value\":98},{\"name\":\"item-99\",\"value\":99},{\"name\":\"item-100\",\"value\":100},{\"name\":\"item-101\",\"value\":101},{\"name\":\"item-102\",\"value\":102},{\"name\":\"item-103\",\"value\":103},{\"name\":\"item-104\",\"value\":104},{\"name\":\"item-105\",\"value\":105},{\"name\":\"item-106\",\"value\":106},{\"name\":\"item-107\",\"value\":107},{\"name\":\"item-108\",\"value\":108},{\"name\":\"item-109\",\"value\":109},{\"name\":\"item-110\",\"value\":110},{\"name\":\"item-111\",\"value\":111},{\"name\":\"item-112\",\"value\":112},{\"name\":\"item-113\",\"value\":113},{\"name\":\"item-114\",\"value\":114},{\"name\":\"item-115\",\"value\":115},{\"name\":\"item-116\",\"value\":116},{\"name\":\"item-117\",\"value\":117},{\"name\":\"item-118\",\"value\":118},{\"name\":\"item-119\",\"value\":119},{\"name\":\"item-120\",\"value\":120},{\"name\":\"item-121\",\"value\":121},{\"name\":\"item-122\",\"value\":122},{\"name\":\"item-123\",\"value\":123},{\"name\":\"item-124\",\"value\":124},{\"name\":\"item-125\",\"value\":125},{\"name\":\"item-126\",\"value\":126},{\"name\":\"item-127\",\"value\":127}]}', '$.items[120].name') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "registered_document_and_path",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT id, get_json_object(j,p) AS r FROM path_inputs ORDER BY id"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "registered_document_literal_path",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT id, get_json_object(j,'$.a') AS r FROM path_inputs ORDER BY id"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "literal_document_registered_path",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT id, get_json_object('{\"a\":1,\"outer\":{\"name\":\"a\"},\"items\":[{\"name\":\"a\"},{\"name\":\"b\"}]}',p) AS r FROM path_inputs ORDER BY id"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "duplicate_first",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"a\":1,\"a\":2}', '$.a') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "duplicate_null_first",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"a\":null,\"a\":2}', '$.a') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "duplicate_nested",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"a\":{\"x\":null},\"a\":{\"x\":2}}', '$.a.x') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "duplicate_root",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{ \"a\" : 1, \"a\" : 2, \"b\" : 3 }', '$') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "number_exponent",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"n\":1.2300e+2}', '$.n') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "number_small",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"n\":1e-7}', '$.n') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "number_large_float",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"n\":1e20}', '$.n') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "number_negative_zero",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"n\":-0.0}', '$.n') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "number_huge_int",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"n\":123456789012345678901234567890}', '$.n') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "number_compact_root",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{ \"n\" : 1.2300e+2, \"small\" : 1e-7, \"negativeZero\" : -0.0 }', '$') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "wildcard_empty",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[]', '$[*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "wildcard_one_number",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[1]', '$[*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "wildcard_one_string",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[\"a\"]', '$[*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "wildcard_many_strings",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[\"a\",\"b\"]', '$[*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "wildcard_null",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[null]', '$[*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "wildcard_array",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[[1,2],[3]]', '$[*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "wildcard_missing",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{},{}]}', '$.items[*].name') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "wildcard_one_match",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{}, {\"name\":\"a\"}]}', '$.items[*].name') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "wildcard_null_member",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{\"name\":null},{\"name\":\"a\"}]}', '$.items[*].name') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "wildcard_nested",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[[{\"name\":\"a\"}],[{\"name\":\"b\"}]]}', '$.items[*][*].name') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "wildcard_double_one",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[[1]]', '$[*][*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "wildcard_deep",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[[[1],[2]],[[3]]]', '$[*][*][*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "wildcard_index",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[[\"a\",\"b\"],[\"c\"]]', '$[0][*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "object_wildcard",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"first\":1,\"second\":2}', '$.*') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "string_escapes",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"s\":\"a\\\\nb\\\\t\\\\\"c\\\\\\\\d\"}', '$.s') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "string_json_text",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"s\":\"{ \\\\\"x\\\\\" : 1 }\"}', '$.s') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "string_unicode",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"s\":\"\\\\u00e9\\\\/x\"}', '$.s') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "string_array",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[ \"a\\\\nb\", \"c\" ]', '$') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "pretty_object",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{ \"o\" : { \"x\" : 1, \"items\" : [ 2, 3 ] } }', '$.o') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "quoted_key",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"a.b\":{\"x\":1}}', '$[\\'a.b\\'].x') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "scalar_root",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('\"hello\"', '$') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "null_root",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('null', '$') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "empty_document",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('', '$') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "malformed",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"a\":', '$.a') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "null_document",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object(CAST(NULL AS STRING), '$.a') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "null_path",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"a\":1}', CAST(NULL AS STRING)) AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "single_quotes",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\\'a\\':1}', '$.a') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "unquoted_key",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{a:1}', '$.a') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "literal_wildcard",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{\"name\":\"a\"},{\"name\":\"b\"}]}', '$.items[*].name') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "literal_index",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{\"name\":\"a\"},{\"name\":\"b\"}]}', '$.items[1].name') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "nested",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"outer\":{\"name\":\"a\"}}', '$.outer.name') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "empty_array",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[]', '$') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "empty_object",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{}', '$') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "boolean",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('true', '$') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "empty_path",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"a\":1}', '') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "invalid_path",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"a\":1}', 'a') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "negative_index",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[1]', '$[-1]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "out_of_bounds",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[1]', '$[2]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "quoted_empty_key",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"\":1}', '$[\\'\\']') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "one_index_wildcard",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[[\"a\"]]', '$[0][*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "nested_member_wildcard",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{\"names\":[\"a\",\"b\"]},{\"names\":[\"c\"]}]}', '$.items[*].names[*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "long_document",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{\"name\":\"item-0\",\"value\":0},{\"name\":\"item-1\",\"value\":1},{\"name\":\"item-2\",\"value\":2},{\"name\":\"item-3\",\"value\":3},{\"name\":\"item-4\",\"value\":4},{\"name\":\"item-5\",\"value\":5},{\"name\":\"item-6\",\"value\":6},{\"name\":\"item-7\",\"value\":7},{\"name\":\"item-8\",\"value\":8},{\"name\":\"item-9\",\"value\":9},{\"name\":\"item-10\",\"value\":10},{\"name\":\"item-11\",\"value\":11},{\"name\":\"item-12\",\"value\":12},{\"name\":\"item-13\",\"value\":13},{\"name\":\"item-14\",\"value\":14},{\"name\":\"item-15\",\"value\":15},{\"name\":\"item-16\",\"value\":16},{\"name\":\"item-17\",\"value\":17},{\"name\":\"item-18\",\"value\":18},{\"name\":\"item-19\",\"value\":19},{\"name\":\"item-20\",\"value\":20},{\"name\":\"item-21\",\"value\":21},{\"name\":\"item-22\",\"value\":22},{\"name\":\"item-23\",\"value\":23},{\"name\":\"item-24\",\"value\":24},{\"name\":\"item-25\",\"value\":25},{\"name\":\"item-26\",\"value\":26},{\"name\":\"item-27\",\"value\":27},{\"name\":\"item-28\",\"value\":28},{\"name\":\"item-29\",\"value\":29},{\"name\":\"item-30\",\"value\":30},{\"name\":\"item-31\",\"value\":31},{\"name\":\"item-32\",\"value\":32},{\"name\":\"item-33\",\"value\":33},{\"name\":\"item-34\",\"value\":34},{\"name\":\"item-35\",\"value\":35},{\"name\":\"item-36\",\"value\":36},{\"name\":\"item-37\",\"value\":37},{\"name\":\"item-38\",\"value\":38},{\"name\":\"item-39\",\"value\":39},{\"name\":\"item-40\",\"value\":40},{\"name\":\"item-41\",\"value\":41},{\"name\":\"item-42\",\"value\":42},{\"name\":\"item-43\",\"value\":43},{\"name\":\"item-44\",\"value\":44},{\"name\":\"item-45\",\"value\":45},{\"name\":\"item-46\",\"value\":46},{\"name\":\"item-47\",\"value\":47},{\"name\":\"item-48\",\"value\":48},{\"name\":\"item-49\",\"value\":49},{\"name\":\"item-50\",\"value\":50},{\"name\":\"item-51\",\"value\":51},{\"name\":\"item-52\",\"value\":52},{\"name\":\"item-53\",\"value\":53},{\"name\":\"item-54\",\"value\":54},{\"name\":\"item-55\",\"value\":55},{\"name\":\"item-56\",\"value\":56},{\"name\":\"item-57\",\"value\":57},{\"name\":\"item-58\",\"value\":58},{\"name\":\"item-59\",\"value\":59},{\"name\":\"item-60\",\"value\":60},{\"name\":\"item-61\",\"value\":61},{\"name\":\"item-62\",\"value\":62},{\"name\":\"item-63\",\"value\":63},{\"name\":\"item-64\",\"value\":64},{\"name\":\"item-65\",\"value\":65},{\"name\":\"item-66\",\"value\":66},{\"name\":\"item-67\",\"value\":67},{\"name\":\"item-68\",\"value\":68},{\"name\":\"item-69\",\"value\":69},{\"name\":\"item-70\",\"value\":70},{\"name\":\"item-71\",\"value\":71},{\"name\":\"item-72\",\"value\":72},{\"name\":\"item-73\",\"value\":73},{\"name\":\"item-74\",\"value\":74},{\"name\":\"item-75\",\"value\":75},{\"name\":\"item-76\",\"value\":76},{\"name\":\"item-77\",\"value\":77},{\"name\":\"item-78\",\"value\":78},{\"name\":\"item-79\",\"value\":79},{\"name\":\"item-80\",\"value\":80},{\"name\":\"item-81\",\"value\":81},{\"name\":\"item-82\",\"value\":82},{\"name\":\"item-83\",\"value\":83},{\"name\":\"item-84\",\"value\":84},{\"name\":\"item-85\",\"value\":85},{\"name\":\"item-86\",\"value\":86},{\"name\":\"item-87\",\"value\":87},{\"name\":\"item-88\",\"value\":88},{\"name\":\"item-89\",\"value\":89},{\"name\":\"item-90\",\"value\":90},{\"name\":\"item-91\",\"value\":91},{\"name\":\"item-92\",\"value\":92},{\"name\":\"item-93\",\"value\":93},{\"name\":\"item-94\",\"value\":94},{\"name\":\"item-95\",\"value\":95},{\"name\":\"item-96\",\"value\":96},{\"name\":\"item-97\",\"value\":97},{\"name\":\"item-98\",\"value\":98},{\"name\":\"item-99\",\"value\":99},{\"name\":\"item-100\",\"value\":100},{\"name\":\"item-101\",\"value\":101},{\"name\":\"item-102\",\"value\":102},{\"name\":\"item-103\",\"value\":103},{\"name\":\"item-104\",\"value\":104},{\"name\":\"item-105\",\"value\":105},{\"name\":\"item-106\",\"value\":106},{\"name\":\"item-107\",\"value\":107},{\"name\":\"item-108\",\"value\":108},{\"name\":\"item-109\",\"value\":109},{\"name\":\"item-110\",\"value\":110},{\"name\":\"item-111\",\"value\":111},{\"name\":\"item-112\",\"value\":112},{\"name\":\"item-113\",\"value\":113},{\"name\":\"item-114\",\"value\":114},{\"name\":\"item-115\",\"value\":115},{\"name\":\"item-116\",\"value\":116},{\"name\":\"item-117\",\"value\":117},{\"name\":\"item-118\",\"value\":118},{\"name\":\"item-119\",\"value\":119},{\"name\":\"item-120\",\"value\":120},{\"name\":\"item-121\",\"value\":121},{\"name\":\"item-122\",\"value\":122},{\"name\":\"item-123\",\"value\":123},{\"name\":\"item-124\",\"value\":124},{\"name\":\"item-125\",\"value\":125},{\"name\":\"item-126\",\"value\":126},{\"name\":\"item-127\",\"value\":127}]}', '$.items[120].name') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "registered_document_and_path",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT id, get_json_object(j,p) AS r FROM path_inputs ORDER BY id"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "registered_document_literal_path",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT id, get_json_object(j,'$.a') AS r FROM path_inputs ORDER BY id"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "literal_document_registered_path",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT id, get_json_object('{\"a\":1,\"outer\":{\"name\":\"a\"},\"items\":[{\"name\":\"a\"},{\"name\":\"b\"}]}',p) AS r FROM path_inputs ORDER BY id"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "empty_before",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{\"names\":[]},{\"names\":[\"a\"]}]}', '$.items[*].names[*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "empty_after",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{\"names\":[\"a\"]},{\"names\":[]}]}', '$.items[*].names[*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "empty_before_two",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{\"names\":[]},{\"names\":[\"a\"]},{\"names\":[\"b\"]}]}', '$.items[*].names[*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "empty_after_two",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{\"names\":[\"a\"]},{\"names\":[\"b\"]},{\"names\":[]}]}', '$.items[*].names[*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "empty_between_two",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{\"names\":[\"a\"]},{\"names\":[]},{\"names\":[\"b\"]}]}', '$.items[*].names[*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "wildcard_empty_object_child",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{\"names\":[{}]},{\"names\":[{\"x\":\"a\"}]}]}', '$.items[*].names[*].x') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "null_element",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{\"names\":[null]},{\"names\":[{\"x\":\"a\"}]}]}', '$.items[*].names[*].x') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "missing_names",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{},{\"names\":[{\"x\":\"a\"}]}]}', '$.items[*].names[*].x') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "null_names",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{\"names\":null},{\"names\":[{\"x\":\"a\"}]}]}', '$.items[*].names[*].x') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "empty_names",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{\"names\":[]},{\"names\":[{\"x\":\"a\"}]}]}', '$.items[*].names[*].x') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "failed_nested_double",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{\"names\":[]},{\"names\":[[\"a\"]]}]}', '$.items[*].names[*][*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "duplicate_double_root",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"a\":[],\"a\":[[1]]}', '$.a[*][*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "duplicate_double_array",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[{\"a\":[],\"a\":[[1]]}]', '$[*].a[*][*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "emoji_root",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[\"\\\\ud83d\\\\ude00\"]', '$') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "emoji_direct",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[\"\\\\ud83d\\\\ude00\"]', '$[0]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "emoji_single_wildcard",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[\"\\\\ud83d\\\\ude00\"]', '$[*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "emoji_nested_root",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[[\"\\\\ud83d\\\\ude00\"]]', '$') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "emoji_index_wildcard",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[[\"\\\\ud83d\\\\ude00\"]]', '$[0][*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "emoji_double_wildcard",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[[\"\\\\ud83d\\\\ude00\"]]', '$[*][*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "emoji_nested_direct",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[[\"\\\\ud83d\\\\ude00\"]]', '$[0][0]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "emoji_nested_single_wildcard",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[[\"\\\\ud83d\\\\ude00\"]]', '$[*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "emoji_member_wildcard",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{\"name\":\"\\\\ud83d\\\\ude00\"}]}', '$.items[*].name') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "emoji_key_root",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"\\\\ud83d\\\\ude00\":\"\\\\ud83d\\\\ude00\"}', '$') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "emoji_key_container",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"outer\":{\"\\\\ud83d\\\\ude00\":\"\\\\ud83d\\\\ude00\"}}', '$.outer') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "emoji_key_wildcard",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[{\"\\\\ud83d\\\\ude00\":\"\\\\ud83d\\\\ude00\"}]', '$[*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "control_hex_1",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[\"\\\\u000b\"]', '$') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "control_hex_2",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[\"\\\\u000B\"]', '$') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "control_hex_3",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[\"\\\\u000b\"]', '$[0]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "control_hex_4",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[\"\\\\u000B\"]', '$[0]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "control_hex_5",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[\"\\\\n\"]', '$') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "control_hex_6",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[\"\\\\t\"]', '$') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "registered_writer_path",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT id,get_json_object(j,p) AS r FROM writer_inputs ORDER BY id"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "registered_writer_root",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT id,get_json_object(j,'$') AS r FROM writer_inputs ORDER BY id"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "registered_writer_direct",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT id,get_json_object(j,'$[0]') AS r FROM writer_inputs ORDER BY id"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "empty_before",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{\"names\":[]},{\"names\":[\"a\"]}]}', '$.items[*].names[*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "empty_after",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{\"names\":[\"a\"]},{\"names\":[]}]}', '$.items[*].names[*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "empty_before_two",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{\"names\":[]},{\"names\":[\"a\"]},{\"names\":[\"b\"]}]}', '$.items[*].names[*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "empty_after_two",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{\"names\":[\"a\"]},{\"names\":[\"b\"]},{\"names\":[]}]}', '$.items[*].names[*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "empty_between_two",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{\"names\":[\"a\"]},{\"names\":[]},{\"names\":[\"b\"]}]}', '$.items[*].names[*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "wildcard_empty_object_child",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{\"names\":[{}]},{\"names\":[{\"x\":\"a\"}]}]}', '$.items[*].names[*].x') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "null_element",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{\"names\":[null]},{\"names\":[{\"x\":\"a\"}]}]}', '$.items[*].names[*].x') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "missing_names",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{},{\"names\":[{\"x\":\"a\"}]}]}', '$.items[*].names[*].x') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "null_names",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{\"names\":null},{\"names\":[{\"x\":\"a\"}]}]}', '$.items[*].names[*].x') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "empty_names",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{\"names\":[]},{\"names\":[{\"x\":\"a\"}]}]}', '$.items[*].names[*].x') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "failed_nested_double",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{\"names\":[]},{\"names\":[[\"a\"]]}]}', '$.items[*].names[*][*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "duplicate_double_root",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"a\":[],\"a\":[[1]]}', '$.a[*][*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "duplicate_double_array",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[{\"a\":[],\"a\":[[1]]}]', '$[*].a[*][*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "emoji_root",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[\"\\\\ud83d\\\\ude00\"]', '$') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "emoji_direct",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[\"\\\\ud83d\\\\ude00\"]', '$[0]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "emoji_single_wildcard",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[\"\\\\ud83d\\\\ude00\"]', '$[*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "emoji_nested_root",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[[\"\\\\ud83d\\\\ude00\"]]', '$') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "emoji_index_wildcard",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[[\"\\\\ud83d\\\\ude00\"]]', '$[0][*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "emoji_double_wildcard",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[[\"\\\\ud83d\\\\ude00\"]]', '$[*][*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "emoji_nested_direct",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[[\"\\\\ud83d\\\\ude00\"]]', '$[0][0]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "emoji_nested_single_wildcard",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[[\"\\\\ud83d\\\\ude00\"]]', '$[*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "emoji_member_wildcard",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"items\":[{\"name\":\"\\\\ud83d\\\\ude00\"}]}', '$.items[*].name') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "emoji_key_root",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"\\\\ud83d\\\\ude00\":\"\\\\ud83d\\\\ude00\"}', '$') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "emoji_key_container",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"outer\":{\"\\\\ud83d\\\\ude00\":\"\\\\ud83d\\\\ude00\"}}', '$.outer') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "emoji_key_wildcard",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[{\"\\\\ud83d\\\\ude00\":\"\\\\ud83d\\\\ude00\"}]', '$[*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "control_hex_1",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[\"\\\\u000b\"]', '$') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "control_hex_2",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[\"\\\\u000B\"]', '$') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "control_hex_3",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[\"\\\\u000b\"]', '$[0]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "control_hex_4",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[\"\\\\u000B\"]', '$[0]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "control_hex_5",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[\"\\\\n\"]', '$') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "control_hex_6",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[\"\\\\t\"]', '$') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "registered_writer_path",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT id,get_json_object(j,p) AS r FROM writer_inputs ORDER BY id"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "registered_writer_root",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT id,get_json_object(j,'$') AS r FROM writer_inputs ORDER BY id"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "registered_writer_direct",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT id,get_json_object(j,'$[0]') AS r FROM writer_inputs ORDER BY id"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "writer_all_escapes_root",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"\\\\\"\\\\\\\\\\\\u0000\\\\u000b\": \"\\\\\"\\\\\\\\\\\\b\\\\f\\\\n\\\\r\\\\t\\\\u0000\\\\u000b\\\\u001f e\\\\u00e9\"}','$') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "writer_all_escapes_root",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('{\"\\\\\"\\\\\\\\\\\\u0000\\\\u000b\": \"\\\\\"\\\\\\\\\\\\b\\\\f\\\\n\\\\r\\\\t\\\\u0000\\\\u000b\\\\u001f e\\\\u00e9\"}','$') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "writer_all_escapes_buffer",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[\"\\\\\"\\\\\\\\\\\\b\\\\f\\\\n\\\\r\\\\t\\\\u0000\\\\u000b\\\\u001f e\\\\u00e9\"]','$[*]') AS r"
+        },
+        {
+          "corpus": "get_json_object_extraction",
+          "id": "writer_all_escapes_buffer",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT get_json_object('[\"\\\\\"\\\\\\\\\\\\b\\\\f\\\\n\\\\r\\\\t\\\\u0000\\\\u000b\\\\u001f e\\\\u00e9\"]','$[*]') AS r"
+        }
+      ]
+    }
+  ],
+  "writer_specs": [
+    {
+      "id": 1,
+      "name": "empty_before",
+      "document": "{\"items\":[{\"names\":[]},{\"names\":[\"a\"]}]}",
+      "path": "$.items[*].names[*]"
+    },
+    {
+      "id": 2,
+      "name": "empty_after",
+      "document": "{\"items\":[{\"names\":[\"a\"]},{\"names\":[]}]}",
+      "path": "$.items[*].names[*]"
+    },
+    {
+      "id": 3,
+      "name": "empty_before_two",
+      "document": "{\"items\":[{\"names\":[]},{\"names\":[\"a\"]},{\"names\":[\"b\"]}]}",
+      "path": "$.items[*].names[*]"
+    },
+    {
+      "id": 4,
+      "name": "empty_after_two",
+      "document": "{\"items\":[{\"names\":[\"a\"]},{\"names\":[\"b\"]},{\"names\":[]}]}",
+      "path": "$.items[*].names[*]"
+    },
+    {
+      "id": 5,
+      "name": "empty_between_two",
+      "document": "{\"items\":[{\"names\":[\"a\"]},{\"names\":[]},{\"names\":[\"b\"]}]}",
+      "path": "$.items[*].names[*]"
+    },
+    {
+      "id": 6,
+      "name": "wildcard_empty_object_child",
+      "document": "{\"items\":[{\"names\":[{}]},{\"names\":[{\"x\":\"a\"}]}]}",
+      "path": "$.items[*].names[*].x"
+    },
+    {
+      "id": 7,
+      "name": "null_element",
+      "document": "{\"items\":[{\"names\":[null]},{\"names\":[{\"x\":\"a\"}]}]}",
+      "path": "$.items[*].names[*].x"
+    },
+    {
+      "id": 8,
+      "name": "missing_names",
+      "document": "{\"items\":[{},{\"names\":[{\"x\":\"a\"}]}]}",
+      "path": "$.items[*].names[*].x"
+    },
+    {
+      "id": 9,
+      "name": "null_names",
+      "document": "{\"items\":[{\"names\":null},{\"names\":[{\"x\":\"a\"}]}]}",
+      "path": "$.items[*].names[*].x"
+    },
+    {
+      "id": 10,
+      "name": "empty_names",
+      "document": "{\"items\":[{\"names\":[]},{\"names\":[{\"x\":\"a\"}]}]}",
+      "path": "$.items[*].names[*].x"
+    },
+    {
+      "id": 11,
+      "name": "failed_nested_double",
+      "document": "{\"items\":[{\"names\":[]},{\"names\":[[\"a\"]]}]}",
+      "path": "$.items[*].names[*][*]"
+    },
+    {
+      "id": 12,
+      "name": "duplicate_double_root",
+      "document": "{\"a\":[],\"a\":[[1]]}",
+      "path": "$.a[*][*]"
+    },
+    {
+      "id": 13,
+      "name": "duplicate_double_array",
+      "document": "[{\"a\":[],\"a\":[[1]]}]",
+      "path": "$[*].a[*][*]"
+    },
+    {
+      "id": 14,
+      "name": "emoji_root",
+      "document": "[\"\\ud83d\\ude00\"]",
+      "path": "$"
+    },
+    {
+      "id": 15,
+      "name": "emoji_direct",
+      "document": "[\"\\ud83d\\ude00\"]",
+      "path": "$[0]"
+    },
+    {
+      "id": 16,
+      "name": "emoji_single_wildcard",
+      "document": "[\"\\ud83d\\ude00\"]",
+      "path": "$[*]"
+    },
+    {
+      "id": 17,
+      "name": "emoji_nested_root",
+      "document": "[[\"\\ud83d\\ude00\"]]",
+      "path": "$"
+    },
+    {
+      "id": 18,
+      "name": "emoji_index_wildcard",
+      "document": "[[\"\\ud83d\\ude00\"]]",
+      "path": "$[0][*]"
+    },
+    {
+      "id": 19,
+      "name": "emoji_double_wildcard",
+      "document": "[[\"\\ud83d\\ude00\"]]",
+      "path": "$[*][*]"
+    },
+    {
+      "id": 20,
+      "name": "emoji_nested_direct",
+      "document": "[[\"\\ud83d\\ude00\"]]",
+      "path": "$[0][0]"
+    },
+    {
+      "id": 21,
+      "name": "emoji_nested_single_wildcard",
+      "document": "[[\"\\ud83d\\ude00\"]]",
+      "path": "$[*]"
+    },
+    {
+      "id": 22,
+      "name": "emoji_member_wildcard",
+      "document": "{\"items\":[{\"name\":\"\\ud83d\\ude00\"}]}",
+      "path": "$.items[*].name"
+    },
+    {
+      "id": 23,
+      "name": "emoji_key_root",
+      "document": "{\"\\ud83d\\ude00\":\"\\ud83d\\ude00\"}",
+      "path": "$"
+    },
+    {
+      "id": 24,
+      "name": "emoji_key_container",
+      "document": "{\"outer\":{\"\\ud83d\\ude00\":\"\\ud83d\\ude00\"}}",
+      "path": "$.outer"
+    },
+    {
+      "id": 25,
+      "name": "emoji_key_wildcard",
+      "document": "[{\"\\ud83d\\ude00\":\"\\ud83d\\ude00\"}]",
+      "path": "$[*]"
+    },
+    {
+      "id": 26,
+      "name": "control_hex_1",
+      "document": "[\"\\u000b\"]",
+      "path": "$"
+    },
+    {
+      "id": 27,
+      "name": "control_hex_2",
+      "document": "[\"\\u000B\"]",
+      "path": "$"
+    },
+    {
+      "id": 28,
+      "name": "control_hex_3",
+      "document": "[\"\\u000b\"]",
+      "path": "$[0]"
+    },
+    {
+      "id": 29,
+      "name": "control_hex_4",
+      "document": "[\"\\u000B\"]",
+      "path": "$[0]"
+    },
+    {
+      "id": 30,
+      "name": "control_hex_5",
+      "document": "[\"\\n\"]",
+      "path": "$"
+    },
+    {
+      "id": 31,
+      "name": "control_hex_6",
+      "document": "[\"\\t\"]",
+      "path": "$"
+    },
+    {
+      "id": 32,
+      "name": "writer_all_escapes_root",
+      "document": "{\"\\\"\\\\\\u0000\\u000b\": \"\\\"\\\\\\b\\f\\n\\r\\t\\u0000\\u000b\\u001f e\\u00e9\"}",
+      "path": "$"
+    },
+    {
+      "id": 33,
+      "name": "writer_all_escapes_buffer",
+      "document": "[\"\\\"\\\\\\b\\f\\n\\r\\t\\u0000\\u000b\\u001f e\\u00e9\"]",
+      "path": "$[*]"
+    }
+  ]
+}
