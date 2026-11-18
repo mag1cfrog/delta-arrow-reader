@@ -808,10 +808,21 @@ async fn file_metadata_survives_ranged_selective_page_and_row_group_reads() -> T
                         .await?;
                     let metrics = collect_scan_metrics(plan.as_ref());
                     let batches = collect(plan, ctx.task_ctx()).await?;
-                    let snapshot = metrics[0].snapshot().reader_metrics;
+                    let mut snapshot = metrics[0].snapshot().reader_metrics;
                     assert!(snapshot.file_tasks_started > 1, "must read ranged tasks");
                     assert_eq!(snapshot.deletion_vector_failures, 0);
                     assert_eq!(snapshot.deletion_vector_coordinate_rejections, 0);
+                    if dv {
+                        assert!(
+                            (1..=snapshot.file_tasks_started)
+                                .contains(&snapshot.deletion_vector_payloads_loaded),
+                            "each ranged task can load its deletion vector at most once"
+                        );
+                    } else {
+                        assert_eq!(snapshot.deletion_vector_payloads_loaded, 0);
+                    }
+                    // The weak DV cache can expire between ranged readers, depending on overlap.
+                    snapshot.deletion_vector_payloads_loaded = 0;
                     let mut actual_ids = Vec::new();
                     for batch in &batches {
                         actual_ids.extend_from_slice(
