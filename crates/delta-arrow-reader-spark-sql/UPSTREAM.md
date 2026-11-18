@@ -102,7 +102,7 @@ element named `kept_element` with `source=constant-coordinate-test` keeps that
 metadata after a constant `SLICE(..., 1, 1)`, including nested and empty results.
 The shared single-row list builder uses the supplied field and Arrow's existing
 constructors, which still reject mismatched child types and required elements
-containing logical NULLs. The [literal field tests](tests/literal_list_fields.rs)
+containing logical NULLs. The [literal field tests](tests/array_functions/literal_list_fields.rs)
 cover direct scalar construction, conversion, casts, folding and NULL parents.
 SLICE retains required Struct elements through result declaration and literal
 folding while allowing NULLs in optional Struct children. Its native result
@@ -137,7 +137,7 @@ remain in place.
 Single-field dense Union NULL gathering uses the field's actual type ID. This
 keeps a selected NULL visible when the field ID is nonzero, so the List check
 cannot accept it as a required element. The
-[constructor tests](tests/list_constructor_logical_nulls.rs) cover both list
+[constructor tests](tests/array_functions/list_constructor_logical_nulls.rs) cover both list
 widths, preserved storage and nested fields, slices, empty arrays and rejected
 inputs. Reusing child storage avoids rewriting it; the exact logical NULL
 check can still scan values or build a temporary validity bitmap.

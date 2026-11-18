@@ -3,7 +3,7 @@
 Run the complete field and count comparisons from the Spark SQL crate:
 
 ```sh
-cargo test --locked --workspace --test collection_length_fields -- --nocapture
+cargo test --locked --workspace --test collection_functions collection_length_fields:: -- --nocapture
 ```
 
 `spark-reference.jsonl` contains 144 independent observations from Spark 4.2.0,

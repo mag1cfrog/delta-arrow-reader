@@ -276,7 +276,7 @@ and capture-script and manifest hashes. Each record preserves its ANSI mode,
 complete available schema stages, plans, and rows or actual error condition and
 phase. These are the authoritative capture inputs and outcomes.
 
-[case_result_tails.rs](../case_result_tails.rs) compares all 70 CASE records at batch
+[case_result_tails.rs](../case_expressions/case_result_tails.rs) compares all 70 CASE records at batch
 sizes 1 and 32 through the canonical stage and optimized-field observers.
 The references distinguish removable provider guards from closed/VALUES errors
 that still require optimization-time failure. A deterministic scalar-subquery
@@ -3031,7 +3031,7 @@ reviewing any reference update:
 
 ```sh
 python tests/fixtures/capture_named_struct_fields_spark.py /tmp/named-struct-fields-spark.jsonl
-cargo test --locked --workspace --test named_struct_declarations
+cargo test --locked --workspace --test struct_expressions named_struct_declarations::
 ```
 
 ## Constant STRUCT result fields
@@ -3123,7 +3123,7 @@ dictionary storage.
 
 ```sh
 python tests/fixtures/capture_struct_field_resolution_spark.py /tmp/struct-field-resolution-spark.jsonl
-cargo test --locked --workspace --test struct_field_resolution --test struct_dictionary_fields
+cargo test --locked --workspace --test struct_expressions
 ```
 
 ## NULL-base extraction
@@ -3178,7 +3178,7 @@ Recollect to a fresh path using the existing pinned PySpark 4.2.0/Java 21 setup:
 
 ```sh
 python tests/fixtures/capture_null_base_extraction_spark.py /tmp/null-base-extraction-815-spark.jsonl
-cargo test --locked --workspace --test null_base_extraction
+cargo test --locked --workspace --test struct_expressions null_base_extraction::
 ```
 
 `null-base-attribute-evaluation-815/attribute-evaluation-spark.jsonl` adds ten
@@ -3197,7 +3197,7 @@ modules from the parent fixture directory:
 
 ```sh
 PYTHONPATH=tests/fixtures python tests/fixtures/null-base-attribute-evaluation-815/capture_attribute_evaluation.py /tmp/null-base-attribute-evaluation-815-spark.jsonl
-cargo test --locked --workspace --test null_base_extraction
+cargo test --locked --workspace --test struct_expressions null_base_extraction::
 ```
 
 ## ARRAY_CONTAINS result declarations
@@ -3245,8 +3245,8 @@ fresh output path, from this crate's directory:
 
 ```sh
 python tests/fixtures/capture_array_contains_result_fields_spark.py /tmp/array-contains-result-fields-spark.jsonl
-cargo test --locked --workspace --test array_result_fields
-cargo test --locked --workspace --test array_contains
+cargo test --locked --workspace --test array_functions array_result_fields::
+cargo test --locked --workspace --test array_functions array_contains::
 ```
 
 The original two `scan_stop` records remain in the preserved CASE reference at
@@ -3355,7 +3355,7 @@ slices. Constant STRUCT declarations use the separate #849 prerequisite.
 From this crate, replay the committed references and the storage control with:
 
 ```sh
-cargo test --locked --workspace --test arrays_overlap_result_fields -- --nocapture
+cargo test --locked --workspace --test array_functions arrays_overlap_result_fields:: -- --nocapture
 cargo test --locked --workspace -p sail-plan arrays_overlap_preserves_null_results_across_list_storage_and_slices
 ```
 
@@ -3546,7 +3546,7 @@ values through native evaluation and constant folding. It checks immediate and
 nested fields, empty inputs and results, selected NULL elements, NULL optional
 Struct children and NULL arguments for List and LargeList.
 
-The [typed literal field tests](../literal_list_fields.rs) check direct
+The [typed literal field tests](../array_functions/literal_list_fields.rs) check direct
 scalar construction, row conversion, scalar casts, coercion and cast folding
 against declared input fields. They cover required/nullable elements, empty and
 nonempty lists, NULL parents, nullable Struct elements, target-field changes and
@@ -3621,7 +3621,7 @@ and the separate constant STRUCT preparation boundary. Run the focused checks
 from this workspace with:
 
 ```sh
-cargo test --locked --workspace --test arrays_overlap_result_fields --test slice_result_fields --test constant_folding_contract -- --nocapture
+cargo test --locked --workspace --test array_functions --test slice_result_fields --test constant_folding_contract -- --nocapture
 cargo test --locked --workspace -p sail-plan --lib arrays_overlap -- --nocapture
 ```
 
@@ -3668,7 +3668,7 @@ parity. Nested capture positions, collection-size fields and generated Map-key
 names remain owned by #821, #822 and #823.
 
 ```sh
-cargo test --locked --workspace --test map_constructor_root
+cargo test --locked --workspace --test collection_functions map_constructor_root::
 cargo test --locked --workspace -p sail-function --lib constructed_map_refines_only_outer_nullability
 ```
 
@@ -3762,8 +3762,8 @@ native admission errors. The volatile-function controls in
 `conditional_evaluation.rs` check selected rows and argument call counts.
 
 ```sh
-cargo test --locked --manifest-path crates/delta-arrow-reader-spark-sql/Cargo.toml --test conditional_nested
-cargo test --locked --manifest-path crates/delta-arrow-reader-spark-sql/Cargo.toml --test conditional_evaluation conditional_arguments_run_once_only_where_needed
+cargo test --locked --manifest-path crates/delta-arrow-reader-spark-sql/Cargo.toml --test conditional_expressions conditional_nested::
+cargo test --locked --manifest-path crates/delta-arrow-reader-spark-sql/Cargo.toml --test conditional_expressions conditional_evaluation::conditional_arguments_run_once_only_where_needed
 ```
 
 ## ARRAY_COMPACT result fields
@@ -3834,8 +3834,8 @@ ARRAY_COMPACT compatibility.
 From this crate, replay the references and focused kernel checks with:
 
 ```sh
-cargo test --locked --workspace --test compact_result_fields -- --nocapture
-cargo test --locked --workspace --test compact_null_inspection -- --nocapture
+cargo test --locked --workspace --test array_functions compact_result_fields:: -- --nocapture
+cargo test --locked --workspace --test array_functions compact_null_inspection:: -- --nocapture
 cargo test --locked --workspace -p sail-plan --lib array_compact_validation -- --nocapture
 cargo test --locked --workspace -p sail-function --lib spark_array_compact -- --nocapture
 cargo test --locked --workspace -p sail-function --lib scalar_adapter -- --nocapture
