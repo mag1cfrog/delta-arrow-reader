@@ -27,7 +27,10 @@ use std::{
     },
 };
 
-use arrow::{datatypes::SchemaRef, record_batch::RecordBatch};
+use arrow::{
+    datatypes::{FieldRef, Schema, SchemaRef},
+    record_batch::RecordBatch,
+};
 use datafusion::{
     common::{DataFusionError, Result as DataFusionResult, config::ConfigOptions},
     datasource::{
@@ -54,6 +57,7 @@ use super::{
         DynamicPartitionKeepReason, DynamicPartitionPruningDecision,
         evaluate_dynamic_partition_filter,
     },
+    file_metadata::{FileMetadata, FileMetadataKind},
     planning::DataFusionScanPlan,
 };
 
@@ -333,6 +337,7 @@ struct DeltaScanExec {
     reader_plan: Arc<DeltaScanPlan>,
     schema: SchemaRef,
     output_projection: Option<Arc<[usize]>>,
+    file_metadata: Option<Arc<FileMetadata>>,
     exact_row_predicate: Option<DeltaKernelPredicate>,
     properties: Arc<PlanProperties>,
     metrics: ScanMetrics,
@@ -370,6 +375,7 @@ impl DeltaScanExec {
             reader_plan: Arc::new(reader_plan),
             schema,
             output_projection,
+            file_metadata: None,
             exact_row_predicate,
             properties,
             metrics,
@@ -431,6 +437,47 @@ impl DeltaScanExec {
             ..self.clone()
         })
     }
+}
+
+pub(super) fn with_file_metadata(
+    plan: Arc<dyn ExecutionPlan>,
+    schema: SchemaRef,
+    output_order: Vec<usize>,
+    columns: Vec<(FieldRef, FileMetadataKind)>,
+) -> DataFusionResult<Arc<dyn ExecutionPlan>> {
+    let scan = plan.downcast_ref::<DeltaScanExec>().ok_or_else(|| {
+        DataFusionError::Internal("Delta provider returned an unexpected execution plan".to_owned())
+    })?;
+    let data_columns = scan.schema.fields().len();
+    let input_columns = scan.reader_plan.logical_schema.fields().len();
+    let projection = output_order
+        .into_iter()
+        .map(|i| {
+            if i < data_columns {
+                scan.output_projection
+                    .as_ref()
+                    .map_or(i, |projection| projection[i])
+            } else {
+                input_columns + i - data_columns
+            }
+        })
+        .collect::<Vec<_>>();
+    let mut fields = scan.reader_plan.logical_schema.fields().to_vec();
+    fields.extend(columns.iter().map(|(field, _)| Arc::clone(field)));
+    let metadata = FileMetadata {
+        schema: Arc::new(Schema::new_with_metadata(
+            fields,
+            scan.reader_plan.logical_schema.metadata().clone(),
+        )),
+        columns,
+    };
+    Ok(Arc::new(DeltaScanExec {
+        properties: scan_properties(&schema, scan.reader_plan.partitions.len()),
+        schema,
+        output_projection: Some(Arc::from(projection)),
+        file_metadata: Some(Arc::new(metadata)),
+        ..scan.clone()
+    }))
 }
 
 fn scan_properties(schema: &SchemaRef, file_partition_count: usize) -> Arc<PlanProperties> {
@@ -712,6 +759,16 @@ impl ExecutionPlan for DeltaScanExec {
                 ParquetReaderBackend::DeltaKernel => {
                     delta_kernel_executor(&self.reader_plan, Arc::clone(&self.range_read_estimator))
                 }
+            };
+            let executor = match &self.file_metadata {
+                Some(metadata) => metadata.decorate(
+                    executor,
+                    self.reader_plan
+                        .engine_context
+                        .file_resolution_url()
+                        .clone(),
+                ),
+                None => executor,
             };
             DeltaScanScheduler::new_with_limiter(
                 Arc::clone(&self.reader_plan),

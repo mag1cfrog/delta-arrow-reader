@@ -331,6 +331,23 @@ impl RealParquetDeltaTable {
         )
     }
 
+    #[allow(dead_code)]
+    pub(crate) fn new_with_two_partition_values_and_deletion_vector(
+        name: &str,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let mut west = file_batch(1, vec![(1, Some("west-1")), (2, Some("west-2"))])?;
+        west.partition_values_json = r#"{"region":"us-west"}"#.to_owned();
+        west.deletion_vector = Some(deletion_vector_fixture(&[0])?);
+        let mut east = file_batch(2, vec![(3, Some("east-3")), (4, Some("east-4"))])?;
+        east.partition_values_json = r#"{"region":"us-east"}"#.to_owned();
+        Self::new_with_protocol_metadata_file_batches(
+            name,
+            DELETION_VECTOR_PROTOCOL_JSON,
+            PARTITIONED_METADATA_JSON,
+            vec![west, east],
+        )
+    }
+
     /// Creates a local partitioned Delta table with null and non-null region
     /// partition values.
     pub(crate) fn new_with_null_partition_value(

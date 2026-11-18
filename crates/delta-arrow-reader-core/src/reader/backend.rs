@@ -1,7 +1,7 @@
 //! Parquet data-file backend implementations.
 
 pub(crate) mod direct_parquet;
-mod file_location;
+pub(crate) mod file_location;
 pub(crate) mod kernel_reader;
 
 use snafu::IntoError;

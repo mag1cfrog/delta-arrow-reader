@@ -25,6 +25,24 @@ pub(super) fn resolve_data_file_path(
     resolve_data_file(table_url, file_path).map(|(_, path)| path)
 }
 
+/// Keeps the full URI namespace that the Kernel I/O URL omits for some stores.
+#[cfg(feature = "datafusion")]
+pub(crate) fn resolve_data_file_metadata(
+    table_url: &Url,
+    file_path: &str,
+) -> Result<(Url, Path), DeltaReaderError> {
+    let (location, object_path) = resolve_data_file(table_url, file_path)?;
+    let full_path = Path::from_url_path(location.path()).map_err(|_| {
+        data_file_error(
+            "data_file_path_resolution_failed",
+            std::io::Error::other("invalid data file object key"),
+        )
+    })?;
+    let location = with_object_store_path(location, &full_path)
+        .map_err(|error| data_file_error("data_file_path_resolution_failed", error))?;
+    Ok((location, object_path))
+}
+
 fn resolve_data_file(table_url: &Url, file_path: &str) -> Result<(Url, Path), DeltaReaderError> {
     let location = table_url
         .join(file_path)

@@ -741,6 +741,137 @@ async fn intra_page_datafusion_repartitioned_dv_scan_matches_baseline() -> TestR
     Ok(())
 }
 
+#[cfg(feature = "datafusion")]
+#[tokio::test]
+async fn file_metadata_survives_ranged_selective_page_and_row_group_reads() -> TestResult {
+    use arrow::array::StringViewArray;
+    use datafusion::{
+        physical_plan::collect,
+        prelude::{SessionConfig, SessionContext},
+    };
+    use delta_arrow_reader::datafusion::{
+        DeltaFileMetadataProvider, DeltaTableProvider, IntraFileRepartitioning, ScanOptions,
+        collect_scan_metrics,
+    };
+    let fixture = create_table(fixture_properties(), None)?;
+    let uri = url::Url::from_file_path(fs::canonicalize(
+        fixture.path().join(fixture.data_file_path()),
+    )?)
+    .map_err(|()| "file URI")?
+    .to_string();
+    for dv in [false, true] {
+        if dv {
+            add_dv(&fixture)?;
+        }
+        for experimental in [false, true] {
+            let mut full_bytes = None;
+            for predicate in ["id >= 0", "id >= 32769 AND is_match = 1"] {
+                let mut baseline = None;
+                for metadata in [false, true] {
+                    let table = DeltaTableBuilder::new(fixture.path().to_string_lossy())
+                        .load_table()
+                        .await?;
+                    let provider = DeltaTableProvider::try_new(
+                        table,
+                        ScanOptions {
+                            target_partitions: Some(4),
+                            intra_file_repartitioning: IntraFileRepartitioning::Always,
+                            execution_options: DeltaScanExecutionOptions::new()
+                                .with_experimental_intra_page_reads(experimental),
+                            ..Default::default()
+                        },
+                    )?;
+                    let ctx = SessionContext::new_with_config(
+                        SessionConfig::new()
+                            .with_batch_size(127)
+                            .with_target_partitions(4)
+                            .with_repartition_file_min_size(1),
+                    );
+                    let columns = if metadata {
+                        ctx.register_table(
+                            "files",
+                            Arc::new(DeltaFileMetadataProvider::try_new(
+                                provider, "path", "name",
+                            )?),
+                        )?;
+                        "id, path, name"
+                    } else {
+                        ctx.register_table("files", Arc::new(provider))?;
+                        "id"
+                    };
+                    let plan = ctx
+                        .sql(&format!(
+                            "SELECT {columns} FROM files WHERE {predicate} ORDER BY id"
+                        ))
+                        .await?
+                        .create_physical_plan()
+                        .await?;
+                    let metrics = collect_scan_metrics(plan.as_ref());
+                    let batches = collect(plan, ctx.task_ctx()).await?;
+                    let snapshot = metrics[0].snapshot().reader_metrics;
+                    assert!(snapshot.file_tasks_started > 1, "must read ranged tasks");
+                    assert_eq!(snapshot.deletion_vector_failures, 0);
+                    assert_eq!(snapshot.deletion_vector_coordinate_rejections, 0);
+                    let mut actual_ids = Vec::new();
+                    for batch in &batches {
+                        actual_ids.extend_from_slice(
+                            batch
+                                .column(0)
+                                .as_any()
+                                .downcast_ref::<Int64Array>()
+                                .ok_or("id type")?
+                                .values(),
+                        );
+                        if metadata {
+                            for (column, expected) in
+                                [(1, uri.as_str()), (2, fixture.data_file_path())]
+                            {
+                                assert!(
+                                    batch
+                                        .column(column)
+                                        .as_any()
+                                        .downcast_ref::<StringViewArray>()
+                                        .ok_or("metadata type")?
+                                        .iter()
+                                        .all(|value| value == Some(expected))
+                                );
+                            }
+                        }
+                    }
+                    if let Some((ids, previous_snapshot)) = &baseline {
+                        assert_eq!(&actual_ids, ids);
+                        assert_eq!(
+                            &snapshot, previous_snapshot,
+                            "metadata must preserve reader metrics"
+                        );
+                    } else {
+                        baseline = Some((actual_ids.clone(), snapshot.clone()));
+                    }
+                    if predicate.contains("is_match") {
+                        let expected: Vec<_> = MATCHES
+                            .iter()
+                            .copied()
+                            .filter(|id| *id >= 32769 && (!dv || *id != 32769))
+                            .collect();
+                        assert_eq!(actual_ids, expected);
+                        assert!(
+                            snapshot
+                                .parquet_data_file_bytes_received
+                                .ok_or("selective bytes")?
+                                < full_bytes.ok_or("full bytes")?,
+                            "selective row-group/page reads must skip bytes"
+                        );
+                    } else {
+                        assert_eq!(actual_ids.len(), ROWS - if dv { 2 } else { 0 });
+                        full_bytes = snapshot.parquet_data_file_bytes_received;
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 #[allow(deprecated)]
 #[tokio::test]
 async fn intra_page_corrupt_or_truncated_input_fails_the_scan() -> TestResult {

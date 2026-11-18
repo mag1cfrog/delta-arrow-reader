@@ -51,6 +51,9 @@ mod empty_scans;
 #[path = "planning_runtime.rs"]
 mod planning_runtime;
 
+#[path = "file_metadata.rs"]
+mod file_metadata;
+
 struct TestTable(PathBuf);
 
 impl TestTable {
