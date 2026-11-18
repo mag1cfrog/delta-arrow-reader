@@ -87,7 +87,7 @@ version numbers, timestamps, schema, statistics, and file names. Record the
 actual generated file hashes, since writer versions can affect Parquet bytes.
 No external storage, cloud data, or credentials are used.
 
-Every session loads that same snapshot through `DeltaTableBuilder` with
+Each paired/stress session loads that same snapshot through `DeltaTableBuilder` with
 `WarmupMode::QueryPlanning`, then registers `DeltaTableProvider`. Registration,
 file creation, log loading, and snapshot warmup occur outside all timers. These
 measurements describe planning over an already registered, warm snapshot; they

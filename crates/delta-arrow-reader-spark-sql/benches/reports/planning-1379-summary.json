@@ -1,0 +1,62 @@
+{
+  "outliers": {
+    "spark_over_native_configured": [],
+    "spark_above_20_ms": [],
+    "native_configured_over_plain": []
+  },
+  "slowest": [
+    {
+      "id": "stress/wide_400",
+      "configuration": "spark-off",
+      "phase": "physical",
+      "phase_ms": 15.748594,
+      "total_ms": 18.874178
+    },
+    {
+      "id": "stress/in_1000",
+      "configuration": "spark-off",
+      "phase": "logical",
+      "phase_ms": 10.76515,
+      "total_ms": 15.478022
+    },
+    {
+      "id": "stress/case_200",
+      "configuration": "spark-off",
+      "phase": "logical",
+      "phase_ms": 9.180658,
+      "total_ms": 14.410479
+    },
+    {
+      "id": "sweep/nested_results/array_literal_access",
+      "configuration": "spark-on",
+      "phase": "physical",
+      "phase_ms": 2.534727,
+      "total_ms": 3.568206
+    },
+    {
+      "id": "sweep/nested_results/nested_array_struct_access",
+      "configuration": "spark-on",
+      "phase": "physical",
+      "phase_ms": 1.962875,
+      "total_ms": 2.405166
+    }
+  ],
+  "exclusions": [],
+  "noise": {
+    "logical": {
+      "median_absolute_difference_ms": 0.0004955000000000029,
+      "p95_absolute_difference_ms": 0.005180050000000008,
+      "max_absolute_difference_ms": 0.00812500000000016
+    },
+    "physical": {
+      "median_absolute_difference_ms": 0.0014829999999999705,
+      "p95_absolute_difference_ms": 0.01019239999999989,
+      "max_absolute_difference_ms": 0.017513000000000112
+    },
+    "total": {
+      "median_absolute_difference_ms": 0.0015030000000000043,
+      "p95_absolute_difference_ms": 0.005832200000000324,
+      "max_absolute_difference_ms": 0.04382100000000033
+    }
+  }
+}

@@ -275,8 +275,8 @@ async fn preflight(manifest: &Manifest, root: &Path) -> TestResult {
         let sessions = build_registered_sessions(manifest, configuration, root).await?;
         for query in &manifest.queries {
             // Untimed correctness includes stress in both native sessions.
-            if !applies(query, configuration, false)
-                && !(configuration == "native-plain" && query.group == "stress")
+            if !(applies(query, configuration, false)
+                || configuration == "native-plain" && query.group == "stress")
             {
                 continue;
             }
