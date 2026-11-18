@@ -58,6 +58,22 @@ A separate partitioned Delta fixture compares a direct filter with an outer
 filter over `DISTRIBUTE BY`: the provider receives the filter and required
 columns, and actual reads reach only the matching Parquet file.
 
+`local-sort-filter-requests.json` and `local-sort-filter-spark-reference.jsonl`
+contain 24 Spark 4.2.0 observations in both ANSI modes. They compare values and
+executed types for outer filters over `SORT BY` and `CLUSTER BY`, hidden sort
+keys, inner and outer limits, and partition-dependent functions. These controls
+use one input and shuffle partition so limited and partition-function results
+have a fixed layout.
+
+The real Delta pruning control checks ordinary deterministic sorts with a
+session target of three partitions. The provider must receive the region filter
+and exactly the `id` projection; actual reads must match the direct query's one
+Parquet file. Fetched sorts retain outer filters. Volatile input producers also
+retain the boundary because filtering earlier can change their row associations.
+Separate seeded controls check volatile keys and predicates against the same
+engine's unfiltered sorted output, without comparing random samples across
+Spark and reader layouts.
+
 The capture environment uses in-memory inputs and requires no Spark Delta
 installation. Candidate storage checks use the reader's existing real-Parquet
 Delta fixtures and the small stored `_metadata` fixture written by this test. No row-origin values are fabricated.
@@ -69,6 +85,7 @@ From this directory, capture to a new file in an existing directory with Python
 ```sh
 TZ=UTC python3.12 capture_spark.py /path/to/new/spark-reference.jsonl
 TZ=UTC python3.12 capture_distribution_spark.py /path/to/new/distribution-spark-reference.jsonl
+TZ=UTC python3.12 capture_local_sort_filter_spark.py /path/to/new/local-sort-filter-spark-reference.jsonl
 ```
 
 The shared capture helper verifies the runtime versions and UTC setting and

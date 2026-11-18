@@ -1226,7 +1226,9 @@ impl OptimizerRule for PushDownFilter {
                     .iter()
                     .map(|expr| {
                         let cols = expr.column_refs();
-                        if cols.iter().any(|c| prevent_cols.contains(&c.name)) {
+                        if expr.is_volatile()
+                            || cols.iter().any(|c| prevent_cols.contains(&c.name))
+                        {
                             Ok(false) // No push (keep)
                         } else {
                             Ok(true) // push

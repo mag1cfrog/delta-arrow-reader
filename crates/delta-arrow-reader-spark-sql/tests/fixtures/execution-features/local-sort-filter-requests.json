@@ -1,0 +1,234 @@
+{
+  "issue": "1344",
+  "expected_record_count": 24,
+  "corpora": [
+    {
+      "corpus": "local_sort_filter",
+      "source": "explicit region partition values and row order",
+      "metadata": {
+        "spark_version": "4.2.0",
+        "timezone": "UTC",
+        "inputs": [
+          {
+            "name": "source",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "region",
+                  "type": "string",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "customer_name",
+                  "type": "string",
+                  "nullable": false,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                "us-west",
+                "west-1"
+              ],
+              [
+                "2",
+                "us-west",
+                "west-2"
+              ],
+              [
+                "3",
+                "us-east",
+                "east-3"
+              ],
+              [
+                "4",
+                "us-east",
+                "east-4"
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "local_sort_filter",
+          "id": "sort_filter",
+          "sql": "SELECT id FROM (SELECT * FROM source SORT BY id) q WHERE region = 'us-west'",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "local_sort_filter",
+          "id": "sort_filter",
+          "sql": "SELECT id FROM (SELECT * FROM source SORT BY id) q WHERE region = 'us-west'",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "local_sort_filter",
+          "id": "cluster_filter",
+          "sql": "SELECT id FROM (SELECT * FROM source CLUSTER BY id) q WHERE region = 'us-west'",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "local_sort_filter",
+          "id": "cluster_filter",
+          "sql": "SELECT id FROM (SELECT * FROM source CLUSTER BY id) q WHERE region = 'us-west'",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "local_sort_filter",
+          "id": "sort_hidden_key",
+          "sql": "SELECT id FROM (SELECT id,region FROM source SORT BY customer_name DESC) q WHERE region = 'us-west'",
+          "ordered": true,
+          "ansi": false
+        },
+        {
+          "corpus": "local_sort_filter",
+          "id": "sort_hidden_key",
+          "sql": "SELECT id FROM (SELECT id,region FROM source SORT BY customer_name DESC) q WHERE region = 'us-west'",
+          "ordered": true,
+          "ansi": true
+        },
+        {
+          "corpus": "local_sort_filter",
+          "id": "sort_inner_limit",
+          "sql": "SELECT id FROM (SELECT * FROM source SORT BY id LIMIT 2) q WHERE region = 'us-east'",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "local_sort_filter",
+          "id": "sort_inner_limit",
+          "sql": "SELECT id FROM (SELECT * FROM source SORT BY id LIMIT 2) q WHERE region = 'us-east'",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "local_sort_filter",
+          "id": "cluster_inner_limit",
+          "sql": "SELECT id FROM (SELECT * FROM source CLUSTER BY id LIMIT 2) q WHERE region = 'us-east'",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "local_sort_filter",
+          "id": "cluster_inner_limit",
+          "sql": "SELECT id FROM (SELECT * FROM source CLUSTER BY id LIMIT 2) q WHERE region = 'us-east'",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "local_sort_filter",
+          "id": "sort_outer_limit",
+          "sql": "SELECT id FROM (SELECT * FROM source SORT BY id DESC) q WHERE region = 'us-west' LIMIT 1",
+          "ordered": true,
+          "ansi": false
+        },
+        {
+          "corpus": "local_sort_filter",
+          "id": "sort_outer_limit",
+          "sql": "SELECT id FROM (SELECT * FROM source SORT BY id DESC) q WHERE region = 'us-west' LIMIT 1",
+          "ordered": true,
+          "ansi": true
+        },
+        {
+          "corpus": "local_sort_filter",
+          "id": "cluster_outer_limit",
+          "sql": "SELECT id FROM (SELECT * FROM source CLUSTER BY id) q WHERE region = 'us-west' LIMIT 1",
+          "ordered": true,
+          "ansi": false
+        },
+        {
+          "corpus": "local_sort_filter",
+          "id": "cluster_outer_limit",
+          "sql": "SELECT id FROM (SELECT * FROM source CLUSTER BY id) q WHERE region = 'us-west' LIMIT 1",
+          "ordered": true,
+          "ansi": true
+        },
+        {
+          "corpus": "local_sort_filter",
+          "id": "sort_partition_functions",
+          "sql": "SELECT id,mid,pid FROM (SELECT id,region,monotonically_increasing_id() AS mid,spark_partition_id() AS pid FROM source SORT BY id) q WHERE id % 2 = 0",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "local_sort_filter",
+          "id": "sort_partition_functions",
+          "sql": "SELECT id,mid,pid FROM (SELECT id,region,monotonically_increasing_id() AS mid,spark_partition_id() AS pid FROM source SORT BY id) q WHERE id % 2 = 0",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "local_sort_filter",
+          "id": "cluster_partition_functions",
+          "sql": "SELECT id,mid,pid FROM (SELECT id,region,monotonically_increasing_id() AS mid,spark_partition_id() AS pid FROM source CLUSTER BY id) q WHERE id % 2 = 0",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "local_sort_filter",
+          "id": "cluster_partition_functions",
+          "sql": "SELECT id,mid,pid FROM (SELECT id,region,monotonically_increasing_id() AS mid,spark_partition_id() AS pid FROM source CLUSTER BY id) q WHERE id % 2 = 0",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "local_sort_filter",
+          "id": "sort_volatile_key",
+          "sql": "SELECT id FROM (SELECT id FROM source SORT BY rand(19)) q WHERE id % 2 = 0",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "local_sort_filter",
+          "id": "sort_volatile_key",
+          "sql": "SELECT id FROM (SELECT id FROM source SORT BY rand(19)) q WHERE id % 2 = 0",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "local_sort_filter",
+          "id": "sort_volatile_alias",
+          "sql": "SELECT id FROM (SELECT id,rand(19) AS r FROM source SORT BY r) q WHERE id % 2 = 0",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "local_sort_filter",
+          "id": "sort_volatile_alias",
+          "sql": "SELECT id FROM (SELECT id,rand(19) AS r FROM source SORT BY r) q WHERE id % 2 = 0",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "local_sort_filter",
+          "id": "sort_volatile_predicate",
+          "sql": "SELECT id FROM (SELECT id FROM source SORT BY id DESC) q WHERE rand(19) < 1.0",
+          "ordered": true,
+          "ansi": false
+        },
+        {
+          "corpus": "local_sort_filter",
+          "id": "sort_volatile_predicate",
+          "sql": "SELECT id FROM (SELECT id FROM source SORT BY id DESC) q WHERE rand(19) < 1.0",
+          "ordered": true,
+          "ansi": true
+        }
+      ]
+    }
+  ]
+}
