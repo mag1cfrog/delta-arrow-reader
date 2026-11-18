@@ -1,6 +1,8 @@
+use std::collections::HashSet;
 use std::fmt::Formatter;
 use std::sync::Arc;
 
+use datafusion_common::tree_node::TreeNodeRecursion;
 use datafusion_common::{DFSchemaRef, Result};
 use datafusion_expr::expr::{Expr, Sort};
 use datafusion_expr::{LogicalPlan, UserDefinedLogicalNodeCore};
@@ -151,6 +153,32 @@ impl UserDefinedLogicalNodeCore for SortWithinPartitionsNode {
     fn expressions(&self) -> Vec<Expr> {
         // Return the inner expression from each Sort so the optimizer can transform them
         self.sort_expr.iter().map(|s| s.expr.clone()).collect()
+    }
+
+    fn prevent_predicate_push_down_columns(&self) -> HashSet<String> {
+        // Aliases can hide volatile producers; filtering first changes their row associations.
+        let input_may_be_volatile = self
+            .input
+            .apply_with_subqueries(|plan| {
+                Ok(if plan.expressions().iter().any(Expr::is_volatile) {
+                    TreeNodeRecursion::Stop
+                } else {
+                    TreeNodeRecursion::Continue
+                })
+            })
+            .map_or(true, |visit| visit == TreeNodeRecursion::Stop);
+        if self.fetch.is_some()
+            || self.sort_expr.iter().any(|sort| sort.expr.is_volatile())
+            || input_may_be_volatile
+        {
+            self.schema()
+                .fields()
+                .iter()
+                .map(|field| field.name().clone())
+                .collect()
+        } else {
+            HashSet::new()
+        }
     }
 
     fn fmt_for_explain(&self, f: &mut Formatter) -> std::fmt::Result {

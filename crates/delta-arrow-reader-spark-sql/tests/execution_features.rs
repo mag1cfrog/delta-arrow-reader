@@ -78,6 +78,13 @@ fn references() -> TestResult<Vec<Value>> {
     )
 }
 
+fn local_sort_filter_references() -> TestResult<Vec<Value>> {
+    read_references(
+        include_str!("fixtures/execution-features/local-sort-filter-requests.json"),
+        include_str!("fixtures/execution-features/local-sort-filter-spark-reference.jsonl"),
+    )
+}
+
 fn distribution_references() -> TestResult<Vec<Value>> {
     read_references(
         include_str!("fixtures/execution-features/distribution-requests.json"),
@@ -860,12 +867,16 @@ fn hidden_sort_columns_cross_restoring_projections_and_keep_validation() -> Test
 }
 
 #[tokio::test]
-async fn distribution_preserves_delta_filter_and_column_pruning() -> TestResult {
+async fn local_sort_and_distribution_preserve_delta_pruning() -> TestResult {
+    use datafusion::common::ScalarValue;
+    use datafusion::logical_expr::{Expr, Operator};
     for ansi_mode in [false, true] {
         let mut baseline_paths = None;
         for sql in [
             "SELECT id FROM partitioned_events WHERE region = 'us-west'",
             "SELECT id FROM (SELECT * FROM partitioned_events DISTRIBUTE BY id) q WHERE region = 'us-west'",
+            "SELECT id FROM (SELECT * FROM partitioned_events SORT BY id) q WHERE region = 'us-west'",
+            "SELECT id FROM (SELECT * FROM partitioned_events CLUSTER BY id) q WHERE region = 'us-west'",
         ] {
             let fixture = DeltaFeatureFixture::new(3, 7).await?;
             let case = json!({"sql":sql,"ansi":ansi_mode,"ordered":false});
@@ -873,32 +884,63 @@ async fn distribution_preserves_delta_filter_and_column_pruning() -> TestResult 
                 .await
                 .map_err(|error| error as Box<dyn std::error::Error>)?;
             assert_eq!(actual["rows"], json!([["1"], ["2"]]));
+            let mut schema = actual["schema"].clone();
+            remove_nullability_and_metadata(&mut schema);
+            assert_eq!(
+                schema,
+                json!({"type":"struct","fields":[{"name":"id","type":"integer"}]})
+            );
             let calls = fixture.calls[3]
                 .lock()
                 .map_err(|_| "provider call lock poisoned")?;
             assert_eq!(calls.scans.len(), 1);
-            assert!(calls.scans[0].projected_columns.contains("id"));
-            assert!(!calls.scans[0].projected_columns.contains("customer_name"));
-            assert!(
-                !calls.scans[0].filters.is_empty(),
-                "outer filter must reach Delta"
+            assert_eq!(
+                calls.scans[0].projected_columns,
+                BTreeSet::from(["id".into()])
             );
-            let paths = fixture.stores[3]
+            assert_eq!(calls.scans[0].filters.len(), 1);
+            assert!(!calls.offered_filters.is_empty());
+            for predicate in calls.offered_filters.iter().chain(&calls.scans[0].filters) {
+                let Expr::BinaryExpr(predicate) = predicate else {
+                    return Err("expected region comparison".into());
+                };
+                let Expr::Column(column) = predicate.left.as_ref() else {
+                    return Err("expected region column".into());
+                };
+                let Expr::Literal(value, _) = predicate.right.as_ref() else {
+                    return Err("expected region literal".into());
+                };
+                assert_eq!(column.name, "region");
+                assert_eq!(predicate.op, Operator::Eq);
+                assert_eq!(
+                    value.cast_to(&DataType::Utf8)?,
+                    ScalarValue::Utf8(Some("us-west".into()))
+                );
+            }
+            let reads = fixture.stores[3]
                 .reads
                 .lock()
-                .map_err(|_| "read log poisoned")?
+                .map_err(|_| "read log poisoned")?;
+            let paths = reads
                 .iter()
                 .map(|read| read.path.clone())
                 .collect::<BTreeSet<_>>();
+            let read_bytes = reads
+                .iter()
+                .map(|read| read.range.end - read.range.start)
+                .sum::<u64>();
+            println!(
+                "LOCAL_SORT_PRUNING ansi={ansi_mode} bytes={read_bytes} paths={paths:?} sql={sql}"
+            );
             assert_eq!(
                 paths.len(),
                 1,
                 "filter must prune one of the two Parquet files"
             );
             if let Some(baseline) = &baseline_paths {
-                assert_eq!(&paths, baseline);
+                assert_eq!(&(paths, read_bytes), baseline);
             } else {
-                baseline_paths = Some(paths);
+                baseline_paths = Some((paths, read_bytes));
             }
         }
     }
@@ -935,6 +977,207 @@ async fn distribution_uses_session_target_with_a_single_input_partition() -> Tes
                 .sum::<usize>();
             assert_eq!(rows, 12);
         }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn volatile_local_sort_keeps_row_key_associations_after_outer_filter() -> TestResult {
+    for ansi_mode in [false, true] {
+        let fixture = DeltaFeatureFixture::new(1, 7).await?;
+        let baseline = create_spark_physical_plan(
+            &fixture.session,
+            "SELECT id FROM events SORT BY rand(19)",
+            ansi_mode,
+        )
+        .await?;
+        let mut expected = vec![];
+        for batch in collect_partitioned(baseline, fixture.session.task_ctx())
+            .await?
+            .into_iter()
+            .flatten()
+        {
+            expected.extend(
+                as_int32_array(batch.column(0).as_ref())?
+                    .values()
+                    .iter()
+                    .copied()
+                    .filter(|id| id % 2 == 0),
+            );
+        }
+        for sql in [
+            "SELECT id FROM (SELECT id FROM events SORT BY rand(19)) q WHERE id % 2 = 0",
+            "SELECT id FROM (SELECT id,rand(19) AS r FROM events SORT BY r) q WHERE id % 2 = 0",
+            "SELECT id FROM (SELECT id FROM (SELECT id,rand(19) AS r FROM events) p SORT BY r) q WHERE id % 2 = 0",
+        ] {
+            let filtered = create_spark_physical_plan(&fixture.session, sql, ansi_mode).await?;
+            let mut actual = vec![];
+            for batch in collect_partitioned(filtered, fixture.session.task_ctx())
+                .await?
+                .into_iter()
+                .flatten()
+            {
+                actual.extend_from_slice(as_int32_array(batch.column(0).as_ref())?.values());
+            }
+            assert_eq!(actual.len(), expected.len());
+            assert!(
+                actual == expected,
+                "outer filter must preserve the materialized volatile sort keys: {sql}"
+            );
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn local_sort_filters_and_boundaries_match_spark_values_and_types() -> TestResult {
+    let request: Value = serde_json::from_str(include_str!(
+        "fixtures/execution-features/local-sort-filter-requests.json"
+    ))?;
+    let records = local_sort_filter_references()?;
+    for batch_size in [1, 3] {
+        let session = context(1, batch_size);
+        spark_inputs::register_recorded_inputs_with_partition_count(
+            &session,
+            &request["corpora"][0]["metadata"],
+            batch_size,
+            1,
+        )
+        .map_err(|error| error as Box<dyn std::error::Error>)?;
+        for case in &records {
+            let actual = capture_executed_query_result(&session, case)
+                .await
+                .map_err(|error| error as Box<dyn std::error::Error>)?;
+            assert_eq!(actual["rows"], case["expected"]["rows"], "{}", case["id"]);
+            let mut schema = actual["schema"].clone();
+            let mut expected = case["schema_stages"]["executed"].clone();
+            remove_nullability_and_metadata(&mut schema);
+            remove_nullability_and_metadata(&mut expected);
+            assert_eq!(schema, expected, "{}", case["id"]);
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn volatile_outer_predicate_stays_after_local_sort() -> TestResult {
+    use arrow::array::Float64Array;
+
+    for ansi_mode in [false, true] {
+        let fixture = DeltaFeatureFixture::new(1, 7).await?;
+        let baseline = create_spark_physical_plan(
+            &fixture.session,
+            "SELECT id,rand(19) AS r FROM (SELECT id FROM events SORT BY id DESC) q",
+            ansi_mode,
+        )
+        .await?;
+        let mut expected = vec![];
+        for batch in collect_partitioned(baseline, fixture.session.task_ctx())
+            .await?
+            .into_iter()
+            .flatten()
+        {
+            let ids = as_int32_array(batch.column(0).as_ref())?;
+            let random = batch
+                .column(1)
+                .as_any()
+                .downcast_ref::<Float64Array>()
+                .ok_or("expected DOUBLE rand")?;
+            for row in 0..batch.num_rows() {
+                if random.value(row) < 0.5 {
+                    expected.push(ids.value(row));
+                }
+            }
+        }
+        let filtered = create_spark_physical_plan(
+            &fixture.session,
+            "SELECT id FROM (SELECT id FROM events SORT BY id DESC) q WHERE rand(19) < 0.5",
+            ansi_mode,
+        )
+        .await?;
+        let mut actual = vec![];
+        for batch in collect_partitioned(filtered, fixture.session.task_ctx())
+            .await?
+            .into_iter()
+            .flatten()
+        {
+            actual.extend_from_slice(as_int32_array(batch.column(0).as_ref())?.values());
+        }
+        assert!(!expected.is_empty() && expected.len() < 2 * ROWS_PER_FILE);
+        assert_eq!(actual.len(), expected.len());
+        assert!(
+            actual == expected,
+            "volatile outer predicate must observe sorted row order"
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn fetched_local_sort_keeps_outer_filter_above_its_row_boundary() -> TestResult {
+    use datafusion::common::{
+        Column,
+        tree_node::{Transformed, TransformedResult, TreeNode},
+    };
+    use datafusion::logical_expr::{Expr, Extension, LogicalPlan, LogicalPlanBuilder, lit};
+    use sail_logical_plan::sort::SortWithinPartitionsNode;
+
+    for ansi_mode in [false, true] {
+        let fixture = DeltaFeatureFixture::new(1, 7).await?;
+        let mut query = plan_query(
+            &fixture.session,
+            "SELECT id FROM partitioned_events SORT BY id",
+            &SparkSqlOptions {
+                ansi_mode,
+                ..Default::default()
+            },
+        )
+        .await?;
+        query.logical_plan = query
+            .logical_plan
+            .transform_up(|plan| {
+                let LogicalPlan::Extension(extension) = &plan else {
+                    return Ok(Transformed::no(plan));
+                };
+                let Some(sort) = extension
+                    .node
+                    .as_any()
+                    .downcast_ref::<SortWithinPartitionsNode>()
+                else {
+                    return Ok(Transformed::no(plan));
+                };
+                Ok(Transformed::yes(LogicalPlan::Extension(Extension {
+                    node: Arc::new(SortWithinPartitionsNode::new(
+                        sort.input().clone(),
+                        sort.sort_expr().to_vec(),
+                        Some(2),
+                    )),
+                })))
+            })
+            .data()?;
+        let id = Expr::Column(Column::from(query.logical_plan.schema().qualified_field(0)));
+        query.logical_plan = LogicalPlanBuilder::from(query.logical_plan)
+            .filter(id.gt(lit(2)))?
+            .build()?;
+        let physical = query.create_physical_plan(&fixture.session).await?;
+        let rows = collect_partitioned(physical, fixture.session.task_ctx())
+            .await?
+            .iter()
+            .flatten()
+            .map(RecordBatch::num_rows)
+            .sum::<usize>();
+        assert_eq!(
+            rows, 0,
+            "filtering before the fetched sort would return ids 3 and 4"
+        );
+        let calls = fixture.calls[3]
+            .lock()
+            .map_err(|_| "provider call lock poisoned")?;
+        assert_eq!(calls.scans.len(), 1);
+        assert!(
+            calls.scans[0].filters.is_empty(),
+            "fetched sort must retain its outer filter"
+        );
     }
     Ok(())
 }
