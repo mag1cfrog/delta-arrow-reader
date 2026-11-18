@@ -1,0 +1,510 @@
+{
+  "issue": 1370,
+  "base": "d4ae811a6f575153fbc14847f7e7d00c40b6069f",
+  "expected_record_count": 16,
+  "purpose": "Wide decimal input encoding, signed byte boundaries, changing seeds, nested containers and scalar broadcasting.",
+  "corpora": [
+    {
+      "corpus": "xxhash64_decimal_encoding",
+      "source": "Bounded ordinary narrow/wide Decimal values, zero/negative/NULL/scales, and ARRAY/STRUCT wide-Decimal consumers.",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "decimal_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "label",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "p12_s3",
+                  "type": "decimal(12,3)",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "p18_s3",
+                  "type": "decimal(18,3)",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "p19_s3",
+                  "type": "decimal(19,3)",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "p38_s3",
+                  "type": "decimal(38,3)",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "p12_s0",
+                  "type": "decimal(12,0)",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "p38_s0",
+                  "type": "decimal(38,0)",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "p18_s6",
+                  "type": "decimal(18,6)",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "p38_s6",
+                  "type": "decimal(38,6)",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "p38_s18",
+                  "type": "decimal(38,18)",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                "row-1",
+                "0.000",
+                "0.000",
+                "0.000",
+                "0.000",
+                "0",
+                "0",
+                "0.000000",
+                "0.000000",
+                "0.000000000000000000"
+              ],
+              [
+                "2",
+                "row-2",
+                "7.250",
+                "7.250",
+                "7.250",
+                "7.250",
+                "7",
+                "7",
+                "7.250000",
+                "7.250000",
+                "7.250000000000000000"
+              ],
+              [
+                "3",
+                "row-3",
+                "-12345.678",
+                "-12345.678",
+                "-12345.678",
+                "-12345.678",
+                "-12346",
+                "-12346",
+                "-12345.678000",
+                "-12345.678000",
+                "-12345.678000000000000000"
+              ],
+              [
+                "4",
+                "row-4",
+                "123.450",
+                "123.450",
+                "123.450",
+                "123.450",
+                "123",
+                "123",
+                "123.450000",
+                "123.450000",
+                "123.450000000000000000"
+              ],
+              [
+                "5",
+                "row-5",
+                "-0.001",
+                "-0.001",
+                "-0.001",
+                "-0.001",
+                "0",
+                "0",
+                "-0.001000",
+                "-0.001000",
+                "-0.001000000000000000"
+              ],
+              [
+                "6",
+                "row-6",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+              ],
+              [
+                "7",
+                "row-7",
+                "128.000",
+                "128.000",
+                "128.000",
+                "128.000",
+                "128",
+                "128",
+                "128.000000",
+                "128.000000",
+                "128.000000000000000000"
+              ],
+              [
+                "8",
+                "row-8",
+                "-129.000",
+                "-129.000",
+                "-129.000",
+                "-129.000",
+                "-129",
+                "-129",
+                "-129.000000",
+                "-129.000000",
+                "-129.000000000000000000"
+              ],
+              [
+                "9",
+                "row-9",
+                "0.128",
+                "0.128",
+                "0.128",
+                "0.128",
+                "0",
+                "0",
+                "0.128000",
+                "0.128000",
+                "0.128000000000000000"
+              ],
+              [
+                "10",
+                "row-10",
+                "-0.129",
+                "-0.129",
+                "-0.129",
+                "-0.129",
+                "-0",
+                "-0",
+                "-0.129000",
+                "-0.129000",
+                "-0.129000000000000000"
+              ],
+              [
+                "11",
+                "row-11",
+                "7.250",
+                "7.250",
+                "7.250",
+                "7.250",
+                "7",
+                "7",
+                "7.250000",
+                "7.250000",
+                "7.250000000000000000"
+              ]
+            ]
+          },
+          {
+            "name": "nested_decimal_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "label",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "a",
+                  "type": {
+                    "type": "array",
+                    "elementType": "decimal(38,3)",
+                    "containsNull": true
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "st",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "d",
+                        "type": "decimal(38,3)",
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "b",
+                        "type": "string",
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "st_small",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "a",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "b",
+                        "type": "string",
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                "x",
+                [
+                  "7.250",
+                  null,
+                  "-1.000"
+                ],
+                [
+                  "7.250",
+                  "x"
+                ],
+                [
+                  "1",
+                  "x"
+                ]
+              ],
+              [
+                "2",
+                "",
+                [],
+                [
+                  null,
+                  null
+                ],
+                [
+                  null,
+                  null
+                ]
+              ],
+              [
+                "3",
+                null,
+                [
+                  null
+                ],
+                [
+                  null,
+                  ""
+                ],
+                [
+                  null,
+                  ""
+                ]
+              ],
+              [
+                "4",
+                "null",
+                null,
+                null,
+                null
+              ],
+              [
+                "5",
+                "z",
+                [
+                  "-0.129",
+                  "0.128"
+                ],
+                [
+                  "-0.129",
+                  "z"
+                ],
+                [
+                  "-1",
+                  "z"
+                ]
+              ],
+              [
+                "6",
+                "x",
+                [
+                  "7.250",
+                  null,
+                  "-1.000"
+                ],
+                [
+                  "7.250",
+                  "x"
+                ],
+                [
+                  "1",
+                  "x"
+                ]
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "xxhash64_decimal_encoding",
+          "id": "decimal_columns",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT id,xxhash64(p12_s3) AS h12_3,xxhash64(p18_s3) AS h18_3,xxhash64(p19_s3) AS h19_3,xxhash64(p38_s3) AS h38_3,xxhash64(p12_s0) AS h12_0,xxhash64(p38_s0) AS h38_0,xxhash64(p18_s6) AS h18_6,xxhash64(p38_s6) AS h38_6,xxhash64(p38_s18) AS h38_18 FROM decimal_inputs ORDER BY id"
+        },
+        {
+          "corpus": "xxhash64_decimal_encoding",
+          "id": "decimal_several",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT id,xxhash64(1,p12_s3,'x') AS small,xxhash64(1,p38_s3,'x') AS wide,xxhash64(p12_s3,p38_s18) AS mixed FROM decimal_inputs ORDER BY id"
+        },
+        {
+          "corpus": "xxhash64_decimal_encoding",
+          "id": "decimal_literals",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT xxhash64(CAST(7.250 AS DECIMAL(12,3))) AS h12_3,xxhash64(CAST(7.250 AS DECIMAL(18,3))) AS h18_3,xxhash64(CAST(7.250 AS DECIMAL(19,3))) AS h19_3,xxhash64(CAST(7.250 AS DECIMAL(38,3))) AS h38_3,xxhash64(CAST(7.250 AS DECIMAL(12,0))) AS h12_0,xxhash64(CAST(7.250 AS DECIMAL(38,0))) AS h38_0,xxhash64(CAST(7.250 AS DECIMAL(18,6))) AS h18_6,xxhash64(CAST(7.250 AS DECIMAL(38,6))) AS h38_6,xxhash64(CAST(7.250 AS DECIMAL(38,18))) AS h38_18"
+        },
+        {
+          "corpus": "xxhash64_decimal_encoding",
+          "id": "decimal_literal_controls",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT xxhash64(CAST(0 AS DECIMAL(12,3))) AS small_zero,xxhash64(CAST(0 AS DECIMAL(38,3))) AS wide_zero,xxhash64(CAST(-12345.678 AS DECIMAL(38,3))) AS negative,xxhash64(CAST(NULL AS DECIMAL(12,3))) AS small_null,xxhash64(CAST(NULL AS DECIMAL(38,18))) AS wide_null"
+        },
+        {
+          "corpus": "xxhash64_decimal_encoding",
+          "id": "decimal_columns",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT id,xxhash64(p12_s3) AS h12_3,xxhash64(p18_s3) AS h18_3,xxhash64(p19_s3) AS h19_3,xxhash64(p38_s3) AS h38_3,xxhash64(p12_s0) AS h12_0,xxhash64(p38_s0) AS h38_0,xxhash64(p18_s6) AS h18_6,xxhash64(p38_s6) AS h38_6,xxhash64(p38_s18) AS h38_18 FROM decimal_inputs ORDER BY id"
+        },
+        {
+          "corpus": "xxhash64_decimal_encoding",
+          "id": "decimal_several",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT id,xxhash64(1,p12_s3,'x') AS small,xxhash64(1,p38_s3,'x') AS wide,xxhash64(p12_s3,p38_s18) AS mixed FROM decimal_inputs ORDER BY id"
+        },
+        {
+          "corpus": "xxhash64_decimal_encoding",
+          "id": "decimal_literals",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT xxhash64(CAST(7.250 AS DECIMAL(12,3))) AS h12_3,xxhash64(CAST(7.250 AS DECIMAL(18,3))) AS h18_3,xxhash64(CAST(7.250 AS DECIMAL(19,3))) AS h19_3,xxhash64(CAST(7.250 AS DECIMAL(38,3))) AS h38_3,xxhash64(CAST(7.250 AS DECIMAL(12,0))) AS h12_0,xxhash64(CAST(7.250 AS DECIMAL(38,0))) AS h38_0,xxhash64(CAST(7.250 AS DECIMAL(18,6))) AS h18_6,xxhash64(CAST(7.250 AS DECIMAL(38,6))) AS h38_6,xxhash64(CAST(7.250 AS DECIMAL(38,18))) AS h38_18"
+        },
+        {
+          "corpus": "xxhash64_decimal_encoding",
+          "id": "decimal_literal_controls",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT xxhash64(CAST(0 AS DECIMAL(12,3))) AS small_zero,xxhash64(CAST(0 AS DECIMAL(38,3))) AS wide_zero,xxhash64(CAST(-12345.678 AS DECIMAL(38,3))) AS negative,xxhash64(CAST(NULL AS DECIMAL(12,3))) AS small_null,xxhash64(CAST(NULL AS DECIMAL(38,18))) AS wide_null"
+        },
+        {
+          "corpus": "xxhash64_decimal_encoding",
+          "id": "wide_decimal_nested",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT id,xxhash64(array(p38_s3,CAST(NULL AS DECIMAL(38,3)))) AS array_wide,xxhash64(named_struct('n',p19_s3,'w',p38_s18)) AS struct_wide FROM decimal_inputs ORDER BY id"
+        },
+        {
+          "corpus": "xxhash64_decimal_encoding",
+          "id": "wide_decimal_nested",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT id,xxhash64(array(p38_s3,CAST(NULL AS DECIMAL(38,3)))) AS array_wide,xxhash64(named_struct('n',p19_s3,'w',p38_s18)) AS struct_wide FROM decimal_inputs ORDER BY id"
+        },
+        {
+          "id": "changing_seeds",
+          "sql": "SELECT id,xxhash64(id,p19_s3,label) AS prefix,xxhash64(p38_s3,id) AS suffix,xxhash64(id,CAST(0.128 AS DECIMAL(38,3)),label) AS broadcast FROM decimal_inputs ORDER BY id",
+          "ansi": false,
+          "ordered": true,
+          "corpus": "xxhash64_decimal_encoding"
+        },
+        {
+          "id": "registered_nested",
+          "sql": "SELECT id,xxhash64(a) AS array_wide,xxhash64(st) AS struct_wide,xxhash64(id,a,st,label) AS mixed,xxhash64(array(st)) AS array_struct,xxhash64(named_struct('a',a,'s',st)) AS struct_array FROM nested_decimal_inputs ORDER BY id",
+          "ansi": false,
+          "ordered": true,
+          "corpus": "xxhash64_decimal_encoding"
+        },
+        {
+          "id": "null_empty_containers",
+          "sql": "SELECT xxhash64(CAST(NULL AS ARRAY<DECIMAL(38,3)>)) AS null_array,xxhash64(CAST(NULL AS STRUCT<d:DECIMAL(38,3),b:STRING>)) AS null_struct,xxhash64(array(CAST(NULL AS DECIMAL(38,3)))) AS null_element,xxhash64(CAST(array() AS ARRAY<DECIMAL(38,3)>)) AS empty_array",
+          "ansi": false,
+          "ordered": true,
+          "corpus": "xxhash64_decimal_encoding"
+        },
+        {
+          "id": "changing_seeds",
+          "sql": "SELECT id,xxhash64(id,p19_s3,label) AS prefix,xxhash64(p38_s3,id) AS suffix,xxhash64(id,CAST(0.128 AS DECIMAL(38,3)),label) AS broadcast FROM decimal_inputs ORDER BY id",
+          "ansi": true,
+          "ordered": true,
+          "corpus": "xxhash64_decimal_encoding"
+        },
+        {
+          "id": "registered_nested",
+          "sql": "SELECT id,xxhash64(a) AS array_wide,xxhash64(st) AS struct_wide,xxhash64(id,a,st,label) AS mixed,xxhash64(array(st)) AS array_struct,xxhash64(named_struct('a',a,'s',st)) AS struct_array FROM nested_decimal_inputs ORDER BY id",
+          "ansi": true,
+          "ordered": true,
+          "corpus": "xxhash64_decimal_encoding"
+        },
+        {
+          "id": "null_empty_containers",
+          "sql": "SELECT xxhash64(CAST(NULL AS ARRAY<DECIMAL(38,3)>)) AS null_array,xxhash64(CAST(NULL AS STRUCT<d:DECIMAL(38,3),b:STRING>)) AS null_struct,xxhash64(array(CAST(NULL AS DECIMAL(38,3)))) AS null_element,xxhash64(CAST(array() AS ARRAY<DECIMAL(38,3)>)) AS empty_array",
+          "ansi": true,
+          "ordered": true,
+          "corpus": "xxhash64_decimal_encoding"
+        }
+      ]
+    }
+  ]
+}
