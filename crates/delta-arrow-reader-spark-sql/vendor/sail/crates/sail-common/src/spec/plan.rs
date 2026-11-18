@@ -41,6 +41,7 @@ pub enum QueryNode {
         input: Box<QueryPlan>,
         order: Vec<SortOrder>,
         is_global: bool,
+        resolve_ordinals: bool,
     },
     Limit {
         input: Box<QueryPlan>,

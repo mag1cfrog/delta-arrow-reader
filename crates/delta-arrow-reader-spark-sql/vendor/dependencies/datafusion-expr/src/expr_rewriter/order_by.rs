@@ -49,7 +49,15 @@ fn rewrite_sort_col_by_aggs(expr: Expr, plan: &LogicalPlan) -> Result<Expr> {
     // Joins, and Unions are not yet handled (should have a projection
     // on top of them)
     if plan_inputs.len() == 1 {
-        let proj_exprs = plan.expressions();
+        // Only expressions with actual output columns can become output references.
+        let proj_exprs = plan
+            .expressions()
+            .into_iter()
+            .filter(|expression| {
+                let (qualifier, name) = expression.qualified_name();
+                plan.schema().has_column(&Column::new(qualifier, name))
+            })
+            .collect::<Vec<_>>();
         rewrite_in_terms_of_projection(expr, &proj_exprs, plan_inputs[0])
     } else {
         Ok(expr)

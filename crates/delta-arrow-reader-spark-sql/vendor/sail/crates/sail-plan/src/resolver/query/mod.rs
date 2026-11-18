@@ -90,8 +90,17 @@ impl PlanResolver<'_> {
                 input,
                 order,
                 is_global,
+                resolve_ordinals,
             } => {
-                self.resolve_query_sort(*input, order, is_global, state)
+                self.resolve_query_sort(*input, order, is_global, resolve_ordinals, state)
+                    .await?
+            }
+            QueryNode::RepartitionByExpression {
+                input,
+                partition_expressions,
+                num_partitions,
+            } => {
+                self.resolve_query_repartition(*input, partition_expressions, num_partitions, state)
                     .await?
             }
             QueryNode::Limit { input, skip, limit } => {
@@ -119,7 +128,6 @@ impl PlanResolver<'_> {
             QueryNode::Sample(_)
             | QueryNode::Range(_)
             | QueryNode::Repartition { .. }
-            | QueryNode::RepartitionByExpression { .. }
             | QueryNode::ToDf { .. }
             | QueryNode::ToSchema { .. }
             | QueryNode::WithColumnsRenamed { .. }

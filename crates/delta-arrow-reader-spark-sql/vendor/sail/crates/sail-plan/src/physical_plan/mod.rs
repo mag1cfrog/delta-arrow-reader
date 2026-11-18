@@ -4,7 +4,10 @@ use std::{borrow::Cow, sync::Arc};
 use async_trait::async_trait;
 use datafusion::execution::SessionState;
 use datafusion::execution::context::QueryPlanner;
-use datafusion::physical_expr::{LexOrdering, OrderingRequirements, create_physical_sort_exprs};
+use datafusion::physical_expr::{
+    Distribution, LexOrdering, OrderingRequirements, create_physical_expr,
+    create_physical_sort_exprs,
+};
 use datafusion::physical_optimizer::output_requirements::OutputRequirementExec;
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_plan::projection::ProjectionExec;
@@ -14,6 +17,7 @@ use datafusion_common::tree_node::{Transformed, TreeNode, TreeNodeRecursion};
 use datafusion_common::{DFSchema, DataFusionError, Result, internal_err};
 use datafusion_expr::{Expr, LogicalPlan, LogicalPlanBuilder, Union, UserDefinedLogicalNode};
 use sail_logical_plan::monotonic_id::MonotonicIdNode;
+use sail_logical_plan::repartition::RequiredDistributionNode;
 use sail_logical_plan::sort::{RequiredSortNode, SortWithinPartitionsNode};
 use sail_logical_plan::spark_partition_id::SparkPartitionIdNode;
 
@@ -256,6 +260,25 @@ impl ExtensionPlanner for SparkExtensionPlanner {
                 monotonic_id.column_name(),
                 node.schema().inner().clone(),
             )?)
+        } else if let Some(distribution) = node.as_any().downcast_ref::<RequiredDistributionNode>()
+        {
+            let [input] = physical_inputs else {
+                return internal_err!("RequiredDistribution requires exactly one physical input");
+            };
+            let keys = distribution
+                .keys()
+                .iter()
+                .map(|key| {
+                    create_physical_expr(key, node.schema(), session_state.execution_props())
+                })
+                .collect::<Result<Vec<_>>>()?;
+            // An explicit SQL distribution must survive without a downstream hash consumer.
+            Arc::new(OutputRequirementExec::new(
+                input.clone(),
+                None,
+                Distribution::HashPartitioned(keys),
+                None,
+            ))
         } else if let Some(sort) = node.as_any().downcast_ref::<SortWithinPartitionsNode>() {
             let [input] = physical_inputs else {
                 return internal_err!("SortExec requires exactly one physical input");

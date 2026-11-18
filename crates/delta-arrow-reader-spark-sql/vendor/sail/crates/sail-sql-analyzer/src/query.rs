@@ -146,23 +146,49 @@ pub(crate) fn from_ast_query(query: Query) -> SqlResult<spec::QueryPlan> {
         window,
     } = modifiers.try_into()?;
 
-    if cluster_by.is_some() {
-        return Err(SqlError::todo("CLUSTER BY"));
-    }
+    let plan = if let Some(items) = distribute_by.or_else(|| cluster_by.clone()) {
+        spec::QueryPlan::new(spec::QueryNode::RepartitionByExpression {
+            input: Box::new(plan),
+            partition_expressions: items
+                .into_iter()
+                .map(from_ast_expression)
+                .collect::<SqlResult<_>>()?,
+            num_partitions: None,
+        })
+    } else {
+        plan
+    };
 
-    if distribute_by.is_some() {
-        return Err(SqlError::todo("DISTRIBUTE BY"));
-    }
-
-    let plan = if let Some(items) = sort_by {
-        let sort_by = items
-            .into_iter()
-            .map(from_ast_order_by)
-            .collect::<SqlResult<_>>()?;
+    let resolve_ordinals = cluster_by.is_none();
+    let sort_by = if let Some(items) = cluster_by {
+        Some(
+            items
+                .into_iter()
+                .map(|item| {
+                    Ok(spec::SortOrder {
+                        child: Box::new(from_ast_expression(item)?),
+                        direction: spec::SortDirection::Ascending,
+                        null_ordering: spec::NullOrdering::NullsFirst,
+                    })
+                })
+                .collect::<SqlResult<_>>()?,
+        )
+    } else {
+        sort_by
+            .map(|items| {
+                items
+                    .into_iter()
+                    .map(from_ast_order_by)
+                    .collect::<SqlResult<_>>()
+            })
+            .transpose()?
+    };
+    let plan = if let Some(order) = sort_by {
         spec::QueryPlan::new(spec::QueryNode::Sort {
             input: Box::new(plan),
-            order: sort_by,
+            order,
             is_global: false,
+            resolve_ordinals,
         })
     } else {
         plan
@@ -177,6 +203,7 @@ pub(crate) fn from_ast_query(query: Query) -> SqlResult<spec::QueryPlan> {
             input: Box::new(plan),
             order: order_by,
             is_global: true,
+            resolve_ordinals: true,
         })
     } else {
         plan

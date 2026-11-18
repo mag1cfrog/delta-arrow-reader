@@ -105,9 +105,14 @@ pool.
 
 The [execution-feature references](tests/fixtures/execution-features/README.md)
 cover bounded `range` values and BIGINT result types. `SORT BY` orders each output
-partition. `DISTRIBUTE BY` and `CLUSTER BY` are unsupported. Partition IDs refer to
-the execution layout; monotonic IDs are unique and increase within a partition.
-Unordered `first`, `last` and `collect_list` checks use membership and counts.
+partition. `DISTRIBUTE BY` places equal keys, including NULL, in the same output
+partition. `CLUSTER BY` also sorts each partition by those keys ascending, with
+NULL first. Both use the session target partition count; their hash function and
+key-to-partition assignment can differ from Spark. `DISTRIBUTE BY` can be combined
+with `SORT BY`, and both distribution clauses work in subqueries and CTEs under
+an outer `ORDER BY` or `LIMIT`. Partition IDs refer to the execution layout;
+monotonic IDs are unique and increase within a partition. Unordered `first`,
+`last` and `collect_list` checks use membership and counts.
 
 `input_file_name()` is unsupported. Registered Delta providers do not inject a
 `_metadata.file_path` column from file origin; referencing that absent field
