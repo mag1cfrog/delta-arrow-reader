@@ -1,0 +1,1320 @@
+{
+  "issue": 1352,
+  "base": "016db83e8641cbb0d1d93d017470ba79c47f922d",
+  "purpose": "Source-only bounded parent oracle; observed MAP provider order and canonical epoch day/microsecond typed input encoding. No expected output.",
+  "expected_record_count": 126,
+  "completed_function_fixtures": [
+    "get-json-object-extraction",
+    "sha2-literal-lengths"
+  ],
+  "corpora": [
+    {
+      "corpus": "json_hash_remaining",
+      "source": "Source-only bounded remaining JSON/hash requests; no expected outputs.",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "json_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "j",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                "{\"a\":{\"x\":\"yes\"},\"items\":[1,{\"b\":\"v\"}]}"
+              ],
+              [
+                "2",
+                "{\"a\":1,\"nested\":{\"x\":\"ok\"},\"items\":[1,null,2],\"extra\":9}"
+              ],
+              [
+                "3",
+                "{\"nested\":{\"x\":\"only\"}}"
+              ],
+              [
+                "4",
+                "{\"a\":\"bad\",\"nested\":3,\"items\":[\"bad\"]}"
+              ],
+              [
+                "5",
+                "[1,null,2]"
+              ],
+              [
+                "6",
+                "[1,\"bad\"]"
+              ],
+              [
+                "7",
+                "{\"x\":1,\"y\":null}"
+              ],
+              [
+                "8",
+                "\"hello\""
+              ],
+              [
+                "9",
+                "17"
+              ],
+              [
+                "10",
+                "[]"
+              ],
+              [
+                "11",
+                "{}"
+              ],
+              [
+                "12",
+                "{\"a\":"
+              ],
+              [
+                "13",
+                ""
+              ],
+              [
+                "14",
+                null
+              ],
+              [
+                "15",
+                "{\"a\":1,\"nested\":{\"x\":\"ok\"},\"items\":[1,null,2],\"extra\":9}"
+              ]
+            ]
+          },
+          {
+            "name": "hash_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "i",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "l",
+                  "type": "long",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "d",
+                  "type": "double",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "dec",
+                  "type": "decimal(12,3)",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "b",
+                  "type": "binary",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "flag",
+                  "type": "boolean",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "day",
+                  "type": "date",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "ts",
+                  "type": "timestamp",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "a",
+                  "type": {
+                    "type": "array",
+                    "elementType": "integer",
+                    "containsNull": true
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "st",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "x",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "y",
+                        "type": "string",
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                "0",
+                "0",
+                "0000000000000000",
+                "0.000",
+                "abc",
+                "616263",
+                "True",
+                "0",
+                "0",
+                [
+                  "1",
+                  null,
+                  "2"
+                ],
+                [
+                  "1",
+                  "x"
+                ]
+              ],
+              [
+                "2",
+                "-1",
+                "-9223372036854775808",
+                "8000000000000000",
+                "-12345.678",
+                "",
+                "",
+                "False",
+                "-1",
+                "-1",
+                [],
+                [
+                  null,
+                  ""
+                ]
+              ],
+              [
+                "3",
+                "2147483647",
+                "9223372036854775807",
+                "3ff8000000000000",
+                "999999999.999",
+                "e\u00e9\ud83d\ude00",
+                "00ff10",
+                "True",
+                "19782",
+                "1709210096123456",
+                [
+                  null
+                ],
+                [
+                  null,
+                  null
+                ]
+              ],
+              [
+                "4",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+              ],
+              [
+                "5",
+                "7",
+                "7",
+                "c002000000000000",
+                "7.250",
+                null,
+                "61",
+                null,
+                null,
+                null,
+                null,
+                null
+              ]
+            ]
+          },
+          {
+            "name": "complex_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "st",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "a",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "s",
+                        "type": "string",
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "ts",
+                        "type": "timestamp",
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "m",
+                  "type": {
+                    "type": "map",
+                    "keyType": "string",
+                    "valueType": "integer",
+                    "valueContainsNull": true
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "a",
+                  "type": {
+                    "type": "array",
+                    "elementType": {
+                      "type": "struct",
+                      "fields": [
+                        {
+                          "name": "a",
+                          "type": "integer",
+                          "nullable": true,
+                          "metadata": {}
+                        },
+                        {
+                          "name": "s",
+                          "type": "string",
+                          "nullable": true,
+                          "metadata": {}
+                        },
+                        {
+                          "name": "ts",
+                          "type": "timestamp",
+                          "nullable": true,
+                          "metadata": {}
+                        }
+                      ]
+                    },
+                    "containsNull": true
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                [
+                  "1",
+                  "x",
+                  "1709210096123000"
+                ],
+                [
+                  [
+                    "a",
+                    "1"
+                  ],
+                  [
+                    "b",
+                    "2"
+                  ]
+                ],
+                [
+                  [
+                    "1",
+                    "x",
+                    "1709210096123000"
+                  ],
+                  null
+                ]
+              ],
+              [
+                "2",
+                [
+                  null,
+                  null,
+                  null
+                ],
+                [
+                  [
+                    "x",
+                    null
+                  ]
+                ],
+                []
+              ],
+              [
+                "3",
+                null,
+                [],
+                null
+              ],
+              [
+                "4",
+                null,
+                null,
+                null
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "id": "json_tuple_literal_nested",
+          "sql": "SELECT json_tuple('{\"a\":{\"x\":\"yes\"},\"items\":[1,{\"b\":\"v\"}]}','a','items','items[0]','missing') AS (a,items,index_like,missing)",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "json_tuple_literal_present",
+          "sql": "SELECT json_tuple('{\"a\":1,\"nested\":{\"x\":\"ok\"},\"items\":[1,null,2],\"extra\":9}','a','items','items[0]','missing') AS (a,items,index_like,missing)",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "json_tuple_literal_missing",
+          "sql": "SELECT json_tuple('{\"nested\":{\"x\":\"only\"}}','a','items','items[0]','missing') AS (a,items,index_like,missing)",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "json_tuple_literal_mismatch",
+          "sql": "SELECT json_tuple('{\"a\":\"bad\",\"nested\":3,\"items\":[\"bad\"]}','a','items','items[0]','missing') AS (a,items,index_like,missing)",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "json_tuple_literal_array",
+          "sql": "SELECT json_tuple('[1,null,2]','a','items','items[0]','missing') AS (a,items,index_like,missing)",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "json_tuple_literal_array_mismatch",
+          "sql": "SELECT json_tuple('[1,\"bad\"]','a','items','items[0]','missing') AS (a,items,index_like,missing)",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "json_tuple_literal_map",
+          "sql": "SELECT json_tuple('{\"x\":1,\"y\":null}','a','items','items[0]','missing') AS (a,items,index_like,missing)",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "json_tuple_literal_string_root",
+          "sql": "SELECT json_tuple('\"hello\"','a','items','items[0]','missing') AS (a,items,index_like,missing)",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "json_tuple_literal_number_root",
+          "sql": "SELECT json_tuple('17','a','items','items[0]','missing') AS (a,items,index_like,missing)",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "json_tuple_literal_empty_array",
+          "sql": "SELECT json_tuple('[]','a','items','items[0]','missing') AS (a,items,index_like,missing)",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "json_tuple_literal_empty_object",
+          "sql": "SELECT json_tuple('{}','a','items','items[0]','missing') AS (a,items,index_like,missing)",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "json_tuple_literal_invalid",
+          "sql": "SELECT json_tuple('{\"a\":','a','items','items[0]','missing') AS (a,items,index_like,missing)",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "json_tuple_literal_empty",
+          "sql": "SELECT json_tuple('','a','items','items[0]','missing') AS (a,items,index_like,missing)",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "json_tuple_literal_null",
+          "sql": "SELECT json_tuple(CAST(NULL AS STRING),'a','items','items[0]','missing') AS (a,items,index_like,missing)",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "json_tuple_literal_duplicate_input",
+          "sql": "SELECT json_tuple('{\"a\":1,\"nested\":{\"x\":\"ok\"},\"items\":[1,null,2],\"extra\":9}','a','items','items[0]','missing') AS (a,items,index_like,missing)",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "json_tuple_columns",
+          "sql": "SELECT id,json_tuple(j,'a','items','missing') AS (a,items,missing) FROM json_inputs ORDER BY id",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "json_tuple_lateral",
+          "sql": "SELECT id,a,again,missing FROM json_inputs LATERAL VIEW json_tuple(j,'a','a','missing') t AS a,again,missing ORDER BY id",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "from_json_columns_struct",
+          "sql": "SELECT id,from_json(j,'STRUCT<a:INT,nested:STRUCT<x:STRING>,items:ARRAY<INT>>') AS r FROM json_inputs ORDER BY id",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "from_json_struct_present",
+          "sql": "SELECT from_json('{\"a\":1,\"nested\":{\"x\":\"ok\"},\"items\":[1,null,2],\"extra\":9}','STRUCT<a:INT,nested:STRUCT<x:STRING>,items:ARRAY<INT>>') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "from_json_struct_missing",
+          "sql": "SELECT from_json('{\"nested\":{\"x\":\"only\"}}','STRUCT<a:INT,nested:STRUCT<x:STRING>,items:ARRAY<INT>>') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "from_json_struct_mismatch",
+          "sql": "SELECT from_json('{\"a\":\"bad\",\"nested\":3,\"items\":[\"bad\"]}','STRUCT<a:INT,nested:STRUCT<x:STRING>,items:ARRAY<INT>>') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "from_json_struct_invalid",
+          "sql": "SELECT from_json('{\"a\":','STRUCT<a:INT,nested:STRUCT<x:STRING>,items:ARRAY<INT>>') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "from_json_struct_empty",
+          "sql": "SELECT from_json('','STRUCT<a:INT,nested:STRUCT<x:STRING>,items:ARRAY<INT>>') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "from_json_struct_null",
+          "sql": "SELECT from_json(CAST(NULL AS STRING),'STRUCT<a:INT,nested:STRUCT<x:STRING>,items:ARRAY<INT>>') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "from_json_columns_array",
+          "sql": "SELECT id,from_json(j,'ARRAY<INT>') AS r FROM json_inputs ORDER BY id",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "from_json_array_array",
+          "sql": "SELECT from_json('[1,null,2]','ARRAY<INT>') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "from_json_array_array_mismatch",
+          "sql": "SELECT from_json('[1,\"bad\"]','ARRAY<INT>') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "from_json_array_invalid",
+          "sql": "SELECT from_json('{\"a\":','ARRAY<INT>') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "from_json_array_null",
+          "sql": "SELECT from_json(CAST(NULL AS STRING),'ARRAY<INT>') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "from_json_columns_map",
+          "sql": "SELECT id,from_json(j,'MAP<STRING,INT>') AS r FROM json_inputs ORDER BY id",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "from_json_map_map",
+          "sql": "SELECT from_json('{\"x\":1,\"y\":null}','MAP<STRING,INT>') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "from_json_map_mismatch",
+          "sql": "SELECT from_json('{\"a\":\"bad\",\"nested\":3,\"items\":[\"bad\"]}','MAP<STRING,INT>') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "from_json_map_invalid",
+          "sql": "SELECT from_json('{\"a\":','MAP<STRING,INT>') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "from_json_map_null",
+          "sql": "SELECT from_json(CAST(NULL AS STRING),'MAP<STRING,INT>') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "schema_of_json_nested",
+          "sql": "SELECT schema_of_json('{\"a\":{\"x\":\"yes\"},\"items\":[1,{\"b\":\"v\"}]}') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "schema_of_json_present",
+          "sql": "SELECT schema_of_json('{\"a\":1,\"nested\":{\"x\":\"ok\"},\"items\":[1,null,2],\"extra\":9}') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "schema_of_json_missing",
+          "sql": "SELECT schema_of_json('{\"nested\":{\"x\":\"only\"}}') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "schema_of_json_mismatch",
+          "sql": "SELECT schema_of_json('{\"a\":\"bad\",\"nested\":3,\"items\":[\"bad\"]}') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "schema_of_json_array",
+          "sql": "SELECT schema_of_json('[1,null,2]') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "schema_of_json_array_mismatch",
+          "sql": "SELECT schema_of_json('[1,\"bad\"]') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "schema_of_json_map",
+          "sql": "SELECT schema_of_json('{\"x\":1,\"y\":null}') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "schema_of_json_string_root",
+          "sql": "SELECT schema_of_json('\"hello\"') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "schema_of_json_number_root",
+          "sql": "SELECT schema_of_json('17') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "schema_of_json_empty_array",
+          "sql": "SELECT schema_of_json('[]') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "schema_of_json_empty_object",
+          "sql": "SELECT schema_of_json('{}') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "schema_of_json_empty",
+          "sql": "SELECT schema_of_json('') AS r",
+          "ordered": true,
+          "classification_note": "Spark rejection retained outside valid-query parity if rejected",
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "to_json_columns",
+          "sql": "SELECT id,to_json(st) AS object_json,to_json(m) AS map_json,to_json(a) AS array_json FROM complex_inputs ORDER BY id",
+          "ordered": true,
+          "classification_note": "Timestamp fraction text also checks recorded #1094; do not change that known-difference line",
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "to_json_literal",
+          "sql": "SELECT to_json(named_struct('a',1,'s','x')) AS st,to_json(map('b',2,'a',1)) AS m,to_json(array(1,CAST(NULL AS INT),2)) AS a",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "to_json_void_boundary",
+          "sql": "SELECT to_json(named_struct('typed',CAST(NULL AS STRING),'void',NULL)) AS r",
+          "ordered": true,
+          "classification_note": "Preserve recorded #1284; no new issue",
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "json_inspection_columns",
+          "sql": "SELECT id,json_array_length(j) AS array_length,json_object_keys(j) AS object_keys FROM json_inputs ORDER BY id",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "json_inspection_literal_array",
+          "sql": "SELECT json_array_length('[1,null,{}]') AS array_length,json_object_keys('[1,null,{}]') AS object_keys",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "json_inspection_literal_object",
+          "sql": "SELECT json_array_length('{\"b\":2,\"a\":1}') AS array_length,json_object_keys('{\"b\":2,\"a\":1}') AS object_keys",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "json_inspection_literal_invalid",
+          "sql": "SELECT json_array_length('bad') AS array_length,json_object_keys('bad') AS object_keys",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "json_inspection_literal_empty",
+          "sql": "SELECT json_array_length('') AS array_length,json_object_keys('') AS object_keys",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "json_inspection_literal_null",
+          "sql": "SELECT json_array_length(CAST(NULL AS STRING)) AS array_length,json_object_keys(CAST(NULL AS STRING)) AS object_keys",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "digest_columns",
+          "sql": "SELECT id,md5(s) AS md5_s,md5(b) AS md5_b,sha(s) AS sha_s,sha(b) AS sha_b,sha1(s) AS sha1_s,sha1(b) AS sha1_b,crc32(s) AS crc32_s,crc32(b) AS crc32_b FROM hash_inputs ORDER BY id",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "digest_literals",
+          "sql": "SELECT md5('abc') AS md5_text,md5(X'616263') AS md5_binary,md5('') AS md5_empty,md5(CAST(NULL AS STRING)) AS md5_null,sha('abc') AS sha_text,sha(X'616263') AS sha_binary,sha('') AS sha_empty,sha(CAST(NULL AS STRING)) AS sha_null,sha1('abc') AS sha1_text,sha1(X'616263') AS sha1_binary,sha1('') AS sha1_empty,sha1(CAST(NULL AS STRING)) AS sha1_null,crc32('abc') AS crc32_text,crc32(X'616263') AS crc32_binary,crc32('') AS crc32_empty,crc32(CAST(NULL AS STRING)) AS crc32_null",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "hash_single_columns",
+          "sql": "SELECT id,hash(i) AS h_i,hash(l) AS h_l,hash(d) AS h_d,hash(dec) AS h_dec,hash(s) AS h_s,hash(b) AS h_b,hash(flag) AS h_flag,hash(day) AS h_day,hash(ts) AS h_ts,hash(a) AS h_a,hash(st) AS h_st FROM hash_inputs ORDER BY id",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "hash_several_columns",
+          "sql": "SELECT id,hash(i,l,d,dec,s,b,flag,day,ts,a,st) AS all_types,hash(i,CAST(NULL AS INT),s) AS mixed_null,hash(CAST(NULL AS INT),CAST(NULL AS STRING)) AS all_null FROM hash_inputs ORDER BY id",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "hash_literals",
+          "sql": "SELECT hash(1) AS integer_value,hash(CAST(1 AS BIGINT)) AS long_value,hash(array(1,CAST(NULL AS INT),2)) AS array_value,hash(named_struct('x',1,'y','x')) AS struct_value,hash(CAST(NULL AS INT)) AS null_value",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "xxhash64_single_columns",
+          "sql": "SELECT id,xxhash64(i) AS h_i,xxhash64(l) AS h_l,xxhash64(d) AS h_d,xxhash64(dec) AS h_dec,xxhash64(s) AS h_s,xxhash64(b) AS h_b,xxhash64(flag) AS h_flag,xxhash64(day) AS h_day,xxhash64(ts) AS h_ts,xxhash64(a) AS h_a,xxhash64(st) AS h_st FROM hash_inputs ORDER BY id",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "xxhash64_several_columns",
+          "sql": "SELECT id,xxhash64(i,l,d,dec,s,b,flag,day,ts,a,st) AS all_types,xxhash64(i,CAST(NULL AS INT),s) AS mixed_null,xxhash64(CAST(NULL AS INT),CAST(NULL AS STRING)) AS all_null FROM hash_inputs ORDER BY id",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "xxhash64_literals",
+          "sql": "SELECT xxhash64(1) AS integer_value,xxhash64(CAST(1 AS BIGINT)) AS long_value,xxhash64(array(1,CAST(NULL AS INT),2)) AS array_value,xxhash64(named_struct('x',1,'y','x')) AS struct_value,xxhash64(CAST(NULL AS INT)) AS null_value",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": false
+        },
+        {
+          "id": "json_tuple_literal_nested",
+          "sql": "SELECT json_tuple('{\"a\":{\"x\":\"yes\"},\"items\":[1,{\"b\":\"v\"}]}','a','items','items[0]','missing') AS (a,items,index_like,missing)",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "json_tuple_literal_present",
+          "sql": "SELECT json_tuple('{\"a\":1,\"nested\":{\"x\":\"ok\"},\"items\":[1,null,2],\"extra\":9}','a','items','items[0]','missing') AS (a,items,index_like,missing)",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "json_tuple_literal_missing",
+          "sql": "SELECT json_tuple('{\"nested\":{\"x\":\"only\"}}','a','items','items[0]','missing') AS (a,items,index_like,missing)",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "json_tuple_literal_mismatch",
+          "sql": "SELECT json_tuple('{\"a\":\"bad\",\"nested\":3,\"items\":[\"bad\"]}','a','items','items[0]','missing') AS (a,items,index_like,missing)",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "json_tuple_literal_array",
+          "sql": "SELECT json_tuple('[1,null,2]','a','items','items[0]','missing') AS (a,items,index_like,missing)",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "json_tuple_literal_array_mismatch",
+          "sql": "SELECT json_tuple('[1,\"bad\"]','a','items','items[0]','missing') AS (a,items,index_like,missing)",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "json_tuple_literal_map",
+          "sql": "SELECT json_tuple('{\"x\":1,\"y\":null}','a','items','items[0]','missing') AS (a,items,index_like,missing)",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "json_tuple_literal_string_root",
+          "sql": "SELECT json_tuple('\"hello\"','a','items','items[0]','missing') AS (a,items,index_like,missing)",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "json_tuple_literal_number_root",
+          "sql": "SELECT json_tuple('17','a','items','items[0]','missing') AS (a,items,index_like,missing)",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "json_tuple_literal_empty_array",
+          "sql": "SELECT json_tuple('[]','a','items','items[0]','missing') AS (a,items,index_like,missing)",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "json_tuple_literal_empty_object",
+          "sql": "SELECT json_tuple('{}','a','items','items[0]','missing') AS (a,items,index_like,missing)",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "json_tuple_literal_invalid",
+          "sql": "SELECT json_tuple('{\"a\":','a','items','items[0]','missing') AS (a,items,index_like,missing)",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "json_tuple_literal_empty",
+          "sql": "SELECT json_tuple('','a','items','items[0]','missing') AS (a,items,index_like,missing)",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "json_tuple_literal_null",
+          "sql": "SELECT json_tuple(CAST(NULL AS STRING),'a','items','items[0]','missing') AS (a,items,index_like,missing)",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "json_tuple_literal_duplicate_input",
+          "sql": "SELECT json_tuple('{\"a\":1,\"nested\":{\"x\":\"ok\"},\"items\":[1,null,2],\"extra\":9}','a','items','items[0]','missing') AS (a,items,index_like,missing)",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "json_tuple_columns",
+          "sql": "SELECT id,json_tuple(j,'a','items','missing') AS (a,items,missing) FROM json_inputs ORDER BY id",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "json_tuple_lateral",
+          "sql": "SELECT id,a,again,missing FROM json_inputs LATERAL VIEW json_tuple(j,'a','a','missing') t AS a,again,missing ORDER BY id",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "from_json_columns_struct",
+          "sql": "SELECT id,from_json(j,'STRUCT<a:INT,nested:STRUCT<x:STRING>,items:ARRAY<INT>>') AS r FROM json_inputs ORDER BY id",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "from_json_struct_present",
+          "sql": "SELECT from_json('{\"a\":1,\"nested\":{\"x\":\"ok\"},\"items\":[1,null,2],\"extra\":9}','STRUCT<a:INT,nested:STRUCT<x:STRING>,items:ARRAY<INT>>') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "from_json_struct_missing",
+          "sql": "SELECT from_json('{\"nested\":{\"x\":\"only\"}}','STRUCT<a:INT,nested:STRUCT<x:STRING>,items:ARRAY<INT>>') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "from_json_struct_mismatch",
+          "sql": "SELECT from_json('{\"a\":\"bad\",\"nested\":3,\"items\":[\"bad\"]}','STRUCT<a:INT,nested:STRUCT<x:STRING>,items:ARRAY<INT>>') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "from_json_struct_invalid",
+          "sql": "SELECT from_json('{\"a\":','STRUCT<a:INT,nested:STRUCT<x:STRING>,items:ARRAY<INT>>') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "from_json_struct_empty",
+          "sql": "SELECT from_json('','STRUCT<a:INT,nested:STRUCT<x:STRING>,items:ARRAY<INT>>') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "from_json_struct_null",
+          "sql": "SELECT from_json(CAST(NULL AS STRING),'STRUCT<a:INT,nested:STRUCT<x:STRING>,items:ARRAY<INT>>') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "from_json_columns_array",
+          "sql": "SELECT id,from_json(j,'ARRAY<INT>') AS r FROM json_inputs ORDER BY id",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "from_json_array_array",
+          "sql": "SELECT from_json('[1,null,2]','ARRAY<INT>') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "from_json_array_array_mismatch",
+          "sql": "SELECT from_json('[1,\"bad\"]','ARRAY<INT>') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "from_json_array_invalid",
+          "sql": "SELECT from_json('{\"a\":','ARRAY<INT>') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "from_json_array_null",
+          "sql": "SELECT from_json(CAST(NULL AS STRING),'ARRAY<INT>') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "from_json_columns_map",
+          "sql": "SELECT id,from_json(j,'MAP<STRING,INT>') AS r FROM json_inputs ORDER BY id",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "from_json_map_map",
+          "sql": "SELECT from_json('{\"x\":1,\"y\":null}','MAP<STRING,INT>') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "from_json_map_mismatch",
+          "sql": "SELECT from_json('{\"a\":\"bad\",\"nested\":3,\"items\":[\"bad\"]}','MAP<STRING,INT>') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "from_json_map_invalid",
+          "sql": "SELECT from_json('{\"a\":','MAP<STRING,INT>') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "from_json_map_null",
+          "sql": "SELECT from_json(CAST(NULL AS STRING),'MAP<STRING,INT>') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "schema_of_json_nested",
+          "sql": "SELECT schema_of_json('{\"a\":{\"x\":\"yes\"},\"items\":[1,{\"b\":\"v\"}]}') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "schema_of_json_present",
+          "sql": "SELECT schema_of_json('{\"a\":1,\"nested\":{\"x\":\"ok\"},\"items\":[1,null,2],\"extra\":9}') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "schema_of_json_missing",
+          "sql": "SELECT schema_of_json('{\"nested\":{\"x\":\"only\"}}') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "schema_of_json_mismatch",
+          "sql": "SELECT schema_of_json('{\"a\":\"bad\",\"nested\":3,\"items\":[\"bad\"]}') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "schema_of_json_array",
+          "sql": "SELECT schema_of_json('[1,null,2]') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "schema_of_json_array_mismatch",
+          "sql": "SELECT schema_of_json('[1,\"bad\"]') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "schema_of_json_map",
+          "sql": "SELECT schema_of_json('{\"x\":1,\"y\":null}') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "schema_of_json_string_root",
+          "sql": "SELECT schema_of_json('\"hello\"') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "schema_of_json_number_root",
+          "sql": "SELECT schema_of_json('17') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "schema_of_json_empty_array",
+          "sql": "SELECT schema_of_json('[]') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "schema_of_json_empty_object",
+          "sql": "SELECT schema_of_json('{}') AS r",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "schema_of_json_empty",
+          "sql": "SELECT schema_of_json('') AS r",
+          "ordered": true,
+          "classification_note": "Spark rejection retained outside valid-query parity if rejected",
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "to_json_columns",
+          "sql": "SELECT id,to_json(st) AS object_json,to_json(m) AS map_json,to_json(a) AS array_json FROM complex_inputs ORDER BY id",
+          "ordered": true,
+          "classification_note": "Timestamp fraction text also checks recorded #1094; do not change that known-difference line",
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "to_json_literal",
+          "sql": "SELECT to_json(named_struct('a',1,'s','x')) AS st,to_json(map('b',2,'a',1)) AS m,to_json(array(1,CAST(NULL AS INT),2)) AS a",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "to_json_void_boundary",
+          "sql": "SELECT to_json(named_struct('typed',CAST(NULL AS STRING),'void',NULL)) AS r",
+          "ordered": true,
+          "classification_note": "Preserve recorded #1284; no new issue",
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "json_inspection_columns",
+          "sql": "SELECT id,json_array_length(j) AS array_length,json_object_keys(j) AS object_keys FROM json_inputs ORDER BY id",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "json_inspection_literal_array",
+          "sql": "SELECT json_array_length('[1,null,{}]') AS array_length,json_object_keys('[1,null,{}]') AS object_keys",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "json_inspection_literal_object",
+          "sql": "SELECT json_array_length('{\"b\":2,\"a\":1}') AS array_length,json_object_keys('{\"b\":2,\"a\":1}') AS object_keys",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "json_inspection_literal_invalid",
+          "sql": "SELECT json_array_length('bad') AS array_length,json_object_keys('bad') AS object_keys",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "json_inspection_literal_empty",
+          "sql": "SELECT json_array_length('') AS array_length,json_object_keys('') AS object_keys",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "json_inspection_literal_null",
+          "sql": "SELECT json_array_length(CAST(NULL AS STRING)) AS array_length,json_object_keys(CAST(NULL AS STRING)) AS object_keys",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "digest_columns",
+          "sql": "SELECT id,md5(s) AS md5_s,md5(b) AS md5_b,sha(s) AS sha_s,sha(b) AS sha_b,sha1(s) AS sha1_s,sha1(b) AS sha1_b,crc32(s) AS crc32_s,crc32(b) AS crc32_b FROM hash_inputs ORDER BY id",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "digest_literals",
+          "sql": "SELECT md5('abc') AS md5_text,md5(X'616263') AS md5_binary,md5('') AS md5_empty,md5(CAST(NULL AS STRING)) AS md5_null,sha('abc') AS sha_text,sha(X'616263') AS sha_binary,sha('') AS sha_empty,sha(CAST(NULL AS STRING)) AS sha_null,sha1('abc') AS sha1_text,sha1(X'616263') AS sha1_binary,sha1('') AS sha1_empty,sha1(CAST(NULL AS STRING)) AS sha1_null,crc32('abc') AS crc32_text,crc32(X'616263') AS crc32_binary,crc32('') AS crc32_empty,crc32(CAST(NULL AS STRING)) AS crc32_null",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "hash_single_columns",
+          "sql": "SELECT id,hash(i) AS h_i,hash(l) AS h_l,hash(d) AS h_d,hash(dec) AS h_dec,hash(s) AS h_s,hash(b) AS h_b,hash(flag) AS h_flag,hash(day) AS h_day,hash(ts) AS h_ts,hash(a) AS h_a,hash(st) AS h_st FROM hash_inputs ORDER BY id",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "hash_several_columns",
+          "sql": "SELECT id,hash(i,l,d,dec,s,b,flag,day,ts,a,st) AS all_types,hash(i,CAST(NULL AS INT),s) AS mixed_null,hash(CAST(NULL AS INT),CAST(NULL AS STRING)) AS all_null FROM hash_inputs ORDER BY id",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "hash_literals",
+          "sql": "SELECT hash(1) AS integer_value,hash(CAST(1 AS BIGINT)) AS long_value,hash(array(1,CAST(NULL AS INT),2)) AS array_value,hash(named_struct('x',1,'y','x')) AS struct_value,hash(CAST(NULL AS INT)) AS null_value",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "xxhash64_single_columns",
+          "sql": "SELECT id,xxhash64(i) AS h_i,xxhash64(l) AS h_l,xxhash64(d) AS h_d,xxhash64(dec) AS h_dec,xxhash64(s) AS h_s,xxhash64(b) AS h_b,xxhash64(flag) AS h_flag,xxhash64(day) AS h_day,xxhash64(ts) AS h_ts,xxhash64(a) AS h_a,xxhash64(st) AS h_st FROM hash_inputs ORDER BY id",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "xxhash64_several_columns",
+          "sql": "SELECT id,xxhash64(i,l,d,dec,s,b,flag,day,ts,a,st) AS all_types,xxhash64(i,CAST(NULL AS INT),s) AS mixed_null,xxhash64(CAST(NULL AS INT),CAST(NULL AS STRING)) AS all_null FROM hash_inputs ORDER BY id",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        },
+        {
+          "id": "xxhash64_literals",
+          "sql": "SELECT xxhash64(1) AS integer_value,xxhash64(CAST(1 AS BIGINT)) AS long_value,xxhash64(array(1,CAST(NULL AS INT),2)) AS array_value,xxhash64(named_struct('x',1,'y','x')) AS struct_value,xxhash64(CAST(NULL AS INT)) AS null_value",
+          "ordered": true,
+          "corpus": "json_hash_remaining",
+          "ansi": true
+        }
+      ]
+    }
+  ],
+  "spark_rejected_source_requests_retained": "1352-remaining-requests.json"
+}
