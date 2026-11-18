@@ -151,6 +151,10 @@ harness = false
 name = "bounded_windows"
 harness = false
 
+[[bench]]
+name = "planning"
+harness = false
+
 [patch.crates-io]
 arrow-arith = { path = "vendor/dependencies/arrow-arith" }
 arrow-array = { path = "vendor/dependencies/arrow-array" }
