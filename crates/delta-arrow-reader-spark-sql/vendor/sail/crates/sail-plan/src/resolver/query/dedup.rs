@@ -22,6 +22,7 @@ impl PlanResolver<'_> {
         let input = self
             .resolve_query_plan_with_hidden_fields(*input, state)
             .await?;
+        let input = self.remove_hidden_fields(input, state, false)?;
         let schema = input.schema();
         if within_watermark {
             return Err(PlanError::todo("deduplicate within watermark"));

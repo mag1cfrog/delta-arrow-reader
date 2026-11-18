@@ -25,7 +25,8 @@ pub(crate) async fn plan_statement(
         PlanResolver::new(session, Arc::new(options.clone()))
     } else {
         PlanResolver::new_for_metadata(session, Arc::new(options.clone()))
-    };
+    }
+    .with_file_metadata_adapter(Arc::new(crate::file_metadata::adapt));
     let resolve = async |query| {
         let named = resolver
             .resolve_named_plan(query)

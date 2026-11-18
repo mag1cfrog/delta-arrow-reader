@@ -27,6 +27,7 @@ impl PlanResolver<'_> {
             ctx: self.ctx,
             config: Arc::new(self.config.with_normalized_timezone()?),
             allow_host_functions: self.allow_host_functions,
+            file_metadata_adapter: self.file_metadata_adapter.clone(),
         };
         let mut state = PlanResolverState::new();
         let plan = resolver.resolve_query_plan(query, &mut state).await?;

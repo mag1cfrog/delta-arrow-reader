@@ -38,7 +38,18 @@ impl PlanResolver<'_> {
         let plan = self
             .resolve_query_plan_with_hidden_fields(plan, state)
             .await?;
-        self.remove_hidden_fields(plan, state)
+        self.remove_hidden_fields(plan, state, false)
+    }
+
+    async fn resolve_query_plan_with_file_metadata(
+        &self,
+        plan: spec::QueryPlan,
+        state: &mut PlanResolverState,
+    ) -> PlanResult<LogicalPlan> {
+        let plan = self
+            .resolve_query_plan_with_hidden_fields(plan, state)
+            .await?;
+        self.remove_hidden_fields(plan, state, true)
     }
 
     /// Resolve query plan.
@@ -230,12 +241,13 @@ impl PlanResolver<'_> {
         &self,
         plan: LogicalPlan,
         state: &PlanResolverState,
+        keep_file_metadata: bool,
     ) -> PlanResult<LogicalPlan> {
         let mut columns = vec![];
         let mut has_hidden_columns = false;
         for column in plan.schema().columns() {
             let info = state.get_field_info(column.name())?;
-            if info.is_hidden() {
+            if info.is_hidden() && !(keep_file_metadata && info.file_metadata().is_some()) {
                 has_hidden_columns = true;
             } else {
                 columns.push(column);

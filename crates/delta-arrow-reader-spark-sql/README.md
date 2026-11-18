@@ -145,10 +145,36 @@ an outer `ORDER BY` or `LIMIT`. Partition IDs refer to the execution layout;
 monotonic IDs are unique and increase within a partition. Unordered `first`,
 `last` and `collect_list` checks use membership and counts.
 
-`input_file_name()` is unsupported. Registered Delta providers do not inject a
-`_metadata.file_path` column from file origin; referencing that absent field
-reports a missing-field error. Stored columns and query aliases named `_metadata`
-remain available as ordinary user data.
+For directly registered `DeltaTableProvider` snapshots, `input_file_name()`
+returns each row's full file URI. It returns an empty STRING for nonfile sources
+and opaque host provider contracts. A join with multiple file sources rejects
+`input_file_name()`; qualified metadata fields can identify each source instead.
+The fields `_metadata.file_path` and `_metadata.file_name` expose the same URI
+and the decoded object-key basename. Stored columns and preceding SELECT aliases
+named `_metadata` take priority. Generated fields stay out of ordinary and
+qualified `SELECT *`, `DESCRIBE` and `SHOW COLUMNS` output.
+
+File URIs retain the Core reader's canonical scheme and percent-encoded path,
+including the bucket or container. Authentication components, query strings and
+fragments are removed; an Azure container username remains part of the store
+identity. File size and modification time are not offered. Planning uses Core's
+opt-in file metadata provider without changing the session's registrations.
+Unrequested metadata is projected away, and ordinary data scans retain Core's
+existing read path. Normal column projection pushdown avoids building unused
+metadata constants; hosts that disable pruning may build them without changing
+results or file reads. Native `SessionContext::sql` keeps its original schema
+and behavior.
+
+The [file-origin references](tests/fixtures/file-metadata/README.md) compare
+`input_file_name()` with Spark 4.2.0 reading local Parquet files, including simple
+subqueries and CTEs. The capture environment has no Delta Lake installation, so
+these references do not establish Spark Delta metadata parity. Real Delta
+fixtures separately check row-to-file membership, deletion vectors and column
+mapping in both ANSI modes.
+Spark can report empty `input_file_name()` values after broadcasting the file
+side of a file/nonfile join. This reader retains that source's per-row URI.
+The [reference controls](tests/fixtures/file-metadata/README.md) record this
+execution-policy difference separately from strict value comparisons.
 
 Floating DISTINCT set results can differ from Spark in their `0.0`/`-0.0` text
 after projection and LIMIT optimization. The [set-result references](tests/fixtures/README.md#floating-intersect-and-except-results)

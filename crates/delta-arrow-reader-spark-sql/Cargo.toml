@@ -121,13 +121,13 @@ datafusion = { version = "=54.1.0", default-features = false, features = ["sql"]
 sail-common-datafusion = { path = "vendor/sail/crates/sail-common-datafusion" }
 sail-plan = { path = "vendor/sail/crates/sail-plan" }
 sail-sql-analyzer = { path = "vendor/sail/crates/sail-sql-analyzer" }
+delta-arrow-reader = { path = "../delta-arrow-reader-core", features = ["datafusion"] }
 
 [dev-dependencies]
 async-trait = { workspace = true }
 arrow = "=58.4.0"
 bytes = "1"
 datasketches = { workspace = true }
-delta-arrow-reader = { path = "../delta-arrow-reader-core", features = ["datafusion"] }
 delta_kernel = { version = "=0.25.0", default-features = false, features = ["arrow", "internal-api"] }
 delta_kernel_default_engine = { version = "=0.25.0", default-features = false, features = ["arrow", "rustls"] }
 flate2 = "1"

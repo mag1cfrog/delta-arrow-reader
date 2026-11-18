@@ -56,7 +56,14 @@ impl PlanResolver<'_> {
             self.rewrite_aggregate(input, expr, vec![], None, false, state)
         } else {
             let (input, expr) = self.materialize_projection_aliases(input, expr, None)?;
-            let expr = self.rewrite_named_expressions(expr, state)?;
+            let mut expr = self.rewrite_named_expressions(expr, state)?;
+            expr.extend(input.schema().iter().filter_map(|(q, field)| {
+                state
+                    .get_field_info(field.name())
+                    .ok()?
+                    .file_metadata()
+                    .map(|_| Expr::Column(Column::from((q, field))))
+            }));
             Ok(LogicalPlan::Projection(Projection::try_new(
                 expr,
                 Arc::new(input),
@@ -139,7 +146,7 @@ impl PlanResolver<'_> {
                 ));
             };
             let info = state.get_field_info(column.name())?;
-            if info.is_hidden() && !qualified {
+            if info.file_metadata().is_some() || (info.is_hidden() && !qualified) {
                 return Ok(None);
             }
             Ok(Some(
@@ -175,7 +182,9 @@ impl PlanResolver<'_> {
                         continue;
                     }
                     let info = state.get_field_info(field.name())?;
-                    if info.is_hidden() && qualifier_filter.is_none() {
+                    if info.file_metadata().is_some()
+                        || (info.is_hidden() && qualifier_filter.is_none())
+                    {
                         continue;
                     }
                     let mut outer_field = field.as_ref().clone();

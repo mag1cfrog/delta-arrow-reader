@@ -17,20 +17,30 @@ impl PlanResolver<'_> {
         columns: Vec<spec::Identifier>,
         state: &mut PlanResolverState,
     ) -> PlanResult<LogicalPlan> {
-        let input = self.resolve_query_plan(input, state).await?;
+        let input = self
+            .resolve_query_plan_with_file_metadata(input, state)
+            .await?;
         let schema = input.schema();
         let input = if columns.is_empty() {
             input
         } else {
-            if columns.len() != schema.fields().len() {
+            let visible = schema
+                .columns()
+                .into_iter()
+                .filter(|column| {
+                    state
+                        .get_field_info(column.name())
+                        .is_ok_and(|info| info.file_metadata().is_none())
+                })
+                .collect::<Vec<_>>();
+            if columns.len() != visible.len() {
                 return Err(PlanError::invalid(format!(
                     "number of column names ({}) does not match number of columns ({})",
                     columns.len(),
-                    schema.fields().len()
+                    visible.len()
                 )));
             }
-            let expr: Vec<Expr> = schema
-                .columns()
+            let mut expr: Vec<Expr> = visible
                 .into_iter()
                 .zip(columns)
                 .map(|(col, name)| {
@@ -40,6 +50,17 @@ impl PlanResolver<'_> {
                     Expr::Column(col.clone()).alias(field_id)
                 })
                 .collect();
+            expr.extend(
+                schema
+                    .columns()
+                    .into_iter()
+                    .filter(|column| {
+                        state
+                            .get_field_info(column.name())
+                            .is_ok_and(|info| info.file_metadata().is_some())
+                    })
+                    .map(Expr::Column),
+            );
             LogicalPlan::Projection(Projection::try_new(expr, Arc::new(input))?)
         };
         Ok(LogicalPlan::SubqueryAlias(SubqueryAlias::try_new(

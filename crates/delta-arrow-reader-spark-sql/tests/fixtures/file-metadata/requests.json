@@ -1,0 +1,301 @@
+{
+  "issue": 1343,
+  "base": "8c0b68af22335b5a79d7bf5bf8dfb51e29ae3eb2",
+  "expected_record_count": 28,
+  "corpora": [
+    {
+      "corpus": "file_metadata",
+      "source": "Independent Spark 4.2 local Parquet input_file_name and ordinary stored/aliased metadata controls; no Delta Lake installation or virtual Delta metadata claim.",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "mem_source",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "customer_name",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                "file-a-1"
+              ],
+              [
+                "2",
+                "file-a-2"
+              ],
+              [
+                "3",
+                "file-b-3"
+              ],
+              [
+                "4",
+                "file-b-4"
+              ]
+            ]
+          },
+          {
+            "name": "stored_source",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "_metadata",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "file_path",
+                        "type": "string",
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                [
+                  "ordinary-a"
+                ]
+              ],
+              [
+                "2",
+                null
+              ],
+              [
+                "3",
+                [
+                  "ordinary-c"
+                ]
+              ]
+            ]
+          }
+        ],
+        "file_input": "mem_source",
+        "partition_rule": "IDs <= 2 in part-00001.parquet; IDs > 2 in part-00002.parquet"
+      },
+      "cases": [
+        {
+          "id": "nonfile",
+          "sql": "SELECT id,input_file_name() AS file FROM mem_source ORDER BY id",
+          "ansi": false,
+          "ordered": true,
+          "corpus": "file_metadata"
+        },
+        {
+          "id": "nonfile",
+          "sql": "SELECT id,input_file_name() AS file FROM mem_source ORDER BY id",
+          "ansi": true,
+          "ordered": true,
+          "corpus": "file_metadata"
+        },
+        {
+          "id": "stored_metadata",
+          "sql": "SELECT id,_metadata.file_path AS path FROM stored_source ORDER BY id",
+          "ansi": false,
+          "ordered": true,
+          "corpus": "file_metadata"
+        },
+        {
+          "id": "stored_metadata",
+          "sql": "SELECT id,_metadata.file_path AS path FROM stored_source ORDER BY id",
+          "ansi": true,
+          "ordered": true,
+          "corpus": "file_metadata"
+        },
+        {
+          "id": "alias_metadata",
+          "sql": "SELECT named_struct('file_path','alias') AS _metadata,_metadata.file_path AS path FROM file_source ORDER BY id",
+          "ansi": false,
+          "ordered": true,
+          "corpus": "file_metadata"
+        },
+        {
+          "id": "alias_metadata",
+          "sql": "SELECT named_struct('file_path','alias') AS _metadata,_metadata.file_path AS path FROM file_source ORDER BY id",
+          "ansi": true,
+          "ordered": true,
+          "corpus": "file_metadata"
+        },
+        {
+          "id": "file_origin",
+          "sql": "SELECT id,input_file_name() AS file FROM file_source ORDER BY id",
+          "ansi": false,
+          "ordered": true,
+          "corpus": "file_metadata"
+        },
+        {
+          "id": "file_origin",
+          "sql": "SELECT id,input_file_name() AS file FROM file_source ORDER BY id",
+          "ansi": true,
+          "ordered": true,
+          "corpus": "file_metadata"
+        },
+        {
+          "id": "subquery",
+          "sql": "SELECT id,input_file_name() AS file FROM (SELECT id FROM file_source) x ORDER BY id",
+          "ansi": false,
+          "ordered": true,
+          "corpus": "file_metadata"
+        },
+        {
+          "id": "subquery",
+          "sql": "SELECT id,input_file_name() AS file FROM (SELECT id FROM file_source) x ORDER BY id",
+          "ansi": true,
+          "ordered": true,
+          "corpus": "file_metadata"
+        },
+        {
+          "id": "cte",
+          "sql": "WITH x AS (SELECT id FROM file_source) SELECT id,input_file_name() AS file FROM x ORDER BY id",
+          "ansi": false,
+          "ordered": true,
+          "corpus": "file_metadata"
+        },
+        {
+          "id": "cte",
+          "sql": "WITH x AS (SELECT id FROM file_source) SELECT id,input_file_name() AS file FROM x ORDER BY id",
+          "ansi": true,
+          "ordered": true,
+          "corpus": "file_metadata"
+        },
+        {
+          "id": "file_mem_join",
+          "sql": "SELECT f.id,input_file_name() AS file FROM file_source f JOIN mem_source m ON f.id=m.id ORDER BY f.id",
+          "ansi": false,
+          "ordered": true,
+          "corpus": "file_metadata"
+        },
+        {
+          "id": "file_mem_join",
+          "sql": "SELECT f.id,input_file_name() AS file FROM file_source f JOIN mem_source m ON f.id=m.id ORDER BY f.id",
+          "ansi": true,
+          "ordered": true,
+          "corpus": "file_metadata"
+        },
+        {
+          "id": "file_join_rejected",
+          "sql": "SELECT input_file_name() AS file FROM file_source a JOIN file_source b ON a.id=b.id",
+          "ansi": false,
+          "ordered": true,
+          "corpus": "file_metadata"
+        },
+        {
+          "id": "file_join_rejected",
+          "sql": "SELECT input_file_name() AS file FROM file_source a JOIN file_source b ON a.id=b.id",
+          "ansi": true,
+          "ordered": true,
+          "corpus": "file_metadata"
+        },
+        {
+          "id": "qualified_star",
+          "sql": "SELECT f.* FROM file_source f ORDER BY id",
+          "ansi": false,
+          "ordered": true,
+          "corpus": "file_metadata"
+        },
+        {
+          "id": "qualified_star",
+          "sql": "SELECT f.* FROM file_source f ORDER BY id",
+          "ansi": true,
+          "ordered": true,
+          "corpus": "file_metadata"
+        },
+        {
+          "id": "file_filter",
+          "sql": "SELECT id,input_file_name() AS file FROM file_source WHERE input_file_name() <> '' AND id >= 2 ORDER BY id",
+          "ansi": false,
+          "ordered": true,
+          "corpus": "file_metadata"
+        },
+        {
+          "id": "file_filter",
+          "sql": "SELECT id,input_file_name() AS file FROM file_source WHERE input_file_name() <> '' AND id >= 2 ORDER BY id",
+          "ansi": true,
+          "ordered": true,
+          "corpus": "file_metadata"
+        },
+        {
+          "id": "file_group",
+          "sql": "SELECT input_file_name() AS file,count(*) AS n FROM file_source GROUP BY input_file_name() ORDER BY file",
+          "ansi": false,
+          "ordered": true,
+          "corpus": "file_metadata"
+        },
+        {
+          "id": "file_group",
+          "sql": "SELECT input_file_name() AS file,count(*) AS n FROM file_source GROUP BY input_file_name() ORDER BY file",
+          "ansi": true,
+          "ordered": true,
+          "corpus": "file_metadata"
+        },
+        {
+          "id": "left_unmatched",
+          "sql": "SELECT m.id,input_file_name() AS file FROM (SELECT 99 AS id) m LEFT OUTER JOIN file_source f ON f.id=m.id WHERE f.id IS NULL",
+          "ansi": false,
+          "ordered": true,
+          "corpus": "file_metadata"
+        },
+        {
+          "id": "left_unmatched",
+          "sql": "SELECT m.id,input_file_name() AS file FROM (SELECT 99 AS id) m LEFT OUTER JOIN file_source f ON f.id=m.id WHERE f.id IS NULL",
+          "ansi": true,
+          "ordered": true,
+          "corpus": "file_metadata"
+        },
+        {
+          "id": "right_unmatched",
+          "sql": "SELECT m.id,input_file_name() AS file FROM file_source f RIGHT OUTER JOIN (SELECT 99 AS id) m ON f.id=m.id WHERE f.id IS NULL",
+          "ansi": false,
+          "ordered": true,
+          "corpus": "file_metadata"
+        },
+        {
+          "id": "right_unmatched",
+          "sql": "SELECT m.id,input_file_name() AS file FROM file_source f RIGHT OUTER JOIN (SELECT 99 AS id) m ON f.id=m.id WHERE f.id IS NULL",
+          "ansi": true,
+          "ordered": true,
+          "corpus": "file_metadata"
+        },
+        {
+          "id": "full_unmatched",
+          "sql": "SELECT m.id,input_file_name() AS file FROM file_source f FULL OUTER JOIN (SELECT 99 AS id) m ON f.id=m.id WHERE f.id IS NULL",
+          "ansi": false,
+          "ordered": true,
+          "corpus": "file_metadata"
+        },
+        {
+          "id": "full_unmatched",
+          "sql": "SELECT m.id,input_file_name() AS file FROM file_source f FULL OUTER JOIN (SELECT 99 AS id) m ON f.id=m.id WHERE f.id IS NULL",
+          "ansi": true,
+          "ordered": true,
+          "corpus": "file_metadata"
+        }
+      ]
+    }
+  ]
+}

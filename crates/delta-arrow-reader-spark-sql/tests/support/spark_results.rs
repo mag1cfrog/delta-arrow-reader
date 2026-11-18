@@ -901,7 +901,12 @@ fn spark_schema_type(data_type: &DataType) -> TestResult<Value> {
         DataType::Date32 => json!("date"),
         DataType::Timestamp(TimeUnit::Microsecond, None) => json!("timestamp_ntz"),
         DataType::Timestamp(TimeUnit::Microsecond, Some(_)) => json!("timestamp"),
-        DataType::Utf8 => json!("string"),
+        DataType::Utf8 | DataType::Utf8View => json!("string"),
+        DataType::Dictionary(_, value)
+            if matches!(value.as_ref(), DataType::Utf8 | DataType::Utf8View) =>
+        {
+            json!("string")
+        }
         DataType::Binary => json!("binary"),
         DataType::List(field) => json!({"type":"array",
             "elementType":spark_schema_type(field.data_type())?,"containsNull":field.is_nullable()}),

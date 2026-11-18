@@ -251,7 +251,8 @@ impl PlanResolver<'_> {
                         let Ok(info) = state.get_field_info(field.name()) else {
                             return None;
                         };
-                        if (!info.is_hidden() || q.is_some())
+                        if info.file_metadata().is_none()
+                            && (!info.is_hidden() || q.is_some())
                             && qualifier_matches(q.as_ref(), qualifier)
                             && info.name().eq_ignore_ascii_case(column.as_ref())
                         {

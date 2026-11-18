@@ -7,8 +7,7 @@ use std::{
 };
 
 use arrow::{
-    array::{Array, Int32Array, Int64Array, ListArray, StringArray, StructArray},
-    buffer::NullBuffer,
+    array::{Array, Int32Array, Int64Array, ListArray},
     datatypes::{DataType, Field, Schema},
     record_batch::RecordBatch,
 };
@@ -25,7 +24,6 @@ use delta_arrow_reader::{
     datafusion::{DeltaTableProvider, ScanOptions, collect_scan_metrics},
 };
 use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
-use parquet::arrow::ArrowWriter;
 use serde_json::{Value, json};
 
 #[allow(dead_code)]
@@ -229,41 +227,9 @@ async fn bounded_ranges_match_spark_values_types_and_requested_partitions() -> T
     Ok(())
 }
 
-fn stored_metadata_fixture() -> TestResult<RealParquetDeltaTable> {
-    let children = vec![Arc::new(Field::new("file_path", DataType::Utf8, true))].into();
-    let metadata = StructArray::new(
-        children,
-        vec![Arc::new(StringArray::from(vec![
-            "ordinary-a",
-            "hidden-under-null",
-            "ordinary-c",
-        ]))],
-        Some(NullBuffer::from(vec![true, false, true])),
-    );
-    let schema = Arc::new(Schema::new(vec![
-        Field::new("id", DataType::Int32, false),
-        Field::new("_metadata", metadata.data_type().clone(), true),
-    ]));
-    let batch = RecordBatch::try_new(
-        schema.clone(),
-        vec![
-            Arc::new(Int32Array::from(vec![1, 2, 3])),
-            Arc::new(metadata),
-        ],
-    )?;
-    let mut bytes = vec![];
-    let mut writer = ArrowWriter::try_new(&mut bytes, schema, None)?;
-    writer.write(&batch)?;
-    writer.close()?;
-    let metadata = json!({"metaData":{"id":"ordinary-metadata-field","format":{"provider":"parquet","options":{}},"schemaString":json!({"type":"struct","fields":[{"name":"id","type":"integer","nullable":false,"metadata":{}},{"name":"_metadata","type":{"type":"struct","fields":[{"name":"file_path","type":"string","nullable":true,"metadata":{}}]},"nullable":true,"metadata":{}}]}).to_string(),"partitionColumns":[],"configuration":{},"createdTime":0}});
-    RealParquetDeltaTable::new_with_raw_parquet(
-        "stored-metadata-field",
-        &bytes,
-        3,
-        &json!({"protocol":{"minReaderVersion":1,"minWriterVersion":2}}),
-        &metadata,
-    )
-}
+#[path = "support/file_metadata.rs"]
+mod file_metadata_fixture;
+use file_metadata_fixture::stored_metadata_fixture;
 
 struct DeltaFeatureFixture {
     _files: Vec<RealParquetDeltaTable>,
@@ -328,45 +294,18 @@ impl DeltaFeatureFixture {
 }
 
 #[tokio::test]
-async fn unsupported_execution_features_keep_ordinary_metadata_fields_available() -> TestResult {
+async fn file_metadata_keeps_ordinary_stored_and_aliased_fields_available() -> TestResult {
     let fixture = DeltaFeatureFixture::new(3, 7).await?;
     for ansi_mode in [false, true] {
-        for (sql, feature) in [
-            ("SELECT input_file_name() FROM source", "input_file_name"),
-            ("SELECT _metadata.file_path FROM source", "_metadata"),
-            ("SELECT s._metadata.file_path FROM source s", "_metadata"),
-        ] {
-            let error = match plan_query(
-                &fixture.session,
-                sql,
-                &SparkSqlOptions {
-                    ansi_mode,
-                    ..Default::default()
-                },
-            )
-            .await
-            {
-                Err(error) => error.to_string(),
-                Ok(_) => return Err("feature unexpectedly admitted".into()),
-            };
-            assert!(error.contains(feature), "{error}");
-            assert!(
-                error.contains("not implemented")
-                    || error.contains("not supported")
-                    || error.contains("missing from the schema"),
-                "{error}"
-            );
-            for store in &fixture.stores {
-                assert!(
-                    store
-                        .reads
-                        .lock()
-                        .map_err(|_| "read log poisoned")?
-                        .is_empty()
-                );
-            }
-            println!("EXECUTION_UNSUPPORTED ansi={ansi_mode} feature={feature} error={error}");
-        }
+        let result = capture_executed_query_result(
+            &fixture.session,
+            &json!({
+                "sql":"SELECT input_file_name() AS file FROM source", "ansi":ansi_mode
+            }),
+        )
+        .await
+        .map_err(|error| error as Box<dyn std::error::Error>)?;
+        assert_eq!(result["rows"], json!([[""], [""], [""]]));
     }
     let records = references()?;
     for case in records.iter().filter(|case| {
