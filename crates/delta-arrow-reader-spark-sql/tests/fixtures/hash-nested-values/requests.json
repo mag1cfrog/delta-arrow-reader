@@ -1,0 +1,434 @@
+{
+  "issue": 1366,
+  "base": "6b5dbcac2b4260cf2aa2975c411101bb2418793d",
+  "expected_record_count": 10,
+  "purpose": "Source-only nested HASH references with concrete varying-seed and NULL/empty witnesses.",
+  "corpora": [
+    {
+      "corpus": "hash_nested_values",
+      "source": "Bounded nested ARRAY/STRUCT values, NULL/empty containers and children, duplicate rows, normal decimals, and multi-argument seeds.",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "nested_hash_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "a_i",
+                  "type": {
+                    "type": "array",
+                    "elementType": "integer",
+                    "containsNull": true
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "a_nested",
+                  "type": {
+                    "type": "array",
+                    "elementType": {
+                      "type": "array",
+                      "elementType": "integer",
+                      "containsNull": true
+                    },
+                    "containsNull": true
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "st",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "a",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "b",
+                        "type": "string",
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "a_st",
+                  "type": {
+                    "type": "array",
+                    "elementType": {
+                      "type": "struct",
+                      "fields": [
+                        {
+                          "name": "a",
+                          "type": "integer",
+                          "nullable": true,
+                          "metadata": {}
+                        },
+                        {
+                          "name": "b",
+                          "type": "string",
+                          "nullable": true,
+                          "metadata": {}
+                        }
+                      ]
+                    },
+                    "containsNull": true
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "st_a",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "a",
+                        "type": {
+                          "type": "array",
+                          "elementType": "integer",
+                          "containsNull": true
+                        },
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "b",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "a_d",
+                  "type": {
+                    "type": "array",
+                    "elementType": "decimal(38,3)",
+                    "containsNull": true
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "st_d",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "small",
+                        "type": "decimal(12,3)",
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "wide",
+                        "type": "decimal(38,3)",
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                [
+                  "1",
+                  null,
+                  "2"
+                ],
+                [
+                  [
+                    "1",
+                    null
+                  ],
+                  [],
+                  null,
+                  [
+                    "2"
+                  ]
+                ],
+                [
+                  "1",
+                  "x"
+                ],
+                [
+                  [
+                    "1",
+                    "x"
+                  ],
+                  null,
+                  [
+                    "2",
+                    null
+                  ]
+                ],
+                [
+                  [
+                    "1",
+                    null,
+                    "2"
+                  ],
+                  "3"
+                ],
+                [
+                  "7.250",
+                  null,
+                  "-1.000"
+                ],
+                [
+                  "7.250",
+                  "-1.000"
+                ]
+              ],
+              [
+                "2",
+                [],
+                [],
+                [
+                  null,
+                  null
+                ],
+                [],
+                [
+                  [],
+                  null
+                ],
+                [],
+                [
+                  null,
+                  null
+                ]
+              ],
+              [
+                "3",
+                [
+                  null
+                ],
+                [
+                  null,
+                  []
+                ],
+                [
+                  null,
+                  ""
+                ],
+                [
+                  [
+                    null,
+                    null
+                  ]
+                ],
+                [
+                  null,
+                  "0"
+                ],
+                [
+                  null
+                ],
+                [
+                  "0.000",
+                  "0.000"
+                ]
+              ],
+              [
+                "4",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+              ],
+              [
+                "5",
+                [
+                  "-1",
+                  "2"
+                ],
+                [
+                  [
+                    "-1"
+                  ],
+                  [
+                    "2"
+                  ]
+                ],
+                [
+                  "-1",
+                  "z"
+                ],
+                [
+                  [
+                    "-1",
+                    "z"
+                  ]
+                ],
+                [
+                  [
+                    "-1"
+                  ],
+                  "2"
+                ],
+                [
+                  "-2.500"
+                ],
+                [
+                  "-2.500",
+                  "7.250"
+                ]
+              ],
+              [
+                "6",
+                [
+                  "1",
+                  null,
+                  "2"
+                ],
+                [
+                  [
+                    "1",
+                    null
+                  ],
+                  [],
+                  null,
+                  [
+                    "2"
+                  ]
+                ],
+                [
+                  "1",
+                  "x"
+                ],
+                [
+                  [
+                    "1",
+                    "x"
+                  ],
+                  null,
+                  [
+                    "2",
+                    null
+                  ]
+                ],
+                [
+                  [
+                    "1",
+                    null,
+                    "2"
+                  ],
+                  "3"
+                ],
+                [
+                  "7.250",
+                  null,
+                  "-1.000"
+                ],
+                [
+                  "7.250",
+                  "-1.000"
+                ]
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "hash_nested_values",
+          "id": "nested_columns",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT id,hash(a_i) AS h_a_i,hash(a_nested) AS h_a_nested,hash(st) AS h_st,hash(a_st) AS h_a_st,hash(st_a) AS h_st_a,hash(a_d) AS h_a_d,hash(st_d) AS h_st_d FROM nested_hash_inputs ORDER BY id"
+        },
+        {
+          "corpus": "hash_nested_values",
+          "id": "nested_several",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT id,hash(id,a_i,st,a_st,CAST(id AS STRING)) AS mixed,hash(st_a,a_nested,st_d) AS deeper FROM nested_hash_inputs ORDER BY id"
+        },
+        {
+          "corpus": "hash_nested_values",
+          "id": "nested_literals",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT hash(array(named_struct('a',1,'b','x'),CAST(NULL AS STRUCT<a:INT,b:STRING>))) AS array_struct,hash(named_struct('a',array(1,CAST(NULL AS INT),2),'b',3)) AS struct_array,hash(array(array(1,2),array(3))) AS nested_array,hash(array(CAST(7.250 AS DECIMAL(38,3)),CAST(NULL AS DECIMAL(38,3)))) AS decimal_array"
+        },
+        {
+          "corpus": "hash_nested_values",
+          "id": "nested_columns",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT id,hash(a_i) AS h_a_i,hash(a_nested) AS h_a_nested,hash(st) AS h_st,hash(a_st) AS h_a_st,hash(st_a) AS h_st_a,hash(a_d) AS h_a_d,hash(st_d) AS h_st_d FROM nested_hash_inputs ORDER BY id"
+        },
+        {
+          "corpus": "hash_nested_values",
+          "id": "nested_several",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT id,hash(id,a_i,st,a_st,CAST(id AS STRING)) AS mixed,hash(st_a,a_nested,st_d) AS deeper FROM nested_hash_inputs ORDER BY id"
+        },
+        {
+          "corpus": "hash_nested_values",
+          "id": "nested_literals",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT hash(array(named_struct('a',1,'b','x'),CAST(NULL AS STRUCT<a:INT,b:STRING>))) AS array_struct,hash(named_struct('a',array(1,CAST(NULL AS INT),2),'b',3)) AS struct_array,hash(array(array(1,2),array(3))) AS nested_array,hash(array(CAST(7.250 AS DECIMAL(38,3)),CAST(NULL AS DECIMAL(38,3)))) AS decimal_array"
+        },
+        {
+          "corpus": "hash_nested_values",
+          "id": "changing_seeds",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT id,hash(id,st) AS prefix_struct,hash(st,id) AS suffix_struct,hash(st) AS struct_only,hash(id,a_i) AS prefix_array FROM nested_hash_inputs ORDER BY id"
+        },
+        {
+          "corpus": "hash_nested_values",
+          "id": "null_empty_literals",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT hash(CAST(NULL AS ARRAY<INT>)) AS array_null,hash(CAST(NULL AS STRUCT<a:INT,b:STRING>)) AS struct_null,hash(array()) AS empty_array,hash(named_struct('a',NULL,'b',NULL)) AS null_fields,hash(array(CAST(NULL AS INT))) AS null_child"
+        },
+        {
+          "corpus": "hash_nested_values",
+          "id": "changing_seeds",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT id,hash(id,st) AS prefix_struct,hash(st,id) AS suffix_struct,hash(st) AS struct_only,hash(id,a_i) AS prefix_array FROM nested_hash_inputs ORDER BY id"
+        },
+        {
+          "corpus": "hash_nested_values",
+          "id": "null_empty_literals",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT hash(CAST(NULL AS ARRAY<INT>)) AS array_null,hash(CAST(NULL AS STRUCT<a:INT,b:STRING>)) AS struct_null,hash(array()) AS empty_array,hash(named_struct('a',NULL,'b',NULL)) AS null_fields,hash(array(CAST(NULL AS INT))) AS null_child"
+        }
+      ]
+    }
+  ]
+}
