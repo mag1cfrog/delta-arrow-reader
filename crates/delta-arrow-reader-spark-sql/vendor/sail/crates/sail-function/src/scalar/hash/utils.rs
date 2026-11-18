@@ -215,8 +215,11 @@ fn create_hashes_dictionary<K: ArrowDictionaryKeyType>(
                 array.data_type()
             ))
         })?;
-    if !first_col {
-        // unpack the dictionary array as each row may have a different hash input
+    let can_reuse_dictionary_hashes = first_col
+        && hashes_buffer.len() > dict_array.values().len()
+        && hashes_buffer.iter().all(|seed| *seed == 42);
+    if !can_reuse_dictionary_hashes {
+        // Each row may continue a different seed, including recursive singleton calls.
         let unpacked = take(dict_array.values().as_ref(), dict_array.keys(), None)?;
         create_murmur3_hashes(&[unpacked], hashes_buffer)?;
     } else {
@@ -241,6 +244,28 @@ fn create_hashes_dictionary<K: ArrowDictionaryKeyType>(
         }
     }
     Ok(())
+}
+
+fn accumulate_murmur3_value(array: &ArrayRef, row: usize, seed: &mut u32) -> Result<()> {
+    if array.data_type() != &DataType::Null && !array.is_null(row) {
+        let value = array.slice(row, 1);
+        create_murmur3_hashes(&[value], std::slice::from_mut(seed))?;
+    }
+    Ok(())
+}
+
+macro_rules! hash_array_list {
+    ($array_type:ident, $column:ident, $hashes:ident) => {
+        let array = $column.as_any().downcast_ref::<$array_type>().unwrap();
+        for (row, seed) in $hashes.iter_mut().enumerate() {
+            if !array.is_null(row) {
+                let values = array.value(row);
+                for element in 0..values.len() {
+                    accumulate_murmur3_value(&values, element, seed)?;
+                }
+            }
+        }
+    };
 }
 
 /// Creates hash values for every row, based on the values in the
@@ -353,6 +378,31 @@ macro_rules! create_hashes_internal {
                 }
                 DataType::Decimal128(_, _) => {
                     hash_array_wide_decimal!(Decimal128Array, col, $hashes_buffer, $hash_method);
+                }
+                DataType::List(_) => {
+                    hash_array_list!(ListArray, col, $hashes_buffer);
+                }
+                DataType::LargeList(_) => {
+                    hash_array_list!(LargeListArray, col, $hashes_buffer);
+                }
+                DataType::FixedSizeList(_, _) => {
+                    hash_array_list!(FixedSizeListArray, col, $hashes_buffer);
+                }
+                DataType::ListView(_) => {
+                    hash_array_list!(ListViewArray, col, $hashes_buffer);
+                }
+                DataType::LargeListView(_) => {
+                    hash_array_list!(LargeListViewArray, col, $hashes_buffer);
+                }
+                DataType::Struct(_) => {
+                    let array = col.as_any().downcast_ref::<StructArray>().unwrap();
+                    for (row, seed) in $hashes_buffer.iter_mut().enumerate() {
+                        if !array.is_null(row) {
+                            for field in array.columns() {
+                                accumulate_murmur3_value(field, row, seed)?;
+                            }
+                        }
+                    }
                 }
                 DataType::Dictionary(index_type, _) => match **index_type {
                     DataType::Int8 => {
