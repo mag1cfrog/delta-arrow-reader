@@ -1,10 +1,11 @@
-//! Encode wide decimals and mask fields beneath NULL STRUCT parents for Spark XXHASH64.
+//! Normalize decimal bytes, STRUCT validity and nested dictionaries for Spark XXHASH64.
 //! The upstream implementation still supplies the hash kernel.
 
 use std::sync::Arc;
 
 use datafusion::arrow::array::{Array, ArrayRef, BinaryBuilder, Decimal128Array, make_array};
 use datafusion::arrow::buffer::NullBuffer;
+use datafusion::arrow::compute::cast;
 use datafusion::arrow::datatypes::{DataType, FieldRef};
 use datafusion_common::{Result, ScalarValue};
 use datafusion_expr::{
@@ -62,9 +63,13 @@ fn requires_spark_hash_input_encoding(data_type: &DataType) -> bool {
     match data_type {
         DataType::Decimal128(precision, _) => *precision > 18,
         DataType::List(field) | DataType::LargeList(field) | DataType::FixedSizeList(field, _) => {
-            requires_spark_hash_input_encoding(field.data_type())
+            matches!(field.data_type(), DataType::Dictionary(_, _))
+                || requires_spark_hash_input_encoding(field.data_type())
         }
-        DataType::Dictionary(_, value) => requires_spark_hash_input_encoding(value),
+        DataType::Dictionary(_, value) => {
+            matches!(value.as_ref(), DataType::Dictionary(_, _))
+                || requires_spark_hash_input_encoding(value)
+        }
         DataType::Struct(_) => true,
         _ => false,
     }
@@ -101,6 +106,16 @@ fn encode_spark_hash_input(array: &ArrayRef) -> Result<ArrayRef> {
         .child_data()
         .iter()
         .map(|child| {
+            // Nested dictionaries can inherit a seed; the upstream cache starts at 42.
+            let child = if let DataType::Dictionary(_, value_type) = child.data_type() {
+                let mut value_type = value_type.as_ref();
+                while let DataType::Dictionary(_, nested_type) = value_type {
+                    value_type = nested_type;
+                }
+                cast(&make_array(child.clone()), value_type)?.to_data()
+            } else {
+                child.clone()
+            };
             // Upstream hashes STRUCT fields directly, so NULL parents must mask their fields.
             let child = if is_struct && child.data_type() != &DataType::Null {
                 child
