@@ -1102,7 +1102,7 @@ pub enum DescribeItem {
         column: Option<ObjectName>,
     },
     // Spark also allows DESCRIBE EXTENDED <table> without the TABLE keyword.
-    // We keep it as a separate branch so DESCRIBE QUERY can still remain the catch-all last case.
+    // It remains distinct from the query and bare-table alternatives.
     TableExtended {
         extended: Extended,
         name: ObjectName,
@@ -1110,11 +1110,14 @@ pub enum DescribeItem {
         partition: Option<PartitionClause>,
         column: Option<ObjectName>,
     },
-    // We try `DESCRIBE QUERY` last since the `QUERY` keyword is optional.
+    // Queries must precede bare table names so SELECT and QUERY are not consumed as names.
     Query {
         query: Option<ast::keywords::Query>,
         #[parser(function = |(q, _), _| q)]
         item: Query,
+    },
+    BareTable {
+        name: ObjectName,
     },
 }
 

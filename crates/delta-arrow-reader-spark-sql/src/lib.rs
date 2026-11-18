@@ -39,7 +39,8 @@ use sail_plan::like_errors::{PreserveSparkLikeErrors, set_spark_query_start_time
 use sail_plan::physical_plan::SparkQueryPlanner;
 use sail_plan::projection_row_errors::CaptureSparkInputSortBoundaries;
 use sail_plan::relabel_pushdown::UnwrapSessionZoneRelabel;
-use sail_plan::resolver::PlanResolver;
+
+mod statement_planning;
 
 /// Interpretation of timestamp types without an explicit timezone qualifier.
 pub use sail_plan::config::DefaultTimestampType;
@@ -126,14 +127,10 @@ pub async fn plan_query(
     .map_err(|error| DataFusionError::External(Box::new(error)))?;
     let ast = sail_sql_analyzer::parser::parse_one_statement(&sql)
         .map_err(|error| DataFusionError::External(Box::new(error)))?;
-    let query = sail_sql_analyzer::statement::from_ast_statement(ast)
+    let statement = sail_sql_analyzer::statement::from_ast_read_only_statement(ast)
         .map_err(|error| DataFusionError::External(Box::new(error)))?;
-    let named = PlanResolver::new(session, Arc::new(options.clone()))
-        .resolve_named_plan(query)
-        .await
+    let options = options
+        .with_normalized_timezone()
         .map_err(|error| DataFusionError::External(Box::new(error)))?;
-    Ok(SparkSqlQuery {
-        logical_plan: named.plan,
-        column_names: named.fields,
-    })
+    statement_planning::plan_statement(session, statement, &options).await
 }

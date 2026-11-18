@@ -7,7 +7,6 @@ use datafusion_expr::Expr;
 use datafusion_expr::expr::AggregateFunction;
 use datafusion_expr::utils::{find_aggregate_exprs, find_window_exprs};
 use sail_common::spec;
-use sail_function::scalar::datetime::convert_tz::normalize_session_timezone;
 
 use crate::error::{PlanError, PlanResult};
 use crate::function::expression_is_nondeterministic;
@@ -24,15 +23,11 @@ pub struct NamedPlan {
 impl PlanResolver<'_> {
     /// Resolves a query into a named plan.
     pub async fn resolve_named_plan(&self, query: spec::QueryPlan) -> PlanResult<NamedPlan> {
-        let mut config = self.config.as_ref().clone();
-        let configured = Arc::clone(&config.session_timezone);
-        config.session_timezone = normalize_session_timezone(&configured).ok_or_else(|| {
-            PlanError::invalid(format!(
-                "[INVALID_TIMEZONE] Invalid session timezone {configured:?}"
-            ))
-        })?;
-        config.original_session_timezone.get_or_insert(configured);
-        let resolver = PlanResolver::new(self.ctx, Arc::new(config));
+        let resolver = PlanResolver {
+            ctx: self.ctx,
+            config: Arc::new(self.config.with_normalized_timezone()?),
+            allow_host_functions: self.allow_host_functions,
+        };
         let mut state = PlanResolverState::new();
         let plan = resolver.resolve_query_plan(query, &mut state).await?;
         Self::validate_aggregate_arguments(&plan)?;

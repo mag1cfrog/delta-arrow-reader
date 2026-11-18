@@ -2733,6 +2733,13 @@
                         "nonTerminal": "Query"
                       }
                     ]
+                  },
+                  {
+                    "sequence": [
+                      {
+                        "nonTerminal": "ObjectName"
+                      }
+                    ]
                   }
                 ]
               }

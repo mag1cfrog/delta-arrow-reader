@@ -62,9 +62,7 @@ pub fn parse_statements(s: &str) -> SqlResult<Vec<Statement>> {
 /// Parses a SQL string containing exactly one statement into an AST.
 pub fn parse_one_statement(s: &str) -> SqlResult<Statement> {
     let mut plan = parse_statements(s).map_err(|error| {
-        unsupported_statement_kind(s).map_or(error, |kind| {
-            SqlError::unsupported(format!("{kind}; only read-only queries are supported"))
-        })
+        unsupported_statement_kind(s).map_or(error, |kind| SqlError::unsupported(kind))
     })?;
     match (plan.pop(), plan.is_empty()) {
         (Some(x), true) => Ok(x),
@@ -112,7 +110,12 @@ fn unsupported_statement_kind(sql: &str) -> Option<String> {
                 | "DESCRIBE"
                 | "SHOW"
         ) {
-            return Some(format!("{kind} statements"));
+            let suffix = if matches!(kind.as_str(), "SHOW" | "DESC" | "DESCRIBE" | "EXPLAIN") {
+                "form"
+            } else {
+                "statements"
+            };
+            return Some(format!("{kind} {suffix}"));
         }
         if kind == "WITH" {
             let mut depth = 0_usize;

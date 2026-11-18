@@ -4,6 +4,9 @@ use std::fmt::Debug;
 use std::hash::Hash;
 use std::sync::Arc;
 
+use crate::error::{PlanError, PlanResult};
+use sail_function::scalar::datetime::convert_tz::normalize_session_timezone;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd)]
 pub enum DefaultTimestampType {
     TimestampLtz,
@@ -47,6 +50,21 @@ pub struct PlanConfig {
     /// Missing names expand to empty text. Environment and system properties are not read.
     /// Redaction overrides use native ASCII regex syntax and fail if unsupported.
     pub variable_substitution_values: BTreeMap<String, String>,
+}
+
+impl PlanConfig {
+    /// Normalize the operational zone on a clone while retaining its configured spelling.
+    pub fn with_normalized_timezone(&self) -> PlanResult<Self> {
+        let mut config = self.clone();
+        let configured = Arc::clone(&config.session_timezone);
+        config.session_timezone = normalize_session_timezone(&configured).ok_or_else(|| {
+            PlanError::invalid(format!(
+                "[INVALID_TIMEZONE] Invalid session timezone {configured:?}"
+            ))
+        })?;
+        config.original_session_timezone.get_or_insert(configured);
+        Ok(config)
+    }
 }
 
 impl Default for PlanConfig {

@@ -421,7 +421,7 @@ pub fn reject_direct_format_path(name: &spec::ObjectName) -> SqlResult<()> {
     Ok(())
 }
 
-fn from_ast_query_table(name: ObjectName) -> SqlResult<spec::QueryPlan> {
+pub(crate) fn from_ast_query_table(name: ObjectName) -> SqlResult<spec::QueryPlan> {
     let name = from_ast_object_name(name)?;
     reject_direct_format_path(&name)?;
     Ok(spec::QueryPlan::new(spec::QueryNode::Read {
