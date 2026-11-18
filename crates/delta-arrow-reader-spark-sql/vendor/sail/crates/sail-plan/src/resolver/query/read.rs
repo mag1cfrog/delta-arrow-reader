@@ -280,6 +280,22 @@ impl PlanResolver<'_> {
         fetch: Option<usize>,
         state: &mut PlanResolverState,
     ) -> PlanResult<LogicalPlan> {
+        let (table_source, metadata) = if let Some(adapter) = &self.file_metadata_adapter {
+            match source_as_provider(&table_source)
+                .ok()
+                .map(|provider| adapter(provider))
+                .transpose()?
+                .flatten()
+            {
+                Some(table) => (
+                    provider_as_source(table.provider),
+                    Some((table.file_path_column, table.file_name_column)),
+                ),
+                None => (table_source, None),
+            }
+        } else {
+            (table_source, None)
+        };
         let schema = table_source.schema();
 
         let has_duplicates = {
@@ -296,7 +312,7 @@ impl PlanResolver<'_> {
                     "duplicate column names require DefaultTableSource-backed TableProvider: {e}"
                 ))
             })?;
-            let names = state.register_fields(schema.fields());
+            let names = state.register_source_fields(schema.fields(), metadata);
             provider_as_source(Arc::new(RenameTableProvider::try_new(provider, names)?))
         } else {
             table_source
@@ -311,7 +327,7 @@ impl PlanResolver<'_> {
         )?);
 
         let plan = if !has_duplicates {
-            let names = state.register_fields(table_scan.schema().fields());
+            let names = state.register_source_fields(table_scan.schema().fields(), metadata);
             rename_logical_plan(table_scan, &names)?
         } else {
             table_scan

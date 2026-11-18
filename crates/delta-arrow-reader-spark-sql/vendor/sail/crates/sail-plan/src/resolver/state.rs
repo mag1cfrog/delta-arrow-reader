@@ -9,6 +9,7 @@ use sail_common::spec;
 
 use crate::error::{PlanError, PlanResult};
 use crate::resolver::expression::NamedExpr;
+use crate::resolver::file_metadata::{FileMetadataColumn, FileMetadataKind};
 use crate::resolver::interval_qualifier::IntervalQualifier;
 
 /// The field information for fields in the logical plan.
@@ -27,6 +28,7 @@ pub(super) struct FieldInfo {
     interval_qualifier: Option<IntervalQualifier>,
     /// The source qualifier of a USING key whose plan alias is unqualified.
     using_key_qualifier: Option<TableReference>,
+    file_metadata: Option<FileMetadataColumn>,
 }
 
 impl FieldInfo {
@@ -36,6 +38,10 @@ impl FieldInfo {
 
     pub fn is_hidden(&self) -> bool {
         self.hidden
+    }
+
+    pub fn file_metadata(&self) -> Option<FileMetadataColumn> {
+        self.file_metadata
     }
 }
 
@@ -75,6 +81,7 @@ struct ProjectionAlias {
 #[derive(Debug)]
 pub(super) struct PlanResolverState {
     next_id: usize,
+    next_file_source_id: usize,
     /// A map from the generated opaque field ID to field information.
     fields: HashMap<String, FieldInfo>,
     /// The outer query schema for the current subquery.
@@ -106,6 +113,7 @@ impl PlanResolverState {
     pub fn new() -> Self {
         Self {
             next_id: 0,
+            next_file_source_id: 0,
             fields: HashMap::new(),
             outer_query_schema: None,
             aggregate_state: AggregateState::default(),
@@ -132,6 +140,7 @@ impl PlanResolverState {
             hidden,
             interval_qualifier: None,
             using_key_qualifier: None,
+            file_metadata: None,
         };
         self.fields.insert(field_id.clone(), info);
         field_id
@@ -206,13 +215,43 @@ impl PlanResolverState {
     /// Registers each field of a scanned source and returns unique internal names to avoid
     /// column name collisions. Spark reads an Arrow interval column as `DAY TO SECOND` or `YEAR
     /// TO MONTH` (#1152).
-    pub fn register_fields(
+    pub fn register_source_fields(
         &mut self,
         fields: impl IntoIterator<Item = impl AsRef<Field>>,
+        metadata: Option<(usize, usize)>,
     ) -> Vec<String> {
+        let source_id = self.next_file_source_id;
+        if metadata.is_some() {
+            self.next_file_source_id += 1;
+        }
         fields
             .into_iter()
-            .map(|field| {
+            .enumerate()
+            .map(|(index, field)| {
+                let kind = metadata.and_then(|(path, name)| {
+                    if index == path {
+                        Some(FileMetadataKind::Path)
+                    } else if index == name {
+                        Some(FileMetadataKind::Name)
+                    } else {
+                        None
+                    }
+                });
+                if let Some(kind) = kind {
+                    let id = format!("#file_metadata_{source_id}_{index}");
+                    self.fields.insert(
+                        id.clone(),
+                        FieldInfo {
+                            name: field.as_ref().name().clone(),
+                            column_identity: id.clone(),
+                            hidden: true,
+                            interval_qualifier: None,
+                            using_key_qualifier: None,
+                            file_metadata: Some(FileMetadataColumn { source_id, kind }),
+                        },
+                    );
+                    return id;
+                }
                 let field_id = self.register_field(&field);
                 let qualifier = IntervalQualifier::default_for_type(field.as_ref().data_type());
                 self.set_interval_qualifier(&field_id, qualifier);

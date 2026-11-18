@@ -10,9 +10,10 @@ output partition count without adding a global sort.
 The stored and aliased `_metadata` controls compare the same explicit inputs in
 Spark and actual Delta tables. They include a nullable stored STRUCT with a
 `file_path` field, a SELECT alias and a table alias. These are user fields. The
-DAR public Delta provider does not expose per-row file origin, so
-`input_file_name()` and an absent injected `_metadata.file_path` remain
-unavailable. The tests require clear errors and preserve ordinary field access.
+resource-test provider is an opaque host wrapper, so its `input_file_name()`
+control returns an empty STRING. Direct Delta provider file origins are covered
+by the [file-metadata references](../file-metadata/README.md). These stored and
+aliased field controls preserve ordinary field access.
 
 Partition IDs, monotonic IDs, SORT BY and unordered aggregates retain their raw
 Spark observations. Rust compares executed types from those records and checks

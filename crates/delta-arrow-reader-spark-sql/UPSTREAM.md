@@ -2359,3 +2359,14 @@ error, with a default of 10000. Numeric results retain their input type, and
 scalar and array probabilities share the same summary. Compressed results can
 change with input partitioning and order. Exact PERCENTILE, PERCENTILE_CONT and
 MEDIAN, and native DataFusion approximate percentiles keep their implementations.
+
+The resolver accepts a trusted file-provider adapter before opaque field renaming.
+The host uses Core's explicit file metadata provider for direct Delta snapshots.
+File-origin slots have separate resolver identities and stay hidden from both
+forms of star expansion and metadata listings; user field metadata cannot mark a
+slot as file origin. Scalar file-name resolution returns the one file source or
+an empty string for nonfile sources, and rejects multiple file sources. Stored
+`_metadata` fields and preceding SELECT aliases resolve before virtual fields.
+Simple projections, aliases and CTEs retain hidden file slots for enclosing
+expressions. The adapter survives timezone normalization, while metadata-command
+host function restrictions remain in force. Native SQL registration is unchanged.

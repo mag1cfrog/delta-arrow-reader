@@ -40,6 +40,7 @@ use sail_plan::physical_plan::SparkQueryPlanner;
 use sail_plan::projection_row_errors::CaptureSparkInputSortBoundaries;
 use sail_plan::relabel_pushdown::UnwrapSessionZoneRelabel;
 
+mod file_metadata;
 mod statement_planning;
 
 /// Interpretation of timestamp types without an explicit timezone qualifier.

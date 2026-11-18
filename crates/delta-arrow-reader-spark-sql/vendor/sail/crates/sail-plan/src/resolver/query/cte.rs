@@ -34,7 +34,8 @@ impl PlanResolver<'_> {
             let plan = if recursive {
                 self.resolve_recursive_query_plan(query, state).await?
             } else {
-                self.resolve_query_plan(query, state).await?
+                self.resolve_query_plan_with_file_metadata(query, state)
+                    .await?
             };
             let plan = LogicalPlan::SubqueryAlias(SubqueryAlias::try_new(
                 Arc::new(plan),
@@ -42,6 +43,7 @@ impl PlanResolver<'_> {
             )?);
             state.insert_cte(reference, plan);
         }
-        self.resolve_query_plan(input, state).await
+        self.resolve_query_plan_with_file_metadata(input, state)
+            .await
     }
 }

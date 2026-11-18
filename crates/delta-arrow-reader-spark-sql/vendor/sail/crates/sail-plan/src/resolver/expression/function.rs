@@ -161,7 +161,19 @@ impl PlanResolver<'_> {
 
         // The native registry also contains DataFusion builtins. Keep Spark's
         // implementations (and explicit unsupported entries) authoritative.
-        let func = if let Ok(func) = get_built_in_function(&canonical_function_name) {
+        let func = if canonical_function_name == "input_file_name" {
+            if !arguments.is_empty()
+                || is_distinct
+                || ignore_nulls.is_some()
+                || filter.is_some()
+                || order_by.is_some()
+            {
+                return Err(PlanError::invalid(
+                    "input_file_name requires no arguments or scalar function clauses",
+                ));
+            }
+            crate::resolver::file_metadata::input_file_name(schema, state)?
+        } else if let Ok(func) = get_built_in_function(&canonical_function_name) {
             if ignore_nulls.is_some() || filter.is_some() || order_by.is_some() {
                 return Err(PlanError::invalid("invalid scalar function clause"));
             }

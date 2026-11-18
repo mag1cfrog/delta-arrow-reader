@@ -12,12 +12,14 @@ use datafusion_functions::core::getfield::GetFieldFunc;
 use sail_common::spec;
 use sail_function::scalar::array_struct_field::ArrayStructField;
 use sail_function::scalar::get_field_with_parent_nulls::GetFieldWithParentNulls;
+use sail_function::scalar::struct_function::StructFunction;
 
 use crate::error::{PlanError, PlanResult};
 use crate::function::common::clear_inherited_field_metadata;
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
 use crate::resolver::expression::lambda::LAMBDA_VARIABLE_EXPRESSION_NAME;
+use crate::resolver::file_metadata::FileMetadataKind;
 use crate::resolver::schema::quote_column_name;
 use crate::resolver::state::PlanResolverState;
 
@@ -129,6 +131,9 @@ impl PlanResolver<'_> {
         {
             return Ok(named);
         }
+        if let Some(named) = self.resolve_file_metadata_attribute(&name, schema, state)? {
+            return Ok(named);
+        }
         Err(Self::unknown_column_error(
             &name,
             Self::available_attribute_names(schema, state),
@@ -146,6 +151,9 @@ impl PlanResolver<'_> {
                 let Ok(info) = state.get_field_info(field.name()) else {
                     continue;
                 };
+                if info.file_metadata().is_some() {
+                    continue;
+                }
                 let mut parts = Vec::new();
                 if let Some(qualifier) = qualifier {
                     parts.extend(qualifier.catalog());
@@ -189,7 +197,8 @@ impl PlanResolver<'_> {
                 let Ok(info) = state.get_field_info(field.name()) else {
                     continue;
                 };
-                if (!info.is_hidden() || q.is_some())
+                if info.file_metadata().is_none()
+                    && (!info.is_hidden() || q.is_some())
                     && qualifier_matches(q.as_ref(), qualifier)
                     && info.name().eq_ignore_ascii_case(column_name.as_ref())
                 {
@@ -313,7 +322,7 @@ impl PlanResolver<'_> {
                 let Ok(info) = state.get_field_info(field.name()) else {
                     return None;
                 };
-                if !info.is_hidden() {
+                if !info.is_hidden() || info.file_metadata().is_some() {
                     return None;
                 }
                 if info.name().eq_ignore_ascii_case(name.as_ref()) {
@@ -332,6 +341,68 @@ impl PlanResolver<'_> {
             )));
         }
         Ok(candidates.pop())
+    }
+
+    fn resolve_file_metadata_attribute(
+        &self,
+        name: &spec::ObjectName,
+        schema: &DFSchemaRef,
+        state: &PlanResolverState,
+    ) -> PlanResult<Option<NamedExpr>> {
+        for (qualifier, column_name, nested) in
+            Self::generate_qualified_nested_field_candidates(name.parts())
+        {
+            if !column_name.as_ref().eq_ignore_ascii_case("_metadata") {
+                continue;
+            }
+            let mut paths = schema.iter().filter_map(|(q, field)| {
+                let metadata = state.get_field_info(field.name()).ok()?.file_metadata()?;
+                (metadata.kind == FileMetadataKind::Path
+                    && qualifier_matches(qualifier.as_ref(), q))
+                .then_some((q, field, metadata.source_id))
+            });
+            let Some((q, path, source_id)) = paths.next() else {
+                continue;
+            };
+            if paths.next().is_some() {
+                return Err(PlanError::analysis("ambiguous attribute: _metadata"));
+            }
+            let filename = schema
+                .iter()
+                .find(|(candidate_q, field)| {
+                    *candidate_q == q
+                        && state.get_field_info(field.name()).is_ok_and(|info| {
+                            info.file_metadata().is_some_and(|metadata| {
+                                metadata.source_id == source_id
+                                    && metadata.kind == FileMetadataKind::Name
+                            })
+                        })
+                })
+                .ok_or_else(|| PlanError::internal("missing file-name metadata slot"))?;
+            let path = expr::Expr::Column(Column::from((q, path)));
+            let filename = expr::Expr::Column(Column::from(filename));
+            let (expr, display) = match nested {
+                [field] if field.as_ref().eq_ignore_ascii_case("file_path") => (path, "file_path"),
+                [field] if field.as_ref().eq_ignore_ascii_case("file_name") => {
+                    (filename, "file_name")
+                }
+                [] => (
+                    ScalarUDF::from(StructFunction::new(vec![
+                        "file_path".into(),
+                        "file_name".into(),
+                    ]))
+                    .call(vec![path, filename]),
+                    "_metadata",
+                ),
+                _ => {
+                    return Err(PlanError::analysis(
+                        "No such struct field in _metadata: available fields are file_path, file_name",
+                    ));
+                }
+            };
+            return Ok(Some(NamedExpr::new(vec![display.to_owned()], expr)));
+        }
+        Ok(None)
     }
 
     fn resolve_struct_field<'a>(fields: &'a Fields, name: &str) -> PlanResult<&'a FieldRef> {
