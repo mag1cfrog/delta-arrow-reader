@@ -247,7 +247,7 @@ fn create_hashes_dictionary<K: ArrowDictionaryKeyType>(
 }
 
 fn accumulate_murmur3_value(array: &ArrayRef, row: usize, seed: &mut u32) -> Result<()> {
-    if array.data_type() != &DataType::Null && !array.is_null(row) {
+    if !array.is_null(row) {
         let value = array.slice(row, 1);
         create_murmur3_hashes(&[value], std::slice::from_mut(seed))?;
     }
@@ -281,6 +281,7 @@ macro_rules! create_hashes_internal {
         for (i, col) in $arrays.iter().enumerate() {
             let first_col = i == 0;
             match col.data_type() {
+                DataType::Null => {}
                 DataType::Boolean => {
                     hash_array_boolean!(BooleanArray, col, i32, $hashes_buffer, $hash_method);
                 }
