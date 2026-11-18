@@ -6,15 +6,18 @@ use sail_common_datafusion::literal::LiteralEvaluator;
 use sail_function::scalar::array::spark_array::SparkArray;
 use sail_function::scalar::explode::{Explode, ExplodeKind};
 use sail_function::scalar::json::{
-    SparkFromJson, SparkGetJsonObject, SparkSchemaOfJson, json_length_udf, json_object_keys_udf,
-    to_json_udf,
+    SparkFromJson, SparkGetJsonObject, SparkSchemaOfJson, json_array_length_udf,
+    json_object_keys_udf, to_json_udf,
 };
 
 use crate::error::{PlanError, PlanResult};
 use crate::function::common::{ScalarFunction, ScalarFunctionBuilder as F, ScalarFunctionInput};
 
 fn json_array_length(json_data: expr::Expr) -> expr::Expr {
-    cast(json_length_udf().call(vec![json_data]), DataType::Int32)
+    cast(
+        json_array_length_udf().call(vec![json_data]),
+        DataType::Int32,
+    )
 }
 
 fn json_object_keys(json_data: expr::Expr) -> expr::Expr {

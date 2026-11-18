@@ -1,0 +1,483 @@
+{
+  "issue": 1362,
+  "base": "8532c3a4e81cb4331406e1c27d9108cbde5990a8",
+  "expected_record_count": 40,
+  "specs": [
+    {
+      "id": 1,
+      "name": "empty_array",
+      "document": "[]"
+    },
+    {
+      "id": 2,
+      "name": "numbers",
+      "document": "[1,2,3]"
+    },
+    {
+      "id": 3,
+      "name": "nested_array",
+      "document": "[[1,2,3],[],null]"
+    },
+    {
+      "id": 4,
+      "name": "mixed_array",
+      "document": "[1,\"x\",true,null,{},[2]]"
+    },
+    {
+      "id": 5,
+      "name": "null_elements",
+      "document": "[null,null]"
+    },
+    {
+      "id": 6,
+      "name": "object",
+      "document": "{\"b\":2,\"a\":1}"
+    },
+    {
+      "id": 7,
+      "name": "empty_object",
+      "document": "{}"
+    },
+    {
+      "id": 8,
+      "name": "nested_object",
+      "document": "{\"items\":[1,2]}"
+    },
+    {
+      "id": 9,
+      "name": "string_root",
+      "document": "\"hello\""
+    },
+    {
+      "id": 10,
+      "name": "number_root",
+      "document": "17"
+    },
+    {
+      "id": 11,
+      "name": "boolean_root",
+      "document": "true"
+    },
+    {
+      "id": 12,
+      "name": "json_null",
+      "document": "null"
+    },
+    {
+      "id": 13,
+      "name": "sql_null",
+      "document": null
+    },
+    {
+      "id": 14,
+      "name": "empty",
+      "document": ""
+    },
+    {
+      "id": 15,
+      "name": "whitespace",
+      "document": " \n\t"
+    },
+    {
+      "id": 16,
+      "name": "malformed_array",
+      "document": "[1,"
+    },
+    {
+      "id": 17,
+      "name": "malformed_object",
+      "document": "{"
+    },
+    {
+      "id": 18,
+      "name": "invalid",
+      "document": "bad"
+    }
+  ],
+  "corpora": [
+    {
+      "corpus": "json_array_length_roots",
+      "source": "Source-only array/object/scalar/null/empty/malformed root requests; no expected results.",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "json_length_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "j",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                "[]"
+              ],
+              [
+                "2",
+                "[1,2,3]"
+              ],
+              [
+                "3",
+                "[[1,2,3],[],null]"
+              ],
+              [
+                "4",
+                "[1,\"x\",true,null,{},[2]]"
+              ],
+              [
+                "5",
+                "[null,null]"
+              ],
+              [
+                "6",
+                "{\"b\":2,\"a\":1}"
+              ],
+              [
+                "7",
+                "{}"
+              ],
+              [
+                "8",
+                "{\"items\":[1,2]}"
+              ],
+              [
+                "9",
+                "\"hello\""
+              ],
+              [
+                "10",
+                "17"
+              ],
+              [
+                "11",
+                "true"
+              ],
+              [
+                "12",
+                "null"
+              ],
+              [
+                "13",
+                null
+              ],
+              [
+                "14",
+                ""
+              ],
+              [
+                "15",
+                " \n\t"
+              ],
+              [
+                "16",
+                "[1,"
+              ],
+              [
+                "17",
+                "{"
+              ],
+              [
+                "18",
+                "bad"
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "json_array_length_roots",
+          "id": "empty_array",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT json_array_length('[]') AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "numbers",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT json_array_length('[1,2,3]') AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "nested_array",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT json_array_length('[[1,2,3],[],null]') AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "mixed_array",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT json_array_length('[1,\"x\",true,null,{},[2]]') AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "null_elements",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT json_array_length('[null,null]') AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "object",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT json_array_length('{\"b\":2,\"a\":1}') AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "empty_object",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT json_array_length('{}') AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "nested_object",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT json_array_length('{\"items\":[1,2]}') AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "string_root",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT json_array_length('\"hello\"') AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "number_root",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT json_array_length('17') AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "boolean_root",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT json_array_length('true') AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "json_null",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT json_array_length('null') AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "sql_null",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT json_array_length(CAST(NULL AS STRING)) AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "empty",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT json_array_length('') AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "whitespace",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT json_array_length(' \n\t') AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "malformed_array",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT json_array_length('[1,') AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "malformed_object",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT json_array_length('{') AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "invalid",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT json_array_length('bad') AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "registered_roots",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT id,json_array_length(j) AS r FROM json_length_inputs ORDER BY id"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "empty_array",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT json_array_length('[]') AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "numbers",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT json_array_length('[1,2,3]') AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "nested_array",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT json_array_length('[[1,2,3],[],null]') AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "mixed_array",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT json_array_length('[1,\"x\",true,null,{},[2]]') AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "null_elements",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT json_array_length('[null,null]') AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "object",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT json_array_length('{\"b\":2,\"a\":1}') AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "empty_object",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT json_array_length('{}') AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "nested_object",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT json_array_length('{\"items\":[1,2]}') AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "string_root",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT json_array_length('\"hello\"') AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "number_root",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT json_array_length('17') AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "boolean_root",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT json_array_length('true') AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "json_null",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT json_array_length('null') AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "sql_null",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT json_array_length(CAST(NULL AS STRING)) AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "empty",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT json_array_length('') AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "whitespace",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT json_array_length(' \n\t') AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "malformed_array",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT json_array_length('[1,') AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "malformed_object",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT json_array_length('{') AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "invalid",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT json_array_length('bad') AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "registered_roots",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT id,json_array_length(j) AS r FROM json_length_inputs ORDER BY id"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "raw_sql_null",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT json_array_length(NULL) AS r"
+        },
+        {
+          "corpus": "json_array_length_roots",
+          "id": "raw_sql_null",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT json_array_length(NULL) AS r"
+        }
+      ]
+    }
+  ]
+}
