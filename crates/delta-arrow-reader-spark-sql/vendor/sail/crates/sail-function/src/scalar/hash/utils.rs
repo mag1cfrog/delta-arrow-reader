@@ -164,7 +164,7 @@ macro_rules! hash_array_primitive_float {
 }
 
 // Spark's wide decimals use Java BigInteger's minimal signed byte representation.
-fn minimal_signed_decimal_bytes(big_endian_bytes: &[u8; 16]) -> &[u8] {
+pub(super) fn minimal_signed_decimal_bytes(big_endian_bytes: &[u8; 16]) -> &[u8] {
     let mut start = 0;
     while start < big_endian_bytes.len() - 1 {
         let is_redundant_sign_byte = match big_endian_bytes[start] {

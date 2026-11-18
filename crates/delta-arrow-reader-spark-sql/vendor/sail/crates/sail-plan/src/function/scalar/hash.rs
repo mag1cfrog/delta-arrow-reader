@@ -4,10 +4,10 @@ use datafusion::functions::expr_fn;
 use datafusion_common::ScalarValue;
 use datafusion_expr::{ScalarUDF, expr, lit};
 use datafusion_spark::function::hash::expr_fn as hash_fn;
-use datafusion_spark::function::hash::xxhash64::SparkXxhash64;
 use datafusion_spark::function::math::hex::SparkHex;
 use sail_common_datafusion::utils::items::ItemTaker;
 use sail_function::scalar::hash::spark_murmur3_hash::SparkMurmur3Hash;
+use sail_function::scalar::hash::xxhash64_spark_input_encoding::Xxhash64WithSparkInputEncoding;
 
 use crate::error::PlanResult;
 use crate::function::common::{ScalarFunction, ScalarFunctionInput};
@@ -47,6 +47,9 @@ pub(super) fn list_built_in_hash_functions() -> Vec<(&'static str, ScalarFunctio
         ("sha", F::unary(hash_fn::sha1)),
         ("sha1", F::unary(hash_fn::sha1)),
         ("sha2", F::custom(sha2)),
-        ("xxhash64", F::udf(SparkXxhash64::new())),
+        (
+            "xxhash64",
+            F::udf(Xxhash64WithSparkInputEncoding::default()),
+        ),
     ]
 }

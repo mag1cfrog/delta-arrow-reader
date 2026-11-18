@@ -14,3 +14,4 @@ mod hash_nested_values;
 mod hash_null_arguments;
 mod json_array_length_roots;
 mod sha2_literal_lengths;
+mod xxhash64_decimal_encoding;
