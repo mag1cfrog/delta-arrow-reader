@@ -3,11 +3,13 @@
 mod dynamic_filters;
 mod dynamic_partition_pruning;
 mod execution;
+mod file_metadata;
 mod planning;
 
 pub use execution::{
     IntraFileRepartitioning, ScanMetrics, ScanMetricsSnapshot, collect_scan_metrics,
 };
+pub use file_metadata::DeltaFileMetadataProvider;
 
 use std::{collections::HashSet, fmt, sync::Arc};
 

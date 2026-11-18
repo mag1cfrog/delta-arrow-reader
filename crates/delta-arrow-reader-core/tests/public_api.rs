@@ -346,8 +346,8 @@ fn datafusion_provider_contract_is_public() {
     use delta_arrow_reader::{
         DeltaReaderError, DeltaTable,
         datafusion::{
-            DeltaTableProvider, IntraFileRepartitioning, ScanOptions, TableRegistration,
-            register_table,
+            DeltaFileMetadataProvider, DeltaTableProvider, IntraFileRepartitioning, ScanOptions,
+            TableRegistration, register_table,
         },
     };
 
@@ -363,6 +363,12 @@ fn datafusion_provider_contract_is_public() {
         IntraFileRepartitioning::WhenBelowTarget
     );
     assert_clone::<DeltaTableProvider>();
+    assert_debug_clone::<DeltaFileMetadataProvider>();
+    let metadata: fn(
+        DeltaTableProvider,
+        String,
+        String,
+    ) -> Result<DeltaFileMetadataProvider, DeltaReaderError> = DeltaFileMetadataProvider::try_new;
     assert_result_traits::<TableRegistration>();
     fn inspect_registration(registration: TableRegistration) {
         let _: String = registration.name;
@@ -383,5 +389,5 @@ fn datafusion_provider_contract_is_public() {
     ) -> Result<TableRegistration, DeltaReaderError> {
         register_table(context, name, table, options)
     }
-    let _ = (construct, refresh, register, inspect_registration);
+    let _ = (construct, metadata, refresh, register, inspect_registration);
 }

@@ -4,7 +4,7 @@ use std::{
     error::Error,
     fmt, fs,
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicUsize, Ordering},
     },
 };
@@ -173,6 +173,7 @@ async fn data_file_location_checks_the_store_before_data_io_in_both_backends() -
     let store = Arc::new(DataReadStore {
         inner: LocalFileSystem::new_with_prefix(fixture.path())?,
         data_gets: AtomicUsize::new(0),
+        data_requests: Mutex::new(Vec::new()),
     });
     let scheme = format!("darlocation{}", std::process::id());
     let weak = Arc::downgrade(&store);
@@ -261,6 +262,7 @@ async fn data_file_location_checks_the_store_before_data_io_in_both_backends() -
 struct DataReadStore {
     inner: LocalFileSystem,
     data_gets: AtomicUsize,
+    data_requests: Mutex<Vec<(String, String)>>,
 }
 
 impl fmt::Display for DataReadStore {
@@ -291,6 +293,13 @@ impl ObjectStore for DataReadStore {
     async fn get_opts(&self, path: &StorePath, options: GetOptions) -> StoreResult<GetResult> {
         if path.as_ref().ends_with(".parquet") {
             self.data_gets.fetch_add(1, Ordering::Relaxed);
+            self.data_requests
+                .lock()
+                .map_err(|_| object_store::Error::Generic {
+                    store: "data-file-location-test-store",
+                    source: std::io::Error::other("request lock poisoned").into(),
+                })?
+                .push((path.to_string(), format!("{:?}", options.range)));
         }
         self.inner.get_opts(path, options).await
     }
@@ -327,4 +336,104 @@ impl ObjectStore for DataReadStore {
     ) -> StoreResult<()> {
         self.inner.copy_opts(from, to, options).await
     }
+}
+
+#[cfg(feature = "datafusion")]
+#[tokio::test]
+async fn file_metadata_unrequested_matches_existing_native_provider_reads() -> TestResult {
+    use datafusion::{datasource::TableProvider, physical_plan::collect, prelude::SessionContext};
+    use delta_arrow_reader::datafusion::{
+        DeltaFileMetadataProvider, DeltaTableProvider, ScanOptions,
+    };
+    let fixture = RealParquetDeltaTable::new_with_rows_and_deletion_vector(
+        "origin-native-read-spy",
+        1024,
+        &[0, 3, 1000],
+    )?;
+    let store = Arc::new(DataReadStore {
+        inner: LocalFileSystem::new_with_prefix(fixture.path())?,
+        data_gets: AtomicUsize::new(0),
+        data_requests: Mutex::new(Vec::new()),
+    });
+    let scheme = format!("darmetadataspy{}", std::process::id());
+    let weak = Arc::downgrade(&store);
+    delta_kernel_default_engine::storage::insert_url_handler(
+        &scheme,
+        Arc::new(move |_, _| {
+            let store = weak.upgrade().ok_or_else(|| object_store::Error::Generic {
+                store: "origin-spy",
+                source: std::io::Error::other("store released").into(),
+            })?;
+            Ok((Box::new(store), StorePath::ROOT))
+        }),
+    )?;
+    for backend in [
+        ParquetReaderBackend::Direct,
+        ParquetReaderBackend::DeltaKernel,
+    ] {
+        for views in [false, true] {
+            let table = DeltaTableBuilder::new(format!("{scheme}://table/"))
+                .load_table()
+                .await?;
+            let base = DeltaTableProvider::try_new(
+                table,
+                ScanOptions {
+                    target_partitions: Some(1),
+                    use_arrow_view_types: views,
+                    execution_options: DeltaScanExecutionOptions::new()
+                        .with_parquet_backend(backend),
+                    ..Default::default()
+                },
+            )?;
+            let metadata =
+                DeltaFileMetadataProvider::try_new(base.clone(), "source_path", "source_name")?;
+            let ctx = SessionContext::new();
+            ctx.register_table("plain", Arc::new(base.clone()))?;
+            ctx.register_table("wrapped", Arc::new(metadata.clone()))?;
+            for sql in [
+                "SELECT * FROM plain ORDER BY id",
+                "SELECT customer_name FROM plain WHERE id > 100 ORDER BY customer_name",
+                "SELECT count(*) FROM plain",
+            ] {
+                store
+                    .data_requests
+                    .lock()
+                    .map_err(|_| "request lock")?
+                    .clear();
+                let expected = ctx.sql(sql).await?.collect().await?;
+                let mut expected_requests =
+                    std::mem::take(&mut *store.data_requests.lock().map_err(|_| "request lock")?);
+                let actual = ctx
+                    .sql(
+                        &sql.replace("plain", "wrapped")
+                            .replace("SELECT *", "SELECT id, customer_name"),
+                    )
+                    .await?
+                    .collect()
+                    .await?;
+                let mut actual_requests =
+                    std::mem::take(&mut *store.data_requests.lock().map_err(|_| "request lock")?);
+                expected_requests.sort();
+                actual_requests.sort();
+                assert_eq!(actual, expected, "{backend:?}, views={views}, {sql}");
+                assert_eq!(
+                    actual_requests, expected_requests,
+                    "{backend:?}, views={views}, {sql}"
+                );
+                if !sql.contains("count(*)") {
+                    assert!(!expected_requests.is_empty());
+                }
+            }
+            let state = ctx.state();
+            let empty = vec![];
+            let expected = base.scan(&state, Some(&empty), &[], None).await?;
+            let actual = metadata.scan(&state, Some(&empty), &[], None).await?;
+            assert_eq!(actual.schema(), expected.schema());
+            assert_eq!(
+                collect(actual, ctx.task_ctx()).await?,
+                collect(expected, ctx.task_ctx()).await?
+            );
+        }
+    }
+    Ok(())
 }
