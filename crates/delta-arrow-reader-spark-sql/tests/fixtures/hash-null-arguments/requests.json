@@ -1,0 +1,106 @@
+{
+  "corpora": [
+    {
+      "metadata": {
+        "inputs": [
+          {
+            "name": "null_hash_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "n",
+                  "type": "void",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "v",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "-1",
+                null,
+                "2"
+              ],
+              [
+                "0",
+                null,
+                null
+              ],
+              [
+                "1",
+                null,
+                "-1"
+              ],
+              [
+                "2",
+                null,
+                "3"
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "id": "hash_untyped_null",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT hash(NULL) AS r,hash(1,NULL,2) AS continued",
+          "corpus": "hash_null_arguments"
+        },
+        {
+          "id": "hash_untyped_null",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT hash(NULL) AS r,hash(1,NULL,2) AS continued",
+          "corpus": "hash_null_arguments"
+        },
+        {
+          "id": "null_literal_positions",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT hash(NULL,NULL) AS repeated,hash(NULL,1,2) AS leading,hash(1,2,NULL) AS trailing,hash(1,NULL,NULL,2) AS middle",
+          "corpus": "hash_null_arguments"
+        },
+        {
+          "id": "null_column_seeds",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT id,hash(n) AS alone,hash(id,n) AS prefix,hash(n,id) AS leading,hash(id,n,v,n,id) AS mixed,hash(id,v,id) AS without_null,hash(CAST(NULL AS INT)) AS typed_int,hash(CAST(NULL AS STRING),id) AS typed_string FROM null_hash_inputs ORDER BY id",
+          "corpus": "hash_null_arguments"
+        },
+        {
+          "id": "null_literal_positions",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT hash(NULL,NULL) AS repeated,hash(NULL,1,2) AS leading,hash(1,2,NULL) AS trailing,hash(1,NULL,NULL,2) AS middle",
+          "corpus": "hash_null_arguments"
+        },
+        {
+          "id": "null_column_seeds",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT id,hash(n) AS alone,hash(id,n) AS prefix,hash(n,id) AS leading,hash(id,n,v,n,id) AS mixed,hash(id,v,id) AS without_null,hash(CAST(NULL AS INT)) AS typed_int,hash(CAST(NULL AS STRING),id) AS typed_string FROM null_hash_inputs ORDER BY id",
+          "corpus": "hash_null_arguments"
+        }
+      ],
+      "corpus": "hash_null_arguments",
+      "source": "Untyped NULL arguments, literal positions and a registered VOID column with changing row seeds."
+    }
+  ],
+  "issue": 1368,
+  "expected_record_count": 6
+}
