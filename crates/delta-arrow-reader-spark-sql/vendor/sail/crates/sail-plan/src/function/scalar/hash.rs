@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use datafusion::functions::expr_fn;
 use datafusion_common::ScalarValue;
-use datafusion_expr::{ScalarUDF, expr};
+use datafusion_expr::{ScalarUDF, expr, lit};
 use datafusion_spark::function::hash::expr_fn as hash_fn;
 use datafusion_spark::function::hash::xxhash64::SparkXxhash64;
 use datafusion_spark::function::math::hex::SparkHex;
@@ -21,6 +21,9 @@ fn sha2(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         expr::Expr::Literal(ScalarValue::Int32(Some(224)), _metadata) => expr_fn::sha224(expr),
         expr::Expr::Literal(ScalarValue::Int32(Some(384)), _metadata) => expr_fn::sha384(expr),
         expr::Expr::Literal(ScalarValue::Int32(Some(512)), _metadata) => expr_fn::sha512(expr),
+        expr::Expr::Literal(ScalarValue::Int32(Some(_)), _metadata) => {
+            return Ok(lit(ScalarValue::Utf8(None)));
+        }
         _ => {
             return Err(crate::error::PlanError::invalid(
                 "The second argument of sha2 must be a literal integer.",

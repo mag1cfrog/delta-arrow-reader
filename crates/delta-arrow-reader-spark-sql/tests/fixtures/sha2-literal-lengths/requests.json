@@ -1,0 +1,405 @@
+{
+  "issue": 1356,
+  "base": "b28a8cb13415fb2a5a92ffb7f1abfadcd9f52214",
+  "expected_record_count": 40,
+  "corpora": [
+    {
+      "corpus": "sha2_literal_lengths",
+      "source": "Source-only SHA2 literal lengths and registered STRING/BINARY inputs; no expected values are read by capture.",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "sha2_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "b",
+                  "type": "binary",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                "abc",
+                "616263"
+              ],
+              [
+                "2",
+                "",
+                ""
+              ],
+              [
+                "3",
+                null,
+                null
+              ],
+              [
+                "4",
+                "Spark42",
+                "ff007f"
+              ],
+              [
+                "5",
+                "caf\u00e9",
+                "636166c3a9"
+              ],
+              [
+                "6",
+                null,
+                "78"
+              ],
+              [
+                "7",
+                "x",
+                null
+              ],
+              [
+                "8",
+                "abc",
+                "616263"
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "literal_0",
+          "ansi": false,
+          "ordered": true,
+          "bits": 0,
+          "sql": "SELECT sha2('abc', 0) AS text, sha2(X'616263', 0) AS binary, sha2('', 0) AS empty_text, sha2(X'', 0) AS empty_binary, sha2(CAST(NULL AS STRING), 0) AS null_text, sha2(CAST(NULL AS BINARY), 0) AS null_binary, sha2('caf\u00e9', 0) AS unicode_text, sha2(X'636166c3a9', 0) AS unicode_binary"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "column_0",
+          "ansi": false,
+          "ordered": true,
+          "bits": 0,
+          "sql": "SELECT id, sha2(s, 0) AS text_hash, sha2(b, 0) AS binary_hash FROM sha2_inputs ORDER BY id"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "literal_224",
+          "ansi": false,
+          "ordered": true,
+          "bits": 224,
+          "sql": "SELECT sha2('abc', 224) AS text, sha2(X'616263', 224) AS binary, sha2('', 224) AS empty_text, sha2(X'', 224) AS empty_binary, sha2(CAST(NULL AS STRING), 224) AS null_text, sha2(CAST(NULL AS BINARY), 224) AS null_binary, sha2('caf\u00e9', 224) AS unicode_text, sha2(X'636166c3a9', 224) AS unicode_binary"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "column_224",
+          "ansi": false,
+          "ordered": true,
+          "bits": 224,
+          "sql": "SELECT id, sha2(s, 224) AS text_hash, sha2(b, 224) AS binary_hash FROM sha2_inputs ORDER BY id"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "literal_256",
+          "ansi": false,
+          "ordered": true,
+          "bits": 256,
+          "sql": "SELECT sha2('abc', 256) AS text, sha2(X'616263', 256) AS binary, sha2('', 256) AS empty_text, sha2(X'', 256) AS empty_binary, sha2(CAST(NULL AS STRING), 256) AS null_text, sha2(CAST(NULL AS BINARY), 256) AS null_binary, sha2('caf\u00e9', 256) AS unicode_text, sha2(X'636166c3a9', 256) AS unicode_binary"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "column_256",
+          "ansi": false,
+          "ordered": true,
+          "bits": 256,
+          "sql": "SELECT id, sha2(s, 256) AS text_hash, sha2(b, 256) AS binary_hash FROM sha2_inputs ORDER BY id"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "literal_384",
+          "ansi": false,
+          "ordered": true,
+          "bits": 384,
+          "sql": "SELECT sha2('abc', 384) AS text, sha2(X'616263', 384) AS binary, sha2('', 384) AS empty_text, sha2(X'', 384) AS empty_binary, sha2(CAST(NULL AS STRING), 384) AS null_text, sha2(CAST(NULL AS BINARY), 384) AS null_binary, sha2('caf\u00e9', 384) AS unicode_text, sha2(X'636166c3a9', 384) AS unicode_binary"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "column_384",
+          "ansi": false,
+          "ordered": true,
+          "bits": 384,
+          "sql": "SELECT id, sha2(s, 384) AS text_hash, sha2(b, 384) AS binary_hash FROM sha2_inputs ORDER BY id"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "literal_512",
+          "ansi": false,
+          "ordered": true,
+          "bits": 512,
+          "sql": "SELECT sha2('abc', 512) AS text, sha2(X'616263', 512) AS binary, sha2('', 512) AS empty_text, sha2(X'', 512) AS empty_binary, sha2(CAST(NULL AS STRING), 512) AS null_text, sha2(CAST(NULL AS BINARY), 512) AS null_binary, sha2('caf\u00e9', 512) AS unicode_text, sha2(X'636166c3a9', 512) AS unicode_binary"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "column_512",
+          "ansi": false,
+          "ordered": true,
+          "bits": 512,
+          "sql": "SELECT id, sha2(s, 512) AS text_hash, sha2(b, 512) AS binary_hash FROM sha2_inputs ORDER BY id"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "literal_128",
+          "ansi": false,
+          "ordered": true,
+          "bits": 128,
+          "sql": "SELECT sha2('abc', 128) AS text, sha2(X'616263', 128) AS binary, sha2('', 128) AS empty_text, sha2(X'', 128) AS empty_binary, sha2(CAST(NULL AS STRING), 128) AS null_text, sha2(CAST(NULL AS BINARY), 128) AS null_binary, sha2('caf\u00e9', 128) AS unicode_text, sha2(X'636166c3a9', 128) AS unicode_binary"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "column_128",
+          "ansi": false,
+          "ordered": true,
+          "bits": 128,
+          "sql": "SELECT id, sha2(s, 128) AS text_hash, sha2(b, 128) AS binary_hash FROM sha2_inputs ORDER BY id"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "literal_1",
+          "ansi": false,
+          "ordered": true,
+          "bits": 1,
+          "sql": "SELECT sha2('abc', 1) AS text, sha2(X'616263', 1) AS binary, sha2('', 1) AS empty_text, sha2(X'', 1) AS empty_binary, sha2(CAST(NULL AS STRING), 1) AS null_text, sha2(CAST(NULL AS BINARY), 1) AS null_binary, sha2('caf\u00e9', 1) AS unicode_text, sha2(X'636166c3a9', 1) AS unicode_binary"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "column_1",
+          "ansi": false,
+          "ordered": true,
+          "bits": 1,
+          "sql": "SELECT id, sha2(s, 1) AS text_hash, sha2(b, 1) AS binary_hash FROM sha2_inputs ORDER BY id"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "literal_minus_1",
+          "ansi": false,
+          "ordered": true,
+          "bits": -1,
+          "sql": "SELECT sha2('abc', -1) AS text, sha2(X'616263', -1) AS binary, sha2('', -1) AS empty_text, sha2(X'', -1) AS empty_binary, sha2(CAST(NULL AS STRING), -1) AS null_text, sha2(CAST(NULL AS BINARY), -1) AS null_binary, sha2('caf\u00e9', -1) AS unicode_text, sha2(X'636166c3a9', -1) AS unicode_binary"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "column_minus_1",
+          "ansi": false,
+          "ordered": true,
+          "bits": -1,
+          "sql": "SELECT id, sha2(s, -1) AS text_hash, sha2(b, -1) AS binary_hash FROM sha2_inputs ORDER BY id"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "literal_minus_256",
+          "ansi": false,
+          "ordered": true,
+          "bits": -256,
+          "sql": "SELECT sha2('abc', -256) AS text, sha2(X'616263', -256) AS binary, sha2('', -256) AS empty_text, sha2(X'', -256) AS empty_binary, sha2(CAST(NULL AS STRING), -256) AS null_text, sha2(CAST(NULL AS BINARY), -256) AS null_binary, sha2('caf\u00e9', -256) AS unicode_text, sha2(X'636166c3a9', -256) AS unicode_binary"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "column_minus_256",
+          "ansi": false,
+          "ordered": true,
+          "bits": -256,
+          "sql": "SELECT id, sha2(s, -256) AS text_hash, sha2(b, -256) AS binary_hash FROM sha2_inputs ORDER BY id"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "literal_2147483647",
+          "ansi": false,
+          "ordered": true,
+          "bits": 2147483647,
+          "sql": "SELECT sha2('abc', 2147483647) AS text, sha2(X'616263', 2147483647) AS binary, sha2('', 2147483647) AS empty_text, sha2(X'', 2147483647) AS empty_binary, sha2(CAST(NULL AS STRING), 2147483647) AS null_text, sha2(CAST(NULL AS BINARY), 2147483647) AS null_binary, sha2('caf\u00e9', 2147483647) AS unicode_text, sha2(X'636166c3a9', 2147483647) AS unicode_binary"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "column_2147483647",
+          "ansi": false,
+          "ordered": true,
+          "bits": 2147483647,
+          "sql": "SELECT id, sha2(s, 2147483647) AS text_hash, sha2(b, 2147483647) AS binary_hash FROM sha2_inputs ORDER BY id"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "literal_0",
+          "ansi": true,
+          "ordered": true,
+          "bits": 0,
+          "sql": "SELECT sha2('abc', 0) AS text, sha2(X'616263', 0) AS binary, sha2('', 0) AS empty_text, sha2(X'', 0) AS empty_binary, sha2(CAST(NULL AS STRING), 0) AS null_text, sha2(CAST(NULL AS BINARY), 0) AS null_binary, sha2('caf\u00e9', 0) AS unicode_text, sha2(X'636166c3a9', 0) AS unicode_binary"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "column_0",
+          "ansi": true,
+          "ordered": true,
+          "bits": 0,
+          "sql": "SELECT id, sha2(s, 0) AS text_hash, sha2(b, 0) AS binary_hash FROM sha2_inputs ORDER BY id"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "literal_224",
+          "ansi": true,
+          "ordered": true,
+          "bits": 224,
+          "sql": "SELECT sha2('abc', 224) AS text, sha2(X'616263', 224) AS binary, sha2('', 224) AS empty_text, sha2(X'', 224) AS empty_binary, sha2(CAST(NULL AS STRING), 224) AS null_text, sha2(CAST(NULL AS BINARY), 224) AS null_binary, sha2('caf\u00e9', 224) AS unicode_text, sha2(X'636166c3a9', 224) AS unicode_binary"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "column_224",
+          "ansi": true,
+          "ordered": true,
+          "bits": 224,
+          "sql": "SELECT id, sha2(s, 224) AS text_hash, sha2(b, 224) AS binary_hash FROM sha2_inputs ORDER BY id"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "literal_256",
+          "ansi": true,
+          "ordered": true,
+          "bits": 256,
+          "sql": "SELECT sha2('abc', 256) AS text, sha2(X'616263', 256) AS binary, sha2('', 256) AS empty_text, sha2(X'', 256) AS empty_binary, sha2(CAST(NULL AS STRING), 256) AS null_text, sha2(CAST(NULL AS BINARY), 256) AS null_binary, sha2('caf\u00e9', 256) AS unicode_text, sha2(X'636166c3a9', 256) AS unicode_binary"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "column_256",
+          "ansi": true,
+          "ordered": true,
+          "bits": 256,
+          "sql": "SELECT id, sha2(s, 256) AS text_hash, sha2(b, 256) AS binary_hash FROM sha2_inputs ORDER BY id"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "literal_384",
+          "ansi": true,
+          "ordered": true,
+          "bits": 384,
+          "sql": "SELECT sha2('abc', 384) AS text, sha2(X'616263', 384) AS binary, sha2('', 384) AS empty_text, sha2(X'', 384) AS empty_binary, sha2(CAST(NULL AS STRING), 384) AS null_text, sha2(CAST(NULL AS BINARY), 384) AS null_binary, sha2('caf\u00e9', 384) AS unicode_text, sha2(X'636166c3a9', 384) AS unicode_binary"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "column_384",
+          "ansi": true,
+          "ordered": true,
+          "bits": 384,
+          "sql": "SELECT id, sha2(s, 384) AS text_hash, sha2(b, 384) AS binary_hash FROM sha2_inputs ORDER BY id"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "literal_512",
+          "ansi": true,
+          "ordered": true,
+          "bits": 512,
+          "sql": "SELECT sha2('abc', 512) AS text, sha2(X'616263', 512) AS binary, sha2('', 512) AS empty_text, sha2(X'', 512) AS empty_binary, sha2(CAST(NULL AS STRING), 512) AS null_text, sha2(CAST(NULL AS BINARY), 512) AS null_binary, sha2('caf\u00e9', 512) AS unicode_text, sha2(X'636166c3a9', 512) AS unicode_binary"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "column_512",
+          "ansi": true,
+          "ordered": true,
+          "bits": 512,
+          "sql": "SELECT id, sha2(s, 512) AS text_hash, sha2(b, 512) AS binary_hash FROM sha2_inputs ORDER BY id"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "literal_128",
+          "ansi": true,
+          "ordered": true,
+          "bits": 128,
+          "sql": "SELECT sha2('abc', 128) AS text, sha2(X'616263', 128) AS binary, sha2('', 128) AS empty_text, sha2(X'', 128) AS empty_binary, sha2(CAST(NULL AS STRING), 128) AS null_text, sha2(CAST(NULL AS BINARY), 128) AS null_binary, sha2('caf\u00e9', 128) AS unicode_text, sha2(X'636166c3a9', 128) AS unicode_binary"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "column_128",
+          "ansi": true,
+          "ordered": true,
+          "bits": 128,
+          "sql": "SELECT id, sha2(s, 128) AS text_hash, sha2(b, 128) AS binary_hash FROM sha2_inputs ORDER BY id"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "literal_1",
+          "ansi": true,
+          "ordered": true,
+          "bits": 1,
+          "sql": "SELECT sha2('abc', 1) AS text, sha2(X'616263', 1) AS binary, sha2('', 1) AS empty_text, sha2(X'', 1) AS empty_binary, sha2(CAST(NULL AS STRING), 1) AS null_text, sha2(CAST(NULL AS BINARY), 1) AS null_binary, sha2('caf\u00e9', 1) AS unicode_text, sha2(X'636166c3a9', 1) AS unicode_binary"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "column_1",
+          "ansi": true,
+          "ordered": true,
+          "bits": 1,
+          "sql": "SELECT id, sha2(s, 1) AS text_hash, sha2(b, 1) AS binary_hash FROM sha2_inputs ORDER BY id"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "literal_minus_1",
+          "ansi": true,
+          "ordered": true,
+          "bits": -1,
+          "sql": "SELECT sha2('abc', -1) AS text, sha2(X'616263', -1) AS binary, sha2('', -1) AS empty_text, sha2(X'', -1) AS empty_binary, sha2(CAST(NULL AS STRING), -1) AS null_text, sha2(CAST(NULL AS BINARY), -1) AS null_binary, sha2('caf\u00e9', -1) AS unicode_text, sha2(X'636166c3a9', -1) AS unicode_binary"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "column_minus_1",
+          "ansi": true,
+          "ordered": true,
+          "bits": -1,
+          "sql": "SELECT id, sha2(s, -1) AS text_hash, sha2(b, -1) AS binary_hash FROM sha2_inputs ORDER BY id"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "literal_minus_256",
+          "ansi": true,
+          "ordered": true,
+          "bits": -256,
+          "sql": "SELECT sha2('abc', -256) AS text, sha2(X'616263', -256) AS binary, sha2('', -256) AS empty_text, sha2(X'', -256) AS empty_binary, sha2(CAST(NULL AS STRING), -256) AS null_text, sha2(CAST(NULL AS BINARY), -256) AS null_binary, sha2('caf\u00e9', -256) AS unicode_text, sha2(X'636166c3a9', -256) AS unicode_binary"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "column_minus_256",
+          "ansi": true,
+          "ordered": true,
+          "bits": -256,
+          "sql": "SELECT id, sha2(s, -256) AS text_hash, sha2(b, -256) AS binary_hash FROM sha2_inputs ORDER BY id"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "literal_2147483647",
+          "ansi": true,
+          "ordered": true,
+          "bits": 2147483647,
+          "sql": "SELECT sha2('abc', 2147483647) AS text, sha2(X'616263', 2147483647) AS binary, sha2('', 2147483647) AS empty_text, sha2(X'', 2147483647) AS empty_binary, sha2(CAST(NULL AS STRING), 2147483647) AS null_text, sha2(CAST(NULL AS BINARY), 2147483647) AS null_binary, sha2('caf\u00e9', 2147483647) AS unicode_text, sha2(X'636166c3a9', 2147483647) AS unicode_binary"
+        },
+        {
+          "corpus": "sha2_literal_lengths",
+          "id": "column_2147483647",
+          "ansi": true,
+          "ordered": true,
+          "bits": 2147483647,
+          "sql": "SELECT id, sha2(s, 2147483647) AS text_hash, sha2(b, 2147483647) AS binary_hash FROM sha2_inputs ORDER BY id"
+        }
+      ]
+    }
+  ]
+}
