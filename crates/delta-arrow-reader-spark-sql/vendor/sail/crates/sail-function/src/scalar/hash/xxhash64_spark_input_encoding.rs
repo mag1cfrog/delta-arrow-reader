@@ -1,4 +1,5 @@
-//! Encode Spark wide decimals as signed bytes while reusing the public XXHASH64 kernel.
+//! Encode wide decimals and mask fields beneath NULL STRUCT parents for Spark XXHASH64.
+//! The upstream implementation still supplies the hash kernel.
 
 use std::sync::Arc;
 
@@ -37,15 +38,15 @@ impl ScalarUDFImpl for Xxhash64WithSparkInputEncoding {
 
     fn invoke_with_args(&self, mut args: ScalarFunctionArgs) -> Result<ColumnarValue> {
         for (index, argument) in args.args.iter_mut().enumerate() {
-            if !contains_wide_decimal(&argument.data_type()) {
+            if !requires_spark_hash_input_encoding(&argument.data_type()) {
                 continue;
             }
             *argument = match argument {
                 ColumnarValue::Array(array) => {
-                    ColumnarValue::Array(encode_wide_decimals_as_binary(array)?)
+                    ColumnarValue::Array(encode_spark_hash_input(array)?)
                 }
                 ColumnarValue::Scalar(value) => {
-                    let array = encode_wide_decimals_as_binary(&value.to_array()?)?;
+                    let array = encode_spark_hash_input(&value.to_array()?)?;
                     ColumnarValue::Scalar(ScalarValue::try_from_array(array.as_ref(), 0)?)
                 }
             };
@@ -57,21 +58,19 @@ impl ScalarUDFImpl for Xxhash64WithSparkInputEncoding {
     }
 }
 
-fn contains_wide_decimal(data_type: &DataType) -> bool {
+fn requires_spark_hash_input_encoding(data_type: &DataType) -> bool {
     match data_type {
         DataType::Decimal128(precision, _) => *precision > 18,
         DataType::List(field) | DataType::LargeList(field) | DataType::FixedSizeList(field, _) => {
-            contains_wide_decimal(field.data_type())
+            requires_spark_hash_input_encoding(field.data_type())
         }
-        DataType::Dictionary(_, value) => contains_wide_decimal(value),
-        DataType::Struct(fields) => fields
-            .iter()
-            .any(|field| contains_wide_decimal(field.data_type())),
+        DataType::Dictionary(_, value) => requires_spark_hash_input_encoding(value),
+        DataType::Struct(_) => true,
         _ => false,
     }
 }
 
-fn encode_wide_decimals_as_binary(array: &ArrayRef) -> Result<ArrayRef> {
+fn encode_spark_hash_input(array: &ArrayRef) -> Result<ArrayRef> {
     if let DataType::Decimal128(precision, _) = array.data_type()
         && *precision > 18
     {
@@ -112,7 +111,7 @@ fn encode_wide_decimals_as_binary(array: &ArrayRef) -> Result<ArrayRef> {
             } else {
                 child.clone()
             };
-            Ok(encode_wide_decimals_as_binary(&make_array(child))?.to_data())
+            Ok(encode_spark_hash_input(&make_array(child))?.to_data())
         })
         .collect::<Result<Vec<_>>>()?;
     let data_type = match array.data_type() {

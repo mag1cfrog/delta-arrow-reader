@@ -1,0 +1,340 @@
+{
+  "issue": 1372,
+  "base": "d935a7a82d13158e0e31c5ec9c69c172ebef009f",
+  "expected_record_count": 8,
+  "corpora": [
+    {
+      "corpus": "xxhash64_null_structs",
+      "source": "Nullable root and nested STRUCT values, ordered ARRAY/STRUCT combinations, empty and NULL children, and changing row seeds.",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "null_struct_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "st",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "a",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "b",
+                        "type": "string",
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "a_st",
+                  "type": {
+                    "type": "array",
+                    "elementType": {
+                      "type": "struct",
+                      "fields": [
+                        {
+                          "name": "a",
+                          "type": "integer",
+                          "nullable": true,
+                          "metadata": {}
+                        },
+                        {
+                          "name": "b",
+                          "type": "string",
+                          "nullable": true,
+                          "metadata": {}
+                        }
+                      ]
+                    },
+                    "containsNull": true
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "st_a",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "a",
+                        "type": {
+                          "type": "array",
+                          "elementType": "integer",
+                          "containsNull": true
+                        },
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "b",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "deep",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "inner",
+                        "type": {
+                          "type": "struct",
+                          "fields": [
+                            {
+                              "name": "a",
+                              "type": "integer",
+                              "nullable": true,
+                              "metadata": {}
+                            },
+                            {
+                              "name": "b",
+                              "type": "string",
+                              "nullable": true,
+                              "metadata": {}
+                            }
+                          ]
+                        },
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "v",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                [
+                  "1",
+                  "x"
+                ],
+                [
+                  [
+                    "1",
+                    "x"
+                  ],
+                  null,
+                  [
+                    "2",
+                    null
+                  ]
+                ],
+                [
+                  [
+                    "1",
+                    null,
+                    "2"
+                  ],
+                  "3"
+                ],
+                [
+                  [
+                    "1",
+                    "x"
+                  ],
+                  "1"
+                ]
+              ],
+              [
+                "2",
+                [
+                  null,
+                  null
+                ],
+                [],
+                [
+                  [],
+                  null
+                ],
+                [
+                  null,
+                  null
+                ]
+              ],
+              [
+                "3",
+                [
+                  null,
+                  ""
+                ],
+                [
+                  [
+                    null,
+                    null
+                  ]
+                ],
+                [
+                  null,
+                  "0"
+                ],
+                [
+                  [
+                    null,
+                    ""
+                  ],
+                  null
+                ]
+              ],
+              [
+                "4",
+                null,
+                null,
+                null,
+                null
+              ],
+              [
+                "5",
+                [
+                  "-1",
+                  "z"
+                ],
+                [
+                  [
+                    "-1",
+                    "z"
+                  ]
+                ],
+                [
+                  [
+                    "-1"
+                  ],
+                  "2"
+                ],
+                [
+                  [
+                    "-1",
+                    "z"
+                  ],
+                  "5"
+                ]
+              ],
+              [
+                "6",
+                [
+                  "1",
+                  "x"
+                ],
+                [
+                  [
+                    "1",
+                    "x"
+                  ],
+                  null,
+                  [
+                    "2",
+                    null
+                  ]
+                ],
+                [
+                  [
+                    "1",
+                    null,
+                    "2"
+                  ],
+                  "3"
+                ],
+                [
+                  [
+                    "1",
+                    "x"
+                  ],
+                  "1"
+                ]
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "id": "struct_columns",
+          "sql": "SELECT id,xxhash64(st) AS root,xxhash64(deep) AS nested,xxhash64(st_a) AS struct_array,xxhash64(a_st) AS array_struct FROM null_struct_inputs ORDER BY id",
+          "ansi": false,
+          "ordered": true,
+          "corpus": "xxhash64_null_structs"
+        },
+        {
+          "id": "seeded_columns",
+          "sql": "SELECT id,xxhash64(id,st) AS prefix,xxhash64(st,id) AS suffix,xxhash64(id,a_st,deep,st_a,CAST(id AS STRING)) AS mixed FROM null_struct_inputs ORDER BY id",
+          "ansi": false,
+          "ordered": true,
+          "corpus": "xxhash64_null_structs"
+        },
+        {
+          "id": "composed_containers",
+          "sql": "SELECT id,xxhash64(array(st,CAST(NULL AS STRUCT<a:INT,b:STRING>))) AS array_root,xxhash64(named_struct('s',st,'items',a_st)) AS nested_root,xxhash64(array(array(st),array(CAST(NULL AS STRUCT<a:INT,b:STRING>)))) AS arrays FROM null_struct_inputs ORDER BY id",
+          "ansi": false,
+          "ordered": true,
+          "corpus": "xxhash64_null_structs"
+        },
+        {
+          "id": "null_empty_literals",
+          "sql": "SELECT xxhash64(CAST(NULL AS STRUCT<a:INT,b:STRING>)) AS null_struct,xxhash64(named_struct('a',CAST(NULL AS INT),'b',CAST(NULL AS STRING))) AS null_fields,xxhash64(named_struct('items',CAST(array() AS ARRAY<INT>))) AS empty_array,xxhash64(array(CAST(NULL AS STRUCT<a:INT,b:STRING>))) AS null_element",
+          "ansi": false,
+          "ordered": true,
+          "corpus": "xxhash64_null_structs"
+        },
+        {
+          "id": "struct_columns",
+          "sql": "SELECT id,xxhash64(st) AS root,xxhash64(deep) AS nested,xxhash64(st_a) AS struct_array,xxhash64(a_st) AS array_struct FROM null_struct_inputs ORDER BY id",
+          "ansi": true,
+          "ordered": true,
+          "corpus": "xxhash64_null_structs"
+        },
+        {
+          "id": "seeded_columns",
+          "sql": "SELECT id,xxhash64(id,st) AS prefix,xxhash64(st,id) AS suffix,xxhash64(id,a_st,deep,st_a,CAST(id AS STRING)) AS mixed FROM null_struct_inputs ORDER BY id",
+          "ansi": true,
+          "ordered": true,
+          "corpus": "xxhash64_null_structs"
+        },
+        {
+          "id": "composed_containers",
+          "sql": "SELECT id,xxhash64(array(st,CAST(NULL AS STRUCT<a:INT,b:STRING>))) AS array_root,xxhash64(named_struct('s',st,'items',a_st)) AS nested_root,xxhash64(array(array(st),array(CAST(NULL AS STRUCT<a:INT,b:STRING>)))) AS arrays FROM null_struct_inputs ORDER BY id",
+          "ansi": true,
+          "ordered": true,
+          "corpus": "xxhash64_null_structs"
+        },
+        {
+          "id": "null_empty_literals",
+          "sql": "SELECT xxhash64(CAST(NULL AS STRUCT<a:INT,b:STRING>)) AS null_struct,xxhash64(named_struct('a',CAST(NULL AS INT),'b',CAST(NULL AS STRING))) AS null_fields,xxhash64(named_struct('items',CAST(array() AS ARRAY<INT>))) AS empty_array,xxhash64(array(CAST(NULL AS STRUCT<a:INT,b:STRING>))) AS null_element",
+          "ansi": true,
+          "ordered": true,
+          "corpus": "xxhash64_null_structs"
+        }
+      ]
+    }
+  ]
+}
