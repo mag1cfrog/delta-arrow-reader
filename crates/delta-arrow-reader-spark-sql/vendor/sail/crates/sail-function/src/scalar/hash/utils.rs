@@ -163,18 +163,37 @@ macro_rules! hash_array_primitive_float {
     };
 }
 
-macro_rules! hash_array_decimal {
+// Spark's wide decimals use Java BigInteger's minimal signed byte representation.
+fn minimal_signed_decimal_bytes(big_endian_bytes: &[u8; 16]) -> &[u8] {
+    let mut start = 0;
+    while start < big_endian_bytes.len() - 1 {
+        let is_redundant_sign_byte = match big_endian_bytes[start] {
+            0x00 => big_endian_bytes[start + 1] & 0x80 == 0,
+            0xff => big_endian_bytes[start + 1] & 0x80 != 0,
+            _ => false,
+        };
+        if !is_redundant_sign_byte {
+            break;
+        }
+        start += 1;
+    }
+    &big_endian_bytes[start..]
+}
+
+macro_rules! hash_array_wide_decimal {
     ($array_type:ident, $column: ident, $hashes: ident, $hash_method: ident) => {
         let array = $column.as_any().downcast_ref::<$array_type>().unwrap();
 
         if array.null_count() == 0 {
             for (i, hash) in $hashes.iter_mut().enumerate() {
-                *hash = $hash_method(array.value(i).to_le_bytes(), *hash);
+                let bytes = array.value(i).to_be_bytes();
+                *hash = $hash_method(minimal_signed_decimal_bytes(&bytes), *hash);
             }
         } else {
             for (i, hash) in $hashes.iter_mut().enumerate() {
                 if !array.is_null(i) {
-                    *hash = $hash_method(array.value(i).to_le_bytes(), *hash);
+                    let bytes = array.value(i).to_be_bytes();
+                    *hash = $hash_method(minimal_signed_decimal_bytes(&bytes), *hash);
                 }
             }
         }
@@ -329,8 +348,11 @@ macro_rules! create_hashes_internal {
                 DataType::FixedSizeBinary(_) => {
                     hash_array!(FixedSizeBinaryArray, col, $hashes_buffer, $hash_method);
                 }
+                DataType::Decimal128(precision, _) if *precision <= 18 => {
+                    hash_array_primitive!(Decimal128Array, col, i64, $hashes_buffer, $hash_method);
+                }
                 DataType::Decimal128(_, _) => {
-                    hash_array_decimal!(Decimal128Array, col, $hashes_buffer, $hash_method);
+                    hash_array_wide_decimal!(Decimal128Array, col, $hashes_buffer, $hash_method);
                 }
                 DataType::Dictionary(index_type, _) => match **index_type {
                     DataType::Int8 => {
