@@ -47,5 +47,5 @@ The sibling `/tmp/null-struct-parent.lifecycle.json` records owned-JVM cleanup.
 From the repository root, run the focused replay with:
 
 ```sh
-cargo test --locked --manifest-path crates/delta-arrow-reader-spark-sql/Cargo.toml --test null_struct_parent
+cargo test --locked --manifest-path crates/delta-arrow-reader-spark-sql/Cargo.toml --test struct_expressions null_struct_parent::
 ```

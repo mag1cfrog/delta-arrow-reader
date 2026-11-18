@@ -31,10 +31,12 @@ artifact sizes. To keep symbols and line tables for a focused test backtrace:
 CARGO_PROFILE_TEST_DEBUG=line-tables-only \
 CARGO_PROFILE_TEST_STRIP=none \
 RUST_BACKTRACE=1 \
-cargo test --locked --manifest-path crates/delta-arrow-reader-spark-sql/Cargo.toml --workspace --test collection_size
+cargo test --locked --manifest-path crates/delta-arrow-reader-spark-sql/Cargo.toml --workspace --test collection_functions collection_size::
 ```
 
-Replace `collection_size` with the integration test target you are debugging.
+Replace `collection_functions` with the integration test target and `collection_size::`
+with the module or test filter you are debugging. Grouped targets declare their modules
+in `tests/<target>/main.rs`; add related cases to those groups to limit formatter command size.
 
 The public API provides session configuration, query resolution and physical
 planning. Its crate-level example shows how to execute a query using the host

@@ -46,5 +46,5 @@ error phases and first cast inputs in 44 strict comparisons at batch sizes 1
 and 32:
 
 ```sh
-cargo test --locked --workspace --test compact_null_inspection -- --nocapture
+cargo test --locked --workspace --test array_functions compact_null_inspection:: -- --nocapture
 ```

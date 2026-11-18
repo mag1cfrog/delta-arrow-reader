@@ -10,8 +10,8 @@ required and optional STRUCT fields, and numeric coercion.
 From the repository root, run:
 
 ```sh
-cargo test --locked --workspace --manifest-path crates/delta-arrow-reader-spark-sql/Cargo.toml --test case_hidden_sort_declarations -- --test-threads=1 --nocapture
-cargo test --locked --workspace --manifest-path crates/delta-arrow-reader-spark-sql/Cargo.toml --test case_reachable_fields -- --test-threads=1 --nocapture
+cargo test --locked --workspace --manifest-path crates/delta-arrow-reader-spark-sql/Cargo.toml --test case_expressions case_hidden_sort_declarations:: -- --test-threads=1 --nocapture
+cargo test --locked --workspace --manifest-path crates/delta-arrow-reader-spark-sql/Cargo.toml --test case_expressions case_reachable_fields:: -- --test-threads=1 --nocapture
 ```
 
 The second test retains all 324 original CASE records at both batch sizes.

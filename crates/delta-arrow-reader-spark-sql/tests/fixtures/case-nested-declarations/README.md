@@ -22,7 +22,7 @@ counterpart.
 From the repository root, run:
 
 ```sh
-cargo test --locked --workspace --manifest-path crates/delta-arrow-reader-spark-sql/Cargo.toml --test case_nested_declarations -- --test-threads=1 --nocapture
+cargo test --locked --workspace --manifest-path crates/delta-arrow-reader-spark-sql/Cargo.toml --test case_expressions case_nested_declarations:: -- --test-threads=1 --nocapture
 ```
 
 The replay requires 194 strict Spark matches and two exact inherited observations
