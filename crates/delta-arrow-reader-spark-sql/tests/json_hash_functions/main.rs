@@ -15,4 +15,5 @@ mod hash_null_arguments;
 mod json_array_length_roots;
 mod sha2_literal_lengths;
 mod xxhash64_decimal_encoding;
+mod xxhash64_dictionary_seeds;
 mod xxhash64_null_structs;

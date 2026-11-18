@@ -1,0 +1,535 @@
+{
+  "issue": 1374,
+  "base": "6282774330e5fa502cbd600f467a032d23e9ff07",
+  "expected_record_count": 8,
+  "corpora": [
+    {
+      "corpus": "xxhash64_dictionary_seeds",
+      "source": "INT, STRING, STRUCT and wide decimal values under ARRAY/STRUCT containers, repeated and NULL values, root controls and changing row seeds.",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "dictionary_seed_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "root_i",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "root_s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "root_st",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "a",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "b",
+                        "type": "string",
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "root_d",
+                  "type": "decimal(38,3)",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "a_i",
+                  "type": {
+                    "type": "array",
+                    "elementType": "integer",
+                    "containsNull": true
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "a_s",
+                  "type": {
+                    "type": "array",
+                    "elementType": "string",
+                    "containsNull": true
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "a_st",
+                  "type": {
+                    "type": "array",
+                    "elementType": {
+                      "type": "struct",
+                      "fields": [
+                        {
+                          "name": "a",
+                          "type": "integer",
+                          "nullable": true,
+                          "metadata": {}
+                        },
+                        {
+                          "name": "b",
+                          "type": "string",
+                          "nullable": true,
+                          "metadata": {}
+                        }
+                      ]
+                    },
+                    "containsNull": true
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "a_d",
+                  "type": {
+                    "type": "array",
+                    "elementType": "decimal(38,3)",
+                    "containsNull": true
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "st",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "a",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "b",
+                        "type": "string",
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "reverse_st",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "a",
+                        "type": "string",
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "b",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "deep",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "a",
+                        "type": {
+                          "type": "struct",
+                          "fields": [
+                            {
+                              "name": "a",
+                              "type": "integer",
+                              "nullable": true,
+                              "metadata": {}
+                            },
+                            {
+                              "name": "b",
+                              "type": "string",
+                              "nullable": true,
+                              "metadata": {}
+                            }
+                          ]
+                        },
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "b",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "st_d",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "a",
+                        "type": "decimal(38,3)",
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "b",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                "1",
+                "x",
+                [
+                  "1",
+                  "x"
+                ],
+                "7.250",
+                [
+                  "1",
+                  null,
+                  "2"
+                ],
+                [
+                  "x",
+                  null,
+                  "x"
+                ],
+                [
+                  [
+                    "1",
+                    "x"
+                  ],
+                  null,
+                  [
+                    "2",
+                    null
+                  ]
+                ],
+                [
+                  "7.250",
+                  null,
+                  "-1.000"
+                ],
+                [
+                  "1",
+                  "x"
+                ],
+                [
+                  "x",
+                  "1"
+                ],
+                [
+                  [
+                    "1",
+                    "x"
+                  ],
+                  "1"
+                ],
+                [
+                  "7.250",
+                  "1"
+                ]
+              ],
+              [
+                "2",
+                null,
+                null,
+                [
+                  null,
+                  null
+                ],
+                null,
+                [],
+                [],
+                [],
+                [],
+                [
+                  null,
+                  null
+                ],
+                [
+                  null,
+                  null
+                ],
+                [
+                  null,
+                  null
+                ],
+                [
+                  null,
+                  null
+                ]
+              ],
+              [
+                "3",
+                "0",
+                "",
+                [
+                  null,
+                  ""
+                ],
+                "0.000",
+                [
+                  null
+                ],
+                [
+                  null
+                ],
+                [
+                  [
+                    null,
+                    null
+                  ]
+                ],
+                [
+                  null
+                ],
+                [
+                  null,
+                  ""
+                ],
+                [
+                  "",
+                  null
+                ],
+                [
+                  [
+                    null,
+                    ""
+                  ],
+                  "0"
+                ],
+                [
+                  "0.000",
+                  "0"
+                ]
+              ],
+              [
+                "4",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+              ],
+              [
+                "5",
+                "-1",
+                "z",
+                [
+                  "-1",
+                  "z"
+                ],
+                "-0.129",
+                [
+                  "-1",
+                  "2"
+                ],
+                [
+                  "",
+                  "z"
+                ],
+                [
+                  [
+                    "-1",
+                    "z"
+                  ]
+                ],
+                [
+                  "-0.129",
+                  "0.128"
+                ],
+                [
+                  "-1",
+                  "z"
+                ],
+                [
+                  "z",
+                  "-1"
+                ],
+                [
+                  [
+                    "-1",
+                    "z"
+                  ],
+                  "2"
+                ],
+                [
+                  "-0.129",
+                  "2"
+                ]
+              ],
+              [
+                "6",
+                "1",
+                "x",
+                [
+                  "1",
+                  "x"
+                ],
+                "7.250",
+                [
+                  "1",
+                  null,
+                  "2"
+                ],
+                [
+                  "x",
+                  null,
+                  "x"
+                ],
+                [
+                  [
+                    "1",
+                    "x"
+                  ],
+                  null,
+                  [
+                    "2",
+                    null
+                  ]
+                ],
+                [
+                  "7.250",
+                  null,
+                  "-1.000"
+                ],
+                [
+                  "1",
+                  "x"
+                ],
+                [
+                  "x",
+                  "1"
+                ],
+                [
+                  [
+                    "1",
+                    "x"
+                  ],
+                  "1"
+                ],
+                [
+                  "7.250",
+                  "1"
+                ]
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "id": "container_values",
+          "sql": "SELECT id,xxhash64(a_i) AS ai,xxhash64(a_s) AS astr,xxhash64(a_st) AS ast,xxhash64(a_d) AS ad,xxhash64(st) AS si,xxhash64(reverse_st) AS ss,xxhash64(deep) AS sst,xxhash64(st_d) AS sd FROM dictionary_seed_inputs ORDER BY id",
+          "ansi": false,
+          "ordered": true,
+          "corpus": "xxhash64_dictionary_seeds"
+        },
+        {
+          "id": "changing_seeds",
+          "sql": "SELECT id,xxhash64(id,a_i,a_s,a_st,a_d,CAST(id AS STRING)) AS arrays,xxhash64(id,st,reverse_st,deep,st_d) AS structs,xxhash64(a_i,id) AS array_suffix,xxhash64(st,id) AS struct_suffix,xxhash64(id,named_struct('values',a_i,'st',st)) AS nested FROM dictionary_seed_inputs ORDER BY id",
+          "ansi": false,
+          "ordered": true,
+          "corpus": "xxhash64_dictionary_seeds"
+        },
+        {
+          "id": "root_dictionaries",
+          "sql": "SELECT id,xxhash64(root_i) AS i,xxhash64(root_s) AS s,xxhash64(root_st) AS st,xxhash64(root_d) AS d,xxhash64(id,root_i,root_s,root_st,root_d) AS prefix,xxhash64(root_i,root_s,root_st,root_d,id) AS suffix FROM dictionary_seed_inputs ORDER BY id",
+          "ansi": false,
+          "ordered": true,
+          "corpus": "xxhash64_dictionary_seeds"
+        },
+        {
+          "id": "literal_controls",
+          "sql": "SELECT xxhash64(array(1,CAST(NULL AS INT),2)) AS array_i,xxhash64(named_struct('a',1,'b','x')) AS st,xxhash64(CAST(NULL AS ARRAY<INT>)) AS null_array,xxhash64(array()) AS empty_array",
+          "ansi": false,
+          "ordered": true,
+          "corpus": "xxhash64_dictionary_seeds"
+        },
+        {
+          "id": "container_values",
+          "sql": "SELECT id,xxhash64(a_i) AS ai,xxhash64(a_s) AS astr,xxhash64(a_st) AS ast,xxhash64(a_d) AS ad,xxhash64(st) AS si,xxhash64(reverse_st) AS ss,xxhash64(deep) AS sst,xxhash64(st_d) AS sd FROM dictionary_seed_inputs ORDER BY id",
+          "ansi": true,
+          "ordered": true,
+          "corpus": "xxhash64_dictionary_seeds"
+        },
+        {
+          "id": "changing_seeds",
+          "sql": "SELECT id,xxhash64(id,a_i,a_s,a_st,a_d,CAST(id AS STRING)) AS arrays,xxhash64(id,st,reverse_st,deep,st_d) AS structs,xxhash64(a_i,id) AS array_suffix,xxhash64(st,id) AS struct_suffix,xxhash64(id,named_struct('values',a_i,'st',st)) AS nested FROM dictionary_seed_inputs ORDER BY id",
+          "ansi": true,
+          "ordered": true,
+          "corpus": "xxhash64_dictionary_seeds"
+        },
+        {
+          "id": "root_dictionaries",
+          "sql": "SELECT id,xxhash64(root_i) AS i,xxhash64(root_s) AS s,xxhash64(root_st) AS st,xxhash64(root_d) AS d,xxhash64(id,root_i,root_s,root_st,root_d) AS prefix,xxhash64(root_i,root_s,root_st,root_d,id) AS suffix FROM dictionary_seed_inputs ORDER BY id",
+          "ansi": true,
+          "ordered": true,
+          "corpus": "xxhash64_dictionary_seeds"
+        },
+        {
+          "id": "literal_controls",
+          "sql": "SELECT xxhash64(array(1,CAST(NULL AS INT),2)) AS array_i,xxhash64(named_struct('a',1,'b','x')) AS st,xxhash64(CAST(NULL AS ARRAY<INT>)) AS null_array,xxhash64(array()) AS empty_array",
+          "ansi": true,
+          "ordered": true,
+          "corpus": "xxhash64_dictionary_seeds"
+        }
+      ]
+    }
+  ]
+}
