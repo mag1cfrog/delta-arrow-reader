@@ -7,10 +7,12 @@ use datafusion_common::{Column, DFSchema, DFSchemaRef};
 use datafusion_expr::expr::{Alias, Sort};
 use datafusion_expr::utils::{exprlist_to_fields, find_aggregate_exprs};
 use datafusion_expr::{
-    Aggregate, Expr, ExprSchemable, Extension, LogicalPlan, LogicalPlanBuilder, Projection, Window,
+    Aggregate, Expr, ExprSchemable, Extension, LogicalPlan, LogicalPlanBuilder, Partitioning,
+    Projection, Repartition, Window,
 };
 use sail_common::spec;
 use sail_common_datafusion::utils::items::ItemTaker;
+use sail_logical_plan::repartition::RequiredDistributionNode;
 use sail_logical_plan::sort::SortWithinPartitionsNode;
 
 use crate::error::{PlanError, PlanResult};
@@ -27,16 +29,12 @@ impl PlanResolver<'_> {
         input: spec::QueryPlan,
         order: Vec<spec::SortOrder>,
         is_global: bool,
+        resolve_ordinals: bool,
         state: &mut PlanResolverState,
     ) -> PlanResult<LogicalPlan> {
-        let mut input = self
-            .resolve_query_plan_with_hidden_fields(input, state)
+        let plan = self
+            .resolve_query_sort_plan(input, order, resolve_ordinals, state)
             .await?;
-        let sorts = self
-            .resolve_query_sort_orders_by_plan(&input, &order, state)
-            .await?;
-        let sorts = Self::rebase_query_sort_orders(sorts, &mut input)?;
-        let mut plan = LogicalPlanBuilder::from(input).sort(sorts)?.build()?;
         // The builder adds the sort, with any columns its keys need, and an optional projection
         // above it, so each key's type is known against the sort's input.
         let sort = match &plan {
@@ -49,19 +47,6 @@ impl PlanResolver<'_> {
                     reject_calendar_interval_sort_key(&data_type)?;
                 }
             }
-        }
-        if let LogicalPlan::Projection(project) = plan {
-            // Hidden ORDER BY columns add an output projection with its own nested declaration.
-            let expressions = project
-                .expr
-                .into_iter()
-                .zip(project.schema.iter())
-                .map(|(expression, (qualifier, field))| {
-                    preserve_hidden_sort_output_declaration(expression, field)
-                        .alias_qualified(qualifier.cloned(), field.name())
-                })
-                .collect();
-            plan = LogicalPlan::Projection(Projection::try_new(expressions, project.input)?);
         }
         // Grouping placeholders and hidden sort columns are resolved before key typing.
         Ok(plan
@@ -108,6 +93,85 @@ impl PlanResolver<'_> {
                 };
                 // The builder adds only this sort and an optional projection above it.
                 Ok(Transformed::new(plan, true, TreeNodeRecursion::Jump))
+            })
+            .data()?)
+    }
+
+    // The sort builder restores nonprojected keys and preserves their output declarations.
+    async fn resolve_query_sort_plan(
+        &self,
+        input: spec::QueryPlan,
+        order: Vec<spec::SortOrder>,
+        resolve_ordinals: bool,
+        state: &mut PlanResolverState,
+    ) -> PlanResult<LogicalPlan> {
+        let mut input = self
+            .resolve_query_plan_with_hidden_fields(input, state)
+            .await?;
+        let sorts = self
+            .resolve_query_sort_orders_by_plan(&input, &order, resolve_ordinals, state)
+            .await?;
+        let sorts = Self::rebase_query_sort_orders(sorts, &mut input)?;
+        let mut plan = LogicalPlanBuilder::from(input).sort(sorts)?.build()?;
+        if let LogicalPlan::Projection(project) = plan {
+            // Hidden ORDER BY columns add an output projection with its own nested declaration.
+            let expressions = project
+                .expr
+                .into_iter()
+                .zip(project.schema.iter())
+                .map(|(expression, (qualifier, field))| {
+                    preserve_hidden_sort_output_declaration(expression, field)
+                        .alias_qualified(qualifier.cloned(), field.name())
+                })
+                .collect();
+            plan = LogicalPlan::Projection(Projection::try_new(expressions, project.input)?);
+        }
+        Ok(plan)
+    }
+
+    pub(super) async fn resolve_query_repartition(
+        &self,
+        input: spec::QueryPlan,
+        expressions: Vec<spec::Expr>,
+        num_partitions: Option<usize>,
+        state: &mut PlanResolverState,
+    ) -> PlanResult<LogicalPlan> {
+        let order = expressions
+            .into_iter()
+            .map(|expression| spec::SortOrder {
+                child: Box::new(expression),
+                direction: spec::SortDirection::Ascending,
+                null_ordering: spec::NullOrdering::NullsFirst,
+            })
+            .collect();
+        let plan = self
+            .resolve_query_sort_plan(input, order, false, state)
+            .await?;
+        let partitions =
+            num_partitions.unwrap_or_else(|| self.ctx.state().config().target_partitions());
+        Ok(plan
+            .transform_down(|plan| {
+                let LogicalPlan::Sort(sort) = plan else {
+                    return Ok(Transformed::no(plan));
+                };
+                let keys = sort
+                    .expr
+                    .into_iter()
+                    .map(|sort_expr| spark_sort_key(sort_expr.expr, sort.input.schema()))
+                    .collect::<datafusion_common::Result<Vec<_>>>()?;
+                Ok(Transformed::new(
+                    LogicalPlan::Extension(Extension {
+                        node: Arc::new(RequiredDistributionNode::new(
+                            Arc::new(LogicalPlan::Repartition(Repartition {
+                                input: sort.input,
+                                partitioning_scheme: Partitioning::Hash(keys.clone(), partitions),
+                            })),
+                            keys,
+                        )),
+                    }),
+                    true,
+                    TreeNodeRecursion::Jump,
+                ))
             })
             .data()?)
     }
@@ -269,7 +333,8 @@ impl PlanResolver<'_> {
                 if let Expr::Column(ref col) = e
                     && let Some(expr) = find(col)
                 {
-                    return Ok(Transformed::yes(expr));
+                    // An alias may wrap the same opaque column in result metadata.
+                    return Ok(Transformed::new(expr, true, TreeNodeRecursion::Jump));
                 }
                 Ok(Transformed::no(e))
             })
@@ -340,12 +405,13 @@ impl PlanResolver<'_> {
         &self,
         plan: &LogicalPlan,
         sorts: &[spec::SortOrder],
+        resolve_ordinals: bool,
         state: &mut PlanResolverState,
     ) -> PlanResult<Vec<Sort>> {
         let mut results: Vec<Sort> = Vec::with_capacity(sorts.len());
         for sort in sorts {
             let expr = self
-                .resolve_query_sort_order_by_plan(plan, sort, true, state)
+                .resolve_query_sort_order_by_plan(plan, sort, resolve_ordinals, true, state)
                 .await?;
             results.push(expr);
         }
@@ -361,6 +427,7 @@ impl PlanResolver<'_> {
         &self,
         plan: &LogicalPlan,
         sort: &spec::SortOrder,
+        resolve_ordinals: bool,
         allow_mixed_aggregate_inputs: bool,
         state: &mut PlanResolverState,
     ) -> PlanResult<Sort> {
@@ -369,7 +436,7 @@ impl PlanResolver<'_> {
         let sort_expr = self
             .resolve_sort_order_allowing_calendar_intervals(
                 sort.clone(),
-                true,
+                resolve_ordinals,
                 plan.schema(),
                 state,
             )
@@ -415,7 +482,13 @@ impl PlanResolver<'_> {
                 let mut sorts = Vec::with_capacity(plan.inputs().len());
                 for input_plan in plan.inputs() {
                     match self
-                        .resolve_query_sort_order_by_plan(input_plan, sort, false, state)
+                        .resolve_query_sort_order_by_plan(
+                            input_plan,
+                            sort,
+                            resolve_ordinals,
+                            false,
+                            state,
+                        )
                         .await
                     {
                         Ok(sort_expr) => sorts.push(sort_expr),

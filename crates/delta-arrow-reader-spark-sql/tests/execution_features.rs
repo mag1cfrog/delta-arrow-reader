@@ -3,7 +3,7 @@
 use std::{
     cmp::Reverse,
     collections::{BTreeMap, BTreeSet},
-    sync::Arc,
+    sync::{Arc, Mutex, atomic::AtomicUsize},
 };
 
 use arrow::{
@@ -14,7 +14,10 @@ use arrow::{
 };
 use datafusion::{
     execution::SessionStateBuilder,
-    physical_plan::{ExecutionPlan, ExecutionPlanProperties, collect_partitioned},
+    physical_plan::{
+        ExecutionPlan, ExecutionPlanProperties, collect_partitioned,
+        execution_plan::reset_plan_states,
+    },
     prelude::{SessionConfig, SessionContext},
 };
 use delta_arrow_reader::{
@@ -31,10 +34,13 @@ mod delta_reads;
 #[allow(dead_code)]
 #[path = "../../delta-arrow-reader-core/tests/reader/support.rs"]
 mod reader_support;
+#[allow(dead_code)]
+#[path = "support/spark_inputs.rs"]
+mod spark_inputs;
 #[path = "support/spark_results.rs"]
 mod spark_results;
 
-use delta_reads::{RecordingLocalStore, TestResult};
+use delta_reads::{ProviderCalls, RecordingDeltaProvider, RecordingLocalStore, TestResult};
 use reader_support::RealParquetDeltaTable;
 use spark_results::{
     capture_executed_query_result, capture_schema, remove_nullability_and_metadata, validate_batch,
@@ -66,9 +72,22 @@ fn case_key(case: &Value) -> TestResult<(String, bool)> {
 }
 
 fn references() -> TestResult<Vec<Value>> {
-    let request: Value =
-        serde_json::from_str(include_str!("fixtures/execution-features/requests.json"))?;
-    let records = include_str!("fixtures/execution-features/spark-reference.jsonl")
+    read_references(
+        include_str!("fixtures/execution-features/requests.json"),
+        include_str!("fixtures/execution-features/spark-reference.jsonl"),
+    )
+}
+
+fn distribution_references() -> TestResult<Vec<Value>> {
+    read_references(
+        include_str!("fixtures/execution-features/distribution-requests.json"),
+        include_str!("fixtures/execution-features/distribution-spark-reference.jsonl"),
+    )
+}
+
+fn read_references(request: &str, records: &str) -> TestResult<Vec<Value>> {
+    let request: Value = serde_json::from_str(request)?;
+    let records = records
         .lines()
         .map(serde_json::from_str::<Value>)
         .collect::<Result<Vec<_>, _>>()?;
@@ -243,6 +262,7 @@ struct DeltaFeatureFixture {
     _files: Vec<RealParquetDeltaTable>,
     session: SessionContext,
     stores: Vec<Arc<RecordingLocalStore>>,
+    calls: Vec<Arc<Mutex<ProviderCalls>>>,
 }
 
 impl DeltaFeatureFixture {
@@ -251,10 +271,12 @@ impl DeltaFeatureFixture {
             RealParquetDeltaTable::new_default("execution-default")?,
             RealParquetDeltaTable::new_with_two_large_files("execution-events", ROWS_PER_FILE)?,
             stored_metadata_fixture()?,
+            RealParquetDeltaTable::new_with_two_partition_values("execution-partitioned")?,
         ];
         let session = context(partitions, batch_size);
         let mut stores = vec![];
-        for (name, fixture) in ["source", "events", "stored_source"]
+        let mut calls = vec![];
+        for (name, fixture) in ["source", "events", "stored_source", "partitioned_events"]
             .into_iter()
             .zip(&files)
         {
@@ -263,17 +285,23 @@ impl DeltaFeatureFixture {
                 .with_warmup(WarmupMode::QueryPlanning)
                 .load_table()
                 .await?;
+            let provider_calls = Arc::new(Mutex::new(ProviderCalls::default()));
             session.register_table(
                 name,
-                Arc::new(DeltaTableProvider::try_new(
-                    table,
-                    ScanOptions {
-                        target_partitions: Some(partitions),
-                        use_arrow_view_types: false,
-                        ..Default::default()
-                    },
-                )?),
+                Arc::new(RecordingDeltaProvider {
+                    inner: DeltaTableProvider::try_new(
+                        table,
+                        ScanOptions {
+                            target_partitions: Some(partitions),
+                            use_arrow_view_types: false,
+                            ..Default::default()
+                        },
+                    )?,
+                    calls: provider_calls.clone(),
+                    schema_calls: Arc::new(AtomicUsize::new(0)),
+                }),
             )?;
+            calls.push(provider_calls);
             assert!(
                 store
                     .reads
@@ -287,6 +315,7 @@ impl DeltaFeatureFixture {
             _files: files,
             session,
             stores,
+            calls,
         })
     }
 }
@@ -296,8 +325,6 @@ async fn unsupported_execution_features_keep_ordinary_metadata_fields_available(
     let fixture = DeltaFeatureFixture::new(3, 7).await?;
     for ansi_mode in [false, true] {
         for (sql, feature) in [
-            ("SELECT id FROM source DISTRIBUTE BY id", "DISTRIBUTE BY"),
-            ("SELECT id FROM source CLUSTER BY id", "CLUSTER BY"),
             ("SELECT input_file_name() FROM source", "input_file_name"),
             ("SELECT _metadata.file_path FROM source", "_metadata"),
             ("SELECT s._metadata.file_path FROM source s", "_metadata"),
@@ -592,6 +619,321 @@ async fn unordered_first_last_and_collect_list_preserve_membership_and_counts() 
                     groups.len()
                 );
             }
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn distribution_clauses_match_spark_values_and_executed_types() -> TestResult {
+    let records = distribution_references()?;
+    let request: Value = serde_json::from_str(include_str!(
+        "fixtures/execution-features/distribution-requests.json"
+    ))?;
+    for partitions in [1, 3] {
+        for batch_size in [2, 7] {
+            let session = context(partitions, batch_size);
+            spark_inputs::register_recorded_inputs_with_partition_count(
+                &session,
+                &request["corpora"][0]["metadata"],
+                batch_size,
+                partitions,
+            )
+            .map_err(|error| error as Box<dyn std::error::Error>)?;
+            for case in &records {
+                println!(
+                    "EXECUTION_DISTRIBUTION_CASE partitions={partitions} batch_size={batch_size} id={} ansi={}",
+                    case["id"], case["ansi"]
+                );
+                let actual = capture_executed_query_result(&session, case)
+                    .await
+                    .map_err(|error| error as Box<dyn std::error::Error>)?;
+                assert_eq!(actual["rows"], case["expected"]["rows"], "{}", case["id"]);
+                let mut actual_schema = actual["schema"].clone();
+                let mut expected = case["schema_stages"]["executed"].clone();
+                remove_nullability_and_metadata(&mut actual_schema);
+                remove_nullability_and_metadata(&mut expected);
+                assert_eq!(actual_schema, expected, "{}", case["id"]);
+            }
+            println!(
+                "EXECUTION_DISTRIBUTION_REFERENCE partitions={partitions} batch_size={batch_size} cases={}",
+                records.len()
+            );
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn distribution_keys_sorting_and_ids_keep_multibatch_partition_invariants() -> TestResult {
+    for ansi_mode in [false, true] {
+        for partitions in [1, 3] {
+            for batch_size in [7, 113] {
+                let fixture = DeltaFeatureFixture::new(partitions, batch_size).await?;
+                for clause in [
+                    "DISTRIBUTE BY key",
+                    "DISTRIBUTE BY 1",
+                    "CLUSTER BY key",
+                    "DISTRIBUTE BY key,id % 3",
+                    "CLUSTER BY key,id % 3",
+                    "DISTRIBUTE BY key SORT BY id DESC",
+                    "DISTRIBUTE BY array(key)",
+                    "CLUSTER BY array(key)",
+                    "DISTRIBUTE BY named_struct('k',key,'a',array(key))",
+                    "CLUSTER BY named_struct('k',key,'a',array(key))",
+                ] {
+                    let compound = clause.contains("key,id % 3");
+                    let sql = format!(
+                        "SELECT id,key,spark_partition_id() AS pid,monotonically_increasing_id() AS mid \
+                         FROM (SELECT id,CASE WHEN id % 5 = 0 THEN NULL ELSE id % 7 END AS key \
+                         FROM events {clause}) q"
+                    );
+                    let plan =
+                        create_spark_physical_plan(&fixture.session, &sql, ansi_mode).await?;
+                    assert_eq!(plan.output_partitioning().partition_count(), partitions);
+                    assert_eq!(
+                        plan.schema()
+                            .fields()
+                            .iter()
+                            .map(|field| field.data_type())
+                            .collect::<Vec<_>>(),
+                        vec![
+                            &DataType::Int32,
+                            &DataType::Int32,
+                            &DataType::Int32,
+                            &DataType::Int64
+                        ]
+                    );
+                    for run in 0..2 {
+                        let execution = reset_plan_states(plan.clone())?;
+                        let mut owners = BTreeMap::new();
+                        let mut all_ids = vec![];
+                        let mut monotonic_ids = BTreeSet::new();
+                        let mut nonempty = 0;
+                        for (partition, batches) in
+                            collect_partitioned(execution, fixture.session.task_ctx())
+                                .await?
+                                .into_iter()
+                                .enumerate()
+                        {
+                            if batches.iter().any(|batch| batch.num_rows() > 0) {
+                                nonempty += 1;
+                                assert!(batches.len() > 1, "must exercise batch boundaries");
+                            }
+                            let mut previous_key = None;
+                            let mut previous_id = None;
+                            let mut previous_mid = None;
+                            for batch in batches {
+                                validate_batch(batch.schema().as_ref(), &batch)
+                                    .map_err(|error| error as Box<dyn std::error::Error>)?;
+                                let ids = as_int32_array(batch.column(0).as_ref())?;
+                                let keys = as_int32_array(batch.column(1).as_ref())?;
+                                let pids = as_int32_array(batch.column(2).as_ref())?;
+                                let mids = batch
+                                    .column(3)
+                                    .as_any()
+                                    .downcast_ref::<Int64Array>()
+                                    .ok_or("expected BIGINT monotonic ID")?;
+                                assert_eq!(ids.null_count(), 0);
+                                assert_eq!(pids.null_count(), 0);
+                                assert_eq!(mids.null_count(), 0);
+                                for row in 0..batch.num_rows() {
+                                    let id = ids.value(row);
+                                    let key = (!keys.is_null(row)).then(|| keys.value(row));
+                                    assert_eq!(key, (id % 5 != 0).then_some(id % 7));
+                                    let distribution_key = if clause == "DISTRIBUTE BY 1" {
+                                        None
+                                    } else {
+                                        key
+                                    };
+                                    let secondary = compound.then_some(id % 3);
+                                    assert_eq!(
+                                        *owners
+                                            .entry((distribution_key, secondary))
+                                            .or_insert(partition),
+                                        partition,
+                                        "equal keys must share an output partition, including NULL"
+                                    );
+                                    assert_eq!(pids.value(row), partition as i32);
+                                    let mid = mids.value(row);
+                                    assert!(previous_mid.is_none_or(|previous| previous < mid));
+                                    assert!(monotonic_ids.insert(mid));
+                                    previous_mid = Some(mid);
+                                    if clause.starts_with("CLUSTER") {
+                                        assert!(
+                                            previous_key.is_none_or(|previous| previous <= (key, secondary)),
+                                            "CLUSTER BY order reset across batches"
+                                        );
+                                    }
+                                    if clause.contains("SORT BY") {
+                                        assert!(
+                                            previous_id.is_none_or(|previous| previous >= id),
+                                            "SORT BY order reset across batches"
+                                        );
+                                    }
+                                    previous_key = Some((key, secondary));
+                                    previous_id = Some(id);
+                                    all_ids.push(id);
+                                }
+                            }
+                        }
+                        assert_eq!(
+                            owners.len(),
+                            if clause == "DISTRIBUTE BY 1" {
+                                1
+                            } else if compound {
+                                24
+                            } else {
+                                8
+                            }
+                        );
+                        assert!(owners.keys().any(|(key, _)| key.is_none()));
+                        all_ids.sort_unstable();
+                        assert_eq!(all_ids, (1..=2 * ROWS_PER_FILE as i32).collect::<Vec<_>>());
+                        if clause == "DISTRIBUTE BY 1" {
+                            assert_eq!(nonempty, 1, "a literal distribution key is constant");
+                        } else if partitions > 1 {
+                            assert!(nonempty > 1, "must exercise a real distributed layout");
+                        }
+                        println!(
+                            "EXECUTION_DISTRIBUTION ansi={ansi_mode} partitions={partitions} nonempty={nonempty} batch_size={batch_size} clause={clause} run={run}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn hidden_sort_columns_cross_restoring_projections_and_keep_validation() -> TestResult {
+    use datafusion::common::Column;
+    use datafusion::datasource::{empty::EmptyTable, provider_as_source};
+    use datafusion::logical_expr::{LogicalPlan, LogicalPlanBuilder, Partitioning, col};
+
+    let source = || {
+        LogicalPlanBuilder::scan(
+            "input",
+            provider_as_source(Arc::new(EmptyTable::new(Arc::new(Schema::new(vec![
+                Field::new("id", DataType::Int32, false),
+                Field::new("k", DataType::Int32, true),
+                Field::new("s", DataType::Utf8, true),
+            ]))))),
+            None,
+        )
+    };
+    let input = source()?
+        .project(vec![col("id"), col("k")])?
+        .repartition(Partitioning::Hash(vec![col("k")], 3))?
+        .project(vec![col("id")])?
+        .build()?;
+    let sorted = LogicalPlanBuilder::from(input)
+        .sort(vec![col("s").sort(true, true)])?
+        .build()?;
+    let LogicalPlan::Projection(output) = sorted else {
+        return Err("hidden sort requires an output projection".into());
+    };
+    let LogicalPlan::Sort(sort) = output.input.as_ref() else {
+        return Err("expected sort below output projection".into());
+    };
+    assert!(
+        sort.input
+            .schema()
+            .has_column(&Column::new(Some("input"), "s"))
+    );
+    assert_eq!(output.schema.fields().len(), 1);
+    assert!(
+        source()?
+            .project(vec![col("id")])?
+            .distinct()?
+            .sort(vec![col("s").sort(true, true)])
+            .is_err()
+    );
+    assert!(
+        source()?
+            .project(vec![col("id")])?
+            .sort(vec![col("absent").sort(true, true)])
+            .is_err()
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn distribution_preserves_delta_filter_and_column_pruning() -> TestResult {
+    for ansi_mode in [false, true] {
+        let mut baseline_paths = None;
+        for sql in [
+            "SELECT id FROM partitioned_events WHERE region = 'us-west'",
+            "SELECT id FROM (SELECT * FROM partitioned_events DISTRIBUTE BY id) q WHERE region = 'us-west'",
+        ] {
+            let fixture = DeltaFeatureFixture::new(3, 7).await?;
+            let case = json!({"sql":sql,"ansi":ansi_mode,"ordered":false});
+            let actual = capture_executed_query_result(&fixture.session, &case)
+                .await
+                .map_err(|error| error as Box<dyn std::error::Error>)?;
+            assert_eq!(actual["rows"], json!([["1"], ["2"]]));
+            let calls = fixture.calls[3]
+                .lock()
+                .map_err(|_| "provider call lock poisoned")?;
+            assert_eq!(calls.scans.len(), 1);
+            assert!(calls.scans[0].projected_columns.contains("id"));
+            assert!(!calls.scans[0].projected_columns.contains("customer_name"));
+            assert!(
+                !calls.scans[0].filters.is_empty(),
+                "outer filter must reach Delta"
+            );
+            let paths = fixture.stores[3]
+                .reads
+                .lock()
+                .map_err(|_| "read log poisoned")?
+                .iter()
+                .map(|read| read.path.clone())
+                .collect::<BTreeSet<_>>();
+            assert_eq!(
+                paths.len(),
+                1,
+                "filter must prune one of the two Parquet files"
+            );
+            if let Some(baseline) = &baseline_paths {
+                assert_eq!(&paths, baseline);
+            } else {
+                baseline_paths = Some(paths);
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn distribution_uses_session_target_with_a_single_input_partition() -> TestResult {
+    let request: Value = serde_json::from_str(include_str!(
+        "fixtures/execution-features/distribution-requests.json"
+    ))?;
+    let session = context(3, 2);
+    spark_inputs::register_recorded_inputs_with_partition_count(
+        &session,
+        &request["corpora"][0]["metadata"],
+        2,
+        1,
+    )
+    .map_err(|error| error as Box<dyn std::error::Error>)?;
+    for ansi_mode in [false, true] {
+        for clause in ["DISTRIBUTE BY k", "CLUSTER BY k", "DISTRIBUTE BY 1"] {
+            let sql = format!("SELECT id,k FROM distribution_source {clause}");
+            let physical = create_spark_physical_plan(&session, &sql, ansi_mode).await?;
+            assert_eq!(
+                physical.output_partitioning().partition_count(),
+                3,
+                "{clause}"
+            );
+            let rows = collect_partitioned(physical, session.task_ctx())
+                .await?
+                .iter()
+                .flatten()
+                .map(RecordBatch::num_rows)
+                .sum::<usize>();
+            assert_eq!(rows, 12);
         }
     }
     Ok(())

@@ -13,7 +13,6 @@ Spark and actual Delta tables. They include a nullable stored STRUCT with a
 DAR public Delta provider does not expose per-row file origin, so
 `input_file_name()` and an absent injected `_metadata.file_path` remain
 unavailable. The tests require clear errors and preserve ordinary field access.
-`DISTRIBUTE BY` and `CLUSTER BY` retain their unsupported decisions.
 
 Partition IDs, monotonic IDs, SORT BY and unordered aggregates retain their raw
 Spark observations. Rust compares executed types from those records and checks
@@ -33,10 +32,35 @@ each group size.
 These checks do not require a particular unordered aggregate result order or a
 fixed assignment matching Spark's partition layout.
 
+`distribution-requests.json` and `distribution-spark-reference.jsonl` add 48
+independent Spark 4.2.0 observations in both ANSI modes. Rust compares complete
+row multisets with duplicates and executed result types across session partition
+counts 1 and 3 and batch sizes 2 and 7. Cases include nullable compound keys,
+aliases, nonprojected distribution and sort keys, array and struct keys,
+`DISTRIBUTE BY` with `SORT BY`, constant distribution keys (including a calendar
+interval), constant `CLUSTER BY` keys, grouped queries,
+subqueries, CTEs, and outer `ORDER BY` and `LIMIT`.
+
+The larger Delta fixture also checks both clauses with target partition counts
+1 and 3 and batch sizes 7 and 113. Every row must survive, equal keys including
+NULL must share one output partition for scalar, array, and nested struct keys,
+and the output partition count must match the session target. Multiple partitions
+must contain rows when the target is 3, except that a constant key must place all
+rows in one partition.
+`CLUSTER BY` must keep ascending key order, including compound keys with an
+independent second key and NULL first, across batch
+boundaries; `DISTRIBUTE BY ... SORT BY` must keep its requested local order.
+An outer projection checks partition IDs against the actual output partition and
+monotonic ID uniqueness and increasing values. Each planned physical tree runs
+twice using DataFusion's `reset_plan_states` between executions.
+These checks do not compare Spark's hash function or key-to-partition assignment.
+A separate partitioned Delta fixture compares a direct filter with an outer
+filter over `DISTRIBUTE BY`: the provider receives the filter and required
+columns, and actual reads reach only the matching Parquet file.
+
 The capture environment uses in-memory inputs and requires no Spark Delta
 installation. Candidate storage checks use the reader's existing real-Parquet
-Delta fixtures, with only the small stored `_metadata` fixture written by this
-test. No row-origin values are fabricated.
+Delta fixtures and the small stored `_metadata` fixture written by this test. No row-origin values are fabricated.
 
 From this directory, capture to a new file in an existing directory with Python
 3.12, Java 21 and PySpark 4.2.0 revision
@@ -44,7 +68,10 @@ From this directory, capture to a new file in an existing directory with Python
 
 ```sh
 TZ=UTC python3.12 capture_spark.py /path/to/new/spark-reference.jsonl
+TZ=UTC python3.12 capture_distribution_spark.py /path/to/new/distribution-spark-reference.jsonl
 ```
 
 The shared capture helper verifies the runtime versions and UTC setting and
-records loaded artifacts and normal JVM cleanup.
+records loaded artifacts and normal JVM cleanup. The distribution capture uses
+three shuffle partitions and disables adaptive execution; these Spark settings
+do not control the reader's session target.

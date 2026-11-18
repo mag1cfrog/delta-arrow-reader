@@ -715,10 +715,17 @@ impl LogicalPlanBuilder {
     ) -> Result<LogicalPlan> {
         match curr_plan {
             LogicalPlan::Projection(Projection {
-                input,
+                mut input,
                 mut expr,
                 schema: _,
-            }) if missing_cols.iter().all(|c| input.schema().has_column(c)) => {
+            }) => {
+                if !missing_cols.iter().all(|c| input.schema().has_column(c)) {
+                    input = Arc::new(Self::add_missing_columns(
+                        Arc::unwrap_or_clone(input),
+                        missing_cols,
+                        is_distinct,
+                    )?);
+                }
                 let mut missing_exprs = missing_cols
                     .iter()
                     .map(|c| normalize_col(Expr::Column(c.clone()), &input))

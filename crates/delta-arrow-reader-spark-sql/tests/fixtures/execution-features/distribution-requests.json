@@ -1,0 +1,442 @@
+{
+  "issue": "1341",
+  "expected_record_count": 48,
+  "corpora": [
+    {
+      "corpus": "distribution",
+      "source": "explicit nullable duplicate source values",
+      "metadata": {
+        "spark_version": "4.2.0",
+        "timezone": "UTC",
+        "inputs": [
+          {
+            "name": "distribution_source",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "k",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "s",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                null,
+                null
+              ],
+              [
+                "2",
+                "1",
+                "red"
+              ],
+              [
+                "3",
+                "1",
+                "red"
+              ],
+              [
+                "3",
+                "1",
+                "red"
+              ],
+              [
+                "4",
+                "2",
+                "blue"
+              ],
+              [
+                "5",
+                "2",
+                "blue"
+              ],
+              [
+                "6",
+                null,
+                null
+              ],
+              [
+                "7",
+                "-1",
+                ""
+              ],
+              [
+                "8",
+                "0",
+                "red"
+              ],
+              [
+                "9",
+                "0",
+                "red"
+              ],
+              [
+                "10",
+                "3",
+                "blue"
+              ],
+              [
+                "11",
+                "3",
+                null
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "distribution",
+          "id": "distribute_keys",
+          "sql": "SELECT id,k,s FROM distribution_source DISTRIBUTE BY k,s",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "distribution",
+          "id": "distribute_keys",
+          "sql": "SELECT id,k,s FROM distribution_source DISTRIBUTE BY k,s",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "distribution",
+          "id": "cluster_keys",
+          "sql": "SELECT id,k,s FROM distribution_source CLUSTER BY k,s",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "distribution",
+          "id": "cluster_keys",
+          "sql": "SELECT id,k,s FROM distribution_source CLUSTER BY k,s",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "distribution",
+          "id": "distribute_sort",
+          "sql": "SELECT id,k,s FROM distribution_source DISTRIBUTE BY k SORT BY s DESC NULLS LAST,id ASC",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "distribution",
+          "id": "distribute_sort",
+          "sql": "SELECT id,k,s FROM distribution_source DISTRIBUTE BY k SORT BY s DESC NULLS LAST,id ASC",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "distribution",
+          "id": "distribute_hidden",
+          "sql": "SELECT id FROM distribution_source DISTRIBUTE BY k,s",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "distribution",
+          "id": "distribute_hidden",
+          "sql": "SELECT id FROM distribution_source DISTRIBUTE BY k,s",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "distribution",
+          "id": "cluster_hidden",
+          "sql": "SELECT id FROM distribution_source CLUSTER BY k,s",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "distribution",
+          "id": "cluster_hidden",
+          "sql": "SELECT id FROM distribution_source CLUSTER BY k,s",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "distribution",
+          "id": "distribute_sort_hidden",
+          "sql": "SELECT id FROM distribution_source DISTRIBUTE BY k SORT BY s DESC NULLS LAST,id",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "distribution",
+          "id": "distribute_sort_hidden",
+          "sql": "SELECT id FROM distribution_source DISTRIBUTE BY k SORT BY s DESC NULLS LAST,id",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "distribution",
+          "id": "distribute_alias",
+          "sql": "SELECT id,k+1 AS shifted FROM distribution_source DISTRIBUTE BY shifted",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "distribution",
+          "id": "distribute_alias",
+          "sql": "SELECT id,k+1 AS shifted FROM distribution_source DISTRIBUTE BY shifted",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "distribution",
+          "id": "cluster_alias",
+          "sql": "SELECT id,k+1 AS shifted FROM distribution_source CLUSTER BY shifted",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "distribution",
+          "id": "cluster_alias",
+          "sql": "SELECT id,k+1 AS shifted FROM distribution_source CLUSTER BY shifted",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "distribution",
+          "id": "distribute_array",
+          "sql": "SELECT id,a FROM (SELECT id,CASE WHEN k IS NULL THEN CAST(NULL AS ARRAY<INT>) ELSE array(k,CAST(NULL AS INT)) END AS a FROM distribution_source) q DISTRIBUTE BY a",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "distribution",
+          "id": "distribute_array",
+          "sql": "SELECT id,a FROM (SELECT id,CASE WHEN k IS NULL THEN CAST(NULL AS ARRAY<INT>) ELSE array(k,CAST(NULL AS INT)) END AS a FROM distribution_source) q DISTRIBUTE BY a",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "distribution",
+          "id": "cluster_array",
+          "sql": "SELECT id,a FROM (SELECT id,CASE WHEN k IS NULL THEN CAST(NULL AS ARRAY<INT>) ELSE array(k,CAST(NULL AS INT)) END AS a FROM distribution_source) q CLUSTER BY a",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "distribution",
+          "id": "cluster_array",
+          "sql": "SELECT id,a FROM (SELECT id,CASE WHEN k IS NULL THEN CAST(NULL AS ARRAY<INT>) ELSE array(k,CAST(NULL AS INT)) END AS a FROM distribution_source) q CLUSTER BY a",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "distribution",
+          "id": "distribute_struct",
+          "sql": "SELECT id,n FROM (SELECT id,CASE WHEN k IS NULL THEN CAST(NULL AS STRUCT<a:INT,b:ARRAY<INT>>) ELSE named_struct('a',k,'b',array(k,CAST(NULL AS INT))) END AS n FROM distribution_source) q DISTRIBUTE BY n",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "distribution",
+          "id": "distribute_struct",
+          "sql": "SELECT id,n FROM (SELECT id,CASE WHEN k IS NULL THEN CAST(NULL AS STRUCT<a:INT,b:ARRAY<INT>>) ELSE named_struct('a',k,'b',array(k,CAST(NULL AS INT))) END AS n FROM distribution_source) q DISTRIBUTE BY n",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "distribution",
+          "id": "cluster_struct",
+          "sql": "SELECT id,n FROM (SELECT id,CASE WHEN k IS NULL THEN CAST(NULL AS STRUCT<a:INT,b:ARRAY<INT>>) ELSE named_struct('a',k,'b',array(k,CAST(NULL AS INT))) END AS n FROM distribution_source) q CLUSTER BY n",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "distribution",
+          "id": "cluster_struct",
+          "sql": "SELECT id,n FROM (SELECT id,CASE WHEN k IS NULL THEN CAST(NULL AS STRUCT<a:INT,b:ARRAY<INT>>) ELSE named_struct('a',k,'b',array(k,CAST(NULL AS INT))) END AS n FROM distribution_source) q CLUSTER BY n",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "distribution",
+          "id": "distribute_literal",
+          "sql": "SELECT id,k FROM distribution_source DISTRIBUTE BY 1",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "distribution",
+          "id": "distribute_literal",
+          "sql": "SELECT id,k FROM distribution_source DISTRIBUTE BY 1",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "distribution",
+          "id": "cluster_subquery_order",
+          "sql": "SELECT id,k FROM (SELECT id,k FROM distribution_source CLUSTER BY k) q ORDER BY id,k",
+          "ordered": true,
+          "ansi": false
+        },
+        {
+          "corpus": "distribution",
+          "id": "cluster_subquery_order",
+          "sql": "SELECT id,k FROM (SELECT id,k FROM distribution_source CLUSTER BY k) q ORDER BY id,k",
+          "ordered": true,
+          "ansi": true
+        },
+        {
+          "corpus": "distribution",
+          "id": "distribute_cte_limit",
+          "sql": "WITH q AS (SELECT id,k FROM distribution_source DISTRIBUTE BY k) SELECT id,k FROM q ORDER BY id,k LIMIT 5",
+          "ordered": true,
+          "ansi": false
+        },
+        {
+          "corpus": "distribution",
+          "id": "distribute_cte_limit",
+          "sql": "WITH q AS (SELECT id,k FROM distribution_source DISTRIBUTE BY k) SELECT id,k FROM q ORDER BY id,k LIMIT 5",
+          "ordered": true,
+          "ansi": true
+        },
+        {
+          "corpus": "distribution",
+          "id": "cluster_cte_limit",
+          "sql": "WITH q AS (SELECT id,k FROM distribution_source CLUSTER BY k) SELECT id,k FROM q ORDER BY id,k LIMIT 5",
+          "ordered": true,
+          "ansi": false
+        },
+        {
+          "corpus": "distribution",
+          "id": "cluster_cte_limit",
+          "sql": "WITH q AS (SELECT id,k FROM distribution_source CLUSTER BY k) SELECT id,k FROM q ORDER BY id,k LIMIT 5",
+          "ordered": true,
+          "ansi": true
+        },
+        {
+          "corpus": "distribution",
+          "id": "distribute_subquery_order",
+          "sql": "SELECT id,k FROM (SELECT id,k FROM distribution_source DISTRIBUTE BY k) q ORDER BY id,k",
+          "ordered": true,
+          "ansi": false
+        },
+        {
+          "corpus": "distribution",
+          "id": "distribute_subquery_order",
+          "sql": "SELECT id,k FROM (SELECT id,k FROM distribution_source DISTRIBUTE BY k) q ORDER BY id,k",
+          "ordered": true,
+          "ansi": true
+        },
+        {
+          "corpus": "distribution",
+          "id": "cluster_inner_limit",
+          "sql": "SELECT id FROM (SELECT id FROM distribution_source CLUSTER BY k LIMIT 100) q ORDER BY id",
+          "ordered": true,
+          "ansi": false
+        },
+        {
+          "corpus": "distribution",
+          "id": "cluster_inner_limit",
+          "sql": "SELECT id FROM (SELECT id FROM distribution_source CLUSTER BY k LIMIT 100) q ORDER BY id",
+          "ordered": true,
+          "ansi": true
+        },
+        {
+          "corpus": "distribution",
+          "id": "distribute_aggregate",
+          "sql": "SELECT k,count(*) AS n FROM distribution_source GROUP BY k DISTRIBUTE BY k",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "distribution",
+          "id": "distribute_aggregate",
+          "sql": "SELECT k,count(*) AS n FROM distribution_source GROUP BY k DISTRIBUTE BY k",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "distribution",
+          "id": "cluster_aggregate",
+          "sql": "SELECT k,count(*) AS n FROM distribution_source GROUP BY k CLUSTER BY k",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "distribution",
+          "id": "cluster_aggregate",
+          "sql": "SELECT k,count(*) AS n FROM distribution_source GROUP BY k CLUSTER BY k",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "distribution",
+          "id": "cluster_literal_positive",
+          "sql": "SELECT id,k FROM distribution_source CLUSTER BY 100",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "distribution",
+          "id": "cluster_literal_positive",
+          "sql": "SELECT id,k FROM distribution_source CLUSTER BY 100",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "distribution",
+          "id": "cluster_literal_zero",
+          "sql": "SELECT id,k FROM distribution_source CLUSTER BY 0",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "distribution",
+          "id": "cluster_literal_zero",
+          "sql": "SELECT id,k FROM distribution_source CLUSTER BY 0",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "distribution",
+          "id": "cluster_literal_negative",
+          "sql": "SELECT id,k FROM distribution_source CLUSTER BY -1",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "distribution",
+          "id": "cluster_literal_negative",
+          "sql": "SELECT id,k FROM distribution_source CLUSTER BY -1",
+          "ordered": false,
+          "ansi": true
+        },
+        {
+          "corpus": "distribution",
+          "id": "distribute_calendar_constant",
+          "sql": "SELECT id FROM distribution_source DISTRIBUTE BY make_interval(1)",
+          "ordered": false,
+          "ansi": false
+        },
+        {
+          "corpus": "distribution",
+          "id": "distribute_calendar_constant",
+          "sql": "SELECT id FROM distribution_source DISTRIBUTE BY make_interval(1)",
+          "ordered": false,
+          "ansi": true
+        }
+      ]
+    }
+  ]
+}
