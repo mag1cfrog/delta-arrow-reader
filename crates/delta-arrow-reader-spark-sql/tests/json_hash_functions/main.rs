@@ -9,4 +9,5 @@ mod spark_results;
 
 mod from_json_permissive;
 mod get_json_object_extraction;
+mod json_array_length_roots;
 mod sha2_literal_lengths;

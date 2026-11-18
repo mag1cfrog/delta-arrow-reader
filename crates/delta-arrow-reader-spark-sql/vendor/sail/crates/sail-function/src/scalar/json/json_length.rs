@@ -16,10 +16,17 @@ use crate::scalar::json::common::{
     GetError, InvokeResult, JsonPath, get_err, invoke, jiter_json_find, return_type_check,
 };
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum JsonLengthMode {
+    ArraysAndObjects,
+    ArraysOnly,
+}
+
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct JsonLength {
     signature: Signature,
     aliases: [String; 2],
+    mode: JsonLengthMode,
 }
 
 impl Default for JsonLength {
@@ -33,13 +40,25 @@ impl JsonLength {
         Self {
             signature: Signature::variadic_any(Volatility::Immutable),
             aliases: ["json_length".to_string(), "json_len".to_string()],
+            mode: JsonLengthMode::ArraysAndObjects,
+        }
+    }
+
+    fn array_only() -> Self {
+        Self {
+            signature: Signature::string(1, Volatility::Immutable),
+            mode: JsonLengthMode::ArraysOnly,
+            ..Self::new()
         }
     }
 }
 
 impl ScalarUDFImpl for JsonLength {
     fn name(&self) -> &str {
-        self.aliases[0].as_str()
+        match self.mode {
+            JsonLengthMode::ArraysAndObjects => self.aliases[0].as_str(),
+            JsonLengthMode::ArraysOnly => "json_array_length",
+        }
     }
 
     fn signature(&self) -> &Signature {
@@ -51,11 +70,16 @@ impl ScalarUDFImpl for JsonLength {
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
-        invoke::<UInt64Array>(&args.args, jiter_json_length)
+        invoke::<UInt64Array>(&args.args, |json, path| {
+            jiter_json_length(json, path, self.mode)
+        })
     }
 
     fn aliases(&self) -> &[String] {
-        &self.aliases
+        match self.mode {
+            JsonLengthMode::ArraysAndObjects => &self.aliases,
+            JsonLengthMode::ArraysOnly => &[],
+        }
     }
 }
 
@@ -63,6 +87,13 @@ pub fn json_length_udf() -> Arc<ScalarUDF> {
     static STATIC_JSON_LENGTH: OnceLock<Arc<ScalarUDF>> = OnceLock::new();
     STATIC_JSON_LENGTH
         .get_or_init(|| Arc::new(ScalarUDF::new_from_impl(JsonLength::new())))
+        .clone()
+}
+
+pub fn json_array_length_udf() -> Arc<ScalarUDF> {
+    static STATIC_JSON_ARRAY_LENGTH: OnceLock<Arc<ScalarUDF>> = OnceLock::new();
+    STATIC_JSON_ARRAY_LENGTH
+        .get_or_init(|| Arc::new(ScalarUDF::new_from_impl(JsonLength::array_only())))
         .clone()
 }
 
@@ -91,7 +122,11 @@ impl InvokeResult for UInt64Array {
     }
 }
 
-fn jiter_json_length(opt_json: Option<&str>, path: &[JsonPath]) -> Result<u64, GetError> {
+fn jiter_json_length(
+    opt_json: Option<&str>,
+    path: &[JsonPath],
+    mode: JsonLengthMode,
+) -> Result<u64, GetError> {
     if let Some((mut jiter, peek)) = jiter_json_find(opt_json, path) {
         match peek {
             Peek::Array => {
@@ -104,7 +139,7 @@ fn jiter_json_length(opt_json: Option<&str>, path: &[JsonPath]) -> Result<u64, G
                 }
                 Ok(length)
             }
-            Peek::Object => {
+            Peek::Object if mode == JsonLengthMode::ArraysAndObjects => {
                 let mut opt_key = jiter.known_object()?;
 
                 let mut length: u64 = 0;
