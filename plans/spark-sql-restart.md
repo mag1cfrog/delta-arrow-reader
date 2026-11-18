@@ -31,11 +31,22 @@ physical nullability, failure causes and execution stages.
 
 ## Current delivery status
 
-The latest accepted source is `e5c8368580fe010cb2c3f99223ce7ccadb213a32` after
-test-build capacity repair #962. The next bounded delivery is Map lookup names
-#823; its independent Spark reference and unchanged-product DAR baseline are
-recorded, with implementation and acceptance still in progress.
-C06 and C07 remain owned by the two Mac workers.
+Result parity for C01-C12 is complete under the 2026-11-10 acceptance.
+Tracker #167 is closed: 46 completed items, with five open difference records
+moved to #1377 for the support statement.
+
+The [three-platform checkpoint](https://github.com/mag1cfrog/delta-arrow-reader/actions/runs/44384984528)
+passed at `ba3bec65`: 3,162 passed, zero failed and three existing ignored tests
+per platform. Reader/CLI adoption, #168 performance validation and the support
+statement remain open under #113. Staging remains separate from main.
+
+## Historical validation snapshots
+
+The sections below, through S01 acceptance, retain earlier source-specific
+results and delivery states. Their present-tense and pending descriptions apply
+to those snapshots, not the current delivery queue. Preserve their source
+revisions, test counts and unresolved observations; use the current status above
+for active work and current checkpoint results.
 
 ### Accepted nested lambda repair
 
@@ -154,14 +165,6 @@ Bulletproof Review. The coordinator serializes engines through one central build
 target and owns integration and cleanup. Remove owned merged worktrees, branches,
 proof refs and temporary outputs while preserving raw references, unmerged work,
 stashes and dirty main work.
-
-## Historical validation snapshots
-
-The sections below, through S01 acceptance, retain earlier source-specific
-results and delivery states. Their present-tense and pending descriptions apply
-to those snapshots, not the current delivery queue. Preserve their source
-revisions, test counts and unresolved observations; use the current status above
-for active work and current checkpoint results.
 
 ### Earlier core sequence at staging 2104fb8c
 
