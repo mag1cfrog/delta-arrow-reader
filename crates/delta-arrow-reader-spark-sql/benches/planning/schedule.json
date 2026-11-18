@@ -1,0 +1,169 @@
+{
+  "cpu": 2,
+  "warmups": 2,
+  "samples": 9,
+  "process_timeout_seconds": 300,
+  "profile_iterations": 100,
+  "runs": [
+    {
+      "series": "noise",
+      "configuration": "native-configured",
+      "process": "noise-01-a",
+      "arm": "a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native-configured",
+      "process": "noise-01-b",
+      "arm": "b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native-configured",
+      "process": "noise-02-b",
+      "arm": "b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native-configured",
+      "process": "noise-02-a",
+      "arm": "a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native-configured",
+      "process": "noise-03-a",
+      "arm": "a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native-configured",
+      "process": "noise-03-b",
+      "arm": "b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native-configured",
+      "process": "noise-04-b",
+      "arm": "b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native-configured",
+      "process": "noise-04-a",
+      "arm": "a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native-configured",
+      "process": "noise-05-a",
+      "arm": "a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native-configured",
+      "process": "noise-05-b",
+      "arm": "b"
+    },
+    {
+      "series": "main",
+      "configuration": "native-plain",
+      "process": "main-01-native-plain"
+    },
+    {
+      "series": "main",
+      "configuration": "native-configured",
+      "process": "main-01-native-configured"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "process": "main-01-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "process": "main-01-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "process": "main-02-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "process": "main-02-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "native-configured",
+      "process": "main-02-native-configured"
+    },
+    {
+      "series": "main",
+      "configuration": "native-plain",
+      "process": "main-02-native-plain"
+    },
+    {
+      "series": "main",
+      "configuration": "native-configured",
+      "process": "main-03-native-configured"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "process": "main-03-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "process": "main-03-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native-plain",
+      "process": "main-03-native-plain"
+    },
+    {
+      "series": "main",
+      "configuration": "native-plain",
+      "process": "main-04-native-plain"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "process": "main-04-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "process": "main-04-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "native-configured",
+      "process": "main-04-native-configured"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "process": "main-05-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "process": "main-05-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native-plain",
+      "process": "main-05-native-plain"
+    },
+    {
+      "series": "main",
+      "configuration": "native-configured",
+      "process": "main-05-native-configured"
+    }
+  ]
+}
