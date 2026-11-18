@@ -246,7 +246,12 @@ fn parse_rows(
 ) -> Result<ArrayRef> {
     let mut builder = create_builder(schema, rows.len(), session_timezone)?;
     for i in 0..rows.len() {
-        if rows.is_null(i) {
+        if rows.is_null(i)
+            || rows
+                .value(i)
+                .trim_matches([' ', '\t', '\n', '\r'])
+                .is_empty()
+        {
             append_to_builder(&mut builder, &Value::Null, options)?;
         } else {
             let json_str = rows.value(i);
@@ -254,7 +259,7 @@ fn parse_rows(
                 Ok(value) if is_top_level_match(&builder, &value) => {
                     append_to_builder(&mut builder, &value, options)?;
                 }
-                Ok(value) if is_arr_and_obj_match(&builder, &value) => {
+                Ok(value) if can_wrap_object_as_struct_array(&builder, &value) => {
                     let arr_wrapped_struct = Value::Array(vec![value]);
                     append_to_builder(&mut builder, &arr_wrapped_struct, options)?;
                 }
@@ -283,13 +288,12 @@ fn is_top_level_match(builder: &FieldBuilder, value: &Value) -> bool {
     )
 }
 
-/// Returns true when parsed JSON is an Object and the builder is a List.
-/// In this case the object should be wrapped in a list. e.g.
-/// {"a": 1} -> [{"a": 1}]
-fn is_arr_and_obj_match(builder: &FieldBuilder, value: &Value) -> bool {
+/// Spark wraps an object root only when the schema is an ARRAY of STRUCTs.
+fn can_wrap_object_as_struct_array(builder: &FieldBuilder, value: &Value) -> bool {
     matches!(
         (builder, value),
-        (FieldBuilder::List { .. }, Value::Object(_))
+        (FieldBuilder::List { field, .. }, Value::Object(_))
+            if matches!(field.data_type(), DataType::Struct(_))
     )
 }
 
@@ -467,20 +471,39 @@ fn create_builder(
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum JsonConversionStatus {
+    /// A converted value, including JSON NULL and missing fields.
+    Complete,
+    /// A valid STRUCT object that retains fields around failed child conversions.
+    PartialStruct,
+    /// A non-NULL value that cannot be converted; invalidates its ARRAY/MAP parent.
+    Invalid,
+}
+
 fn append_to_builder(
     builder: &mut FieldBuilder,
     value: &Value,
     options: &SparkFromJsonOptions,
-) -> Result<()> {
+) -> Result<JsonConversionStatus> {
+    let mut status = if value.is_null() {
+        JsonConversionStatus::Complete
+    } else {
+        JsonConversionStatus::Invalid
+    };
     match builder {
         FieldBuilder::Boolean(b) => match value {
-            Value::Bool(bool) => b.append_value(*bool),
+            Value::Bool(bool) => {
+                b.append_value(*bool);
+                status = JsonConversionStatus::Complete;
+            }
             _ => b.append_null(),
         },
         FieldBuilder::Date32(b) => match value {
             Value::String(string) => {
                 let date32 = parse_date32(string, options)?;
                 b.append_value(date32);
+                status = JsonConversionStatus::Complete;
             }
             _ => b.append_null(),
         },
@@ -493,10 +516,12 @@ fn append_to_builder(
                 Value::Number(n) => {
                     let decimal128 = parse_decimal_to_i128(&n.to_string(), *precision, *scale)?;
                     builder.append_value(decimal128);
+                    status = JsonConversionStatus::Complete;
                 }
                 Value::String(s) => {
                     let decimal128 = parse_decimal_to_i128(s, *precision, *scale)?;
                     builder.append_value(decimal128);
+                    status = JsonConversionStatus::Complete;
                 }
                 _ => builder.append_null(),
             };
@@ -505,6 +530,7 @@ fn append_to_builder(
             Value::Number(num) => {
                 if let Some(f) = num.as_f64() {
                     b.append_value(f as f32);
+                    status = JsonConversionStatus::Complete;
                 } else {
                     b.append_null();
                 }
@@ -515,6 +541,7 @@ fn append_to_builder(
             Value::Number(num) => {
                 if let Some(f) = num.as_f64() {
                     b.append_value(f);
+                    status = JsonConversionStatus::Complete;
                 } else {
                     b.append_null();
                 }
@@ -525,6 +552,7 @@ fn append_to_builder(
             Value::Number(num) => {
                 if let Some(n) = num.as_i64() {
                     b.append_value(n as i8);
+                    status = JsonConversionStatus::Complete;
                 } else {
                     b.append_null();
                 }
@@ -535,6 +563,7 @@ fn append_to_builder(
             Value::Number(num) => {
                 if let Some(n) = num.as_i64() {
                     b.append_value(n as i16);
+                    status = JsonConversionStatus::Complete;
                 } else {
                     b.append_null();
                 }
@@ -545,6 +574,7 @@ fn append_to_builder(
             Value::Number(num) => {
                 if let Some(n) = num.as_i64() {
                     b.append_value(n as i32);
+                    status = JsonConversionStatus::Complete;
                 } else {
                     b.append_null();
                 }
@@ -555,6 +585,7 @@ fn append_to_builder(
             Value::Number(num) => {
                 if let Some(n) = num.as_i64() {
                     b.append_value(n);
+                    status = JsonConversionStatus::Complete;
                 } else {
                     b.append_null();
                 }
@@ -563,11 +594,26 @@ fn append_to_builder(
         },
         // TODO: 1) verify string size 2) other Values can be converted to strings
         FieldBuilder::LargeString(b) => match value {
-            Value::String(string) => b.append_value(string),
-            Value::Number(num) => b.append_value(num.to_string()),
-            Value::Bool(bool) => b.append_value(bool.to_string()),
-            Value::Object(_) => b.append_value(value.to_string()),
-            Value::Array(_) => b.append_value(value.to_string()),
+            Value::String(string) => {
+                b.append_value(string);
+                status = JsonConversionStatus::Complete;
+            }
+            Value::Number(num) => {
+                b.append_value(num.to_string());
+                status = JsonConversionStatus::Complete;
+            }
+            Value::Bool(bool) => {
+                b.append_value(bool.to_string());
+                status = JsonConversionStatus::Complete;
+            }
+            Value::Object(_) => {
+                b.append_value(value.to_string());
+                status = JsonConversionStatus::Complete;
+            }
+            Value::Array(_) => {
+                b.append_value(value.to_string());
+                status = JsonConversionStatus::Complete;
+            }
             _ => b.append_null(),
         },
         FieldBuilder::List {
@@ -577,10 +623,13 @@ fn append_to_builder(
             ..
         } => match value {
             Value::Array(arr) => {
-                nulls.push(true);
+                status = JsonConversionStatus::Complete;
                 for val in arr.iter() {
-                    append_to_builder(values, val, options)?;
+                    if append_to_builder(values, val, options)? == JsonConversionStatus::Invalid {
+                        status = JsonConversionStatus::Invalid;
+                    }
                 }
+                nulls.push(status != JsonConversionStatus::Invalid);
                 let curr_len = offsets.last().copied().unwrap_or(0) + arr.len() as i32;
                 offsets.push(curr_len);
             }
@@ -599,13 +648,19 @@ fn append_to_builder(
         } => {
             match value {
                 Value::Object(obj) => {
-                    // just push to struct builder
-                    nulls.push(true);
+                    status = JsonConversionStatus::Complete;
                     for (k, v) in obj.iter() {
                         // map each pair to "key" and "value" - default field names
-                        append_to_builder(keys, &Value::String(k.clone()), options)?;
-                        append_to_builder(values, v, options)?;
+                        let key_status =
+                            append_to_builder(keys, &Value::String(k.clone()), options)?;
+                        let value_status = append_to_builder(values, v, options)?;
+                        if key_status == JsonConversionStatus::Invalid
+                            || value_status == JsonConversionStatus::Invalid
+                        {
+                            status = JsonConversionStatus::Invalid;
+                        }
                     }
+                    nulls.push(status != JsonConversionStatus::Invalid);
                     let curr_len = offsets.last().copied().unwrap_or(0) + obj.len() as i32;
                     offsets.push(curr_len);
                 }
@@ -617,11 +672,26 @@ fn append_to_builder(
             }
         }
         FieldBuilder::String(b) => match value {
-            Value::String(string) => b.append_value(string),
-            Value::Number(num) => b.append_value(num.to_string()),
-            Value::Bool(bool) => b.append_value(bool.to_string()),
-            Value::Object(_) => b.append_value(value.to_string()),
-            Value::Array(_) => b.append_value(value.to_string()),
+            Value::String(string) => {
+                b.append_value(string);
+                status = JsonConversionStatus::Complete;
+            }
+            Value::Number(num) => {
+                b.append_value(num.to_string());
+                status = JsonConversionStatus::Complete;
+            }
+            Value::Bool(bool) => {
+                b.append_value(bool.to_string());
+                status = JsonConversionStatus::Complete;
+            }
+            Value::Object(_) => {
+                b.append_value(value.to_string());
+                status = JsonConversionStatus::Complete;
+            }
+            Value::Array(_) => {
+                b.append_value(value.to_string());
+                status = JsonConversionStatus::Complete;
+            }
             _ => b.append_null(),
         },
         FieldBuilder::Struct {
@@ -632,6 +702,7 @@ fn append_to_builder(
             match value {
                 Value::Object(obj) => {
                     nulls.push(true);
+                    status = JsonConversionStatus::Complete;
                     for (field, nested_builder) in fields.iter().zip(nested_builders.iter_mut()) {
                         // if key not found return null
                         let val = if let Some(v) = obj.get(field.name()) {
@@ -639,7 +710,11 @@ fn append_to_builder(
                         } else {
                             &Value::Null
                         };
-                        append_to_builder(nested_builder, val, options)?;
+                        if append_to_builder(nested_builder, val, options)?
+                            != JsonConversionStatus::Complete
+                        {
+                            status = JsonConversionStatus::PartialStruct;
+                        }
                     }
                 }
                 _ => {
@@ -657,6 +732,7 @@ fn append_to_builder(
                     TimestampMicrosecondType::from_datetime(utc_datetime)
                 {
                     builder.append_value(timestamp_microseconds);
+                    status = JsonConversionStatus::Complete;
                 } else {
                     builder.append_null();
                 }
@@ -670,6 +746,7 @@ fn append_to_builder(
                     TimestampMillisecondType::from_datetime(utc_datetime)
                 {
                     builder.append_value(timestamp_milliseconds);
+                    status = JsonConversionStatus::Complete;
                 } else {
                     builder.append_null();
                 }
@@ -683,6 +760,7 @@ fn append_to_builder(
                     TimestampNanosecondType::from_datetime(utc_datetime)
                 {
                     builder.append_value(timestamp_nanoseconds);
+                    status = JsonConversionStatus::Complete;
                 } else {
                     builder.append_null();
                 }
@@ -694,6 +772,7 @@ fn append_to_builder(
                 let utc_datetime = parse_timestamp(string, tz.clone(), options)?;
                 if let Some(timestamp_second) = TimestampSecondType::from_datetime(utc_datetime) {
                     builder.append_value(timestamp_second);
+                    status = JsonConversionStatus::Complete;
                 } else {
                     builder.append_null();
                 }
@@ -702,7 +781,7 @@ fn append_to_builder(
         },
         FieldBuilder::Unsupported { count, .. } => *count += 1,
     };
-    Ok(())
+    Ok(status)
 }
 
 /// Handle PERMISSIVE MODE. When json fails to parse:

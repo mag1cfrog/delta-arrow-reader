@@ -1,0 +1,1274 @@
+{
+  "issue": 1360,
+  "base": "016db83e8641cbb0d1d93d017470ba79c47f922d",
+  "expected_record_count": 102,
+  "specs": [
+    {
+      "id": 1,
+      "name": "struct_valid",
+      "kind": "struct",
+      "document": "{\"a\":1,\"b\":\"keep\",\"items\":[1,null,2],\"nested\":{\"a\":2,\"b\":\"nested\"},\"m\":{\"x\":3},\"extra\":9}",
+      "schema": "STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>"
+    },
+    {
+      "id": 2,
+      "name": "struct_missing",
+      "kind": "struct",
+      "document": "{}",
+      "schema": "STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>"
+    },
+    {
+      "id": 3,
+      "name": "struct_json_null",
+      "kind": "struct",
+      "document": "null",
+      "schema": "STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>"
+    },
+    {
+      "id": 4,
+      "name": "struct_empty",
+      "kind": "struct",
+      "document": "",
+      "schema": "STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>"
+    },
+    {
+      "id": 5,
+      "name": "struct_whitespace",
+      "kind": "struct",
+      "document": " \t\n",
+      "schema": "STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>"
+    },
+    {
+      "id": 6,
+      "name": "struct_malformed",
+      "kind": "struct",
+      "document": "{",
+      "schema": "STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>"
+    },
+    {
+      "id": 7,
+      "name": "struct_array_root",
+      "kind": "struct",
+      "document": "[1]",
+      "schema": "STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>"
+    },
+    {
+      "id": 8,
+      "name": "struct_scalar_root",
+      "kind": "struct",
+      "document": "1",
+      "schema": "STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>"
+    },
+    {
+      "id": 9,
+      "name": "struct_string_root",
+      "kind": "struct",
+      "document": "\"hello\"",
+      "schema": "STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>"
+    },
+    {
+      "id": 10,
+      "name": "struct_sql_null",
+      "kind": "struct",
+      "document": null,
+      "schema": "STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>"
+    },
+    {
+      "id": 11,
+      "name": "struct_bad_array_sibling",
+      "kind": "struct",
+      "document": "{\"a\":1,\"b\":\"keep\",\"items\":[1,\"bad\",2],\"nested\":{\"a\":2},\"m\":{\"x\":3}}",
+      "schema": "STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>"
+    },
+    {
+      "id": 12,
+      "name": "struct_bad_map_sibling",
+      "kind": "struct",
+      "document": "{\"a\":1,\"b\":\"keep\",\"items\":[1,2],\"nested\":{\"a\":2},\"m\":{\"x\":3,\"y\":\"bad\"}}",
+      "schema": "STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>"
+    },
+    {
+      "id": 13,
+      "name": "struct_bad_nested_struct",
+      "kind": "struct",
+      "document": "{\"a\":1,\"b\":\"keep\",\"nested\":{\"a\":\"bad\",\"b\":\"retained\"},\"items\":[1]}",
+      "schema": "STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>"
+    },
+    {
+      "id": 14,
+      "name": "struct_malformed_after_fields",
+      "kind": "struct",
+      "document": "{\"a\":1,\"b\":\"keep\"",
+      "schema": "STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>"
+    },
+    {
+      "id": 15,
+      "name": "struct_wrong_nested_shape",
+      "kind": "struct",
+      "document": "{\"a\":1,\"nested\":[1]}",
+      "schema": "STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>"
+    },
+    {
+      "id": 16,
+      "name": "struct_bad_scalar_sibling",
+      "kind": "struct",
+      "document": "{\"a\":\"bad\",\"b\":\"keep\"}",
+      "schema": "STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>"
+    },
+    {
+      "id": 17,
+      "name": "array_int_valid",
+      "kind": "array_int",
+      "document": "[1,null,2]",
+      "schema": "ARRAY<INT>"
+    },
+    {
+      "id": 18,
+      "name": "array_int_bad_string",
+      "kind": "array_int",
+      "document": "[1,\"bad\",2]",
+      "schema": "ARRAY<INT>"
+    },
+    {
+      "id": 19,
+      "name": "array_int_bad_object",
+      "kind": "array_int",
+      "document": "[1,{},2]",
+      "schema": "ARRAY<INT>"
+    },
+    {
+      "id": 20,
+      "name": "array_int_empty",
+      "kind": "array_int",
+      "document": "[]",
+      "schema": "ARRAY<INT>"
+    },
+    {
+      "id": 21,
+      "name": "array_int_object_root",
+      "kind": "array_int",
+      "document": "{\"a\":1}",
+      "schema": "ARRAY<INT>"
+    },
+    {
+      "id": 22,
+      "name": "array_int_json_null",
+      "kind": "array_int",
+      "document": "null",
+      "schema": "ARRAY<INT>"
+    },
+    {
+      "id": 23,
+      "name": "array_int_whitespace",
+      "kind": "array_int",
+      "document": " ",
+      "schema": "ARRAY<INT>"
+    },
+    {
+      "id": 24,
+      "name": "array_int_malformed",
+      "kind": "array_int",
+      "document": "[1,",
+      "schema": "ARRAY<INT>"
+    },
+    {
+      "id": 25,
+      "name": "array_struct_valid",
+      "kind": "array_struct",
+      "document": "[{\"a\":1,\"b\":\"one\"},null,{\"a\":2}]",
+      "schema": "ARRAY<STRUCT<a:INT,b:STRING>>"
+    },
+    {
+      "id": 26,
+      "name": "array_struct_bad_struct",
+      "kind": "array_struct",
+      "document": "[{\"a\":1},{\"a\":\"bad\",\"b\":\"keep\"},{\"a\":2}]",
+      "schema": "ARRAY<STRUCT<a:INT,b:STRING>>"
+    },
+    {
+      "id": 27,
+      "name": "array_struct_wrapped_object",
+      "kind": "array_struct",
+      "document": "{\"a\":1,\"b\":\"wrapped\"}",
+      "schema": "ARRAY<STRUCT<a:INT,b:STRING>>"
+    },
+    {
+      "id": 28,
+      "name": "array_struct_scalar_element",
+      "kind": "array_struct",
+      "document": "[1,{\"a\":2}]",
+      "schema": "ARRAY<STRUCT<a:INT,b:STRING>>"
+    },
+    {
+      "id": 29,
+      "name": "array_struct_missing_fields",
+      "kind": "array_struct",
+      "document": "[{}]",
+      "schema": "ARRAY<STRUCT<a:INT,b:STRING>>"
+    },
+    {
+      "id": 30,
+      "name": "map_int_valid",
+      "kind": "map_int",
+      "document": "{\"x\":1,\"y\":null}",
+      "schema": "MAP<STRING,INT>"
+    },
+    {
+      "id": 31,
+      "name": "map_int_bad_string",
+      "kind": "map_int",
+      "document": "{\"x\":1,\"y\":\"bad\",\"z\":2}",
+      "schema": "MAP<STRING,INT>"
+    },
+    {
+      "id": 32,
+      "name": "map_int_bad_array",
+      "kind": "map_int",
+      "document": "{\"x\":1,\"y\":[2]}",
+      "schema": "MAP<STRING,INT>"
+    },
+    {
+      "id": 33,
+      "name": "map_int_empty",
+      "kind": "map_int",
+      "document": "{}",
+      "schema": "MAP<STRING,INT>"
+    },
+    {
+      "id": 34,
+      "name": "map_int_array_root",
+      "kind": "map_int",
+      "document": "[1]",
+      "schema": "MAP<STRING,INT>"
+    },
+    {
+      "id": 35,
+      "name": "map_int_json_null",
+      "kind": "map_int",
+      "document": "null",
+      "schema": "MAP<STRING,INT>"
+    },
+    {
+      "id": 36,
+      "name": "map_int_empty_string",
+      "kind": "map_int",
+      "document": "",
+      "schema": "MAP<STRING,INT>"
+    },
+    {
+      "id": 37,
+      "name": "map_struct_bad_child",
+      "kind": "map_struct",
+      "document": "{\"x\":{\"a\":1},\"y\":{\"a\":\"bad\",\"b\":\"keep\"}}",
+      "schema": "MAP<STRING,STRUCT<a:INT,b:STRING>>"
+    },
+    {
+      "id": 38,
+      "name": "map_array_bad_child",
+      "kind": "map_array",
+      "document": "{\"x\":[1],\"y\":[2,\"bad\"],\"z\":null}",
+      "schema": "MAP<STRING,ARRAY<INT>>"
+    },
+    {
+      "id": 39,
+      "name": "array_map_bad_child",
+      "kind": "array_map",
+      "document": "[{\"x\":1},{\"y\":\"bad\"}]",
+      "schema": "ARRAY<MAP<STRING,INT>>"
+    }
+  ],
+  "corpora": [
+    {
+      "corpus": "from_json_permissive",
+      "source": "Source-only bounded default PERMISSIVE container and root-shape cases; no expected output.",
+      "metadata": {
+        "inputs": [
+          {
+            "name": "from_json_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "j",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "kind",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                "{\"a\":1,\"b\":\"keep\",\"items\":[1,null,2],\"nested\":{\"a\":2,\"b\":\"nested\"},\"m\":{\"x\":3},\"extra\":9}",
+                "struct"
+              ],
+              [
+                "2",
+                "{}",
+                "struct"
+              ],
+              [
+                "3",
+                "null",
+                "struct"
+              ],
+              [
+                "4",
+                "",
+                "struct"
+              ],
+              [
+                "5",
+                " \t\n",
+                "struct"
+              ],
+              [
+                "6",
+                "{",
+                "struct"
+              ],
+              [
+                "7",
+                "[1]",
+                "struct"
+              ],
+              [
+                "8",
+                "1",
+                "struct"
+              ],
+              [
+                "9",
+                "\"hello\"",
+                "struct"
+              ],
+              [
+                "10",
+                null,
+                "struct"
+              ],
+              [
+                "11",
+                "{\"a\":1,\"b\":\"keep\",\"items\":[1,\"bad\",2],\"nested\":{\"a\":2},\"m\":{\"x\":3}}",
+                "struct"
+              ],
+              [
+                "12",
+                "{\"a\":1,\"b\":\"keep\",\"items\":[1,2],\"nested\":{\"a\":2},\"m\":{\"x\":3,\"y\":\"bad\"}}",
+                "struct"
+              ],
+              [
+                "13",
+                "{\"a\":1,\"b\":\"keep\",\"nested\":{\"a\":\"bad\",\"b\":\"retained\"},\"items\":[1]}",
+                "struct"
+              ],
+              [
+                "14",
+                "{\"a\":1,\"b\":\"keep\"",
+                "struct"
+              ],
+              [
+                "15",
+                "{\"a\":1,\"nested\":[1]}",
+                "struct"
+              ],
+              [
+                "16",
+                "{\"a\":\"bad\",\"b\":\"keep\"}",
+                "struct"
+              ],
+              [
+                "17",
+                "[1,null,2]",
+                "array_int"
+              ],
+              [
+                "18",
+                "[1,\"bad\",2]",
+                "array_int"
+              ],
+              [
+                "19",
+                "[1,{},2]",
+                "array_int"
+              ],
+              [
+                "20",
+                "[]",
+                "array_int"
+              ],
+              [
+                "21",
+                "{\"a\":1}",
+                "array_int"
+              ],
+              [
+                "22",
+                "null",
+                "array_int"
+              ],
+              [
+                "23",
+                " ",
+                "array_int"
+              ],
+              [
+                "24",
+                "[1,",
+                "array_int"
+              ],
+              [
+                "25",
+                "[{\"a\":1,\"b\":\"one\"},null,{\"a\":2}]",
+                "array_struct"
+              ],
+              [
+                "26",
+                "[{\"a\":1},{\"a\":\"bad\",\"b\":\"keep\"},{\"a\":2}]",
+                "array_struct"
+              ],
+              [
+                "27",
+                "{\"a\":1,\"b\":\"wrapped\"}",
+                "array_struct"
+              ],
+              [
+                "28",
+                "[1,{\"a\":2}]",
+                "array_struct"
+              ],
+              [
+                "29",
+                "[{}]",
+                "array_struct"
+              ],
+              [
+                "30",
+                "{\"x\":1,\"y\":null}",
+                "map_int"
+              ],
+              [
+                "31",
+                "{\"x\":1,\"y\":\"bad\",\"z\":2}",
+                "map_int"
+              ],
+              [
+                "32",
+                "{\"x\":1,\"y\":[2]}",
+                "map_int"
+              ],
+              [
+                "33",
+                "{}",
+                "map_int"
+              ],
+              [
+                "34",
+                "[1]",
+                "map_int"
+              ],
+              [
+                "35",
+                "null",
+                "map_int"
+              ],
+              [
+                "36",
+                "",
+                "map_int"
+              ],
+              [
+                "37",
+                "{\"x\":{\"a\":1},\"y\":{\"a\":\"bad\",\"b\":\"keep\"}}",
+                "map_struct"
+              ],
+              [
+                "38",
+                "{\"x\":[1],\"y\":[2,\"bad\"],\"z\":null}",
+                "map_array"
+              ],
+              [
+                "39",
+                "[{\"x\":1},{\"y\":\"bad\"}]",
+                "array_map"
+              ]
+            ]
+          },
+          {
+            "name": "from_json_root_inputs",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {}
+                },
+                {
+                  "name": "j",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "kind",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": [
+              [
+                "1",
+                "{\"x\":1}",
+                "object_root"
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "from_json_permissive",
+          "id": "struct_valid",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('{\"a\":1,\"b\":\"keep\",\"items\":[1,null,2],\"nested\":{\"a\":2,\"b\":\"nested\"},\"m\":{\"x\":3},\"extra\":9}','STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "struct_missing",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('{}','STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "struct_json_null",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('null','STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "struct_empty",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('','STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "struct_whitespace",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json(' \t\n','STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "struct_malformed",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('{','STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "struct_array_root",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('[1]','STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "struct_scalar_root",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('1','STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "struct_string_root",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('\"hello\"','STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "struct_sql_null",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json(CAST(NULL AS STRING),'STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "struct_bad_array_sibling",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('{\"a\":1,\"b\":\"keep\",\"items\":[1,\"bad\",2],\"nested\":{\"a\":2},\"m\":{\"x\":3}}','STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "struct_bad_map_sibling",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('{\"a\":1,\"b\":\"keep\",\"items\":[1,2],\"nested\":{\"a\":2},\"m\":{\"x\":3,\"y\":\"bad\"}}','STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "struct_bad_nested_struct",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('{\"a\":1,\"b\":\"keep\",\"nested\":{\"a\":\"bad\",\"b\":\"retained\"},\"items\":[1]}','STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "struct_malformed_after_fields",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('{\"a\":1,\"b\":\"keep\"','STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "struct_wrong_nested_shape",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('{\"a\":1,\"nested\":[1]}','STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "struct_bad_scalar_sibling",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('{\"a\":\"bad\",\"b\":\"keep\"}','STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "array_int_valid",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('[1,null,2]','ARRAY<INT>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "array_int_bad_string",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('[1,\"bad\",2]','ARRAY<INT>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "array_int_bad_object",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('[1,{},2]','ARRAY<INT>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "array_int_empty",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('[]','ARRAY<INT>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "array_int_object_root",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('{\"a\":1}','ARRAY<INT>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "array_int_json_null",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('null','ARRAY<INT>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "array_int_whitespace",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json(' ','ARRAY<INT>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "array_int_malformed",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('[1,','ARRAY<INT>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "array_struct_valid",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('[{\"a\":1,\"b\":\"one\"},null,{\"a\":2}]','ARRAY<STRUCT<a:INT,b:STRING>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "array_struct_bad_struct",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('[{\"a\":1},{\"a\":\"bad\",\"b\":\"keep\"},{\"a\":2}]','ARRAY<STRUCT<a:INT,b:STRING>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "array_struct_wrapped_object",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('{\"a\":1,\"b\":\"wrapped\"}','ARRAY<STRUCT<a:INT,b:STRING>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "array_struct_scalar_element",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('[1,{\"a\":2}]','ARRAY<STRUCT<a:INT,b:STRING>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "array_struct_missing_fields",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('[{}]','ARRAY<STRUCT<a:INT,b:STRING>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "map_int_valid",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('{\"x\":1,\"y\":null}','MAP<STRING,INT>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "map_int_bad_string",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('{\"x\":1,\"y\":\"bad\",\"z\":2}','MAP<STRING,INT>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "map_int_bad_array",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('{\"x\":1,\"y\":[2]}','MAP<STRING,INT>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "map_int_empty",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('{}','MAP<STRING,INT>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "map_int_array_root",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('[1]','MAP<STRING,INT>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "map_int_json_null",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('null','MAP<STRING,INT>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "map_int_empty_string",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('','MAP<STRING,INT>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "map_struct_bad_child",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('{\"x\":{\"a\":1},\"y\":{\"a\":\"bad\",\"b\":\"keep\"}}','MAP<STRING,STRUCT<a:INT,b:STRING>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "map_array_bad_child",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('{\"x\":[1],\"y\":[2,\"bad\"],\"z\":null}','MAP<STRING,ARRAY<INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "array_map_bad_child",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('[{\"x\":1},{\"y\":\"bad\"}]','ARRAY<MAP<STRING,INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "registered_struct",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT id,from_json(j,'STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>') AS r FROM from_json_inputs WHERE kind='struct' ORDER BY id"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "registered_array_int",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT id,from_json(j,'ARRAY<INT>') AS r FROM from_json_inputs WHERE kind='array_int' ORDER BY id"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "registered_array_struct",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT id,from_json(j,'ARRAY<STRUCT<a:INT,b:STRING>>') AS r FROM from_json_inputs WHERE kind='array_struct' ORDER BY id"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "registered_map_int",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT id,from_json(j,'MAP<STRING,INT>') AS r FROM from_json_inputs WHERE kind='map_int' ORDER BY id"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "registered_map_struct",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT id,from_json(j,'MAP<STRING,STRUCT<a:INT,b:STRING>>') AS r FROM from_json_inputs WHERE kind='map_struct' ORDER BY id"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "registered_map_array",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT id,from_json(j,'MAP<STRING,ARRAY<INT>>') AS r FROM from_json_inputs WHERE kind='map_array' ORDER BY id"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "registered_array_map",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT id,from_json(j,'ARRAY<MAP<STRING,INT>>') AS r FROM from_json_inputs WHERE kind='array_map' ORDER BY id"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "struct_valid",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('{\"a\":1,\"b\":\"keep\",\"items\":[1,null,2],\"nested\":{\"a\":2,\"b\":\"nested\"},\"m\":{\"x\":3},\"extra\":9}','STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "struct_missing",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('{}','STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "struct_json_null",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('null','STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "struct_empty",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('','STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "struct_whitespace",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json(' \t\n','STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "struct_malformed",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('{','STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "struct_array_root",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('[1]','STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "struct_scalar_root",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('1','STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "struct_string_root",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('\"hello\"','STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "struct_sql_null",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json(CAST(NULL AS STRING),'STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "struct_bad_array_sibling",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('{\"a\":1,\"b\":\"keep\",\"items\":[1,\"bad\",2],\"nested\":{\"a\":2},\"m\":{\"x\":3}}','STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "struct_bad_map_sibling",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('{\"a\":1,\"b\":\"keep\",\"items\":[1,2],\"nested\":{\"a\":2},\"m\":{\"x\":3,\"y\":\"bad\"}}','STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "struct_bad_nested_struct",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('{\"a\":1,\"b\":\"keep\",\"nested\":{\"a\":\"bad\",\"b\":\"retained\"},\"items\":[1]}','STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "struct_malformed_after_fields",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('{\"a\":1,\"b\":\"keep\"','STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "struct_wrong_nested_shape",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('{\"a\":1,\"nested\":[1]}','STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "struct_bad_scalar_sibling",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('{\"a\":\"bad\",\"b\":\"keep\"}','STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "array_int_valid",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('[1,null,2]','ARRAY<INT>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "array_int_bad_string",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('[1,\"bad\",2]','ARRAY<INT>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "array_int_bad_object",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('[1,{},2]','ARRAY<INT>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "array_int_empty",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('[]','ARRAY<INT>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "array_int_object_root",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('{\"a\":1}','ARRAY<INT>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "array_int_json_null",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('null','ARRAY<INT>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "array_int_whitespace",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json(' ','ARRAY<INT>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "array_int_malformed",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('[1,','ARRAY<INT>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "array_struct_valid",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('[{\"a\":1,\"b\":\"one\"},null,{\"a\":2}]','ARRAY<STRUCT<a:INT,b:STRING>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "array_struct_bad_struct",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('[{\"a\":1},{\"a\":\"bad\",\"b\":\"keep\"},{\"a\":2}]','ARRAY<STRUCT<a:INT,b:STRING>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "array_struct_wrapped_object",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('{\"a\":1,\"b\":\"wrapped\"}','ARRAY<STRUCT<a:INT,b:STRING>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "array_struct_scalar_element",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('[1,{\"a\":2}]','ARRAY<STRUCT<a:INT,b:STRING>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "array_struct_missing_fields",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('[{}]','ARRAY<STRUCT<a:INT,b:STRING>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "map_int_valid",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('{\"x\":1,\"y\":null}','MAP<STRING,INT>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "map_int_bad_string",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('{\"x\":1,\"y\":\"bad\",\"z\":2}','MAP<STRING,INT>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "map_int_bad_array",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('{\"x\":1,\"y\":[2]}','MAP<STRING,INT>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "map_int_empty",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('{}','MAP<STRING,INT>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "map_int_array_root",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('[1]','MAP<STRING,INT>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "map_int_json_null",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('null','MAP<STRING,INT>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "map_int_empty_string",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('','MAP<STRING,INT>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "map_struct_bad_child",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('{\"x\":{\"a\":1},\"y\":{\"a\":\"bad\",\"b\":\"keep\"}}','MAP<STRING,STRUCT<a:INT,b:STRING>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "map_array_bad_child",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('{\"x\":[1],\"y\":[2,\"bad\"],\"z\":null}','MAP<STRING,ARRAY<INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "array_map_bad_child",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('[{\"x\":1},{\"y\":\"bad\"}]','ARRAY<MAP<STRING,INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "registered_struct",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT id,from_json(j,'STRUCT<a:INT,b:STRING,items:ARRAY<INT>,nested:STRUCT<a:INT,b:STRING>,m:MAP<STRING,INT>>') AS r FROM from_json_inputs WHERE kind='struct' ORDER BY id"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "registered_array_int",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT id,from_json(j,'ARRAY<INT>') AS r FROM from_json_inputs WHERE kind='array_int' ORDER BY id"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "registered_array_struct",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT id,from_json(j,'ARRAY<STRUCT<a:INT,b:STRING>>') AS r FROM from_json_inputs WHERE kind='array_struct' ORDER BY id"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "registered_map_int",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT id,from_json(j,'MAP<STRING,INT>') AS r FROM from_json_inputs WHERE kind='map_int' ORDER BY id"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "registered_map_struct",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT id,from_json(j,'MAP<STRING,STRUCT<a:INT,b:STRING>>') AS r FROM from_json_inputs WHERE kind='map_struct' ORDER BY id"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "registered_map_array",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT id,from_json(j,'MAP<STRING,ARRAY<INT>>') AS r FROM from_json_inputs WHERE kind='map_array' ORDER BY id"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "registered_array_map",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT id,from_json(j,'ARRAY<MAP<STRING,INT>>') AS r FROM from_json_inputs WHERE kind='array_map' ORDER BY id"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "date_format_option",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('{\"d\":\"31/12/2024\"}','STRUCT<d:DATE>',map('dateFormat','dd/MM/yyyy')) AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "timestamp_format_option",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('{\"at\":\"2024|02|29 12:34\"}','STRUCT<at:TIMESTAMP>',map('timestampFormat','yyyy|MM|dd HH:mm')) AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "date_format_option",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('{\"d\":\"31/12/2024\"}','STRUCT<d:DATE>',map('dateFormat','dd/MM/yyyy')) AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "timestamp_format_option",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('{\"at\":\"2024|02|29 12:34\"}','STRUCT<at:TIMESTAMP>',map('timestampFormat','yyyy|MM|dd HH:mm')) AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "object_root_map_array",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('{\"x\":1}','ARRAY<MAP<STRING,INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "object_root_string_array",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT from_json('{\"x\":1}','ARRAY<STRING>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "registered_object_roots",
+          "ansi": false,
+          "ordered": true,
+          "sql": "SELECT id,from_json(j,'ARRAY<MAP<STRING,INT>>') AS map_array,from_json(j,'ARRAY<STRING>') AS string_array FROM from_json_root_inputs ORDER BY id"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "object_root_map_array",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('{\"x\":1}','ARRAY<MAP<STRING,INT>>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "object_root_string_array",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT from_json('{\"x\":1}','ARRAY<STRING>') AS r"
+        },
+        {
+          "corpus": "from_json_permissive",
+          "id": "registered_object_roots",
+          "ansi": true,
+          "ordered": true,
+          "sql": "SELECT id,from_json(j,'ARRAY<MAP<STRING,INT>>') AS map_array,from_json(j,'ARRAY<STRING>') AS string_array FROM from_json_root_inputs ORDER BY id"
+        }
+      ]
+    }
+  ],
+  "root_admission_specs": [
+    {
+      "name": "object_root_map_array",
+      "document": "{\"x\":1}",
+      "schema": "ARRAY<MAP<STRING,INT>>"
+    },
+    {
+      "name": "object_root_string_array",
+      "document": "{\"x\":1}",
+      "schema": "ARRAY<STRING>"
+    }
+  ]
+}
