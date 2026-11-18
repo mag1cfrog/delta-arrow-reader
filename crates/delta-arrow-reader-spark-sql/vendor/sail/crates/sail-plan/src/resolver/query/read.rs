@@ -221,6 +221,11 @@ impl PlanResolver<'_> {
             let arguments = self.resolve_expressions(arguments, &schema, state).await?;
             let table_function = match get_built_in_table_function(&canonical_function_name) {
                 Ok(f) => f,
+                _ if !self.allow_host_functions => {
+                    return Err(PlanError::unsupported(
+                        "host table functions in metadata queries",
+                    ));
+                }
                 _ => match self.ctx.table_function(&canonical_function_name) {
                     Ok(f) => f,
                     _ => {

@@ -324,12 +324,7 @@ async fn reject_writes_external_sources_and_multiple_statements() -> TestResult 
             .await
             .err()
             .ok_or("write command was accepted")?;
-        assert!(
-            error
-                .to_string()
-                .contains("only read-only queries are supported"),
-            "{error}"
-        );
+        assert!(error.to_string().contains("not supported"), "{error}");
     }
     for sql in [
         "SELECT * FROM parquet.`/unavailable/file.parquet`",

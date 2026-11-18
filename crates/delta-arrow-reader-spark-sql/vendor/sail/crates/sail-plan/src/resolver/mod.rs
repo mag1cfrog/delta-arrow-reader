@@ -18,10 +18,24 @@ mod tree;
 pub struct PlanResolver<'a> {
     ctx: &'a SessionContext,
     config: Arc<PlanConfig>,
+    allow_host_functions: bool,
 }
 
 impl<'a> PlanResolver<'a> {
     pub fn new(ctx: &'a SessionContext, config: Arc<PlanConfig>) -> Self {
-        Self { ctx, config }
+        Self {
+            ctx,
+            config,
+            allow_host_functions: true,
+        }
+    }
+
+    /// Resolve metadata from registered providers and frontend built-in functions only.
+    pub fn new_for_metadata(ctx: &'a SessionContext, config: Arc<PlanConfig>) -> Self {
+        Self {
+            ctx,
+            config,
+            allow_host_functions: false,
+        }
     }
 }

@@ -265,6 +265,8 @@ impl PlanResolver<'_> {
                     }
                 })
                 .data()?
+        } else if !self.allow_host_functions {
+            return Err(PlanError::unsupported("host functions in metadata queries"));
         } else if let Ok(udf) = self.ctx.udf(&canonical_function_name) {
             if is_distinct || ignore_nulls.is_some() || filter.is_some() || order_by.is_some() {
                 return Err(PlanError::invalid("invalid scalar function clause"));

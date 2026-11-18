@@ -1,0 +1,711 @@
+{
+  "issue": "1342",
+  "expected_record_count": 64,
+  "setup_sql": [
+    "CREATE DATABASE analytics",
+    "CREATE DATABASE audit",
+    "CREATE DATABASE zanalytics",
+    "CREATE TABLE default.orders (id INT) USING PARQUET",
+    "CREATE VIEW default.orders_view AS SELECT id FROM default.orders",
+    "CREATE TABLE default.ab (id INT) USING PARQUET",
+    "CREATE TABLE default.zab (id INT) USING PARQUET",
+    "CREATE TABLE analytics.archive (id INT) USING PARQUET",
+    "CREATE TEMP VIEW `odd.name` AS SELECT 1 AS id",
+    "CREATE TEMP VIEW oddxname AS SELECT 1 AS id"
+  ],
+  "corpora": [
+    {
+      "corpus": "read_only_metadata",
+      "source": "explicit registered metadata and Spark catalog setup",
+      "metadata": {
+        "spark_version": "4.2.0",
+        "timezone": "UTC",
+        "catalog": "spark_catalog",
+        "default_schema": "default",
+        "schemas": [
+          "default",
+          "analytics",
+          "audit",
+          "zanalytics"
+        ],
+        "tables": [
+          {
+            "schema": "default",
+            "name": "rich_source",
+            "kind": "temporary",
+            "input": "rich_source"
+          },
+          {
+            "schema": "default",
+            "name": "orders",
+            "kind": "base"
+          },
+          {
+            "schema": "default",
+            "name": "orders_view",
+            "kind": "view"
+          },
+          {
+            "schema": "default",
+            "name": "ab",
+            "kind": "base"
+          },
+          {
+            "schema": "default",
+            "name": "zab",
+            "kind": "base"
+          },
+          {
+            "schema": "analytics",
+            "name": "archive",
+            "kind": "base"
+          },
+          {
+            "schema": "default",
+            "name": "odd.name",
+            "kind": "temporary"
+          },
+          {
+            "schema": "default",
+            "name": "oddxname",
+            "kind": "temporary"
+          }
+        ],
+        "inputs": [
+          {
+            "name": "rich_source",
+            "schema": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "comment": "identifier"
+                  }
+                },
+                {
+                  "name": "tiny",
+                  "type": "byte",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "money",
+                  "type": "decimal(18,3)",
+                  "nullable": true,
+                  "metadata": {
+                    "comment": "amount"
+                  }
+                },
+                {
+                  "name": "items",
+                  "type": {
+                    "type": "array",
+                    "elementType": {
+                      "type": "struct",
+                      "fields": [
+                        {
+                          "name": "x",
+                          "type": "integer",
+                          "nullable": true,
+                          "metadata": {}
+                        },
+                        {
+                          "name": "label",
+                          "type": "string",
+                          "nullable": true,
+                          "metadata": {}
+                        }
+                      ]
+                    },
+                    "containsNull": true
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "lookup",
+                  "type": {
+                    "type": "map",
+                    "keyType": "string",
+                    "valueType": {
+                      "type": "array",
+                      "elementType": "decimal(12,2)",
+                      "containsNull": true
+                    },
+                    "valueContainsNull": true
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "local_ts",
+                  "type": "timestamp_ntz",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "zoned_ts",
+                  "type": "timestamp",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "odd.field",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {
+                    "comment": "quoted field"
+                  }
+                },
+                {
+                  "name": "nested",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "space name",
+                        "type": "string",
+                        "nullable": true,
+                        "metadata": {}
+                      },
+                      {
+                        "name": "child",
+                        "type": {
+                          "type": "array",
+                          "elementType": "timestamp_ntz",
+                          "containsNull": true
+                        },
+                        "nullable": true,
+                        "metadata": {}
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "rows": []
+          }
+        ]
+      },
+      "cases": [
+        {
+          "corpus": "read_only_metadata",
+          "id": "describe_bare",
+          "sql": "DESCRIBE rich_source",
+          "ordered": true,
+          "ansi": false,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "describe_bare",
+          "sql": "DESCRIBE rich_source",
+          "ordered": true,
+          "ansi": true,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "desc_bare",
+          "sql": "DESC rich_source",
+          "ordered": true,
+          "ansi": false,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "desc_bare",
+          "sql": "DESC rich_source",
+          "ordered": true,
+          "ansi": true,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "describe_table",
+          "sql": "DESCRIBE TABLE rich_source",
+          "ordered": true,
+          "ansi": false,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "describe_table",
+          "sql": "DESCRIBE TABLE rich_source",
+          "ordered": true,
+          "ansi": true,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "describe_qualified",
+          "sql": "DESC spark_catalog.default.orders",
+          "ordered": true,
+          "ansi": false,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "describe_qualified",
+          "sql": "DESC spark_catalog.default.orders",
+          "ordered": true,
+          "ansi": true,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "describe_quoted",
+          "sql": "DESCRIBE `odd.name`",
+          "ordered": true,
+          "ansi": false,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "describe_quoted",
+          "sql": "DESCRIBE `odd.name`",
+          "ordered": true,
+          "ansi": true,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "describe_query",
+          "sql": "DESCRIBE QUERY SELECT money,items,local_ts,zoned_ts FROM rich_source",
+          "ordered": true,
+          "ansi": false,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "describe_query",
+          "sql": "DESCRIBE QUERY SELECT money,items,local_ts,zoned_ts FROM rich_source",
+          "ordered": true,
+          "ansi": true,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "describe_query_implicit",
+          "sql": "DESCRIBE SELECT id AS renamed,lookup,nested FROM rich_source",
+          "ordered": true,
+          "ansi": false,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "describe_query_implicit",
+          "sql": "DESCRIBE SELECT id AS renamed,lookup,nested FROM rich_source",
+          "ordered": true,
+          "ansi": true,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_columns_in",
+          "sql": "SHOW COLUMNS IN rich_source",
+          "ordered": true,
+          "ansi": false,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_columns_in",
+          "sql": "SHOW COLUMNS IN rich_source",
+          "ordered": true,
+          "ansi": true,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_columns_from",
+          "sql": "SHOW COLUMNS FROM spark_catalog.default.orders",
+          "ordered": true,
+          "ansi": false,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_columns_from",
+          "sql": "SHOW COLUMNS FROM spark_catalog.default.orders",
+          "ordered": true,
+          "ansi": true,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_tables",
+          "sql": "SHOW TABLES",
+          "ordered": false,
+          "ansi": false,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_tables",
+          "sql": "SHOW TABLES",
+          "ordered": false,
+          "ansi": true,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_tables_schema",
+          "sql": "SHOW TABLES IN analytics",
+          "ordered": false,
+          "ansi": false,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_tables_schema",
+          "sql": "SHOW TABLES IN analytics",
+          "ordered": false,
+          "ansi": true,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_tables_qualified_schema",
+          "sql": "SHOW TABLES IN spark_catalog.analytics",
+          "ordered": false,
+          "ansi": false,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_tables_qualified_schema",
+          "sql": "SHOW TABLES IN spark_catalog.analytics",
+          "ordered": false,
+          "ansi": true,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_tables_like_case",
+          "sql": "SHOW TABLES LIKE 'RIC*'",
+          "ordered": false,
+          "ansi": false,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_tables_like_case",
+          "sql": "SHOW TABLES LIKE 'RIC*'",
+          "ordered": false,
+          "ansi": true,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_tables_like_alternatives",
+          "sql": "SHOW TABLES LIKE 'ab|odd*'",
+          "ordered": false,
+          "ansi": false,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_tables_like_alternatives",
+          "sql": "SHOW TABLES LIKE 'ab|odd*'",
+          "ordered": false,
+          "ansi": true,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_tables_like_trim",
+          "sql": "SHOW TABLES LIKE '  ORD*  '",
+          "ordered": false,
+          "ansi": false,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_tables_like_trim",
+          "sql": "SHOW TABLES LIKE '  ORD*  '",
+          "ordered": false,
+          "ansi": true,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_tables_like_regex",
+          "sql": "SHOW TABLES LIKE 'odd.name'",
+          "ordered": false,
+          "ansi": false,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_tables_like_regex",
+          "sql": "SHOW TABLES LIKE 'odd.name'",
+          "ordered": false,
+          "ansi": true,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_tables_like_literal_dot",
+          "sql": "SHOW TABLES LIKE 'odd[.]name'",
+          "ordered": false,
+          "ansi": false,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_tables_like_literal_dot",
+          "sql": "SHOW TABLES LIKE 'odd[.]name'",
+          "ordered": false,
+          "ansi": true,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_tables_like_escaped_dot",
+          "sql": "SHOW TABLES LIKE 'odd\\\\.name'",
+          "ordered": false,
+          "ansi": false,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_tables_like_escaped_dot",
+          "sql": "SHOW TABLES LIKE 'odd\\\\.name'",
+          "ordered": false,
+          "ansi": true,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_tables_like_no_match",
+          "sql": "SHOW TABLES LIKE 'missing*'",
+          "ordered": false,
+          "ansi": false,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_tables_like_no_match",
+          "sql": "SHOW TABLES LIKE 'missing*'",
+          "ordered": false,
+          "ansi": true,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_schemas",
+          "sql": "SHOW SCHEMAS",
+          "ordered": false,
+          "ansi": false,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_schemas",
+          "sql": "SHOW SCHEMAS",
+          "ordered": false,
+          "ansi": true,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_databases",
+          "sql": "SHOW DATABASES",
+          "ordered": false,
+          "ansi": false,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_databases",
+          "sql": "SHOW DATABASES",
+          "ordered": false,
+          "ansi": true,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_schemas_like",
+          "sql": "SHOW SCHEMAS LIKE 'AN*|default'",
+          "ordered": false,
+          "ansi": false,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_schemas_like",
+          "sql": "SHOW SCHEMAS LIKE 'AN*|default'",
+          "ordered": false,
+          "ansi": true,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_schemas_like_anchored",
+          "sql": "SHOW DATABASES LIKE 'audit|analytics'",
+          "ordered": false,
+          "ansi": false,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_schemas_like_anchored",
+          "sql": "SHOW DATABASES LIKE 'audit|analytics'",
+          "ordered": false,
+          "ansi": true,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "explain",
+          "sql": "EXPLAIN SELECT id FROM rich_source WHERE id=1",
+          "ordered": false,
+          "ansi": false,
+          "explain": true
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "explain",
+          "sql": "EXPLAIN SELECT id FROM rich_source WHERE id=1",
+          "ordered": false,
+          "ansi": true,
+          "explain": true
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "explain_extended",
+          "sql": "EXPLAIN EXTENDED SELECT id FROM rich_source",
+          "ordered": false,
+          "ansi": false,
+          "explain": true
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "explain_extended",
+          "sql": "EXPLAIN EXTENDED SELECT id FROM rich_source",
+          "ordered": false,
+          "ansi": true,
+          "explain": true
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "explain_formatted",
+          "sql": "EXPLAIN FORMATTED SELECT id FROM rich_source",
+          "ordered": false,
+          "ansi": false,
+          "explain": true
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "explain_formatted",
+          "sql": "EXPLAIN FORMATTED SELECT id FROM rich_source",
+          "ordered": false,
+          "ansi": true,
+          "explain": true
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "explain_cost",
+          "sql": "EXPLAIN COST SELECT id FROM rich_source",
+          "ordered": false,
+          "ansi": false,
+          "explain": true
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "explain_cost",
+          "sql": "EXPLAIN COST SELECT id FROM rich_source",
+          "ordered": false,
+          "ansi": true,
+          "explain": true
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "explain_codegen",
+          "sql": "EXPLAIN CODEGEN SELECT id FROM rich_source",
+          "ordered": false,
+          "ansi": false,
+          "explain": true
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "explain_codegen",
+          "sql": "EXPLAIN CODEGEN SELECT id FROM rich_source",
+          "ordered": false,
+          "ansi": true,
+          "explain": true
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_tables_invalid_pattern",
+          "sql": "SHOW TABLES LIKE '['",
+          "ordered": false,
+          "ansi": false,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_tables_invalid_pattern",
+          "sql": "SHOW TABLES LIKE '['",
+          "ordered": false,
+          "ansi": true,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_tables_invalid_alternative",
+          "sql": "SHOW TABLES LIKE 'rich_source|['",
+          "ordered": false,
+          "ansi": false,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_tables_invalid_alternative",
+          "sql": "SHOW TABLES LIKE 'rich_source|['",
+          "ordered": false,
+          "ansi": true,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_schemas_invalid_pattern",
+          "sql": "SHOW SCHEMAS LIKE '['",
+          "ordered": false,
+          "ansi": false,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_schemas_invalid_pattern",
+          "sql": "SHOW SCHEMAS LIKE '['",
+          "ordered": false,
+          "ansi": true,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_schemas_invalid_alternative",
+          "sql": "SHOW SCHEMAS LIKE 'default|['",
+          "ordered": false,
+          "ansi": false,
+          "explain": false
+        },
+        {
+          "corpus": "read_only_metadata",
+          "id": "show_schemas_invalid_alternative",
+          "sql": "SHOW SCHEMAS LIKE 'default|['",
+          "ordered": false,
+          "ansi": true,
+          "explain": false
+        }
+      ]
+    }
+  ]
+}

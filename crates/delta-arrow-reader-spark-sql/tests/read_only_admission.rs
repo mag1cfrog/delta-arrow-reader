@@ -799,9 +799,51 @@ fn rejected_queries() -> Vec<(String, String)> {
         ("mixed_case_command", "/* SELECT 1 */ TrUnCaTe TABLE source"),
         ("use_database", "USE DATABASE public"),
         ("use_catalog", "USE CATALOG datafusion"),
-        ("describe_table", "DESCRIBE TABLE source"),
         ("explain_analyze", "EXPLAIN ANALYZE SELECT * FROM source"),
         ("show_functions", "SHOW FUNCTIONS"),
+        ("show_create", "SHOW CREATE TABLE source"),
+        ("show_partitions", "SHOW PARTITIONS source"),
+        ("show_properties", "SHOW TBLPROPERTIES source"),
+        ("show_views", "SHOW VIEWS"),
+        ("describe_function", "DESCRIBE FUNCTION abs"),
+        ("describe_database", "DESCRIBE DATABASE public"),
+        ("describe_history", "DESCRIBE HISTORY source"),
+        ("describe_detail", "DESCRIBE DETAIL source"),
+        ("describe_extended", "DESCRIBE EXTENDED source"),
+        (
+            "explain_write",
+            "EXPLAIN INSERT INTO source SELECT * FROM host_rows()",
+        ),
+        ("explain_metadata", "EXPLAIN SHOW TABLES"),
+        ("explain_host_table", "EXPLAIN SELECT * FROM host_rows()"),
+        (
+            "describe_host_table",
+            "DESCRIBE QUERY SELECT * FROM host_rows()",
+        ),
+        (
+            "explain_host_scalar",
+            "EXPLAIN SELECT host_add_one(id) FROM source",
+        ),
+        (
+            "describe_host_scalar",
+            "DESCRIBE QUERY SELECT host_add_one(id) FROM source",
+        ),
+        (
+            "explain_folded_host_scalar",
+            "EXPLAIN SELECT from_xml('<a/>',CASE WHEN host_add_one(1)=2 THEN 'a INT' ELSE 'a STRING' END)",
+        ),
+        (
+            "describe_format_path",
+            "DESCRIBE parquet.`/guarded/source.parquet`",
+        ),
+        (
+            "columns_format_path",
+            "SHOW COLUMNS IN parquet.`/guarded/source.parquet`",
+        ),
+        (
+            "explain_format_path",
+            "EXPLAIN SELECT * FROM parquet.`/guarded/source.parquet`",
+        ),
     ] {
         queries.push((name.to_string(), sql.to_string()));
     }
@@ -885,7 +927,119 @@ const REJECTED_STATEMENTS: &[(&str, &str)] = &[
         "python_script",
         "SELECT TRANSFORM (id) USING 'python /guarded/script.py' AS (id INT) FROM source",
     ),
-    ("explain", "EXPLAIN SELECT id FROM source"),
-    ("describe", "DESCRIBE source"),
-    ("show", "SHOW TABLES"),
 ];
+
+#[tokio::test]
+async fn admitted_metadata_reads_no_objects_and_preserves_host_state() -> TestResult {
+    let fixture = AdmissionFixture::new().await?;
+    fixture
+        .context
+        .register_udf(native_add_one("abs", fixture.scalar_calls.clone()));
+    fixture.context.register_udtf(
+        "range",
+        Arc::new(FileReadingHostDeltaTableFunction {
+            provider: fixture.source.clone(),
+            calls: fixture.table_function_calls.clone(),
+            data_file: fixture.table.path().join(fixture.table.data_file_path()),
+            bytes_read: fixture.host_file_bytes.clone(),
+        }),
+    );
+    let initial_state = host_state(&fixture.context).await?;
+    let initial_files = fixture_files(fixture.table.path())?;
+    for ansi_mode in [false, true] {
+        let options = SparkSqlOptions {
+            ansi_mode,
+            ..Default::default()
+        };
+        for sql in [
+            "DESCRIBE source",
+            "DESC source",
+            "DESCRIBE TABLE source",
+            "DESCRIBE QUERY SELECT id AS renamed FROM source",
+            "DESCRIBE SELECT id FROM source",
+            "DESCRIBE QUERY SELECT abs(id) AS a FROM source",
+            "DESCRIBE QUERY SELECT id FROM range(3)",
+            "SHOW COLUMNS IN source",
+            "SHOW COLUMNS FROM source",
+            "SHOW TABLES",
+            "SHOW TABLES IN public",
+            "SHOW TABLES LIKE 'SOURCE*'",
+            "SHOW SCHEMAS",
+            "SHOW DATABASES",
+        ] {
+            fixture.reset_calls()?;
+            let query = plan_query(&fixture.context, sql, &options).await?;
+            let physical = query.create_physical_plan(&fixture.context).await?;
+            assert!(
+                physical
+                    .schema()
+                    .fields()
+                    .iter()
+                    .all(|field| matches!(field.data_type(), DataType::Utf8 | DataType::Boolean))
+            );
+            collect(physical, fixture.context.task_ctx()).await?;
+            fixture.assert_no_io(sql)?;
+            assert_eq!(host_state(&fixture.context).await?, initial_state);
+            assert_eq!(fixture_files(fixture.table.path())?, initial_files);
+        }
+        for mode in ["", "EXTENDED ", "FORMATTED ", "COST ", "CODEGEN "] {
+            fixture.reset_calls()?;
+            let sql = format!("EXPLAIN {mode}SELECT id FROM source WHERE id = 1");
+            let query = plan_query(&fixture.context, &sql, &options).await?;
+            assert!(
+                !fixture
+                    .source
+                    .calls
+                    .lock()
+                    .map_err(|_| "provider lock poisoned")?
+                    .scans
+                    .is_empty()
+            );
+            assert_eq!(fixture.store.read_calls.load(Ordering::Relaxed), 0);
+            let physical = query.create_physical_plan(&fixture.context).await?;
+            assert_eq!(physical.schema().field(0).name(), "plan");
+            assert_eq!(physical.schema().field(0).data_type(), &DataType::Utf8);
+            let batches = collect(physical, fixture.context.task_ctx()).await?;
+            assert_eq!(
+                batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
+                1
+            );
+            assert_eq!(fixture.store.read_calls.load(Ordering::Relaxed), 0);
+            assert_eq!(fixture.store.write_calls.load(Ordering::Relaxed), 0);
+            assert_eq!(fixture.scalar_calls.load(Ordering::Relaxed), 0);
+            assert_eq!(fixture.table_function_calls.load(Ordering::Relaxed), 0);
+            assert_eq!(fixture.host_file_bytes.load(Ordering::Relaxed), 0);
+            assert_eq!(host_state(&fixture.context).await?, initial_state);
+            assert_eq!(fixture_files(fixture.table.path())?, initial_files);
+        }
+        for sql in [
+            "EXPLAIN SELECT raise_error('must not execute') FROM source",
+            "EXPLAIN SELECT id FROM range(3)",
+        ] {
+            fixture.reset_calls()?;
+            let query = plan_query(&fixture.context, sql, &options).await?;
+            collect(
+                query.create_physical_plan(&fixture.context).await?,
+                fixture.context.task_ctx(),
+            )
+            .await?;
+            assert_eq!(fixture.store.read_calls.load(Ordering::Relaxed), 0);
+            assert_eq!(fixture.store.write_calls.load(Ordering::Relaxed), 0);
+            assert_eq!(fixture.scalar_calls.load(Ordering::Relaxed), 0);
+            assert_eq!(fixture.table_function_calls.load(Ordering::Relaxed), 0);
+            assert_eq!(fixture.host_file_bytes.load(Ordering::Relaxed), 0);
+            assert_eq!(host_state(&fixture.context).await?, initial_state);
+        }
+        for sql in ["SHOW TABLES", "SHOW SCHEMAS"] {
+            fixture.reset_calls()?;
+            let invalid = SparkSqlOptions {
+                session_timezone: Arc::from("Invalid/Zone"),
+                ..options.clone()
+            };
+            let error = plan_query(&fixture.context, sql, &invalid).await;
+            assert!(error.is_err());
+            fixture.assert_no_io(sql)?;
+        }
+    }
+    Ok(())
+}

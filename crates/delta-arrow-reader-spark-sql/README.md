@@ -40,10 +40,38 @@ The public API provides session configuration, query resolution and physical
 planning. Its crate-level example shows how to execute a query using the host
 session. The host must install `configure_spark_sql` before using `plan_query`.
 
-The frontend admits one read-only query: `SELECT`, `WITH`, `VALUES` or `TABLE`,
-including supported nested queries and set operations over registered providers.
-It rejects writes, DDL, maintenance commands, session changes and the metadata
-commands `EXPLAIN`, `DESCRIBE` and `SHOW`. Direct format paths such as
+The frontend admits one read-only statement:
+
+- `SELECT`, `WITH`, `VALUES` or `TABLE`, including supported nested queries and
+  set operations over registered providers.
+- `DESCRIBE [TABLE] t`, `DESC t`, and `DESCRIBE [QUERY] <query>`.
+- `SHOW COLUMNS IN t` or `SHOW COLUMNS FROM t`, `SHOW TABLES [IN schema]
+  [LIKE 'pattern']`, and `SHOW SCHEMAS` or `SHOW DATABASES`, optionally with `LIKE`.
+- `EXPLAIN [EXTENDED|FORMATTED|COST|CODEGEN] <query>`.
+
+`DESCRIBE` returns one row per provider or query-result column, in field order,
+with Spark type names and stored field comments. It omits Spark's partition
+information rows, including on partitioned Delta tables. `SHOW` uses the host's
+registered catalog and schema names; only providers reporting `TableType::Temporary`
+are temporary, and ordinary views retain their registered namespace. Patterns
+match complete names, ignore surrounding whitespace, and support case-insensitive
+`*` wildcards and `|` alternatives. Invalid alternatives are ignored. The native
+matcher uses Unicode case folding; Spark's default ASCII case folding differs
+for some non-ASCII patterns. Java-only regex constructs such as lookbehind are
+not supported by the native matcher. These limits are recorded in
+[known differences](https://github.com/mag1cfrog/delta-arrow-reader/issues/1248).
+
+`EXPLAIN` returns one STRING column named `plan` and one row containing
+DataFusion's logical and physical plans. It plans the query without collecting
+its rows. The text differs from Spark's and is not compared with Spark's text.
+The [metadata references](tests/fixtures/read-only-metadata/README.md) record the
+values, types, provider requests and storage checks.
+
+Writes, DDL, maintenance commands and session changes remain rejected, along with
+`SHOW CREATE TABLE`, `SHOW PARTITIONS`, `SHOW TBLPROPERTIES`, `SHOW FUNCTIONS`,
+`SHOW VIEWS`, `DESCRIBE FUNCTION`, `DESCRIBE DATABASE`, `DESCRIBE HISTORY`,
+`DESCRIBE DETAIL`, extended or column-specific descriptions, `EXPLAIN ANALYZE`,
+and `EXPLAIN` of a non-query statement. Direct format paths such as
 ``parquet.`/path/to/data` `` must be replaced with a host-registered table provider.
 Ordinary qualified catalog names and quoted names such as ``public.`events.json` ``
 remain available.
@@ -57,7 +85,10 @@ for this computed-name boundary.
 
 SQL cannot install or invoke external Python/JVM function implementations. The
 host can register native scalar and table functions, which keep their existing
-execution contract. The [admission references](tests/fixtures/read-only-admission/README.md)
+execution contract for ordinary queries. Metadata query bodies use registered
+providers and frontend built-ins; host scalar and table functions are rejected
+before their callbacks. Registered Rust providers retain responsibility for
+their metadata and scan-planning contracts. The [admission references](tests/fixtures/read-only-admission/README.md)
 cover ordinary query results and the tested rejection paths through the public
 API, with actual Delta scans, file reads and writes observed.
 
