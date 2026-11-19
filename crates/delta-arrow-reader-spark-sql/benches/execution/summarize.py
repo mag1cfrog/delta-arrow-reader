@@ -11,6 +11,7 @@ import sys
 
 SUITE = pathlib.Path(__file__).resolve().parent
 CAST_SUITE_SELECTED = False
+DATE_STAGE_SELECTED = False
 TIMINGS = ("planning_ns", "execution_first_batch_ns", "query_first_batch_ns", "execution_complete_ns", "query_complete_ns")
 COUNTERS = ("rows", "peak_pool_bytes", "output_partitions")
 IO = ("source_file_count", "source_bytes_received", "recorded_range_bytes", "source_range_gets", "source_full_gets", "file_tasks_started", "file_tasks_completed")
@@ -85,10 +86,13 @@ def summarize(run_directory, output_directory):
     assert {record["process"] for record in records} == {run["process"] for run in schedule["runs"]}
     assert len(records)==len(schedule["runs"]) and len(concurrency)==len(schedule["concurrency"])
     if CAST_SUITE_SELECTED:
-        assert len(records)==45 and concurrency==[]
+        assert len(records)==(30 if DATE_STAGE_SELECTED else 45) and concurrency==[]
     assert {record["process"] for record in concurrency} == {case["process"] for case in schedule["concurrency"]}
     data=aggregate(records)
     query_ids=[query["id"] for query in json.loads((SUITE/"queries.json").read_text())["queries"]]
+    if DATE_STAGE_SELECTED:
+        query_ids = [query for query in query_ids if query in {run["query"] for run in schedule["runs"]}]
+        assert query_ids == ["cast_strings", "cast_date"]
     configurations=("native","spark-off","spark-on")
     def value(configuration,query,metric):
         return data[("main",None,configuration,query,metric)]["median"]
@@ -116,7 +120,7 @@ def summarize(run_directory, output_directory):
                 outliers.append(dict(id=query,configuration=configuration,completion_flag=time_flag,pool_flag=memory_flag,native_query_complete_ns=native_time,spark_query_complete_ns=spark_time,native_peak_pool_bytes=native_memory,spark_peak_pool_bytes=spark_memory))
     related={query:{configuration:{"query_complete_ns":value(configuration,query,"query_complete_ns"),"peak_pool_bytes":value(configuration,query,"peak_pool_bytes"),"above_threshold":any(case["id"]==query and case["configuration"]==configuration for case in outliers)} for configuration in configurations} for query in (() if CAST_SUITE_SELECTED else ("nullif_nullable","in_10","in_1000","mixed_boolean"))}
     output_directory.mkdir(parents=True,exist_ok=True)
-    prefix="casts-1385" if CAST_SUITE_SELECTED else "execution-1380"
+    prefix="casts-1385-date" if DATE_STAGE_SELECTED else "casts-1385" if CAST_SUITE_SELECTED else "execution-1380"
     for name,rows in ((prefix+"-results.csv",table),(prefix+"-noise.csv",noise)):
         with (output_directory/name).open("w",newline="") as output:
             writer=csv.DictWriter(output,fieldnames=list(rows[0]));writer.writeheader();writer.writerows(rows)
@@ -126,9 +130,12 @@ def summarize(run_directory, output_directory):
 
 
 if __name__ == "__main__":
-    if sys.argv[1:2] == ["--casts-1385"]:
+    if sys.argv[1:2] in (["--casts-1385"], ["--casts-1385-date"]):
+        DATE_STAGE_SELECTED = sys.argv[1] == "--casts-1385-date"
         CAST_SUITE_SELECTED = True
         SUITE = SUITE.parent / "casts"
+        if DATE_STAGE_SELECTED:
+            SUITE = SUITE / "date"
         del sys.argv[1]
     self_check()
     if sys.argv[1:]==["--check"]:
@@ -136,4 +143,4 @@ if __name__ == "__main__":
     elif len(sys.argv)==3:
         summarize(*sys.argv[1:])
     else:
-        raise SystemExit("usage: summarize.py [--casts-1385] --check | RUN_DIRECTORY OUTPUT_DIRECTORY")
+        raise SystemExit("usage: summarize.py [--casts-1385|--casts-1385-date] --check | RUN_DIRECTORY OUTPUT_DIRECTORY")

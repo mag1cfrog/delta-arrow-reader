@@ -1,0 +1,253 @@
+{
+  "cpus": [
+    2,
+    3,
+    4,
+    5
+  ],
+  "target_partitions": 2,
+  "batch_rows": 8192,
+  "runtime_workers": 2,
+  "warmups": 1,
+  "samples": 3,
+  "process_timeout_seconds": 180,
+  "schedule_timeout_seconds": 3600,
+  "single_pool_bytes": 2147483648,
+  "preflight_pool_bytes": 4294967296,
+  "concurrency_pool_bytes": 8589934592,
+  "single_address_space_bytes": 12884901888,
+  "preflight_address_space_bytes": 17179869184,
+  "concurrency_address_space_bytes": 21474836480,
+  "spill_limit_bytes": 8589934592,
+  "preflight_process_timeout_seconds": 300,
+  "preflight_timeout_seconds": 1800,
+  "profile_iterations": 3,
+  "profile_frequency_hz": 199,
+  "profile_stack_bytes": 8192,
+  "profile_max_cases": 0,
+  "runs": [
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "cast_strings",
+      "replica": 1,
+      "arm": "a",
+      "process": "noise-01-cast_strings-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "cast_strings",
+      "replica": 1,
+      "arm": "b",
+      "process": "noise-01-cast_strings-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "cast_date",
+      "replica": 1,
+      "arm": "b",
+      "process": "noise-01-cast_date-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "cast_date",
+      "replica": 1,
+      "arm": "a",
+      "process": "noise-01-cast_date-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "cast_strings",
+      "replica": 2,
+      "arm": "b",
+      "process": "noise-02-cast_strings-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "cast_strings",
+      "replica": 2,
+      "arm": "a",
+      "process": "noise-02-cast_strings-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "cast_date",
+      "replica": 2,
+      "arm": "a",
+      "process": "noise-02-cast_date-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "cast_date",
+      "replica": 2,
+      "arm": "b",
+      "process": "noise-02-cast_date-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "cast_strings",
+      "replica": 3,
+      "arm": "a",
+      "process": "noise-03-cast_strings-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "cast_strings",
+      "replica": 3,
+      "arm": "b",
+      "process": "noise-03-cast_strings-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "cast_date",
+      "replica": 3,
+      "arm": "b",
+      "process": "noise-03-cast_date-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "cast_date",
+      "replica": 3,
+      "arm": "a",
+      "process": "noise-03-cast_date-a"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "cast_strings",
+      "replica": 1,
+      "process": "main-01-cast_strings-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "cast_strings",
+      "replica": 1,
+      "process": "main-01-cast_strings-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "cast_strings",
+      "replica": 1,
+      "process": "main-01-cast_strings-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "cast_date",
+      "replica": 1,
+      "process": "main-01-cast_date-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "cast_date",
+      "replica": 1,
+      "process": "main-01-cast_date-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "cast_date",
+      "replica": 1,
+      "process": "main-01-cast_date-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "cast_strings",
+      "replica": 2,
+      "process": "main-02-cast_strings-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "cast_strings",
+      "replica": 2,
+      "process": "main-02-cast_strings-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "cast_strings",
+      "replica": 2,
+      "process": "main-02-cast_strings-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "cast_date",
+      "replica": 2,
+      "process": "main-02-cast_date-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "cast_date",
+      "replica": 2,
+      "process": "main-02-cast_date-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "cast_date",
+      "replica": 2,
+      "process": "main-02-cast_date-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "cast_strings",
+      "replica": 3,
+      "process": "main-03-cast_strings-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "cast_strings",
+      "replica": 3,
+      "process": "main-03-cast_strings-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "cast_strings",
+      "replica": 3,
+      "process": "main-03-cast_strings-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "cast_date",
+      "replica": 3,
+      "process": "main-03-cast_date-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "cast_date",
+      "replica": 3,
+      "process": "main-03-cast_date-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "cast_date",
+      "replica": 3,
+      "process": "main-03-cast_date-spark-on"
+    }
+  ],
+  "concurrency": []
+}

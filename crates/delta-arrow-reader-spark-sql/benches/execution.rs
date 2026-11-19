@@ -833,16 +833,29 @@ async fn async_main(args: &[String], manifest: &Manifest, schedule: &Schedule) -
 }
 fn main() -> TestResult {
     let mut args = std::env::args().skip(1).collect::<Vec<_>>();
-    let casts = args.first().is_some_and(|arg| arg == "--casts-1385");
+    let date_stage = args.first().is_some_and(|arg| arg == "--casts-1385-date");
+    let casts = date_stage || args.first().is_some_and(|arg| arg == "--casts-1385");
     let (manifest_json, schedule_json) = if casts {
         args.remove(0);
         if args.first().is_some_and(|mode| mode == "concurrency") {
             return Err("cast attribution does not run concurrency checks".into());
         }
-        (
-            include_str!("casts/queries.json"),
-            include_str!("casts/schedule.json"),
-        )
+        if date_stage {
+            if args.first().is_some_and(|mode| mode == "measure")
+                && args.get(4).is_some_and(|query| query == "cast_decimal")
+            {
+                return Err("DATE stage times only the combined and DATE shapes".into());
+            }
+            (
+                include_str!("casts/date/queries.json"),
+                include_str!("casts/date/schedule.json"),
+            )
+        } else {
+            (
+                include_str!("casts/queries.json"),
+                include_str!("casts/schedule.json"),
+            )
+        }
     } else {
         (
             include_str!("execution/queries.json"),

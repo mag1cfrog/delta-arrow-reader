@@ -1,0 +1,170 @@
+{
+  "status": "passed",
+  "baseline_commit": "0b6ff0fd0a89a78dee8b0ae7419ee4b4ebfe745f",
+  "preflight_head_commit": "0b6ff0fd0a89a78dee8b0ae7419ee4b4ebfe745f",
+  "queries_sha256": "7b254a1f5b2138cdb5ed4e19a845542baaf3776a45e6c43e16792c98b7201836",
+  "schedule_sha256": "9c3e8c57bcd61c5b392af074114e02636e720347e0b54111ce8b13b5666f53de",
+  "fixture_receipt_sha256": "9eb1e98be9381de74bd8908ac540c91eec6f0b0862089d1655baca537f43301d",
+  "snapshot_log_sha256": "21d2257a5c6d201f74c2c3516a134095c2f4efb680595cbd56228ae6581e71cb",
+  "binary_sha256": "4757aff7514261ffe18f96ffae227070197d7505f1f8649506188b006bd6a81c",
+  "harness_sha256": "a7f5bed49f2072c21bb940edb4154cd39ff2f7779d80403fd540ed2e3a759f29",
+  "timing_driver_sha256": "9406949f27193dc04540bb1265a0790d4fa191ef28c85829de5bcd2166057324",
+  "summarizer_sha256": "0cbad0b6d1128bb4aeb7d7c52016f4529722090a98e8d1c98ff9fbc919bf6bd4",
+  "protocol_sha256": "246385eeecf7453cede0af1ea14e3ffeda5666dcf6131be9f3771a53c70a460a",
+  "expected_rows": {
+    "cast_strings": {
+      "native": 6001215,
+      "spark-off": 6001215,
+      "spark-on": 6001215
+    },
+    "cast_date": {
+      "native": 6001215,
+      "spark-off": 6001215,
+      "spark-on": 6001215
+    },
+    "cast_decimal": {
+      "native": 6001215,
+      "spark-off": 6001215,
+      "spark-on": 6001215
+    }
+  },
+  "expected_source_io": {
+    "cast_strings": {
+      "native": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 57151761,
+        "recorded_range_bytes": 57151761
+      },
+      "spark-off": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 57151761,
+        "recorded_range_bytes": 57151761
+      },
+      "spark-on": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 57151761,
+        "recorded_range_bytes": 57151761
+      }
+    },
+    "cast_date": {
+      "native": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 25585934,
+        "recorded_range_bytes": 25585934
+      },
+      "spark-off": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 25585934,
+        "recorded_range_bytes": 25585934
+      },
+      "spark-on": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 25585934,
+        "recorded_range_bytes": 25585934
+      }
+    },
+    "cast_decimal": {
+      "native": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 57127165,
+        "recorded_range_bytes": 57127165
+      },
+      "spark-off": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 57127165,
+        "recorded_range_bytes": 57127165
+      },
+      "spark-on": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 57127165,
+        "recorded_range_bytes": 57127165
+      }
+    }
+  },
+  "preflight_result_count": 9,
+  "exact_comparison_count": 6,
+  "baseline_comparison_count": 9,
+  "full_receipt_sha256": "40c9604bb2d783cb7a0beef5558d5290885d997e4f98e5a9a5737f7981f9c51e",
+  "baseline_preflight_sha256": "f3760b645799d44b0485b8cf0c546327f4e15f5cf5459d96b46bf0b0f2e3cee7",
+  "phase_source_hashes": {
+    "vendor/sail/crates/sail-function/src/scalar/datetime/spark_date.rs": "50111bda13b876d3cceaa596a20e170b664cecf4e7851273914215f188eb21a9",
+    "vendor/sail/crates/sail-function/tests/fixtures/date-cast-1385-inputs.json": "9a8d484204af3b35bb289c9be2dc899014fde87b34b4dab45acf8654c9f7f567",
+    "tests/date_cast_row_path.rs": "4a357718599007c32dc8ee0701658a12976bbaffc4a396cb43bbdeba8360c3ae",
+    "UPSTREAM.md": "a2adc15997a85bb8ee8224664519fd7c0b3c48343e222ac044d805cf1f9673c1"
+  },
+  "rustc": "rustc 1.96.0 (ac68faa20 2026-05-25)\nbinary: rustc\ncommit-hash: ac68faa20c58cbccd01ee7208bf3b6e93a7d7f96\ncommit-date: 2026-05-25\nhost: x86_64-unknown-linux-gnu\nrelease: 1.96.0\nLLVM version: 22.1.2\n",
+  "compiled_source_build_command": "CARGO_TARGET_DIR=/home/hanbo/.cache/delta-arrow-reader/casts-1385-2026-11-19 CARGO_BUILD_JOBS=2 CARGO_PROFILE_RELEASE_DEBUG=1 cargo +1.96.0 build --locked --release --bench execution --message-format=json-render-diagnostics",
+  "snapshot_root": "/home/hanbo/.local/share/delta-arrow-reader-review/measurements-2026-11-18/1380/delta-snapshot"
+}
