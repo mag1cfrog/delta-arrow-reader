@@ -832,9 +832,25 @@ async fn async_main(args: &[String], manifest: &Manifest, schedule: &Schedule) -
     }
 }
 fn main() -> TestResult {
-    let args = std::env::args().skip(1).collect::<Vec<_>>();
-    let manifest: Manifest = serde_json::from_str(include_str!("execution/queries.json"))?;
-    let schedule: Schedule = serde_json::from_str(include_str!("execution/schedule.json"))?;
+    let mut args = std::env::args().skip(1).collect::<Vec<_>>();
+    let casts = args.first().is_some_and(|arg| arg == "--casts-1385");
+    let (manifest_json, schedule_json) = if casts {
+        args.remove(0);
+        if args.first().is_some_and(|mode| mode == "concurrency") {
+            return Err("cast attribution does not run concurrency checks".into());
+        }
+        (
+            include_str!("casts/queries.json"),
+            include_str!("casts/schedule.json"),
+        )
+    } else {
+        (
+            include_str!("execution/queries.json"),
+            include_str!("execution/schedule.json"),
+        )
+    };
+    let manifest: Manifest = serde_json::from_str(manifest_json)?;
+    let schedule: Schedule = serde_json::from_str(schedule_json)?;
     let workers = if args.first().is_some_and(|mode| mode == "concurrency") {
         4
     } else {

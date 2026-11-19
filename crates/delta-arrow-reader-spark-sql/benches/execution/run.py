@@ -13,9 +13,11 @@ import subprocess
 import sys
 import time
 
-HERE = pathlib.Path(__file__).resolve().parent
-WORKSPACE = HERE.parents[1]
+EXECUTION = pathlib.Path(__file__).resolve().parent
+WORKSPACE = EXECUTION.parents[1]
 REPORTS = WORKSPACE / "benches/reports"
+SUITE = EXECUTION
+CAST_SUITE_SELECTED = False
 
 
 def read(path):
@@ -28,8 +30,28 @@ def digest(path):
 
 
 def check_inventory():
-    manifest, schedule = read(HERE / "queries.json"), read(HERE / "schedule.json")
+    manifest, schedule = read(SUITE / "queries.json"), read(SUITE / "schedule.json")
     ids = [query["id"] for query in manifest["queries"]]
+    if CAST_SUITE_SELECTED:
+        assert ids == ["cast_strings", "cast_date", "cast_decimal"]
+        original = read(EXECUTION / "queries.json")
+        assert manifest["common_view_sql"] == original["common_view_sql"]
+        assert manifest["dimension"] == original["dimension"]
+        assert manifest["queries"][0] == next(query for query in original["queries"] if query["id"] == "cast_strings")
+        for query, expression in zip(manifest["queries"][1:], ("CAST(date_text AS DATE) AS ship_date", "CAST(decimal_text AS DECIMAL(15,2)) AS price"), strict=True):
+            assert query["native_sql"] == query["spark_sql"] == f"SELECT l_orderkey,l_linenumber,{expression} FROM bench"
+            assert not query["ordered"]
+        original_schedule = read(EXECUTION / "schedule.json")
+        for key in ("cpus", "target_partitions", "batch_rows", "runtime_workers", "warmups", "samples", "process_timeout_seconds", "single_pool_bytes", "preflight_pool_bytes", "single_address_space_bytes", "preflight_address_space_bytes", "spill_limit_bytes", "preflight_process_timeout_seconds"):
+            assert schedule[key] == original_schedule[key], key
+        assert schedule["concurrency"] == [] and schedule["profile_max_cases"] == 0
+        assert len(schedule["runs"]) == len({run["process"] for run in schedule["runs"]}) == 45
+        assert [run["series"] for run in schedule["runs"]] == ["noise"] * 18 + ["main"] * 27
+        assert all(run["replica"] in (1, 2, 3) for run in schedule["runs"])
+        assert collections.Counter((run["query"],run["configuration"]) for run in schedule["runs"] if run["series"] == "main") == {(query,configuration):3 for query in ids for configuration in ("native","spark-off","spark-on")}
+        assert collections.Counter((run["query"],run["arm"]) for run in schedule["runs"] if run["series"] == "noise") == {(query,arm):3 for query in ids for arm in ("a","b")}
+        assert all(run["configuration"] == "native" for run in schedule["runs"] if run["series"] == "noise")
+        return manifest, schedule
     assert len(ids) == len(set(ids)) == 18
     assert set(ids) == {"projection_five", "partition_filter", "statistics_filter", "empty_filter", "ordered_limit", "group_low", "group_high", "count_distinct", "row_number", "dimension_join", "self_join", "decimal_division_round", "cast_strings", "string_functions", "nullif_nullable", "in_10", "in_1000", "mixed_boolean"}
     queries = {query["id"]:query for query in manifest["queries"]}
@@ -43,6 +65,36 @@ def check_inventory():
     assert all(run["configuration"] == "native" for run in schedule["runs"] if run["series"] == "noise")
     assert len(schedule["concurrency"]) == 6 and all(case["executions"] == 4 for case in schedule["concurrency"])
     return manifest, schedule
+
+
+def binary_command(binary, *args):
+    return [str(binary)] + (["--casts-1385"] if CAST_SUITE_SELECTED else []) + list(args)
+
+
+def require_same_source_io(actual, expected):
+    for evidence in (actual, expected):
+        assert evidence["source_bytes_received"] == evidence["recorded_range_bytes"], "received bytes differ from recorded range sum"
+    for key in ("distinct_source_files", "source_file_count", "source_bytes_received", "recorded_range_bytes"):
+        assert actual[key] == expected[key], f"source I/O differs: {key}"
+
+
+def source_io_self_check():
+    expected = dict(distinct_source_files=["one.parquet"], source_file_count=1, source_bytes_received=10, recorded_range_bytes=10)
+    require_same_source_io(dict(expected), expected)
+    for key, changed in (("distinct_source_files", ["other.parquet"]), ("source_file_count", 2), ("source_bytes_received", 9), ("recorded_range_bytes", 11)):
+        try:
+            require_same_source_io(dict(expected, **{key: changed}), expected)
+        except AssertionError:
+            pass
+        else:
+            raise AssertionError(f"changed source I/O accepted: {key}")
+    inconsistent = dict(expected, recorded_range_bytes=11)
+    try:
+        require_same_source_io(inconsistent, inconsistent)
+    except AssertionError:
+        pass
+    else:
+        raise AssertionError("matching but internally inconsistent source I/O accepted")
 
 
 def remaining_timeout(deadline, per_process):
@@ -73,20 +125,20 @@ def invoke(command, work, timeout, address_bytes):
 
 def metadata(binary, snapshot, manifest, schedule):
     fixture = REPORTS / "execution-1380-fixture.json"
-    return {"baseline_commit":manifest["source_commit"],"head_commit":subprocess.check_output(["git","rev-parse","HEAD"],cwd=WORKSPACE,text=True).strip(),"binary_sha256":digest(binary),"queries_sha256":digest(HERE/"queries.json"),"schedule_sha256":digest(HERE/"schedule.json"),"fixture_receipt_sha256":digest(fixture),"fixture":read(fixture),"snapshot":str(snapshot),"rustc":subprocess.check_output(["rustc","+1.96.0","--version","--verbose"],text=True),"uname":platform.uname()._asdict(),"cpuinfo":pathlib.Path("/proc/cpuinfo").read_text(),"governors":{str(cpu):pathlib.Path(f"/sys/devices/system/cpu/cpu{cpu}/cpufreq/scaling_governor").read_text().strip() for cpu in schedule["cpus"]},"schedule":schedule}
+    return {"baseline_commit":manifest["source_commit"],"head_commit":subprocess.check_output(["git","rev-parse","HEAD"],cwd=WORKSPACE,text=True).strip(),"binary_sha256":digest(binary),"queries_sha256":digest(SUITE/"queries.json"),"schedule_sha256":digest(SUITE/"schedule.json"),"fixture_receipt_sha256":digest(fixture),"fixture":read(fixture),"snapshot":str(snapshot),"rustc":subprocess.check_output(["rustc","+1.96.0","--version","--verbose"],text=True),"uname":platform.uname()._asdict(),"cpuinfo":pathlib.Path("/proc/cpuinfo").read_text(),"governors":{str(cpu):pathlib.Path(f"/sys/devices/system/cpu/cpu{cpu}/cpufreq/scaling_governor").read_text().strip() for cpu in schedule["cpus"]},"schedule":schedule}
 
 
 def preflight(binary, snapshot, destination, manifest, schedule):
     deadline = time.monotonic() + schedule["preflight_timeout_seconds"]
     cpu = ",".join(map(str,schedule["cpus"]))
-    check = invoke([str(binary),"check"], destination/"self-check", remaining_timeout(deadline,30), schedule["preflight_address_space_bytes"])
+    check = invoke(binary_command(binary,"check"), destination/"self-check", remaining_timeout(deadline,30), schedule["preflight_address_space_bytes"])
     assert check == {"kind":"self_check","status":"passed"}
     outcomes, comparisons = [], []
     for query in manifest["queries"]:
         results = {}
         for configuration in ("native","spark-off","spark-on"):
             work = destination / query["id"] / configuration
-            command = ["taskset","-c",cpu,str(binary),"preflight",str(snapshot),str(work),configuration,query["id"]]
+            command = ["taskset","-c",cpu] + binary_command(binary,"preflight",str(snapshot),str(work),configuration,query["id"])
             print("preflight",query["id"],configuration,flush=True)
             result = invoke(command, work, remaining_timeout(deadline,schedule["preflight_process_timeout_seconds"]), schedule["preflight_address_space_bytes"])
             result["ipc_sha256"] = digest(pathlib.Path(result["ipc_path"]))
@@ -100,12 +152,14 @@ def preflight(binary, snapshot, destination, manifest, schedule):
         for configuration in ("spark-off","spark-on"):
             spark = results[configuration]
             work = destination / query["id"] / ("compare-"+configuration)
-            command = [str(binary),"compare",native["ipc_path"],spark["ipc_path"]]
+            command = binary_command(binary,"compare",native["ipc_path"],spark["ipc_path"])
             result = invoke(command, work, remaining_timeout(deadline,180), schedule["preflight_address_space_bytes"])
             result.update(id=query["id"],configuration=configuration,native_rows=native["rows"],spark_rows=spark["rows"])
             assert result["rows_compared"] == native["rows"] == spark["rows"]
             result["extra_source_files"] = spark["source_io"]["source_file_count"] > native["source_io"]["source_file_count"]
             result["extra_source_bytes"] = spark["source_io"]["source_bytes_received"] > native["source_io"]["source_bytes_received"]
+            if CAST_SUITE_SELECTED:
+                require_same_source_io(spark["source_io"], native["source_io"])
             comparisons.append(result)
             difference = "".join(difflib.unified_diff(native["physical_plan"].splitlines(keepends=True),spark["physical_plan"].splitlines(keepends=True),fromfile="native",tofile=configuration))
             (destination/query["id"]/(configuration+".plan.diff")).write_text(difference)
@@ -120,9 +174,9 @@ def preflight(binary, snapshot, destination, manifest, schedule):
 def measure(binary, snapshot, destination, manifest, schedule):
     if subprocess.check_output(["git","status","--porcelain"],cwd=WORKSPACE,text=True).strip():
         raise RuntimeError("commit protocol, fixture receipt, query list and harness before timing")
-    eligibility = read(HERE/"preflight-receipt.json")
+    eligibility = read(SUITE/"preflight-receipt.json")
     assert eligibility["status"] == "passed"
-    for key, path in [("queries_sha256",HERE/"queries.json"),("schedule_sha256",HERE/"schedule.json"),("harness_sha256",WORKSPACE/"benches/execution.rs"),("timing_driver_sha256",HERE/"run.py"),("fixture_receipt_sha256",REPORTS/"execution-1380-fixture.json")]:
+    for key, path in [("queries_sha256",SUITE/"queries.json"),("schedule_sha256",SUITE/"schedule.json"),("harness_sha256",WORKSPACE/"benches/execution.rs"),("timing_driver_sha256",EXECUTION/"run.py"),("fixture_receipt_sha256",REPORTS/"execution-1380-fixture.json")]:
         assert eligibility[key] == digest(path), key
     assert eligibility["binary_sha256"] == digest(binary)
     assert eligibility["baseline_commit"] == manifest["source_commit"]
@@ -130,6 +184,12 @@ def measure(binary, snapshot, destination, manifest, schedule):
     assert eligibility["snapshot_log_sha256"] == digest(snapshot/"_delta_log/00000000000000000000.json")
     for file in read(REPORTS/"execution-1380-fixture.json")["files"]:
         assert file["sha256"] == digest(snapshot/file["path"]), file["path"]
+    if CAST_SUITE_SELECTED:
+        for key, path in (("protocol_sha256", REPORTS/"casts-1385-protocol.md"), ("summarizer_sha256", EXECUTION/"summarize.py")):
+            assert eligibility[key] == digest(path), key
+        assert eligibility["timing_driver_sha256"] == digest(EXECUTION/"run.py")
+        assert eligibility["full_receipt_sha256"] == digest(REPORTS/"casts-1385-preflight.json.gz")
+        assert eligibility["preflight_result_count"] == 9 and eligibility["exact_comparison_count"] == 6
     expected_rows = eligibility["expected_rows"]
     deadline = time.monotonic() + schedule["schedule_timeout_seconds"]
     cpu = ",".join(map(str,schedule["cpus"]))
@@ -137,12 +197,14 @@ def measure(binary, snapshot, destination, manifest, schedule):
     for run in schedule["runs"]:
         print(run["process"],flush=True)
         work = destination / run["process"]
-        command = ["taskset","-c",cpu,str(binary),"measure",str(snapshot),str(work),run["configuration"],run["query"]]
+        command = ["taskset","-c",cpu] + binary_command(binary,"measure",str(snapshot),str(work),run["configuration"],run["query"])
         result = invoke(command, work, remaining_timeout(deadline,schedule["process_timeout_seconds"]),schedule["single_address_space_bytes"])
         assert result["id"] == run["query"] and result["configuration"] == run["configuration"]
         assert len(result["samples"]) == schedule["samples"]
         assert isinstance(result["process_peak_rss_bytes"],int) and result["process_peak_rss_bytes"] > 0
         for sample in result["samples"]:
+            if CAST_SUITE_SELECTED:
+                require_same_source_io(sample["source_io"], eligibility["expected_source_io"][run["query"]][run["configuration"]])
             if sample["rows"] != expected_rows[run["query"]][run["configuration"]]:
                 (destination/"finding.json").write_text(json.dumps({"kind":"timed_row_count","run":run,"sample":sample,"expected_rows":expected_rows[run["query"]][run["configuration"]]},indent=2)+"\n")
                 raise RuntimeError("timed row count differs from exact preflight; coordinator handling required")
@@ -176,7 +238,13 @@ def measure(binary, snapshot, destination, manifest, schedule):
 
 
 if __name__ == "__main__":
+    if sys.argv[1:2] == ["--casts-1385"]:
+        CAST_SUITE_SELECTED = True
+        SUITE = EXECUTION.parent / "casts"
+        del sys.argv[1]
+    source_io_self_check()
     manifest, schedule = check_inventory()
+    assert binary_command(pathlib.Path("execution"), "check") == (["execution", "--casts-1385", "check"] if CAST_SUITE_SELECTED else ["execution", "check"])
     if sys.argv[1:] == ["--check"]:
         print("execution inventory/schedule checks passed")
     elif len(sys.argv) == 5 and sys.argv[1] in ("preflight","measure"):
@@ -190,4 +258,4 @@ if __name__ == "__main__":
         (destination/"metadata.json").write_text(json.dumps(metadata(binary,snapshot,manifest,schedule),indent=2)+"\n")
         (preflight if mode == "preflight" else measure)(binary,snapshot,destination,manifest,schedule)
     else:
-        raise SystemExit("usage: run.py --check | preflight/measure BINARY SNAPSHOT NEW_DIRECTORY")
+        raise SystemExit("usage: run.py [--casts-1385] --check | preflight/measure BINARY SNAPSHOT NEW_DIRECTORY")
