@@ -1,0 +1,135 @@
+{
+  "status": "passed",
+  "baseline_commit": "8260c58ba48e0a65ca7cb7668dd2d8c64b1434f1",
+  "measured_commit": "518b695089533e04760a7b21261867aea6ce980f",
+  "preflight": {
+    "exports": 12,
+    "decoded_native_spark_comparisons": 8,
+    "rows_each": 6001215,
+    "excluded_shapes": {},
+    "exact_source_io": true
+  },
+  "measurement": {
+    "query_processes": 60,
+    "warmups": 60,
+    "retained_samples": 180,
+    "concurrency_processes": 0,
+    "retries": 0,
+    "independently_recomputed_metric_statistics": 340,
+    "source_io_samples_checked": 180
+  },
+  "profiles": {
+    "profile_count": 3,
+    "diagnostic_results_checked": 9,
+    "retries": 0,
+    "lost_samples": 0,
+    "unwinding_limits": "Zero reported lost samples does not establish complete unwinding. Empty decoded callchains, unresolved symbol frames, unresolved leaves and zero-line source annotations are separate counts."
+  },
+  "rust_gates": {
+    "fmt": {
+      "command": [
+        "cargo",
+        "+1.96.0",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "workdir": "/home/hanbo/repo/delta-arrow-reader-costs-168/crates/delta-arrow-reader-spark-sql",
+      "environment": {
+        "CARGO_TARGET_DIR": "/home/hanbo/.cache/delta-arrow-reader/costs-168-2026-11-19",
+        "CARGO_BUILD_JOBS": "2"
+      },
+      "exit_code": 0,
+      "started_unix": 1795099091.3822007,
+      "completed_unix": 1795099118.1583374
+    },
+    "clippy": {
+      "command": [
+        "cargo",
+        "+1.96.0",
+        "clippy",
+        "--locked",
+        "-p",
+        "delta-arrow-reader-spark-sql",
+        "--all-targets",
+        "--no-deps",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "workdir": "/home/hanbo/repo/delta-arrow-reader-costs-168/crates/delta-arrow-reader-spark-sql",
+      "environment": {
+        "CARGO_TARGET_DIR": "/home/hanbo/.cache/delta-arrow-reader/costs-168-2026-11-19",
+        "CARGO_BUILD_JOBS": "2"
+      },
+      "exit_code": 0,
+      "started_unix": 1795099153.693178,
+      "completed_unix": 1795099461.6853244
+    },
+    "workspace-test": {
+      "command": [
+        "cargo",
+        "+1.96.0",
+        "test",
+        "--locked",
+        "--workspace"
+      ],
+      "workdir": "/home/hanbo/repo/delta-arrow-reader-costs-168/crates/delta-arrow-reader-spark-sql",
+      "environment": {
+        "CARGO_TARGET_DIR": "/home/hanbo/.cache/delta-arrow-reader/costs-168-2026-11-19",
+        "CARGO_BUILD_JOBS": "2"
+      },
+      "exit_code": 0,
+      "started_unix": 1795099461.6856399,
+      "completed_unix": 1795101218.4543989
+    }
+  },
+  "named_outcomes": {
+    "counts": {
+      "passed": 3164,
+      "failed": 0,
+      "ignored": 3,
+      "measured": 0,
+      "filtered_out": 0,
+      "result_groups": 230,
+      "inventory_entries": 3167
+    },
+    "prior_named_outcomes_preserved": 3167,
+    "inventory_sha256": "c65510006e4156d5f5d99a5924fec605e052341df1d99a01055e68ee1836f3aa",
+    "raw_log_sha256": "ac89450584825bbab815855d55471353bd505eb8268d1ca86fce6dbbbd96be52"
+  },
+  "gate_source_binding": "The Rust source was unchanged after the passed gates; later controller/protocol metadata changes received fresh full untimed preflights and controller self-checks before timing.",
+  "frozen_files_unchanged": 7,
+  "historical_assets_unchanged": 86,
+  "protected_engine_objects_unchanged": 9,
+  "independent_audits": {
+    "compact-receipt-audit-v3.json": {
+      "status": "passed",
+      "sha256": "0cc83bb1865c4ffafcac5554ea63c2b64cec0038d2a77a7aab909d23d5a3a7f7"
+    },
+    "committed-source-audit.json": {
+      "status": "passed",
+      "sha256": "5e412db05bae347e7bc76cc2cb31b7bbda380a67cc8997a5db39874cf6038524"
+    },
+    "gate-audit-v2.json": {
+      "status": "passed",
+      "sha256": "72b61dd74cb037362cd3bbc4d406bd8ffe9d5e413cdbe04a4af75d8dae77f07e"
+    },
+    "raw-statistics-audit.json": {
+      "status": "passed",
+      "sha256": "ee42be49a8944787cd664d48ec779584acf448d01b775bf63ee7a4f18a3add74"
+    },
+    "profile-artifact-audit.json": {
+      "status": "passed",
+      "sha256": "421bc9ffe74519ef80e8bd3407d125dfb11bca840ffdc5642983f42fbc0cfeab"
+    }
+  },
+  "details": {
+    "file": "strings-1388-validation-details.json.gz",
+    "raw_bytes": 580540,
+    "raw_sha256": "5475c7a5b6b26318c73e170a79cd9ab3fcc00700389202539577103856a5a7ad",
+    "gzip_bytes": 49599,
+    "gzip_sha256": "ed10220159f1bb4bf7fab1b3ce4e10faa84c744e5f4bc3c89685e635b9c05ede"
+  }
+}

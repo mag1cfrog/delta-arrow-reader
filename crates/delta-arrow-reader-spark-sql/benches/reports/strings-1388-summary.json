@@ -1,0 +1,221 @@
+{
+  "shapes": [
+    {
+      "id": "string_functions",
+      "noise_ns": 437082,
+      "noise_ms": 0.437082,
+      "noise_ns_per_row": 0.07283225146907751,
+      "configurations": {
+        "native": {
+          "query_complete_ns": {
+            "median": 350202303,
+            "minimum": 345659365,
+            "maximum": 369263736,
+            "iqr": 11802185.5,
+            "processes_with_value": 3
+          },
+          "query_complete_ms": 350.202303,
+          "ns_per_row": 58.355233565203044,
+          "rows": 6001215,
+          "delta_ns": 0,
+          "completion_gap_exceeds_noise": false
+        },
+        "spark-off": {
+          "query_complete_ns": {
+            "median": 420596906,
+            "minimum": 420386486,
+            "maximum": 426388724,
+            "iqr": 3001119.0,
+            "processes_with_value": 3
+          },
+          "query_complete_ms": 420.596906,
+          "ns_per_row": 70.08529206169084,
+          "rows": 6001215,
+          "delta_ns": 70394603,
+          "completion_gap_exceeds_noise": true
+        },
+        "spark-on": {
+          "query_complete_ns": {
+            "median": 418043935,
+            "minimum": 411170809,
+            "maximum": 425022967,
+            "iqr": 6926079.0,
+            "processes_with_value": 3
+          },
+          "query_complete_ms": 418.043935,
+          "ns_per_row": 69.65988304035099,
+          "rows": 6001215,
+          "delta_ns": 67841632,
+          "completion_gap_exceeds_noise": true
+        }
+      }
+    },
+    {
+      "id": "substring_only",
+      "noise_ns": 18656630,
+      "noise_ms": 18.65663,
+      "noise_ns_per_row": 3.108808799551424,
+      "configurations": {
+        "native": {
+          "query_complete_ns": {
+            "median": 193595235,
+            "minimum": 175662970,
+            "maximum": 194837072,
+            "iqr": 9587051.0,
+            "processes_with_value": 3
+          },
+          "query_complete_ms": 193.595235,
+          "ns_per_row": 32.25933998365331,
+          "rows": 6001215,
+          "delta_ns": 0,
+          "completion_gap_exceeds_noise": false
+        },
+        "spark-off": {
+          "query_complete_ns": {
+            "median": 240511022,
+            "minimum": 218560714,
+            "maximum": 245716952,
+            "iqr": 13578119.0,
+            "processes_with_value": 3
+          },
+          "query_complete_ms": 240.511022,
+          "ns_per_row": 40.07705472975056,
+          "rows": 6001215,
+          "delta_ns": 46915787,
+          "completion_gap_exceeds_noise": true
+        },
+        "spark-on": {
+          "query_complete_ns": {
+            "median": 235056081,
+            "minimum": 223432983,
+            "maximum": 242942398,
+            "iqr": 9754707.5,
+            "processes_with_value": 3
+          },
+          "query_complete_ms": 235.056081,
+          "ns_per_row": 39.16808196340241,
+          "rows": 6001215,
+          "delta_ns": 41460846,
+          "completion_gap_exceeds_noise": true
+        }
+      }
+    },
+    {
+      "id": "concat_only",
+      "noise_ns": 1242178,
+      "noise_ms": 1.242178,
+      "noise_ns_per_row": 0.20698775164695815,
+      "configurations": {
+        "native": {
+          "query_complete_ns": {
+            "median": 127570297,
+            "minimum": 127476633,
+            "maximum": 127906080,
+            "iqr": 214723.5,
+            "processes_with_value": 3
+          },
+          "query_complete_ms": 127.570297,
+          "ns_per_row": 21.257411540829647,
+          "rows": 6001215,
+          "delta_ns": 0,
+          "completion_gap_exceeds_noise": false
+        },
+        "spark-off": {
+          "query_complete_ns": {
+            "median": 153826142,
+            "minimum": 153604661,
+            "maximum": 154523728,
+            "iqr": 459533.5,
+            "processes_with_value": 3
+          },
+          "query_complete_ms": 153.826142,
+          "ns_per_row": 25.632499752133526,
+          "rows": 6001215,
+          "delta_ns": 26255845,
+          "completion_gap_exceeds_noise": true
+        },
+        "spark-on": {
+          "query_complete_ns": {
+            "median": 154908462,
+            "minimum": 154020002,
+            "maximum": 155694742,
+            "iqr": 837370.0,
+            "processes_with_value": 3
+          },
+          "query_complete_ms": 154.908462,
+          "ns_per_row": 25.812849897895678,
+          "rows": 6001215,
+          "delta_ns": 27338165,
+          "completion_gap_exceeds_noise": true
+        }
+      }
+    },
+    {
+      "id": "upper_only",
+      "noise_ns": 13292979,
+      "noise_ms": 13.292979,
+      "noise_ns_per_row": 2.21504795278956,
+      "configurations": {
+        "native": {
+          "query_complete_ns": {
+            "median": 224241285,
+            "minimum": 223690993,
+            "maximum": 227026627,
+            "iqr": 1667817.0,
+            "processes_with_value": 3
+          },
+          "query_complete_ms": 224.241285,
+          "ns_per_row": 37.365980888870006,
+          "rows": 6001215,
+          "delta_ns": 0,
+          "completion_gap_exceeds_noise": false
+        },
+        "spark-off": {
+          "query_complete_ns": {
+            "median": 216873399,
+            "minimum": 214517925,
+            "maximum": 220930446,
+            "iqr": 3206260.5,
+            "processes_with_value": 3
+          },
+          "query_complete_ms": 216.873399,
+          "ns_per_row": 36.138248504677804,
+          "rows": 6001215,
+          "delta_ns": -7367886,
+          "completion_gap_exceeds_noise": false
+        },
+        "spark-on": {
+          "query_complete_ns": {
+            "median": 208124862,
+            "minimum": 205501819,
+            "maximum": 227151029,
+            "iqr": 10824605.0,
+            "processes_with_value": 3
+          },
+          "query_complete_ms": 208.124862,
+          "ns_per_row": 34.68045420802287,
+          "rows": 6001215,
+          "delta_ns": -16116423,
+          "completion_gap_exceeds_noise": false
+        }
+      }
+    }
+  ],
+  "profile_cases": [
+    {
+      "id": "string_functions",
+      "configuration": "spark-off"
+    },
+    {
+      "id": "substring_only",
+      "configuration": "spark-off"
+    },
+    {
+      "id": "concat_only",
+      "configuration": "spark-on"
+    }
+  ],
+  "process_records": 60,
+  "excluded_shapes": {},
+  "samples_sha256": "3a955af2154572c254c79ae647bbad61457ea665b39276ca452232e0bafb9224"
+}
