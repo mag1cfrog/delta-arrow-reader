@@ -77,7 +77,7 @@ From the repository root, run the controller checks and full untimed preflight:
 
 ```sh
 python3 crates/delta-arrow-reader-spark-sql/benches/strings/run.py --check
-python3 crates/delta-arrow-reader-spark-sql/benches/strings/run.py preflight BINARY /home/hanbo/.local/share/delta-arrow-reader-review/measurements-2026-11-18/1380/delta-snapshot /home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1388/pr1/preflight-v2
+python3 crates/delta-arrow-reader-spark-sql/benches/strings/run.py preflight BINARY /home/hanbo/.local/share/delta-arrow-reader-review/measurements-2026-11-18/1380/delta-snapshot /home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1388/pr1/preflight-v3
 ```
 
 The controller rejects optimized Python with an explicit early diagnostic, before
@@ -107,8 +107,11 @@ evidence. Only the legacy comparator's three exact decoded mismatch errors with
 exit status 1 establish a comparison-process shape exclusion. There is no
 inference of equality from IPC bytes, checksums or row counts alone.
 
-The full compressed receipt is `strings-1388-preflight.json.gz`. The separate
-[bound receipt](../strings/preflight-receipt.json) records eligibility/exclusions,
+The full compressed receipt is `strings-1388-preflight.json.gz`; it retains all
+source ranges and counters. The separate
+[bound receipt](../strings/preflight-receipt.json) stores only expected file
+identities/counts and received/range byte totals for each shape/configuration,
+alongside eligibility/exclusions,
 rows and exact source I/O, executable hash, snapshot identity and hashes of the
 manifest, schedule, controller, harness, original drivers, protocol, Cargo files,
 fixture receipt and full compressed preflight. Commit the independently reviewed

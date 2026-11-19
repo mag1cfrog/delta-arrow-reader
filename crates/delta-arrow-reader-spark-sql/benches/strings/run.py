@@ -189,7 +189,9 @@ def preflight(binary, snapshot, destination, manifest, schedule):
                    file_hashes=bound_hashes(), eligible_shapes=eligible, excluded_shapes=excluded,
                    preflight_result_count=len(results), exact_comparison_count=len(comparisons),
                    expected_rows={q: {r["configuration"]: r["rows"] for r in results if r["id"] == q} for q in eligible},
-                   expected_source_io={q: {r["configuration"]: r["source_io"] for r in results if r["id"] == q} for q in eligible})
+                   expected_source_io={q: {r["configuration"]: {key: r["source_io"][key] for key in (
+                       "distinct_source_files", "source_file_count", "source_bytes_received", "recorded_range_bytes"
+                   )} for r in results if r["id"] == q} for q in eligible})
     write_json(SUITE / "preflight-receipt.json", receipt)
     print(json.dumps({key: full[key] for key in ("status", "eligible_shapes", "excluded_shapes")}))
 
