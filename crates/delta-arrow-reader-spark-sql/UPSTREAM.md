@@ -420,6 +420,19 @@ intervals, and native DataFusion SQL are unchanged. Ordering aggregates and arra
 accept calendar intervals (#1160). The [calendar interval ordering
 references](tests/fixtures/calendar-interval-ordering/README.md) record the checks.
 
+### Ordinary STRING-to-DATE rows
+
+`SparkDate` uses Arrow's existing Date32 parser only for complete ten-byte ASCII
+`YYYY-MM-DD` values. On that subset, both parsers use Chrono calendar validation
+and the same epoch-day conversion. Other forms and unsuccessful native attempts
+retain the existing Sail parser and CAST/TRY_CAST error policy. Formatted dates,
+STRING-to-TIMESTAMP, shared analyzer parsing and dependency forks are unchanged.
+The [differential inputs](vendor/sail/crates/sail-function/tests/fixtures/date-cast-1385-inputs.json)
+compare the row path directly with the original parser; the
+[caller tests](tests/date_cast_row_path.rs) cover ANSI modes, scalar/array inputs,
+NULLs and ordinary, large, viewed and dictionary string storage. This repair is
+recorded in Git without rewriting accepted source hashes.
+
 ## Licenses and maintenance
 
 The Sail selection retains its Apache-2.0 LICENSE. The pinned Sail revision has no

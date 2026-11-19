@@ -1,0 +1,234 @@
+{
+  "status": "passed",
+  "pre_timing_local_validation": {
+    "status": "passed",
+    "gates": [
+      {
+        "name": "fmt",
+        "command": [
+          "cargo",
+          "+1.96.0",
+          "fmt",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "workdir": "/home/hanbo/repo/delta-arrow-reader-casts-1385/crates/delta-arrow-reader-spark-sql",
+        "environment": {
+          "CARGO_TARGET_DIR": "/home/hanbo/.cache/delta-arrow-reader/casts-1385-2026-11-19",
+          "CARGO_BUILD_JOBS": "2"
+        },
+        "exit_code": 0,
+        "log_path": "/home/hanbo/.local/share/delta-arrow-reader-review/casts-1385-2026-11-19/date-stage/fmt.log",
+        "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "clippy",
+        "command": [
+          "cargo",
+          "+1.96.0",
+          "clippy",
+          "--locked",
+          "-p",
+          "delta-arrow-reader-spark-sql",
+          "--all-targets",
+          "--no-deps",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "workdir": "/home/hanbo/repo/delta-arrow-reader-casts-1385/crates/delta-arrow-reader-spark-sql",
+        "environment": {
+          "CARGO_TARGET_DIR": "/home/hanbo/.cache/delta-arrow-reader/casts-1385-2026-11-19",
+          "CARGO_BUILD_JOBS": "2"
+        },
+        "exit_code": 0,
+        "log_path": "/home/hanbo/.local/share/delta-arrow-reader-review/casts-1385-2026-11-19/date-stage/clippy.log",
+        "log_sha256": "878efb1243b52b572af525fae8afbab16d3d91fc4e1276b021733dd1c593e27f"
+      },
+      {
+        "name": "workspace_test",
+        "command": [
+          "cargo",
+          "+1.96.0",
+          "test",
+          "--locked",
+          "--workspace"
+        ],
+        "workdir": "/home/hanbo/repo/delta-arrow-reader-casts-1385/crates/delta-arrow-reader-spark-sql",
+        "environment": {
+          "CARGO_TARGET_DIR": "/home/hanbo/.cache/delta-arrow-reader/casts-1385-2026-11-19",
+          "CARGO_BUILD_JOBS": "2"
+        },
+        "exit_code": 0,
+        "log_path": "/home/hanbo/.local/share/delta-arrow-reader-review/casts-1385-2026-11-19/date-stage/workspace-test.log",
+        "log_sha256": "521af56d05b29da35882f99b38afe7366070045698280d7e7600fae9ae7206d1"
+      }
+    ],
+    "workspace_inventory_path": "/home/hanbo/.local/share/delta-arrow-reader-review/casts-1385-2026-11-19/date-stage/workspace-test-receipt.json",
+    "workspace_inventory_sha256": "ab1a1e40926c2a101bbb8b5e848eb4861233f85ac837dbadb2d0dcf07359b001",
+    "counts": {
+      "passed": 3164,
+      "failed": 0,
+      "ignored": 3,
+      "measured": 0,
+      "filtered_out": 0,
+      "result_groups": 230,
+      "inventory_entries": 3167
+    },
+    "original_named_outcomes_preserved": 3165,
+    "new_named_outcomes": 2,
+    "differential_test": {
+      "log_path": "/home/hanbo/.local/share/delta-arrow-reader-review/casts-1385-2026-11-19/date-stage/differential-test.log",
+      "log_sha256": "2fa0fed5799525785a9bb9f9aa56642c81b6095a9b569d7fc57e64be3813d3fb",
+      "exit_code": 0,
+      "inputs": 102,
+      "outcome_comparisons": 204
+    },
+    "corrected_caller_test": {
+      "log_path": "/home/hanbo/.local/share/delta-arrow-reader-review/casts-1385-2026-11-19/date-stage/caller-test.log",
+      "log_sha256": "6d3fad9d9d4b3493717e94539056686105e0b3a6162d2645a73f229cdc65514a",
+      "exit_code": 0
+    },
+    "retained_initial_test_failures": {
+      "reason": "New caller test assumed which of two invalid rows supplied a parallel error. The correct error class was returned; test data now isolates one invalid value per input.",
+      "product_code_changed_for_failure": false,
+      "existing_named_outcomes_changed": false,
+      "failed_logs": [
+        "workspace-test-first-new-test-assertion.log",
+        "caller-test-before-edit-assertion.log"
+      ],
+      "extra_retry_reason": "The first edit used the wrong working directory, so a focused retry still ran the original assertion before the absolute-path correction.",
+      "corrected_focused_check": {
+        "log": "caller-test.log",
+        "exit_code": 0,
+        "passed": 1
+      },
+      "next_gate": "Full fmt/strict Clippy/workspace sequence on corrected test"
+    },
+    "candidate_source_hashes": [
+      {
+        "path": "crates/delta-arrow-reader-spark-sql/UPSTREAM.md",
+        "sha256": "a2adc15997a85bb8ee8224664519fd7c0b3c48343e222ac044d805cf1f9673c1"
+      },
+      {
+        "path": "crates/delta-arrow-reader-spark-sql/benches/execution.rs",
+        "sha256": "a7f5bed49f2072c21bb940edb4154cd39ff2f7779d80403fd540ed2e3a759f29"
+      },
+      {
+        "path": "crates/delta-arrow-reader-spark-sql/benches/execution/run.py",
+        "sha256": "9406949f27193dc04540bb1265a0790d4fa191ef28c85829de5bcd2166057324"
+      },
+      {
+        "path": "crates/delta-arrow-reader-spark-sql/benches/execution/summarize.py",
+        "sha256": "0cbad0b6d1128bb4aeb7d7c52016f4529722090a98e8d1c98ff9fbc919bf6bd4"
+      },
+      {
+        "path": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-function/src/scalar/datetime/spark_date.rs",
+        "sha256": "50111bda13b876d3cceaa596a20e170b664cecf4e7851273914215f188eb21a9"
+      },
+      {
+        "path": "crates/delta-arrow-reader-spark-sql/benches/casts/date/queries.json",
+        "sha256": "7b254a1f5b2138cdb5ed4e19a845542baaf3776a45e6c43e16792c98b7201836"
+      },
+      {
+        "path": "crates/delta-arrow-reader-spark-sql/benches/casts/date/schedule.json",
+        "sha256": "9c3e8c57bcd61c5b392af074114e02636e720347e0b54111ce8b13b5666f53de"
+      },
+      {
+        "path": "crates/delta-arrow-reader-spark-sql/benches/reports/casts-1385-date-protocol.md",
+        "sha256": "246385eeecf7453cede0af1ea14e3ffeda5666dcf6131be9f3771a53c70a460a"
+      },
+      {
+        "path": "crates/delta-arrow-reader-spark-sql/tests/date_cast_row_path.rs",
+        "sha256": "4a357718599007c32dc8ee0701658a12976bbaffc4a396cb43bbdeba8360c3ae"
+      },
+      {
+        "path": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-function/tests/fixtures/date-cast-1385-inputs.json",
+        "sha256": "9a8d484204af3b35bb289c9be2dc899014fde87b34b4dab45acf8654c9f7f567"
+      }
+    ],
+    "benchmark_timing_samples": 0
+  },
+  "untimed_preflight": {
+    "status": "passed",
+    "exports": 9,
+    "current_native_spark_comparisons": 6,
+    "baseline_current_comparisons": 9,
+    "rows_per_result": 6001215,
+    "source_files": 6,
+    "source_bytes": {
+      "cast_strings": 57151761,
+      "cast_date": 25585934,
+      "cast_decimal": 57127165
+    },
+    "preflight_asset_bytes": 62370,
+    "binary_sha256": "4757aff7514261ffe18f96ffae227070197d7505f1f8649506188b006bd6a81c",
+    "benchmark_timing_samples": 0
+  },
+  "independent_timing_eligibility_audit": {
+    "status": "passed",
+    "processes": 30,
+    "samples": 90,
+    "completion_medians_ns": {
+      "cast_strings": {
+        "native": 677533468,
+        "spark-off": 686025762,
+        "spark-on": 686998319
+      },
+      "cast_date": {
+        "native": 179231711,
+        "spark-off": 194524676,
+        "spark-on": 193683725
+      }
+    },
+    "noise_ns": {
+      "cast_strings": 603252,
+      "cast_date": 29235
+    },
+    "completion_flags": {
+      "cast_strings": {
+        "spark-off": false,
+        "spark-on": false
+      },
+      "cast_date": {
+        "spark-off": false,
+        "spark-on": false
+      }
+    },
+    "all_sample_rows_and_io_match_preflight": true,
+    "decimal_eligible": false,
+    "decimal_reason": "Isolated baseline flags false; combined after DATE flags false."
+  },
+  "post_timing_binary_binding": {
+    "status": "passed",
+    "verified_at_utc": "2026-11-19T08:58:53.473927+00:00",
+    "measured_source_commit": "d25b1b228a5405be4f4d812b36af3a50d0823787",
+    "actual_timing_cache_path": "/home/hanbo/.cache/delta-arrow-reader/casts-1385-2026-11-19/release/deps/execution-87be9fc3f891d603",
+    "metadata_binary_sha256": "4757aff7514261ffe18f96ffae227070197d7505f1f8649506188b006bd6a81c",
+    "post_timing_cache_sha256": "4757aff7514261ffe18f96ffae227070197d7505f1f8649506188b006bd6a81c",
+    "cache_inode": 1215188327,
+    "sealed_date_artifact": {
+      "path": "/home/hanbo/.local/share/delta-arrow-reader-review/casts-1385-2026-11-19/artifacts/date-d25b1b22-execution",
+      "sha256": "4757aff7514261ffe18f96ffae227070197d7505f1f8649506188b006bd6a81c",
+      "inode": 1214514350,
+      "mode": "0o555",
+      "independent_inode": true
+    },
+    "sealed_baseline_artifact": {
+      "path": "/home/hanbo/.local/share/delta-arrow-reader-review/casts-1385-2026-11-19/artifacts/baseline-03313bab-execution",
+      "sha256": "ab282d8c8b774b15f68d6709cf3ff4e6cc089b805646ace2a148fc1ba9326373",
+      "mode": "0o555"
+    }
+  },
+  "committed_binary_matches_preflight": true,
+  "tests_repeated_after_identical_rebuild": false,
+  "preflight_repeated_after_identical_rebuild": false,
+  "timing_schedule_repeated": false,
+  "decimal_timing_processes": 0,
+  "profiles": 0,
+  "concurrency_processes": 0,
+  "decimal_eligible": false,
+  "frozen_files_preserved": 12,
+  "baseline_assets_preserved": 29
+}

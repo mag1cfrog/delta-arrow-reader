@@ -4,6 +4,7 @@ use std::collections::hash_map::Entry;
 use std::sync::Arc;
 
 use datafusion::arrow::array::{Array, Date32Array, new_null_array};
+use datafusion::arrow::compute::kernels::cast_utils::Parser;
 use datafusion::arrow::datatypes::{DataType, Date32Type};
 use datafusion_common::cast::{as_large_string_array, as_string_array, as_string_view_array};
 use datafusion_common::{Result, ScalarValue, exec_datafusion_err, exec_err};
@@ -32,6 +33,17 @@ impl SparkDate {
     }
 
     fn string_to_date32(value: &str, is_try: bool) -> Result<Option<i32>> {
+        // Native parsing agrees with Spark on this subset, not its other date forms.
+        let bytes = value.as_bytes();
+        if bytes.len() == 10
+            && bytes.iter().enumerate().all(|(index, byte)| match index {
+                4 | 7 => *byte == b'-',
+                _ => byte.is_ascii_digit(),
+            })
+            && let Some(date) = Date32Type::parse(value)
+        {
+            return Ok(Some(date));
+        }
         match parse_date(value).and_then(|date| Ok(Date32Type::from_naive_date(date.try_into()?))) {
             Ok(v) => Ok(Some(v)),
             Err(_e) if is_try => Ok(None),
@@ -266,5 +278,41 @@ fn get_or_parse_format<'a>(
     match cache.entry(pattern.to_string()) {
         Entry::Occupied(entry) => Ok(entry.into_mut()),
         Entry::Vacant(entry) => Ok(entry.insert(DateTimeFormat::for_parsing(pattern)?)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn date_row_path_matches_existing_parser() -> std::result::Result<(), Box<dyn std::error::Error>>
+    {
+        let categories: std::collections::BTreeMap<String, Vec<String>> = serde_json::from_str(
+            include_str!("../../../tests/fixtures/date-cast-1385-inputs.json"),
+        )?;
+        assert_eq!(categories.len(), 13);
+        let mut comparisons = 0;
+        for (category, values) in categories {
+            assert!(!values.is_empty());
+            for value in values {
+                let original = parse_date(&value)
+                    .and_then(|date| Ok(Date32Type::from_naive_date(date.try_into()?)));
+                for is_try in [false, true] {
+                    let expected = match &original {
+                        Ok(days) => Ok(Some(*days)),
+                        Err(_) if is_try => Ok(None),
+                        Err(_) => Err(()),
+                    };
+                    let actual = SparkDate::string_to_date32(&value, is_try).map_err(|error| {
+                        assert!(error.to_string().contains("[CAST_INVALID_INPUT]"));
+                    });
+                    assert_eq!(actual, expected, "{category}: {value:?}, is_try={is_try}");
+                    comparisons += 1;
+                }
+            }
+        }
+        assert_eq!(comparisons, 204);
+        Ok(())
     }
 }

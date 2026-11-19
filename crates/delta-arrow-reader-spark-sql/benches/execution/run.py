@@ -18,6 +18,7 @@ WORKSPACE = EXECUTION.parents[1]
 REPORTS = WORKSPACE / "benches/reports"
 SUITE = EXECUTION
 CAST_SUITE_SELECTED = False
+DATE_STAGE_SELECTED = False
 
 
 def read(path):
@@ -45,11 +46,12 @@ def check_inventory():
         for key in ("cpus", "target_partitions", "batch_rows", "runtime_workers", "warmups", "samples", "process_timeout_seconds", "single_pool_bytes", "preflight_pool_bytes", "single_address_space_bytes", "preflight_address_space_bytes", "spill_limit_bytes", "preflight_process_timeout_seconds"):
             assert schedule[key] == original_schedule[key], key
         assert schedule["concurrency"] == [] and schedule["profile_max_cases"] == 0
-        assert len(schedule["runs"]) == len({run["process"] for run in schedule["runs"]}) == 45
-        assert [run["series"] for run in schedule["runs"]] == ["noise"] * 18 + ["main"] * 27
+        timed_ids = ids[:2] if DATE_STAGE_SELECTED else ids
+        assert len(schedule["runs"]) == len({run["process"] for run in schedule["runs"]}) == len(timed_ids) * 15
+        assert [run["series"] for run in schedule["runs"]] == ["noise"] * (len(timed_ids) * 6) + ["main"] * (len(timed_ids) * 9)
         assert all(run["replica"] in (1, 2, 3) for run in schedule["runs"])
-        assert collections.Counter((run["query"],run["configuration"]) for run in schedule["runs"] if run["series"] == "main") == {(query,configuration):3 for query in ids for configuration in ("native","spark-off","spark-on")}
-        assert collections.Counter((run["query"],run["arm"]) for run in schedule["runs"] if run["series"] == "noise") == {(query,arm):3 for query in ids for arm in ("a","b")}
+        assert collections.Counter((run["query"],run["configuration"]) for run in schedule["runs"] if run["series"] == "main") == {(query,configuration):3 for query in timed_ids for configuration in ("native","spark-off","spark-on")}
+        assert collections.Counter((run["query"],run["arm"]) for run in schedule["runs"] if run["series"] == "noise") == {(query,arm):3 for query in timed_ids for arm in ("a","b")}
         assert all(run["configuration"] == "native" for run in schedule["runs"] if run["series"] == "noise")
         return manifest, schedule
     assert len(ids) == len(set(ids)) == 18
@@ -68,7 +70,7 @@ def check_inventory():
 
 
 def binary_command(binary, *args):
-    return [str(binary)] + (["--casts-1385"] if CAST_SUITE_SELECTED else []) + list(args)
+    return [str(binary)] + (["--casts-1385-date" if DATE_STAGE_SELECTED else "--casts-1385"] if CAST_SUITE_SELECTED else []) + list(args)
 
 
 def require_same_source_io(actual, expected):
@@ -133,7 +135,10 @@ def preflight(binary, snapshot, destination, manifest, schedule):
     cpu = ",".join(map(str,schedule["cpus"]))
     check = invoke(binary_command(binary,"check"), destination/"self-check", remaining_timeout(deadline,30), schedule["preflight_address_space_bytes"])
     assert check == {"kind":"self_check","status":"passed"}
-    outcomes, comparisons = [], []
+    outcomes, comparisons, baseline_comparisons = [], [], []
+    if DATE_STAGE_SELECTED:
+        with gzip.open(REPORTS/"casts-1385-preflight.json.gz", "rt") as source:
+            baseline = {(result["id"], result["configuration"]): result for result in json.load(source)["results"]}
     for query in manifest["queries"]:
         results = {}
         for configuration in ("native","spark-off","spark-on"):
@@ -142,6 +147,15 @@ def preflight(binary, snapshot, destination, manifest, schedule):
             print("preflight",query["id"],configuration,flush=True)
             result = invoke(command, work, remaining_timeout(deadline,schedule["preflight_process_timeout_seconds"]), schedule["preflight_address_space_bytes"])
             result["ipc_sha256"] = digest(pathlib.Path(result["ipc_path"]))
+            if DATE_STAGE_SELECTED:
+                original = baseline[query["id"], configuration]
+                assert original["ipc_sha256"] == digest(pathlib.Path(original["ipc_path"]))
+                require_same_source_io(result["source_io"], original["source_io"])
+                assert result["rows"] == original["rows"] and result["sql_schema"] == original["sql_schema"]
+                comparison = invoke(binary_command(binary,"compare",original["ipc_path"],result["ipc_path"]), destination/query["id"]/("baseline-compare-"+configuration), remaining_timeout(deadline,180), schedule["preflight_address_space_bytes"])
+                assert comparison["equal"] and comparison["rows_compared"] == result["rows"]
+                comparison.update(id=query["id"],configuration=configuration)
+                baseline_comparisons.append(comparison)
             outcomes.append(result)
             results[configuration] = result
             if query["id"] in ("partition_filter","statistics_filter"):
@@ -167,6 +181,9 @@ def preflight(binary, snapshot, destination, manifest, schedule):
                 (destination/"finding.json").write_text(json.dumps({"kind":"extra_source_io","comparison":result,"native":native["source_io"],"spark":spark["source_io"]},indent=2)+"\n")
                 raise RuntimeError("extra source I/O; stop before freeze for coordinator handling")
     receipt = {"status":"passed","result_count":len(outcomes),"comparison_count":len(comparisons),"results":outcomes,"comparisons":comparisons}
+    if DATE_STAGE_SELECTED:
+        receipt["baseline_comparisons"] = baseline_comparisons
+        receipt["baseline_comparison_count"] = len(baseline_comparisons)
     (destination/"preflight.json").write_text(json.dumps(receipt,indent=2)+"\n")
     print(json.dumps({"status":"passed","results":len(outcomes),"comparisons":len(comparisons)}))
 
@@ -185,11 +202,17 @@ def measure(binary, snapshot, destination, manifest, schedule):
     for file in read(REPORTS/"execution-1380-fixture.json")["files"]:
         assert file["sha256"] == digest(snapshot/file["path"]), file["path"]
     if CAST_SUITE_SELECTED:
-        for key, path in (("protocol_sha256", REPORTS/"casts-1385-protocol.md"), ("summarizer_sha256", EXECUTION/"summarize.py")):
+        prefix = "casts-1385-date" if DATE_STAGE_SELECTED else "casts-1385"
+        for key, path in (("protocol_sha256", REPORTS/(prefix+"-protocol.md")), ("summarizer_sha256", EXECUTION/"summarize.py")):
             assert eligibility[key] == digest(path), key
         assert eligibility["timing_driver_sha256"] == digest(EXECUTION/"run.py")
-        assert eligibility["full_receipt_sha256"] == digest(REPORTS/"casts-1385-preflight.json.gz")
+        assert eligibility["full_receipt_sha256"] == digest(REPORTS/(prefix+"-preflight.json.gz"))
         assert eligibility["preflight_result_count"] == 9 and eligibility["exact_comparison_count"] == 6
+        if DATE_STAGE_SELECTED:
+            assert eligibility["baseline_comparison_count"] == 9
+            assert eligibility["baseline_preflight_sha256"] == digest(REPORTS/"casts-1385-preflight.json.gz")
+            for path, expected in eligibility["phase_source_hashes"].items():
+                assert expected == digest(WORKSPACE/path), path
     expected_rows = eligibility["expected_rows"]
     deadline = time.monotonic() + schedule["schedule_timeout_seconds"]
     cpu = ",".join(map(str,schedule["cpus"]))
@@ -238,13 +261,16 @@ def measure(binary, snapshot, destination, manifest, schedule):
 
 
 if __name__ == "__main__":
-    if sys.argv[1:2] == ["--casts-1385"]:
+    if sys.argv[1:2] in (["--casts-1385"], ["--casts-1385-date"]):
+        DATE_STAGE_SELECTED = sys.argv[1] == "--casts-1385-date"
         CAST_SUITE_SELECTED = True
         SUITE = EXECUTION.parent / "casts"
+        if DATE_STAGE_SELECTED:
+            SUITE = SUITE / "date"
         del sys.argv[1]
     source_io_self_check()
     manifest, schedule = check_inventory()
-    assert binary_command(pathlib.Path("execution"), "check") == (["execution", "--casts-1385", "check"] if CAST_SUITE_SELECTED else ["execution", "check"])
+    assert binary_command(pathlib.Path("execution"), "check") == (["execution", "--casts-1385-date" if DATE_STAGE_SELECTED else "--casts-1385", "check"] if CAST_SUITE_SELECTED else ["execution", "check"])
     if sys.argv[1:] == ["--check"]:
         print("execution inventory/schedule checks passed")
     elif len(sys.argv) == 5 and sys.argv[1] in ("preflight","measure"):
@@ -258,4 +284,4 @@ if __name__ == "__main__":
         (destination/"metadata.json").write_text(json.dumps(metadata(binary,snapshot,manifest,schedule),indent=2)+"\n")
         (preflight if mode == "preflight" else measure)(binary,snapshot,destination,manifest,schedule)
     else:
-        raise SystemExit("usage: run.py [--casts-1385] --check | preflight/measure BINARY SNAPSHOT NEW_DIRECTORY")
+        raise SystemExit("usage: run.py [--casts-1385|--casts-1385-date] --check | preflight/measure BINARY SNAPSHOT NEW_DIRECTORY")
