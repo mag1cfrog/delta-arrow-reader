@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use std::sync::Arc;
 
 use crate::scalar::string::spark_substring::SparkSubstring;
-use datafusion::arrow::array::{BooleanArray, StringArray};
+use datafusion::arrow::array::{AsArray, BooleanArray, StringArray};
 use datafusion::arrow::compute::cast;
 use datafusion::arrow::compute::kernels::boolean::{is_null, or};
 use datafusion::arrow::compute::kernels::concat_elements::concat_elements_dyn;
@@ -227,7 +227,9 @@ impl ScalarUDFImpl for SparkConcat {
             concat_binary_values(&args.args, return_type)
         } else {
             let casted_columns =
-                if args.args.iter().any(|arg| {
+                if can_concat_views_with_utf8_limits(&args.args) {
+                    args.args
+                } else if args.args.iter().any(|arg| {
                     matches!(arg.data_type(), DataType::LargeUtf8 | DataType::LargeBinary)
                 }) {
                     cast_columnar_values(args.args, &DataType::LargeUtf8)?
@@ -256,6 +258,56 @@ impl ScalarUDFImpl for SparkConcat {
             &null_mask,
         )?))
     }
+}
+
+fn can_concat_views_with_utf8_limits(values: &[ColumnarValue]) -> bool {
+    if !values
+        .iter()
+        .all(|value| matches!(value.data_type(), DataType::Utf8 | DataType::Utf8View))
+    {
+        return false;
+    }
+    let Some(rows) = values.iter().find_map(|value| match value {
+        ColumnarValue::Array(array) if array.data_type() == &DataType::Utf8View => {
+            Some(array.len())
+        }
+        _ => None,
+    }) else {
+        return false;
+    };
+    // Preserve both old Utf8 input/output limits, including encoded NULL view lengths.
+    let limit = i32::MAX as usize;
+    let mut remaining = limit;
+    for value in values {
+        let available = match value {
+            ColumnarValue::Array(array) if array.len() == rows => match array.data_type() {
+                DataType::Utf8View => array
+                    .as_string_view()
+                    .views()
+                    .iter()
+                    .try_fold(remaining, |bytes, view| {
+                        bytes.checked_sub(*view as u32 as usize)
+                    }),
+                DataType::Utf8 => remaining.checked_sub(array.as_string::<i32>().values().len()),
+                _ => None,
+            },
+            ColumnarValue::Scalar(ScalarValue::Utf8(Some(value)))
+            | ColumnarValue::Scalar(ScalarValue::Utf8View(Some(value)))
+                if value.len() <= limit =>
+            {
+                value
+                    .len()
+                    .checked_mul(rows)
+                    .and_then(|bytes| remaining.checked_sub(bytes))
+            }
+            _ => None,
+        };
+        let Some(available) = available else {
+            return false;
+        };
+        remaining = available;
+    }
+    true
 }
 
 // Explicit folding opt-outs keep the whole CONCAT on its native NULL path.
@@ -624,10 +676,246 @@ fn merge_list_types(left: &DataType, right: &DataType) -> Option<DataType> {
 
 #[cfg(test)]
 mod tests {
-    use datafusion::arrow::array::{ArrayRef, AsArray, BinaryArray};
+    use datafusion::arrow::array::{ArrayRef, AsArray, BinaryArray, ListArray, StringViewArray};
+    use datafusion::arrow::buffer::{NullBuffer, ScalarBuffer};
+    use datafusion::arrow::datatypes::Int32Type;
     use datafusion_common::config::ConfigOptions;
 
     use super::*;
+
+    include!("../../../tests/fixtures/concat-row-cost-1388-original.rs");
+
+    fn concat_arguments(values: Vec<ColumnarValue>, rows: usize) -> Result<ScalarFunctionArgs> {
+        let fields = values
+            .iter()
+            .map(|value| Arc::new(Field::new("", value.data_type(), true)))
+            .collect::<Vec<_>>();
+        let scalars = values
+            .iter()
+            .map(|value| match value {
+                ColumnarValue::Scalar(value) => Some(value),
+                ColumnarValue::Array(_) => None,
+            })
+            .collect::<Vec<_>>();
+        let return_field = SparkConcat::new().return_field_from_args(ReturnFieldArgs {
+            arg_fields: &fields,
+            scalar_arguments: &scalars,
+        })?;
+        Ok(ScalarFunctionArgs {
+            args: values,
+            arg_fields: fields,
+            number_rows: rows,
+            return_field,
+            config_options: Arc::new(ConfigOptions::default()),
+        })
+    }
+
+    fn assert_original_concat(values: Vec<ColumnarValue>, rows: usize) -> Result<()> {
+        let description = format!("args={values:?}, rows={rows}");
+        let expected = original_concat(concat_arguments(values.clone(), rows)?);
+        let actual = SparkConcat::new().invoke_with_args(concat_arguments(values, rows)?);
+        match (actual, expected) {
+            (Ok(ColumnarValue::Array(actual)), Ok(ColumnarValue::Array(expected))) => {
+                assert_eq!(actual.data_type(), expected.data_type(), "{description}");
+                assert_eq!(actual.as_ref(), expected.as_ref(), "{description}");
+            }
+            (Ok(ColumnarValue::Scalar(actual)), Ok(ColumnarValue::Scalar(expected))) => {
+                assert_eq!(actual.data_type(), expected.data_type(), "{description}");
+                assert_eq!(actual, expected, "{description}");
+            }
+            (Err(actual), Err(expected)) => {
+                assert_eq!(actual.to_string(), expected.to_string(), "{description}")
+            }
+            (actual, expected) => {
+                return internal_err!(
+                    "CONCAT result forms differ: {actual:?}, {expected:?}; {description}"
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn concat_row_path_matches_frozen_materialization() -> Result<()> {
+        let inputs: Vec<Vec<Option<String>>> = serde_json::from_str(include_str!(
+            "../../../tests/fixtures/concat-row-cost-1388-inputs.json"
+        ))
+        .map_err(|error| {
+            datafusion_common::internal_datafusion_err!("invalid CONCAT corpus: {error}")
+        })?;
+        let types = [DataType::Utf8, DataType::LargeUtf8, DataType::Utf8View];
+        for values in inputs {
+            for mut storage in 0..3_usize.pow(values.len() as u32) {
+                let scalars = values
+                    .iter()
+                    .map(|value| {
+                        let data_type = &types[storage % 3];
+                        storage /= 3;
+                        ScalarValue::try_from_array(
+                            cast(&StringViewArray::from(vec![value.as_deref()]), data_type)?
+                                .as_ref(),
+                            0,
+                        )
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                for mask in 0..1 << values.len() {
+                    for rows in [0, 3] {
+                        let args = scalars
+                            .iter()
+                            .enumerate()
+                            .map(|(index, value)| {
+                                if mask & (1 << index) == 0 {
+                                    Ok(ColumnarValue::Scalar(value.clone()))
+                                } else {
+                                    Ok(ColumnarValue::Array(value.to_array_of_size(rows)?))
+                                }
+                            })
+                            .collect::<Result<Vec<_>>>()?;
+                        assert_original_concat(args, rows)?;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn concat_view_guard_preserves_utf8_capacity_boundaries() -> Result<()> {
+        let source = StringViewArray::from(vec!["x".repeat(32768)]);
+        let repeated = |bytes: usize, nulls: bool| {
+            let full = bytes / 32768;
+            let tail = bytes % 32768;
+            let mut views = vec![source.views()[0]; full];
+            if tail != 0 {
+                let value = source.value(0);
+                views.push(datafusion::arrow::array::make_view(
+                    &value.as_bytes()[..tail],
+                    0,
+                    0,
+                ));
+            }
+            let validity = nulls.then(|| NullBuffer::new_null(views.len()));
+            ColumnarValue::Array(Arc::new(StringViewArray::new(
+                ScalarBuffer::from(views),
+                source.data_buffers().to_vec(),
+                validity,
+            )))
+        };
+        let limit = i32::MAX as usize;
+        assert!(can_concat_views_with_utf8_limits(&[repeated(limit, false)]));
+        assert!(!can_concat_views_with_utf8_limits(&[repeated(
+            limit + 1,
+            false
+        )]));
+        // Each input fits Utf8; their concatenation would cross its old output limit.
+        assert!(!can_concat_views_with_utf8_limits(&[
+            repeated(1 << 30, false),
+            repeated(1 << 30, false)
+        ]));
+        let nulls = repeated(limit + 1, true);
+        if let ColumnarValue::Array(array) = &nulls {
+            assert_eq!(array.as_string_view().total_bytes_len(), 0);
+        }
+        assert!(!can_concat_views_with_utf8_limits(&[nulls]));
+        let fitting_rows = limit / 4096;
+        let scalar = ColumnarValue::Scalar(ScalarValue::Utf8(Some("x".repeat(4096))));
+        for rows in [fitting_rows, fitting_rows + 1] {
+            let empty_views = ColumnarValue::Array(Arc::new(StringViewArray::new(
+                ScalarBuffer::from(vec![0_u128; rows]),
+                vec![],
+                None,
+            )));
+            assert_eq!(
+                can_concat_views_with_utf8_limits(&[empty_views, scalar.clone()]),
+                rows == fitting_rows,
+                "scalar broadcast rows={rows}"
+            );
+        }
+        let view = ColumnarValue::Array(Arc::new(StringViewArray::from(vec!["left", "right"])));
+        assert!(can_concat_views_with_utf8_limits(&[
+            view.clone(),
+            ColumnarValue::Scalar(ScalarValue::Utf8(Some(":".into())))
+        ]));
+        assert!(!can_concat_views_with_utf8_limits(&[
+            view.clone(),
+            ColumnarValue::Array(Arc::new(StringArray::from(vec!["one"])))
+        ]));
+        assert!(!can_concat_views_with_utf8_limits(&[
+            view,
+            ColumnarValue::Scalar(ScalarValue::LargeUtf8(Some(":".into())))
+        ]));
+        // Above-limit inputs are guard-only checks: invoking the retained old
+        // route would allocate multi-GiB Utf8 buffers before failing.
+        Ok(())
+    }
+
+    #[test]
+    fn concat_other_paths_match_frozen_invocation() -> Result<()> {
+        let bytes: ArrayRef = Arc::new(BinaryArray::from(vec![
+            Some(b"abcdefghijklmnop".as_slice()),
+            None,
+            Some(b"".as_slice()),
+        ]));
+        for storage in [
+            DataType::Binary,
+            DataType::LargeBinary,
+            DataType::BinaryView,
+            DataType::FixedSizeBinary(16),
+        ] {
+            let input = if storage == DataType::FixedSizeBinary(16) {
+                cast(
+                    &BinaryArray::from(vec![
+                        Some(b"abcdefghijklmnop".as_slice()),
+                        None,
+                        Some(b"qrstuvwxyz012345".as_slice()),
+                    ]),
+                    &storage,
+                )?
+            } else {
+                cast(bytes.as_ref(), &storage)?
+            };
+            for mask in 0..4 {
+                let scalar = ScalarValue::try_from_array(input.as_ref(), 0)?;
+                let args = (0..2)
+                    .map(|index| {
+                        if mask & (1 << index) == 0 {
+                            ColumnarValue::Scalar(scalar.clone())
+                        } else {
+                            ColumnarValue::Array(input.clone())
+                        }
+                    })
+                    .collect();
+                assert_original_concat(args, 3)?;
+            }
+        }
+        let list: ArrayRef = Arc::new(ListArray::from_iter_primitive::<Int32Type, _, _>([
+            Some(vec![Some(1), None]),
+            None,
+            Some(vec![]),
+        ]));
+        assert_original_concat(
+            vec![
+                ColumnarValue::Array(list.clone()),
+                ColumnarValue::Array(list),
+            ],
+            3,
+        )?;
+        for value in [
+            ScalarValue::Int64(Some(42)),
+            ScalarValue::Float64(Some(1.5)),
+            ScalarValue::TimestampMicrosecond(Some(0), None),
+            ScalarValue::Binary(Some(vec![255])),
+        ] {
+            assert_original_concat(
+                vec![
+                    ColumnarValue::Scalar(value),
+                    ColumnarValue::Array(Arc::new(StringViewArray::from(vec!["text"]))),
+                ],
+                1,
+            )?;
+        }
+        Ok(())
+    }
 
     #[test]
     fn binary_concat_preserves_bytes_and_nulls_across_representations() -> Result<()> {
