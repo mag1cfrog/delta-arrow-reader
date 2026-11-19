@@ -17,8 +17,8 @@ use arrow::record_batch::RecordBatch;
 use datafusion::datasource::MemTable;
 use datafusion::execution::SessionStateBuilder;
 use datafusion::logical_expr::{ColumnarValue, ScalarFunctionArgs, Volatility, create_udf};
+use datafusion::physical_expr::ScalarFunctionExpr;
 use datafusion::physical_expr::expressions::Column;
-use datafusion::physical_expr::{PhysicalExpr, ScalarFunctionExpr};
 use datafusion::physical_expr_common::utils::scatter;
 use datafusion::physical_plan::{
     ExecutionPlan, ExecutionPlanProperties, collect, displayable, projection::ProjectionExec,
@@ -34,15 +34,15 @@ fn input_value(fraction: &str, row: usize, left: bool) -> Option<i32> {
     let valid = if left {
         match fraction {
             "none" => true,
-            "sparse" => row % 11 != 0,
-            "half" => row % 2 != 0,
+            "sparse" => !row.is_multiple_of(11),
+            "half" => !row.is_multiple_of(2),
             "all" => false,
             _ => unreachable!("fixed manifest fraction"),
         }
     } else {
-        fraction == "none" || row % 13 != 0
+        fraction == "none" || !row.is_multiple_of(13)
     };
-    valid.then_some(if left || row % 3 == 0 {
+    valid.then_some(if left || row.is_multiple_of(3) {
         (row % 17) as i32
     } else {
         0
