@@ -1,0 +1,49 @@
+{
+  "build_command": "RUSTFLAGS='-C target-cpu=x86-64' CARGO_TARGET_DIR=/home/hanbo/.cache/delta-arrow-reader/measurements-2026-11-18/target/fixtures cargo +1.98.1 build --release --locked -j2 --manifest-path benches/selective_read/Cargo.toml --bin selective-read-fixtures --message-format=json-render-diagnostics",
+  "generator_binary": "/home/hanbo/.cache/delta-arrow-reader/measurements-2026-11-18/target/fixtures/release/selective-read-fixtures",
+  "generator_binary_sha256": "7c84c270b88595559854ade637873e13b776a24e8ebc53310128cfa0f86441d4",
+  "capacity_command": [
+    "/home/hanbo/.cache/delta-arrow-reader/measurements-2026-11-18/target/fixtures/release/selective-read-fixtures",
+    "--profile",
+    "large",
+    "--scale-factor",
+    "1",
+    "--fixture",
+    "wide.clustered",
+    "--preparation-only",
+    "--sort-memory-mib",
+    "4096",
+    "--disk-limit-mib",
+    "32768",
+    "--elapsed-limit-seconds",
+    "1800",
+    "--output",
+    "/home/hanbo/.local/share/delta-arrow-reader-review/measurements-2026-11-18/1380/base-sf1",
+    "--preflight"
+  ],
+  "generation_command": [
+    "/home/hanbo/.cache/delta-arrow-reader/measurements-2026-11-18/target/fixtures/release/selective-read-fixtures",
+    "--profile",
+    "large",
+    "--scale-factor",
+    "1",
+    "--fixture",
+    "wide.clustered",
+    "--preparation-only",
+    "--sort-memory-mib",
+    "4096",
+    "--disk-limit-mib",
+    "32768",
+    "--elapsed-limit-seconds",
+    "1800",
+    "--output",
+    "/home/hanbo/.local/share/delta-arrow-reader-review/measurements-2026-11-18/1380/base-sf1"
+  ],
+  "derivation_command": [
+    "python3",
+    "crates/delta-arrow-reader-spark-sql/benches/execution/prepare.py",
+    "/home/hanbo/.local/share/delta-arrow-reader-review/measurements-2026-11-18/1380/base-sf1",
+    "/home/hanbo/.local/share/delta-arrow-reader-review/measurements-2026-11-18/1380/delta-snapshot",
+    "crates/delta-arrow-reader-spark-sql/benches/reports/execution-1380-fixture.json"
+  ]
+}

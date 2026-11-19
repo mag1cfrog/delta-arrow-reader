@@ -1,0 +1,71 @@
+{
+  "status": "complete",
+  "source_scale_factor": 1,
+  "source_commit": "8954dcec63f934359c7bcdb74b5220c842d898e4",
+  "source_table": "wide.clustered",
+  "stored_columns": 80,
+  "snapshot_columns": 81,
+  "snapshot_version": 0,
+  "rows": 6001215,
+  "files": [
+    {
+      "path": "part-00000.parquet",
+      "file_bucket": 0,
+      "rows": 1048576,
+      "bytes": 665464418,
+      "sha256": "8886fe3d5670f0559525e914b24c931896e45370aa07fcdbf79065d6d1021579"
+    },
+    {
+      "path": "part-00001.parquet",
+      "file_bucket": 1,
+      "rows": 1048576,
+      "bytes": 665488141,
+      "sha256": "65ab912b14e24e6250900a32f91aad3d6961f0490cc4f5d0466e57fd3a5d29fc"
+    },
+    {
+      "path": "part-00002.parquet",
+      "file_bucket": 2,
+      "rows": 1048576,
+      "bytes": 665496112,
+      "sha256": "15c2db0931adb17fb2b257eb9481b251863cb60e2624075683f05fa0d9724d35"
+    },
+    {
+      "path": "part-00003.parquet",
+      "file_bucket": 3,
+      "rows": 1048576,
+      "bytes": 665373167,
+      "sha256": "f0338fbec7d68a61ed76ad40e545ff573d1e7ad0074872ba736f8c07fc5e8aea"
+    },
+    {
+      "path": "part-00004.parquet",
+      "file_bucket": 4,
+      "rows": 1048576,
+      "bytes": 665376528,
+      "sha256": "f434eb6accf21b56b4e0583235736bf2a78ce7ad4e3021db1efda1bb4f22729d"
+    },
+    {
+      "path": "part-00005.parquet",
+      "file_bucket": 5,
+      "rows": 758335,
+      "bytes": 481083496,
+      "sha256": "9d01eed319ccef5bc52b6f5114ccb134a458d485133ee2bc5ab8a38e7187f670"
+    }
+  ],
+  "data_bytes": 3808281862,
+  "base_root": "/home/hanbo/.local/share/delta-arrow-reader-review/measurements-2026-11-18/1380/base-sf1",
+  "snapshot_root": "/home/hanbo/.local/share/delta-arrow-reader-review/measurements-2026-11-18/1380/delta-snapshot",
+  "source_manifest_sha256": "37906576c32e8c1c2ca7b3920f11ccd107c00633851d05e15e1f1db112305bc5",
+  "base_delta_log_sha256": "8ffd867bc4c1966190472cf68d7277e9363645bfee992d28ee3938eb1cc1f2a2",
+  "derived_delta_log_sha256": "21d2257a5c6d201f74c2c3516a134095c2f4efb680595cbd56228ae6581e71cb",
+  "generator": {
+    "arrow": "58.4.0",
+    "datafusion_sort": "54.1.0",
+    "executable_sha256": "7c84c270b88595559854ade637873e13b776a24e8ebc53310128cfa0f86441d4",
+    "lockfile_sha256": "2d1c035a3c655ce09668182e30a8d578f30fa07020ea8a02815f1cf712fc6daa",
+    "parquet": "58.4.0",
+    "target": "x86_64-linux",
+    "tpchgen": "3.0.0",
+    "tpchgen_git": "4f6bf4c5ab40511c8fdef5888fc8d022e5e546d7"
+  },
+  "derivation": "unchanged hardlinked Parquet; virtual INT file_bucket is path-sorted file ordinal; all original rows/statistics retained"
+}

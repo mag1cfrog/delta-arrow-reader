@@ -1,0 +1,2066 @@
+{
+  "cpus": [
+    2,
+    3,
+    4,
+    5
+  ],
+  "target_partitions": 2,
+  "batch_rows": 8192,
+  "runtime_workers": 2,
+  "warmups": 1,
+  "samples": 3,
+  "process_timeout_seconds": 180,
+  "schedule_timeout_seconds": 10800,
+  "single_pool_bytes": 2147483648,
+  "preflight_pool_bytes": 4294967296,
+  "concurrency_pool_bytes": 8589934592,
+  "single_address_space_bytes": 12884901888,
+  "preflight_address_space_bytes": 17179869184,
+  "concurrency_address_space_bytes": 21474836480,
+  "spill_limit_bytes": 8589934592,
+  "preflight_process_timeout_seconds": 300,
+  "preflight_timeout_seconds": 3600,
+  "profile_iterations": 3,
+  "profile_frequency_hz": 199,
+  "profile_stack_bytes": 8192,
+  "profile_max_cases": 36,
+  "runs": [
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "projection_five",
+      "replica": 1,
+      "arm": "a",
+      "process": "noise-01-projection_five-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "projection_five",
+      "replica": 1,
+      "arm": "b",
+      "process": "noise-01-projection_five-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "partition_filter",
+      "replica": 1,
+      "arm": "b",
+      "process": "noise-01-partition_filter-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "partition_filter",
+      "replica": 1,
+      "arm": "a",
+      "process": "noise-01-partition_filter-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "statistics_filter",
+      "replica": 1,
+      "arm": "a",
+      "process": "noise-01-statistics_filter-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "statistics_filter",
+      "replica": 1,
+      "arm": "b",
+      "process": "noise-01-statistics_filter-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "empty_filter",
+      "replica": 1,
+      "arm": "b",
+      "process": "noise-01-empty_filter-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "empty_filter",
+      "replica": 1,
+      "arm": "a",
+      "process": "noise-01-empty_filter-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "ordered_limit",
+      "replica": 1,
+      "arm": "a",
+      "process": "noise-01-ordered_limit-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "ordered_limit",
+      "replica": 1,
+      "arm": "b",
+      "process": "noise-01-ordered_limit-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "group_low",
+      "replica": 1,
+      "arm": "b",
+      "process": "noise-01-group_low-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "group_low",
+      "replica": 1,
+      "arm": "a",
+      "process": "noise-01-group_low-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "group_high",
+      "replica": 1,
+      "arm": "a",
+      "process": "noise-01-group_high-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "group_high",
+      "replica": 1,
+      "arm": "b",
+      "process": "noise-01-group_high-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "count_distinct",
+      "replica": 1,
+      "arm": "b",
+      "process": "noise-01-count_distinct-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "count_distinct",
+      "replica": 1,
+      "arm": "a",
+      "process": "noise-01-count_distinct-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "row_number",
+      "replica": 1,
+      "arm": "a",
+      "process": "noise-01-row_number-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "row_number",
+      "replica": 1,
+      "arm": "b",
+      "process": "noise-01-row_number-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "dimension_join",
+      "replica": 1,
+      "arm": "b",
+      "process": "noise-01-dimension_join-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "dimension_join",
+      "replica": 1,
+      "arm": "a",
+      "process": "noise-01-dimension_join-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "self_join",
+      "replica": 1,
+      "arm": "a",
+      "process": "noise-01-self_join-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "self_join",
+      "replica": 1,
+      "arm": "b",
+      "process": "noise-01-self_join-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "decimal_division_round",
+      "replica": 1,
+      "arm": "b",
+      "process": "noise-01-decimal_division_round-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "decimal_division_round",
+      "replica": 1,
+      "arm": "a",
+      "process": "noise-01-decimal_division_round-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "cast_strings",
+      "replica": 1,
+      "arm": "a",
+      "process": "noise-01-cast_strings-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "cast_strings",
+      "replica": 1,
+      "arm": "b",
+      "process": "noise-01-cast_strings-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "string_functions",
+      "replica": 1,
+      "arm": "b",
+      "process": "noise-01-string_functions-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "string_functions",
+      "replica": 1,
+      "arm": "a",
+      "process": "noise-01-string_functions-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "nullif_nullable",
+      "replica": 1,
+      "arm": "a",
+      "process": "noise-01-nullif_nullable-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "nullif_nullable",
+      "replica": 1,
+      "arm": "b",
+      "process": "noise-01-nullif_nullable-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "in_10",
+      "replica": 1,
+      "arm": "b",
+      "process": "noise-01-in_10-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "in_10",
+      "replica": 1,
+      "arm": "a",
+      "process": "noise-01-in_10-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "in_1000",
+      "replica": 1,
+      "arm": "a",
+      "process": "noise-01-in_1000-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "in_1000",
+      "replica": 1,
+      "arm": "b",
+      "process": "noise-01-in_1000-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "mixed_boolean",
+      "replica": 1,
+      "arm": "b",
+      "process": "noise-01-mixed_boolean-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "mixed_boolean",
+      "replica": 1,
+      "arm": "a",
+      "process": "noise-01-mixed_boolean-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "projection_five",
+      "replica": 2,
+      "arm": "b",
+      "process": "noise-02-projection_five-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "projection_five",
+      "replica": 2,
+      "arm": "a",
+      "process": "noise-02-projection_five-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "partition_filter",
+      "replica": 2,
+      "arm": "a",
+      "process": "noise-02-partition_filter-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "partition_filter",
+      "replica": 2,
+      "arm": "b",
+      "process": "noise-02-partition_filter-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "statistics_filter",
+      "replica": 2,
+      "arm": "b",
+      "process": "noise-02-statistics_filter-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "statistics_filter",
+      "replica": 2,
+      "arm": "a",
+      "process": "noise-02-statistics_filter-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "empty_filter",
+      "replica": 2,
+      "arm": "a",
+      "process": "noise-02-empty_filter-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "empty_filter",
+      "replica": 2,
+      "arm": "b",
+      "process": "noise-02-empty_filter-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "ordered_limit",
+      "replica": 2,
+      "arm": "b",
+      "process": "noise-02-ordered_limit-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "ordered_limit",
+      "replica": 2,
+      "arm": "a",
+      "process": "noise-02-ordered_limit-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "group_low",
+      "replica": 2,
+      "arm": "a",
+      "process": "noise-02-group_low-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "group_low",
+      "replica": 2,
+      "arm": "b",
+      "process": "noise-02-group_low-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "group_high",
+      "replica": 2,
+      "arm": "b",
+      "process": "noise-02-group_high-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "group_high",
+      "replica": 2,
+      "arm": "a",
+      "process": "noise-02-group_high-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "count_distinct",
+      "replica": 2,
+      "arm": "a",
+      "process": "noise-02-count_distinct-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "count_distinct",
+      "replica": 2,
+      "arm": "b",
+      "process": "noise-02-count_distinct-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "row_number",
+      "replica": 2,
+      "arm": "b",
+      "process": "noise-02-row_number-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "row_number",
+      "replica": 2,
+      "arm": "a",
+      "process": "noise-02-row_number-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "dimension_join",
+      "replica": 2,
+      "arm": "a",
+      "process": "noise-02-dimension_join-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "dimension_join",
+      "replica": 2,
+      "arm": "b",
+      "process": "noise-02-dimension_join-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "self_join",
+      "replica": 2,
+      "arm": "b",
+      "process": "noise-02-self_join-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "self_join",
+      "replica": 2,
+      "arm": "a",
+      "process": "noise-02-self_join-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "decimal_division_round",
+      "replica": 2,
+      "arm": "a",
+      "process": "noise-02-decimal_division_round-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "decimal_division_round",
+      "replica": 2,
+      "arm": "b",
+      "process": "noise-02-decimal_division_round-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "cast_strings",
+      "replica": 2,
+      "arm": "b",
+      "process": "noise-02-cast_strings-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "cast_strings",
+      "replica": 2,
+      "arm": "a",
+      "process": "noise-02-cast_strings-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "string_functions",
+      "replica": 2,
+      "arm": "a",
+      "process": "noise-02-string_functions-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "string_functions",
+      "replica": 2,
+      "arm": "b",
+      "process": "noise-02-string_functions-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "nullif_nullable",
+      "replica": 2,
+      "arm": "b",
+      "process": "noise-02-nullif_nullable-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "nullif_nullable",
+      "replica": 2,
+      "arm": "a",
+      "process": "noise-02-nullif_nullable-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "in_10",
+      "replica": 2,
+      "arm": "a",
+      "process": "noise-02-in_10-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "in_10",
+      "replica": 2,
+      "arm": "b",
+      "process": "noise-02-in_10-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "in_1000",
+      "replica": 2,
+      "arm": "b",
+      "process": "noise-02-in_1000-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "in_1000",
+      "replica": 2,
+      "arm": "a",
+      "process": "noise-02-in_1000-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "mixed_boolean",
+      "replica": 2,
+      "arm": "a",
+      "process": "noise-02-mixed_boolean-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "mixed_boolean",
+      "replica": 2,
+      "arm": "b",
+      "process": "noise-02-mixed_boolean-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "projection_five",
+      "replica": 3,
+      "arm": "a",
+      "process": "noise-03-projection_five-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "projection_five",
+      "replica": 3,
+      "arm": "b",
+      "process": "noise-03-projection_five-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "partition_filter",
+      "replica": 3,
+      "arm": "b",
+      "process": "noise-03-partition_filter-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "partition_filter",
+      "replica": 3,
+      "arm": "a",
+      "process": "noise-03-partition_filter-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "statistics_filter",
+      "replica": 3,
+      "arm": "a",
+      "process": "noise-03-statistics_filter-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "statistics_filter",
+      "replica": 3,
+      "arm": "b",
+      "process": "noise-03-statistics_filter-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "empty_filter",
+      "replica": 3,
+      "arm": "b",
+      "process": "noise-03-empty_filter-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "empty_filter",
+      "replica": 3,
+      "arm": "a",
+      "process": "noise-03-empty_filter-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "ordered_limit",
+      "replica": 3,
+      "arm": "a",
+      "process": "noise-03-ordered_limit-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "ordered_limit",
+      "replica": 3,
+      "arm": "b",
+      "process": "noise-03-ordered_limit-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "group_low",
+      "replica": 3,
+      "arm": "b",
+      "process": "noise-03-group_low-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "group_low",
+      "replica": 3,
+      "arm": "a",
+      "process": "noise-03-group_low-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "group_high",
+      "replica": 3,
+      "arm": "a",
+      "process": "noise-03-group_high-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "group_high",
+      "replica": 3,
+      "arm": "b",
+      "process": "noise-03-group_high-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "count_distinct",
+      "replica": 3,
+      "arm": "b",
+      "process": "noise-03-count_distinct-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "count_distinct",
+      "replica": 3,
+      "arm": "a",
+      "process": "noise-03-count_distinct-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "row_number",
+      "replica": 3,
+      "arm": "a",
+      "process": "noise-03-row_number-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "row_number",
+      "replica": 3,
+      "arm": "b",
+      "process": "noise-03-row_number-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "dimension_join",
+      "replica": 3,
+      "arm": "b",
+      "process": "noise-03-dimension_join-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "dimension_join",
+      "replica": 3,
+      "arm": "a",
+      "process": "noise-03-dimension_join-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "self_join",
+      "replica": 3,
+      "arm": "a",
+      "process": "noise-03-self_join-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "self_join",
+      "replica": 3,
+      "arm": "b",
+      "process": "noise-03-self_join-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "decimal_division_round",
+      "replica": 3,
+      "arm": "b",
+      "process": "noise-03-decimal_division_round-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "decimal_division_round",
+      "replica": 3,
+      "arm": "a",
+      "process": "noise-03-decimal_division_round-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "cast_strings",
+      "replica": 3,
+      "arm": "a",
+      "process": "noise-03-cast_strings-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "cast_strings",
+      "replica": 3,
+      "arm": "b",
+      "process": "noise-03-cast_strings-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "string_functions",
+      "replica": 3,
+      "arm": "b",
+      "process": "noise-03-string_functions-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "string_functions",
+      "replica": 3,
+      "arm": "a",
+      "process": "noise-03-string_functions-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "nullif_nullable",
+      "replica": 3,
+      "arm": "a",
+      "process": "noise-03-nullif_nullable-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "nullif_nullable",
+      "replica": 3,
+      "arm": "b",
+      "process": "noise-03-nullif_nullable-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "in_10",
+      "replica": 3,
+      "arm": "b",
+      "process": "noise-03-in_10-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "in_10",
+      "replica": 3,
+      "arm": "a",
+      "process": "noise-03-in_10-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "in_1000",
+      "replica": 3,
+      "arm": "a",
+      "process": "noise-03-in_1000-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "in_1000",
+      "replica": 3,
+      "arm": "b",
+      "process": "noise-03-in_1000-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "mixed_boolean",
+      "replica": 3,
+      "arm": "b",
+      "process": "noise-03-mixed_boolean-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "mixed_boolean",
+      "replica": 3,
+      "arm": "a",
+      "process": "noise-03-mixed_boolean-a"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "projection_five",
+      "replica": 1,
+      "process": "main-01-projection_five-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "projection_five",
+      "replica": 1,
+      "process": "main-01-projection_five-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "projection_five",
+      "replica": 1,
+      "process": "main-01-projection_five-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "partition_filter",
+      "replica": 1,
+      "process": "main-01-partition_filter-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "partition_filter",
+      "replica": 1,
+      "process": "main-01-partition_filter-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "partition_filter",
+      "replica": 1,
+      "process": "main-01-partition_filter-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "statistics_filter",
+      "replica": 1,
+      "process": "main-01-statistics_filter-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "statistics_filter",
+      "replica": 1,
+      "process": "main-01-statistics_filter-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "statistics_filter",
+      "replica": 1,
+      "process": "main-01-statistics_filter-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "empty_filter",
+      "replica": 1,
+      "process": "main-01-empty_filter-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "empty_filter",
+      "replica": 1,
+      "process": "main-01-empty_filter-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "empty_filter",
+      "replica": 1,
+      "process": "main-01-empty_filter-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "ordered_limit",
+      "replica": 1,
+      "process": "main-01-ordered_limit-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "ordered_limit",
+      "replica": 1,
+      "process": "main-01-ordered_limit-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "ordered_limit",
+      "replica": 1,
+      "process": "main-01-ordered_limit-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "group_low",
+      "replica": 1,
+      "process": "main-01-group_low-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "group_low",
+      "replica": 1,
+      "process": "main-01-group_low-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "group_low",
+      "replica": 1,
+      "process": "main-01-group_low-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "group_high",
+      "replica": 1,
+      "process": "main-01-group_high-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "group_high",
+      "replica": 1,
+      "process": "main-01-group_high-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "group_high",
+      "replica": 1,
+      "process": "main-01-group_high-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "count_distinct",
+      "replica": 1,
+      "process": "main-01-count_distinct-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "count_distinct",
+      "replica": 1,
+      "process": "main-01-count_distinct-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "count_distinct",
+      "replica": 1,
+      "process": "main-01-count_distinct-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "row_number",
+      "replica": 1,
+      "process": "main-01-row_number-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "row_number",
+      "replica": 1,
+      "process": "main-01-row_number-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "row_number",
+      "replica": 1,
+      "process": "main-01-row_number-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "dimension_join",
+      "replica": 1,
+      "process": "main-01-dimension_join-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "dimension_join",
+      "replica": 1,
+      "process": "main-01-dimension_join-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "dimension_join",
+      "replica": 1,
+      "process": "main-01-dimension_join-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "self_join",
+      "replica": 1,
+      "process": "main-01-self_join-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "self_join",
+      "replica": 1,
+      "process": "main-01-self_join-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "self_join",
+      "replica": 1,
+      "process": "main-01-self_join-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "decimal_division_round",
+      "replica": 1,
+      "process": "main-01-decimal_division_round-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "decimal_division_round",
+      "replica": 1,
+      "process": "main-01-decimal_division_round-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "decimal_division_round",
+      "replica": 1,
+      "process": "main-01-decimal_division_round-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "cast_strings",
+      "replica": 1,
+      "process": "main-01-cast_strings-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "cast_strings",
+      "replica": 1,
+      "process": "main-01-cast_strings-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "cast_strings",
+      "replica": 1,
+      "process": "main-01-cast_strings-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "string_functions",
+      "replica": 1,
+      "process": "main-01-string_functions-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "string_functions",
+      "replica": 1,
+      "process": "main-01-string_functions-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "string_functions",
+      "replica": 1,
+      "process": "main-01-string_functions-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "nullif_nullable",
+      "replica": 1,
+      "process": "main-01-nullif_nullable-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "nullif_nullable",
+      "replica": 1,
+      "process": "main-01-nullif_nullable-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "nullif_nullable",
+      "replica": 1,
+      "process": "main-01-nullif_nullable-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "in_10",
+      "replica": 1,
+      "process": "main-01-in_10-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "in_10",
+      "replica": 1,
+      "process": "main-01-in_10-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "in_10",
+      "replica": 1,
+      "process": "main-01-in_10-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "in_1000",
+      "replica": 1,
+      "process": "main-01-in_1000-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "in_1000",
+      "replica": 1,
+      "process": "main-01-in_1000-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "in_1000",
+      "replica": 1,
+      "process": "main-01-in_1000-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "mixed_boolean",
+      "replica": 1,
+      "process": "main-01-mixed_boolean-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "mixed_boolean",
+      "replica": 1,
+      "process": "main-01-mixed_boolean-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "mixed_boolean",
+      "replica": 1,
+      "process": "main-01-mixed_boolean-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "projection_five",
+      "replica": 2,
+      "process": "main-02-projection_five-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "projection_five",
+      "replica": 2,
+      "process": "main-02-projection_five-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "projection_five",
+      "replica": 2,
+      "process": "main-02-projection_five-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "partition_filter",
+      "replica": 2,
+      "process": "main-02-partition_filter-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "partition_filter",
+      "replica": 2,
+      "process": "main-02-partition_filter-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "partition_filter",
+      "replica": 2,
+      "process": "main-02-partition_filter-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "statistics_filter",
+      "replica": 2,
+      "process": "main-02-statistics_filter-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "statistics_filter",
+      "replica": 2,
+      "process": "main-02-statistics_filter-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "statistics_filter",
+      "replica": 2,
+      "process": "main-02-statistics_filter-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "empty_filter",
+      "replica": 2,
+      "process": "main-02-empty_filter-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "empty_filter",
+      "replica": 2,
+      "process": "main-02-empty_filter-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "empty_filter",
+      "replica": 2,
+      "process": "main-02-empty_filter-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "ordered_limit",
+      "replica": 2,
+      "process": "main-02-ordered_limit-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "ordered_limit",
+      "replica": 2,
+      "process": "main-02-ordered_limit-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "ordered_limit",
+      "replica": 2,
+      "process": "main-02-ordered_limit-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "group_low",
+      "replica": 2,
+      "process": "main-02-group_low-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "group_low",
+      "replica": 2,
+      "process": "main-02-group_low-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "group_low",
+      "replica": 2,
+      "process": "main-02-group_low-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "group_high",
+      "replica": 2,
+      "process": "main-02-group_high-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "group_high",
+      "replica": 2,
+      "process": "main-02-group_high-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "group_high",
+      "replica": 2,
+      "process": "main-02-group_high-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "count_distinct",
+      "replica": 2,
+      "process": "main-02-count_distinct-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "count_distinct",
+      "replica": 2,
+      "process": "main-02-count_distinct-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "count_distinct",
+      "replica": 2,
+      "process": "main-02-count_distinct-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "row_number",
+      "replica": 2,
+      "process": "main-02-row_number-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "row_number",
+      "replica": 2,
+      "process": "main-02-row_number-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "row_number",
+      "replica": 2,
+      "process": "main-02-row_number-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "dimension_join",
+      "replica": 2,
+      "process": "main-02-dimension_join-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "dimension_join",
+      "replica": 2,
+      "process": "main-02-dimension_join-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "dimension_join",
+      "replica": 2,
+      "process": "main-02-dimension_join-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "self_join",
+      "replica": 2,
+      "process": "main-02-self_join-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "self_join",
+      "replica": 2,
+      "process": "main-02-self_join-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "self_join",
+      "replica": 2,
+      "process": "main-02-self_join-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "decimal_division_round",
+      "replica": 2,
+      "process": "main-02-decimal_division_round-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "decimal_division_round",
+      "replica": 2,
+      "process": "main-02-decimal_division_round-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "decimal_division_round",
+      "replica": 2,
+      "process": "main-02-decimal_division_round-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "cast_strings",
+      "replica": 2,
+      "process": "main-02-cast_strings-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "cast_strings",
+      "replica": 2,
+      "process": "main-02-cast_strings-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "cast_strings",
+      "replica": 2,
+      "process": "main-02-cast_strings-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "string_functions",
+      "replica": 2,
+      "process": "main-02-string_functions-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "string_functions",
+      "replica": 2,
+      "process": "main-02-string_functions-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "string_functions",
+      "replica": 2,
+      "process": "main-02-string_functions-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "nullif_nullable",
+      "replica": 2,
+      "process": "main-02-nullif_nullable-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "nullif_nullable",
+      "replica": 2,
+      "process": "main-02-nullif_nullable-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "nullif_nullable",
+      "replica": 2,
+      "process": "main-02-nullif_nullable-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "in_10",
+      "replica": 2,
+      "process": "main-02-in_10-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "in_10",
+      "replica": 2,
+      "process": "main-02-in_10-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "in_10",
+      "replica": 2,
+      "process": "main-02-in_10-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "in_1000",
+      "replica": 2,
+      "process": "main-02-in_1000-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "in_1000",
+      "replica": 2,
+      "process": "main-02-in_1000-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "in_1000",
+      "replica": 2,
+      "process": "main-02-in_1000-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "mixed_boolean",
+      "replica": 2,
+      "process": "main-02-mixed_boolean-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "mixed_boolean",
+      "replica": 2,
+      "process": "main-02-mixed_boolean-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "mixed_boolean",
+      "replica": 2,
+      "process": "main-02-mixed_boolean-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "projection_five",
+      "replica": 3,
+      "process": "main-03-projection_five-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "projection_five",
+      "replica": 3,
+      "process": "main-03-projection_five-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "projection_five",
+      "replica": 3,
+      "process": "main-03-projection_five-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "partition_filter",
+      "replica": 3,
+      "process": "main-03-partition_filter-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "partition_filter",
+      "replica": 3,
+      "process": "main-03-partition_filter-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "partition_filter",
+      "replica": 3,
+      "process": "main-03-partition_filter-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "statistics_filter",
+      "replica": 3,
+      "process": "main-03-statistics_filter-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "statistics_filter",
+      "replica": 3,
+      "process": "main-03-statistics_filter-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "statistics_filter",
+      "replica": 3,
+      "process": "main-03-statistics_filter-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "empty_filter",
+      "replica": 3,
+      "process": "main-03-empty_filter-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "empty_filter",
+      "replica": 3,
+      "process": "main-03-empty_filter-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "empty_filter",
+      "replica": 3,
+      "process": "main-03-empty_filter-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "ordered_limit",
+      "replica": 3,
+      "process": "main-03-ordered_limit-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "ordered_limit",
+      "replica": 3,
+      "process": "main-03-ordered_limit-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "ordered_limit",
+      "replica": 3,
+      "process": "main-03-ordered_limit-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "group_low",
+      "replica": 3,
+      "process": "main-03-group_low-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "group_low",
+      "replica": 3,
+      "process": "main-03-group_low-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "group_low",
+      "replica": 3,
+      "process": "main-03-group_low-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "group_high",
+      "replica": 3,
+      "process": "main-03-group_high-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "group_high",
+      "replica": 3,
+      "process": "main-03-group_high-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "group_high",
+      "replica": 3,
+      "process": "main-03-group_high-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "count_distinct",
+      "replica": 3,
+      "process": "main-03-count_distinct-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "count_distinct",
+      "replica": 3,
+      "process": "main-03-count_distinct-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "count_distinct",
+      "replica": 3,
+      "process": "main-03-count_distinct-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "row_number",
+      "replica": 3,
+      "process": "main-03-row_number-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "row_number",
+      "replica": 3,
+      "process": "main-03-row_number-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "row_number",
+      "replica": 3,
+      "process": "main-03-row_number-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "dimension_join",
+      "replica": 3,
+      "process": "main-03-dimension_join-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "dimension_join",
+      "replica": 3,
+      "process": "main-03-dimension_join-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "dimension_join",
+      "replica": 3,
+      "process": "main-03-dimension_join-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "self_join",
+      "replica": 3,
+      "process": "main-03-self_join-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "self_join",
+      "replica": 3,
+      "process": "main-03-self_join-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "self_join",
+      "replica": 3,
+      "process": "main-03-self_join-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "decimal_division_round",
+      "replica": 3,
+      "process": "main-03-decimal_division_round-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "decimal_division_round",
+      "replica": 3,
+      "process": "main-03-decimal_division_round-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "decimal_division_round",
+      "replica": 3,
+      "process": "main-03-decimal_division_round-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "cast_strings",
+      "replica": 3,
+      "process": "main-03-cast_strings-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "cast_strings",
+      "replica": 3,
+      "process": "main-03-cast_strings-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "cast_strings",
+      "replica": 3,
+      "process": "main-03-cast_strings-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "string_functions",
+      "replica": 3,
+      "process": "main-03-string_functions-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "string_functions",
+      "replica": 3,
+      "process": "main-03-string_functions-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "string_functions",
+      "replica": 3,
+      "process": "main-03-string_functions-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "nullif_nullable",
+      "replica": 3,
+      "process": "main-03-nullif_nullable-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "nullif_nullable",
+      "replica": 3,
+      "process": "main-03-nullif_nullable-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "nullif_nullable",
+      "replica": 3,
+      "process": "main-03-nullif_nullable-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "in_10",
+      "replica": 3,
+      "process": "main-03-in_10-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "in_10",
+      "replica": 3,
+      "process": "main-03-in_10-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "in_10",
+      "replica": 3,
+      "process": "main-03-in_10-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "in_1000",
+      "replica": 3,
+      "process": "main-03-in_1000-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "in_1000",
+      "replica": 3,
+      "process": "main-03-in_1000-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "in_1000",
+      "replica": 3,
+      "process": "main-03-in_1000-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "mixed_boolean",
+      "replica": 3,
+      "process": "main-03-mixed_boolean-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "mixed_boolean",
+      "replica": 3,
+      "process": "main-03-mixed_boolean-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "mixed_boolean",
+      "replica": 3,
+      "process": "main-03-mixed_boolean-native"
+    }
+  ],
+  "concurrency": [
+    {
+      "query": "group_high",
+      "configuration": "native",
+      "process": "concurrency-group_high-native",
+      "executions": 4
+    },
+    {
+      "query": "group_high",
+      "configuration": "spark-off",
+      "process": "concurrency-group_high-spark-off",
+      "executions": 4
+    },
+    {
+      "query": "group_high",
+      "configuration": "spark-on",
+      "process": "concurrency-group_high-spark-on",
+      "executions": 4
+    },
+    {
+      "query": "nullif_nullable",
+      "configuration": "spark-off",
+      "process": "concurrency-nullif_nullable-spark-off",
+      "executions": 4
+    },
+    {
+      "query": "nullif_nullable",
+      "configuration": "spark-on",
+      "process": "concurrency-nullif_nullable-spark-on",
+      "executions": 4
+    },
+    {
+      "query": "nullif_nullable",
+      "configuration": "native",
+      "process": "concurrency-nullif_nullable-native",
+      "executions": 4
+    }
+  ]
+}

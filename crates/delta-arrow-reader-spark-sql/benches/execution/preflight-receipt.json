@@ -1,0 +1,111 @@
+{
+  "status": "passed",
+  "baseline_commit": "8954dcec63f934359c7bcdb74b5220c842d898e4",
+  "preflight_head_commit": "8954dcec63f934359c7bcdb74b5220c842d898e4",
+  "queries_sha256": "a63405d5da5358e8e4c4600dda74b4404b2b9ec605f32c9bdd2bd1d0b4f950c1",
+  "schedule_sha256": "afdf3715edfc3f1431f9db432edb4787ae380aeaf1a7619535e2038e3f9f73f7",
+  "fixture_receipt_sha256": "9eb1e98be9381de74bd8908ac540c91eec6f0b0862089d1655baca537f43301d",
+  "snapshot_log_sha256": "21d2257a5c6d201f74c2c3516a134095c2f4efb680595cbd56228ae6581e71cb",
+  "binary_sha256": "afabd4101f885adc9fbe4ee07950733c15d5638d9039d8881834b19c054389c6",
+  "harness_sha256": "0bfe8cb675cb7cfaa1509e44e32466843754881b1689f2f3f0f901b273dc1c16",
+  "expected_rows": {
+    "projection_five": {
+      "native": 6001215,
+      "spark-off": 6001215,
+      "spark-on": 6001215
+    },
+    "partition_filter": {
+      "native": 1048576,
+      "spark-off": 1048576,
+      "spark-on": 1048576
+    },
+    "statistics_filter": {
+      "native": 2528,
+      "spark-off": 2528,
+      "spark-on": 2528
+    },
+    "empty_filter": {
+      "native": 0,
+      "spark-off": 0,
+      "spark-on": 0
+    },
+    "ordered_limit": {
+      "native": 100,
+      "spark-off": 100,
+      "spark-on": 100
+    },
+    "group_low": {
+      "native": 4,
+      "spark-off": 4,
+      "spark-on": 4
+    },
+    "group_high": {
+      "native": 1500000,
+      "spark-off": 1500000,
+      "spark-on": 1500000
+    },
+    "count_distinct": {
+      "native": 1,
+      "spark-off": 1,
+      "spark-on": 1
+    },
+    "row_number": {
+      "native": 6001215,
+      "spark-off": 6001215,
+      "spark-on": 6001215
+    },
+    "dimension_join": {
+      "native": 6001215,
+      "spark-off": 6001215,
+      "spark-on": 6001215
+    },
+    "self_join": {
+      "native": 6001215,
+      "spark-off": 6001215,
+      "spark-on": 6001215
+    },
+    "decimal_division_round": {
+      "native": 6001215,
+      "spark-off": 6001215,
+      "spark-on": 6001215
+    },
+    "cast_strings": {
+      "native": 6001215,
+      "spark-off": 6001215,
+      "spark-on": 6001215
+    },
+    "string_functions": {
+      "native": 6001215,
+      "spark-off": 6001215,
+      "spark-on": 6001215
+    },
+    "nullif_nullable": {
+      "native": 6001215,
+      "spark-off": 6001215,
+      "spark-on": 6001215
+    },
+    "in_10": {
+      "native": 13774,
+      "spark-off": 13774,
+      "spark-on": 13774
+    },
+    "in_1000": {
+      "native": 1379288,
+      "spark-off": 1379288,
+      "spark-on": 1379288
+    },
+    "mixed_boolean": {
+      "native": 1112548,
+      "spark-off": 1112548,
+      "spark-on": 1112548
+    }
+  },
+  "preflight_result_count": 54,
+  "exact_comparison_count": 36,
+  "full_receipt_sha256": "4ece439288bef4a85c7dd2818d0d357294e620c1c8b259902d3dd1b853e159b6",
+  "rustc": "rustc 1.96.0 (ac68faa20 2026-05-25)\nbinary: rustc\ncommit-hash: ac68faa20c58cbccd01ee7208bf3b6e93a7d7f96\ncommit-date: 2026-05-25\nhost: x86_64-unknown-linux-gnu\nrelease: 1.96.0\nLLVM version: 22.1.2\n",
+  "compiled_source_build_command": "CARGO_TARGET_DIR=/home/hanbo/.cache/delta-arrow-reader/measurements-2026-11-18/target/planning CARGO_BUILD_JOBS=2 CARGO_PROFILE_RELEASE_DEBUG=1 cargo +1.96.0 build --release --bench execution --message-format=json-render-diagnostics",
+  "snapshot_root": "/home/hanbo/.local/share/delta-arrow-reader-review/measurements-2026-11-18/1380/delta-snapshot",
+  "timing_driver_sha256": "e37d421ab4ed867298acfd45d997618a2d7ce5571dfe6decca9048cf93aa7185",
+  "timing_driver_note": "Deadline/provenance/result guards were finalized after the successful exact preflight; query execution, export/comparison code and compiled harness are unchanged."
+}

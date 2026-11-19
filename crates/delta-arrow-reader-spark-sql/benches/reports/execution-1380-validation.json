@@ -1,0 +1,48 @@
+{
+  "status": "passed",
+  "product_baseline_commit": "8954dcec63f934359c7bcdb74b5220c842d898e4",
+  "protocol_commit": "6376636dccfc10458f6b939a585d9173b469daf6",
+  "working_directory": "/home/hanbo/repo/delta-arrow-reader-measurements/crates/delta-arrow-reader-spark-sql",
+  "rust_cargo_bench_inputs_sha256": {
+    "crates/delta-arrow-reader-spark-sql/Cargo.toml": "d06f9f2fc6a258b2d4d898fe596d0279827765047b4bee79befd119073d7208f",
+    "crates/delta-arrow-reader-spark-sql/benches/execution.rs": "0bfe8cb675cb7cfaa1509e44e32466843754881b1689f2f3f0f901b273dc1c16",
+    "crates/delta-arrow-reader-spark-sql/benches/execution/queries.json": "a63405d5da5358e8e4c4600dda74b4404b2b9ec605f32c9bdd2bd1d0b4f950c1",
+    "crates/delta-arrow-reader-spark-sql/benches/execution/schedule.json": "afdf3715edfc3f1431f9db432edb4787ae380aeaf1a7619535e2038e3f9f73f7"
+  },
+  "fmt": {
+    "command": "cargo +1.96.0 fmt --all -- --check",
+    "exit_code": 0,
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "clippy": {
+    "command": "cargo +1.96.0 clippy --locked -p delta-arrow-reader-spark-sql --all-targets --no-deps -- -D warnings",
+    "exit_code": 0,
+    "log_sha256": "2420588c50632f0bb423db60a3f6a315a41826b020da27434814a69561422808",
+    "note": "Passing gate before protocol commit; all Rust/Cargo inputs remain identical. Only report assets and the Python CSV source-byte unit label changed afterward."
+  },
+  "workspace_test": {
+    "command": "cargo +1.96.0 test --locked --workspace",
+    "exit_code": 0,
+    "log_sha256": "ecb096511984e79ea7111bc5e0a08ed4649bfc451827f269af019bbe15d07970",
+    "counts": {
+      "passed": 3162,
+      "failed": 0,
+      "ignored": 3,
+      "measured": 0,
+      "filtered_out": 0,
+      "result_groups": 229,
+      "inventory_entries": 3165
+    },
+    "matches_accepted_checkpoint_inventory": true,
+    "inventory_receipt_sha256": "8f51a6d0ca66100cba88bc833c1849987e65d811cc657cad21fbe63118653e00",
+    "comparison_log_sha256": "4f5b7a5e07002ab7fc5410fb0b20a4199251776728dbe116a54f5c0bc6b2bbda",
+    "grouping_method": "Two-pass: align ordered Running/Doc-tests headers with running-N through test-result blocks, then compare sorted exact test names and outcomes plus group summaries."
+  },
+  "lightweight_checks": {
+    "inventory_and_schedule": "passed",
+    "aggregation_including_unavailable_batch_and_zero_pool": "passed",
+    "real_reservation_and_full_value_comparator": "passed",
+    "git_diff_check": "passed"
+  },
+  "external_evidence_directory": "/home/hanbo/.local/share/delta-arrow-reader-review/measurements-2026-11-18/1380"
+}

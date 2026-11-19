@@ -219,10 +219,13 @@ the slower ANSI mode for each identity. Name the larger phase and make one
 bounded diagnostic profile per selected identity: 100 repetitions of that phase,
 without query execution. `perf record` uses user-space `cpu-clock` sampling,
 999 Hz, and leaf instruction samples. Release debug information supplies
-function names. User-space leaf sampling succeeded in the capability check; both
-DWARF and frame-pointer call graphs were denied by the current perf policy. No
-sysctl was changed. Attribution is limited to rules/functions visible as sampled
-leaves in that one profile; it cannot establish a complete caller chain.
+function names. The initial DWARF and frame-pointer attempts omitted explicit
+user-only call-chain settings and were denied. The five historical profiles
+therefore use leaf samples; they cannot establish a complete caller chain.
+A later non-product #1380 probe established working user-only DWARF settings
+(`--user-callchains --call-graph dwarf,8192`) without changing system policy.
+The original #1379 samples and profiles remain unchanged. Attribution here is
+limited to rules/functions visible as sampled leaves.
 Profiles include session registration and snapshot setup before the repeated
 phase. Shared allocator, registration, and setup leaves are not evidence that
 a particular rule caused the phase cost. When the sampled function cannot be
