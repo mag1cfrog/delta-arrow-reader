@@ -11,15 +11,14 @@ use arrow::array::{
     Array, ArrayRef, AsArray, BooleanArray, Float64Array, Int32Array, new_null_array,
 };
 use arrow::compute::{filter, filter_record_batch};
-use arrow::datatypes::{DataType, Field, Float64Type, Int32Type, Schema};
+use arrow::datatypes::{DataType, Field, FieldRef, Float64Type, Int32Type, Schema};
 use arrow::ipc::{reader::FileReader, writer::FileWriter};
 use arrow::record_batch::RecordBatch;
 use datafusion::datasource::MemTable;
 use datafusion::execution::SessionStateBuilder;
 use datafusion::logical_expr::{ColumnarValue, ScalarFunctionArgs, Volatility, create_udf};
-use datafusion::physical_expr::PhysicalExpr;
 use datafusion::physical_expr::expressions::Column;
-use datafusion::physical_expr::scalar_function::ScalarFunctionExpr;
+use datafusion::physical_expr::{PhysicalExpr, ScalarFunctionExpr};
 use datafusion::physical_expr_common::utils::scatter;
 use datafusion::physical_plan::{
     ExecutionPlan, ExecutionPlanProperties, collect, displayable, projection::ProjectionExec,
@@ -135,7 +134,7 @@ async fn plan(
     session: &SessionContext,
     configuration: &str,
     sql: &str,
-) -> BenchResult<(Arc<dyn ExecutionPlan>, Field)> {
+) -> BenchResult<(Arc<dyn ExecutionPlan>, FieldRef)> {
     if configuration == "native" {
         let frame = session.sql(sql).await?;
         let logical = frame.logical_plan().schema().field(0).clone();
@@ -235,7 +234,7 @@ fn read_ipc(path: &str) -> BenchResult<(Arc<Schema>, Vec<RecordBatch>)> {
 }
 
 fn projection(plan: &dyn ExecutionPlan) -> BenchResult<&ProjectionExec> {
-    if let Some(projection) = plan.as_any().downcast_ref::<ProjectionExec>() {
+    if let Some(projection) = plan.downcast_ref::<ProjectionExec>() {
         return Ok(projection);
     }
     for child in plan.children() {
