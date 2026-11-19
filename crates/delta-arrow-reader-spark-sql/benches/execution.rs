@@ -654,11 +654,41 @@ async fn export_preflight_result(
         return Err("source requests are still active after preflight stream completion".into());
     }
     fs::write(work.join("physical-plan.txt"), &raw_plan)?;
-    let mut sql_schema = spark_results::capture_schema(actual_schema.fields(), None)?;
+    let mut sql_schema = capture_execution_schema(actual_schema.fields())?;
     spark_results::remove_nullability_and_metadata(&mut sql_schema);
     Ok(
         json!({"kind":"preflight_result","id":query.id,"configuration":configuration,"rows":rows,"sql_schema":sql_schema,"arrow_types":actual_schema.fields().iter().map(|field|field.data_type().to_string()).collect::<Vec<_>>(),"output_partitions":partitions,"ipc_path":output,"pool_peak_bytes":session.pool.peak.load(Ordering::Relaxed),"source_io":source_evidence(plan.as_ref(),&session.store,query.id!="ordered_limit")?,"operator_metrics":operator_metrics(plan.as_ref()),"physical_plan":raw_plan}),
     )
+}
+
+fn capture_execution_schema(fields: &arrow::datatypes::Fields) -> TestResult<Value> {
+    if !fields.iter().any(|field| {
+        matches!(
+            field.data_type(),
+            DataType::Duration(arrow::datatypes::TimeUnit::Microsecond)
+                | DataType::Interval(arrow::datatypes::IntervalUnit::MonthDayNano)
+        )
+    }) {
+        return spark_results::capture_schema(fields, None);
+    }
+    let mut captured = Vec::new();
+    for field in fields {
+        let interval_type = match field.data_type() {
+            DataType::Duration(arrow::datatypes::TimeUnit::Microsecond) => {
+                Some("interval day to second")
+            }
+            DataType::Interval(arrow::datatypes::IntervalUnit::MonthDayNano) => Some("interval"),
+            _ => None,
+        };
+        if let Some(interval_type) = interval_type {
+            captured.push(json!({"name":field.name(),"type":interval_type,
+                "nullable":field.is_nullable(),"metadata":field.metadata()}));
+        } else {
+            let schema = spark_results::capture_schema(&vec![field.clone()].into(), None)?;
+            captured.push(schema["fields"][0].clone());
+        }
+    }
+    Ok(json!({"type":"struct","fields":captured}))
 }
 
 async fn drain_execution(
@@ -882,10 +912,23 @@ async fn profile_strings(args: &[String], manifest: &Manifest, schedule: &Schedu
 
 fn main() -> TestResult {
     let mut args = std::env::args().skip(1).collect::<Vec<_>>();
+    let parsers = args.first().is_some_and(|arg| arg == "--parsers-1389");
     let date_stage = args.first().is_some_and(|arg| arg == "--casts-1385-date");
     let casts = date_stage || args.first().is_some_and(|arg| arg == "--casts-1385");
     let strings = args.first().is_some_and(|arg| arg == "--strings-1388");
-    let (manifest_json, schedule_json) = if strings {
+    let (manifest_json, schedule_json) = if parsers {
+        args.remove(0);
+        if args
+            .first()
+            .is_some_and(|mode| matches!(mode.as_str(), "concurrency" | "profile"))
+        {
+            return Err("parser attribution runs only preflight and serial measurements".into());
+        }
+        (
+            include_str!("parsers/queries.json"),
+            include_str!("parsers/schedule.json"),
+        )
+    } else if strings {
         args.remove(0);
         if args.first().is_some_and(|mode| mode == "concurrency") {
             return Err("string attribution does not run concurrency checks".into());

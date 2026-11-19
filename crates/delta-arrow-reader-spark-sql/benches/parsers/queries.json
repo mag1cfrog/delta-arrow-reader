@@ -1,0 +1,101 @@
+{
+  "source_commit": "298015f9def26cc97a271bdbc0316e64083d7874",
+  "source_scale_factor": 1,
+  "stored_columns": 80,
+  "snapshot_columns": 81,
+  "common_view_sql": "SELECT *,CAST(payload_00%17 AS DOUBLE) AS double_a,CAST(payload_01%17 AS DOUBLE) AS double_b,(payload_02%3=0) AS bool_a,(payload_03%5=0) AS bool_b,(payload_04%7=0) AS bool_c,ABS(payload_05%4096) AS in_key,CAST(l_shipdate AS VARCHAR) AS date_text,CAST(l_extendedprice AS VARCHAR) AS decimal_text,CASE WHEN l_orderkey%97=0 THEN CAST(NULL AS VARCHAR) ELSE CONCAT(SUBSTRING(CAST(l_shipdate AS VARCHAR),1,4),'-2-9') END AS parser_date_input,CASE WHEN l_orderkey%97=0 THEN CAST(NULL AS VARCHAR) ELSE CONCAT(CAST(l_shipdate AS VARCHAR),' 12:34:56') END AS parser_timestamp_input,CASE WHEN l_orderkey%97=0 THEN CAST(NULL AS VARCHAR) ELSE CONCAT(CAST(l_linenumber AS VARCHAR),' months') END AS parser_year_month_input,CASE WHEN l_orderkey%97=0 THEN CAST(NULL AS VARCHAR) ELSE CONCAT(CAST(l_linenumber AS VARCHAR),' days 2 hours') END AS parser_day_time_input,CASE WHEN l_orderkey%97=0 THEN CAST(NULL AS VARCHAR) ELSE CONCAT(CAST(l_linenumber AS VARCHAR),' months 1 day 2 seconds') END AS parser_calendar_input FROM raw_lineitem",
+  "dimension": {
+    "name": "suppliers",
+    "rows": 10000,
+    "recipe": "suppkey=1..10000 BIGINT; region=suppkey%5 INT; label=supplier-{suppkey} STRING"
+  },
+  "queries": [
+    {
+      "id": "date_fallback",
+      "native_sql": "SELECT l_orderkey,l_linenumber,CAST(parser_date_input AS DATE) AS result FROM bench",
+      "spark_sql": "SELECT l_orderkey,l_linenumber,CAST(parser_date_input AS DATE) AS result FROM bench",
+      "ordered": false,
+      "related_issues": [],
+      "reference": "native",
+      "expected_arrow_type": "Date32",
+      "input_column": "parser_date_input"
+    },
+    {
+      "id": "timestamp_ltz",
+      "native_sql": "SELECT l_orderkey,l_linenumber,ARROW_CAST(parser_timestamp_input,'Timestamp(Microsecond, Some(\"UTC\"))') AS result FROM bench",
+      "spark_sql": "SELECT l_orderkey,l_linenumber,CAST(parser_timestamp_input AS TIMESTAMP) AS result FROM bench",
+      "ordered": false,
+      "related_issues": [],
+      "reference": "native",
+      "expected_arrow_type": "Timestamp(us, \"UTC\")",
+      "input_column": "parser_timestamp_input"
+    },
+    {
+      "id": "timestamp_ntz",
+      "native_sql": "SELECT l_orderkey,l_linenumber,ARROW_CAST(parser_timestamp_input,'Timestamp(Microsecond, None)') AS result FROM bench",
+      "spark_sql": "SELECT l_orderkey,l_linenumber,CAST(parser_timestamp_input AS TIMESTAMP_NTZ) AS result FROM bench",
+      "ordered": false,
+      "related_issues": [],
+      "reference": "native",
+      "expected_arrow_type": "Timestamp(us)",
+      "input_column": "parser_timestamp_input"
+    },
+    {
+      "id": "interval_year_month",
+      "native_sql": "SELECT l_orderkey,l_linenumber,ARROW_CAST(parser_year_month_input,'Interval(YearMonth)') AS result FROM bench",
+      "spark_sql": "SELECT l_orderkey,l_linenumber,CAST(parser_year_month_input AS INTERVAL YEAR TO MONTH) AS result FROM bench",
+      "ordered": false,
+      "related_issues": [],
+      "reference": "native",
+      "expected_arrow_type": "Interval(YearMonth)",
+      "input_column": "parser_year_month_input"
+    },
+    {
+      "id": "interval_day_time",
+      "native_sql": "SELECT l_orderkey,l_linenumber,parser_day_time_input AS result FROM bench",
+      "spark_sql": "SELECT l_orderkey,l_linenumber,CAST(parser_day_time_input AS INTERVAL DAY TO SECOND) AS result FROM bench",
+      "ordered": false,
+      "related_issues": [],
+      "reference": "projection",
+      "expected_arrow_type": "Duration(us)",
+      "input_column": "parser_day_time_input"
+    },
+    {
+      "id": "interval_calendar",
+      "native_sql": "SELECT l_orderkey,l_linenumber,ARROW_CAST(parser_calendar_input,'Interval(MonthDayNano)') AS result FROM bench",
+      "spark_sql": "SELECT l_orderkey,l_linenumber,CAST(parser_calendar_input AS INTERVAL) AS result FROM bench",
+      "ordered": false,
+      "related_issues": [],
+      "reference": "native",
+      "expected_arrow_type": "Interval(MonthDayNano)",
+      "input_column": "parser_calendar_input"
+    },
+    {
+      "id": "date_format_string",
+      "native_sql": "SELECT l_orderkey,l_linenumber,TO_CHAR(ARROW_CAST(parser_timestamp_input,'Timestamp(Microsecond, Some(\"UTC\"))'),'%Y/%m/%d %H:%M') AS result FROM bench",
+      "spark_sql": "SELECT l_orderkey,l_linenumber,DATE_FORMAT(parser_timestamp_input,'yyyy/MM/dd HH:mm') AS result FROM bench",
+      "ordered": false,
+      "related_issues": [],
+      "reference": "native",
+      "expected_arrow_type": "Utf8",
+      "input_column": "parser_timestamp_input"
+    },
+    {
+      "id": "interval_day_time_input",
+      "native_sql": "SELECT l_orderkey,l_linenumber,parser_day_time_input AS result FROM bench",
+      "spark_sql": "SELECT l_orderkey,l_linenumber,parser_day_time_input AS result FROM bench",
+      "ordered": false,
+      "related_issues": [],
+      "reference": "control",
+      "expected_arrow_type": "string",
+      "input_column": "parser_day_time_input"
+    }
+  ],
+  "input_columns": {
+    "parser_date_input": "CONCAT(SUBSTRING(CAST(l_shipdate AS VARCHAR),1,4),'-2-9')",
+    "parser_timestamp_input": "CONCAT(CAST(l_shipdate AS VARCHAR),' 12:34:56')",
+    "parser_year_month_input": "CONCAT(CAST(l_linenumber AS VARCHAR),' months')",
+    "parser_day_time_input": "CONCAT(CAST(l_linenumber AS VARCHAR),' days 2 hours')",
+    "parser_calendar_input": "CONCAT(CAST(l_linenumber AS VARCHAR),' months 1 day 2 seconds')"
+  }
+}
