@@ -23,6 +23,7 @@ PREFIX = "parsers-1389"
 IDS = ("date_fallback", "timestamp_ltz", "timestamp_ntz", "interval_year_month",
        "interval_day_time", "interval_calendar", "date_format_string", "interval_day_time_input")
 PROJECTION = ("interval_day_time", "interval_day_time_input")
+INTERVALS = ("interval_year_month", "interval_day_time", "interval_calendar", "interval_day_time_input")
 MODES = ("native", "spark-off", "spark-on")
 PRODUCT_PATHS = ("Cargo.toml", "Cargo.lock", "crates/delta-arrow-reader-core",
                  "crates/delta-arrow-reader-cli", "crates/delta-arrow-reader-python",
@@ -73,6 +74,16 @@ def load_and_validate_workload():
         " FROM raw_lineitem", "," + ",".join(additions) + " FROM raw_lineitem")
     assert manifest["queries"][4]["input_column"] == manifest["queries"][-1]["input_column"]
     assert all(query["ordered"] is False and query["related_issues"] == [] for query in manifest["queries"])
+    counts = execution.read(SUITE / "interval-input-count.json")
+    assert counts["source_rows"] == 6_001_215 and counts["interval_rows"] == 8_184
+    assert counts["null_rows"] == 90 and counts["keys_unique"] and counts["line_numbers_in_1_to_7"]
+    assert counts["predicate"] == "l_orderkey BETWEEN 1 AND 8192"
+    for query in manifest["queries"]:
+        predicate = counts["predicate"] if query["id"] in INTERVALS else None
+        assert query["input_predicate"] == predicate
+        assert query["expected_rows"] == counts["interval_rows" if predicate else "source_rows"]
+        suffix = " FROM bench" + (" WHERE " + predicate if predicate else "")
+        assert query["native_sql"].endswith(suffix) and query["spark_sql"].endswith(suffix)
     original_schedule = execution.read(SUITE.parent / "casts/schedule.json")
     for key, value in original_schedule.items():
         if key not in ("runs", "schedule_timeout_seconds", "preflight_timeout_seconds"):
@@ -87,7 +98,7 @@ def command(binary, *args):
 
 
 def bound_hashes():
-    paths = [SUITE / name for name in ("queries.json", "schedule.json", "run.py")]
+    paths = [SUITE / name for name in ("queries.json", "schedule.json", "run.py", "interval-input-count.json")]
     paths += [WORKSPACE / path for path in (
         "benches/execution.rs", "benches/execution/run.py", "benches/execution/summarize.py",
         "benches/strings/run.py", "tests/support/delta_reads.rs", "tests/support/spark_results.rs",
@@ -123,6 +134,8 @@ def expected_type(query, result):
 
 def preflight(binary, snapshot, destination, manifest, schedule):
     fixture = strings.check_fixture(snapshot)
+    counts = execution.read(SUITE / "interval-input-count.json")
+    assert counts["source_rows"] == fixture["rows"]
     deadline = time.monotonic() + schedule["preflight_timeout_seconds"]
     check = execution.invoke(command(binary, "check"), destination / "self-check",
                              execution.remaining_timeout(deadline, 30), schedule["preflight_address_space_bytes"])
@@ -148,8 +161,8 @@ def preflight(binary, snapshot, destination, manifest, schedule):
                                                      fromfile=left_mode, tofile=right_mode))
             (destination / name / (left_mode + "-" + right_mode + ".plan.diff")).write_text(difference)
             proof, reason = comparison_failure(binary, left, right, destination / name / ("compare-" + right_mode), deadline, schedule)
-            if proof["equal"] and left["rows"] != fixture["rows"]:
-                reason = "row count differs from the full SF1 input"
+            if proof["equal"] and left["rows"] != query["expected_rows"]:
+                reason = "row count differs from the complete declared input"
             if not all(expected_type(query, output) for output in (left, right)):
                 reason = "executed Arrow type differs from the declared shape"
             comparisons.append(dict(proof, id=name, left=left_mode, right=right_mode))
@@ -157,7 +170,7 @@ def preflight(binary, snapshot, destination, manifest, schedule):
                 assert reason is None, f"Spark-only ANSI outcomes differ: {name}: {reason}"
             elif reason:
                 failures.append(dict(configuration=right_mode, reason=reason))
-        assert len({result["rows"] for result in outputs.values()}) != 1 or next(iter(outputs.values()))["rows"] == fixture["rows"], "all outputs have the same incorrect fixture row count"
+        assert len({result["rows"] for result in outputs.values()}) != 1 or next(iter(outputs.values()))["rows"] == query["expected_rows"], "all outputs have the same incorrect declared input row count"
         if failures:
             excluded[name] = failures
         else:
@@ -166,13 +179,14 @@ def preflight(binary, snapshot, destination, manifest, schedule):
     indexed = {(result["id"], result["configuration"]): result for result in results}
     for mode in MODES[1:]:
         execution.require_same_source_io(indexed[PROJECTION[0], mode]["source_io"], indexed[PROJECTION[1], mode]["source_io"])
-    full = dict(status="complete", results=results, comparisons=comparisons,
+    full = dict(status="complete", results=results, comparisons=comparisons, input_count_reference=counts,
                 eligible_shapes=eligible, excluded_shapes=excluded)
     strings.write_json(destination / "preflight.json", full)
     with (REPORTS / (PREFIX + "-preflight.json.gz")).open("xb") as output:
         with gzip.GzipFile(fileobj=output, mode="wb", mtime=0) as compressed:
             compressed.write((json.dumps(full, indent=2) + "\n").encode())
     receipt = dict(status="complete", baseline_commit=BASELINE, product_source_objects=product_source_objects(),
+                   input_count_reference=counts,
                    binary_sha256=execution.digest(binary), snapshot_root=str(snapshot),
                    snapshot_log_sha256=fixture["derived_delta_log_sha256"], file_hashes=bound_hashes(),
                    eligible_shapes=eligible, excluded_shapes=excluded,
@@ -196,6 +210,10 @@ def validate_receipt(binary, snapshot):
     assert set(receipt["eligible_shapes"]) | set(receipt["excluded_shapes"]) == set(IDS)
     assert not set(receipt["eligible_shapes"]) & set(receipt["excluded_shapes"])
     assert set(PROJECTION) <= set(receipt["eligible_shapes"])
+    assert receipt["input_count_reference"] == execution.read(SUITE / "interval-input-count.json")
+    for query in execution.read(SUITE / "queries.json")["queries"]:
+        if query["id"] in receipt["eligible_shapes"]:
+            assert receipt["expected_rows"][query["id"]] == {mode: query["expected_rows"] for mode in modes(query["id"])}
     return receipt
 
 

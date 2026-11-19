@@ -15,6 +15,56 @@ before timing, rebuild that exact source and independently verify its identity.
 A clean tree alone does not release timing. There are no pilot SQL timings or
 unchanged reruns; an operational failure preserves partial evidence and stops.
 
+## Amendment after the full-input interval failure
+
+The first preflight at `fe91cc8b6c2314065b78b246804ab391ba051901`
+completed ten exports and six exact native/Spark date/timestamp comparisons.
+It then stopped on `interval_year_month` with ANSI off: the process exited
+with SIGABRT (-6), reporting a failed 4,864-byte allocation under the original
+16 GiB preflight address-space limit. The full log and partial exports remain
+under `1389/pr1-preflight` and `1389/pr1-preflight.log` in the external evidence
+root named below. No timing collection ran. This operational failure is retained as
+evidence; it is not a semantic exclusion or an interval performance number.
+
+The coordinator's separately specified untimed allocation probe used the exact
+release analyzer from that build, ordinary `2 months` text, no retained results,
+separate processes, affinity 2-5, a 2 GiB address limit and a 60-second limit.
+Across 4,096 calls, interval VmSize grew from 7,080 to 65,960 KiB, about
+14.375 KiB per call; RSS/HWM also grew. The date fallback control's VmSize stayed
+at 7,080 KiB. The probe and logs remain under `1389/allocation-diagnostic`.
+This observes retained memory after repeated parsing. Source strongly identifies
+owned cycles in the constructed recursive graph; it does not attribute every
+observed byte to a particular allocation.
+
+This amendment fixes the interval input predicate to
+`l_orderkey BETWEEN 1 AND 8192` for all three interval shapes and their day-time
+projection control. It keeps real SF1 rows and original input/NULL expressions.
+There is no LIMIT, resampling, regenerated fixture, memory-cap increase or product
+change. A fully decoded existing native date export independently establishes
+exactly 8,184 selected key/line pairs, including 90 rows whose interval input is
+NULL. The full export contained 6,001,215 rows; selected key/line pairs were
+unique, with line numbers 1-7. The
+[count proof](../parsers/interval-input-count.json) binds the original IPC and
+independent decoder source SHA-256 values and raw result path. The coordinator
+and independent reviewer verify those historical bytes as provenance before
+this amendment is committed. Their external paths are not runtime prerequisites
+for reproducing the benchmark.
+
+The domain gives an absolute row ceiling of 8,192 keys times seven lines,
+57,344 rows. Four executions per timed process give at most 229,376 interval
+parser calls before NULL skips. Extrapolating the observed probe slope gives
+about 3.15 GiB retained virtual memory at that ceiling, below the unchanged
+12 GiB measured-process cap. The actual subset has 32,376 non-NULL calls across
+four executions, suggesting about 455 MiB by the same estimate. These are sizing
+estimates, not measured SQL peaks or guarantees; preflight still stops on any
+operational failure. Actual batches and memory peaks must come from execution
+evidence. DATE, both TIMESTAMP shapes and date_format keep all 6,001,215 rows.
+
+Review and commit this changed protocol, manifest, count proof and controller
+before rebuilding or resuming preflight in a new evidence directory. The first
+failed preflight remains immutable. The fixed timing order and all resource
+limits below stay unchanged, and no valid timing run is repeated.
+
 ## Fixed workload and references
 
 The [manifest](../parsers/queries.json) contains seven parser shapes and one
@@ -113,15 +163,23 @@ repository root:
 
 ```sh
 python3 crates/delta-arrow-reader-spark-sql/benches/parsers/run.py --check
-python3 crates/delta-arrow-reader-spark-sql/benches/parsers/run.py preflight BINARY /home/hanbo/.local/share/delta-arrow-reader-review/measurements-2026-11-18/1380/delta-snapshot /home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1389/preflight
+python3 crates/delta-arrow-reader-spark-sql/benches/parsers/run.py preflight BINARY /home/hanbo/.local/share/delta-arrow-reader-review/measurements-2026-11-18/1380/delta-snapshot /home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1389/pr1-preflight-reduced
 ```
 
 Export 22 complete results: six native-reference shapes in native/off/on, plus
 the day-time shape and control in both Spark modes. Decode 12 native/Spark pairs
 and two independent off/on pairs. Check all values, NULLs, multiplicities, rows
-and executed SQL types; require 6,001,215 rows, two output partitions, completed
-source counters, identical observed paths and exact received/range byte totals.
-The day-time shape and control must also have identical source traffic.
+and executed SQL types. Require exactly 8,184 rows for each interval/control
+export and all 6,001,215 rows for every date/timestamp/date_format export,
+matching the independently verified complete-input count proof. Bind the
+committed proof's hash and contents into both new receipts; verify fixture rows
+and all new output counts without requiring the old external evidence files.
+A completed decoded native/Spark row mismatch excludes the whole
+shape; if every output has the same incorrect declared count, stop as an invalid
+workload. This is an exact per-shape count check, not a partial-result allowance.
+Require two output partitions, completed source counters, identical observed
+paths and exact received/range byte totals for each semantic pair. The day-time
+shape and control must also have identical source traffic.
 
 Retain actual Arrow storage/unit/zone types separately from SQL types, IPC
 checksums, every read range, operator counters, raw plans before export sorting,
@@ -168,7 +226,10 @@ python3 crates/delta-arrow-reader-spark-sql/benches/parsers/run.py summarize /ho
 ```
 
 Validate each retained sample against preflight rows, partitions and exact source
-I/O. Aggregate medians within each process, then the median of the three process
+I/O. The receipt must match the manifest's exact 8,184 or 6,001,215 count for
+every eligible shape/configuration. Use that shape's actual row denominator for
+ns/row, and label the interval results as the fixed reduced SF1 subset.
+Aggregate medians within each process, then the median of the three process
 medians; retain their minimum, maximum and IQR. For native-reference shapes the
 noise floor is the absolute difference between native A/B arm medians. In each
 ANSI mode the target flag is strictly `spark_time - native_time > noise`.

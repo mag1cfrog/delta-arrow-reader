@@ -18,7 +18,9 @@
       "related_issues": [],
       "reference": "native",
       "expected_arrow_type": "Date32",
-      "input_column": "parser_date_input"
+      "input_column": "parser_date_input",
+      "expected_rows": 6001215,
+      "input_predicate": null
     },
     {
       "id": "timestamp_ltz",
@@ -28,7 +30,9 @@
       "related_issues": [],
       "reference": "native",
       "expected_arrow_type": "Timestamp(us, \"UTC\")",
-      "input_column": "parser_timestamp_input"
+      "input_column": "parser_timestamp_input",
+      "expected_rows": 6001215,
+      "input_predicate": null
     },
     {
       "id": "timestamp_ntz",
@@ -38,37 +42,45 @@
       "related_issues": [],
       "reference": "native",
       "expected_arrow_type": "Timestamp(us)",
-      "input_column": "parser_timestamp_input"
+      "input_column": "parser_timestamp_input",
+      "expected_rows": 6001215,
+      "input_predicate": null
     },
     {
       "id": "interval_year_month",
-      "native_sql": "SELECT l_orderkey,l_linenumber,ARROW_CAST(parser_year_month_input,'Interval(YearMonth)') AS result FROM bench",
-      "spark_sql": "SELECT l_orderkey,l_linenumber,CAST(parser_year_month_input AS INTERVAL YEAR TO MONTH) AS result FROM bench",
+      "native_sql": "SELECT l_orderkey,l_linenumber,ARROW_CAST(parser_year_month_input,'Interval(YearMonth)') AS result FROM bench WHERE l_orderkey BETWEEN 1 AND 8192",
+      "spark_sql": "SELECT l_orderkey,l_linenumber,CAST(parser_year_month_input AS INTERVAL YEAR TO MONTH) AS result FROM bench WHERE l_orderkey BETWEEN 1 AND 8192",
       "ordered": false,
       "related_issues": [],
       "reference": "native",
       "expected_arrow_type": "Interval(YearMonth)",
-      "input_column": "parser_year_month_input"
+      "input_column": "parser_year_month_input",
+      "expected_rows": 8184,
+      "input_predicate": "l_orderkey BETWEEN 1 AND 8192"
     },
     {
       "id": "interval_day_time",
-      "native_sql": "SELECT l_orderkey,l_linenumber,parser_day_time_input AS result FROM bench",
-      "spark_sql": "SELECT l_orderkey,l_linenumber,CAST(parser_day_time_input AS INTERVAL DAY TO SECOND) AS result FROM bench",
+      "native_sql": "SELECT l_orderkey,l_linenumber,parser_day_time_input AS result FROM bench WHERE l_orderkey BETWEEN 1 AND 8192",
+      "spark_sql": "SELECT l_orderkey,l_linenumber,CAST(parser_day_time_input AS INTERVAL DAY TO SECOND) AS result FROM bench WHERE l_orderkey BETWEEN 1 AND 8192",
       "ordered": false,
       "related_issues": [],
       "reference": "projection",
       "expected_arrow_type": "Duration(us)",
-      "input_column": "parser_day_time_input"
+      "input_column": "parser_day_time_input",
+      "expected_rows": 8184,
+      "input_predicate": "l_orderkey BETWEEN 1 AND 8192"
     },
     {
       "id": "interval_calendar",
-      "native_sql": "SELECT l_orderkey,l_linenumber,ARROW_CAST(parser_calendar_input,'Interval(MonthDayNano)') AS result FROM bench",
-      "spark_sql": "SELECT l_orderkey,l_linenumber,CAST(parser_calendar_input AS INTERVAL) AS result FROM bench",
+      "native_sql": "SELECT l_orderkey,l_linenumber,ARROW_CAST(parser_calendar_input,'Interval(MonthDayNano)') AS result FROM bench WHERE l_orderkey BETWEEN 1 AND 8192",
+      "spark_sql": "SELECT l_orderkey,l_linenumber,CAST(parser_calendar_input AS INTERVAL) AS result FROM bench WHERE l_orderkey BETWEEN 1 AND 8192",
       "ordered": false,
       "related_issues": [],
       "reference": "native",
       "expected_arrow_type": "Interval(MonthDayNano)",
-      "input_column": "parser_calendar_input"
+      "input_column": "parser_calendar_input",
+      "expected_rows": 8184,
+      "input_predicate": "l_orderkey BETWEEN 1 AND 8192"
     },
     {
       "id": "date_format_string",
@@ -78,17 +90,21 @@
       "related_issues": [],
       "reference": "native",
       "expected_arrow_type": "Utf8",
-      "input_column": "parser_timestamp_input"
+      "input_column": "parser_timestamp_input",
+      "expected_rows": 6001215,
+      "input_predicate": null
     },
     {
       "id": "interval_day_time_input",
-      "native_sql": "SELECT l_orderkey,l_linenumber,parser_day_time_input AS result FROM bench",
-      "spark_sql": "SELECT l_orderkey,l_linenumber,parser_day_time_input AS result FROM bench",
+      "native_sql": "SELECT l_orderkey,l_linenumber,parser_day_time_input AS result FROM bench WHERE l_orderkey BETWEEN 1 AND 8192",
+      "spark_sql": "SELECT l_orderkey,l_linenumber,parser_day_time_input AS result FROM bench WHERE l_orderkey BETWEEN 1 AND 8192",
       "ordered": false,
       "related_issues": [],
       "reference": "control",
       "expected_arrow_type": "string",
-      "input_column": "parser_day_time_input"
+      "input_column": "parser_day_time_input",
+      "expected_rows": 8184,
+      "input_predicate": "l_orderkey BETWEEN 1 AND 8192"
     }
   ],
   "input_columns": {

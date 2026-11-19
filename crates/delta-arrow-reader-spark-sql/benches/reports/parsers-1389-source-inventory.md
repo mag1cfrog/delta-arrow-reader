@@ -30,6 +30,24 @@ call. The complete macro invocation list is:
 The `NonZeroValues` family rule is part of this runtime chain. SQL interval
 literals use their separate written-unit rule.
 
+The token parser construction also reaches
+`create_interval_literal_parser -> interval_literal -> expression` in
+[sail-sql-parser/src/parser.rs](../../vendor/sail/crates/sail-sql-parser/src/parser.rs).
+`expression` declares and defines mutually recursive expression/query/type/table
+parsers with owned clones. In pinned Chumsky 0.12.0, `Recursive::declare` creates
+an owned Rc, `clone` preserves owned references and `define` stores the graph;
+these references form cycles. The separate `recursive()` constructor uses weak
+references during its callback and is not the construction used here.
+
+The first full-input interval preflight aborted on an allocation failure.
+An isolated release probe, retaining no parse outputs, observed interval memory
+growing across 4,096 calls while a date fallback control stayed flat in VmSize.
+This confirms observed retention and strongly supports the graph-cycle source
+attribution; it does not prove every retained byte came from that graph. The
+[protocol amendment](parsers-1389-protocol.md) records the failure, diagnostic
+method and fixed reduced interval input. No parser or dependency change is made
+in this measurement PR.
+
 ## Direct row consumers
 
 These are all production UDF consumers of those parser entry points. NULL
