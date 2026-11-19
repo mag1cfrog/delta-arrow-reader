@@ -1,0 +1,416 @@
+{
+  "status": "complete",
+  "baseline_commit": "298015f9def26cc97a271bdbc0316e64083d7874",
+  "product_source_objects": {
+    "Cargo.toml": "86ce253ff3be80fac714b3c5fa3ac71f848c6661",
+    "Cargo.lock": "ec257172d1bf34c53aa4a3b77f0f7c86732ab678",
+    "crates/delta-arrow-reader-core": "7a5a018132ef8bbdeb81a0416c70bdc010b4f6e2",
+    "crates/delta-arrow-reader-cli": "528060d52d55713d7002375e23f463b931f298d2",
+    "crates/delta-arrow-reader-python": "fc34cc502915f456018c8f6886752b01e1dd7fe0",
+    "crates/delta-arrow-reader-spark-sql/Cargo.toml": "18dbe54f18196560450b62a54ca8fc067f7540fd",
+    "crates/delta-arrow-reader-spark-sql/Cargo.lock": "4d79889a1593a30ec517fe7dd741b69f9c8dc1d8",
+    "crates/delta-arrow-reader-spark-sql/src": "3c1911f6e3eafc6c02709cdee8f82a4a8aae437e",
+    "crates/delta-arrow-reader-spark-sql/vendor": "ed69290258a67fa827d5c7b3ba8f8840fdf8828c"
+  },
+  "input_count_reference": {
+    "source_rows": 6001215,
+    "interval_rows": 8184,
+    "null_rows": 90,
+    "min_order_key": 1,
+    "max_order_key": 8192,
+    "keys_unique": true,
+    "line_numbers_in_1_to_7": true,
+    "predicate": "l_orderkey BETWEEN 1 AND 8192",
+    "source_commit": "fe91cc8b6c2314065b78b246804ab391ba051901",
+    "source_ipc_path": "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1389/pr1-preflight/date_fallback/native/result.arrow",
+    "source_ipc_sha256": "5ab7362cfce9b2a2875cefcf834d18c3edeeac74aa60c4041595e395ff724a06",
+    "decoder_source_path": "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1389/interval-subset-reference/count.rs",
+    "decoder_source_sha256": "2226921e4ffc8d79dcddec947bd2fdf6bc1cb7a6fd56278f77db17bd318743d7",
+    "raw_result_path": "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1389/interval-subset-reference/result.json"
+  },
+  "binary_sha256": "5b8c6152ce210a427e2610739237487c80b07d89a17c8aa15a3626bb3aa8265c",
+  "snapshot_root": "/home/hanbo/.local/share/delta-arrow-reader-review/measurements-2026-11-18/1380/delta-snapshot",
+  "snapshot_log_sha256": "21d2257a5c6d201f74c2c3516a134095c2f4efb680595cbd56228ae6581e71cb",
+  "file_hashes": {
+    "benches/parsers/queries.json": "4f3d9a0a5f7755b1524fcb2ca9641b97c0b3f0b232ab9923141176869c5c2359",
+    "benches/parsers/schedule.json": "301fb5ae06d7ee99f65c17658f595038a40f0a27b58b55eb34b6cddade389996",
+    "benches/parsers/run.py": "55a860df4e814849223d90341aae6c7be8258e47fc962bbc8800bff1ce4fd328",
+    "benches/parsers/interval-input-count.json": "6a03edc86f603d3e22fd76e5c37a42ba3b52c0377dfc71c70942571d8865f4d3",
+    "benches/execution.rs": "ca5aada758dddb2051c27d8cc5c62c33d3f7ed3e78d2d0e9823ac5778b7f3833",
+    "benches/execution/run.py": "9406949f27193dc04540bb1265a0790d4fa191ef28c85829de5bcd2166057324",
+    "benches/execution/summarize.py": "0cbad0b6d1128bb4aeb7d7c52016f4529722090a98e8d1c98ff9fbc919bf6bd4",
+    "benches/strings/run.py": "ee34b1e1de1f2c1d2ea466ec1a0358e4d54b870dcd23448f8239664f37ebcf7b",
+    "tests/support/delta_reads.rs": "b2fac8a774ab2c5bb8e03199600f34bf66ad7dd55741ce92801e75a25667bf5c",
+    "tests/support/spark_results.rs": "c4a1a5c92c0d11920e0aa8672608df0f42e422ad092fb7619a1abe29e5de779e",
+    "Cargo.toml": "6f74a106a253d727bd43ec6ba245fc1e7ed548472d80180b9717007a9a86932e",
+    "Cargo.lock": "75061d138984fcd08fe4543c0cfa3ffc52fb928e54423feceaff5ec08a2e8fe8",
+    "benches/reports/execution-1380-fixture.json": "9eb1e98be9381de74bd8908ac540c91eec6f0b0862089d1655baca537f43301d",
+    "benches/reports/parsers-1389-reuse-protocol.md": "bfaed77fd7bb2b0dc9a2fd8f2c93ca469d5466f4793977b5fe55dad77a5800d3",
+    "benches/reports/parsers-1389-source-inventory.md": "6350656e8cf68839971d0d1dfb51076fcde06b3d97de4a662f8c5b290ebdbd0a",
+    "benches/reports/parsers-1389-reuse-preflight.json.gz": "1dac8244650ee96372158d0882f4181710492751e171fae6acbd28f3514f5beb",
+    "benches/reports/parsers-1389-preflight.json.gz": "2f3f9ddc44242cc9ede5ccfec446c51a3033740e38f76dc80cef2b6dcbc833ed",
+    "benches/parsers/preflight-receipt.json": "73a78100d3900f963bfa218405525b562c29dfb803b617311563b2c37f7eac77",
+    "UPSTREAM.md": "6661ecaf1248f32cf3a8598239cf6e2bd17093121d311a5f5d84bf575338871a",
+    "tests/parser_reuse.rs": "6f34ac6c3752a7ddc387774e912f46790dd7ddea1a07963da4fdecbd7968131a",
+    "tests/fixtures/row-parser-1389-original.rs": "64e6d020c51e7ed54bb41b171e4bf906bab41e455d08dbc7ef7cdd820ee79cd4"
+  },
+  "eligible_shapes": [
+    "date_fallback",
+    "timestamp_ltz",
+    "timestamp_ntz",
+    "interval_year_month",
+    "interval_day_time",
+    "interval_calendar",
+    "date_format_string",
+    "interval_day_time_input"
+  ],
+  "excluded_shapes": {},
+  "preflight_result_count": 22,
+  "exact_comparison_count": 14,
+  "expected_rows": {
+    "date_fallback": {
+      "native": 6001215,
+      "spark-off": 6001215,
+      "spark-on": 6001215
+    },
+    "timestamp_ltz": {
+      "native": 6001215,
+      "spark-off": 6001215,
+      "spark-on": 6001215
+    },
+    "timestamp_ntz": {
+      "native": 6001215,
+      "spark-off": 6001215,
+      "spark-on": 6001215
+    },
+    "interval_year_month": {
+      "native": 8184,
+      "spark-off": 8184,
+      "spark-on": 8184
+    },
+    "interval_day_time": {
+      "spark-off": 8184,
+      "spark-on": 8184
+    },
+    "interval_calendar": {
+      "native": 8184,
+      "spark-off": 8184,
+      "spark-on": 8184
+    },
+    "date_format_string": {
+      "native": 6001215,
+      "spark-off": 6001215,
+      "spark-on": 6001215
+    },
+    "interval_day_time_input": {
+      "spark-off": 8184,
+      "spark-on": 8184
+    }
+  },
+  "expected_source_io": {
+    "date_fallback": {
+      "native": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 25585934,
+        "recorded_range_bytes": 25585934
+      },
+      "spark-off": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 25585934,
+        "recorded_range_bytes": 25585934
+      },
+      "spark-on": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 25585934,
+        "recorded_range_bytes": 25585934
+      }
+    },
+    "timestamp_ltz": {
+      "native": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 25585934,
+        "recorded_range_bytes": 25585934
+      },
+      "spark-off": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 25585934,
+        "recorded_range_bytes": 25585934
+      },
+      "spark-on": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 25585934,
+        "recorded_range_bytes": 25585934
+      }
+    },
+    "timestamp_ntz": {
+      "native": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 25585934,
+        "recorded_range_bytes": 25585934
+      },
+      "spark-off": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 25585934,
+        "recorded_range_bytes": 25585934
+      },
+      "spark-on": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 25585934,
+        "recorded_range_bytes": 25585934
+      }
+    },
+    "interval_year_month": {
+      "native": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 25946748,
+        "recorded_range_bytes": 25946748
+      },
+      "spark-off": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 25946748,
+        "recorded_range_bytes": 25946748
+      },
+      "spark-on": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 25946748,
+        "recorded_range_bytes": 25946748
+      }
+    },
+    "interval_day_time": {
+      "spark-off": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 25946748,
+        "recorded_range_bytes": 25946748
+      },
+      "spark-on": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 25946748,
+        "recorded_range_bytes": 25946748
+      }
+    },
+    "interval_calendar": {
+      "native": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 25946748,
+        "recorded_range_bytes": 25946748
+      },
+      "spark-off": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 25946748,
+        "recorded_range_bytes": 25946748
+      },
+      "spark-on": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 25946748,
+        "recorded_range_bytes": 25946748
+      }
+    },
+    "date_format_string": {
+      "native": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 25585934,
+        "recorded_range_bytes": 25585934
+      },
+      "spark-off": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 25585934,
+        "recorded_range_bytes": 25585934
+      },
+      "spark-on": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 25585934,
+        "recorded_range_bytes": 25585934
+      }
+    },
+    "interval_day_time_input": {
+      "spark-off": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 25946748,
+        "recorded_range_bytes": 25946748
+      },
+      "spark-on": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 25946748,
+        "recorded_range_bytes": 25946748
+      }
+    }
+  },
+  "product_baseline_commit": "be3c663a8380d5094cb52003f351d5b9a5d48383",
+  "baseline_comparison_count": 22
+}
