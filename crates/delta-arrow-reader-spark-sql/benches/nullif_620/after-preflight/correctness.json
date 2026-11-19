@@ -1,0 +1,97 @@
+{
+  "scope": "Captured release results, decoded equality receipts, hashes and native comparisons.",
+  "build_commit": "46bfb58d572f86a29dd970436b4c61b5ee72aa54",
+  "binary_sha256": "951d1054e232b3647ef1a1d4b66009b7d00c9a300f701afee99ba0a1b3d4b689",
+  "full_workspace": {
+    "gate_exits": [
+      0,
+      0,
+      0
+    ],
+    "passed": 3180,
+    "failed": 0,
+    "ignored": [
+      [
+        "binary:floating_extrema",
+        "floating_extrema_bounded_cost",
+        "ignored"
+      ],
+      [
+        "doc:sail_function",
+        "vendor/sail/crates/sail-function/src/aggregate/mod.rs - aggregate::interval_none (line 39)",
+        "ignored"
+      ],
+      [
+        "doc:sail_function",
+        "vendor/sail/crates/sail-function/src/aggregate/mod.rs - aggregate::match_string_type (line 14)",
+        "ignored"
+      ]
+    ],
+    "unchanged_original_outcomes": 3178,
+    "new_named_outcomes": [
+      [
+        "binary:nullif_selection_620",
+        "provider_local_guards_and_comparability_keep_nullif_outcomes",
+        "ok"
+      ],
+      [
+        "binary:sail_plan",
+        "function::scalar::conditional::nullif::tests::selection_620_tests::malformed_left_and_unavailable_right_keep_old_outcomes",
+        "ok"
+      ],
+      [
+        "binary:sail_plan",
+        "function::scalar::conditional::nullif::tests::selection_620_tests::double_selection_preserves_original_bits_types_nulls_and_forms",
+        "ok"
+      ],
+      [
+        "binary:sail_plan",
+        "function::scalar::conditional::nullif::tests::selection_620_tests::other_types_and_required_comparison_errors_keep_the_original_selection",
+        "ok"
+      ],
+      [
+        "binary:sail_plan",
+        "function::scalar::conditional::nullif::tests::selection_620_tests::routing_and_effects_distinguish_opt_in_default_and_computed_operands",
+        "ok"
+      ]
+    ],
+    "named_inventory_sha256": "50121f826984fac87d7bc7a2edcf1c328713362622d796266d513f1e70ae27e4",
+    "sql_golden_comparison": "passed",
+    "gate_source": "e12a66d37a2dd846f5d98c44288c7c033cd05c18",
+    "candidate_file_hashes": {
+      "crates/delta-arrow-reader-spark-sql/UPSTREAM.md": "c5776bb298fa3bb1b9f73b68f742ef172e8bfd0769806d118704ba363ca1c10e",
+      "crates/delta-arrow-reader-spark-sql/vendor/dependencies/datafusion-expr/src/udf.rs": "f5b17950948facd878fe3ffa982c02f66ae742e94dec50d1bf7ecb162c112416",
+      "crates/delta-arrow-reader-spark-sql/vendor/dependencies/datafusion-physical-expr/src/scalar_function.rs": "58d414752b5f04c60a9d2074ab1aba9b11d0aa3f2c4538b304140f2eaa393e1c",
+      "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional/nullif.rs": "d53b46b88b1b225eadbfd7c45b8a30161aed7c0aeb9fe656c5af5ea1c96ade0e",
+      "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/tests/fixtures/nullif-selection-620-original.rs": "8efbf9825fd4613ab555cac245681e916c5b84b13e34dd0ae01c2a6e52ea766b"
+    }
+  },
+  "families": [
+    {
+      "family": "nullif",
+      "receipt_sha256": "22b15ce77987ea15e649aa41c4e3fb40ac7329765bcaa0c26c011681d68426e5",
+      "original_receipt_sha256": "47c22c6e55fca18197ad71c6b7188cc30a56ef754216d8a1dcc25a61365fea25",
+      "configurations": 216,
+      "native_pairs": 144,
+      "original_result_matches": 216,
+      "effects": 16,
+      "executed_type": "Float64",
+      "operator_partitions": 1,
+      "formula_errors": 0,
+      "excluded_cells": 0
+    },
+    {
+      "family": "checked",
+      "receipt_sha256": "c34f7fa61c286f4b305a39eb7c1e77bf8e2e66fcb0f60e37617475985ae8b848",
+      "original_receipt_sha256": "667e574a7c731598630cfddb24c4d7a42fa91e5c42cd9b8d2163e990da4ab400",
+      "configurations": 108,
+      "native_pairs": 72,
+      "original_result_matches": 108,
+      "effects": 0,
+      "executed_type": "Int32",
+      "operator_partitions": 1,
+      "formula_errors": 0,
+      "excluded_cells": 0
+    }
+  ]
+}

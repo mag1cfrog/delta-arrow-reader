@@ -1,0 +1,40 @@
+{
+  "exit_code": 0,
+  "elapsed_seconds": 658.6942811012268,
+  "commit": "46bfb58d572f86a29dd970436b4c61b5ee72aa54",
+  "artifact": {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/hanbo/repo/delta-arrow-reader-costs-168/crates/delta-arrow-reader-spark-sql#0.1.0",
+    "manifest_path": "/home/hanbo/repo/delta-arrow-reader-costs-168/crates/delta-arrow-reader-spark-sql/Cargo.toml",
+    "target": {
+      "kind": [
+        "bench"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "nullif_620",
+      "src_path": "/home/hanbo/repo/delta-arrow-reader-costs-168/crates/delta-arrow-reader-spark-sql/benches/nullif_620.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": false
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 1,
+      "debug_assertions": false,
+      "overflow_checks": false,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/home/hanbo/.cache/delta-arrow-reader/costs-168-2026-11-19/release/deps/nullif_620-51b171d35e6bc289"
+    ],
+    "executable": "/home/hanbo/.cache/delta-arrow-reader/costs-168-2026-11-19/release/deps/nullif_620-51b171d35e6bc289",
+    "fresh": false
+  },
+  "sealed_binary": "/home/hanbo/.cache/delta-arrow-reader/costs-168-2026-11-19/620-artifacts/nullif-candidate",
+  "sealed_sha256": "951d1054e232b3647ef1a1d4b66009b7d00c9a300f701afee99ba0a1b3d4b689",
+  "sealed_bytes": 1245141072
+}

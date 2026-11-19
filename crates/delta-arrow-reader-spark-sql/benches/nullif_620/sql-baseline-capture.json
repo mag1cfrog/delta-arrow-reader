@@ -1,0 +1,46 @@
+{
+  "source_commit": "594c3134c9eaa53b771bbcc55c25aae6df685f51",
+  "original_engine_reference": "d69d6bc3c9b50c76bd645287d28803447c864390",
+  "original_engine_files": [
+    {
+      "path": "crates/delta-arrow-reader-spark-sql/UPSTREAM.md",
+      "sha256": "da3ddfce185d91e078fb1aba10b163a0db99e815394592d44441437225892ec2"
+    },
+    {
+      "path": "crates/delta-arrow-reader-spark-sql/vendor/dependencies/datafusion-expr/src/udf.rs",
+      "sha256": "23aa4c60d6b4d3d50835993bd535813a09f901b420ce6ff16714d7d750b2fa5b"
+    },
+    {
+      "path": "crates/delta-arrow-reader-spark-sql/vendor/dependencies/datafusion-physical-expr/src/scalar_function.rs",
+      "sha256": "7d1aca4cdf5515af984caa44636e45287903a7d177be8a4d0e901babcc360853"
+    },
+    {
+      "path": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional/nullif.rs",
+      "sha256": "9ce1291287c7985ec6b55b7cd6687b4eafb9148bca54c1def231eabf2efd5b51"
+    }
+  ],
+  "driver_sha256": "0873d13726c364b288bfc45eea702855ebe039ee78ca390f9f59ba8f2ee94350",
+  "input_sha256": "c414471506d7c5174f0bea45c6c8677a5100f5377f1c2fd579ce0244c577f0d9",
+  "binary_sha256": "4ea288e17efd1fc66c2d1017eead3527813393d6bdbcb805dc1f699cc6bded07",
+  "command": [
+    "/home/hanbo/.cache/delta-arrow-reader/costs-168-2026-11-19/620-artifacts/nullif-sql-original",
+    "--exact",
+    "provider_local_guards_and_comparability_keep_nullif_outcomes",
+    "--nocapture"
+  ],
+  "exit_code": 0,
+  "kind": "correctness_only_original_sql_capture",
+  "observations": 48,
+  "success": 36,
+  "errors": 12,
+  "phase_counts": {
+    "execution": 39,
+    "planning": 6,
+    "physical-planning": 3
+  },
+  "fixture_sha256": "3e7e2b246965ecc6b533b7aa155f912570e9526a0b9c7b8b8f1b7122d9416bff",
+  "fixture_path": "tests/fixtures/nullif-selection-620-sql-baseline.json",
+  "original_engine_source_changes": "Only the committed test driver and input JSON differ from d69; all product/provenance bytes remain original.",
+  "candidate_restoration": "All four candidate files and frozen reference restored byte-identically, with unchanged driver/input bytes.",
+  "timing_claim": false
+}

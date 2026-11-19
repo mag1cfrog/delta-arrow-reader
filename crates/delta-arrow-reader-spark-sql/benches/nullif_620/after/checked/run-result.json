@@ -1,0 +1,12 @@
+{
+  "exit_code": 0,
+  "elapsed_seconds": 10.568924908999179,
+  "command": [
+    "python3",
+    "benches/nullif_620/run.py",
+    "measure",
+    "/home/hanbo/.cache/delta-arrow-reader/costs-168-2026-11-19/620-artifacts/nullif-candidate",
+    "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/620/checked-candidate-timing",
+    "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/620/checked-candidate-preflight/receipt.json"
+  ]
+}
