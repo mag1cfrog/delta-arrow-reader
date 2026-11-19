@@ -1,0 +1,320 @@
+{
+  "query_configurations": 54,
+  "process_records": 270,
+  "concurrency": [
+    {
+      "kind": "concurrency",
+      "id": "group_high",
+      "configuration": "native",
+      "executions": 4,
+      "group_complete_ns": 979087091,
+      "peak_pool_bytes": 897364224,
+      "process_peak_rss_bytes": 967888896,
+      "results": [
+        {
+          "rows": 1500000,
+          "execution_first_batch_ns": 950802092,
+          "execution_complete_ns": 978969463
+        },
+        {
+          "rows": 1500000,
+          "execution_first_batch_ns": 939205025,
+          "execution_complete_ns": 947691426
+        },
+        {
+          "rows": 1500000,
+          "execution_first_batch_ns": 916880015,
+          "execution_complete_ns": 923192949
+        },
+        {
+          "rows": 1500000,
+          "execution_first_batch_ns": 941504675,
+          "execution_complete_ns": 948437972
+        }
+      ],
+      "query": "group_high",
+      "process": "concurrency-group_high-native"
+    },
+    {
+      "kind": "concurrency",
+      "id": "group_high",
+      "configuration": "spark-off",
+      "executions": 4,
+      "group_complete_ns": 973609559,
+      "peak_pool_bytes": 753160896,
+      "process_peak_rss_bytes": 945147904,
+      "results": [
+        {
+          "rows": 1500000,
+          "execution_first_batch_ns": 934729163,
+          "execution_complete_ns": 940120926
+        },
+        {
+          "rows": 1500000,
+          "execution_first_batch_ns": 892869905,
+          "execution_complete_ns": 897837360
+        },
+        {
+          "rows": 1500000,
+          "execution_first_batch_ns": 958652091,
+          "execution_complete_ns": 973521455
+        },
+        {
+          "rows": 1500000,
+          "execution_first_batch_ns": 943426485,
+          "execution_complete_ns": 952715445
+        }
+      ],
+      "query": "group_high",
+      "process": "concurrency-group_high-spark-off"
+    },
+    {
+      "kind": "concurrency",
+      "id": "group_high",
+      "configuration": "spark-on",
+      "executions": 4,
+      "group_complete_ns": 977080394,
+      "peak_pool_bytes": 996324032,
+      "process_peak_rss_bytes": 1042845696,
+      "results": [
+        {
+          "rows": 1500000,
+          "execution_first_batch_ns": 931686672,
+          "execution_complete_ns": 937464693
+        },
+        {
+          "rows": 1500000,
+          "execution_first_batch_ns": 946569361,
+          "execution_complete_ns": 976996108
+        },
+        {
+          "rows": 1500000,
+          "execution_first_batch_ns": 940801700,
+          "execution_complete_ns": 957251420
+        },
+        {
+          "rows": 1500000,
+          "execution_first_batch_ns": 939603905,
+          "execution_complete_ns": 950489792
+        }
+      ],
+      "query": "group_high",
+      "process": "concurrency-group_high-spark-on"
+    },
+    {
+      "kind": "concurrency",
+      "id": "nullif_nullable",
+      "configuration": "spark-off",
+      "executions": 4,
+      "group_complete_ns": 432933233,
+      "peak_pool_bytes": 0,
+      "process_peak_rss_bytes": 184643584,
+      "results": [
+        {
+          "rows": 6001215,
+          "execution_first_batch_ns": 17535194,
+          "execution_complete_ns": 432224326
+        },
+        {
+          "rows": 6001215,
+          "execution_first_batch_ns": 10461568,
+          "execution_complete_ns": 429363923
+        },
+        {
+          "rows": 6001215,
+          "execution_first_batch_ns": 8893646,
+          "execution_complete_ns": 432405733
+        },
+        {
+          "rows": 6001215,
+          "execution_first_batch_ns": 9451963,
+          "execution_complete_ns": 428856261
+        }
+      ],
+      "query": "nullif_nullable",
+      "process": "concurrency-nullif_nullable-spark-off"
+    },
+    {
+      "kind": "concurrency",
+      "id": "nullif_nullable",
+      "configuration": "spark-on",
+      "executions": 4,
+      "group_complete_ns": 446550532,
+      "peak_pool_bytes": 0,
+      "process_peak_rss_bytes": 192319488,
+      "results": [
+        {
+          "rows": 6001215,
+          "execution_first_batch_ns": 10564820,
+          "execution_complete_ns": 446495851
+        },
+        {
+          "rows": 6001215,
+          "execution_first_batch_ns": 7675063,
+          "execution_complete_ns": 416486919
+        },
+        {
+          "rows": 6001215,
+          "execution_first_batch_ns": 11723622,
+          "execution_complete_ns": 415166878
+        },
+        {
+          "rows": 6001215,
+          "execution_first_batch_ns": 8429805,
+          "execution_complete_ns": 434757430
+        }
+      ],
+      "query": "nullif_nullable",
+      "process": "concurrency-nullif_nullable-spark-on"
+    },
+    {
+      "kind": "concurrency",
+      "id": "nullif_nullable",
+      "configuration": "native",
+      "executions": 4,
+      "group_complete_ns": 318742595,
+      "peak_pool_bytes": 0,
+      "process_peak_rss_bytes": 187092992,
+      "results": [
+        {
+          "rows": 6001215,
+          "execution_first_batch_ns": 16162776,
+          "execution_complete_ns": 308603086
+        },
+        {
+          "rows": 6001215,
+          "execution_first_batch_ns": 7797592,
+          "execution_complete_ns": 318123246
+        },
+        {
+          "rows": 6001215,
+          "execution_first_batch_ns": 10356012,
+          "execution_complete_ns": 307350801
+        },
+        {
+          "rows": 6001215,
+          "execution_first_batch_ns": 12642799,
+          "execution_complete_ns": 318662277
+        }
+      ],
+      "query": "nullif_nullable",
+      "process": "concurrency-nullif_nullable-native"
+    }
+  ],
+  "outliers": [
+    {
+      "id": "cast_strings",
+      "configuration": "spark-off",
+      "completion_flag": true,
+      "pool_flag": false,
+      "native_query_complete_ns": 688885138,
+      "spark_query_complete_ns": 1129266413,
+      "native_peak_pool_bytes": 0,
+      "spark_peak_pool_bytes": 0
+    },
+    {
+      "id": "cast_strings",
+      "configuration": "spark-on",
+      "completion_flag": true,
+      "pool_flag": false,
+      "native_query_complete_ns": 688885138,
+      "spark_query_complete_ns": 1131417318,
+      "native_peak_pool_bytes": 0,
+      "spark_peak_pool_bytes": 0
+    },
+    {
+      "id": "string_functions",
+      "configuration": "spark-on",
+      "completion_flag": true,
+      "pool_flag": false,
+      "native_query_complete_ns": 341726390,
+      "spark_query_complete_ns": 431068350,
+      "native_peak_pool_bytes": 0,
+      "spark_peak_pool_bytes": 0
+    }
+  ],
+  "related_issue_shapes": {
+    "nullif_nullable": {
+      "native": {
+        "query_complete_ns": 172135378,
+        "peak_pool_bytes": 0,
+        "above_threshold": false
+      },
+      "spark-off": {
+        "query_complete_ns": 213060050,
+        "peak_pool_bytes": 0,
+        "above_threshold": false
+      },
+      "spark-on": {
+        "query_complete_ns": 213430308,
+        "peak_pool_bytes": 0,
+        "above_threshold": false
+      }
+    },
+    "in_10": {
+      "native": {
+        "query_complete_ns": 146299537,
+        "peak_pool_bytes": 0,
+        "above_threshold": false
+      },
+      "spark-off": {
+        "query_complete_ns": 146292695,
+        "peak_pool_bytes": 0,
+        "above_threshold": false
+      },
+      "spark-on": {
+        "query_complete_ns": 146305038,
+        "peak_pool_bytes": 0,
+        "above_threshold": false
+      }
+    },
+    "in_1000": {
+      "native": {
+        "query_complete_ns": 172997639,
+        "peak_pool_bytes": 0,
+        "above_threshold": false
+      },
+      "spark-off": {
+        "query_complete_ns": 196942337,
+        "peak_pool_bytes": 0,
+        "above_threshold": false
+      },
+      "spark-on": {
+        "query_complete_ns": 180520780,
+        "peak_pool_bytes": 0,
+        "above_threshold": false
+      }
+    },
+    "mixed_boolean": {
+      "native": {
+        "query_complete_ns": 290779606,
+        "peak_pool_bytes": 0,
+        "above_threshold": false
+      },
+      "spark-off": {
+        "query_complete_ns": 279333328,
+        "peak_pool_bytes": 0,
+        "above_threshold": false
+      },
+      "spark-on": {
+        "query_complete_ns": 276640507,
+        "peak_pool_bytes": 0,
+        "above_threshold": false
+      }
+    }
+  },
+  "profile_cases": [
+    {
+      "id": "cast_strings",
+      "configuration": "spark-off"
+    },
+    {
+      "id": "cast_strings",
+      "configuration": "spark-on"
+    },
+    {
+      "id": "string_functions",
+      "configuration": "spark-on"
+    }
+  ]
+}

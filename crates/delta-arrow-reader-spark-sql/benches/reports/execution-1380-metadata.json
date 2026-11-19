@@ -1,0 +1,2274 @@
+{
+  "baseline_commit": "8954dcec63f934359c7bcdb74b5220c842d898e4",
+  "head_commit": "6376636dccfc10458f6b939a585d9173b469daf6",
+  "binary_sha256": "afabd4101f885adc9fbe4ee07950733c15d5638d9039d8881834b19c054389c6",
+  "queries_sha256": "a63405d5da5358e8e4c4600dda74b4404b2b9ec605f32c9bdd2bd1d0b4f950c1",
+  "schedule_sha256": "afdf3715edfc3f1431f9db432edb4787ae380aeaf1a7619535e2038e3f9f73f7",
+  "fixture_receipt_sha256": "9eb1e98be9381de74bd8908ac540c91eec6f0b0862089d1655baca537f43301d",
+  "fixture": {
+    "status": "complete",
+    "source_scale_factor": 1,
+    "source_commit": "8954dcec63f934359c7bcdb74b5220c842d898e4",
+    "source_table": "wide.clustered",
+    "stored_columns": 80,
+    "snapshot_columns": 81,
+    "snapshot_version": 0,
+    "rows": 6001215,
+    "files": [
+      {
+        "path": "part-00000.parquet",
+        "file_bucket": 0,
+        "rows": 1048576,
+        "bytes": 665464418,
+        "sha256": "8886fe3d5670f0559525e914b24c931896e45370aa07fcdbf79065d6d1021579"
+      },
+      {
+        "path": "part-00001.parquet",
+        "file_bucket": 1,
+        "rows": 1048576,
+        "bytes": 665488141,
+        "sha256": "65ab912b14e24e6250900a32f91aad3d6961f0490cc4f5d0466e57fd3a5d29fc"
+      },
+      {
+        "path": "part-00002.parquet",
+        "file_bucket": 2,
+        "rows": 1048576,
+        "bytes": 665496112,
+        "sha256": "15c2db0931adb17fb2b257eb9481b251863cb60e2624075683f05fa0d9724d35"
+      },
+      {
+        "path": "part-00003.parquet",
+        "file_bucket": 3,
+        "rows": 1048576,
+        "bytes": 665373167,
+        "sha256": "f0338fbec7d68a61ed76ad40e545ff573d1e7ad0074872ba736f8c07fc5e8aea"
+      },
+      {
+        "path": "part-00004.parquet",
+        "file_bucket": 4,
+        "rows": 1048576,
+        "bytes": 665376528,
+        "sha256": "f434eb6accf21b56b4e0583235736bf2a78ce7ad4e3021db1efda1bb4f22729d"
+      },
+      {
+        "path": "part-00005.parquet",
+        "file_bucket": 5,
+        "rows": 758335,
+        "bytes": 481083496,
+        "sha256": "9d01eed319ccef5bc52b6f5114ccb134a458d485133ee2bc5ab8a38e7187f670"
+      }
+    ],
+    "data_bytes": 3808281862,
+    "base_root": "/home/hanbo/.local/share/delta-arrow-reader-review/measurements-2026-11-18/1380/base-sf1",
+    "snapshot_root": "/home/hanbo/.local/share/delta-arrow-reader-review/measurements-2026-11-18/1380/delta-snapshot",
+    "source_manifest_sha256": "37906576c32e8c1c2ca7b3920f11ccd107c00633851d05e15e1f1db112305bc5",
+    "base_delta_log_sha256": "8ffd867bc4c1966190472cf68d7277e9363645bfee992d28ee3938eb1cc1f2a2",
+    "derived_delta_log_sha256": "21d2257a5c6d201f74c2c3516a134095c2f4efb680595cbd56228ae6581e71cb",
+    "generator": {
+      "arrow": "58.4.0",
+      "datafusion_sort": "54.1.0",
+      "executable_sha256": "7c84c270b88595559854ade637873e13b776a24e8ebc53310128cfa0f86441d4",
+      "lockfile_sha256": "2d1c035a3c655ce09668182e30a8d578f30fa07020ea8a02815f1cf712fc6daa",
+      "parquet": "58.4.0",
+      "target": "x86_64-linux",
+      "tpchgen": "3.0.0",
+      "tpchgen_git": "4f6bf4c5ab40511c8fdef5888fc8d022e5e546d7"
+    },
+    "derivation": "unchanged hardlinked Parquet; virtual INT file_bucket is path-sorted file ordinal; all original rows/statistics retained"
+  },
+  "snapshot": "/home/hanbo/.local/share/delta-arrow-reader-review/measurements-2026-11-18/1380/delta-snapshot",
+  "rustc": "rustc 1.96.0 (ac68faa20 2026-05-25)\nbinary: rustc\ncommit-hash: ac68faa20c58cbccd01ee7208bf3b6e93a7d7f96\ncommit-date: 2026-05-25\nhost: x86_64-unknown-linux-gnu\nrelease: 1.96.0\nLLVM version: 22.1.2\n",
+  "uname": {
+    "system": "Linux",
+    "node": "gmktec",
+    "release": "7.2.14-100.fc43.x86_64",
+    "version": "#1 SMP PREEMPT_DYNAMIC Fri Oct 30 16:29:56 UTC 2026",
+    "machine": "x86_64",
+    "processor": ""
+  },
+  "cpuinfo": "processor\t: 0\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 2025.011\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 0\ncpu cores\t: 8\napicid\t\t: 0\ninitial apicid\t: 0\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7585.74\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]\n\nprocessor\t: 1\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 2045.989\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 1\ncpu cores\t: 8\napicid\t\t: 2\ninitial apicid\t: 2\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7585.74\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]\n\nprocessor\t: 2\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 2025.243\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 2\ncpu cores\t: 8\napicid\t\t: 4\ninitial apicid\t: 4\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7585.74\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]\n\nprocessor\t: 3\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 2026.078\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 3\ncpu cores\t: 8\napicid\t\t: 6\ninitial apicid\t: 6\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7585.74\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]\n\nprocessor\t: 4\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 2022.728\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 4\ncpu cores\t: 8\napicid\t\t: 8\ninitial apicid\t: 8\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7585.74\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]\n\nprocessor\t: 5\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 2018.592\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 5\ncpu cores\t: 8\napicid\t\t: 10\ninitial apicid\t: 10\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7585.74\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]\n\nprocessor\t: 6\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 1100.980\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 6\ncpu cores\t: 8\napicid\t\t: 12\ninitial apicid\t: 12\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7585.74\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]\n\nprocessor\t: 7\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 1100.980\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 7\ncpu cores\t: 8\napicid\t\t: 14\ninitial apicid\t: 14\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7585.74\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]\n\nprocessor\t: 8\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 2023.093\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 0\ncpu cores\t: 8\napicid\t\t: 1\ninitial apicid\t: 1\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7585.74\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]\n\nprocessor\t: 9\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 2023.489\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 1\ncpu cores\t: 8\napicid\t\t: 3\ninitial apicid\t: 3\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7585.74\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]\n\nprocessor\t: 10\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 1100.980\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 2\ncpu cores\t: 8\napicid\t\t: 5\ninitial apicid\t: 5\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7585.74\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]\n\nprocessor\t: 11\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 1100.980\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 3\ncpu cores\t: 8\napicid\t\t: 7\ninitial apicid\t: 7\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7585.74\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]\n\nprocessor\t: 12\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 1100.980\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 4\ncpu cores\t: 8\napicid\t\t: 9\ninitial apicid\t: 9\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7585.74\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]\n\nprocessor\t: 13\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 1100.980\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 5\ncpu cores\t: 8\napicid\t\t: 11\ninitial apicid\t: 11\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7585.74\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]\n\nprocessor\t: 14\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 5032.019\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 6\ncpu cores\t: 8\napicid\t\t: 13\ninitial apicid\t: 13\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7585.74\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]\n\nprocessor\t: 15\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 2025.392\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 7\ncpu cores\t: 8\napicid\t\t: 15\ninitial apicid\t: 15\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7585.74\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]\n\n",
+  "governors": {
+    "2": "powersave",
+    "3": "powersave",
+    "4": "powersave",
+    "5": "powersave"
+  },
+  "schedule": {
+    "cpus": [
+      2,
+      3,
+      4,
+      5
+    ],
+    "target_partitions": 2,
+    "batch_rows": 8192,
+    "runtime_workers": 2,
+    "warmups": 1,
+    "samples": 3,
+    "process_timeout_seconds": 180,
+    "schedule_timeout_seconds": 10800,
+    "single_pool_bytes": 2147483648,
+    "preflight_pool_bytes": 4294967296,
+    "concurrency_pool_bytes": 8589934592,
+    "single_address_space_bytes": 12884901888,
+    "preflight_address_space_bytes": 17179869184,
+    "concurrency_address_space_bytes": 21474836480,
+    "spill_limit_bytes": 8589934592,
+    "preflight_process_timeout_seconds": 300,
+    "preflight_timeout_seconds": 3600,
+    "profile_iterations": 3,
+    "profile_frequency_hz": 199,
+    "profile_stack_bytes": 8192,
+    "profile_max_cases": 36,
+    "runs": [
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "projection_five",
+        "replica": 1,
+        "arm": "a",
+        "process": "noise-01-projection_five-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "projection_five",
+        "replica": 1,
+        "arm": "b",
+        "process": "noise-01-projection_five-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "partition_filter",
+        "replica": 1,
+        "arm": "b",
+        "process": "noise-01-partition_filter-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "partition_filter",
+        "replica": 1,
+        "arm": "a",
+        "process": "noise-01-partition_filter-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "statistics_filter",
+        "replica": 1,
+        "arm": "a",
+        "process": "noise-01-statistics_filter-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "statistics_filter",
+        "replica": 1,
+        "arm": "b",
+        "process": "noise-01-statistics_filter-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "empty_filter",
+        "replica": 1,
+        "arm": "b",
+        "process": "noise-01-empty_filter-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "empty_filter",
+        "replica": 1,
+        "arm": "a",
+        "process": "noise-01-empty_filter-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "ordered_limit",
+        "replica": 1,
+        "arm": "a",
+        "process": "noise-01-ordered_limit-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "ordered_limit",
+        "replica": 1,
+        "arm": "b",
+        "process": "noise-01-ordered_limit-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "group_low",
+        "replica": 1,
+        "arm": "b",
+        "process": "noise-01-group_low-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "group_low",
+        "replica": 1,
+        "arm": "a",
+        "process": "noise-01-group_low-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "group_high",
+        "replica": 1,
+        "arm": "a",
+        "process": "noise-01-group_high-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "group_high",
+        "replica": 1,
+        "arm": "b",
+        "process": "noise-01-group_high-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "count_distinct",
+        "replica": 1,
+        "arm": "b",
+        "process": "noise-01-count_distinct-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "count_distinct",
+        "replica": 1,
+        "arm": "a",
+        "process": "noise-01-count_distinct-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "row_number",
+        "replica": 1,
+        "arm": "a",
+        "process": "noise-01-row_number-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "row_number",
+        "replica": 1,
+        "arm": "b",
+        "process": "noise-01-row_number-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "dimension_join",
+        "replica": 1,
+        "arm": "b",
+        "process": "noise-01-dimension_join-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "dimension_join",
+        "replica": 1,
+        "arm": "a",
+        "process": "noise-01-dimension_join-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "self_join",
+        "replica": 1,
+        "arm": "a",
+        "process": "noise-01-self_join-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "self_join",
+        "replica": 1,
+        "arm": "b",
+        "process": "noise-01-self_join-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "decimal_division_round",
+        "replica": 1,
+        "arm": "b",
+        "process": "noise-01-decimal_division_round-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "decimal_division_round",
+        "replica": 1,
+        "arm": "a",
+        "process": "noise-01-decimal_division_round-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "cast_strings",
+        "replica": 1,
+        "arm": "a",
+        "process": "noise-01-cast_strings-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "cast_strings",
+        "replica": 1,
+        "arm": "b",
+        "process": "noise-01-cast_strings-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "string_functions",
+        "replica": 1,
+        "arm": "b",
+        "process": "noise-01-string_functions-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "string_functions",
+        "replica": 1,
+        "arm": "a",
+        "process": "noise-01-string_functions-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "nullif_nullable",
+        "replica": 1,
+        "arm": "a",
+        "process": "noise-01-nullif_nullable-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "nullif_nullable",
+        "replica": 1,
+        "arm": "b",
+        "process": "noise-01-nullif_nullable-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "in_10",
+        "replica": 1,
+        "arm": "b",
+        "process": "noise-01-in_10-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "in_10",
+        "replica": 1,
+        "arm": "a",
+        "process": "noise-01-in_10-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "in_1000",
+        "replica": 1,
+        "arm": "a",
+        "process": "noise-01-in_1000-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "in_1000",
+        "replica": 1,
+        "arm": "b",
+        "process": "noise-01-in_1000-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "mixed_boolean",
+        "replica": 1,
+        "arm": "b",
+        "process": "noise-01-mixed_boolean-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "mixed_boolean",
+        "replica": 1,
+        "arm": "a",
+        "process": "noise-01-mixed_boolean-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "projection_five",
+        "replica": 2,
+        "arm": "b",
+        "process": "noise-02-projection_five-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "projection_five",
+        "replica": 2,
+        "arm": "a",
+        "process": "noise-02-projection_five-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "partition_filter",
+        "replica": 2,
+        "arm": "a",
+        "process": "noise-02-partition_filter-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "partition_filter",
+        "replica": 2,
+        "arm": "b",
+        "process": "noise-02-partition_filter-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "statistics_filter",
+        "replica": 2,
+        "arm": "b",
+        "process": "noise-02-statistics_filter-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "statistics_filter",
+        "replica": 2,
+        "arm": "a",
+        "process": "noise-02-statistics_filter-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "empty_filter",
+        "replica": 2,
+        "arm": "a",
+        "process": "noise-02-empty_filter-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "empty_filter",
+        "replica": 2,
+        "arm": "b",
+        "process": "noise-02-empty_filter-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "ordered_limit",
+        "replica": 2,
+        "arm": "b",
+        "process": "noise-02-ordered_limit-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "ordered_limit",
+        "replica": 2,
+        "arm": "a",
+        "process": "noise-02-ordered_limit-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "group_low",
+        "replica": 2,
+        "arm": "a",
+        "process": "noise-02-group_low-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "group_low",
+        "replica": 2,
+        "arm": "b",
+        "process": "noise-02-group_low-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "group_high",
+        "replica": 2,
+        "arm": "b",
+        "process": "noise-02-group_high-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "group_high",
+        "replica": 2,
+        "arm": "a",
+        "process": "noise-02-group_high-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "count_distinct",
+        "replica": 2,
+        "arm": "a",
+        "process": "noise-02-count_distinct-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "count_distinct",
+        "replica": 2,
+        "arm": "b",
+        "process": "noise-02-count_distinct-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "row_number",
+        "replica": 2,
+        "arm": "b",
+        "process": "noise-02-row_number-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "row_number",
+        "replica": 2,
+        "arm": "a",
+        "process": "noise-02-row_number-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "dimension_join",
+        "replica": 2,
+        "arm": "a",
+        "process": "noise-02-dimension_join-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "dimension_join",
+        "replica": 2,
+        "arm": "b",
+        "process": "noise-02-dimension_join-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "self_join",
+        "replica": 2,
+        "arm": "b",
+        "process": "noise-02-self_join-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "self_join",
+        "replica": 2,
+        "arm": "a",
+        "process": "noise-02-self_join-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "decimal_division_round",
+        "replica": 2,
+        "arm": "a",
+        "process": "noise-02-decimal_division_round-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "decimal_division_round",
+        "replica": 2,
+        "arm": "b",
+        "process": "noise-02-decimal_division_round-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "cast_strings",
+        "replica": 2,
+        "arm": "b",
+        "process": "noise-02-cast_strings-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "cast_strings",
+        "replica": 2,
+        "arm": "a",
+        "process": "noise-02-cast_strings-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "string_functions",
+        "replica": 2,
+        "arm": "a",
+        "process": "noise-02-string_functions-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "string_functions",
+        "replica": 2,
+        "arm": "b",
+        "process": "noise-02-string_functions-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "nullif_nullable",
+        "replica": 2,
+        "arm": "b",
+        "process": "noise-02-nullif_nullable-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "nullif_nullable",
+        "replica": 2,
+        "arm": "a",
+        "process": "noise-02-nullif_nullable-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "in_10",
+        "replica": 2,
+        "arm": "a",
+        "process": "noise-02-in_10-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "in_10",
+        "replica": 2,
+        "arm": "b",
+        "process": "noise-02-in_10-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "in_1000",
+        "replica": 2,
+        "arm": "b",
+        "process": "noise-02-in_1000-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "in_1000",
+        "replica": 2,
+        "arm": "a",
+        "process": "noise-02-in_1000-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "mixed_boolean",
+        "replica": 2,
+        "arm": "a",
+        "process": "noise-02-mixed_boolean-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "mixed_boolean",
+        "replica": 2,
+        "arm": "b",
+        "process": "noise-02-mixed_boolean-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "projection_five",
+        "replica": 3,
+        "arm": "a",
+        "process": "noise-03-projection_five-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "projection_five",
+        "replica": 3,
+        "arm": "b",
+        "process": "noise-03-projection_five-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "partition_filter",
+        "replica": 3,
+        "arm": "b",
+        "process": "noise-03-partition_filter-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "partition_filter",
+        "replica": 3,
+        "arm": "a",
+        "process": "noise-03-partition_filter-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "statistics_filter",
+        "replica": 3,
+        "arm": "a",
+        "process": "noise-03-statistics_filter-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "statistics_filter",
+        "replica": 3,
+        "arm": "b",
+        "process": "noise-03-statistics_filter-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "empty_filter",
+        "replica": 3,
+        "arm": "b",
+        "process": "noise-03-empty_filter-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "empty_filter",
+        "replica": 3,
+        "arm": "a",
+        "process": "noise-03-empty_filter-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "ordered_limit",
+        "replica": 3,
+        "arm": "a",
+        "process": "noise-03-ordered_limit-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "ordered_limit",
+        "replica": 3,
+        "arm": "b",
+        "process": "noise-03-ordered_limit-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "group_low",
+        "replica": 3,
+        "arm": "b",
+        "process": "noise-03-group_low-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "group_low",
+        "replica": 3,
+        "arm": "a",
+        "process": "noise-03-group_low-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "group_high",
+        "replica": 3,
+        "arm": "a",
+        "process": "noise-03-group_high-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "group_high",
+        "replica": 3,
+        "arm": "b",
+        "process": "noise-03-group_high-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "count_distinct",
+        "replica": 3,
+        "arm": "b",
+        "process": "noise-03-count_distinct-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "count_distinct",
+        "replica": 3,
+        "arm": "a",
+        "process": "noise-03-count_distinct-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "row_number",
+        "replica": 3,
+        "arm": "a",
+        "process": "noise-03-row_number-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "row_number",
+        "replica": 3,
+        "arm": "b",
+        "process": "noise-03-row_number-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "dimension_join",
+        "replica": 3,
+        "arm": "b",
+        "process": "noise-03-dimension_join-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "dimension_join",
+        "replica": 3,
+        "arm": "a",
+        "process": "noise-03-dimension_join-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "self_join",
+        "replica": 3,
+        "arm": "a",
+        "process": "noise-03-self_join-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "self_join",
+        "replica": 3,
+        "arm": "b",
+        "process": "noise-03-self_join-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "decimal_division_round",
+        "replica": 3,
+        "arm": "b",
+        "process": "noise-03-decimal_division_round-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "decimal_division_round",
+        "replica": 3,
+        "arm": "a",
+        "process": "noise-03-decimal_division_round-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "cast_strings",
+        "replica": 3,
+        "arm": "a",
+        "process": "noise-03-cast_strings-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "cast_strings",
+        "replica": 3,
+        "arm": "b",
+        "process": "noise-03-cast_strings-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "string_functions",
+        "replica": 3,
+        "arm": "b",
+        "process": "noise-03-string_functions-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "string_functions",
+        "replica": 3,
+        "arm": "a",
+        "process": "noise-03-string_functions-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "nullif_nullable",
+        "replica": 3,
+        "arm": "a",
+        "process": "noise-03-nullif_nullable-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "nullif_nullable",
+        "replica": 3,
+        "arm": "b",
+        "process": "noise-03-nullif_nullable-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "in_10",
+        "replica": 3,
+        "arm": "b",
+        "process": "noise-03-in_10-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "in_10",
+        "replica": 3,
+        "arm": "a",
+        "process": "noise-03-in_10-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "in_1000",
+        "replica": 3,
+        "arm": "a",
+        "process": "noise-03-in_1000-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "in_1000",
+        "replica": 3,
+        "arm": "b",
+        "process": "noise-03-in_1000-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "mixed_boolean",
+        "replica": 3,
+        "arm": "b",
+        "process": "noise-03-mixed_boolean-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "mixed_boolean",
+        "replica": 3,
+        "arm": "a",
+        "process": "noise-03-mixed_boolean-a"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "projection_five",
+        "replica": 1,
+        "process": "main-01-projection_five-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "projection_five",
+        "replica": 1,
+        "process": "main-01-projection_five-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "projection_five",
+        "replica": 1,
+        "process": "main-01-projection_five-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "partition_filter",
+        "replica": 1,
+        "process": "main-01-partition_filter-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "partition_filter",
+        "replica": 1,
+        "process": "main-01-partition_filter-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "partition_filter",
+        "replica": 1,
+        "process": "main-01-partition_filter-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "statistics_filter",
+        "replica": 1,
+        "process": "main-01-statistics_filter-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "statistics_filter",
+        "replica": 1,
+        "process": "main-01-statistics_filter-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "statistics_filter",
+        "replica": 1,
+        "process": "main-01-statistics_filter-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "empty_filter",
+        "replica": 1,
+        "process": "main-01-empty_filter-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "empty_filter",
+        "replica": 1,
+        "process": "main-01-empty_filter-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "empty_filter",
+        "replica": 1,
+        "process": "main-01-empty_filter-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "ordered_limit",
+        "replica": 1,
+        "process": "main-01-ordered_limit-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "ordered_limit",
+        "replica": 1,
+        "process": "main-01-ordered_limit-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "ordered_limit",
+        "replica": 1,
+        "process": "main-01-ordered_limit-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "group_low",
+        "replica": 1,
+        "process": "main-01-group_low-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "group_low",
+        "replica": 1,
+        "process": "main-01-group_low-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "group_low",
+        "replica": 1,
+        "process": "main-01-group_low-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "group_high",
+        "replica": 1,
+        "process": "main-01-group_high-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "group_high",
+        "replica": 1,
+        "process": "main-01-group_high-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "group_high",
+        "replica": 1,
+        "process": "main-01-group_high-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "count_distinct",
+        "replica": 1,
+        "process": "main-01-count_distinct-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "count_distinct",
+        "replica": 1,
+        "process": "main-01-count_distinct-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "count_distinct",
+        "replica": 1,
+        "process": "main-01-count_distinct-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "row_number",
+        "replica": 1,
+        "process": "main-01-row_number-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "row_number",
+        "replica": 1,
+        "process": "main-01-row_number-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "row_number",
+        "replica": 1,
+        "process": "main-01-row_number-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "dimension_join",
+        "replica": 1,
+        "process": "main-01-dimension_join-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "dimension_join",
+        "replica": 1,
+        "process": "main-01-dimension_join-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "dimension_join",
+        "replica": 1,
+        "process": "main-01-dimension_join-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "self_join",
+        "replica": 1,
+        "process": "main-01-self_join-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "self_join",
+        "replica": 1,
+        "process": "main-01-self_join-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "self_join",
+        "replica": 1,
+        "process": "main-01-self_join-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "decimal_division_round",
+        "replica": 1,
+        "process": "main-01-decimal_division_round-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "decimal_division_round",
+        "replica": 1,
+        "process": "main-01-decimal_division_round-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "decimal_division_round",
+        "replica": 1,
+        "process": "main-01-decimal_division_round-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "cast_strings",
+        "replica": 1,
+        "process": "main-01-cast_strings-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "cast_strings",
+        "replica": 1,
+        "process": "main-01-cast_strings-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "cast_strings",
+        "replica": 1,
+        "process": "main-01-cast_strings-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "string_functions",
+        "replica": 1,
+        "process": "main-01-string_functions-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "string_functions",
+        "replica": 1,
+        "process": "main-01-string_functions-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "string_functions",
+        "replica": 1,
+        "process": "main-01-string_functions-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "nullif_nullable",
+        "replica": 1,
+        "process": "main-01-nullif_nullable-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "nullif_nullable",
+        "replica": 1,
+        "process": "main-01-nullif_nullable-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "nullif_nullable",
+        "replica": 1,
+        "process": "main-01-nullif_nullable-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "in_10",
+        "replica": 1,
+        "process": "main-01-in_10-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "in_10",
+        "replica": 1,
+        "process": "main-01-in_10-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "in_10",
+        "replica": 1,
+        "process": "main-01-in_10-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "in_1000",
+        "replica": 1,
+        "process": "main-01-in_1000-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "in_1000",
+        "replica": 1,
+        "process": "main-01-in_1000-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "in_1000",
+        "replica": 1,
+        "process": "main-01-in_1000-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "mixed_boolean",
+        "replica": 1,
+        "process": "main-01-mixed_boolean-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "mixed_boolean",
+        "replica": 1,
+        "process": "main-01-mixed_boolean-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "mixed_boolean",
+        "replica": 1,
+        "process": "main-01-mixed_boolean-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "projection_five",
+        "replica": 2,
+        "process": "main-02-projection_five-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "projection_five",
+        "replica": 2,
+        "process": "main-02-projection_five-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "projection_five",
+        "replica": 2,
+        "process": "main-02-projection_five-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "partition_filter",
+        "replica": 2,
+        "process": "main-02-partition_filter-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "partition_filter",
+        "replica": 2,
+        "process": "main-02-partition_filter-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "partition_filter",
+        "replica": 2,
+        "process": "main-02-partition_filter-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "statistics_filter",
+        "replica": 2,
+        "process": "main-02-statistics_filter-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "statistics_filter",
+        "replica": 2,
+        "process": "main-02-statistics_filter-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "statistics_filter",
+        "replica": 2,
+        "process": "main-02-statistics_filter-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "empty_filter",
+        "replica": 2,
+        "process": "main-02-empty_filter-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "empty_filter",
+        "replica": 2,
+        "process": "main-02-empty_filter-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "empty_filter",
+        "replica": 2,
+        "process": "main-02-empty_filter-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "ordered_limit",
+        "replica": 2,
+        "process": "main-02-ordered_limit-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "ordered_limit",
+        "replica": 2,
+        "process": "main-02-ordered_limit-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "ordered_limit",
+        "replica": 2,
+        "process": "main-02-ordered_limit-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "group_low",
+        "replica": 2,
+        "process": "main-02-group_low-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "group_low",
+        "replica": 2,
+        "process": "main-02-group_low-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "group_low",
+        "replica": 2,
+        "process": "main-02-group_low-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "group_high",
+        "replica": 2,
+        "process": "main-02-group_high-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "group_high",
+        "replica": 2,
+        "process": "main-02-group_high-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "group_high",
+        "replica": 2,
+        "process": "main-02-group_high-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "count_distinct",
+        "replica": 2,
+        "process": "main-02-count_distinct-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "count_distinct",
+        "replica": 2,
+        "process": "main-02-count_distinct-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "count_distinct",
+        "replica": 2,
+        "process": "main-02-count_distinct-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "row_number",
+        "replica": 2,
+        "process": "main-02-row_number-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "row_number",
+        "replica": 2,
+        "process": "main-02-row_number-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "row_number",
+        "replica": 2,
+        "process": "main-02-row_number-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "dimension_join",
+        "replica": 2,
+        "process": "main-02-dimension_join-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "dimension_join",
+        "replica": 2,
+        "process": "main-02-dimension_join-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "dimension_join",
+        "replica": 2,
+        "process": "main-02-dimension_join-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "self_join",
+        "replica": 2,
+        "process": "main-02-self_join-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "self_join",
+        "replica": 2,
+        "process": "main-02-self_join-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "self_join",
+        "replica": 2,
+        "process": "main-02-self_join-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "decimal_division_round",
+        "replica": 2,
+        "process": "main-02-decimal_division_round-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "decimal_division_round",
+        "replica": 2,
+        "process": "main-02-decimal_division_round-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "decimal_division_round",
+        "replica": 2,
+        "process": "main-02-decimal_division_round-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "cast_strings",
+        "replica": 2,
+        "process": "main-02-cast_strings-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "cast_strings",
+        "replica": 2,
+        "process": "main-02-cast_strings-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "cast_strings",
+        "replica": 2,
+        "process": "main-02-cast_strings-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "string_functions",
+        "replica": 2,
+        "process": "main-02-string_functions-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "string_functions",
+        "replica": 2,
+        "process": "main-02-string_functions-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "string_functions",
+        "replica": 2,
+        "process": "main-02-string_functions-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "nullif_nullable",
+        "replica": 2,
+        "process": "main-02-nullif_nullable-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "nullif_nullable",
+        "replica": 2,
+        "process": "main-02-nullif_nullable-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "nullif_nullable",
+        "replica": 2,
+        "process": "main-02-nullif_nullable-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "in_10",
+        "replica": 2,
+        "process": "main-02-in_10-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "in_10",
+        "replica": 2,
+        "process": "main-02-in_10-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "in_10",
+        "replica": 2,
+        "process": "main-02-in_10-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "in_1000",
+        "replica": 2,
+        "process": "main-02-in_1000-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "in_1000",
+        "replica": 2,
+        "process": "main-02-in_1000-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "in_1000",
+        "replica": 2,
+        "process": "main-02-in_1000-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "mixed_boolean",
+        "replica": 2,
+        "process": "main-02-mixed_boolean-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "mixed_boolean",
+        "replica": 2,
+        "process": "main-02-mixed_boolean-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "mixed_boolean",
+        "replica": 2,
+        "process": "main-02-mixed_boolean-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "projection_five",
+        "replica": 3,
+        "process": "main-03-projection_five-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "projection_five",
+        "replica": 3,
+        "process": "main-03-projection_five-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "projection_five",
+        "replica": 3,
+        "process": "main-03-projection_five-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "partition_filter",
+        "replica": 3,
+        "process": "main-03-partition_filter-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "partition_filter",
+        "replica": 3,
+        "process": "main-03-partition_filter-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "partition_filter",
+        "replica": 3,
+        "process": "main-03-partition_filter-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "statistics_filter",
+        "replica": 3,
+        "process": "main-03-statistics_filter-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "statistics_filter",
+        "replica": 3,
+        "process": "main-03-statistics_filter-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "statistics_filter",
+        "replica": 3,
+        "process": "main-03-statistics_filter-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "empty_filter",
+        "replica": 3,
+        "process": "main-03-empty_filter-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "empty_filter",
+        "replica": 3,
+        "process": "main-03-empty_filter-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "empty_filter",
+        "replica": 3,
+        "process": "main-03-empty_filter-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "ordered_limit",
+        "replica": 3,
+        "process": "main-03-ordered_limit-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "ordered_limit",
+        "replica": 3,
+        "process": "main-03-ordered_limit-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "ordered_limit",
+        "replica": 3,
+        "process": "main-03-ordered_limit-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "group_low",
+        "replica": 3,
+        "process": "main-03-group_low-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "group_low",
+        "replica": 3,
+        "process": "main-03-group_low-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "group_low",
+        "replica": 3,
+        "process": "main-03-group_low-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "group_high",
+        "replica": 3,
+        "process": "main-03-group_high-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "group_high",
+        "replica": 3,
+        "process": "main-03-group_high-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "group_high",
+        "replica": 3,
+        "process": "main-03-group_high-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "count_distinct",
+        "replica": 3,
+        "process": "main-03-count_distinct-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "count_distinct",
+        "replica": 3,
+        "process": "main-03-count_distinct-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "count_distinct",
+        "replica": 3,
+        "process": "main-03-count_distinct-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "row_number",
+        "replica": 3,
+        "process": "main-03-row_number-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "row_number",
+        "replica": 3,
+        "process": "main-03-row_number-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "row_number",
+        "replica": 3,
+        "process": "main-03-row_number-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "dimension_join",
+        "replica": 3,
+        "process": "main-03-dimension_join-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "dimension_join",
+        "replica": 3,
+        "process": "main-03-dimension_join-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "dimension_join",
+        "replica": 3,
+        "process": "main-03-dimension_join-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "self_join",
+        "replica": 3,
+        "process": "main-03-self_join-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "self_join",
+        "replica": 3,
+        "process": "main-03-self_join-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "self_join",
+        "replica": 3,
+        "process": "main-03-self_join-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "decimal_division_round",
+        "replica": 3,
+        "process": "main-03-decimal_division_round-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "decimal_division_round",
+        "replica": 3,
+        "process": "main-03-decimal_division_round-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "decimal_division_round",
+        "replica": 3,
+        "process": "main-03-decimal_division_round-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "cast_strings",
+        "replica": 3,
+        "process": "main-03-cast_strings-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "cast_strings",
+        "replica": 3,
+        "process": "main-03-cast_strings-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "cast_strings",
+        "replica": 3,
+        "process": "main-03-cast_strings-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "string_functions",
+        "replica": 3,
+        "process": "main-03-string_functions-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "string_functions",
+        "replica": 3,
+        "process": "main-03-string_functions-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "string_functions",
+        "replica": 3,
+        "process": "main-03-string_functions-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "nullif_nullable",
+        "replica": 3,
+        "process": "main-03-nullif_nullable-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "nullif_nullable",
+        "replica": 3,
+        "process": "main-03-nullif_nullable-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "nullif_nullable",
+        "replica": 3,
+        "process": "main-03-nullif_nullable-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "in_10",
+        "replica": 3,
+        "process": "main-03-in_10-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "in_10",
+        "replica": 3,
+        "process": "main-03-in_10-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "in_10",
+        "replica": 3,
+        "process": "main-03-in_10-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "in_1000",
+        "replica": 3,
+        "process": "main-03-in_1000-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "in_1000",
+        "replica": 3,
+        "process": "main-03-in_1000-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "in_1000",
+        "replica": 3,
+        "process": "main-03-in_1000-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "mixed_boolean",
+        "replica": 3,
+        "process": "main-03-mixed_boolean-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "mixed_boolean",
+        "replica": 3,
+        "process": "main-03-mixed_boolean-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "mixed_boolean",
+        "replica": 3,
+        "process": "main-03-mixed_boolean-native"
+      }
+    ],
+    "concurrency": [
+      {
+        "query": "group_high",
+        "configuration": "native",
+        "process": "concurrency-group_high-native",
+        "executions": 4
+      },
+      {
+        "query": "group_high",
+        "configuration": "spark-off",
+        "process": "concurrency-group_high-spark-off",
+        "executions": 4
+      },
+      {
+        "query": "group_high",
+        "configuration": "spark-on",
+        "process": "concurrency-group_high-spark-on",
+        "executions": 4
+      },
+      {
+        "query": "nullif_nullable",
+        "configuration": "spark-off",
+        "process": "concurrency-nullif_nullable-spark-off",
+        "executions": 4
+      },
+      {
+        "query": "nullif_nullable",
+        "configuration": "spark-on",
+        "process": "concurrency-nullif_nullable-spark-on",
+        "executions": 4
+      },
+      {
+        "query": "nullif_nullable",
+        "configuration": "native",
+        "process": "concurrency-nullif_nullable-native",
+        "executions": 4
+      }
+    ]
+  },
+  "committed_source_build": {
+    "status": "passed",
+    "completed_utc": "2026-11-19T00:31:46.896762+00:00",
+    "source_commit": "6376636dccfc10458f6b939a585d9173b469daf6",
+    "source_clean": true,
+    "product_baseline_commit": "8954dcec63f934359c7bcdb74b5220c842d898e4",
+    "working_directory": "/home/hanbo/repo/delta-arrow-reader-measurements/crates/delta-arrow-reader-spark-sql",
+    "command": "CARGO_TARGET_DIR=/home/hanbo/.cache/delta-arrow-reader/measurements-2026-11-18/target/planning CARGO_BUILD_JOBS=2 CARGO_PROFILE_RELEASE_DEBUG=1 cargo +1.96.0 build --release --bench execution --message-format=json-render-diagnostics",
+    "rustc": "rustc 1.96.0 (ac68faa20 2026-05-25)\nbinary: rustc\ncommit-hash: ac68faa20c58cbccd01ee7208bf3b6e93a7d7f96\ncommit-date: 2026-05-25\nhost: x86_64-unknown-linux-gnu\nrelease: 1.96.0\nLLVM version: 22.1.2\n",
+    "binary": "/home/hanbo/.cache/delta-arrow-reader/measurements-2026-11-18/target/planning/release/deps/execution-28890602179f7ff9",
+    "binary_sha256": "afabd4101f885adc9fbe4ee07950733c15d5638d9039d8881834b19c054389c6",
+    "matches_frozen_preflight_binary": true,
+    "frozen_preflight_receipt_sha256": "88996d1c1aef90b4fe62db067ac3c76f6c090bf8dd2c37408b5a53da232ed607",
+    "queries_sha256": "a63405d5da5358e8e4c4600dda74b4404b2b9ec605f32c9bdd2bd1d0b4f950c1",
+    "harness_sha256": "0bfe8cb675cb7cfaa1509e44e32466843754881b1689f2f3f0f901b273dc1c16",
+    "schedule_sha256": "afdf3715edfc3f1431f9db432edb4787ae380aeaf1a7619535e2038e3f9f73f7",
+    "stdout_sha256": "96976dcfe8ffe62c7e5a556378b49741856623e73e0b4570364787d949b2158e",
+    "stderr_sha256": "62192ce837503a5d062ac68a7ad263033e51b6d66d50f9f22bc9cab6919ae241",
+    "cargo_build_finished": {
+      "reason": "build-finished",
+      "success": true
+    }
+  },
+  "input_null_counts_from_delta_stats": {
+    "l_comment": 0,
+    "l_commitdate": 0,
+    "l_discount": 0,
+    "l_extendedprice": 0,
+    "l_linenumber": 0,
+    "l_linestatus": 0,
+    "l_orderkey": 0,
+    "l_partkey": 0,
+    "l_quantity": 0,
+    "l_receiptdate": 0,
+    "l_returnflag": 0,
+    "l_shipdate": 0,
+    "l_shipinstruct": 0,
+    "l_shipmode": 0,
+    "l_suppkey": 0,
+    "l_tax": 0,
+    "payload_00": 353763,
+    "payload_01": 353138,
+    "payload_02": 352793,
+    "payload_03": 352247,
+    "payload_04": 353269,
+    "payload_05": 352836,
+    "payload_06": 354023,
+    "payload_07": 353279,
+    "payload_08": 353016,
+    "payload_09": 353411,
+    "payload_10": 353968,
+    "payload_11": 352687,
+    "payload_12": 353029,
+    "payload_13": 353624,
+    "payload_14": 352928,
+    "payload_15": 352429,
+    "payload_16": 353310,
+    "payload_17": 352992,
+    "payload_18": 352603,
+    "payload_19": 352401,
+    "payload_20": 352289,
+    "payload_21": 352769,
+    "payload_22": 352333,
+    "payload_23": 353519,
+    "payload_24": 352554,
+    "payload_25": 352830,
+    "payload_26": 353774,
+    "payload_27": 353371,
+    "payload_28": 354029,
+    "payload_29": 352474,
+    "payload_30": 353347,
+    "payload_31": 351670,
+    "payload_32": 352676,
+    "payload_33": 353041,
+    "payload_34": 352411,
+    "payload_35": 353471,
+    "payload_36": 353392,
+    "payload_37": 353666,
+    "payload_38": 353243,
+    "payload_39": 352607,
+    "payload_40": 352425,
+    "payload_41": 353135,
+    "payload_42": 353348,
+    "payload_43": 353051,
+    "payload_44": 352504,
+    "payload_45": 352568,
+    "payload_46": 353540,
+    "payload_47": 353349,
+    "payload_48": 353914,
+    "payload_49": 352429,
+    "payload_50": 352476,
+    "payload_51": 352866,
+    "payload_52": 352965,
+    "payload_53": 354097,
+    "payload_54": 352714,
+    "payload_55": 353056,
+    "payload_56": 353423,
+    "payload_57": 352912,
+    "payload_58": 353203,
+    "payload_59": 353151,
+    "payload_60": 353276,
+    "payload_61": 352595,
+    "payload_62": 352971,
+    "payload_63": 353306
+  },
+  "raw_samples_sha256": "cfe0bb318dc7826275aad1f904836e3ca5891d12c9aee742b47088ef4f10d50f",
+  "completed_schedule": {
+    "query_processes": 270,
+    "concurrency_processes": 6
+  },
+  "measurement_stdout_sha256": "7eb6b281abb035e24c06b514717e0e2fde5bf19b189f722120c5bad84fb1b286",
+  "measurement_stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

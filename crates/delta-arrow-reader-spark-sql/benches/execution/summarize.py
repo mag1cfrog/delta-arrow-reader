@@ -90,7 +90,7 @@ def summarize(run_directory, output_directory):
     for query in query_ids:
         for configuration in configurations:
             for metric in TIMINGS+COUNTERS+IO+("process_peak_rss_bytes","setup_rss_bytes"):
-                unit="ns" if metric in TIMINGS else "bytes" if metric.endswith("bytes") else "count"
+                unit="ns" if metric in TIMINGS else "bytes" if metric.endswith("bytes") or metric=="source_bytes_received" else "count"
                 table.append(dict(id=query,configuration=configuration,metric=metric,unit=unit,**data[("main",None,configuration,query,metric)]))
     noise=[]
     for query in query_ids:
