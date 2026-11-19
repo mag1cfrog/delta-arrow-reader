@@ -1,0 +1,797 @@
+[
+  {
+    "case": "provider_skipped_cast",
+    "sql": "SELECT NULLIF(a,s) AS r FROM inputs",
+    "ansi": false,
+    "batch_size": 1,
+    "observation": {
+      "status": "ok",
+      "phase": "execution",
+      "physical_type": "Float64",
+      "executed_types": [
+        "Float64"
+      ],
+      "values": [
+        null,
+        null,
+        "4000000000000000",
+        null
+      ]
+    }
+  },
+  {
+    "case": "provider_required_cast",
+    "sql": "SELECT NULLIF(a,bad) AS r FROM inputs",
+    "ansi": false,
+    "batch_size": 1,
+    "observation": {
+      "status": "ok",
+      "phase": "execution",
+      "physical_type": "Float64",
+      "executed_types": [
+        "Float64"
+      ],
+      "values": [
+        null,
+        "3ff0000000000000",
+        "4000000000000000",
+        null
+      ]
+    }
+  },
+  {
+    "case": "literal_skipped_cast",
+    "sql": "SELECT NULLIF(CAST(NULL AS DOUBLE),'bad') AS r",
+    "ansi": false,
+    "batch_size": 1,
+    "observation": {
+      "status": "ok",
+      "phase": "execution",
+      "physical_type": "Float64",
+      "executed_types": [
+        "Float64"
+      ],
+      "values": [
+        null
+      ]
+    }
+  },
+  {
+    "case": "literal_required_cast",
+    "sql": "SELECT NULLIF(CAST(1 AS DOUBLE),'bad') AS r",
+    "ansi": false,
+    "batch_size": 1,
+    "observation": {
+      "status": "ok",
+      "phase": "execution",
+      "physical_type": "Float64",
+      "executed_types": [
+        "Float64"
+      ],
+      "values": [
+        "3ff0000000000000"
+      ]
+    }
+  },
+  {
+    "case": "local_skipped_cast",
+    "sql": "SELECT NULLIF(a,s) AS r FROM VALUES (CAST(NULL AS DOUBLE),'bad'),(CAST(1 AS DOUBLE),'1') t(a,s)",
+    "ansi": false,
+    "batch_size": 1,
+    "observation": {
+      "status": "ok",
+      "phase": "execution",
+      "physical_type": "Float64",
+      "executed_types": [
+        "Float64"
+      ],
+      "values": [
+        null,
+        null
+      ]
+    }
+  },
+  {
+    "case": "limit_zero",
+    "sql": "SELECT NULLIF(a,bad) AS r FROM inputs LIMIT 0",
+    "ansi": false,
+    "batch_size": 1,
+    "observation": {
+      "status": "ok",
+      "phase": "execution",
+      "physical_type": "Float64",
+      "executed_types": [],
+      "values": []
+    }
+  },
+  {
+    "case": "guarded_required_cast",
+    "sql": "SELECT CASE WHEN a IS NULL THEN NULLIF(a,bad) ELSE a END AS r FROM inputs",
+    "ansi": false,
+    "batch_size": 1,
+    "observation": {
+      "status": "ok",
+      "phase": "execution",
+      "physical_type": "Float64",
+      "executed_types": [
+        "Float64"
+      ],
+      "values": [
+        null,
+        "3ff0000000000000",
+        "4000000000000000",
+        null
+      ]
+    }
+  },
+  {
+    "case": "typed_null_comparability",
+    "sql": "SELECT NULLIF(CAST(NULL AS DOUBLE),ARRAY(1)) AS r",
+    "ansi": false,
+    "batch_size": 1,
+    "observation": {
+      "status": "error",
+      "phase": "planning",
+      "root_class": "Plan",
+      "root_message": "Error during planning: For function 'nullif' Float64 and List(non-null Int32) is not comparable",
+      "message": "External error: error in DataFusion: Error during planning: For function 'nullif' Float64 and List(non-null Int32) is not comparable"
+    }
+  },
+  {
+    "case": "provider_skipped_cast",
+    "sql": "SELECT NULLIF(a,s) AS r FROM inputs",
+    "ansi": true,
+    "batch_size": 1,
+    "observation": {
+      "status": "ok",
+      "phase": "execution",
+      "physical_type": "Float64",
+      "executed_types": [
+        "Float64"
+      ],
+      "values": [
+        null,
+        null,
+        "4000000000000000",
+        null
+      ]
+    }
+  },
+  {
+    "case": "provider_required_cast",
+    "sql": "SELECT NULLIF(a,bad) AS r FROM inputs",
+    "ansi": true,
+    "batch_size": 1,
+    "observation": {
+      "status": "error",
+      "phase": "execution",
+      "root_class": "Execution",
+      "root_message": "Execution error: [CAST_INVALID_INPUT] Cannot cast string \"bad\" to Float64",
+      "message": "Execution error: [CAST_INVALID_INPUT] Cannot cast string \"bad\" to Float64"
+    }
+  },
+  {
+    "case": "literal_skipped_cast",
+    "sql": "SELECT NULLIF(CAST(NULL AS DOUBLE),'bad') AS r",
+    "ansi": true,
+    "batch_size": 1,
+    "observation": {
+      "status": "ok",
+      "phase": "execution",
+      "physical_type": "Float64",
+      "executed_types": [
+        "Float64"
+      ],
+      "values": [
+        null
+      ]
+    }
+  },
+  {
+    "case": "literal_required_cast",
+    "sql": "SELECT NULLIF(CAST(1 AS DOUBLE),'bad') AS r",
+    "ansi": true,
+    "batch_size": 1,
+    "observation": {
+      "status": "error",
+      "phase": "physical-planning",
+      "root_class": "Execution",
+      "root_message": "Execution error: [CAST_INVALID_INPUT] Cannot cast string \"bad\" to Float64",
+      "message": "preserve_spark_expression_errors\ncaused by\nExecution error: [CAST_INVALID_INPUT] Cannot cast string \"bad\" to Float64"
+    }
+  },
+  {
+    "case": "local_skipped_cast",
+    "sql": "SELECT NULLIF(a,s) AS r FROM VALUES (CAST(NULL AS DOUBLE),'bad'),(CAST(1 AS DOUBLE),'1') t(a,s)",
+    "ansi": true,
+    "batch_size": 1,
+    "observation": {
+      "status": "ok",
+      "phase": "execution",
+      "physical_type": "Float64",
+      "executed_types": [
+        "Float64"
+      ],
+      "values": [
+        null,
+        null
+      ]
+    }
+  },
+  {
+    "case": "limit_zero",
+    "sql": "SELECT NULLIF(a,bad) AS r FROM inputs LIMIT 0",
+    "ansi": true,
+    "batch_size": 1,
+    "observation": {
+      "status": "ok",
+      "phase": "execution",
+      "physical_type": "Float64",
+      "executed_types": [],
+      "values": []
+    }
+  },
+  {
+    "case": "guarded_required_cast",
+    "sql": "SELECT CASE WHEN a IS NULL THEN NULLIF(a,bad) ELSE a END AS r FROM inputs",
+    "ansi": true,
+    "batch_size": 1,
+    "observation": {
+      "status": "ok",
+      "phase": "execution",
+      "physical_type": "Float64",
+      "executed_types": [
+        "Float64"
+      ],
+      "values": [
+        null,
+        "3ff0000000000000",
+        "4000000000000000",
+        null
+      ]
+    }
+  },
+  {
+    "case": "typed_null_comparability",
+    "sql": "SELECT NULLIF(CAST(NULL AS DOUBLE),ARRAY(1)) AS r",
+    "ansi": true,
+    "batch_size": 1,
+    "observation": {
+      "status": "error",
+      "phase": "planning",
+      "root_class": "Plan",
+      "root_message": "Error during planning: For function 'nullif' Float64 and List(non-null Int32) is not comparable",
+      "message": "External error: error in DataFusion: Error during planning: For function 'nullif' Float64 and List(non-null Int32) is not comparable"
+    }
+  },
+  {
+    "case": "provider_skipped_cast",
+    "sql": "SELECT NULLIF(a,s) AS r FROM inputs",
+    "ansi": false,
+    "batch_size": 3,
+    "observation": {
+      "status": "ok",
+      "phase": "execution",
+      "physical_type": "Float64",
+      "executed_types": [
+        "Float64"
+      ],
+      "values": [
+        null,
+        null,
+        "4000000000000000",
+        null
+      ]
+    }
+  },
+  {
+    "case": "provider_required_cast",
+    "sql": "SELECT NULLIF(a,bad) AS r FROM inputs",
+    "ansi": false,
+    "batch_size": 3,
+    "observation": {
+      "status": "ok",
+      "phase": "execution",
+      "physical_type": "Float64",
+      "executed_types": [
+        "Float64"
+      ],
+      "values": [
+        null,
+        "3ff0000000000000",
+        "4000000000000000",
+        null
+      ]
+    }
+  },
+  {
+    "case": "literal_skipped_cast",
+    "sql": "SELECT NULLIF(CAST(NULL AS DOUBLE),'bad') AS r",
+    "ansi": false,
+    "batch_size": 3,
+    "observation": {
+      "status": "ok",
+      "phase": "execution",
+      "physical_type": "Float64",
+      "executed_types": [
+        "Float64"
+      ],
+      "values": [
+        null
+      ]
+    }
+  },
+  {
+    "case": "literal_required_cast",
+    "sql": "SELECT NULLIF(CAST(1 AS DOUBLE),'bad') AS r",
+    "ansi": false,
+    "batch_size": 3,
+    "observation": {
+      "status": "ok",
+      "phase": "execution",
+      "physical_type": "Float64",
+      "executed_types": [
+        "Float64"
+      ],
+      "values": [
+        "3ff0000000000000"
+      ]
+    }
+  },
+  {
+    "case": "local_skipped_cast",
+    "sql": "SELECT NULLIF(a,s) AS r FROM VALUES (CAST(NULL AS DOUBLE),'bad'),(CAST(1 AS DOUBLE),'1') t(a,s)",
+    "ansi": false,
+    "batch_size": 3,
+    "observation": {
+      "status": "ok",
+      "phase": "execution",
+      "physical_type": "Float64",
+      "executed_types": [
+        "Float64"
+      ],
+      "values": [
+        null,
+        null
+      ]
+    }
+  },
+  {
+    "case": "limit_zero",
+    "sql": "SELECT NULLIF(a,bad) AS r FROM inputs LIMIT 0",
+    "ansi": false,
+    "batch_size": 3,
+    "observation": {
+      "status": "ok",
+      "phase": "execution",
+      "physical_type": "Float64",
+      "executed_types": [],
+      "values": []
+    }
+  },
+  {
+    "case": "guarded_required_cast",
+    "sql": "SELECT CASE WHEN a IS NULL THEN NULLIF(a,bad) ELSE a END AS r FROM inputs",
+    "ansi": false,
+    "batch_size": 3,
+    "observation": {
+      "status": "ok",
+      "phase": "execution",
+      "physical_type": "Float64",
+      "executed_types": [
+        "Float64"
+      ],
+      "values": [
+        null,
+        "3ff0000000000000",
+        "4000000000000000",
+        null
+      ]
+    }
+  },
+  {
+    "case": "typed_null_comparability",
+    "sql": "SELECT NULLIF(CAST(NULL AS DOUBLE),ARRAY(1)) AS r",
+    "ansi": false,
+    "batch_size": 3,
+    "observation": {
+      "status": "error",
+      "phase": "planning",
+      "root_class": "Plan",
+      "root_message": "Error during planning: For function 'nullif' Float64 and List(non-null Int32) is not comparable",
+      "message": "External error: error in DataFusion: Error during planning: For function 'nullif' Float64 and List(non-null Int32) is not comparable"
+    }
+  },
+  {
+    "case": "provider_skipped_cast",
+    "sql": "SELECT NULLIF(a,s) AS r FROM inputs",
+    "ansi": true,
+    "batch_size": 3,
+    "observation": {
+      "status": "ok",
+      "phase": "execution",
+      "physical_type": "Float64",
+      "executed_types": [
+        "Float64"
+      ],
+      "values": [
+        null,
+        null,
+        "4000000000000000",
+        null
+      ]
+    }
+  },
+  {
+    "case": "provider_required_cast",
+    "sql": "SELECT NULLIF(a,bad) AS r FROM inputs",
+    "ansi": true,
+    "batch_size": 3,
+    "observation": {
+      "status": "error",
+      "phase": "execution",
+      "root_class": "Execution",
+      "root_message": "Execution error: [CAST_INVALID_INPUT] Cannot cast string \"bad\" to Float64",
+      "message": "Execution error: [CAST_INVALID_INPUT] Cannot cast string \"bad\" to Float64"
+    }
+  },
+  {
+    "case": "literal_skipped_cast",
+    "sql": "SELECT NULLIF(CAST(NULL AS DOUBLE),'bad') AS r",
+    "ansi": true,
+    "batch_size": 3,
+    "observation": {
+      "status": "ok",
+      "phase": "execution",
+      "physical_type": "Float64",
+      "executed_types": [
+        "Float64"
+      ],
+      "values": [
+        null
+      ]
+    }
+  },
+  {
+    "case": "literal_required_cast",
+    "sql": "SELECT NULLIF(CAST(1 AS DOUBLE),'bad') AS r",
+    "ansi": true,
+    "batch_size": 3,
+    "observation": {
+      "status": "error",
+      "phase": "physical-planning",
+      "root_class": "Execution",
+      "root_message": "Execution error: [CAST_INVALID_INPUT] Cannot cast string \"bad\" to Float64",
+      "message": "preserve_spark_expression_errors\ncaused by\nExecution error: [CAST_INVALID_INPUT] Cannot cast string \"bad\" to Float64"
+    }
+  },
+  {
+    "case": "local_skipped_cast",
+    "sql": "SELECT NULLIF(a,s) AS r FROM VALUES (CAST(NULL AS DOUBLE),'bad'),(CAST(1 AS DOUBLE),'1') t(a,s)",
+    "ansi": true,
+    "batch_size": 3,
+    "observation": {
+      "status": "ok",
+      "phase": "execution",
+      "physical_type": "Float64",
+      "executed_types": [
+        "Float64"
+      ],
+      "values": [
+        null,
+        null
+      ]
+    }
+  },
+  {
+    "case": "limit_zero",
+    "sql": "SELECT NULLIF(a,bad) AS r FROM inputs LIMIT 0",
+    "ansi": true,
+    "batch_size": 3,
+    "observation": {
+      "status": "ok",
+      "phase": "execution",
+      "physical_type": "Float64",
+      "executed_types": [],
+      "values": []
+    }
+  },
+  {
+    "case": "guarded_required_cast",
+    "sql": "SELECT CASE WHEN a IS NULL THEN NULLIF(a,bad) ELSE a END AS r FROM inputs",
+    "ansi": true,
+    "batch_size": 3,
+    "observation": {
+      "status": "ok",
+      "phase": "execution",
+      "physical_type": "Float64",
+      "executed_types": [
+        "Float64"
+      ],
+      "values": [
+        null,
+        "3ff0000000000000",
+        "4000000000000000",
+        null
+      ]
+    }
+  },
+  {
+    "case": "typed_null_comparability",
+    "sql": "SELECT NULLIF(CAST(NULL AS DOUBLE),ARRAY(1)) AS r",
+    "ansi": true,
+    "batch_size": 3,
+    "observation": {
+      "status": "error",
+      "phase": "planning",
+      "root_class": "Plan",
+      "root_message": "Error during planning: For function 'nullif' Float64 and List(non-null Int32) is not comparable",
+      "message": "External error: error in DataFusion: Error during planning: For function 'nullif' Float64 and List(non-null Int32) is not comparable"
+    }
+  },
+  {
+    "case": "provider_skipped_cast",
+    "sql": "SELECT NULLIF(a,s) AS r FROM inputs",
+    "ansi": false,
+    "batch_size": 16,
+    "observation": {
+      "status": "ok",
+      "phase": "execution",
+      "physical_type": "Float64",
+      "executed_types": [
+        "Float64"
+      ],
+      "values": [
+        null,
+        null,
+        "4000000000000000",
+        null
+      ]
+    }
+  },
+  {
+    "case": "provider_required_cast",
+    "sql": "SELECT NULLIF(a,bad) AS r FROM inputs",
+    "ansi": false,
+    "batch_size": 16,
+    "observation": {
+      "status": "ok",
+      "phase": "execution",
+      "physical_type": "Float64",
+      "executed_types": [
+        "Float64"
+      ],
+      "values": [
+        null,
+        "3ff0000000000000",
+        "4000000000000000",
+        null
+      ]
+    }
+  },
+  {
+    "case": "literal_skipped_cast",
+    "sql": "SELECT NULLIF(CAST(NULL AS DOUBLE),'bad') AS r",
+    "ansi": false,
+    "batch_size": 16,
+    "observation": {
+      "status": "ok",
+      "phase": "execution",
+      "physical_type": "Float64",
+      "executed_types": [
+        "Float64"
+      ],
+      "values": [
+        null
+      ]
+    }
+  },
+  {
+    "case": "literal_required_cast",
+    "sql": "SELECT NULLIF(CAST(1 AS DOUBLE),'bad') AS r",
+    "ansi": false,
+    "batch_size": 16,
+    "observation": {
+      "status": "ok",
+      "phase": "execution",
+      "physical_type": "Float64",
+      "executed_types": [
+        "Float64"
+      ],
+      "values": [
+        "3ff0000000000000"
+      ]
+    }
+  },
+  {
+    "case": "local_skipped_cast",
+    "sql": "SELECT NULLIF(a,s) AS r FROM VALUES (CAST(NULL AS DOUBLE),'bad'),(CAST(1 AS DOUBLE),'1') t(a,s)",
+    "ansi": false,
+    "batch_size": 16,
+    "observation": {
+      "status": "ok",
+      "phase": "execution",
+      "physical_type": "Float64",
+      "executed_types": [
+        "Float64"
+      ],
+      "values": [
+        null,
+        null
+      ]
+    }
+  },
+  {
+    "case": "limit_zero",
+    "sql": "SELECT NULLIF(a,bad) AS r FROM inputs LIMIT 0",
+    "ansi": false,
+    "batch_size": 16,
+    "observation": {
+      "status": "ok",
+      "phase": "execution",
+      "physical_type": "Float64",
+      "executed_types": [],
+      "values": []
+    }
+  },
+  {
+    "case": "guarded_required_cast",
+    "sql": "SELECT CASE WHEN a IS NULL THEN NULLIF(a,bad) ELSE a END AS r FROM inputs",
+    "ansi": false,
+    "batch_size": 16,
+    "observation": {
+      "status": "ok",
+      "phase": "execution",
+      "physical_type": "Float64",
+      "executed_types": [
+        "Float64"
+      ],
+      "values": [
+        null,
+        "3ff0000000000000",
+        "4000000000000000",
+        null
+      ]
+    }
+  },
+  {
+    "case": "typed_null_comparability",
+    "sql": "SELECT NULLIF(CAST(NULL AS DOUBLE),ARRAY(1)) AS r",
+    "ansi": false,
+    "batch_size": 16,
+    "observation": {
+      "status": "error",
+      "phase": "planning",
+      "root_class": "Plan",
+      "root_message": "Error during planning: For function 'nullif' Float64 and List(non-null Int32) is not comparable",
+      "message": "External error: error in DataFusion: Error during planning: For function 'nullif' Float64 and List(non-null Int32) is not comparable"
+    }
+  },
+  {
+    "case": "provider_skipped_cast",
+    "sql": "SELECT NULLIF(a,s) AS r FROM inputs",
+    "ansi": true,
+    "batch_size": 16,
+    "observation": {
+      "status": "ok",
+      "phase": "execution",
+      "physical_type": "Float64",
+      "executed_types": [
+        "Float64"
+      ],
+      "values": [
+        null,
+        null,
+        "4000000000000000",
+        null
+      ]
+    }
+  },
+  {
+    "case": "provider_required_cast",
+    "sql": "SELECT NULLIF(a,bad) AS r FROM inputs",
+    "ansi": true,
+    "batch_size": 16,
+    "observation": {
+      "status": "error",
+      "phase": "execution",
+      "root_class": "Execution",
+      "root_message": "Execution error: [CAST_INVALID_INPUT] Cannot cast string \"bad\" to Float64",
+      "message": "Execution error: [CAST_INVALID_INPUT] Cannot cast string \"bad\" to Float64"
+    }
+  },
+  {
+    "case": "literal_skipped_cast",
+    "sql": "SELECT NULLIF(CAST(NULL AS DOUBLE),'bad') AS r",
+    "ansi": true,
+    "batch_size": 16,
+    "observation": {
+      "status": "ok",
+      "phase": "execution",
+      "physical_type": "Float64",
+      "executed_types": [
+        "Float64"
+      ],
+      "values": [
+        null
+      ]
+    }
+  },
+  {
+    "case": "literal_required_cast",
+    "sql": "SELECT NULLIF(CAST(1 AS DOUBLE),'bad') AS r",
+    "ansi": true,
+    "batch_size": 16,
+    "observation": {
+      "status": "error",
+      "phase": "physical-planning",
+      "root_class": "Execution",
+      "root_message": "Execution error: [CAST_INVALID_INPUT] Cannot cast string \"bad\" to Float64",
+      "message": "preserve_spark_expression_errors\ncaused by\nExecution error: [CAST_INVALID_INPUT] Cannot cast string \"bad\" to Float64"
+    }
+  },
+  {
+    "case": "local_skipped_cast",
+    "sql": "SELECT NULLIF(a,s) AS r FROM VALUES (CAST(NULL AS DOUBLE),'bad'),(CAST(1 AS DOUBLE),'1') t(a,s)",
+    "ansi": true,
+    "batch_size": 16,
+    "observation": {
+      "status": "ok",
+      "phase": "execution",
+      "physical_type": "Float64",
+      "executed_types": [
+        "Float64"
+      ],
+      "values": [
+        null,
+        null
+      ]
+    }
+  },
+  {
+    "case": "limit_zero",
+    "sql": "SELECT NULLIF(a,bad) AS r FROM inputs LIMIT 0",
+    "ansi": true,
+    "batch_size": 16,
+    "observation": {
+      "status": "ok",
+      "phase": "execution",
+      "physical_type": "Float64",
+      "executed_types": [],
+      "values": []
+    }
+  },
+  {
+    "case": "guarded_required_cast",
+    "sql": "SELECT CASE WHEN a IS NULL THEN NULLIF(a,bad) ELSE a END AS r FROM inputs",
+    "ansi": true,
+    "batch_size": 16,
+    "observation": {
+      "status": "ok",
+      "phase": "execution",
+      "physical_type": "Float64",
+      "executed_types": [
+        "Float64"
+      ],
+      "values": [
+        null,
+        "3ff0000000000000",
+        "4000000000000000",
+        null
+      ]
+    }
+  },
+  {
+    "case": "typed_null_comparability",
+    "sql": "SELECT NULLIF(CAST(NULL AS DOUBLE),ARRAY(1)) AS r",
+    "ansi": true,
+    "batch_size": 16,
+    "observation": {
+      "status": "error",
+      "phase": "planning",
+      "root_class": "Plan",
+      "root_message": "Error during planning: For function 'nullif' Float64 and List(non-null Int32) is not comparable",
+      "message": "External error: error in DataFusion: Error during planning: For function 'nullif' Float64 and List(non-null Int32) is not comparable"
+    }
+  }
+]
