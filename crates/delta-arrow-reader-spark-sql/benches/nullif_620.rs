@@ -345,25 +345,46 @@ async fn effects(manifest: &Value) -> BenchResult {
                         }),
                     ));
                 }
-                let (plan, _) = plan(
+                let (plan, logical_field) = plan(
                     &session,
                     configuration,
                     "SELECT NULLIF(left_effect(a),right_effect(b)) AS r FROM inputs",
                 )
                 .await?;
                 assert_eq!(counts.each_ref().map(|c| c.load(Ordering::SeqCst)), [0, 0]);
-                let result = collect(plan, session.task_ctx()).await?;
-                assert!(validate(
+                let result = collect(plan.clone(), session.task_ctx()).await?;
+                let formula_match = validate(
                     &result,
                     &manifest["families"]["nullif"][2],
                     "nullif",
                     fraction,
-                    rows
-                )?);
+                    rows,
+                )?;
                 let required = (0..rows)
                     .filter(|row| input_value(fraction, *row, true).is_some())
                     .count();
                 let actual = counts.each_ref().map(|c| c.load(Ordering::SeqCst));
+                if !formula_match || actual != [rows, required] {
+                    let actual_values = values(&result);
+                    let expected_values = (0..rows)
+                        .map(|row| {
+                            expected(&manifest["families"]["nullif"][2], fraction, row)
+                                .map(f64::to_bits)
+                        })
+                        .collect::<Vec<_>>();
+                    let mut sorted_expected = expected_values.clone();
+                    sorted_expected.sort_unstable();
+                    let multiset_equal = actual_values.as_ref().is_ok_and(|values| {
+                        let mut sorted = values.clone();
+                        sorted.sort_unstable();
+                        sorted == sorted_expected
+                    });
+                    eprintln!(
+                        "{}",
+                        json!({"kind":"effects_failure","configuration":configuration,"fraction":fraction,"expected_rows":rows,"actual_rows":result.iter().map(RecordBatch::num_rows).sum::<usize>(),"planning_evaluated_rows":[0,0],"execution_evaluated_rows":actual,"expected_execution_evaluated_rows":[rows,required],"logical_field":format!("{logical_field:?}"),"executed_schemas":result.iter().map(|b|format!("{:?}",b.schema())).collect::<Vec<_>>(),"actual_values":actual_values.as_ref().map(|values|values.iter().map(|v|v.map(f64::from_bits)).collect::<Vec<_>>()).map_err(ToString::to_string),"expected_values":expected_values.iter().map(|v|v.map(f64::from_bits)).collect::<Vec<_>>(),"multiset_equal":multiset_equal,"plan":displayable(plan.as_ref()).indent(true).to_string(),"plan_partitions":partitions(plan.as_ref())})
+                    );
+                }
+                assert!(formula_match);
                 assert_eq!(actual, [rows, required]);
                 println!(
                     "{}",
@@ -379,6 +400,53 @@ async fn effects(manifest: &Value) -> BenchResult {
 async fn main() -> BenchResult {
     let args = std::env::args().skip(1).collect::<Vec<_>>();
     let manifest: Value = serde_json::from_str(MANIFEST)?;
+    if args.first().map(String::as_str) == Some("effects") {
+        return effects(&manifest).await;
+    }
+    if args.first().map(String::as_str) == Some("inspect-retained") {
+        let directory = Path::new(args.get(1).ok_or("expected retained IPC directory")?);
+        let rows = manifest["rows"].as_u64().ok_or("missing rows")? as usize;
+        for batch in manifest["batch_rows"].as_array().ok_or("missing batches")? {
+            for fraction in manifest["null_fractions"]
+                .as_array()
+                .ok_or("missing fractions")?
+            {
+                let fraction = fraction.as_str().ok_or("invalid fraction")?;
+                for case in manifest["families"]["nullif"]
+                    .as_array()
+                    .ok_or("missing cases")?
+                {
+                    let mut expected_values = (0..rows)
+                        .map(|row| expected(case, fraction, row).map(f64::to_bits))
+                        .collect::<Vec<_>>();
+                    expected_values.sort_unstable();
+                    for configuration in ["native", "spark-off", "spark-on"] {
+                        let id = format!(
+                            "nullif-{}-{fraction}-{batch}-{configuration}",
+                            case["name"].as_str().ok_or("missing name")?
+                        );
+                        let path = directory.join(format!("{id}.arrow"));
+                        let (schema, batches) = read_ipc(path.to_str().ok_or("invalid IPC path")?)?;
+                        let mut actual = values(&batches)?;
+                        let first_values = actual
+                            .iter()
+                            .take(17)
+                            .map(|value| value.map(f64::from_bits))
+                            .collect::<Vec<_>>();
+                        actual.sort_unstable();
+                        let equal = schema.field(0).data_type() == &DataType::Float64
+                            && actual == expected_values;
+                        println!(
+                            "{}",
+                            json!({"kind":"retained_multiset","id":id,"rows":actual.len(),"schema":format!("{schema:?}"),"first_values":first_values,"multiset_equal":equal})
+                        );
+                        assert!(equal, "retained IPC differs from formula: {id}");
+                    }
+                }
+            }
+        }
+        return Ok(());
+    }
     if args.first().map(String::as_str) == Some("compare") {
         let (left_schema, left) = read_ipc(&args[1])?;
         let (right_schema, right) = read_ipc(&args[2])?;
