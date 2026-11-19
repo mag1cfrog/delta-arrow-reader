@@ -1,0 +1,154 @@
+package,version,change,source,declared_license,features
+aead,0.5.2,new name,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,"alloc,getrandom,rand_core"
+aes,0.8.4,new name,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,
+aes-gcm,0.10.3,new name,registry+https://github.com/rust-lang/crates.io-index,Apache-2.0 OR MIT,"aes,alloc,default,getrandom,rand_core"
+ar_archive_writer,0.5.5,new name,registry+https://github.com/rust-lang/crates.io-index,Apache-2.0 WITH LLVM-exception,
+arrayvec,0.7.8,new name,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,"default,std"
+async-recursion,1.2.0,new name,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,
+beef,0.5.2,new name,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,default
+bitvec,1.1.1,new name,registry+https://github.com/rust-lang/crates.io-index,MIT,"alloc,atomic,default,std"
+blake2,0.10.6,new name,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,"default,std"
+blake3,1.8.7,new name,registry+https://github.com/rust-lang/crates.io-index,CC0-1.0 OR Apache-2.0 OR Apache-2.0 WITH LLVM-exception,"default,std"
+blanket,0.4.0,new name,registry+https://github.com/rust-lang/crates.io-index,MIT,default
+block-buffer,0.12.1,additional version,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,
+block-padding,0.3.3,new name,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,std
+calendrical_calculations,0.1.3,new name,registry+https://github.com/rust-lang/crates.io-index,Apache-2.0,
+cbc,0.1.2,new name,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,"alloc,block-padding,default,std"
+chumsky,0.12.0,new name,registry+https://github.com/rust-lang/crates.io-index,MIT,"pratt,unstable"
+chumsky,1.0.0-alpha.8,new name,registry+https://github.com/rust-lang/crates.io-index,MIT,"default,stacker,std"
+cipher,0.4.4,new name,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,"alloc,block-padding,std"
+const-oid,0.10.3,new name,registry+https://github.com/rust-lang/crates.io-index,Apache-2.0 OR MIT,
+constant_time_eq,0.4.2,new name,registry+https://github.com/rust-lang/crates.io-index,CC0-1.0 OR MIT-0 OR Apache-2.0,std
+core_maths,0.1.1,new name,registry+https://github.com/rust-lang/crates.io-index,MIT,
+crc32fast,1.5.5,new name,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,"default,std"
+crypto-common,0.2.2,additional version,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,
+ctr,0.9.2,new name,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,
+datafusion-spark,54.1.0,new name,registry+https://github.com/rust-lang/crates.io-index,Apache-2.0,"core,datafusion,default"
+datasketches,0.3.0,new name,registry+https://github.com/rust-lang/crates.io-index,Apache-2.0,"default,hll,theta"
+delta-arrow-reader-spark-sql,0.1.0,new name,local path,Apache-2.0,
+digest,0.11.3,additional version,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,"alloc,block-api,default,oid"
+educe,0.6.0,new name,registry+https://github.com/rust-lang/crates.io-index,MIT,"Clone,Copy,Debug,Default,Deref,DerefMut,Eq,Hash,Into,Ord,PartialEq,PartialOrd,default"
+enum-ordinalize,4.4.2,new name,registry+https://github.com/rust-lang/crates.io-index,MIT,derive
+enum-ordinalize-derive,4.4.2,new name,registry+https://github.com/rust-lang/crates.io-index,MIT,
+enum_dispatch,0.3.13,new name,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,
+fixed_decimal,0.5.6,new name,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,
+funty,2.0.0,new name,registry+https://github.com/rust-lang/crates.io-index,MIT,
+genawaiter,0.99.1,new name,registry+https://github.com/rust-lang/crates.io-index,MIT,"default,genawaiter-proc-macro,proc-macro-hack,proc_macro"
+genawaiter-macro,0.99.1,new name,registry+https://github.com/rust-lang/crates.io-index,MIT/Apache-2.0,proc_macro
+genawaiter-proc-macro,0.99.1,new name,registry+https://github.com/rust-lang/crates.io-index,MIT/Apache-2.0,
+ghash,0.5.1,new name,registry+https://github.com/rust-lang/crates.io-index,Apache-2.0 OR MIT,
+hybrid-array,0.4.15,new name,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,
+ibig,0.3.6,new name,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,"default,num-traits,rand,std"
+icu,1.5.0,new name,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,default
+icu_calendar,1.5.2,new name,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,"compiled_data,default"
+icu_calendar_data,1.5.1,new name,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,
+icu_casemap,1.5.1,new name,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,"compiled_data,default"
+icu_casemap_data,1.5.1,new name,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,
+icu_collator,1.5.0,new name,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,"compiled_data,default"
+icu_collator_data,1.5.1,new name,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,
+icu_collections,1.5.0,additional version,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,
+icu_datetime,1.5.1,new name,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,"compiled_data,default"
+icu_datetime_data,1.5.1,new name,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,
+icu_decimal,1.5.0,new name,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,"compiled_data,default"
+icu_decimal_data,1.5.1,new name,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,
+icu_list,1.5.0,new name,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,"compiled_data,default"
+icu_list_data,1.5.1,new name,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,
+icu_locid,1.5.0,new name,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,zerovec
+icu_locid_transform,1.5.0,new name,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,"compiled_data,default"
+icu_locid_transform_data,1.5.1,new name,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,
+icu_normalizer,1.5.0,additional version,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,"compiled_data,default"
+icu_normalizer_data,1.5.1,additional version,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,
+icu_plurals,1.5.0,new name,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,"compiled_data,default"
+icu_plurals_data,1.5.1,new name,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,
+icu_properties,1.5.1,additional version,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,"compiled_data,default"
+icu_properties_data,1.5.1,additional version,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,
+icu_provider,1.5.0,additional version,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,"experimental,macros"
+icu_provider_adapters,1.5.0,new name,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,
+icu_provider_macros,1.5.0,new name,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,
+icu_segmenter,1.5.0,new name,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,"auto,compiled_data,default,lstm"
+icu_segmenter_data,1.5.1,new name,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,
+icu_timezone,1.5.0,new name,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,"compiled_data,default"
+icu_timezone_data,1.5.1,new name,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,
+indextree,4.9.2,new name,registry+https://github.com/rust-lang/crates.io-index,MIT,"default,indextree-macros,macros,std"
+indextree-macros,0.1.4,new name,registry+https://github.com/rust-lang/crates.io-index,MIT,
+inout,0.1.4,new name,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,"block-padding,std"
+iri-string,0.7.14,new name,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,"alloc,default,std"
+jiter,0.15.0,new name,registry+https://github.com/rust-lang/crates.io-index,MIT,num-bigint
+json,0.12.4,new name,registry+https://github.com/rust-lang/crates.io-index,MIT/Apache-2.0,
+lexical,7.0.5,new name,registry+https://github.com/rust-lang/crates.io-index,MIT/Apache-2.0,"default,format,parse-floats,parse-integers,std,write-floats,write-integers"
+litemap,0.7.5,additional version,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,alloc
+logos,0.15.1,new name,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,"default,export_derive,logos-derive,std"
+logos-codegen,0.15.1,new name,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,
+logos-derive,0.15.1,new name,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,
+md-5,0.11.0,additional version,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,"alloc,default,oid"
+next-gen,0.1.1,new name,registry+https://github.com/rust-lang/crates.io-index,Zlib OR MIT OR Apache-2.0,"alloc,default,std"
+next-gen-proc_macros,0.1.1,new name,registry+https://github.com/rust-lang/crates.io-index,Zlib OR MIT OR Apache-2.0,
+num,0.4.3,new name,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,"default,num-bigint,std"
+num-derive,0.4.2,new name,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,
+num-iter,0.1.46,new name,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,"i128,std"
+num-rational,0.4.2,new name,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,"num-bigint,num-bigint-std,std"
+object,0.39.1,new name,registry+https://github.com/rust-lang/crates.io-index,Apache-2.0 OR MIT,"archive,coff,elf,macho,pe,read,read_core,std,xcoff"
+opaque-debug,0.3.1,new name,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,
+ordered-float,5.5.1,additional version,registry+https://github.com/rust-lang/crates.io-index,MIT,"default,std"
+phf,0.13.1,additional version,registry+https://github.com/rust-lang/crates.io-index,MIT,"default,macros,phf_macros,std"
+phf_generator,0.13.1,new name,registry+https://github.com/rust-lang/crates.io-index,MIT,
+phf_macros,0.13.1,new name,registry+https://github.com/rust-lang/crates.io-index,MIT,
+phf_shared,0.13.1,additional version,registry+https://github.com/rust-lang/crates.io-index,MIT,std
+polyval,0.6.2,new name,registry+https://github.com/rust-lang/crates.io-index,Apache-2.0 OR MIT,
+prettyplease,0.2.37,new name,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,
+proc-macro-error,0.4.12,new name,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,
+proc-macro-error-attr,0.4.12,new name,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,
+proc-macro-hack,0.5.20+deprecated,new name,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,
+psm,0.1.32,new name,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,
+radium,0.7.0,new name,registry+https://github.com/rust-lang/crates.io-index,MIT,
+rand,0.8.8,additional version,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,
+rand_core,0.6.4,additional version,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,getrandom
+rand_distr,0.6.0,new name,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,"alloc,default,std"
+rand_xoshiro,0.6.0,new name,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,
+recursive,0.1.1,new name,registry+https://github.com/rust-lang/crates.io-index,MIT,
+recursive-proc-macro-impl,0.1.1,new name,registry+https://github.com/rust-lang/crates.io-index,MIT,
+regex-automata,0.2.0,additional version,registry+https://github.com/rust-lang/crates.io-index,Unlicense/MIT,
+regexml,0.2.2,new name,registry+https://github.com/rust-lang/crates.io-index,Apache-2.0 OR MPL-2.0,
+rust_decimal,1.43.0,new name,registry+https://github.com/rust-lang/crates.io-index,MIT,"default,serde,std"
+sail-common,0.7.1,new name,local path,missing; shared Sail license clarified,
+sail-common-datafusion,0.7.1,new name,local path,missing; shared Sail license clarified,
+sail-function,0.7.1,new name,local path,missing; shared Sail license clarified,
+sail-logical-plan,0.7.1,new name,local path,missing; shared Sail license clarified,
+sail-plan,0.7.1,new name,local path,missing; shared Sail license clarified,
+sail-sql-analyzer,0.7.1,new name,local path,missing; shared Sail license clarified,
+sail-sql-macro,0.7.1,new name,local path,missing; shared Sail license clarified,
+sail-sql-parser,0.7.1,new name,local path,missing; shared Sail license clarified,
+sha1,0.11.0,new name,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,"alloc,default,oid"
+sha2,0.11.1,additional version,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,"alloc,default,oid"
+stacker,0.1.25,new name,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,
+static_assertions,1.1.0,new name,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,
+syn,1.0.109,additional version,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,"clone-impls,default,derive,full,parsing,printing,proc-macro,quote,visit-mut"
+syn-mid,0.5.4,new name,registry+https://github.com/rust-lang/crates.io-index,Apache-2.0 OR MIT,
+tap,1.0.1,new name,registry+https://github.com/rust-lang/crates.io-index,MIT,
+tinystr,0.7.6,additional version,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,"alloc,zerovec"
+universal-hash,0.5.1,new name,registry+https://github.com/rust-lang/crates.io-index,MIT OR Apache-2.0,
+unwind_safe,0.1.0,new name,registry+https://github.com/rust-lang/crates.io-index,Zlib OR MIT OR Apache-2.0,
+utf16_iter,1.1.0,new name,registry+https://github.com/rust-lang/crates.io-index,Apache-2.0 OR MIT,
+utf_types,1.0.0,new name,registry+https://github.com/rust-lang/crates.io-index,Apache-2.0 OR MIT,
+v_jsonescape,0.7.8,new name,registry+https://github.com/rust-lang/crates.io-index,MIT/Apache-2.0,
+write16,1.0.0,new name,registry+https://github.com/rust-lang/crates.io-index,Apache-2.0 OR MIT,alloc
+writeable,0.5.5,additional version,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,
+wyz,0.5.1,new name,registry+https://github.com/rust-lang/crates.io-index,MIT,
+xee-interpreter,0.2.0,new name,registry+https://github.com/rust-lang/crates.io-index,MIT,
+xee-ir,0.1.5,new name,registry+https://github.com/rust-lang/crates.io-index,MIT,
+xee-name,0.1.5,new name,registry+https://github.com/rust-lang/crates.io-index,MIT,
+xee-schema-type,0.1.4,new name,registry+https://github.com/rust-lang/crates.io-index,MIT,
+xee-xpath,0.1.5,new name,registry+https://github.com/rust-lang/crates.io-index,MIT,
+xee-xpath-ast,0.1.4,new name,registry+https://github.com/rust-lang/crates.io-index,MIT,
+xee-xpath-compiler,0.1.5,new name,registry+https://github.com/rust-lang/crates.io-index,MIT,
+xee-xpath-lexer,0.1.4,new name,registry+https://github.com/rust-lang/crates.io-index,MIT,
+xee-xpath-macros,0.1.4,new name,registry+https://github.com/rust-lang/crates.io-index,MIT,
+xee-xpath-type,0.1.4,new name,registry+https://github.com/rust-lang/crates.io-index,MIT,
+xhtmlchardet,2.2.0,new name,registry+https://github.com/rust-lang/crates.io-index,MIT,
+xmlparser,0.13.6,new name,registry+https://github.com/rust-lang/crates.io-index,MIT/Apache-2.0,"default,std"
+xot,0.31.2,new name,registry+https://github.com/rust-lang/crates.io-index,MIT,
+yoke,0.7.5,additional version,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,"alloc,default,derive,zerofrom"
+yoke-derive,0.7.5,additional version,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,
+zerotrie,0.1.3,additional version,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,"alloc,yoke,zerofrom"
+zerovec,0.10.4,additional version,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,"derive,yoke"
+zerovec-derive,0.10.4,additional version,registry+https://github.com/rust-lang/crates.io-index,Unicode-3.0,

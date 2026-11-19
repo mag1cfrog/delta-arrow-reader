@@ -1,0 +1,12 @@
+{
+  "product_baseline": "093bf3d65408043b87d39bf92fd5b42eda635013",
+  "scratch_worktree": "/home/hanbo/.local/share/delta-arrow-reader-review/measurements-2026-11-18/1381/scratch-worktree",
+  "scratch_branch": "perf/1381-spark-link-scratch",
+  "target_root": "/home/hanbo/.cache/delta-arrow-reader/measurements-2026-11-18/target/footprint",
+  "evidence_root": "/home/hanbo/.local/share/delta-arrow-reader-review/measurements-2026-11-18/1381",
+  "builds": {
+    "stock": "093bf3d65408043b87d39bf92fd5b42eda635013",
+    "forks-only": "b0c554143c686d44c7fe9897350b24a0a3cc1669",
+    "linked": "1394728a925b6cdae28e2062eb5637464e4a2fd1"
+  }
+}

@@ -1,0 +1,4931 @@
+{
+  "toolchain": "1.96.0",
+  "target": "x86_64-unknown-linux-gnu",
+  "build_jobs": 2,
+  "build_order": [
+    "stock",
+    "forks-only",
+    "linked"
+  ],
+  "clean_build_timeout_seconds": 5400,
+  "msrv_candidates": [
+    "1.93.0",
+    "1.94.0",
+    "1.95.0",
+    "1.96.0"
+  ],
+  "msrv_build_timeout_seconds": 5400,
+  "cpus": [
+    2,
+    3,
+    4,
+    5
+  ],
+  "process_timeout_seconds": 180,
+  "native_schedule_timeout_seconds": 7200,
+  "preflight_process_timeout_seconds": 300,
+  "preflight_timeout_seconds": 3600,
+  "address_space_bytes": 12884901888,
+  "memory_limit_bytes": 2147483648,
+  "max_rows": 7000000,
+  "max_output_bytes": 2147483648,
+  "spill_limit_bytes": 0,
+  "runs": [
+    {
+      "series": "warmup",
+      "case": "version",
+      "build": "stock",
+      "process": "warmup-version-stock"
+    },
+    {
+      "series": "warmup",
+      "case": "version",
+      "build": "forks-only",
+      "process": "warmup-version-forks-only"
+    },
+    {
+      "series": "warmup",
+      "case": "trivial",
+      "build": "forks-only",
+      "process": "warmup-trivial-forks-only"
+    },
+    {
+      "series": "warmup",
+      "case": "trivial",
+      "build": "stock",
+      "process": "warmup-trivial-stock"
+    },
+    {
+      "series": "warmup",
+      "case": "projection_five",
+      "build": "stock",
+      "process": "warmup-projection_five-stock"
+    },
+    {
+      "series": "warmup",
+      "case": "projection_five",
+      "build": "forks-only",
+      "process": "warmup-projection_five-forks-only"
+    },
+    {
+      "series": "warmup",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "process": "warmup-statistics_filter-forks-only"
+    },
+    {
+      "series": "warmup",
+      "case": "statistics_filter",
+      "build": "stock",
+      "process": "warmup-statistics_filter-stock"
+    },
+    {
+      "series": "warmup",
+      "case": "group_low",
+      "build": "stock",
+      "process": "warmup-group_low-stock"
+    },
+    {
+      "series": "warmup",
+      "case": "group_low",
+      "build": "forks-only",
+      "process": "warmup-group_low-forks-only"
+    },
+    {
+      "series": "warmup",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "process": "warmup-count_distinct-forks-only"
+    },
+    {
+      "series": "warmup",
+      "case": "count_distinct",
+      "build": "stock",
+      "process": "warmup-count_distinct-stock"
+    },
+    {
+      "series": "warmup",
+      "case": "row_number",
+      "build": "stock",
+      "process": "warmup-row_number-stock"
+    },
+    {
+      "series": "warmup",
+      "case": "row_number",
+      "build": "forks-only",
+      "process": "warmup-row_number-forks-only"
+    },
+    {
+      "series": "warmup",
+      "case": "self_join",
+      "build": "forks-only",
+      "process": "warmup-self_join-forks-only"
+    },
+    {
+      "series": "warmup",
+      "case": "self_join",
+      "build": "stock",
+      "process": "warmup-self_join-stock"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "stock",
+      "arm": "a",
+      "replica": 1,
+      "process": "noise-01-version-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "stock",
+      "arm": "b",
+      "replica": 1,
+      "process": "noise-01-version-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 1,
+      "process": "noise-01-version-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 1,
+      "process": "noise-01-version-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 1,
+      "process": "noise-01-trivial-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 1,
+      "process": "noise-01-trivial-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "stock",
+      "arm": "b",
+      "replica": 1,
+      "process": "noise-01-trivial-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "stock",
+      "arm": "a",
+      "replica": 1,
+      "process": "noise-01-trivial-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "stock",
+      "arm": "a",
+      "replica": 1,
+      "process": "noise-01-projection_five-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "stock",
+      "arm": "b",
+      "replica": 1,
+      "process": "noise-01-projection_five-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 1,
+      "process": "noise-01-projection_five-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 1,
+      "process": "noise-01-projection_five-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 1,
+      "process": "noise-01-statistics_filter-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 1,
+      "process": "noise-01-statistics_filter-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "stock",
+      "arm": "b",
+      "replica": 1,
+      "process": "noise-01-statistics_filter-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "stock",
+      "arm": "a",
+      "replica": 1,
+      "process": "noise-01-statistics_filter-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "stock",
+      "arm": "a",
+      "replica": 1,
+      "process": "noise-01-group_low-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "stock",
+      "arm": "b",
+      "replica": 1,
+      "process": "noise-01-group_low-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 1,
+      "process": "noise-01-group_low-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 1,
+      "process": "noise-01-group_low-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 1,
+      "process": "noise-01-count_distinct-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 1,
+      "process": "noise-01-count_distinct-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "stock",
+      "arm": "b",
+      "replica": 1,
+      "process": "noise-01-count_distinct-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "stock",
+      "arm": "a",
+      "replica": 1,
+      "process": "noise-01-count_distinct-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "stock",
+      "arm": "a",
+      "replica": 1,
+      "process": "noise-01-row_number-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "stock",
+      "arm": "b",
+      "replica": 1,
+      "process": "noise-01-row_number-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 1,
+      "process": "noise-01-row_number-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 1,
+      "process": "noise-01-row_number-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 1,
+      "process": "noise-01-self_join-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 1,
+      "process": "noise-01-self_join-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "stock",
+      "arm": "b",
+      "replica": 1,
+      "process": "noise-01-self_join-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "stock",
+      "arm": "a",
+      "replica": 1,
+      "process": "noise-01-self_join-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 2,
+      "process": "noise-02-version-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 2,
+      "process": "noise-02-version-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "stock",
+      "arm": "b",
+      "replica": 2,
+      "process": "noise-02-version-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "stock",
+      "arm": "a",
+      "replica": 2,
+      "process": "noise-02-version-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "stock",
+      "arm": "a",
+      "replica": 2,
+      "process": "noise-02-trivial-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "stock",
+      "arm": "b",
+      "replica": 2,
+      "process": "noise-02-trivial-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 2,
+      "process": "noise-02-trivial-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 2,
+      "process": "noise-02-trivial-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 2,
+      "process": "noise-02-projection_five-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 2,
+      "process": "noise-02-projection_five-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "stock",
+      "arm": "b",
+      "replica": 2,
+      "process": "noise-02-projection_five-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "stock",
+      "arm": "a",
+      "replica": 2,
+      "process": "noise-02-projection_five-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "stock",
+      "arm": "a",
+      "replica": 2,
+      "process": "noise-02-statistics_filter-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "stock",
+      "arm": "b",
+      "replica": 2,
+      "process": "noise-02-statistics_filter-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 2,
+      "process": "noise-02-statistics_filter-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 2,
+      "process": "noise-02-statistics_filter-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 2,
+      "process": "noise-02-group_low-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 2,
+      "process": "noise-02-group_low-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "stock",
+      "arm": "b",
+      "replica": 2,
+      "process": "noise-02-group_low-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "stock",
+      "arm": "a",
+      "replica": 2,
+      "process": "noise-02-group_low-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "stock",
+      "arm": "a",
+      "replica": 2,
+      "process": "noise-02-count_distinct-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "stock",
+      "arm": "b",
+      "replica": 2,
+      "process": "noise-02-count_distinct-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 2,
+      "process": "noise-02-count_distinct-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 2,
+      "process": "noise-02-count_distinct-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 2,
+      "process": "noise-02-row_number-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 2,
+      "process": "noise-02-row_number-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "stock",
+      "arm": "b",
+      "replica": 2,
+      "process": "noise-02-row_number-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "stock",
+      "arm": "a",
+      "replica": 2,
+      "process": "noise-02-row_number-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "stock",
+      "arm": "a",
+      "replica": 2,
+      "process": "noise-02-self_join-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "stock",
+      "arm": "b",
+      "replica": 2,
+      "process": "noise-02-self_join-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 2,
+      "process": "noise-02-self_join-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 2,
+      "process": "noise-02-self_join-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "stock",
+      "arm": "a",
+      "replica": 3,
+      "process": "noise-03-version-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "stock",
+      "arm": "b",
+      "replica": 3,
+      "process": "noise-03-version-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 3,
+      "process": "noise-03-version-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 3,
+      "process": "noise-03-version-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 3,
+      "process": "noise-03-trivial-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 3,
+      "process": "noise-03-trivial-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "stock",
+      "arm": "b",
+      "replica": 3,
+      "process": "noise-03-trivial-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "stock",
+      "arm": "a",
+      "replica": 3,
+      "process": "noise-03-trivial-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "stock",
+      "arm": "a",
+      "replica": 3,
+      "process": "noise-03-projection_five-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "stock",
+      "arm": "b",
+      "replica": 3,
+      "process": "noise-03-projection_five-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 3,
+      "process": "noise-03-projection_five-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 3,
+      "process": "noise-03-projection_five-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 3,
+      "process": "noise-03-statistics_filter-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 3,
+      "process": "noise-03-statistics_filter-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "stock",
+      "arm": "b",
+      "replica": 3,
+      "process": "noise-03-statistics_filter-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "stock",
+      "arm": "a",
+      "replica": 3,
+      "process": "noise-03-statistics_filter-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "stock",
+      "arm": "a",
+      "replica": 3,
+      "process": "noise-03-group_low-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "stock",
+      "arm": "b",
+      "replica": 3,
+      "process": "noise-03-group_low-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 3,
+      "process": "noise-03-group_low-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 3,
+      "process": "noise-03-group_low-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 3,
+      "process": "noise-03-count_distinct-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 3,
+      "process": "noise-03-count_distinct-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "stock",
+      "arm": "b",
+      "replica": 3,
+      "process": "noise-03-count_distinct-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "stock",
+      "arm": "a",
+      "replica": 3,
+      "process": "noise-03-count_distinct-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "stock",
+      "arm": "a",
+      "replica": 3,
+      "process": "noise-03-row_number-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "stock",
+      "arm": "b",
+      "replica": 3,
+      "process": "noise-03-row_number-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 3,
+      "process": "noise-03-row_number-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 3,
+      "process": "noise-03-row_number-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 3,
+      "process": "noise-03-self_join-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 3,
+      "process": "noise-03-self_join-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "stock",
+      "arm": "b",
+      "replica": 3,
+      "process": "noise-03-self_join-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "stock",
+      "arm": "a",
+      "replica": 3,
+      "process": "noise-03-self_join-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 4,
+      "process": "noise-04-version-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 4,
+      "process": "noise-04-version-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "stock",
+      "arm": "b",
+      "replica": 4,
+      "process": "noise-04-version-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "stock",
+      "arm": "a",
+      "replica": 4,
+      "process": "noise-04-version-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "stock",
+      "arm": "a",
+      "replica": 4,
+      "process": "noise-04-trivial-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "stock",
+      "arm": "b",
+      "replica": 4,
+      "process": "noise-04-trivial-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 4,
+      "process": "noise-04-trivial-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 4,
+      "process": "noise-04-trivial-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 4,
+      "process": "noise-04-projection_five-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 4,
+      "process": "noise-04-projection_five-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "stock",
+      "arm": "b",
+      "replica": 4,
+      "process": "noise-04-projection_five-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "stock",
+      "arm": "a",
+      "replica": 4,
+      "process": "noise-04-projection_five-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "stock",
+      "arm": "a",
+      "replica": 4,
+      "process": "noise-04-statistics_filter-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "stock",
+      "arm": "b",
+      "replica": 4,
+      "process": "noise-04-statistics_filter-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 4,
+      "process": "noise-04-statistics_filter-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 4,
+      "process": "noise-04-statistics_filter-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 4,
+      "process": "noise-04-group_low-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 4,
+      "process": "noise-04-group_low-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "stock",
+      "arm": "b",
+      "replica": 4,
+      "process": "noise-04-group_low-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "stock",
+      "arm": "a",
+      "replica": 4,
+      "process": "noise-04-group_low-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "stock",
+      "arm": "a",
+      "replica": 4,
+      "process": "noise-04-count_distinct-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "stock",
+      "arm": "b",
+      "replica": 4,
+      "process": "noise-04-count_distinct-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 4,
+      "process": "noise-04-count_distinct-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 4,
+      "process": "noise-04-count_distinct-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 4,
+      "process": "noise-04-row_number-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 4,
+      "process": "noise-04-row_number-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "stock",
+      "arm": "b",
+      "replica": 4,
+      "process": "noise-04-row_number-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "stock",
+      "arm": "a",
+      "replica": 4,
+      "process": "noise-04-row_number-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "stock",
+      "arm": "a",
+      "replica": 4,
+      "process": "noise-04-self_join-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "stock",
+      "arm": "b",
+      "replica": 4,
+      "process": "noise-04-self_join-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 4,
+      "process": "noise-04-self_join-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 4,
+      "process": "noise-04-self_join-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "stock",
+      "arm": "a",
+      "replica": 5,
+      "process": "noise-05-version-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "stock",
+      "arm": "b",
+      "replica": 5,
+      "process": "noise-05-version-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 5,
+      "process": "noise-05-version-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 5,
+      "process": "noise-05-version-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 5,
+      "process": "noise-05-trivial-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 5,
+      "process": "noise-05-trivial-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "stock",
+      "arm": "b",
+      "replica": 5,
+      "process": "noise-05-trivial-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "stock",
+      "arm": "a",
+      "replica": 5,
+      "process": "noise-05-trivial-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "stock",
+      "arm": "a",
+      "replica": 5,
+      "process": "noise-05-projection_five-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "stock",
+      "arm": "b",
+      "replica": 5,
+      "process": "noise-05-projection_five-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 5,
+      "process": "noise-05-projection_five-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 5,
+      "process": "noise-05-projection_five-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 5,
+      "process": "noise-05-statistics_filter-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 5,
+      "process": "noise-05-statistics_filter-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "stock",
+      "arm": "b",
+      "replica": 5,
+      "process": "noise-05-statistics_filter-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "stock",
+      "arm": "a",
+      "replica": 5,
+      "process": "noise-05-statistics_filter-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "stock",
+      "arm": "a",
+      "replica": 5,
+      "process": "noise-05-group_low-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "stock",
+      "arm": "b",
+      "replica": 5,
+      "process": "noise-05-group_low-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 5,
+      "process": "noise-05-group_low-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 5,
+      "process": "noise-05-group_low-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 5,
+      "process": "noise-05-count_distinct-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 5,
+      "process": "noise-05-count_distinct-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "stock",
+      "arm": "b",
+      "replica": 5,
+      "process": "noise-05-count_distinct-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "stock",
+      "arm": "a",
+      "replica": 5,
+      "process": "noise-05-count_distinct-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "stock",
+      "arm": "a",
+      "replica": 5,
+      "process": "noise-05-row_number-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "stock",
+      "arm": "b",
+      "replica": 5,
+      "process": "noise-05-row_number-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 5,
+      "process": "noise-05-row_number-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 5,
+      "process": "noise-05-row_number-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 5,
+      "process": "noise-05-self_join-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 5,
+      "process": "noise-05-self_join-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "stock",
+      "arm": "b",
+      "replica": 5,
+      "process": "noise-05-self_join-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "stock",
+      "arm": "a",
+      "replica": 5,
+      "process": "noise-05-self_join-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 6,
+      "process": "noise-06-version-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 6,
+      "process": "noise-06-version-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "stock",
+      "arm": "b",
+      "replica": 6,
+      "process": "noise-06-version-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "stock",
+      "arm": "a",
+      "replica": 6,
+      "process": "noise-06-version-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "stock",
+      "arm": "a",
+      "replica": 6,
+      "process": "noise-06-trivial-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "stock",
+      "arm": "b",
+      "replica": 6,
+      "process": "noise-06-trivial-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 6,
+      "process": "noise-06-trivial-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 6,
+      "process": "noise-06-trivial-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 6,
+      "process": "noise-06-projection_five-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 6,
+      "process": "noise-06-projection_five-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "stock",
+      "arm": "b",
+      "replica": 6,
+      "process": "noise-06-projection_five-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "stock",
+      "arm": "a",
+      "replica": 6,
+      "process": "noise-06-projection_five-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "stock",
+      "arm": "a",
+      "replica": 6,
+      "process": "noise-06-statistics_filter-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "stock",
+      "arm": "b",
+      "replica": 6,
+      "process": "noise-06-statistics_filter-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 6,
+      "process": "noise-06-statistics_filter-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 6,
+      "process": "noise-06-statistics_filter-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 6,
+      "process": "noise-06-group_low-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 6,
+      "process": "noise-06-group_low-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "stock",
+      "arm": "b",
+      "replica": 6,
+      "process": "noise-06-group_low-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "stock",
+      "arm": "a",
+      "replica": 6,
+      "process": "noise-06-group_low-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "stock",
+      "arm": "a",
+      "replica": 6,
+      "process": "noise-06-count_distinct-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "stock",
+      "arm": "b",
+      "replica": 6,
+      "process": "noise-06-count_distinct-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 6,
+      "process": "noise-06-count_distinct-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 6,
+      "process": "noise-06-count_distinct-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 6,
+      "process": "noise-06-row_number-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 6,
+      "process": "noise-06-row_number-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "stock",
+      "arm": "b",
+      "replica": 6,
+      "process": "noise-06-row_number-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "stock",
+      "arm": "a",
+      "replica": 6,
+      "process": "noise-06-row_number-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "stock",
+      "arm": "a",
+      "replica": 6,
+      "process": "noise-06-self_join-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "stock",
+      "arm": "b",
+      "replica": 6,
+      "process": "noise-06-self_join-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 6,
+      "process": "noise-06-self_join-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 6,
+      "process": "noise-06-self_join-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "stock",
+      "arm": "a",
+      "replica": 7,
+      "process": "noise-07-version-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "stock",
+      "arm": "b",
+      "replica": 7,
+      "process": "noise-07-version-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 7,
+      "process": "noise-07-version-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 7,
+      "process": "noise-07-version-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 7,
+      "process": "noise-07-trivial-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 7,
+      "process": "noise-07-trivial-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "stock",
+      "arm": "b",
+      "replica": 7,
+      "process": "noise-07-trivial-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "stock",
+      "arm": "a",
+      "replica": 7,
+      "process": "noise-07-trivial-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "stock",
+      "arm": "a",
+      "replica": 7,
+      "process": "noise-07-projection_five-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "stock",
+      "arm": "b",
+      "replica": 7,
+      "process": "noise-07-projection_five-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 7,
+      "process": "noise-07-projection_five-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 7,
+      "process": "noise-07-projection_five-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 7,
+      "process": "noise-07-statistics_filter-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 7,
+      "process": "noise-07-statistics_filter-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "stock",
+      "arm": "b",
+      "replica": 7,
+      "process": "noise-07-statistics_filter-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "stock",
+      "arm": "a",
+      "replica": 7,
+      "process": "noise-07-statistics_filter-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "stock",
+      "arm": "a",
+      "replica": 7,
+      "process": "noise-07-group_low-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "stock",
+      "arm": "b",
+      "replica": 7,
+      "process": "noise-07-group_low-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 7,
+      "process": "noise-07-group_low-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 7,
+      "process": "noise-07-group_low-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 7,
+      "process": "noise-07-count_distinct-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 7,
+      "process": "noise-07-count_distinct-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "stock",
+      "arm": "b",
+      "replica": 7,
+      "process": "noise-07-count_distinct-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "stock",
+      "arm": "a",
+      "replica": 7,
+      "process": "noise-07-count_distinct-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "stock",
+      "arm": "a",
+      "replica": 7,
+      "process": "noise-07-row_number-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "stock",
+      "arm": "b",
+      "replica": 7,
+      "process": "noise-07-row_number-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 7,
+      "process": "noise-07-row_number-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 7,
+      "process": "noise-07-row_number-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 7,
+      "process": "noise-07-self_join-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 7,
+      "process": "noise-07-self_join-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "stock",
+      "arm": "b",
+      "replica": 7,
+      "process": "noise-07-self_join-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "stock",
+      "arm": "a",
+      "replica": 7,
+      "process": "noise-07-self_join-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 8,
+      "process": "noise-08-version-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 8,
+      "process": "noise-08-version-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "stock",
+      "arm": "b",
+      "replica": 8,
+      "process": "noise-08-version-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "stock",
+      "arm": "a",
+      "replica": 8,
+      "process": "noise-08-version-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "stock",
+      "arm": "a",
+      "replica": 8,
+      "process": "noise-08-trivial-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "stock",
+      "arm": "b",
+      "replica": 8,
+      "process": "noise-08-trivial-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 8,
+      "process": "noise-08-trivial-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 8,
+      "process": "noise-08-trivial-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 8,
+      "process": "noise-08-projection_five-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 8,
+      "process": "noise-08-projection_five-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "stock",
+      "arm": "b",
+      "replica": 8,
+      "process": "noise-08-projection_five-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "stock",
+      "arm": "a",
+      "replica": 8,
+      "process": "noise-08-projection_five-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "stock",
+      "arm": "a",
+      "replica": 8,
+      "process": "noise-08-statistics_filter-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "stock",
+      "arm": "b",
+      "replica": 8,
+      "process": "noise-08-statistics_filter-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 8,
+      "process": "noise-08-statistics_filter-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 8,
+      "process": "noise-08-statistics_filter-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 8,
+      "process": "noise-08-group_low-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 8,
+      "process": "noise-08-group_low-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "stock",
+      "arm": "b",
+      "replica": 8,
+      "process": "noise-08-group_low-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "stock",
+      "arm": "a",
+      "replica": 8,
+      "process": "noise-08-group_low-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "stock",
+      "arm": "a",
+      "replica": 8,
+      "process": "noise-08-count_distinct-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "stock",
+      "arm": "b",
+      "replica": 8,
+      "process": "noise-08-count_distinct-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 8,
+      "process": "noise-08-count_distinct-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 8,
+      "process": "noise-08-count_distinct-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 8,
+      "process": "noise-08-row_number-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 8,
+      "process": "noise-08-row_number-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "stock",
+      "arm": "b",
+      "replica": 8,
+      "process": "noise-08-row_number-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "stock",
+      "arm": "a",
+      "replica": 8,
+      "process": "noise-08-row_number-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "stock",
+      "arm": "a",
+      "replica": 8,
+      "process": "noise-08-self_join-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "stock",
+      "arm": "b",
+      "replica": 8,
+      "process": "noise-08-self_join-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 8,
+      "process": "noise-08-self_join-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 8,
+      "process": "noise-08-self_join-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "stock",
+      "arm": "a",
+      "replica": 9,
+      "process": "noise-09-version-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "stock",
+      "arm": "b",
+      "replica": 9,
+      "process": "noise-09-version-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 9,
+      "process": "noise-09-version-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 9,
+      "process": "noise-09-version-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 9,
+      "process": "noise-09-trivial-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 9,
+      "process": "noise-09-trivial-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "stock",
+      "arm": "b",
+      "replica": 9,
+      "process": "noise-09-trivial-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "stock",
+      "arm": "a",
+      "replica": 9,
+      "process": "noise-09-trivial-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "stock",
+      "arm": "a",
+      "replica": 9,
+      "process": "noise-09-projection_five-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "stock",
+      "arm": "b",
+      "replica": 9,
+      "process": "noise-09-projection_five-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 9,
+      "process": "noise-09-projection_five-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 9,
+      "process": "noise-09-projection_five-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 9,
+      "process": "noise-09-statistics_filter-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 9,
+      "process": "noise-09-statistics_filter-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "stock",
+      "arm": "b",
+      "replica": 9,
+      "process": "noise-09-statistics_filter-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "stock",
+      "arm": "a",
+      "replica": 9,
+      "process": "noise-09-statistics_filter-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "stock",
+      "arm": "a",
+      "replica": 9,
+      "process": "noise-09-group_low-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "stock",
+      "arm": "b",
+      "replica": 9,
+      "process": "noise-09-group_low-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 9,
+      "process": "noise-09-group_low-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 9,
+      "process": "noise-09-group_low-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 9,
+      "process": "noise-09-count_distinct-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 9,
+      "process": "noise-09-count_distinct-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "stock",
+      "arm": "b",
+      "replica": 9,
+      "process": "noise-09-count_distinct-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "stock",
+      "arm": "a",
+      "replica": 9,
+      "process": "noise-09-count_distinct-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "stock",
+      "arm": "a",
+      "replica": 9,
+      "process": "noise-09-row_number-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "stock",
+      "arm": "b",
+      "replica": 9,
+      "process": "noise-09-row_number-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 9,
+      "process": "noise-09-row_number-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 9,
+      "process": "noise-09-row_number-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 9,
+      "process": "noise-09-self_join-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 9,
+      "process": "noise-09-self_join-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "stock",
+      "arm": "b",
+      "replica": 9,
+      "process": "noise-09-self_join-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "stock",
+      "arm": "a",
+      "replica": 9,
+      "process": "noise-09-self_join-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 10,
+      "process": "noise-10-version-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 10,
+      "process": "noise-10-version-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "stock",
+      "arm": "b",
+      "replica": 10,
+      "process": "noise-10-version-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "version",
+      "build": "stock",
+      "arm": "a",
+      "replica": 10,
+      "process": "noise-10-version-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "stock",
+      "arm": "a",
+      "replica": 10,
+      "process": "noise-10-trivial-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "stock",
+      "arm": "b",
+      "replica": 10,
+      "process": "noise-10-trivial-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 10,
+      "process": "noise-10-trivial-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "trivial",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 10,
+      "process": "noise-10-trivial-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 10,
+      "process": "noise-10-projection_five-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 10,
+      "process": "noise-10-projection_five-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "stock",
+      "arm": "b",
+      "replica": 10,
+      "process": "noise-10-projection_five-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "projection_five",
+      "build": "stock",
+      "arm": "a",
+      "replica": 10,
+      "process": "noise-10-projection_five-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "stock",
+      "arm": "a",
+      "replica": 10,
+      "process": "noise-10-statistics_filter-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "stock",
+      "arm": "b",
+      "replica": 10,
+      "process": "noise-10-statistics_filter-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 10,
+      "process": "noise-10-statistics_filter-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 10,
+      "process": "noise-10-statistics_filter-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 10,
+      "process": "noise-10-group_low-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 10,
+      "process": "noise-10-group_low-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "stock",
+      "arm": "b",
+      "replica": 10,
+      "process": "noise-10-group_low-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "group_low",
+      "build": "stock",
+      "arm": "a",
+      "replica": 10,
+      "process": "noise-10-group_low-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "stock",
+      "arm": "a",
+      "replica": 10,
+      "process": "noise-10-count_distinct-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "stock",
+      "arm": "b",
+      "replica": 10,
+      "process": "noise-10-count_distinct-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 10,
+      "process": "noise-10-count_distinct-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 10,
+      "process": "noise-10-count_distinct-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 10,
+      "process": "noise-10-row_number-forks-only-b"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 10,
+      "process": "noise-10-row_number-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "stock",
+      "arm": "b",
+      "replica": 10,
+      "process": "noise-10-row_number-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "row_number",
+      "build": "stock",
+      "arm": "a",
+      "replica": 10,
+      "process": "noise-10-row_number-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "stock",
+      "arm": "a",
+      "replica": 10,
+      "process": "noise-10-self_join-stock-a"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "stock",
+      "arm": "b",
+      "replica": 10,
+      "process": "noise-10-self_join-stock-b"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "forks-only",
+      "arm": "a",
+      "replica": 10,
+      "process": "noise-10-self_join-forks-only-a"
+    },
+    {
+      "series": "noise",
+      "case": "self_join",
+      "build": "forks-only",
+      "arm": "b",
+      "replica": 10,
+      "process": "noise-10-self_join-forks-only-b"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "stock",
+      "replica": 1,
+      "process": "main-01-version-stock"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "forks-only",
+      "replica": 1,
+      "process": "main-01-version-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "forks-only",
+      "replica": 1,
+      "process": "main-01-trivial-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "stock",
+      "replica": 1,
+      "process": "main-01-trivial-stock"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "stock",
+      "replica": 1,
+      "process": "main-01-projection_five-stock"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "forks-only",
+      "replica": 1,
+      "process": "main-01-projection_five-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "replica": 1,
+      "process": "main-01-statistics_filter-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "stock",
+      "replica": 1,
+      "process": "main-01-statistics_filter-stock"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "stock",
+      "replica": 1,
+      "process": "main-01-group_low-stock"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "forks-only",
+      "replica": 1,
+      "process": "main-01-group_low-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "replica": 1,
+      "process": "main-01-count_distinct-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "stock",
+      "replica": 1,
+      "process": "main-01-count_distinct-stock"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "stock",
+      "replica": 1,
+      "process": "main-01-row_number-stock"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "forks-only",
+      "replica": 1,
+      "process": "main-01-row_number-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "forks-only",
+      "replica": 1,
+      "process": "main-01-self_join-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "stock",
+      "replica": 1,
+      "process": "main-01-self_join-stock"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "forks-only",
+      "replica": 2,
+      "process": "main-02-version-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "stock",
+      "replica": 2,
+      "process": "main-02-version-stock"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "stock",
+      "replica": 2,
+      "process": "main-02-trivial-stock"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "forks-only",
+      "replica": 2,
+      "process": "main-02-trivial-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "forks-only",
+      "replica": 2,
+      "process": "main-02-projection_five-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "stock",
+      "replica": 2,
+      "process": "main-02-projection_five-stock"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "stock",
+      "replica": 2,
+      "process": "main-02-statistics_filter-stock"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "replica": 2,
+      "process": "main-02-statistics_filter-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "forks-only",
+      "replica": 2,
+      "process": "main-02-group_low-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "stock",
+      "replica": 2,
+      "process": "main-02-group_low-stock"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "stock",
+      "replica": 2,
+      "process": "main-02-count_distinct-stock"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "replica": 2,
+      "process": "main-02-count_distinct-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "forks-only",
+      "replica": 2,
+      "process": "main-02-row_number-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "stock",
+      "replica": 2,
+      "process": "main-02-row_number-stock"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "stock",
+      "replica": 2,
+      "process": "main-02-self_join-stock"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "forks-only",
+      "replica": 2,
+      "process": "main-02-self_join-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "stock",
+      "replica": 3,
+      "process": "main-03-version-stock"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "forks-only",
+      "replica": 3,
+      "process": "main-03-version-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "forks-only",
+      "replica": 3,
+      "process": "main-03-trivial-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "stock",
+      "replica": 3,
+      "process": "main-03-trivial-stock"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "stock",
+      "replica": 3,
+      "process": "main-03-projection_five-stock"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "forks-only",
+      "replica": 3,
+      "process": "main-03-projection_five-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "replica": 3,
+      "process": "main-03-statistics_filter-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "stock",
+      "replica": 3,
+      "process": "main-03-statistics_filter-stock"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "stock",
+      "replica": 3,
+      "process": "main-03-group_low-stock"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "forks-only",
+      "replica": 3,
+      "process": "main-03-group_low-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "replica": 3,
+      "process": "main-03-count_distinct-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "stock",
+      "replica": 3,
+      "process": "main-03-count_distinct-stock"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "stock",
+      "replica": 3,
+      "process": "main-03-row_number-stock"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "forks-only",
+      "replica": 3,
+      "process": "main-03-row_number-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "forks-only",
+      "replica": 3,
+      "process": "main-03-self_join-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "stock",
+      "replica": 3,
+      "process": "main-03-self_join-stock"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "forks-only",
+      "replica": 4,
+      "process": "main-04-version-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "stock",
+      "replica": 4,
+      "process": "main-04-version-stock"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "stock",
+      "replica": 4,
+      "process": "main-04-trivial-stock"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "forks-only",
+      "replica": 4,
+      "process": "main-04-trivial-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "forks-only",
+      "replica": 4,
+      "process": "main-04-projection_five-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "stock",
+      "replica": 4,
+      "process": "main-04-projection_five-stock"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "stock",
+      "replica": 4,
+      "process": "main-04-statistics_filter-stock"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "replica": 4,
+      "process": "main-04-statistics_filter-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "forks-only",
+      "replica": 4,
+      "process": "main-04-group_low-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "stock",
+      "replica": 4,
+      "process": "main-04-group_low-stock"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "stock",
+      "replica": 4,
+      "process": "main-04-count_distinct-stock"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "replica": 4,
+      "process": "main-04-count_distinct-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "forks-only",
+      "replica": 4,
+      "process": "main-04-row_number-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "stock",
+      "replica": 4,
+      "process": "main-04-row_number-stock"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "stock",
+      "replica": 4,
+      "process": "main-04-self_join-stock"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "forks-only",
+      "replica": 4,
+      "process": "main-04-self_join-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "stock",
+      "replica": 5,
+      "process": "main-05-version-stock"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "forks-only",
+      "replica": 5,
+      "process": "main-05-version-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "forks-only",
+      "replica": 5,
+      "process": "main-05-trivial-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "stock",
+      "replica": 5,
+      "process": "main-05-trivial-stock"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "stock",
+      "replica": 5,
+      "process": "main-05-projection_five-stock"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "forks-only",
+      "replica": 5,
+      "process": "main-05-projection_five-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "replica": 5,
+      "process": "main-05-statistics_filter-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "stock",
+      "replica": 5,
+      "process": "main-05-statistics_filter-stock"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "stock",
+      "replica": 5,
+      "process": "main-05-group_low-stock"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "forks-only",
+      "replica": 5,
+      "process": "main-05-group_low-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "replica": 5,
+      "process": "main-05-count_distinct-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "stock",
+      "replica": 5,
+      "process": "main-05-count_distinct-stock"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "stock",
+      "replica": 5,
+      "process": "main-05-row_number-stock"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "forks-only",
+      "replica": 5,
+      "process": "main-05-row_number-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "forks-only",
+      "replica": 5,
+      "process": "main-05-self_join-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "stock",
+      "replica": 5,
+      "process": "main-05-self_join-stock"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "forks-only",
+      "replica": 6,
+      "process": "main-06-version-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "stock",
+      "replica": 6,
+      "process": "main-06-version-stock"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "stock",
+      "replica": 6,
+      "process": "main-06-trivial-stock"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "forks-only",
+      "replica": 6,
+      "process": "main-06-trivial-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "forks-only",
+      "replica": 6,
+      "process": "main-06-projection_five-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "stock",
+      "replica": 6,
+      "process": "main-06-projection_five-stock"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "stock",
+      "replica": 6,
+      "process": "main-06-statistics_filter-stock"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "replica": 6,
+      "process": "main-06-statistics_filter-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "forks-only",
+      "replica": 6,
+      "process": "main-06-group_low-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "stock",
+      "replica": 6,
+      "process": "main-06-group_low-stock"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "stock",
+      "replica": 6,
+      "process": "main-06-count_distinct-stock"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "replica": 6,
+      "process": "main-06-count_distinct-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "forks-only",
+      "replica": 6,
+      "process": "main-06-row_number-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "stock",
+      "replica": 6,
+      "process": "main-06-row_number-stock"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "stock",
+      "replica": 6,
+      "process": "main-06-self_join-stock"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "forks-only",
+      "replica": 6,
+      "process": "main-06-self_join-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "stock",
+      "replica": 7,
+      "process": "main-07-version-stock"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "forks-only",
+      "replica": 7,
+      "process": "main-07-version-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "forks-only",
+      "replica": 7,
+      "process": "main-07-trivial-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "stock",
+      "replica": 7,
+      "process": "main-07-trivial-stock"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "stock",
+      "replica": 7,
+      "process": "main-07-projection_five-stock"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "forks-only",
+      "replica": 7,
+      "process": "main-07-projection_five-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "replica": 7,
+      "process": "main-07-statistics_filter-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "stock",
+      "replica": 7,
+      "process": "main-07-statistics_filter-stock"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "stock",
+      "replica": 7,
+      "process": "main-07-group_low-stock"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "forks-only",
+      "replica": 7,
+      "process": "main-07-group_low-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "replica": 7,
+      "process": "main-07-count_distinct-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "stock",
+      "replica": 7,
+      "process": "main-07-count_distinct-stock"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "stock",
+      "replica": 7,
+      "process": "main-07-row_number-stock"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "forks-only",
+      "replica": 7,
+      "process": "main-07-row_number-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "forks-only",
+      "replica": 7,
+      "process": "main-07-self_join-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "stock",
+      "replica": 7,
+      "process": "main-07-self_join-stock"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "forks-only",
+      "replica": 8,
+      "process": "main-08-version-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "stock",
+      "replica": 8,
+      "process": "main-08-version-stock"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "stock",
+      "replica": 8,
+      "process": "main-08-trivial-stock"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "forks-only",
+      "replica": 8,
+      "process": "main-08-trivial-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "forks-only",
+      "replica": 8,
+      "process": "main-08-projection_five-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "stock",
+      "replica": 8,
+      "process": "main-08-projection_five-stock"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "stock",
+      "replica": 8,
+      "process": "main-08-statistics_filter-stock"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "replica": 8,
+      "process": "main-08-statistics_filter-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "forks-only",
+      "replica": 8,
+      "process": "main-08-group_low-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "stock",
+      "replica": 8,
+      "process": "main-08-group_low-stock"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "stock",
+      "replica": 8,
+      "process": "main-08-count_distinct-stock"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "replica": 8,
+      "process": "main-08-count_distinct-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "forks-only",
+      "replica": 8,
+      "process": "main-08-row_number-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "stock",
+      "replica": 8,
+      "process": "main-08-row_number-stock"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "stock",
+      "replica": 8,
+      "process": "main-08-self_join-stock"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "forks-only",
+      "replica": 8,
+      "process": "main-08-self_join-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "stock",
+      "replica": 9,
+      "process": "main-09-version-stock"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "forks-only",
+      "replica": 9,
+      "process": "main-09-version-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "forks-only",
+      "replica": 9,
+      "process": "main-09-trivial-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "stock",
+      "replica": 9,
+      "process": "main-09-trivial-stock"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "stock",
+      "replica": 9,
+      "process": "main-09-projection_five-stock"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "forks-only",
+      "replica": 9,
+      "process": "main-09-projection_five-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "replica": 9,
+      "process": "main-09-statistics_filter-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "stock",
+      "replica": 9,
+      "process": "main-09-statistics_filter-stock"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "stock",
+      "replica": 9,
+      "process": "main-09-group_low-stock"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "forks-only",
+      "replica": 9,
+      "process": "main-09-group_low-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "replica": 9,
+      "process": "main-09-count_distinct-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "stock",
+      "replica": 9,
+      "process": "main-09-count_distinct-stock"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "stock",
+      "replica": 9,
+      "process": "main-09-row_number-stock"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "forks-only",
+      "replica": 9,
+      "process": "main-09-row_number-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "forks-only",
+      "replica": 9,
+      "process": "main-09-self_join-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "stock",
+      "replica": 9,
+      "process": "main-09-self_join-stock"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "forks-only",
+      "replica": 10,
+      "process": "main-10-version-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "stock",
+      "replica": 10,
+      "process": "main-10-version-stock"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "stock",
+      "replica": 10,
+      "process": "main-10-trivial-stock"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "forks-only",
+      "replica": 10,
+      "process": "main-10-trivial-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "forks-only",
+      "replica": 10,
+      "process": "main-10-projection_five-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "stock",
+      "replica": 10,
+      "process": "main-10-projection_five-stock"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "stock",
+      "replica": 10,
+      "process": "main-10-statistics_filter-stock"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "replica": 10,
+      "process": "main-10-statistics_filter-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "forks-only",
+      "replica": 10,
+      "process": "main-10-group_low-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "stock",
+      "replica": 10,
+      "process": "main-10-group_low-stock"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "stock",
+      "replica": 10,
+      "process": "main-10-count_distinct-stock"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "replica": 10,
+      "process": "main-10-count_distinct-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "forks-only",
+      "replica": 10,
+      "process": "main-10-row_number-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "stock",
+      "replica": 10,
+      "process": "main-10-row_number-stock"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "stock",
+      "replica": 10,
+      "process": "main-10-self_join-stock"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "forks-only",
+      "replica": 10,
+      "process": "main-10-self_join-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "stock",
+      "replica": 11,
+      "process": "main-11-version-stock"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "forks-only",
+      "replica": 11,
+      "process": "main-11-version-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "forks-only",
+      "replica": 11,
+      "process": "main-11-trivial-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "stock",
+      "replica": 11,
+      "process": "main-11-trivial-stock"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "stock",
+      "replica": 11,
+      "process": "main-11-projection_five-stock"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "forks-only",
+      "replica": 11,
+      "process": "main-11-projection_five-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "replica": 11,
+      "process": "main-11-statistics_filter-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "stock",
+      "replica": 11,
+      "process": "main-11-statistics_filter-stock"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "stock",
+      "replica": 11,
+      "process": "main-11-group_low-stock"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "forks-only",
+      "replica": 11,
+      "process": "main-11-group_low-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "replica": 11,
+      "process": "main-11-count_distinct-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "stock",
+      "replica": 11,
+      "process": "main-11-count_distinct-stock"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "stock",
+      "replica": 11,
+      "process": "main-11-row_number-stock"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "forks-only",
+      "replica": 11,
+      "process": "main-11-row_number-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "forks-only",
+      "replica": 11,
+      "process": "main-11-self_join-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "stock",
+      "replica": 11,
+      "process": "main-11-self_join-stock"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "forks-only",
+      "replica": 12,
+      "process": "main-12-version-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "stock",
+      "replica": 12,
+      "process": "main-12-version-stock"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "stock",
+      "replica": 12,
+      "process": "main-12-trivial-stock"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "forks-only",
+      "replica": 12,
+      "process": "main-12-trivial-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "forks-only",
+      "replica": 12,
+      "process": "main-12-projection_five-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "stock",
+      "replica": 12,
+      "process": "main-12-projection_five-stock"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "stock",
+      "replica": 12,
+      "process": "main-12-statistics_filter-stock"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "replica": 12,
+      "process": "main-12-statistics_filter-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "forks-only",
+      "replica": 12,
+      "process": "main-12-group_low-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "stock",
+      "replica": 12,
+      "process": "main-12-group_low-stock"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "stock",
+      "replica": 12,
+      "process": "main-12-count_distinct-stock"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "replica": 12,
+      "process": "main-12-count_distinct-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "forks-only",
+      "replica": 12,
+      "process": "main-12-row_number-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "stock",
+      "replica": 12,
+      "process": "main-12-row_number-stock"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "stock",
+      "replica": 12,
+      "process": "main-12-self_join-stock"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "forks-only",
+      "replica": 12,
+      "process": "main-12-self_join-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "stock",
+      "replica": 13,
+      "process": "main-13-version-stock"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "forks-only",
+      "replica": 13,
+      "process": "main-13-version-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "forks-only",
+      "replica": 13,
+      "process": "main-13-trivial-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "stock",
+      "replica": 13,
+      "process": "main-13-trivial-stock"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "stock",
+      "replica": 13,
+      "process": "main-13-projection_five-stock"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "forks-only",
+      "replica": 13,
+      "process": "main-13-projection_five-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "replica": 13,
+      "process": "main-13-statistics_filter-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "stock",
+      "replica": 13,
+      "process": "main-13-statistics_filter-stock"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "stock",
+      "replica": 13,
+      "process": "main-13-group_low-stock"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "forks-only",
+      "replica": 13,
+      "process": "main-13-group_low-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "replica": 13,
+      "process": "main-13-count_distinct-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "stock",
+      "replica": 13,
+      "process": "main-13-count_distinct-stock"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "stock",
+      "replica": 13,
+      "process": "main-13-row_number-stock"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "forks-only",
+      "replica": 13,
+      "process": "main-13-row_number-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "forks-only",
+      "replica": 13,
+      "process": "main-13-self_join-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "stock",
+      "replica": 13,
+      "process": "main-13-self_join-stock"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "forks-only",
+      "replica": 14,
+      "process": "main-14-version-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "stock",
+      "replica": 14,
+      "process": "main-14-version-stock"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "stock",
+      "replica": 14,
+      "process": "main-14-trivial-stock"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "forks-only",
+      "replica": 14,
+      "process": "main-14-trivial-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "forks-only",
+      "replica": 14,
+      "process": "main-14-projection_five-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "stock",
+      "replica": 14,
+      "process": "main-14-projection_five-stock"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "stock",
+      "replica": 14,
+      "process": "main-14-statistics_filter-stock"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "replica": 14,
+      "process": "main-14-statistics_filter-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "forks-only",
+      "replica": 14,
+      "process": "main-14-group_low-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "stock",
+      "replica": 14,
+      "process": "main-14-group_low-stock"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "stock",
+      "replica": 14,
+      "process": "main-14-count_distinct-stock"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "replica": 14,
+      "process": "main-14-count_distinct-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "forks-only",
+      "replica": 14,
+      "process": "main-14-row_number-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "stock",
+      "replica": 14,
+      "process": "main-14-row_number-stock"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "stock",
+      "replica": 14,
+      "process": "main-14-self_join-stock"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "forks-only",
+      "replica": 14,
+      "process": "main-14-self_join-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "stock",
+      "replica": 15,
+      "process": "main-15-version-stock"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "forks-only",
+      "replica": 15,
+      "process": "main-15-version-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "forks-only",
+      "replica": 15,
+      "process": "main-15-trivial-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "stock",
+      "replica": 15,
+      "process": "main-15-trivial-stock"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "stock",
+      "replica": 15,
+      "process": "main-15-projection_five-stock"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "forks-only",
+      "replica": 15,
+      "process": "main-15-projection_five-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "replica": 15,
+      "process": "main-15-statistics_filter-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "stock",
+      "replica": 15,
+      "process": "main-15-statistics_filter-stock"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "stock",
+      "replica": 15,
+      "process": "main-15-group_low-stock"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "forks-only",
+      "replica": 15,
+      "process": "main-15-group_low-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "replica": 15,
+      "process": "main-15-count_distinct-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "stock",
+      "replica": 15,
+      "process": "main-15-count_distinct-stock"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "stock",
+      "replica": 15,
+      "process": "main-15-row_number-stock"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "forks-only",
+      "replica": 15,
+      "process": "main-15-row_number-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "forks-only",
+      "replica": 15,
+      "process": "main-15-self_join-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "stock",
+      "replica": 15,
+      "process": "main-15-self_join-stock"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "forks-only",
+      "replica": 16,
+      "process": "main-16-version-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "stock",
+      "replica": 16,
+      "process": "main-16-version-stock"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "stock",
+      "replica": 16,
+      "process": "main-16-trivial-stock"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "forks-only",
+      "replica": 16,
+      "process": "main-16-trivial-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "forks-only",
+      "replica": 16,
+      "process": "main-16-projection_five-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "stock",
+      "replica": 16,
+      "process": "main-16-projection_five-stock"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "stock",
+      "replica": 16,
+      "process": "main-16-statistics_filter-stock"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "replica": 16,
+      "process": "main-16-statistics_filter-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "forks-only",
+      "replica": 16,
+      "process": "main-16-group_low-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "stock",
+      "replica": 16,
+      "process": "main-16-group_low-stock"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "stock",
+      "replica": 16,
+      "process": "main-16-count_distinct-stock"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "replica": 16,
+      "process": "main-16-count_distinct-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "forks-only",
+      "replica": 16,
+      "process": "main-16-row_number-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "stock",
+      "replica": 16,
+      "process": "main-16-row_number-stock"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "stock",
+      "replica": 16,
+      "process": "main-16-self_join-stock"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "forks-only",
+      "replica": 16,
+      "process": "main-16-self_join-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "stock",
+      "replica": 17,
+      "process": "main-17-version-stock"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "forks-only",
+      "replica": 17,
+      "process": "main-17-version-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "forks-only",
+      "replica": 17,
+      "process": "main-17-trivial-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "stock",
+      "replica": 17,
+      "process": "main-17-trivial-stock"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "stock",
+      "replica": 17,
+      "process": "main-17-projection_five-stock"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "forks-only",
+      "replica": 17,
+      "process": "main-17-projection_five-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "replica": 17,
+      "process": "main-17-statistics_filter-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "stock",
+      "replica": 17,
+      "process": "main-17-statistics_filter-stock"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "stock",
+      "replica": 17,
+      "process": "main-17-group_low-stock"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "forks-only",
+      "replica": 17,
+      "process": "main-17-group_low-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "replica": 17,
+      "process": "main-17-count_distinct-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "stock",
+      "replica": 17,
+      "process": "main-17-count_distinct-stock"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "stock",
+      "replica": 17,
+      "process": "main-17-row_number-stock"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "forks-only",
+      "replica": 17,
+      "process": "main-17-row_number-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "forks-only",
+      "replica": 17,
+      "process": "main-17-self_join-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "stock",
+      "replica": 17,
+      "process": "main-17-self_join-stock"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "forks-only",
+      "replica": 18,
+      "process": "main-18-version-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "stock",
+      "replica": 18,
+      "process": "main-18-version-stock"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "stock",
+      "replica": 18,
+      "process": "main-18-trivial-stock"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "forks-only",
+      "replica": 18,
+      "process": "main-18-trivial-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "forks-only",
+      "replica": 18,
+      "process": "main-18-projection_five-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "stock",
+      "replica": 18,
+      "process": "main-18-projection_five-stock"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "stock",
+      "replica": 18,
+      "process": "main-18-statistics_filter-stock"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "replica": 18,
+      "process": "main-18-statistics_filter-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "forks-only",
+      "replica": 18,
+      "process": "main-18-group_low-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "stock",
+      "replica": 18,
+      "process": "main-18-group_low-stock"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "stock",
+      "replica": 18,
+      "process": "main-18-count_distinct-stock"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "replica": 18,
+      "process": "main-18-count_distinct-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "forks-only",
+      "replica": 18,
+      "process": "main-18-row_number-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "stock",
+      "replica": 18,
+      "process": "main-18-row_number-stock"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "stock",
+      "replica": 18,
+      "process": "main-18-self_join-stock"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "forks-only",
+      "replica": 18,
+      "process": "main-18-self_join-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "stock",
+      "replica": 19,
+      "process": "main-19-version-stock"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "forks-only",
+      "replica": 19,
+      "process": "main-19-version-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "forks-only",
+      "replica": 19,
+      "process": "main-19-trivial-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "stock",
+      "replica": 19,
+      "process": "main-19-trivial-stock"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "stock",
+      "replica": 19,
+      "process": "main-19-projection_five-stock"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "forks-only",
+      "replica": 19,
+      "process": "main-19-projection_five-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "replica": 19,
+      "process": "main-19-statistics_filter-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "stock",
+      "replica": 19,
+      "process": "main-19-statistics_filter-stock"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "stock",
+      "replica": 19,
+      "process": "main-19-group_low-stock"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "forks-only",
+      "replica": 19,
+      "process": "main-19-group_low-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "replica": 19,
+      "process": "main-19-count_distinct-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "stock",
+      "replica": 19,
+      "process": "main-19-count_distinct-stock"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "stock",
+      "replica": 19,
+      "process": "main-19-row_number-stock"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "forks-only",
+      "replica": 19,
+      "process": "main-19-row_number-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "forks-only",
+      "replica": 19,
+      "process": "main-19-self_join-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "stock",
+      "replica": 19,
+      "process": "main-19-self_join-stock"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "forks-only",
+      "replica": 20,
+      "process": "main-20-version-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "version",
+      "build": "stock",
+      "replica": 20,
+      "process": "main-20-version-stock"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "stock",
+      "replica": 20,
+      "process": "main-20-trivial-stock"
+    },
+    {
+      "series": "main",
+      "case": "trivial",
+      "build": "forks-only",
+      "replica": 20,
+      "process": "main-20-trivial-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "forks-only",
+      "replica": 20,
+      "process": "main-20-projection_five-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "projection_five",
+      "build": "stock",
+      "replica": 20,
+      "process": "main-20-projection_five-stock"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "stock",
+      "replica": 20,
+      "process": "main-20-statistics_filter-stock"
+    },
+    {
+      "series": "main",
+      "case": "statistics_filter",
+      "build": "forks-only",
+      "replica": 20,
+      "process": "main-20-statistics_filter-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "forks-only",
+      "replica": 20,
+      "process": "main-20-group_low-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "group_low",
+      "build": "stock",
+      "replica": 20,
+      "process": "main-20-group_low-stock"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "stock",
+      "replica": 20,
+      "process": "main-20-count_distinct-stock"
+    },
+    {
+      "series": "main",
+      "case": "count_distinct",
+      "build": "forks-only",
+      "replica": 20,
+      "process": "main-20-count_distinct-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "forks-only",
+      "replica": 20,
+      "process": "main-20-row_number-forks-only"
+    },
+    {
+      "series": "main",
+      "case": "row_number",
+      "build": "stock",
+      "replica": 20,
+      "process": "main-20-row_number-stock"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "stock",
+      "replica": 20,
+      "process": "main-20-self_join-stock"
+    },
+    {
+      "series": "main",
+      "case": "self_join",
+      "build": "forks-only",
+      "replica": 20,
+      "process": "main-20-self_join-forks-only"
+    }
+  ]
+}

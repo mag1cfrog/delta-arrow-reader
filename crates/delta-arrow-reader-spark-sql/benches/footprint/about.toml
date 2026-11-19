@@ -1,0 +1,91 @@
+accepted = [
+    "MIT",
+    "Apache-2.0",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+]
+ignore-dev-dependencies = true
+
+[target-lexicon]
+accepted = ["Apache-2.0 WITH LLVM-exception"]
+
+# Explicit workspace license files let CI reuse dependency scans after source edits.
+[delta-arrow-reader.clarify]
+license = "Apache-2.0"
+[[delta-arrow-reader.clarify.files]]
+path = "LICENSE"
+checksum = "b009e2ca7df3cebefbacf792b52e4d8d6f5e1e340b14a9290cf49bb1143d58ac"
+
+[delta-arrow-reader-cli.clarify]
+license = "Apache-2.0"
+[[delta-arrow-reader-cli.clarify.files]]
+path = "../../LICENSE"
+checksum = "b009e2ca7df3cebefbacf792b52e4d8d6f5e1e340b14a9290cf49bb1143d58ac"
+
+# The binding keeps its license outside its crate for Maturin's license metadata.
+[delta-arrow-reader-python.clarify]
+license = "Apache-2.0"
+[[delta-arrow-reader-python.clarify.files]]
+path = "../../LICENSE"
+checksum = "b009e2ca7df3cebefbacf792b52e4d8d6f5e1e340b14a9290cf49bb1143d58ac"
+
+# Measurement-only clarification; product manifests and allowlist are unchanged.
+[delta-arrow-reader-spark-sql.clarify]
+license = "Apache-2.0"
+[[delta-arrow-reader-spark-sql.clarify.files]]
+path = "../../LICENSE"
+checksum = "b009e2ca7df3cebefbacf792b52e4d8d6f5e1e340b14a9290cf49bb1143d58ac"
+
+[sail-common.clarify]
+license = "Apache-2.0"
+[[sail-common.clarify.files]]
+path = "../../LICENSE"
+checksum = "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+
+[sail-common-datafusion.clarify]
+license = "Apache-2.0"
+[[sail-common-datafusion.clarify.files]]
+path = "../../LICENSE"
+checksum = "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+
+[sail-function.clarify]
+license = "Apache-2.0"
+[[sail-function.clarify.files]]
+path = "../../LICENSE"
+checksum = "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+
+[sail-logical-plan.clarify]
+license = "Apache-2.0"
+[[sail-logical-plan.clarify.files]]
+path = "../../LICENSE"
+checksum = "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+
+[sail-plan.clarify]
+license = "Apache-2.0"
+[[sail-plan.clarify.files]]
+path = "../../LICENSE"
+checksum = "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+
+[sail-sql-analyzer.clarify]
+license = "Apache-2.0"
+[[sail-sql-analyzer.clarify.files]]
+path = "../../LICENSE"
+checksum = "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+
+[sail-sql-macro.clarify]
+license = "Apache-2.0"
+[[sail-sql-macro.clarify.files]]
+path = "../../LICENSE"
+checksum = "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+
+[sail-sql-parser.clarify]
+license = "Apache-2.0"
+[[sail-sql-parser.clarify.files]]
+path = "../../LICENSE"
+checksum = "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+
+# The linked graph adds this package's sole declared LLVM exception license.
+[ar_archive_writer]
+accepted = ["Apache-2.0 WITH LLVM-exception"]

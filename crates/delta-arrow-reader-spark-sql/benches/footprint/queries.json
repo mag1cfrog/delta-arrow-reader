@@ -1,0 +1,80 @@
+{
+  "product_baseline": "093bf3d65408043b87d39bf92fd5b42eda635013",
+  "source_queries_sha256": "a63405d5da5358e8e4c4600dda74b4404b2b9ec605f32c9bdd2bd1d0b4f950c1",
+  "table_alias": "bench",
+  "snapshot": "/home/hanbo/.local/share/delta-arrow-reader-review/measurements-2026-11-18/1380/delta-snapshot",
+  "snapshot_fixture_receipt": "../reports/execution-1380-fixture.json",
+  "cases": [
+    {
+      "id": "version",
+      "kind": "version"
+    },
+    {
+      "id": "trivial",
+      "kind": "query",
+      "sql": "SELECT CAST(1 AS BIGINT) AS value",
+      "preflight_order": [
+        "value"
+      ]
+    },
+    {
+      "id": "projection_five",
+      "kind": "query",
+      "source_issue": 1380,
+      "sql": "SELECT l_orderkey,l_linenumber,l_shipdate,l_shipmode,l_extendedprice FROM bench",
+      "preflight_order": [
+        "l_orderkey",
+        "l_linenumber"
+      ]
+    },
+    {
+      "id": "statistics_filter",
+      "kind": "query",
+      "source_issue": 1380,
+      "sql": "SELECT l_orderkey,l_linenumber,l_shipdate,l_shipmode,l_extendedprice FROM bench WHERE l_shipdate=DATE '1995-03-15'",
+      "preflight_order": [
+        "l_orderkey",
+        "l_linenumber"
+      ]
+    },
+    {
+      "id": "group_low",
+      "kind": "query",
+      "source_issue": 1380,
+      "sql": "SELECT l_returnflag,l_linestatus,COUNT(*) AS row_count,SUM(CAST(l_quantity AS BIGINT)) AS quantity,MAX(l_extendedprice) AS largest_price FROM bench GROUP BY l_returnflag,l_linestatus",
+      "preflight_order": [
+        "l_returnflag",
+        "l_linestatus"
+      ]
+    },
+    {
+      "id": "count_distinct",
+      "kind": "query",
+      "source_issue": 1380,
+      "sql": "SELECT COUNT(DISTINCT l_partkey) AS parts FROM bench",
+      "preflight_order": [
+        "parts"
+      ]
+    },
+    {
+      "id": "row_number",
+      "kind": "query",
+      "source_issue": 1380,
+      "sql": "SELECT l_orderkey,l_linenumber,l_suppkey,CAST(ROW_NUMBER() OVER (PARTITION BY l_suppkey ORDER BY l_orderkey,l_linenumber) AS BIGINT) AS row_position FROM bench",
+      "preflight_order": [
+        "l_orderkey",
+        "l_linenumber"
+      ]
+    },
+    {
+      "id": "self_join",
+      "kind": "query",
+      "source_issue": 1380,
+      "sql": "SELECT a.l_orderkey,a.l_linenumber,a.l_extendedprice,b.l_quantity FROM bench a JOIN bench b ON a.l_orderkey=b.l_orderkey AND a.l_linenumber=b.l_linenumber",
+      "preflight_order": [
+        "l_orderkey",
+        "l_linenumber"
+      ]
+    }
+  ]
+}

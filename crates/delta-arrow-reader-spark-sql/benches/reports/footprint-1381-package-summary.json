@@ -1,0 +1,264 @@
+{
+  "package_counts": {
+    "stock": 303,
+    "forks-only": 303,
+    "linked": 456
+  },
+  "logical_additions": 153,
+  "logical_removals": 0,
+  "addition_kinds": {
+    "new-name/version pairs": 127,
+    "additional versions of existing names": 26
+  },
+  "duplicate_families": [
+    {
+      "package": "base64",
+      "stock_versions": "0.22.1,0.23.1",
+      "forks_only_versions": "0.22.1,0.23.1",
+      "linked_versions": "0.22.1,0.23.1",
+      "new_duplicate_family": false
+    },
+    {
+      "package": "block-buffer",
+      "stock_versions": "0.10.4",
+      "forks_only_versions": "0.10.4",
+      "linked_versions": "0.10.4,0.12.1",
+      "new_duplicate_family": true
+    },
+    {
+      "package": "chumsky",
+      "stock_versions": "",
+      "forks_only_versions": "",
+      "linked_versions": "0.12.0,1.0.0-alpha.8",
+      "new_duplicate_family": true
+    },
+    {
+      "package": "cpufeatures",
+      "stock_versions": "0.2.17,0.3.0",
+      "forks_only_versions": "0.2.17,0.3.0",
+      "linked_versions": "0.2.17,0.3.0",
+      "new_duplicate_family": false
+    },
+    {
+      "package": "crypto-common",
+      "stock_versions": "0.1.7",
+      "forks_only_versions": "0.1.7",
+      "linked_versions": "0.1.7,0.2.2",
+      "new_duplicate_family": true
+    },
+    {
+      "package": "digest",
+      "stock_versions": "0.10.7",
+      "forks_only_versions": "0.10.7",
+      "linked_versions": "0.10.7,0.11.3",
+      "new_duplicate_family": true
+    },
+    {
+      "package": "foldhash",
+      "stock_versions": "0.1.5,0.2.0",
+      "forks_only_versions": "0.1.5,0.2.0",
+      "linked_versions": "0.1.5,0.2.0",
+      "new_duplicate_family": false
+    },
+    {
+      "package": "getrandom",
+      "stock_versions": "0.2.17,0.3.4,0.4.3",
+      "forks_only_versions": "0.2.17,0.3.4,0.4.3",
+      "linked_versions": "0.2.17,0.3.4,0.4.3",
+      "new_duplicate_family": false
+    },
+    {
+      "package": "hashbrown",
+      "stock_versions": "0.14.5,0.15.5,0.17.1",
+      "forks_only_versions": "0.14.5,0.15.5,0.17.1",
+      "linked_versions": "0.14.5,0.15.5,0.17.1",
+      "new_duplicate_family": false
+    },
+    {
+      "package": "icu_collections",
+      "stock_versions": "2.2.0",
+      "forks_only_versions": "2.2.0",
+      "linked_versions": "1.5.0,2.2.0",
+      "new_duplicate_family": true
+    },
+    {
+      "package": "icu_normalizer",
+      "stock_versions": "2.2.0",
+      "forks_only_versions": "2.2.0",
+      "linked_versions": "1.5.0,2.2.0",
+      "new_duplicate_family": true
+    },
+    {
+      "package": "icu_normalizer_data",
+      "stock_versions": "2.2.0",
+      "forks_only_versions": "2.2.0",
+      "linked_versions": "1.5.1,2.2.0",
+      "new_duplicate_family": true
+    },
+    {
+      "package": "icu_properties",
+      "stock_versions": "2.2.0",
+      "forks_only_versions": "2.2.0",
+      "linked_versions": "1.5.1,2.2.0",
+      "new_duplicate_family": true
+    },
+    {
+      "package": "icu_properties_data",
+      "stock_versions": "2.2.0",
+      "forks_only_versions": "2.2.0",
+      "linked_versions": "1.5.1,2.2.0",
+      "new_duplicate_family": true
+    },
+    {
+      "package": "icu_provider",
+      "stock_versions": "2.2.0",
+      "forks_only_versions": "2.2.0",
+      "linked_versions": "1.5.0,2.2.0",
+      "new_duplicate_family": true
+    },
+    {
+      "package": "litemap",
+      "stock_versions": "0.8.2",
+      "forks_only_versions": "0.8.2",
+      "linked_versions": "0.7.5,0.8.2",
+      "new_duplicate_family": true
+    },
+    {
+      "package": "md-5",
+      "stock_versions": "0.10.6",
+      "forks_only_versions": "0.10.6",
+      "linked_versions": "0.10.6,0.11.0",
+      "new_duplicate_family": true
+    },
+    {
+      "package": "ordered-float",
+      "stock_versions": "2.10.1",
+      "forks_only_versions": "2.10.1",
+      "linked_versions": "2.10.1,5.5.1",
+      "new_duplicate_family": true
+    },
+    {
+      "package": "phf",
+      "stock_versions": "0.12.1",
+      "forks_only_versions": "0.12.1",
+      "linked_versions": "0.12.1,0.13.1",
+      "new_duplicate_family": true
+    },
+    {
+      "package": "phf_shared",
+      "stock_versions": "0.12.1",
+      "forks_only_versions": "0.12.1",
+      "linked_versions": "0.12.1,0.13.1",
+      "new_duplicate_family": true
+    },
+    {
+      "package": "rand",
+      "stock_versions": "0.10.2,0.9.5",
+      "forks_only_versions": "0.10.2,0.9.5",
+      "linked_versions": "0.10.2,0.8.8,0.9.5",
+      "new_duplicate_family": false
+    },
+    {
+      "package": "rand_core",
+      "stock_versions": "0.10.1,0.9.5",
+      "forks_only_versions": "0.10.1,0.9.5",
+      "linked_versions": "0.10.1,0.6.4,0.9.5",
+      "new_duplicate_family": false
+    },
+    {
+      "package": "regex-automata",
+      "stock_versions": "0.4.18",
+      "forks_only_versions": "0.4.18",
+      "linked_versions": "0.2.0,0.4.18",
+      "new_duplicate_family": true
+    },
+    {
+      "package": "reqwest",
+      "stock_versions": "0.12.28,0.13.4",
+      "forks_only_versions": "0.12.28,0.13.4",
+      "linked_versions": "0.12.28,0.13.4",
+      "new_duplicate_family": false
+    },
+    {
+      "package": "sha2",
+      "stock_versions": "0.10.9",
+      "forks_only_versions": "0.10.9",
+      "linked_versions": "0.10.9,0.11.1",
+      "new_duplicate_family": true
+    },
+    {
+      "package": "syn",
+      "stock_versions": "2.0.119,3.0.3",
+      "forks_only_versions": "2.0.119,3.0.3",
+      "linked_versions": "1.0.109,2.0.119,3.0.3",
+      "new_duplicate_family": false
+    },
+    {
+      "package": "tinystr",
+      "stock_versions": "0.8.3",
+      "forks_only_versions": "0.8.3",
+      "linked_versions": "0.7.6,0.8.3",
+      "new_duplicate_family": true
+    },
+    {
+      "package": "writeable",
+      "stock_versions": "0.6.3",
+      "forks_only_versions": "0.6.3",
+      "linked_versions": "0.5.5,0.6.3",
+      "new_duplicate_family": true
+    },
+    {
+      "package": "yoke",
+      "stock_versions": "0.8.3",
+      "forks_only_versions": "0.8.3",
+      "linked_versions": "0.7.5,0.8.3",
+      "new_duplicate_family": true
+    },
+    {
+      "package": "yoke-derive",
+      "stock_versions": "0.8.2",
+      "forks_only_versions": "0.8.2",
+      "linked_versions": "0.7.5,0.8.2",
+      "new_duplicate_family": true
+    },
+    {
+      "package": "zerotrie",
+      "stock_versions": "0.2.4",
+      "forks_only_versions": "0.2.4",
+      "linked_versions": "0.1.3,0.2.4",
+      "new_duplicate_family": true
+    },
+    {
+      "package": "zerovec",
+      "stock_versions": "0.11.6",
+      "forks_only_versions": "0.11.6",
+      "linked_versions": "0.10.4,0.11.6",
+      "new_duplicate_family": true
+    },
+    {
+      "package": "zerovec-derive",
+      "stock_versions": "0.11.3",
+      "forks_only_versions": "0.11.3",
+      "linked_versions": "0.10.4,0.11.3",
+      "new_duplicate_family": true
+    }
+  ],
+  "source_substitutions": [
+    "arrow-arith",
+    "arrow-array",
+    "arrow-cast",
+    "datafusion-common",
+    "datafusion-datasource",
+    "datafusion-expr",
+    "datafusion-functions",
+    "datafusion-functions-aggregate",
+    "datafusion-optimizer",
+    "datafusion-physical-expr",
+    "datafusion-physical-expr-common",
+    "datafusion-physical-optimizer",
+    "datafusion-physical-plan",
+    "datafusion-sql",
+    "lexical-parse-float"
+  ],
+  "unique_new_names": 126
+}
