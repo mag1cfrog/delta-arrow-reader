@@ -1,0 +1,134 @@
+{
+  "status": "passed",
+  "target_fully_met": false,
+  "baseline_commit": "05cde76fe6d46d505916e349ef23436a94416c7d",
+  "measured_commit": "36635ac9f619ab56140adc134219f35a63d755ef",
+  "preflight": {
+    "exports": 6,
+    "decoded_native_spark_comparisons": 4,
+    "old_new_comparisons": 6,
+    "rows_each": 6001215,
+    "excluded_shapes": {},
+    "actual_storage_types_equal": true,
+    "exact_source_io": true,
+    "full_range_multisets_equal": true
+  },
+  "measurement": {
+    "query_processes": 30,
+    "warmups": 30,
+    "retained_samples": 90,
+    "concurrency_processes": 0,
+    "retries": 0,
+    "profile_count": 0,
+    "metric_statistics_independently_recomputed": 170,
+    "source_io_samples_checked": 90,
+    "order_and_stdout_verified": true
+  },
+  "interrupted_gate": {
+    "status": "interrupted_for_reviewed_type_precheck",
+    "exit_code": 130,
+    "command": [
+      "cargo",
+      "+1.96.0",
+      "test",
+      "--locked",
+      "--workspace"
+    ],
+    "cwd": "/home/hanbo/repo/delta-arrow-reader-costs-168/crates/delta-arrow-reader-spark-sql",
+    "signal": "SIGINT",
+    "owned_cargo_pid": 331337,
+    "log_sha256": "142acd3325321fa0a3b1aa235c287f0f0ec7d50ab44c54d138b3d3c2222716ea",
+    "source_inventory": "source-ready-inventory.json"
+  },
+  "profile_cases_field": "Inherited eligibility selector only; no PR 3 profile was authorized or run.",
+  "rust_gates": {
+    "fmt": {
+      "command": [
+        "cargo",
+        "+1.96.0",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "cwd": "/home/hanbo/repo/delta-arrow-reader-costs-168/crates/delta-arrow-reader-spark-sql",
+      "source_commit": "8af864e4765647d54920d94cdf4cc12e5f5b0183",
+      "environment": {
+        "CARGO_TARGET_DIR": "/home/hanbo/.cache/delta-arrow-reader/costs-168-2026-11-19",
+        "CARGO_BUILD_JOBS": "2"
+      },
+      "exit_code": 0,
+      "started_unix": 1795112643.3502562,
+      "completed_unix": 1795112670.8348188,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "clippy": {
+      "command": [
+        "cargo",
+        "+1.96.0",
+        "clippy",
+        "--locked",
+        "-p",
+        "delta-arrow-reader-spark-sql",
+        "--all-targets",
+        "--no-deps",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "cwd": "/home/hanbo/repo/delta-arrow-reader-costs-168/crates/delta-arrow-reader-spark-sql",
+      "source_commit": "8af864e4765647d54920d94cdf4cc12e5f5b0183",
+      "environment": {
+        "CARGO_TARGET_DIR": "/home/hanbo/.cache/delta-arrow-reader/costs-168-2026-11-19",
+        "CARGO_BUILD_JOBS": "2"
+      },
+      "exit_code": 0,
+      "started_unix": 1795112670.8352191,
+      "completed_unix": 1795112712.460887,
+      "log_sha256": "f2aabfbf4eec6062e6425fb02ea19015b02e0eb5c4d55f684dfeb2f0207f394c"
+    }
+  },
+  "named_outcomes": {
+    "counts": {
+      "passed": 3175,
+      "failed": 0,
+      "ignored": 3,
+      "measured": 0,
+      "filtered_out": 0,
+      "result_groups": 232,
+      "inventory_entries": 3178
+    },
+    "prior_named_outcomes_preserved": 3172,
+    "added_tests": 6,
+    "workspace_test_receipt_sha256": "af1c04dc9e0c694dcc33dd1a1c70a853319b3de8f638b5f0dd5af64b2bd491de",
+    "raw_log_sha256": "a14e349a685aa01aed6f6f40bcb1eac7ea22d23e57ad4f2a3d6c35abe491e6be"
+  },
+  "frozen_files_unchanged": 11,
+  "prior_string_paths_unchanged": 33,
+  "historical_assets_unchanged": 86,
+  "independent_audits": {
+    "full-workspace-gate-audit.json": {
+      "status": "passed",
+      "sha256": "a383906dbde8a615c3d6cc5b97214aeae4822c483ca2fd672e51ab9cdfd65314"
+    },
+    "preflight-build-audit.json": {
+      "status": "passed",
+      "sha256": "57d61d4635ce740289cd20d41728eedf2c620654321d10eeb48ffd0f0fcf5205"
+    },
+    "postcommit-timing-readiness.json": {
+      "status": "ready",
+      "sha256": "421ed254dbd91e83b7f786f27d0664dbe24e6ec9baa5cd7480c6d505e3100eb3"
+    },
+    "measurement-audit.json": {
+      "status": "passed",
+      "sha256": "4524ad5140257680493ac3e32bf3109750c6941ea122ca47660c47f974b59023"
+    }
+  },
+  "details": {
+    "file": "strings-1388-concat-validation-details.json.gz",
+    "raw_bytes": 596670,
+    "raw_sha256": "f976aef27665a1cbf47e7c9fdd1ab49148ebc93623ea1a8925b4ffb7e1e6735b",
+    "gzip_bytes": 55925,
+    "gzip_sha256": "04e18f528ec770afc7c7cbd6b35d0a9890ea96d0ded6eef260f5e82d845c78da"
+  }
+}

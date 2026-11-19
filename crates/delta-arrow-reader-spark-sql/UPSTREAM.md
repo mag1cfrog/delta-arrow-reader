@@ -2048,6 +2048,37 @@ Async UDF operands also retain their existing extraction path: DataFusion's nati
 lambda planner rejects async bodies. The C06 adapter does not change that shared
 contract or claim ordered masking for async operands.
 
+### CONCAT view row path
+
+The #1388 row-cost adaptation lets the existing native `ConcatFunc` read STRING
+views directly when every argument is Utf8/Utf8View, scalars are non-NULL, at
+least one array is Utf8View, array lengths agree and a checked byte bound fits
+the old Utf8 capacity.
+Sail's outer cast and NULL mask remain in place, so executed storage and
+Array/Scalar form retain the existing contract. No dependency fork or second
+string algorithm is added. Preparation, simplification, ordered evaluation,
+BINARY/List concatenation and non-string formatting remain unchanged.
+
+An argument-type check rejects non-Utf8/View inputs before the per-row byte-size scan.
+The bound counts each encoded View length, including NULL entries as the old
+Arrow cast's capacity calculation does; shared buffers and repeated views do not
+reduce this logical byte count. Ordinary Utf8 value-buffer bytes provide a
+conservative bound, and scalar bytes are multiplied by the array row count.
+Each scalar's standalone length must also fit Utf8, because its old cast still
+materializes one value when the arrays have zero rows. The combined bound covers
+the old per-input casts and concatenated Utf8 output before outer NULL masking.
+Excluded cases use the retained old materialization route, preserving its
+capacity failures. Large strings and all-scalar calls also retain that route.
+
+The [committed corpus](vendor/sail/crates/sail-function/tests/fixtures/concat-row-cost-1388-inputs.json)
+compares against the [frozen pre-change invocation](vendor/sail/crates/sail-function/tests/fixtures/concat-row-cost-1388-original.rs)
+from staging `05cde76fe6d46d505916e349ef23436a94416c7d`, using the unchanged
+conversion, binary and list helpers. Inline guard tests use repeated views over
+small buffers to check the i32 capacity boundary without allocating multi-GiB
+outputs. [SQL controls](tests/concat_row_cost.rs) cover decoded dictionary NULLs,
+all scalar/column forms, executed storage, ordered effects/errors and accepted
+BINARY/List rows. The earlier independently captured outcomes remain unchanged.
+
 ### Trim and case fields
 
 Spark TRIM, LTRIM, RTRIM, LOWER and UPPER use a private planning adapter that
