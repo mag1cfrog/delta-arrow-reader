@@ -1,0 +1,16 @@
+{
+  "source_rows": 6001215,
+  "interval_rows": 8184,
+  "null_rows": 90,
+  "min_order_key": 1,
+  "max_order_key": 8192,
+  "keys_unique": true,
+  "line_numbers_in_1_to_7": true,
+  "predicate": "l_orderkey BETWEEN 1 AND 8192",
+  "source_commit": "fe91cc8b6c2314065b78b246804ab391ba051901",
+  "source_ipc_path": "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1389/pr1-preflight/date_fallback/native/result.arrow",
+  "source_ipc_sha256": "5ab7362cfce9b2a2875cefcf834d18c3edeeac74aa60c4041595e395ff724a06",
+  "decoder_source_path": "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1389/interval-subset-reference/count.rs",
+  "decoder_source_sha256": "2226921e4ffc8d79dcddec947bd2fdf6bc1cb7a6fd56278f77db17bd318743d7",
+  "raw_result_path": "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1389/interval-subset-reference/result.json"
+}
