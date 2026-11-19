@@ -1,0 +1,48 @@
+{
+  "commit": "46bfb58d572f86a29dd970436b4c61b5ee72aa54",
+  "cwd": "/home/hanbo/repo/delta-arrow-reader-costs-168/crates/delta-arrow-reader-spark-sql",
+  "command": [
+    "cargo",
+    "+1.96.0",
+    "build",
+    "--locked",
+    "--release",
+    "--workspace",
+    "--bench",
+    "nullif_620",
+    "--message-format=json-render-diagnostics"
+  ],
+  "environment": {
+    "CARGO_TARGET_DIR": "/home/hanbo/.cache/delta-arrow-reader/costs-168-2026-11-19",
+    "CARGO_BUILD_JOBS": "2",
+    "CARGO_PROFILE_RELEASE_DEBUG": "1"
+  },
+  "inherited_build_overrides": {},
+  "rustc": "rustc 1.96.0 (ac68faa20 2026-05-25)\nbinary: rustc\ncommit-hash: ac68faa20c58cbccd01ee7208bf3b6e93a7d7f96\ncommit-date: 2026-05-25\nhost: x86_64-unknown-linux-gnu\nrelease: 1.96.0\nLLVM version: 22.1.2\n",
+  "cargo": "cargo 1.96.0 (30a34c682 2026-05-25)\nrelease: 1.96.0\ncommit-hash: 30a34c6821b57de0aaec83a901aca39f88f6778c\ncommit-date: 2026-05-25\nhost: x86_64-unknown-linux-gnu\nlibgit2: 1.9.2 (sys:0.20.4 vendored)\nlibcurl: 8.19.0-DEV (sys:0.4.87+curl-8.19.0 vendored ssl:OpenSSL/3.5.4)\nssl: OpenSSL 3.5.4 30 Sep 2025\nos: Fedora 43.0.0 [64-bit]\n",
+  "protocol_assets": [
+    {
+      "path": "Cargo.toml",
+      "sha256": "6f74a106a253d727bd43ec6ba245fc1e7ed548472d80180b9717007a9a86932e"
+    },
+    {
+      "path": "benches/nullif_620.rs",
+      "sha256": "60e8632cb799ccda6127565b68b6f0ca0568ba49c29838f243f327e746ea5cde"
+    },
+    {
+      "path": "benches/nullif_620/manifest.json",
+      "sha256": "b2b4dbf0b0247603d079934715d3294a6ec2dd427e59ce3d94f5420870732174"
+    },
+    {
+      "path": "benches/nullif_620/run.py",
+      "sha256": "4bb3523f5fec374d388ee4f23734cc8ba6aac8ee84e9c4f09474aa93ae3b291f"
+    },
+    {
+      "path": "benches/reports/nullif-620-protocol.md",
+      "sha256": "8451b2d515e3d4bad338a8deedf8ebc1ad3709021ab766692bf313e95685bfbc"
+    }
+  ],
+  "index": "270dc76ee13ea6a3a50a5f1d021cef3a44934a7e",
+  "started_unix": 1795123844.10294,
+  "lock_sha256": "75061d138984fcd08fe4543c0cfa3ffc52fb928e54423feceaff5ec08a2e8fe8"
+}

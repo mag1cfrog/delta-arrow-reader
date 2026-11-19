@@ -1,0 +1,45 @@
+{
+  "issue": 620,
+  "product_baseline": "e48dab25e421eca49086577b4fc0f683490f3d83",
+  "rows": 262144,
+  "batch_rows": [1024, 8192, 262144],
+  "null_fractions": ["none", "sparse", "half", "all"],
+  "input_formula": {
+    "left_value": "row % 17",
+    "right_value": "row % 3 == 0 ? row % 17 : 0",
+    "left_valid": {"none": "true", "sparse": "row % 11 != 0", "half": "row % 2 != 0", "all": "false"},
+    "right_valid": "fraction == none || row % 13 != 0",
+    "storage": {"nullif": "Float64", "checked": "Int32"}
+  },
+  "configurations": ["native", "spark-off", "spark-on"],
+  "families": {
+    "nullif": [
+      {"name": "column_zero", "sql": "NULLIF(a,CAST(0 AS DOUBLE))", "left": "column", "right": "zero"},
+      {"name": "column_nonzero", "sql": "NULLIF(a,CAST(1 AS DOUBLE))", "left": "column", "right": "one"},
+      {"name": "columns", "sql": "NULLIF(a,b)", "left": "column", "right": "column"},
+      {"name": "scalar_column", "sql": "NULLIF(CAST(1 AS DOUBLE),b)", "left": "one", "right": "column"},
+      {"name": "computed_left", "sql": "NULLIF(a+CAST(1 AS DOUBLE),b)", "left": "plus_one", "right": "column"},
+      {"name": "computed_right", "sql": "NULLIF(a,b+CAST(1 AS DOUBLE))", "left": "column", "right": "plus_one"}
+    ],
+    "checked": [
+      {"name": "add", "sql": "a+b", "operator": "+"},
+      {"name": "subtract", "sql": "a-b", "operator": "-"},
+      {"name": "multiply", "sql": "a*b", "operator": "*"}
+    ]
+  },
+  "warmups": 1,
+  "samples": 3,
+  "processes": [
+    {"arm": "main", "replica": 1}, {"arm": "native-b", "replica": 1},
+    {"arm": "native-b", "replica": 2}, {"arm": "main", "replica": 2},
+    {"arm": "main", "replica": 3}, {"arm": "native-b", "replica": 3}
+  ],
+  "attribution_stages": ["first_argument", "logical_null_selection", "filter_batch", "select_first_argument", "later_arguments", "kernel", "scatter"],
+  "cpus": [2, 3, 4, 5],
+  "workers": 2,
+  "target_partitions": 1,
+  "process_timeout_seconds": 180,
+  "campaign_timeout_seconds": 1800,
+  "evidence_limit_bytes": 1073741824,
+  "checked_controls": "Predeclared; run only if the attributed candidate affects checked arithmetic."
+}

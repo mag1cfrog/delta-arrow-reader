@@ -1,0 +1,80 @@
+{
+  "source_commit": "2bba5d3a4c48baa6e113f27efb17a308c9056a33",
+  "binary_sha256": "b93f7dad90f156fe586f5f56867849c76e122646ec7eaf6428194d2c61f1a319",
+  "files": [
+    {
+      "path": "main-1.jsonl.gz",
+      "bytes": 8765,
+      "sha256": "6b42744ad04b368faadce164e5849d93143f50faf4799113bc4b0fa36eb0a6e3"
+    },
+    {
+      "path": "main-2.jsonl.gz",
+      "bytes": 8770,
+      "sha256": "d9143aa58d5b4c08bf6cf29a99d01b031fa1620f767ea1a5cc3771e785493e58"
+    },
+    {
+      "path": "main-3.jsonl.gz",
+      "bytes": 8793,
+      "sha256": "b277d66c83f38fb51e4513aed243fd3103d6be5d3b1e17677bd7f0baa6300389"
+    },
+    {
+      "path": "native-b-1.jsonl.gz",
+      "bytes": 3030,
+      "sha256": "196b886aa8a17481c619d6d0849f60e04378bfdafa3fbcb8f0e49e6446c4a4c8"
+    },
+    {
+      "path": "native-b-2.jsonl.gz",
+      "bytes": 3017,
+      "sha256": "b3958fcafaeeab3f32d58f7076c905b47d58be8cfa87f35286281371e5213471"
+    },
+    {
+      "path": "native-b-3.jsonl.gz",
+      "bytes": 3024,
+      "sha256": "b15e45a7d7ae0634bf31862a3149638c0b997974e6b1625dfb306f72dad531e3"
+    },
+    {
+      "path": "stages-spark-off.jsonl.gz",
+      "bytes": 5330,
+      "sha256": "9d97bd04a254a30071a773b350f75d26a127c7915ba7a3bff63a08fac1569de9"
+    },
+    {
+      "path": "stages-spark-on.jsonl.gz",
+      "bytes": 5334,
+      "sha256": "095310dc27cddcbd849350882315dd1066ac7ec760eab38db08c9f29c4b592ff"
+    },
+    {
+      "path": "timing-metadata.json.gz",
+      "bytes": 2116,
+      "sha256": "b1d5c4b4bdd9356186a398392c2052256d86c3f8f23b534945e735bf98812d11",
+      "decoded_sha256": "8ed4f0c45d1424b553b4ffdff9b24b3681d5eaa68079061d34ce4b6b4a5d8d7d"
+    },
+    {
+      "path": "stages-metadata.json.gz",
+      "bytes": 2130,
+      "sha256": "c9f6a165e4ef0a35514bfd9f7beaa57c06ceb828672c76d7cd5f33be9f5c70fb",
+      "decoded_sha256": "2be80bd6a2f5d539806c8e97d8c63a1d91829099f750b03b977185ed1a2709a0"
+    },
+    {
+      "path": "summary.json.gz",
+      "bytes": 28377,
+      "sha256": "e3d93af8bc1cd3d8df60119a653522bf4237b9f090e70da16968450048fd5aaf",
+      "decoded_sha256": "85931491f1fef0fac5011f24c287806c42cdc1c1f6ecd2198801a24f3f69ca28"
+    },
+    {
+      "path": "eligibility.json",
+      "bytes": 131,
+      "sha256": "593f11e5ccce5c73cf23f74c577ebec608b95063602f93e79f9f391dd4e507b2"
+    },
+    {
+      "path": "checked-preflight-receipt.json.gz",
+      "bytes": 13723,
+      "sha256": "c2f8e0d74db969d848218661917a5d8b05ba2dab27e20f96a4dc199afe180bc6",
+      "decoded_sha256": "667e574a7c731598630cfddb24c4d7a42fa91e5c42cd9b8d2163e990da4ab400"
+    },
+    {
+      "path": "checked-preflight-summary.json",
+      "bytes": 1231,
+      "sha256": "f7b3a9e8b465833e46509197e6312208d8a30aa9e77f99f6675b88e905fd2d70"
+    }
+  ]
+}

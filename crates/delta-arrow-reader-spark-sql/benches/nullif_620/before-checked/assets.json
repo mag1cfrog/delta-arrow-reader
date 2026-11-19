@@ -1,0 +1,54 @@
+{
+  "source_commit": "744d1474539605bff63494ba5ce6088d2d7891b0",
+  "binary_sha256": "b93f7dad90f156fe586f5f56867849c76e122646ec7eaf6428194d2c61f1a319",
+  "family": "checked",
+  "files": [
+    {
+      "path": "main-1.jsonl.gz",
+      "bytes": 4360,
+      "sha256": "4182ce10e809021c7d0c697313789f916c9655cd32ae56dacfdde47cb65f4854"
+    },
+    {
+      "path": "main-2.jsonl.gz",
+      "bytes": 4325,
+      "sha256": "dd9de40de63a33ecee8b4e6731e68c921aae0f01b11b1a921e1057d1a541ab3c"
+    },
+    {
+      "path": "main-3.jsonl.gz",
+      "bytes": 4336,
+      "sha256": "841f81b86823c52200d6041686ee189db34418284a0490c7842625e194d0beca"
+    },
+    {
+      "path": "native-b-1.jsonl.gz",
+      "bytes": 1560,
+      "sha256": "9f39d4804cb111cb9701b077368ae210357235e6aaefa7c86ab3f5596d813352"
+    },
+    {
+      "path": "native-b-2.jsonl.gz",
+      "bytes": 1529,
+      "sha256": "fc3c94736831ec594227b644d92e5830a3e210b1f0758c9ef278e6788e92ef33"
+    },
+    {
+      "path": "native-b-3.jsonl.gz",
+      "bytes": 1529,
+      "sha256": "b3373c969c8ea944113217410d7abea979c2f35aa89a103a442889c87c56d999"
+    },
+    {
+      "path": "metadata.json.gz",
+      "bytes": 2124,
+      "sha256": "66994b3d7bda14ed390c180c01a78a8a2d3b127af696dffe428092256dafc5b6",
+      "decoded_sha256": "5e5b052b72254bf8074c93b833eea29715074a7730af2552df31c85bc12aea86"
+    },
+    {
+      "path": "summary.json.gz",
+      "bytes": 14157,
+      "sha256": "db17f90dbd8243116adca6a8ad816b3e18c061bd17febcb2c7a0eaeb0d5e4b82",
+      "decoded_sha256": "adf953b105a093c1305c2be5f9cd45eddd6b12e1051725b22dba54c1e84afc6c"
+    },
+    {
+      "path": "eligibility.json",
+      "bytes": 132,
+      "sha256": "1660739214cd58325a68a412979f620eaf569b01abe74e10a29932f48255f0b8"
+    }
+  ]
+}
