@@ -157,6 +157,18 @@ impl ScalarUDFImpl for SparkSubstring {
             args.arg_fields
                 .push(Arc::new(Field::new("length", DataType::Int64, false)));
         }
+        if let [
+            value,
+            ColumnarValue::Scalar(ScalarValue::Int64(Some(position))),
+            ColumnarValue::Scalar(ScalarValue::Int64(Some(length))),
+        ] = args.args.as_slice()
+            && value.data_type() == DataType::Utf8View
+            && *position == 1
+            && *length >= 0
+        {
+            // A prefix preserves the view type and avoids adding to a possibly large buffer offset.
+            return datafusion_functions::unicode::substr().invoke_with_args(args);
+        }
         if !args.args.first().is_some_and(|value| {
             matches!(
                 value.data_type(),
@@ -363,4 +375,254 @@ fn binary_substring<'a, O: OffsetSizeTrait>(
         }
     }
     Ok(Arc::new(builder.finish()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use arrow::array::{BinaryArray, BinaryViewArray, LargeBinaryArray, StringViewArray};
+    use datafusion_common::config::ConfigOptions;
+
+    type TestResult = std::result::Result<(), Box<dyn std::error::Error>>;
+
+    fn arguments(values: Vec<ColumnarValue>, rows: usize) -> Result<ScalarFunctionArgs> {
+        let fields = values
+            .iter()
+            .map(|value| Arc::new(Field::new("", value.data_type(), true)))
+            .collect::<Vec<_>>();
+        let scalars = values
+            .iter()
+            .map(|value| match value {
+                ColumnarValue::Scalar(value) => Some(value),
+                ColumnarValue::Array(_) => None,
+            })
+            .collect::<Vec<_>>();
+        let return_field =
+            NativeSparkSubstring::default().return_field_from_args(ReturnFieldArgs {
+                arg_fields: &fields,
+                scalar_arguments: &scalars,
+            })?;
+        Ok(ScalarFunctionArgs {
+            args: values,
+            arg_fields: fields,
+            number_rows: rows,
+            return_field,
+            config_options: Arc::new(ConfigOptions::default()),
+        })
+    }
+
+    fn assert_same(actual: Result<ColumnarValue>, expected: Result<ColumnarValue>) -> TestResult {
+        match (actual, expected) {
+            (Ok(ColumnarValue::Scalar(actual)), Ok(ColumnarValue::Scalar(expected))) => {
+                assert_eq!(actual.data_type(), expected.data_type());
+                assert_eq!(actual, expected);
+            }
+            (Ok(ColumnarValue::Array(actual)), Ok(ColumnarValue::Array(expected))) => {
+                assert_eq!(actual.data_type(), expected.data_type());
+                assert_eq!(actual.as_ref(), expected.as_ref());
+            }
+            (Err(actual), Err(expected)) => assert_eq!(actual.to_string(), expected.to_string()),
+            (actual, expected) => {
+                return Err(
+                    format!("substring result forms differ: {actual:?}, {expected:?}").into(),
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn substring_row_path_matches_existing_string_kernel() -> TestResult {
+        let inputs: Vec<(Option<String>, Option<i64>, Option<i64>)> = serde_json::from_str(
+            include_str!("../../../tests/fixtures/substring-row-cost-1388-inputs.json"),
+        )?;
+        let wrapper = SparkSubstring::new();
+        let original = NativeSparkSubstring::default();
+        for (value, position, length) in inputs {
+            for storage in [DataType::Utf8, DataType::LargeUtf8, DataType::Utf8View] {
+                let values = [
+                    ScalarValue::try_from_array(
+                        cast(&StringViewArray::from(vec![value.as_deref()]), &storage)?.as_ref(),
+                        0,
+                    )?,
+                    ScalarValue::Int64(position),
+                    ScalarValue::Int64(length),
+                ];
+                // Every scalar/column combination, including all-scalar and zero-row batches.
+                for mask in 0..8 {
+                    for rows in [0, 3] {
+                        let args = values
+                            .iter()
+                            .enumerate()
+                            .map(|(index, value)| {
+                                if mask & (1 << index) == 0 {
+                                    Ok(ColumnarValue::Scalar(value.clone()))
+                                } else {
+                                    Ok(ColumnarValue::Array(value.to_array_of_size(rows)?))
+                                }
+                            })
+                            .collect::<Result<Vec<_>>>()?;
+                        assert_same(
+                            ScalarUDFImpl::invoke_with_args(
+                                &wrapper,
+                                arguments(args.clone(), rows)?,
+                            ),
+                            original.invoke_with_args(arguments(args, rows)?),
+                        )?;
+                    }
+                }
+                // The wrapper's omitted length is INT_MAX, including scalar calls.
+                for rows in [0, 3] {
+                    for source in [
+                        ColumnarValue::Scalar(values[0].clone()),
+                        ColumnarValue::Array(values[0].to_array_of_size(rows)?),
+                    ] {
+                        let short = vec![source, ColumnarValue::Scalar(values[1].clone())];
+                        let mut explicit = short.clone();
+                        explicit.push(ColumnarValue::Scalar(ScalarValue::Int64(Some(
+                            i32::MAX.into(),
+                        ))));
+                        assert_same(
+                            ScalarUDFImpl::invoke_with_args(&wrapper, arguments(short, rows)?),
+                            original.invoke_with_args(arguments(explicit, rows)?),
+                        )?;
+                    }
+                }
+            }
+        }
+        // Unsupported storage and bound types retain the original failure.
+        for values in [
+            vec![
+                ScalarValue::Int32(Some(1)),
+                ScalarValue::Int64(Some(1)),
+                ScalarValue::Int64(Some(12)),
+            ],
+            vec![
+                ScalarValue::Utf8View(Some("text".into())),
+                ScalarValue::Int32(Some(1)),
+                ScalarValue::Int64(Some(12)),
+            ],
+        ] {
+            let values = values
+                .into_iter()
+                .map(ColumnarValue::Scalar)
+                .collect::<Vec<_>>();
+            assert_same(
+                ScalarUDFImpl::invoke_with_args(&wrapper, arguments(values.clone(), 1)?),
+                original.invoke_with_args(arguments(values, 1)?),
+            )?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn substring_delegates_only_view_prefixes() -> TestResult {
+        let source: ArrayRef = Arc::new(StringViewArray::from(vec![
+            "abcdefghijklmnopqrstuvwxyz0123456789",
+        ]));
+        for position in [1, 2] {
+            let result = ScalarUDFImpl::invoke_with_args(
+                &SparkSubstring::new(),
+                arguments(
+                    vec![
+                        ColumnarValue::Array(source.clone()),
+                        ColumnarValue::Scalar(ScalarValue::Int64(Some(position))),
+                        ColumnarValue::Scalar(ScalarValue::Int64(Some(20))),
+                    ],
+                    1,
+                )?,
+            )?
+            .into_array(1)?;
+            // Out-of-line prefixes use the native shared-buffer view. Other positions
+            // retain the old copying kernel, including valid offsets near u32::MAX.
+            let shared = result.as_string_view().data_buffers()[0].as_ptr()
+                == source.as_string_view().data_buffers()[0].as_ptr();
+            assert_eq!(shared, position == 1);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn substring_binary_keeps_existing_adapter() -> TestResult {
+        let values = vec![
+            Some(b"abcdefghijklmnop".as_slice()),
+            None,
+            Some(b"".as_slice()),
+        ];
+        let arrays: [ArrayRef; 3] = [
+            Arc::new(BinaryArray::from(values.clone())),
+            Arc::new(LargeBinaryArray::from(values.clone())),
+            Arc::new(BinaryViewArray::from(values)),
+        ];
+        for source in arrays {
+            for (position, length) in [
+                (1, 12),
+                (0, 2),
+                (-2, 1),
+                (1, -1),
+                (i64::MAX, 1),
+                (1, i64::MAX),
+            ] {
+                for mask in 0..8 {
+                    let values = [
+                        ScalarValue::try_from_array(source.as_ref(), 0)?,
+                        ScalarValue::Int64(Some(position)),
+                        ScalarValue::Int64(Some(length)),
+                    ];
+                    let args = values
+                        .iter()
+                        .enumerate()
+                        .map(|(index, value)| {
+                            if mask & (1 << index) == 0 {
+                                Ok(ColumnarValue::Scalar(value.clone()))
+                            } else if index == 0 {
+                                Ok(ColumnarValue::Array(source.clone()))
+                            } else {
+                                Ok(ColumnarValue::Array(value.to_array_of_size(3)?))
+                            }
+                        })
+                        .collect::<Result<Vec<_>>>()?;
+                    // Invoke the unchanged binary helper through the old scalar expansion.
+                    let expected = make_scalar_function(
+                        |arrays| {
+                            let source = &arrays[0];
+                            let positions = as_int64_array(&arrays[1])?;
+                            let lengths = as_int64_array(&arrays[2])?;
+                            match source.data_type() {
+                                DataType::Binary => binary_substring::<i32>(
+                                    source.as_binary::<i32>().iter(),
+                                    positions,
+                                    lengths,
+                                ),
+                                DataType::LargeBinary => binary_substring::<i64>(
+                                    source.as_binary::<i64>().iter(),
+                                    positions,
+                                    lengths,
+                                ),
+                                DataType::BinaryView => Ok(cast(
+                                    binary_substring::<i64>(
+                                        source.as_binary_view().iter(),
+                                        positions,
+                                        lengths,
+                                    )?
+                                    .as_ref(),
+                                    &DataType::BinaryView,
+                                )?),
+                                other => exec_err!("unexpected test storage {other}"),
+                            }
+                        },
+                        vec![],
+                    )(&args);
+                    assert_same(
+                        ScalarUDFImpl::invoke_with_args(
+                            &SparkSubstring::new(),
+                            arguments(args, 3)?,
+                        ),
+                        expected,
+                    )?;
+                }
+            }
+        }
+        Ok(())
+    }
 }

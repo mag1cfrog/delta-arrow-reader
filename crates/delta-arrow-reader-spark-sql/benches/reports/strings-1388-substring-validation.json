@@ -1,0 +1,122 @@
+{
+  "status": "passed",
+  "target_fully_met": false,
+  "baseline_commit": "7cbb9dbf0ca0e625f0fe4a50f12292e0720788b7",
+  "measured_commit": "49176fd72984a19fef9cd10c432458c34ddf8c2b",
+  "preflight": {
+    "exports": 6,
+    "decoded_native_spark_comparisons": 4,
+    "old_new_comparisons": 6,
+    "rows_each": 6001215,
+    "excluded_shapes": {},
+    "actual_storage_types_equal": true,
+    "exact_source_io": true,
+    "full_range_multisets_equal": true
+  },
+  "measurement": {
+    "query_processes": 30,
+    "warmups": 30,
+    "retained_samples": 90,
+    "concurrency_processes": 0,
+    "retries": 0,
+    "profile_count": 0,
+    "metric_statistics_independently_recomputed": 170,
+    "source_io_samples_checked": 90,
+    "order_and_stdout_verified": true
+  },
+  "profile_cases_field": "Inherited eligibility selector only; no PR 2 profile was authorized or run.",
+  "rust_gates": {
+    "fmt": {
+      "command": [
+        "cargo",
+        "+1.96.0",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "cwd": "/home/hanbo/repo/delta-arrow-reader-costs-168/crates/delta-arrow-reader-spark-sql",
+      "source_commit": "2dd66fd476129e36b38e78127d7e334522058f34",
+      "environment": {
+        "CARGO_TARGET_DIR": "/home/hanbo/.cache/delta-arrow-reader/costs-168-2026-11-19",
+        "CARGO_BUILD_JOBS": "2"
+      },
+      "exit_code": 0,
+      "started_unix": 1795107664.1430364,
+      "completed_unix": 1795107691.82342,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "clippy": {
+      "command": [
+        "cargo",
+        "+1.96.0",
+        "clippy",
+        "--locked",
+        "-p",
+        "delta-arrow-reader-spark-sql",
+        "--all-targets",
+        "--no-deps",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "cwd": "/home/hanbo/repo/delta-arrow-reader-costs-168/crates/delta-arrow-reader-spark-sql",
+      "source_commit": "2dd66fd476129e36b38e78127d7e334522058f34",
+      "environment": {
+        "CARGO_TARGET_DIR": "/home/hanbo/.cache/delta-arrow-reader/costs-168-2026-11-19",
+        "CARGO_BUILD_JOBS": "2"
+      },
+      "exit_code": 0,
+      "started_unix": 1795107691.8238072,
+      "completed_unix": 1795107732.468718,
+      "log_sha256": "9bba41613442bbc291051385190f098aa7e9e7f17f2f60ff0812fc6ea9f228b9"
+    }
+  },
+  "named_outcomes": {
+    "counts": {
+      "passed": 3169,
+      "failed": 0,
+      "ignored": 3,
+      "measured": 0,
+      "filtered_out": 0,
+      "result_groups": 231,
+      "inventory_entries": 3172
+    },
+    "prior_named_outcomes_preserved": 3167,
+    "added_tests": 5,
+    "workspace_test_receipt_sha256": "e0a1e8fc96d640dfdf31f6f64771a932c84fa1ed241d44df111a94b354f13814",
+    "raw_log_sha256": "cce209465e65aef774ca9b67b18a880df93253bc8e44e5b39b42fc2e21220ca2"
+  },
+  "frozen_files_unchanged": 10,
+  "pr1_paths_unchanged": 16,
+  "historical_assets_unchanged": 86,
+  "independent_audits": {
+    "focused-gate-audit.json": {
+      "status": "focused_gate_receipt_log_verified",
+      "sha256": "60494831b295d75124dee2fa5f2195e5485f76fee76a1538a4531cf2453bc494"
+    },
+    "full-workspace-gate-audit.json": {
+      "status": "independently_verified",
+      "sha256": "de3947fb68b28832355b408489e93c53218e01aee35a02990b0e5022adf6197a"
+    },
+    "preflight-build-audit.json": {
+      "status": "ready_to_commit_two_bound_receipts",
+      "sha256": "72673d5582649bb7da4325cc6bbe2e217f3a110aeb32bee2a1ffc5162c9d2b0a"
+    },
+    "postcommit-timing-readiness.json": {
+      "status": "ready_for_once_only_timing",
+      "sha256": "3b9fb7406d7084644139fc0318e45ee3ac6e2a0a3aaf633b9984efca0c9f79a4"
+    },
+    "measurement-audit.json": {
+      "status": "measurement_independently_verified",
+      "sha256": "32022a81c3521dbf7b1f6e4288f2bb6e7467daef90acd1f12e628efe9ae491a4"
+    }
+  },
+  "details": {
+    "file": "strings-1388-substring-validation-details.json.gz",
+    "raw_bytes": 656276,
+    "raw_sha256": "0653bbd11e0277c249e949d94b6ac9b3d3c55d9e46655f867e4abd71151ff8f8",
+    "gzip_bytes": 55945,
+    "gzip_sha256": "46cde4116d02ff5e850dd5f884b123d9005fc8f761b9c39c64b68d86777d7b78"
+  }
+}

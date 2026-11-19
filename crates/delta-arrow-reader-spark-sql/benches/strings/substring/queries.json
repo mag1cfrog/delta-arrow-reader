@@ -1,0 +1,28 @@
+{
+  "source_commit": "8260c58ba48e0a65ca7cb7668dd2d8c64b1434f1",
+  "source_scale_factor": 1,
+  "stored_columns": 80,
+  "snapshot_columns": 81,
+  "common_view_sql": "SELECT *,CAST(payload_00%17 AS DOUBLE) AS double_a,CAST(payload_01%17 AS DOUBLE) AS double_b,(payload_02%3=0) AS bool_a,(payload_03%5=0) AS bool_b,(payload_04%7=0) AS bool_c,ABS(payload_05%4096) AS in_key,CAST(l_shipdate AS VARCHAR) AS date_text,CAST(l_extendedprice AS VARCHAR) AS decimal_text FROM raw_lineitem",
+  "dimension": {
+    "name": "suppliers",
+    "rows": 10000,
+    "recipe": "suppkey=1..10000 BIGINT; region=suppkey%5 INT; label=supplier-{suppkey} STRING"
+  },
+  "queries": [
+    {
+      "id": "string_functions",
+      "native_sql": "SELECT l_orderkey,l_linenumber,SUBSTRING(l_comment,1,12) AS prefix,CONCAT(l_shipmode,':',l_shipinstruct) AS description,UPPER(l_comment) AS uppercase FROM bench",
+      "spark_sql": "SELECT l_orderkey,l_linenumber,SUBSTRING(l_comment,1,12) AS prefix,CONCAT(l_shipmode,':',l_shipinstruct) AS description,UPPER(l_comment) AS uppercase FROM bench",
+      "ordered": false,
+      "related_issues": []
+    },
+    {
+      "id": "substring_only",
+      "native_sql": "SELECT l_orderkey,l_linenumber,SUBSTRING(l_comment,1,12) AS prefix FROM bench",
+      "spark_sql": "SELECT l_orderkey,l_linenumber,SUBSTRING(l_comment,1,12) AS prefix FROM bench",
+      "ordered": false,
+      "related_issues": []
+    }
+  ]
+}

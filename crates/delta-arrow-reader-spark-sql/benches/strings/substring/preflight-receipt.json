@@ -1,0 +1,145 @@
+{
+  "status": "complete",
+  "baseline_commit": "7cbb9dbf0ca0e625f0fe4a50f12292e0720788b7",
+  "binary_sha256": "fa06fd38820390e60de15e25dc9c446bbccb5ada0c3d851b20b109701ff5d308",
+  "snapshot_root": "/home/hanbo/.local/share/delta-arrow-reader-review/measurements-2026-11-18/1380/delta-snapshot",
+  "snapshot_log_sha256": "21d2257a5c6d201f74c2c3516a134095c2f4efb680595cbd56228ae6581e71cb",
+  "file_hashes": {
+    "benches/strings/substring/queries.json": "18fa0eb633cf2087c5d0e32a190fcb6cd22f56b055b058cda8f34e83c81eea02",
+    "benches/strings/substring/schedule.json": "ba67984b5b3233739afb51469601528b1f52486d1c628608d47de2e4eed641ac",
+    "benches/strings/substring/run.py": "e056659a7bd75476fba4b1e40802075360bfb43dacc3f427009d13516dbd7070",
+    "benches/execution.rs": "80ff880e1281f30c64cdef0a5ca8d7d42bb6141c30a865d0ffa734532004d000",
+    "Cargo.toml": "d06f9f2fc6a258b2d4d898fe596d0279827765047b4bee79befd119073d7208f",
+    "Cargo.lock": "75061d138984fcd08fe4543c0cfa3ffc52fb928e54423feceaff5ec08a2e8fe8",
+    "benches/execution/run.py": "9406949f27193dc04540bb1265a0790d4fa191ef28c85829de5bcd2166057324",
+    "benches/execution/summarize.py": "0cbad0b6d1128bb4aeb7d7c52016f4529722090a98e8d1c98ff9fbc919bf6bd4",
+    "benches/reports/execution-1380-fixture.json": "9eb1e98be9381de74bd8908ac540c91eec6f0b0862089d1655baca537f43301d",
+    "benches/reports/strings-1388-substring-protocol.md": "1835da194fc3ba51559fb0fa333a31e6b9a7bf5561414852601e385807deabeb",
+    "benches/reports/strings-1388-substring-preflight.json.gz": "8df61df9e72d7a0375b9657cd591e5a79d0cd6ab38f0eb6f0cfa5313d290e692",
+    "benches/strings/run.py": "ee34b1e1de1f2c1d2ea466ec1a0358e4d54b870dcd23448f8239664f37ebcf7b",
+    "benches/strings/queries.json": "82e08edf20e562d54ec2b794ee174611e4d6a6b52aed698d3dd130b8599b8ecd",
+    "benches/strings/schedule.json": "8086a8932ff51dd2c7390fdeadf214a95083b3c84eea758cc8b261947af16dfa",
+    "benches/reports/strings-1388-preflight.json.gz": "86ba69d21e3ac0a817313b5b73a4a88b99840b03c59ca66d03c26867185f2b30",
+    "vendor/sail/crates/sail-function/src/scalar/string/spark_substring.rs": "ba205cde3ff72f14d14ce1b410e9fc9fccaa23f8034ebdcc21aedbc0cd684fd6",
+    "vendor/sail/crates/sail-function/tests/fixtures/substring-row-cost-1388-inputs.json": "1793d3a8bfa245983f9b602fe21e2aeaa08d4ce3ef19d2964d31e7cd766577a7",
+    "tests/substring_row_cost.rs": "1afaf618e3b525191e818522697466c478808f4af0578d7bd74f89f1a9449584",
+    "UPSTREAM.md": "f4335b65d1cc07d45bc5e3095f98aa9b7ee975927cec0b7d4a5e051f274cc281"
+  },
+  "eligible_shapes": [
+    "string_functions",
+    "substring_only"
+  ],
+  "excluded_shapes": {},
+  "preflight_result_count": 6,
+  "exact_comparison_count": 4,
+  "expected_rows": {
+    "string_functions": {
+      "native": 6001215,
+      "spark-off": 6001215,
+      "spark-on": 6001215
+    },
+    "substring_only": {
+      "native": 6001215,
+      "spark-off": 6001215,
+      "spark-on": 6001215
+    }
+  },
+  "expected_source_io": {
+    "string_functions": {
+      "native": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 81807546,
+        "recorded_range_bytes": 81807546
+      },
+      "spark-off": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 81807546,
+        "recorded_range_bytes": 81807546
+      },
+      "spark-on": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 81807546,
+        "recorded_range_bytes": 81807546
+      }
+    },
+    "substring_only": {
+      "native": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 80224680,
+        "recorded_range_bytes": 80224680
+      },
+      "spark-off": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 80224680,
+        "recorded_range_bytes": 80224680
+      },
+      "spark-on": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 80224680,
+        "recorded_range_bytes": 80224680
+      }
+    }
+  },
+  "query_manifest_origin": "8260c58ba48e0a65ca7cb7668dd2d8c64b1434f1",
+  "source_head_commit": "2dd66fd476129e36b38e78127d7e334522058f34",
+  "product_source_objects": {
+    "Cargo.toml": "86ce253ff3be80fac714b3c5fa3ac71f848c6661",
+    "Cargo.lock": "ec257172d1bf34c53aa4a3b77f0f7c86732ab678",
+    "crates/delta-arrow-reader-core": "7a5a018132ef8bbdeb81a0416c70bdc010b4f6e2",
+    "crates/delta-arrow-reader-cli": "528060d52d55713d7002375e23f463b931f298d2",
+    "crates/delta-arrow-reader-python": "fc34cc502915f456018c8f6886752b01e1dd7fe0",
+    "crates/delta-arrow-reader-spark-sql/Cargo.toml": "03f1c27708686838944969490f6ba763472846bd",
+    "crates/delta-arrow-reader-spark-sql/Cargo.lock": "4d79889a1593a30ec517fe7dd741b69f9c8dc1d8",
+    "crates/delta-arrow-reader-spark-sql/src": "3c1911f6e3eafc6c02709cdee8f82a4a8aae437e",
+    "crates/delta-arrow-reader-spark-sql/vendor": "0f3446c37bd1374b46b694c7bbb663a610c00629"
+  },
+  "baseline_comparison_count": 6
+}

@@ -1,0 +1,234 @@
+{
+  "baseline_commit": "7cbb9dbf0ca0e625f0fe4a50f12292e0720788b7",
+  "measured_commit": "49176fd72984a19fef9cd10c432458c34ddf8c2b",
+  "initial_protocol_and_product_commit": "e944900dc2f6360272f71172334e36093a2862f2",
+  "dictionary_fixture_correction_commit": "2dd66fd476129e36b38e78127d7e334522058f34",
+  "query_manifest_origin": "8260c58ba48e0a65ca7cb7668dd2d8c64b1434f1",
+  "product_source_objects": {
+    "Cargo.toml": "86ce253ff3be80fac714b3c5fa3ac71f848c6661",
+    "Cargo.lock": "ec257172d1bf34c53aa4a3b77f0f7c86732ab678",
+    "crates/delta-arrow-reader-core": "7a5a018132ef8bbdeb81a0416c70bdc010b4f6e2",
+    "crates/delta-arrow-reader-cli": "528060d52d55713d7002375e23f463b931f298d2",
+    "crates/delta-arrow-reader-python": "fc34cc502915f456018c8f6886752b01e1dd7fe0",
+    "crates/delta-arrow-reader-spark-sql/Cargo.toml": "03f1c27708686838944969490f6ba763472846bd",
+    "crates/delta-arrow-reader-spark-sql/Cargo.lock": "4d79889a1593a30ec517fe7dd741b69f9c8dc1d8",
+    "crates/delta-arrow-reader-spark-sql/src": "3c1911f6e3eafc6c02709cdee8f82a4a8aae437e",
+    "crates/delta-arrow-reader-spark-sql/vendor": "0f3446c37bd1374b46b694c7bbb663a610c00629"
+  },
+  "frozen_source_hashes": {
+    "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-function/src/scalar/string/spark_substring.rs": "ba205cde3ff72f14d14ce1b410e9fc9fccaa23f8034ebdcc21aedbc0cd684fd6",
+    "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-function/tests/fixtures/substring-row-cost-1388-inputs.json": "1793d3a8bfa245983f9b602fe21e2aeaa08d4ce3ef19d2964d31e7cd766577a7",
+    "crates/delta-arrow-reader-spark-sql/tests/substring_row_cost.rs": "1afaf618e3b525191e818522697466c478808f4af0578d7bd74f89f1a9449584",
+    "crates/delta-arrow-reader-spark-sql/UPSTREAM.md": "f4335b65d1cc07d45bc5e3095f98aa9b7ee975927cec0b7d4a5e051f274cc281",
+    "crates/delta-arrow-reader-spark-sql/benches/reports/strings-1388-substring-protocol.md": "1835da194fc3ba51559fb0fa333a31e6b9a7bf5561414852601e385807deabeb",
+    "crates/delta-arrow-reader-spark-sql/benches/strings/substring/queries.json": "18fa0eb633cf2087c5d0e32a190fcb6cd22f56b055b058cda8f34e83c81eea02",
+    "crates/delta-arrow-reader-spark-sql/benches/strings/substring/run.py": "e056659a7bd75476fba4b1e40802075360bfb43dacc3f427009d13516dbd7070",
+    "crates/delta-arrow-reader-spark-sql/benches/strings/substring/schedule.json": "ba67984b5b3233739afb51469601528b1f52486d1c628608d47de2e4eed641ac",
+    "crates/delta-arrow-reader-spark-sql/benches/reports/strings-1388-substring-preflight.json.gz": "8df61df9e72d7a0375b9657cd591e5a79d0cd6ab38f0eb6f0cfa5313d290e692",
+    "crates/delta-arrow-reader-spark-sql/benches/strings/substring/preflight-receipt.json": "8ad5491410c4a41fd830cc3aa214e9d01ad6d14b33108dda07d3c36d0037b203"
+  },
+  "exact_committed_build": {
+    "command": [
+      "cargo",
+      "+1.96.0",
+      "build",
+      "--locked",
+      "--release",
+      "--bench",
+      "execution",
+      "--message-format=json-render-diagnostics"
+    ],
+    "cwd": "/home/hanbo/repo/delta-arrow-reader-costs-168/crates/delta-arrow-reader-spark-sql",
+    "environment": {
+      "CARGO_TARGET_DIR": "/home/hanbo/.cache/delta-arrow-reader/costs-168-2026-11-19",
+      "CARGO_BUILD_JOBS": "2",
+      "CARGO_PROFILE_RELEASE_DEBUG": "1"
+    },
+    "source_commit": "49176fd72984a19fef9cd10c432458c34ddf8c2b",
+    "compiler_profile": {
+      "opt_level": "3",
+      "debuginfo": 1,
+      "debug_assertions": false,
+      "overflow_checks": false,
+      "test": true
+    },
+    "rustc": "rustc 1.96.0 (ac68faa20 2026-05-25)\nbinary: rustc\ncommit-hash: ac68faa20c58cbccd01ee7208bf3b6e93a7d7f96\ncommit-date: 2026-05-25\nhost: x86_64-unknown-linux-gnu\nrelease: 1.96.0\nLLVM version: 22.1.2\n",
+    "cargo": "cargo 1.96.0 (30a34c682 2026-05-25)",
+    "compiler_overrides": {},
+    "locked": true,
+    "build_binding_receipt_sha256": "c8f529a2efe87f6277cf95a310ea2e36cf47049e55894ae7558370ab616236c8"
+  },
+  "binary": {
+    "sha256": "fa06fd38820390e60de15e25dc9c446bbccb5ada0c3d851b20b109701ff5d308",
+    "bytes": 1263588280,
+    "seal": "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1388/pr2/artifacts/substring-freeze-execution",
+    "seal_mode": "0o444",
+    "independent_inode": true
+  },
+  "measurement": {
+    "command": [
+      "python3",
+      "/home/hanbo/repo/delta-arrow-reader-costs-168/crates/delta-arrow-reader-spark-sql/benches/strings/substring/run.py",
+      "measure",
+      "/home/hanbo/.cache/delta-arrow-reader/costs-168-2026-11-19/release/deps/execution-58c954bd4b1fa356",
+      "/home/hanbo/.local/share/delta-arrow-reader-review/measurements-2026-11-18/1380/delta-snapshot",
+      "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1388/pr2/after-once"
+    ],
+    "cwd": "/home/hanbo/repo/delta-arrow-reader-costs-168",
+    "source_commit": "49176fd72984a19fef9cd10c432458c34ddf8c2b",
+    "binary_sha256": "fa06fd38820390e60de15e25dc9c446bbccb5ada0c3d851b20b109701ff5d308",
+    "started_unix": 1795108680.0281093,
+    "outer_timeout_seconds": 3700,
+    "retries": 0,
+    "planned_processes": 30,
+    "planned_warmups": 30,
+    "planned_samples": 90,
+    "exit_code": 0,
+    "completed_unix": 1795108717.3855555,
+    "wall_seconds": 37.35744762420654
+  },
+  "raw_environment_sha256": "1a0d24e7345606a81d318e25617e11acdc98191bb1f2c2e5d4260f72de7e69e5",
+  "samples": {
+    "raw_bytes": 1785384,
+    "raw_sha256": "362b898ffeb6e4d12008cc0aac40bfd08725f8d2f333bafbc74424f81edf7e6d",
+    "gzip_bytes": 51847,
+    "gzip_sha256": "bc5545b0e45d567c2ab2a53aec25cd72b5626dd860d68a5d4c823c9bfbecca57"
+  },
+  "metrics": {
+    "file": "strings-1388-substring-metrics.json.gz",
+    "raw_bytes": 43850,
+    "raw_sha256": "4a1177021a77fd2b8d84e5ae4fad87d834afb152f4631934446756a86d504029",
+    "gzip_bytes": 2926,
+    "gzip_sha256": "dd04cc212e2789cf45514845990e1e2396d30d101eb600de940144c2812ccbab"
+  },
+  "validation_details": {
+    "file": "strings-1388-substring-validation-details.json.gz",
+    "raw_bytes": 656276,
+    "raw_sha256": "0653bbd11e0277c249e949d94b6ac9b3d3c55d9e46655f867e4abd71151ff8f8",
+    "gzip_bytes": 55945,
+    "gzip_sha256": "46cde4116d02ff5e850dd5f884b123d9005fc8f761b9c39c64b68d86777d7b78"
+  },
+  "plans": {
+    "source_commit": "49176fd72984a19fef9cd10c432458c34ddf8c2b",
+    "files": [
+      {
+        "path": "string_functions/before-vs-after-native.diff",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "string_functions/before-vs-after-spark-off.diff",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "string_functions/before-vs-after-spark-on.diff",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "string_functions/native-vs-spark-off.diff",
+        "bytes": 673,
+        "sha256": "ff4030e90bf792901dfc23e83cc96ab544c1ab45b37053092df748e39ca0f3a2"
+      },
+      {
+        "path": "string_functions/native-vs-spark-on.diff",
+        "bytes": 672,
+        "sha256": "6007cf6da8ba4df7b9281340e38cdc73659f43c06f77154bd6df5d49f2543d78"
+      },
+      {
+        "path": "string_functions/native.txt",
+        "bytes": 261,
+        "sha256": "c69cf51431e73793d57f43c1c76cc030bf2b7375ccfeefe1e881b8ef4305618a"
+      },
+      {
+        "path": "string_functions/spark-off.txt",
+        "bytes": 366,
+        "sha256": "9cad1fc15ac409a0c7e4bd042a83b8003cda64501eb2fd418ee26dd4c372b2fb"
+      },
+      {
+        "path": "string_functions/spark-on.txt",
+        "bytes": 366,
+        "sha256": "9cad1fc15ac409a0c7e4bd042a83b8003cda64501eb2fd418ee26dd4c372b2fb"
+      },
+      {
+        "path": "substring_only/before-vs-after-native.diff",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "substring_only/before-vs-after-spark-off.diff",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "substring_only/before-vs-after-spark-on.diff",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "substring_only/native-vs-spark-off.diff",
+        "bytes": 457,
+        "sha256": "fba22df47935c2258c1f971336ebd93d88ea341df7d27ddfb4865de7307600dc"
+      },
+      {
+        "path": "substring_only/native-vs-spark-on.diff",
+        "bytes": 456,
+        "sha256": "f34460509eb01332e5233a167d277a42d04e39abe43d1e8515ea1324c99a037e"
+      },
+      {
+        "path": "substring_only/native.txt",
+        "bytes": 170,
+        "sha256": "53b97368a4c6a69dbbf16b0bd236a4e67de82cbf06e80e76de5f5d39c52dd7a6"
+      },
+      {
+        "path": "substring_only/spark-off.txt",
+        "bytes": 241,
+        "sha256": "a0713330f40d25d4e56f034224fdd9a53438a94c67fa202a9482c5b1bf27886e"
+      },
+      {
+        "path": "substring_only/spark-on.txt",
+        "bytes": 241,
+        "sha256": "a0713330f40d25d4e56f034224fdd9a53438a94c67fa202a9482c5b1bf27886e"
+      }
+    ],
+    "manifest_excludes_itself": true
+  },
+  "profiles_run": 0,
+  "original_attribution": {
+    "report": "strings-1388.md",
+    "archive": "strings-1388-profiles.tar.gz",
+    "archive_sha256": "220d2cf0ee3f3a00e88ca2377994795a3eb4a344949ee4e39481227ccb293131",
+    "copied": false
+  },
+  "artifacts": {
+    "strings-1388-substring.md": {
+      "bytes": 8897,
+      "sha256": "755d58231b0cc7e4f1eac056d1da0a39053e3ccbeee41c01796da82061e87b65"
+    },
+    "strings-1388-substring-summary.json": {
+      "bytes": 3325,
+      "sha256": "5721e37ee1a470b58b9a96d650cb6c427e31838781e827aca9343af89a688ec3"
+    },
+    "strings-1388-substring-samples.jsonl.gz": {
+      "bytes": 51847,
+      "sha256": "bc5545b0e45d567c2ab2a53aec25cd72b5626dd860d68a5d4c823c9bfbecca57"
+    },
+    "strings-1388-substring-metrics.json.gz": {
+      "bytes": 2926,
+      "sha256": "dd04cc212e2789cf45514845990e1e2396d30d101eb600de940144c2812ccbab"
+    },
+    "strings-1388-substring-plans.tar.gz": {
+      "bytes": 1371,
+      "sha256": "261b00899d1b818a771820943327bfbcdacddd903dea555fe5677e0ca768bcd7"
+    },
+    "strings-1388-substring-validation-details.json.gz": {
+      "bytes": 55945,
+      "sha256": "46cde4116d02ff5e850dd5f884b123d9005fc8f761b9c39c64b68d86777d7b78"
+    },
+    "strings-1388-substring-validation.json": {
+      "bytes": 4125,
+      "sha256": "043084ca12ce12b37ece23bcd395cdd276be9bebad7c5c936758b2343c53ea73"
+    }
+  }
+}
