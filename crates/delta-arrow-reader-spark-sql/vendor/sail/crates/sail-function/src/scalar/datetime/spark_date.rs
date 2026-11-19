@@ -10,7 +10,9 @@ use datafusion_common::cast::{as_large_string_array, as_string_array, as_string_
 use datafusion_common::{Result, ScalarValue, exec_datafusion_err, exec_err};
 use datafusion_expr::{ColumnarValue, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility};
 use sail_common_datafusion::utils::items::ItemTaker;
-use sail_sql_analyzer::parser::parse_date;
+use sail_sql_analyzer::error::SqlResult;
+use sail_sql_analyzer::literal::datetime::DateValue;
+use sail_sql_analyzer::parser::{date_parser, parse_date};
 
 use crate::scalar::datetime::format::DateTimeFormat;
 
@@ -33,6 +35,14 @@ impl SparkDate {
     }
 
     fn string_to_date32(value: &str, is_try: bool) -> Result<Option<i32>> {
+        Self::string_to_date32_with_parser(value, is_try, &mut parse_date)
+    }
+
+    fn string_to_date32_with_parser<'a>(
+        value: &'a str,
+        is_try: bool,
+        parse: &mut impl FnMut(&'a str) -> SqlResult<DateValue>,
+    ) -> Result<Option<i32>> {
         // Native parsing agrees with Spark on this subset, not its other date forms.
         let bytes = value.as_bytes();
         if bytes.len() == 10
@@ -44,7 +54,7 @@ impl SparkDate {
         {
             return Ok(Some(date));
         }
-        match parse_date(value).and_then(|date| Ok(Date32Type::from_naive_date(date.try_into()?))) {
+        match parse(value).and_then(|date| Ok(Date32Type::from_naive_date(date.try_into()?))) {
             Ok(v) => Ok(Some(v)),
             Err(_e) if is_try => Ok(None),
             Err(_) => {
@@ -129,13 +139,14 @@ impl ScalarUDFImpl for SparkDate {
                     Some(ColumnarValue::Array(_)) => unreachable!(),
                     None => None,
                 };
+                let mut parse = date_parser();
                 let array = match array.data_type() {
                     DataType::Utf8 => as_string_array(&array)?
                         .iter()
                         .map(|x| {
                             x.map(|v| match &format {
                                 Some(format) => Self::formatted_string_to_date32(v, format, is_try),
-                                None => Self::string_to_date32(v, is_try),
+                                None => Self::string_to_date32_with_parser(v, is_try, &mut parse),
                             })
                             .transpose()
                             .map(|opt| opt.flatten())
@@ -146,7 +157,7 @@ impl ScalarUDFImpl for SparkDate {
                         .map(|x| {
                             x.map(|v| match &format {
                                 Some(format) => Self::formatted_string_to_date32(v, format, is_try),
-                                None => Self::string_to_date32(v, is_try),
+                                None => Self::string_to_date32_with_parser(v, is_try, &mut parse),
                             })
                             .transpose()
                             .map(|opt| opt.flatten())
@@ -157,7 +168,7 @@ impl ScalarUDFImpl for SparkDate {
                         .map(|x| {
                             x.map(|v| match &format {
                                 Some(format) => Self::formatted_string_to_date32(v, format, is_try),
-                                None => Self::string_to_date32(v, is_try),
+                                None => Self::string_to_date32_with_parser(v, is_try, &mut parse),
                             })
                             .transpose()
                             .map(|opt| opt.flatten())
@@ -284,6 +295,22 @@ fn get_or_parse_format<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn canonical_date_bypasses_the_lazy_fallback_parser() -> Result<()> {
+        let mut fallback = |_| -> SqlResult<DateValue> {
+            Err(sail_sql_analyzer::error::SqlError::invalid(
+                "fallback reached",
+            ))
+        };
+        assert!(
+            SparkDate::string_to_date32_with_parser("2024-02-29", false, &mut fallback)?.is_some()
+        );
+        assert!(
+            SparkDate::string_to_date32_with_parser("2024-02-30", false, &mut fallback).is_err()
+        );
+        Ok(())
+    }
 
     #[test]
     fn date_row_path_matches_existing_parser() -> std::result::Result<(), Box<dyn std::error::Error>>

@@ -15,10 +15,10 @@ use datafusion_expr::{ColumnarValue, ScalarFunctionArgs, ScalarUDFImpl, Signatur
 use datafusion_expr_common::signature::{Coercion, TypeSignatureClass};
 use sail_common_datafusion::utils::items::ItemTaker;
 use sail_sql_analyzer::literal::interval::IntervalValue;
-use sail_sql_analyzer::parser::parse_interval;
+use sail_sql_analyzer::parser::{interval_parser, parse_interval};
 
 macro_rules! define_interval_udf {
-    ($udf:ident, $name:expr_2021, $return_type:expr_2021, $primitive_type:ty, $func:expr_2021, $scalar:expr_2021 $(,)?) => {
+    ($udf:ident, $name:expr_2021, $return_type:expr_2021, $primitive_type:ty, $func:expr_2021, $convert:expr_2021, $scalar:expr_2021 $(,)?) => {
         #[derive(Debug, PartialEq, Eq, Hash)]
         pub struct $udf {
             signature: Signature,
@@ -61,18 +61,25 @@ macro_rules! define_interval_udf {
                 let arg = args.one()?;
                 match arg {
                     ColumnarValue::Array(array) => {
+                        let mut parse = interval_parser();
+                        let mut convert = |value| {
+                            $convert(
+                                parse(value).map_err(|e| exec_datafusion_err!("{e}"))?,
+                                value,
+                            )
+                        };
                         let array: PrimitiveArray<$primitive_type> = match array.data_type() {
                             DataType::Utf8 => as_string_array(&array)?
                                 .iter()
-                                .map(|x| x.map(|x| $func(x)).transpose())
+                                .map(|x| x.map(&mut convert).transpose())
                                 .collect::<Result<_>>()?,
                             DataType::LargeUtf8 => as_large_string_array(&array)?
                                 .iter()
-                                .map(|x| x.map(|x| $func(x)).transpose())
+                                .map(|x| x.map(&mut convert).transpose())
                                 .collect::<Result<_>>()?,
                             DataType::Utf8View => as_string_view_array(&array)?
                                 .iter()
-                                .map(|x| x.map(|x| $func(x)).transpose())
+                                .map(|x| x.map(&mut convert).transpose())
                                 .collect::<Result<_>>()?,
                             _ => return exec_err!("expected string array for intervals"),
                         };
@@ -97,6 +104,7 @@ define_interval_udf!(
     DataType::Interval(IntervalUnit::YearMonth),
     IntervalYearMonthType,
     string_to_year_month_interval,
+    year_month_interval,
     ScalarValue::IntervalYearMonth,
 );
 
@@ -106,6 +114,7 @@ define_interval_udf!(
     DataType::Duration(TimeUnit::Microsecond),
     DurationMicrosecondType,
     string_to_day_time_interval,
+    day_time_interval,
     ScalarValue::DurationMicrosecond,
 );
 
@@ -115,6 +124,7 @@ define_interval_udf!(
     DataType::Interval(IntervalUnit::MonthDayNano),
     IntervalMonthDayNanoType,
     string_to_calendar_interval,
+    calendar_interval,
     ScalarValue::IntervalMonthDayNano,
 );
 
@@ -200,6 +210,10 @@ impl ScalarUDFImpl for SparkDayTimeIntervalToCalendarInterval {
 
 fn string_to_year_month_interval(value: &str) -> Result<i32> {
     let interval = parse_interval(value).map_err(|e| exec_datafusion_err!("{e}"))?;
+    year_month_interval(interval, value)
+}
+
+fn year_month_interval(interval: IntervalValue, value: &str) -> Result<i32> {
     match interval {
         IntervalValue::YearMonth { months, .. } => Ok(months),
         IntervalValue::Microsecond { .. } | IntervalValue::MonthDayNanosecond { .. } => {
@@ -210,6 +224,10 @@ fn string_to_year_month_interval(value: &str) -> Result<i32> {
 
 fn string_to_day_time_interval(value: &str) -> Result<i64> {
     let interval = parse_interval(value).map_err(|e| exec_datafusion_err!("{e}"))?;
+    day_time_interval(interval, value)
+}
+
+fn day_time_interval(interval: IntervalValue, value: &str) -> Result<i64> {
     match interval {
         IntervalValue::Microsecond { microseconds, .. } => Ok(microseconds),
         IntervalValue::YearMonth { .. } | IntervalValue::MonthDayNanosecond { .. } => {
@@ -220,6 +238,10 @@ fn string_to_day_time_interval(value: &str) -> Result<i64> {
 
 fn string_to_calendar_interval(value: &str) -> Result<IntervalMonthDayNano> {
     let interval = parse_interval(value).map_err(|e| exec_datafusion_err!("{e}"))?;
+    calendar_interval(interval, value)
+}
+
+fn calendar_interval(interval: IntervalValue, _value: &str) -> Result<IntervalMonthDayNano> {
     match interval {
         IntervalValue::YearMonth { months, .. } => Ok(IntervalMonthDayNano {
             months,

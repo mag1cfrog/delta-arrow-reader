@@ -1,6 +1,8 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
+use std::sync::LazyLock;
+
 use chumsky::Parser;
-use chumsky::input::Input;
+use chumsky::input::{Input, Stream};
 use chumsky::span::SimpleSpan;
 use sail_sql_parser::ast::data_type::DataType;
 use sail_sql_parser::ast::expression::IntervalLiteral;
@@ -19,7 +21,14 @@ use crate::literal::datetime::{
     DateValue, TimeValue, TimestampValue, create_date_parser, create_time_parser,
     create_timestamp_parser,
 };
-use crate::literal::interval::{IntervalValue, parse_unqualified_interval_string};
+use crate::literal::interval::{
+    IntervalValue, from_ast_unqualified_interval, parse_unqualified_interval_string,
+};
+
+#[cfg(test)]
+thread_local! {
+    static INTERVAL_LITERAL_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
 
 fn map_parser_input<'a, C>(
     (t, s): &'a (Token<'a>, SimpleSpan<usize, C>),
@@ -159,6 +168,8 @@ pub fn parse_object_name(s: &str) -> SqlResult<ObjectName> {
 }
 
 pub(crate) fn parse_interval_literal(s: &str) -> SqlResult<IntervalLiteral> {
+    #[cfg(test)]
+    INTERVAL_LITERAL_CALLS.with(|calls| calls.set(calls.get() + 1));
     parse!(s, create_interval_literal_parser)
 }
 
@@ -178,6 +189,68 @@ pub fn parse_timestamp(s: &str) -> SqlResult<TimestampValue<'_>> {
     parse_simple!(s, create_timestamp_parser)
 }
 
+/// Reuse the existing DATE parser within an input batch, constructing it only on first use.
+pub fn date_parser<'a>() -> impl FnMut(&'a str) -> SqlResult<DateValue> {
+    let mut parser = None;
+    move |s| {
+        let s = s.trim_matches(|c: char| c.is_ascii_control() || c == ' ');
+        parser
+            .get_or_insert_with(
+                create_date_parser::<chumsky::extra::Err<chumsky::error::Rich<_, _>>>,
+            )
+            .parse(s)
+            .into_result()
+            .map_err(SqlError::parser)
+    }
+}
+
+/// Reuse the existing TIMESTAMP parser within an input batch; timezone text borrows that input.
+pub fn timestamp_parser<'a>() -> impl FnMut(&'a str) -> SqlResult<TimestampValue<'a>> {
+    let mut parser = None;
+    move |s| {
+        let s = s.trim_matches(|c: char| c.is_ascii_control() || c == ' ');
+        parser
+            .get_or_insert_with(
+                create_timestamp_parser::<chumsky::extra::Err<chumsky::error::Rich<_, _>>>,
+            )
+            .parse(s)
+            .into_result()
+            .map_err(SqlError::parser)
+    }
+}
+
+/// Reuse an interval lexer and parser for rows borrowing the same batch.
+pub fn interval_parser<'a>() -> impl FnMut(&'a str) -> SqlResult<IntervalValue> {
+    static OPTIONS: LazyLock<ParserOptions> = LazyLock::new(ParserOptions::default);
+    let options = &*OPTIONS;
+    let mut lexer = None;
+    let mut parser = None;
+    move |s| {
+        let tokens = lexer
+            .get_or_insert_with(|| {
+                create_lexer::<_, chumsky::extra::Err<chumsky::error::Rich<_, _>>>(options)
+            })
+            .parse(s)
+            .into_result()
+            .map_err(SqlError::parser)?;
+        // Owning the token vector avoids tying this parser to a temporary row-local slice.
+        let tokens =
+            Stream::from_iter(tokens).map((s.len()..s.len()).into(), |(token, span)| (token, span));
+        let interval =
+            parser
+                .get_or_insert_with(|| {
+                    create_interval_literal_parser::<
+                        _,
+                        chumsky::extra::Err<chumsky::error::Rich<_, _>>,
+                    >(options)
+                })
+                .parse(tokens)
+                .into_result()
+                .map_err(SqlError::parser)?;
+        from_ast_unqualified_interval(interval)
+    }
+}
+
 pub fn parse_time(s: &str) -> SqlResult<TimeValue> {
     parse_simple!(s, create_time_parser)
 }
@@ -189,6 +262,20 @@ mod tests {
 
     use crate::error::SqlResult;
     use crate::parser::{parse_one_statement, parse_statements, parse_time, parse_timestamp};
+
+    #[test]
+    fn decoded_interval_literals_retain_only_their_scoped_parser_calls() -> SqlResult<()> {
+        super::INTERVAL_LITERAL_CALLS.with(|calls| calls.set(0));
+        let mut parse = super::interval_parser();
+        for (text, scoped_calls) in [("2 months", 0), ("'2 months'", 1), ("'''2 months'''", 3)] {
+            assert!(matches!(
+                parse(text)?,
+                super::IntervalValue::YearMonth { months: 2, .. }
+            ));
+            super::INTERVAL_LITERAL_CALLS.with(|calls| assert_eq!(calls.get(), scoped_calls));
+        }
+        Ok(())
+    }
 
     #[test]
     fn test_timestamp_date_time_separators() -> SqlResult<()> {

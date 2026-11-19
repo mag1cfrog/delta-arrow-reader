@@ -2433,3 +2433,30 @@ an empty string for nonfile sources, and rejects multiple file sources. Stored
 Simple projections, aliases and CTEs retain hidden file slots for enclosing
 expressions. The adapter survives timezone normalization, while metadata-command
 host function restrictions remain in force. Native SQL registration is unchanged.
+
+### STRING row parser construction (#1389)
+
+Unformatted STRING conversions in SparkDate, SparkTimestamp LTZ/NTZ,
+SparkDateFormat and the three interval UDFs reuse their existing Chumsky parsers
+within each array invocation. Construction is lazy, so NULL-only/empty inputs
+and the exact ASCII DATE fast route build no unused parser. Scalar calls retain
+their original single-value route. Input trimming, grammar, Rich errors,
+timezone conversion, leap-second handling and CAST/TRY_CAST modes are unchanged.
+
+The interval row factory feeds the same lexed tokens and byte spans through an
+owning Chumsky Stream, avoiding a borrow of a row-local token vector. Its private
+expression factory is used only by interval_literal. That factory retains the
+same Expr, Query, DataType and TableRelation combinators while nested recursive()
+constructors use weak references. Dropping the parser now releases its graph. The separate statement and schema parser factories are unchanged.
+Decoded quoted interval literals still call their original scoped parser for
+temporary text with a shorter lifetime. A test counts those residual calls.
+
+The [committed input lists](vendor/sail/crates/sail-sql-analyzer/tests/fixtures/string-parser-1389-inputs.rs)
+compare reused entry points and the
+[frozen interval graph](vendor/sail/crates/sail-sql-analyzer/tests/fixtures/interval-parser-1389-original.rs)
+on values, recursive ASTs, lexer/parser errors and source positions. Connected
+[SQL and kernel tests](tests/parser_reuse.rs) compare against
+[frozen unformatted conversion bodies](tests/fixtures/row-parser-1389-original.rs)
+for all three string encodings, SQL dictionary inputs, NULL/empty/scalar/array
+forms, both ANSI modes and CAST/TRY_CAST. Existing test outcomes and captures are
+retained. No dependency fork or explicit-input-format parser changes.

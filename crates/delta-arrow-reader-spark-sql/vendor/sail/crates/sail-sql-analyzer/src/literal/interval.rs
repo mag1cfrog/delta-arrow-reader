@@ -178,6 +178,7 @@ fn from_ast_signed_interval_with_rule(
             }
         }
         IntervalExpr::Literal(value) => {
+            // shortcut: decoded quoted text has a shorter lifetime; retain its scoped parser until measured otherwise.
             parse_interval_string(&from_ast_string(value)?, negated, rule)
         }
     }
@@ -541,6 +542,13 @@ pub(crate) fn parse_unqualified_interval_string(
     negated: bool,
 ) -> SqlResult<IntervalValue> {
     parse_interval_string(s, negated, MultiUnitFamilyRule::NonZeroValues)
+}
+
+pub(crate) fn from_ast_unqualified_interval(interval: IntervalLiteral) -> SqlResult<IntervalValue> {
+    from_ast_signed_interval_with_rule(
+        Signed::Positive(interval.value),
+        MultiUnitFamilyRule::NonZeroValues,
+    )
 }
 
 fn parse_interval_string(

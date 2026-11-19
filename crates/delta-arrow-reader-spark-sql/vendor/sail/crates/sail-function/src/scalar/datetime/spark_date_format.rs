@@ -19,7 +19,9 @@ use datafusion_common::{Result, ScalarValue, exec_datafusion_err, exec_err};
 use datafusion_expr::{ColumnarValue, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility};
 use sail_common_datafusion::utils::datetime::localize_with_fallback;
 use sail_common_datafusion::utils::items::ItemTaker;
-use sail_sql_analyzer::parser::parse_timestamp;
+use sail_sql_analyzer::error::SqlResult;
+use sail_sql_analyzer::literal::datetime::TimestampValue;
+use sail_sql_analyzer::parser::{parse_timestamp, timestamp_parser};
 
 use crate::scalar::datetime::format::{DateTimeFormat, DateTimeFormatInput, TimeZoneDisplay};
 use crate::scalar::datetime::local_datetime_to_ltz::cast_local_timestamp_value_to_ltz;
@@ -249,7 +251,14 @@ fn null_string_array(len: usize) -> ColumnarValue {
 
 /// Parse a timestamp string to microseconds since epoch.
 fn parse_timestamp_string(value: &str, timezone: &str) -> Result<Option<i64>> {
-    let parsed = parse_timestamp(value).and_then(|x| x.into_naive());
+    parsed_timestamp_to_microseconds(parse_timestamp(value), timezone)
+}
+
+fn parsed_timestamp_to_microseconds(
+    parsed: SqlResult<TimestampValue<'_>>,
+    timezone: &str,
+) -> Result<Option<i64>> {
+    let parsed = parsed.and_then(|x| x.into_naive());
     let (datetime, parsed_timezone) = match parsed {
         Ok(v) => v,
         Err(_e) => return Ok(None),
@@ -279,13 +288,14 @@ fn parse_string_array_to_timestamp(
     timezone: &str,
 ) -> Result<TimestampMicrosecondArray> {
     let mut builder = TimestampMicrosecondArray::builder(array.len());
+    let mut parse = timestamp_parser();
 
     match array.data_type() {
         DataType::Utf8 => {
             let string_array = as_string_array(array)?;
             for value in string_array.iter() {
                 match value {
-                    Some(v) => match parse_timestamp_string(v, timezone)? {
+                    Some(v) => match parsed_timestamp_to_microseconds(parse(v), timezone)? {
                         Some(micros) => builder.append_value(micros),
                         None => builder.append_null(),
                     },
@@ -297,7 +307,7 @@ fn parse_string_array_to_timestamp(
             let string_array = as_large_string_array(array)?;
             for value in string_array.iter() {
                 match value {
-                    Some(v) => match parse_timestamp_string(v, timezone)? {
+                    Some(v) => match parsed_timestamp_to_microseconds(parse(v), timezone)? {
                         Some(micros) => builder.append_value(micros),
                         None => builder.append_null(),
                     },
@@ -309,7 +319,7 @@ fn parse_string_array_to_timestamp(
             let string_array = as_string_view_array(array)?;
             for value in string_array.iter() {
                 match value {
-                    Some(v) => match parse_timestamp_string(v, timezone)? {
+                    Some(v) => match parsed_timestamp_to_microseconds(parse(v), timezone)? {
                         Some(micros) => builder.append_value(micros),
                         None => builder.append_null(),
                     },
