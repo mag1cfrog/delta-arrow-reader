@@ -9,7 +9,8 @@ import pathlib
 import statistics
 import sys
 
-HERE = pathlib.Path(__file__).resolve().parent
+SUITE = pathlib.Path(__file__).resolve().parent
+CAST_SUITE_SELECTED = False
 TIMINGS = ("planning_ns", "execution_first_batch_ns", "query_first_batch_ns", "execution_complete_ns", "query_complete_ns")
 COUNTERS = ("rows", "peak_pool_bytes", "output_partitions")
 IO = ("source_file_count", "source_bytes_received", "recorded_range_bytes", "source_range_gets", "source_full_gets", "file_tasks_started", "file_tasks_completed")
@@ -59,6 +60,9 @@ def self_check():
     empty = [dict(record,samples=[dict(sample,execution_first_batch_ns=None,query_first_batch_ns=None,rows=0) for sample in record["samples"]]) for record in records]
     missing_batch = aggregate(empty)[("main",None,"native","check","execution_first_batch_ns")]
     assert missing_batch["median"] is None and missing_batch["processes_with_value"] == 0
+    assert outlier_flags(400_000_000,500_000_000,0,0) == (False,False)
+    assert outlier_flags(100_000_000,150_000_000,0,0) == (False,False)
+    assert outlier_flags(200_000_000,250_000_001,0,0) == (True,False)
     assert outlier_flags(1,1,0,32*1024**2) == (False,True)
     assert outlier_flags(1,1,0,8*1024**2) == (False,False)
     for invalid in (records[:-1],records+[records[0]]):
@@ -77,12 +81,14 @@ def summarize(run_directory, output_directory):
         all_records=[json.loads(line) for line in source]
     records=[record for record in all_records if record["kind"]=="query_samples"]
     concurrency=[record for record in all_records if record["kind"]=="concurrency"]
-    schedule=json.loads((HERE/"schedule.json").read_text())
+    schedule=json.loads((SUITE/"schedule.json").read_text())
     assert {record["process"] for record in records} == {run["process"] for run in schedule["runs"]}
-    assert len(records)==270 and len(concurrency)==6
+    assert len(records)==len(schedule["runs"]) and len(concurrency)==len(schedule["concurrency"])
+    if CAST_SUITE_SELECTED:
+        assert len(records)==45 and concurrency==[]
     assert {record["process"] for record in concurrency} == {case["process"] for case in schedule["concurrency"]}
     data=aggregate(records)
-    query_ids=[query["id"] for query in json.loads((HERE/"queries.json").read_text())["queries"]]
+    query_ids=[query["id"] for query in json.loads((SUITE/"queries.json").read_text())["queries"]]
     configurations=("native","spark-off","spark-on")
     def value(configuration,query,metric):
         return data[("main",None,configuration,query,metric)]["median"]
@@ -108,21 +114,26 @@ def summarize(run_directory, output_directory):
             time_flag,memory_flag=outlier_flags(native_time,spark_time,native_memory,spark_memory)
             if time_flag or memory_flag:
                 outliers.append(dict(id=query,configuration=configuration,completion_flag=time_flag,pool_flag=memory_flag,native_query_complete_ns=native_time,spark_query_complete_ns=spark_time,native_peak_pool_bytes=native_memory,spark_peak_pool_bytes=spark_memory))
-    related={query:{configuration:{"query_complete_ns":value(configuration,query,"query_complete_ns"),"peak_pool_bytes":value(configuration,query,"peak_pool_bytes"),"above_threshold":any(case["id"]==query and case["configuration"]==configuration for case in outliers)} for configuration in configurations} for query in ("nullif_nullable","in_10","in_1000","mixed_boolean")}
+    related={query:{configuration:{"query_complete_ns":value(configuration,query,"query_complete_ns"),"peak_pool_bytes":value(configuration,query,"peak_pool_bytes"),"above_threshold":any(case["id"]==query and case["configuration"]==configuration for case in outliers)} for configuration in configurations} for query in (() if CAST_SUITE_SELECTED else ("nullif_nullable","in_10","in_1000","mixed_boolean"))}
     output_directory.mkdir(parents=True,exist_ok=True)
-    for name,rows in (("execution-1380-results.csv",table),("execution-1380-noise.csv",noise)):
+    prefix="casts-1385" if CAST_SUITE_SELECTED else "execution-1380"
+    for name,rows in ((prefix+"-results.csv",table),(prefix+"-noise.csv",noise)):
         with (output_directory/name).open("w",newline="") as output:
             writer=csv.DictWriter(output,fieldnames=list(rows[0]));writer.writeheader();writer.writerows(rows)
-    summary={"query_configurations":54,"process_records":len(records),"concurrency":concurrency,"outliers":outliers,"related_issue_shapes":related,"profile_cases":[{"id":case["id"],"configuration":case["configuration"]} for case in outliers]}
-    (output_directory/"execution-1380-summary.json").write_text(json.dumps(summary,indent=2)+"\n")
-    print(json.dumps({"query_configurations":54,"metric_rows":len(table),"noise_rows":len(noise),"outliers":len(outliers),"concurrency_processes":len(concurrency)},indent=2))
+    summary={"query_configurations":len(query_ids)*3,"process_records":len(records),"concurrency":concurrency,"outliers":outliers,"related_issue_shapes":related,"profile_cases":[] if CAST_SUITE_SELECTED else [{"id":case["id"],"configuration":case["configuration"]} for case in outliers]}
+    (output_directory/(prefix+"-summary.json")).write_text(json.dumps(summary,indent=2)+"\n")
+    print(json.dumps({"query_configurations":len(query_ids)*3,"metric_rows":len(table),"noise_rows":len(noise),"outliers":len(outliers),"concurrency_processes":len(concurrency)},indent=2))
 
 
 if __name__ == "__main__":
+    if sys.argv[1:2] == ["--casts-1385"]:
+        CAST_SUITE_SELECTED = True
+        SUITE = SUITE.parent / "casts"
+        del sys.argv[1]
     self_check()
     if sys.argv[1:]==["--check"]:
         print("execution aggregation checks passed")
     elif len(sys.argv)==3:
         summarize(*sys.argv[1:])
     else:
-        raise SystemExit("usage: summarize.py --check | RUN_DIRECTORY OUTPUT_DIRECTORY")
+        raise SystemExit("usage: summarize.py [--casts-1385] --check | RUN_DIRECTORY OUTPUT_DIRECTORY")

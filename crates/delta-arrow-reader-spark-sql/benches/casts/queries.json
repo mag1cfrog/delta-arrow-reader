@@ -1,0 +1,35 @@
+{
+  "source_commit": "176a5761abe19eeb6a2058c9008d97ce1647b7ef",
+  "source_scale_factor": 1,
+  "stored_columns": 80,
+  "snapshot_columns": 81,
+  "common_view_sql": "SELECT *,CAST(payload_00%17 AS DOUBLE) AS double_a,CAST(payload_01%17 AS DOUBLE) AS double_b,(payload_02%3=0) AS bool_a,(payload_03%5=0) AS bool_b,(payload_04%7=0) AS bool_c,ABS(payload_05%4096) AS in_key,CAST(l_shipdate AS VARCHAR) AS date_text,CAST(l_extendedprice AS VARCHAR) AS decimal_text FROM raw_lineitem",
+  "dimension": {
+    "name": "suppliers",
+    "rows": 10000,
+    "recipe": "suppkey=1..10000 BIGINT; region=suppkey%5 INT; label=supplier-{suppkey} STRING"
+  },
+  "queries": [
+    {
+      "id": "cast_strings",
+      "native_sql": "SELECT l_orderkey,l_linenumber,CAST(date_text AS DATE) AS ship_date,CAST(decimal_text AS DECIMAL(15,2)) AS price FROM bench",
+      "spark_sql": "SELECT l_orderkey,l_linenumber,CAST(date_text AS DATE) AS ship_date,CAST(decimal_text AS DECIMAL(15,2)) AS price FROM bench",
+      "ordered": false,
+      "related_issues": []
+    },
+    {
+      "id": "cast_date",
+      "native_sql": "SELECT l_orderkey,l_linenumber,CAST(date_text AS DATE) AS ship_date FROM bench",
+      "spark_sql": "SELECT l_orderkey,l_linenumber,CAST(date_text AS DATE) AS ship_date FROM bench",
+      "ordered": false,
+      "related_issues": []
+    },
+    {
+      "id": "cast_decimal",
+      "native_sql": "SELECT l_orderkey,l_linenumber,CAST(decimal_text AS DECIMAL(15,2)) AS price FROM bench",
+      "spark_sql": "SELECT l_orderkey,l_linenumber,CAST(decimal_text AS DECIMAL(15,2)) AS price FROM bench",
+      "ordered": false,
+      "related_issues": []
+    }
+  ]
+}
