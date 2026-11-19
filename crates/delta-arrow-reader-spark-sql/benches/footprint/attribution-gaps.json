@@ -1,0 +1,47 @@
+{
+  "original_attribution_complete": false,
+  "packages": [
+    {
+      "name": "genawaiter",
+      "version": "0.99.1",
+      "declared_license": "MIT",
+      "registry_checksum": "c86bd0361bcbde39b13475e6e36cb24c329964aa2611be285289d1e4b751c1a0",
+      "source_vcs_commit": "b7e93c2d444a5c63e94e14f6809c8dc27785c1c7",
+      "repository": "https://github.com/whatisaphone/genawaiter",
+      "tree_url": "https://api.github.com/repos/whatisaphone/genawaiter/git/trees/b7e93c2d444a5c63e94e14f6809c8dc27785c1c7?recursive=1",
+      "tree_sha256": "4488b3dfa329b2c7c7033006a0ad8f52a63a11eae83f5055e42a3bc3c8aa4058",
+      "original_legal_paths_in_pinned_tree": [],
+      "readme_url": "https://raw.githubusercontent.com/whatisaphone/genawaiter/b7e93c2d444a5c63e94e14f6809c8dc27785c1c7/README-crates-io.md",
+      "readme_sha256": "59a7d6a4d97a068696cb05879cb45235b3465d215b2a1928b81e3610bff1fbf5",
+      "status": "UNAVAILABLE: no original legal/attribution file in published crate or pinned source tree; no copyright holder inferred"
+    },
+    {
+      "name": "genawaiter-macro",
+      "version": "0.99.1",
+      "declared_license": "MIT/Apache-2.0",
+      "registry_checksum": "0b32dfe1fdfc0bbde1f22a5da25355514b5e450c33a6af6770884c8750aedfbc",
+      "source_vcs_commit": "f48046a9f66fbd2e535d5614fa7fe0d0b1a6a046",
+      "repository": "https://github.com/whatisaphone/genawaiter",
+      "tree_url": "https://api.github.com/repos/whatisaphone/genawaiter/git/trees/f48046a9f66fbd2e535d5614fa7fe0d0b1a6a046?recursive=1",
+      "tree_sha256": "d8f6cd87013870956d1d5d2cad3a7f6ac4d48be748ef16cecc4c77225f02ddc1",
+      "original_legal_paths_in_pinned_tree": [],
+      "readme_url": "https://raw.githubusercontent.com/whatisaphone/genawaiter/f48046a9f66fbd2e535d5614fa7fe0d0b1a6a046/README.md",
+      "readme_sha256": "49224d2d7434614d6dc3b155afaea3b9e5bc19425c254101dc96164fb5340ff2",
+      "status": "UNAVAILABLE: no original legal/attribution file in published crate or pinned source tree; no copyright holder inferred"
+    },
+    {
+      "name": "genawaiter-proc-macro",
+      "version": "0.99.1",
+      "declared_license": "MIT/Apache-2.0",
+      "registry_checksum": "784f84eebc366e15251c4a8c3acee82a6a6f427949776ecb88377362a9621738",
+      "source_vcs_commit": "f48046a9f66fbd2e535d5614fa7fe0d0b1a6a046",
+      "repository": "https://github.com/whatisaphone/genawaiter",
+      "tree_url": "https://api.github.com/repos/whatisaphone/genawaiter/git/trees/f48046a9f66fbd2e535d5614fa7fe0d0b1a6a046?recursive=1",
+      "tree_sha256": "d8f6cd87013870956d1d5d2cad3a7f6ac4d48be748ef16cecc4c77225f02ddc1",
+      "original_legal_paths_in_pinned_tree": [],
+      "readme_url": "https://raw.githubusercontent.com/whatisaphone/genawaiter/f48046a9f66fbd2e535d5614fa7fe0d0b1a6a046/README.md",
+      "readme_sha256": "49224d2d7434614d6dc3b155afaea3b9e5bc19425c254101dc96164fb5340ff2",
+      "status": "UNAVAILABLE: no original legal/attribution file in published crate or pinned source tree; no copyright holder inferred"
+    }
+  ]
+}
