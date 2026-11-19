@@ -1,0 +1,246 @@
+{
+  "baseline_commit": "05cde76fe6d46d505916e349ef23436a94416c7d",
+  "measured_commit": "36635ac9f619ab56140adc134219f35a63d755ef",
+  "product_and_protocol_commit": "8af864e4765647d54920d94cdf4cc12e5f5b0183",
+  "query_manifest_origin": "8260c58ba48e0a65ca7cb7668dd2d8c64b1434f1",
+  "product_source_objects": {
+    "Cargo.toml": "86ce253ff3be80fac714b3c5fa3ac71f848c6661",
+    "Cargo.lock": "ec257172d1bf34c53aa4a3b77f0f7c86732ab678",
+    "crates/delta-arrow-reader-core": "7a5a018132ef8bbdeb81a0416c70bdc010b4f6e2",
+    "crates/delta-arrow-reader-cli": "528060d52d55713d7002375e23f463b931f298d2",
+    "crates/delta-arrow-reader-python": "fc34cc502915f456018c8f6886752b01e1dd7fe0",
+    "crates/delta-arrow-reader-spark-sql/Cargo.toml": "03f1c27708686838944969490f6ba763472846bd",
+    "crates/delta-arrow-reader-spark-sql/Cargo.lock": "4d79889a1593a30ec517fe7dd741b69f9c8dc1d8",
+    "crates/delta-arrow-reader-spark-sql/src": "3c1911f6e3eafc6c02709cdee8f82a4a8aae437e",
+    "crates/delta-arrow-reader-spark-sql/vendor": "2402b4fb0fd5c61d3489a3bc854715f46957ed67"
+  },
+  "frozen_source_hashes": {
+    "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-function/src/scalar/collection/spark_concat.rs": "cab8f975f24c1285816042a1f8c817611dade000630750eeb2bd126382ecfa80",
+    "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-function/tests/fixtures/concat-row-cost-1388-inputs.json": "10f709e3b2ba33eda25e1710378ae1dca5eaec3f45fc578102c389fecc42f77f",
+    "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-function/tests/fixtures/concat-row-cost-1388-original.rs": "50a08dea1badfd72aad82b129582dd12b6d64425792b2469953403319d21ef2a",
+    "crates/delta-arrow-reader-spark-sql/tests/concat_row_cost.rs": "d3f316e0847b292534f9050edd602900649da64f6b72768fc880c7fdfc855ec0",
+    "crates/delta-arrow-reader-spark-sql/UPSTREAM.md": "da3ddfce185d91e078fb1aba10b163a0db99e815394592d44441437225892ec2",
+    "crates/delta-arrow-reader-spark-sql/benches/reports/strings-1388-concat-protocol.md": "ad007ed1d85cf877859e1d0e8b738df5b06dba9341901d959c396c3b6a59b27e",
+    "crates/delta-arrow-reader-spark-sql/benches/strings/concat/queries.json": "ab9df0e6295960f4eeb93babde09c8d951d7aa56bc05a6d67d2b0c464325b977",
+    "crates/delta-arrow-reader-spark-sql/benches/strings/concat/schedule.json": "067dc44f0707e66b6d4b10dea59d0a7766be350730797f9276eda2d20bdbfa72",
+    "crates/delta-arrow-reader-spark-sql/benches/strings/concat/run.py": "3c950bf423b1d0e372a3b7cafa4cf4cad1ca7b1a510060ba0d6e900861aa20fb",
+    "crates/delta-arrow-reader-spark-sql/benches/reports/strings-1388-concat-preflight.json.gz": "2b01c2e061164f6f4bde389892fd6c8531f977b9db9244431a3de21b0632e6c4",
+    "crates/delta-arrow-reader-spark-sql/benches/strings/concat/preflight-receipt.json": "6636b80ce82ce70b4ad8124697743d4385e93c400368c863f742b5de56419eaa"
+  },
+  "exact_committed_build": {
+    "command": [
+      "cargo",
+      "+1.96.0",
+      "build",
+      "--locked",
+      "--release",
+      "--bench",
+      "execution",
+      "--message-format=json-render-diagnostics"
+    ],
+    "cwd": "/home/hanbo/repo/delta-arrow-reader-costs-168/crates/delta-arrow-reader-spark-sql",
+    "environment": {
+      "CARGO_TARGET_DIR": "/home/hanbo/.cache/delta-arrow-reader/costs-168-2026-11-19",
+      "CARGO_BUILD_JOBS": "2",
+      "CARGO_PROFILE_RELEASE_DEBUG": "1"
+    },
+    "source_commit": "36635ac9f619ab56140adc134219f35a63d755ef",
+    "compiler_profile": {
+      "opt_level": "3",
+      "debuginfo": 1,
+      "debug_assertions": false,
+      "overflow_checks": false,
+      "test": true
+    },
+    "rustc": "rustc 1.96.0 (ac68faa20 2026-05-25)\nbinary: rustc\ncommit-hash: ac68faa20c58cbccd01ee7208bf3b6e93a7d7f96\ncommit-date: 2026-05-25\nhost: x86_64-unknown-linux-gnu\nrelease: 1.96.0\nLLVM version: 22.1.2\n",
+    "cargo": "cargo 1.96.0 (30a34c682 2026-05-25)",
+    "compiler_overrides": {},
+    "locked": true,
+    "build_binding_receipt_sha256": "e8a440e67b6110977a1bb67de95eb188f94ee0c2d2e5e0e9f6615b083b529103"
+  },
+  "binary": {
+    "sha256": "1ab10674c2101414fc7592eb20890009dd5eb62b0c98514711fd8193d5f4998d",
+    "bytes": 1263647624,
+    "seal": "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1388/pr3/artifacts/concat-freeze-execution",
+    "seal_mode": "0o444",
+    "independent_inode": true
+  },
+  "measurement": {
+    "command": [
+      "python3",
+      "/home/hanbo/repo/delta-arrow-reader-costs-168/crates/delta-arrow-reader-spark-sql/benches/strings/concat/run.py",
+      "measure",
+      "/home/hanbo/.cache/delta-arrow-reader/costs-168-2026-11-19/release/deps/execution-58c954bd4b1fa356",
+      "/home/hanbo/.local/share/delta-arrow-reader-review/measurements-2026-11-18/1380/delta-snapshot",
+      "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1388/pr3/after-once"
+    ],
+    "cwd": "/home/hanbo/repo/delta-arrow-reader-costs-168",
+    "source_commit": "36635ac9f619ab56140adc134219f35a63d755ef",
+    "binary_sha256": "1ab10674c2101414fc7592eb20890009dd5eb62b0c98514711fd8193d5f4998d",
+    "started_unix": 1795113553.4613588,
+    "outer_timeout_seconds": 3700,
+    "retries": 0,
+    "planned_processes": 30,
+    "planned_warmups": 30,
+    "planned_samples": 90,
+    "exit_code": 0,
+    "completed_unix": 1795113586.8085284,
+    "wall_seconds": 33.34717082977295
+  },
+  "before_campaigns": {
+    "string_functions": {
+      "campaign": 2,
+      "summary": "strings-1388-substring-summary.json",
+      "summary_sha256": "5721e37ee1a470b58b9a96d650cb6c427e31838781e827aca9343af89a688ec3"
+    },
+    "concat_only": {
+      "campaign": 1,
+      "summary": "strings-1388-summary.json",
+      "summary_sha256": "31b834dd2ae09885dea684205d4fea9c34a22762fa40577c04f28eb128102742"
+    }
+  },
+  "raw_environment_sha256": "b99f3581d64381562445e7510bc1207ce42695b45b05f352f7d29f1986ad81d0",
+  "samples": {
+    "raw_bytes": 1917792,
+    "raw_sha256": "b698c246a71c18a332f46e195d46fcfb3b54483e21480bb451dc7b52bfe2cccb",
+    "gzip_bytes": 48812,
+    "gzip_sha256": "3325086b2678a3c28adf3f0fe3788bcbbd5fa9ccccfa5b51518c9faaf1d1dd5c"
+  },
+  "metrics": {
+    "file": "strings-1388-concat-metrics.json.gz",
+    "raw_bytes": 43573,
+    "raw_sha256": "df34bd123bc81b1440e24ae78b87f1c3ac33008d7245e61bfab7a373456317ae",
+    "gzip_bytes": 2917,
+    "gzip_sha256": "84cff65bc2967e81cba377a1b617eabd866e7497795f0496719063e64e453d76"
+  },
+  "validation_details": {
+    "file": "strings-1388-concat-validation-details.json.gz",
+    "raw_bytes": 596670,
+    "raw_sha256": "f976aef27665a1cbf47e7c9fdd1ab49148ebc93623ea1a8925b4ffb7e1e6735b",
+    "gzip_bytes": 55925,
+    "gzip_sha256": "04e18f528ec770afc7c7cbd6b35d0a9890ea96d0ded6eef260f5e82d845c78da"
+  },
+  "plans": {
+    "source_commit": "36635ac9f619ab56140adc134219f35a63d755ef",
+    "files": [
+      {
+        "path": "concat_only/before-vs-after-native.diff",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "concat_only/before-vs-after-spark-off.diff",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "concat_only/before-vs-after-spark-on.diff",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "concat_only/native-vs-spark-off.diff",
+        "bytes": 500,
+        "sha256": "666357b6f26cdafecfd811f27cd9472be7b92a5fa963451e961fcf5c766df345"
+      },
+      {
+        "path": "concat_only/native-vs-spark-on.diff",
+        "bytes": 499,
+        "sha256": "c761eb2472727dbe870b49cfdf842ccdde40726fe66994be9ad4e695f4e75fb0"
+      },
+      {
+        "path": "concat_only/native.txt",
+        "bytes": 190,
+        "sha256": "eafd4f866ff06c61426656669d2b2c57c87262fb3666ab4adb90afb5cbac5e44"
+      },
+      {
+        "path": "concat_only/spark-off.txt",
+        "bytes": 264,
+        "sha256": "4f7e585590aefbaab2fca438fb5cd3050bb6e677fbea34f07dd9e6551bfb2312"
+      },
+      {
+        "path": "concat_only/spark-on.txt",
+        "bytes": 264,
+        "sha256": "4f7e585590aefbaab2fca438fb5cd3050bb6e677fbea34f07dd9e6551bfb2312"
+      },
+      {
+        "path": "string_functions/before-vs-after-native.diff",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "string_functions/before-vs-after-spark-off.diff",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "string_functions/before-vs-after-spark-on.diff",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "string_functions/native-vs-spark-off.diff",
+        "bytes": 673,
+        "sha256": "ff4030e90bf792901dfc23e83cc96ab544c1ab45b37053092df748e39ca0f3a2"
+      },
+      {
+        "path": "string_functions/native-vs-spark-on.diff",
+        "bytes": 672,
+        "sha256": "6007cf6da8ba4df7b9281340e38cdc73659f43c06f77154bd6df5d49f2543d78"
+      },
+      {
+        "path": "string_functions/native.txt",
+        "bytes": 261,
+        "sha256": "c69cf51431e73793d57f43c1c76cc030bf2b7375ccfeefe1e881b8ef4305618a"
+      },
+      {
+        "path": "string_functions/spark-off.txt",
+        "bytes": 366,
+        "sha256": "9cad1fc15ac409a0c7e4bd042a83b8003cda64501eb2fd418ee26dd4c372b2fb"
+      },
+      {
+        "path": "string_functions/spark-on.txt",
+        "bytes": 366,
+        "sha256": "9cad1fc15ac409a0c7e4bd042a83b8003cda64501eb2fd418ee26dd4c372b2fb"
+      }
+    ],
+    "manifest_excludes_itself": true
+  },
+  "profiles_run": 0,
+  "original_attribution": {
+    "report": "strings-1388.md",
+    "archive": "strings-1388-profiles.tar.gz",
+    "archive_sha256": "220d2cf0ee3f3a00e88ca2377994795a3eb4a344949ee4e39481227ccb293131",
+    "copied": false
+  },
+  "artifacts": {
+    "strings-1388-concat.md": {
+      "bytes": 10468,
+      "sha256": "f141cabf54f31e3128b7051cef5aaf12f1a86bfe6f5b9cdadeaa746c0be9f138"
+    },
+    "strings-1388-concat-summary.json": {
+      "bytes": 3234,
+      "sha256": "92d4f1453da2fc2771a304417ce25022eb0b8eb7210a28a4c82bb2d1fa04c40e"
+    },
+    "strings-1388-concat-samples.jsonl.gz": {
+      "bytes": 48812,
+      "sha256": "3325086b2678a3c28adf3f0fe3788bcbbd5fa9ccccfa5b51518c9faaf1d1dd5c"
+    },
+    "strings-1388-concat-metrics.json.gz": {
+      "bytes": 2917,
+      "sha256": "84cff65bc2967e81cba377a1b617eabd866e7497795f0496719063e64e453d76"
+    },
+    "strings-1388-concat-plans.tar.gz": {
+      "bytes": 1381,
+      "sha256": "7940ac2da946b6fc6baec1bd12929d7d09ec0f5e280ced7e6c85c0407dd612fa"
+    },
+    "strings-1388-concat-validation-details.json.gz": {
+      "bytes": 55925,
+      "sha256": "04e18f528ec770afc7c7cbd6b35d0a9890ea96d0ded6eef260f5e82d845c78da"
+    },
+    "strings-1388-concat-validation.json": {
+      "bytes": 4370,
+      "sha256": "d75842cf13db0af43ad0aafe4be04497dda3f46a66c9f5b1ecaa289bf3c16723"
+    }
+  }
+}
