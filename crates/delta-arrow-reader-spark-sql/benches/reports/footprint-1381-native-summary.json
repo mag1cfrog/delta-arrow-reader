@@ -1,0 +1,397 @@
+{
+  "process_records": 656,
+  "cases": [
+    {
+      "case": "version",
+      "stock": {
+        "median_ns": 7063018.5,
+        "minimum_ns": 6087005,
+        "maximum_ns": 8260191,
+        "iqr_ns": 521465.5
+      },
+      "forks_only": {
+        "median_ns": 7433156.0,
+        "minimum_ns": 6207380,
+        "maximum_ns": 7991052,
+        "iqr_ns": 356111.5
+      },
+      "noise": {
+        "stock": {
+          "a": {
+            "median_ns": 7357184.5,
+            "minimum_ns": 5867808,
+            "maximum_ns": 7965524,
+            "iqr_ns": 538440.0
+          },
+          "b": {
+            "median_ns": 6989846.5,
+            "minimum_ns": 6332921,
+            "maximum_ns": 8279067,
+            "iqr_ns": 807740.5
+          }
+        },
+        "forks-only": {
+          "a": {
+            "median_ns": 7313392.5,
+            "minimum_ns": 6397532,
+            "maximum_ns": 7701113,
+            "iqr_ns": 439447.5
+          },
+          "b": {
+            "median_ns": 7221818.5,
+            "minimum_ns": 6420524,
+            "maximum_ns": 7870066,
+            "iqr_ns": 470240.5
+          }
+        }
+      },
+      "noise_floor_ns": 367338.0,
+      "forks_over_stock": 1.052405002195591,
+      "difference_ns": 370137.5,
+      "above_threshold": true
+    },
+    {
+      "case": "trivial",
+      "stock": {
+        "median_ns": 10676740.0,
+        "minimum_ns": 9727527,
+        "maximum_ns": 12253639,
+        "iqr_ns": 773633.75
+      },
+      "forks_only": {
+        "median_ns": 11207796.5,
+        "minimum_ns": 10085262,
+        "maximum_ns": 12374874,
+        "iqr_ns": 394195.25
+      },
+      "noise": {
+        "stock": {
+          "a": {
+            "median_ns": 10188809.0,
+            "minimum_ns": 9460851,
+            "maximum_ns": 12368192,
+            "iqr_ns": 1454621.25
+          },
+          "b": {
+            "median_ns": 10487111.5,
+            "minimum_ns": 9975427,
+            "maximum_ns": 11283137,
+            "iqr_ns": 732618.25
+          }
+        },
+        "forks-only": {
+          "a": {
+            "median_ns": 10865857.0,
+            "minimum_ns": 9482681,
+            "maximum_ns": 11321859,
+            "iqr_ns": 678785.75
+          },
+          "b": {
+            "median_ns": 10064537.5,
+            "minimum_ns": 9619295,
+            "maximum_ns": 11958620,
+            "iqr_ns": 1009472.25
+          }
+        }
+      },
+      "noise_floor_ns": 801319.5,
+      "forks_over_stock": 1.0497395740647426,
+      "difference_ns": 531056.5,
+      "above_threshold": false
+    },
+    {
+      "case": "projection_five",
+      "stock": {
+        "median_ns": 160629592.0,
+        "minimum_ns": 155008952,
+        "maximum_ns": 166500446,
+        "iqr_ns": 4420050.0
+      },
+      "forks_only": {
+        "median_ns": 160574715.0,
+        "minimum_ns": 156491607,
+        "maximum_ns": 171141325,
+        "iqr_ns": 4328364.75
+      },
+      "noise": {
+        "stock": {
+          "a": {
+            "median_ns": 161715412.5,
+            "minimum_ns": 155994808,
+            "maximum_ns": 164069425,
+            "iqr_ns": 4645517.25
+          },
+          "b": {
+            "median_ns": 160600321.5,
+            "minimum_ns": 157447205,
+            "maximum_ns": 168757317,
+            "iqr_ns": 4577755.25
+          }
+        },
+        "forks-only": {
+          "a": {
+            "median_ns": 161318230.0,
+            "minimum_ns": 155764055,
+            "maximum_ns": 173616155,
+            "iqr_ns": 3342329.25
+          },
+          "b": {
+            "median_ns": 163964044.5,
+            "minimum_ns": 153968540,
+            "maximum_ns": 168345416,
+            "iqr_ns": 4270997.0
+          }
+        }
+      },
+      "noise_floor_ns": 2645814.5,
+      "forks_over_stock": 0.9996583630742211,
+      "difference_ns": -54877.0,
+      "above_threshold": false
+    },
+    {
+      "case": "statistics_filter",
+      "stock": {
+        "median_ns": 18766175.0,
+        "minimum_ns": 17243367,
+        "maximum_ns": 19730005,
+        "iqr_ns": 612915.5
+      },
+      "forks_only": {
+        "median_ns": 18605867.0,
+        "minimum_ns": 17405908,
+        "maximum_ns": 20008121,
+        "iqr_ns": 731989.75
+      },
+      "noise": {
+        "stock": {
+          "a": {
+            "median_ns": 17732028.0,
+            "minimum_ns": 16698243,
+            "maximum_ns": 19363443,
+            "iqr_ns": 1527587.5
+          },
+          "b": {
+            "median_ns": 18496479.0,
+            "minimum_ns": 16729480,
+            "maximum_ns": 19519372,
+            "iqr_ns": 880871.5
+          }
+        },
+        "forks-only": {
+          "a": {
+            "median_ns": 18531086.0,
+            "minimum_ns": 16683986,
+            "maximum_ns": 19009617,
+            "iqr_ns": 246820.5
+          },
+          "b": {
+            "median_ns": 18448633.0,
+            "minimum_ns": 16982152,
+            "maximum_ns": 19601666,
+            "iqr_ns": 1046309.0
+          }
+        }
+      },
+      "noise_floor_ns": 764451.0,
+      "forks_over_stock": 0.991457609235766,
+      "difference_ns": -160308.0,
+      "above_threshold": false
+    },
+    {
+      "case": "group_low",
+      "stock": {
+        "median_ns": 193004022.5,
+        "minimum_ns": 189987469,
+        "maximum_ns": 198121266,
+        "iqr_ns": 2479933.25
+      },
+      "forks_only": {
+        "median_ns": 192814855.5,
+        "minimum_ns": 190388473,
+        "maximum_ns": 200128905,
+        "iqr_ns": 2108194.0
+      },
+      "noise": {
+        "stock": {
+          "a": {
+            "median_ns": 192085305.5,
+            "minimum_ns": 189168619,
+            "maximum_ns": 195764039,
+            "iqr_ns": 2954798.25
+          },
+          "b": {
+            "median_ns": 193061418.5,
+            "minimum_ns": 189644363,
+            "maximum_ns": 196226287,
+            "iqr_ns": 2077473.75
+          }
+        },
+        "forks-only": {
+          "a": {
+            "median_ns": 192679535.5,
+            "minimum_ns": 190522333,
+            "maximum_ns": 196730664,
+            "iqr_ns": 1057293.25
+          },
+          "b": {
+            "median_ns": 192077947.0,
+            "minimum_ns": 189706266,
+            "maximum_ns": 195284047,
+            "iqr_ns": 1066661.25
+          }
+        }
+      },
+      "noise_floor_ns": 976113.0,
+      "forks_over_stock": 0.9990198805312465,
+      "difference_ns": -189167.0,
+      "above_threshold": false
+    },
+    {
+      "case": "count_distinct",
+      "stock": {
+        "median_ns": 251994195.5,
+        "minimum_ns": 241368129,
+        "maximum_ns": 262918185,
+        "iqr_ns": 8493711.0
+      },
+      "forks_only": {
+        "median_ns": 253831673.5,
+        "minimum_ns": 240102018,
+        "maximum_ns": 258953522,
+        "iqr_ns": 10235049.75
+      },
+      "noise": {
+        "stock": {
+          "a": {
+            "median_ns": 254893255.0,
+            "minimum_ns": 243614258,
+            "maximum_ns": 263880883,
+            "iqr_ns": 7127150.0
+          },
+          "b": {
+            "median_ns": 252088992.0,
+            "minimum_ns": 240987939,
+            "maximum_ns": 262231210,
+            "iqr_ns": 8287751.5
+          }
+        },
+        "forks-only": {
+          "a": {
+            "median_ns": 249682675.5,
+            "minimum_ns": 242286515,
+            "maximum_ns": 259997832,
+            "iqr_ns": 8790505.0
+          },
+          "b": {
+            "median_ns": 253299532.5,
+            "minimum_ns": 242262116,
+            "maximum_ns": 260080007,
+            "iqr_ns": 7383794.25
+          }
+        }
+      },
+      "noise_floor_ns": 3616857.0,
+      "forks_over_stock": 1.0072917473212195,
+      "difference_ns": 1837478.0,
+      "above_threshold": false
+    },
+    {
+      "case": "row_number",
+      "stock": {
+        "median_ns": 1461371360.5,
+        "minimum_ns": 1456768045,
+        "maximum_ns": 1469447596,
+        "iqr_ns": 4024461.75
+      },
+      "forks_only": {
+        "median_ns": 1462621943.0,
+        "minimum_ns": 1454584931,
+        "maximum_ns": 1479718271,
+        "iqr_ns": 6350051.5
+      },
+      "noise": {
+        "stock": {
+          "a": {
+            "median_ns": 1458539543.5,
+            "minimum_ns": 1456288160,
+            "maximum_ns": 1463759381,
+            "iqr_ns": 5039180.5
+          },
+          "b": {
+            "median_ns": 1457005323.5,
+            "minimum_ns": 1451063306,
+            "maximum_ns": 1462287432,
+            "iqr_ns": 3159925.5
+          }
+        },
+        "forks-only": {
+          "a": {
+            "median_ns": 1459866095.0,
+            "minimum_ns": 1453497968,
+            "maximum_ns": 1465732565,
+            "iqr_ns": 4188353.0
+          },
+          "b": {
+            "median_ns": 1462415094.0,
+            "minimum_ns": 1460955529,
+            "maximum_ns": 1465904775,
+            "iqr_ns": 2700177.5
+          }
+        }
+      },
+      "noise_floor_ns": 2548999.0,
+      "forks_over_stock": 1.000855759551475,
+      "difference_ns": 1250582.5,
+      "above_threshold": false
+    },
+    {
+      "case": "self_join",
+      "stock": {
+        "median_ns": 822451507.0,
+        "minimum_ns": 816495700,
+        "maximum_ns": 838807731,
+        "iqr_ns": 4658998.25
+      },
+      "forks_only": {
+        "median_ns": 820559722.5,
+        "minimum_ns": 815817320,
+        "maximum_ns": 834982456,
+        "iqr_ns": 3673895.75
+      },
+      "noise": {
+        "stock": {
+          "a": {
+            "median_ns": 816850579.0,
+            "minimum_ns": 815317732,
+            "maximum_ns": 822576091,
+            "iqr_ns": 3940720.0
+          },
+          "b": {
+            "median_ns": 822647455.5,
+            "minimum_ns": 816481143,
+            "maximum_ns": 832915344,
+            "iqr_ns": 7380940.0
+          }
+        },
+        "forks-only": {
+          "a": {
+            "median_ns": 821847986.0,
+            "minimum_ns": 813537395,
+            "maximum_ns": 831985469,
+            "iqr_ns": 4445622.0
+          },
+          "b": {
+            "median_ns": 821531171.5,
+            "minimum_ns": 812783615,
+            "maximum_ns": 826194182,
+            "iqr_ns": 5480343.5
+          }
+        }
+      },
+      "noise_floor_ns": 5796876.5,
+      "forks_over_stock": 0.9976998224407169,
+      "difference_ns": -1891784.5,
+      "above_threshold": false
+    }
+  ]
+}
