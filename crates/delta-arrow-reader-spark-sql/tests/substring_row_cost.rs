@@ -77,15 +77,23 @@ async fn substring_row_path_preserves_resolved_storage_and_bounds() -> TestResul
             );
             session.register_batch(
                 "inputs",
-                RecordBatch::try_from_iter(vec![
-                    (
-                        "k",
-                        Arc::new(Int32Array::from_iter_values(0..values.len() as i32)) as ArrayRef,
-                    ),
-                    ("s", source),
-                    ("p", positions.clone()),
-                    ("n", lengths.clone()),
-                ])?,
+                RecordBatch::try_from_iter_with_nullable(
+                    vec![
+                        (
+                            "k",
+                            Arc::new(Int32Array::from_iter_values(0..values.len() as i32))
+                                as ArrayRef,
+                        ),
+                        ("s", source),
+                        ("p", positions.clone()),
+                        ("n", lengths.clone()),
+                    ]
+                    .into_iter()
+                    .map(|(name, array)| {
+                        let nullable = array.logical_null_count() > 0;
+                        (name, array, nullable)
+                    }),
+                )?,
             )?;
             for ansi in [false, true] {
                 for (position, length) in [
@@ -136,12 +144,13 @@ async fn substring_row_path_preserves_resolved_storage_and_bounds() -> TestResul
                         &format!("SELECT k,{expression} AS r FROM inputs ORDER BY k"),
                         ansi,
                     )
-                    .await?;
+                    .await
+                    .map_err(|error| format!("{expression}, storage={storage}, dictionary={dictionary}, ANSI={ansi}: {error}"))?;
                     for batch in &batches {
                         assert_eq!(
                             batch.schema().field(1).data_type(),
                             &storage,
-                            "dictionary={dictionary}, ANSI={ansi}"
+                            "{expression}, storage={storage}, dictionary={dictionary}, ANSI={ansi}"
                         );
                         assert_eq!(batch.schema().field(1).name(), "r");
                     }
