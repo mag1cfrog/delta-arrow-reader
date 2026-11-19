@@ -171,8 +171,11 @@ complete phase table supplies IQRs as well.
 One user-space `cpu-clock` leaf profile was taken per selected phase, with
 100 repetitions at 999 Hz using the same binary and CPU affinity. No query was
 executed. [Profile commands, raw perf data, reports, and stderr](planning-1379-profiles.tar.gz)
-are retained together. DWARF and frame-pointer call graphs were denied by the
-worker's current perf policy; no system policy was changed.
+are retained together. These five historical profiles use leaf samples: the
+initial call-graph attempts omitted explicit user-only settings and were denied.
+A later non-product #1380 probe established user-only DWARF collection with
+`--user-callchains --call-graph dwarf,8192` under unchanged system policy.
+No #1379 sample or profile was repeated or changed.
 
 | Case | Leaf samples | Observed functions | Attribution limit |
 | --- | ---: | --- | --- |
