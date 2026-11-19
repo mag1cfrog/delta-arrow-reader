@@ -1535,6 +1535,25 @@ SUBSTR and SUBSTRING reuse DataFusion Spark's Unicode substring kernel. Binary
 ranges retain Spark's Java INT arithmetic and zero padding through a small
 native adapter, preserving Binary, LargeBinary and BinaryView results. An omitted
 length is INT_MAX for both strings and binary values.
+The #1388 row-cost adaptation delegates only Utf8View inputs with non-NULL scalar
+Int64 position 1 and nonnegative scalar Int64 length to the installed
+`datafusion_functions::unicode::substr()` singleton. This removes the registry
+`datafusion-spark` 54.1.0 kernel's unconditional positional-length calculation,
+including the full character count on the measured short-prefix path, and reuses
+DataFusion's Unicode slicing and view builder. The
+registry package retains Cargo.lock checksum
+`a1ccd16a6949503e56c084df1b90c8889db826ec9347d2f0f51a7837d6fa011e`;
+this adaptation does not create a dependency fork. The Utf8View guard preserves
+the old result storage. Position 1 also keeps the delegated view's byte offset
+unchanged: other positive positions can overflow the native builder's u32 offset
+addition for valid views into buffers larger than 4 GiB. Every other storage,
+bound form and position retains the existing implementation. The private
+closed-lambda and async evaluation paths remain unchanged. The
+[focused corpus](vendor/sail/crates/sail-function/tests/fixtures/substring-row-cost-1388-inputs.json)
+compares scalar/column calls directly with the old kernel; the
+[resolver checks](tests/substring_row_cost.rs) cover dictionary decoding, executed
+storage and effect/error boundaries in both ANSI modes. The independently
+captured Spark references below remain unchanged.
 Position and length use the mode-aware STRING and Decimal integer casts and the
 shared numeric-to-INT conversion before widening to the value kernel's Int64 inputs.
 Row-dependent calls use native scalar NULL selection while retaining ordinary
