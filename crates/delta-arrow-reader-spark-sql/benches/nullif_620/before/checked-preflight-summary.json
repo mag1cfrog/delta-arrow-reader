@@ -1,0 +1,23 @@
+{
+  "kind": "untimed_checked_arithmetic_baseline",
+  "family": "checked",
+  "source_commit": "2bba5d3a4c48baa6e113f27efb17a308c9056a33",
+  "binary_sha256": "b93f7dad90f156fe586f5f56867849c76e122646ec7eaf6428194d2c61f1a319",
+  "source_sha256": "07beee7fad2eab4bc546e2e8714d052af3a67dd0a2d54af3e92410ba7b2cc5eb",
+  "manifest_sha256": "b2b4dbf0b0247603d079934715d3294a6ec2dd427e59ce3d94f5420870732174",
+  "harness_sha256": "60e8632cb799ccda6127565b68b6f0ca0568ba49c29838f243f327e746ea5cde",
+  "controller_sha256": "4bb3523f5fec374d388ee4f23734cc8ba6aac8ee84e9c4f09474aa93ae3b291f",
+  "protocol_sha256": "8451b2d515e3d4bad338a8deedf8ebc1ad3709021ab766692bf313e95685bfbc",
+  "receipt_sha256": "667e574a7c731598630cfddb24c4d7a42fa91e5c42cd9b8d2163e990da4ab400",
+  "cells": 108,
+  "native_exact_comparisons": 72,
+  "formula_matches": 108,
+  "executed_type": "Int32",
+  "rows_per_cell": 262144,
+  "all_operator_partitions": 1,
+  "excluded": [],
+  "ipc_gzip_and_decoded_sha256_checks": 108,
+  "scope": "Checked +, -, * end-to-end controls; NULLIF stage replay is not used.",
+  "full_receipt_archive": "checked-preflight-receipt.json.gz",
+  "full_receipt_archive_sha256": "c2f8e0d74db969d848218661917a5d8b05ba2dab27e20f96a4dc199afe180bc6"
+}
