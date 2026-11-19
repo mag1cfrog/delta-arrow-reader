@@ -1,0 +1,49 @@
+{
+  "query_configurations": 9,
+  "process_records": 45,
+  "concurrency": [],
+  "outliers": [
+    {
+      "id": "cast_strings",
+      "configuration": "spark-off",
+      "completion_flag": true,
+      "pool_flag": false,
+      "native_query_complete_ns": 688293379,
+      "spark_query_complete_ns": 1035473465,
+      "native_peak_pool_bytes": 0,
+      "spark_peak_pool_bytes": 0
+    },
+    {
+      "id": "cast_strings",
+      "configuration": "spark-on",
+      "completion_flag": true,
+      "pool_flag": false,
+      "native_query_complete_ns": 688293379,
+      "spark_query_complete_ns": 1035847189,
+      "native_peak_pool_bytes": 0,
+      "spark_peak_pool_bytes": 0
+    },
+    {
+      "id": "cast_date",
+      "configuration": "spark-off",
+      "completion_flag": true,
+      "pool_flag": false,
+      "native_query_complete_ns": 180169694,
+      "spark_query_complete_ns": 545464209,
+      "native_peak_pool_bytes": 0,
+      "spark_peak_pool_bytes": 0
+    },
+    {
+      "id": "cast_date",
+      "configuration": "spark-on",
+      "completion_flag": true,
+      "pool_flag": false,
+      "native_query_complete_ns": 180169694,
+      "spark_query_complete_ns": 554339180,
+      "native_peak_pool_bytes": 0,
+      "spark_peak_pool_bytes": 0
+    }
+  ],
+  "related_issue_shapes": {},
+  "profile_cases": []
+}

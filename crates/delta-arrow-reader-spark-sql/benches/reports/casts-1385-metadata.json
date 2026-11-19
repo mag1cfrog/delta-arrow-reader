@@ -1,0 +1,591 @@
+{
+  "baseline_commit": "176a5761abe19eeb6a2058c9008d97ce1647b7ef",
+  "head_commit": "03313bab7739e0945be5d2e872ad52a7591b8483",
+  "binary_sha256": "ab282d8c8b774b15f68d6709cf3ff4e6cc089b805646ace2a148fc1ba9326373",
+  "queries_sha256": "46d310bb37efe03d969e20ff588c583d5c503d6974c8242defdb1af30fa50195",
+  "schedule_sha256": "dcebf23408f7b552dd7f3d2026c7d47fbadf258c813d6a5a9b47ba529f3316c2",
+  "fixture_receipt_sha256": "9eb1e98be9381de74bd8908ac540c91eec6f0b0862089d1655baca537f43301d",
+  "fixture": {
+    "status": "complete",
+    "source_scale_factor": 1,
+    "source_commit": "8954dcec63f934359c7bcdb74b5220c842d898e4",
+    "source_table": "wide.clustered",
+    "stored_columns": 80,
+    "snapshot_columns": 81,
+    "snapshot_version": 0,
+    "rows": 6001215,
+    "files": [
+      {
+        "path": "part-00000.parquet",
+        "file_bucket": 0,
+        "rows": 1048576,
+        "bytes": 665464418,
+        "sha256": "8886fe3d5670f0559525e914b24c931896e45370aa07fcdbf79065d6d1021579"
+      },
+      {
+        "path": "part-00001.parquet",
+        "file_bucket": 1,
+        "rows": 1048576,
+        "bytes": 665488141,
+        "sha256": "65ab912b14e24e6250900a32f91aad3d6961f0490cc4f5d0466e57fd3a5d29fc"
+      },
+      {
+        "path": "part-00002.parquet",
+        "file_bucket": 2,
+        "rows": 1048576,
+        "bytes": 665496112,
+        "sha256": "15c2db0931adb17fb2b257eb9481b251863cb60e2624075683f05fa0d9724d35"
+      },
+      {
+        "path": "part-00003.parquet",
+        "file_bucket": 3,
+        "rows": 1048576,
+        "bytes": 665373167,
+        "sha256": "f0338fbec7d68a61ed76ad40e545ff573d1e7ad0074872ba736f8c07fc5e8aea"
+      },
+      {
+        "path": "part-00004.parquet",
+        "file_bucket": 4,
+        "rows": 1048576,
+        "bytes": 665376528,
+        "sha256": "f434eb6accf21b56b4e0583235736bf2a78ce7ad4e3021db1efda1bb4f22729d"
+      },
+      {
+        "path": "part-00005.parquet",
+        "file_bucket": 5,
+        "rows": 758335,
+        "bytes": 481083496,
+        "sha256": "9d01eed319ccef5bc52b6f5114ccb134a458d485133ee2bc5ab8a38e7187f670"
+      }
+    ],
+    "data_bytes": 3808281862,
+    "base_root": "/home/hanbo/.local/share/delta-arrow-reader-review/measurements-2026-11-18/1380/base-sf1",
+    "snapshot_root": "/home/hanbo/.local/share/delta-arrow-reader-review/measurements-2026-11-18/1380/delta-snapshot",
+    "source_manifest_sha256": "37906576c32e8c1c2ca7b3920f11ccd107c00633851d05e15e1f1db112305bc5",
+    "base_delta_log_sha256": "8ffd867bc4c1966190472cf68d7277e9363645bfee992d28ee3938eb1cc1f2a2",
+    "derived_delta_log_sha256": "21d2257a5c6d201f74c2c3516a134095c2f4efb680595cbd56228ae6581e71cb",
+    "generator": {
+      "arrow": "58.4.0",
+      "datafusion_sort": "54.1.0",
+      "executable_sha256": "7c84c270b88595559854ade637873e13b776a24e8ebc53310128cfa0f86441d4",
+      "lockfile_sha256": "2d1c035a3c655ce09668182e30a8d578f30fa07020ea8a02815f1cf712fc6daa",
+      "parquet": "58.4.0",
+      "target": "x86_64-linux",
+      "tpchgen": "3.0.0",
+      "tpchgen_git": "4f6bf4c5ab40511c8fdef5888fc8d022e5e546d7"
+    },
+    "derivation": "unchanged hardlinked Parquet; virtual INT file_bucket is path-sorted file ordinal; all original rows/statistics retained"
+  },
+  "snapshot": "/home/hanbo/.local/share/delta-arrow-reader-review/measurements-2026-11-18/1380/delta-snapshot",
+  "rustc": "rustc 1.96.0 (ac68faa20 2026-05-25)\nbinary: rustc\ncommit-hash: ac68faa20c58cbccd01ee7208bf3b6e93a7d7f96\ncommit-date: 2026-05-25\nhost: x86_64-unknown-linux-gnu\nrelease: 1.96.0\nLLVM version: 22.1.2\n",
+  "uname": {
+    "system": "Linux",
+    "node": "gmktec",
+    "release": "7.2.14-100.fc43.x86_64",
+    "version": "#1 SMP PREEMPT_DYNAMIC Fri Oct 30 16:29:56 UTC 2026",
+    "machine": "x86_64",
+    "processor": ""
+  },
+  "cpuinfo": "processor\t: 0\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 1100.980\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 0\ncpu cores\t: 8\napicid\t\t: 0\ninitial apicid\t: 0\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7586.11\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]\n\nprocessor\t: 1\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 3205.795\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 1\ncpu cores\t: 8\napicid\t\t: 2\ninitial apicid\t: 2\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7586.11\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]\n\nprocessor\t: 2\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 5006.669\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 2\ncpu cores\t: 8\napicid\t\t: 4\ninitial apicid\t: 4\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7586.11\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]\n\nprocessor\t: 3\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 2011.607\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 3\ncpu cores\t: 8\napicid\t\t: 6\ninitial apicid\t: 6\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7586.11\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]\n\nprocessor\t: 4\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 2012.578\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 4\ncpu cores\t: 8\napicid\t\t: 8\ninitial apicid\t: 8\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7586.11\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]\n\nprocessor\t: 5\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 2580.081\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 5\ncpu cores\t: 8\napicid\t\t: 10\ninitial apicid\t: 10\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7586.11\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]\n\nprocessor\t: 6\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 2015.111\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 6\ncpu cores\t: 8\napicid\t\t: 12\ninitial apicid\t: 12\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7586.11\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]\n\nprocessor\t: 7\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 2013.403\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 7\ncpu cores\t: 8\napicid\t\t: 14\ninitial apicid\t: 14\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7586.11\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]\n\nprocessor\t: 8\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 2014.491\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 0\ncpu cores\t: 8\napicid\t\t: 1\ninitial apicid\t: 1\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7586.11\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]\n\nprocessor\t: 9\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 1100.980\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 1\ncpu cores\t: 8\napicid\t\t: 3\ninitial apicid\t: 3\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7586.11\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]\n\nprocessor\t: 10\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 1100.980\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 2\ncpu cores\t: 8\napicid\t\t: 5\ninitial apicid\t: 5\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7586.11\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]\n\nprocessor\t: 11\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 2009.106\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 3\ncpu cores\t: 8\napicid\t\t: 7\ninitial apicid\t: 7\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7586.11\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]\n\nprocessor\t: 12\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 1100.980\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 4\ncpu cores\t: 8\napicid\t\t: 9\ninitial apicid\t: 9\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7586.11\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]\n\nprocessor\t: 13\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 1100.980\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 5\ncpu cores\t: 8\napicid\t\t: 11\ninitial apicid\t: 11\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7586.11\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]\n\nprocessor\t: 14\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 1100.980\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 6\ncpu cores\t: 8\napicid\t\t: 13\ninitial apicid\t: 13\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7586.11\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]\n\nprocessor\t: 15\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 1100.980\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 7\ncpu cores\t: 8\napicid\t\t: 15\ninitial apicid\t: 15\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7586.11\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]\n\n",
+  "governors": {
+    "2": "powersave",
+    "3": "powersave",
+    "4": "powersave",
+    "5": "powersave"
+  },
+  "schedule": {
+    "cpus": [
+      2,
+      3,
+      4,
+      5
+    ],
+    "target_partitions": 2,
+    "batch_rows": 8192,
+    "runtime_workers": 2,
+    "warmups": 1,
+    "samples": 3,
+    "process_timeout_seconds": 180,
+    "schedule_timeout_seconds": 3600,
+    "single_pool_bytes": 2147483648,
+    "preflight_pool_bytes": 4294967296,
+    "concurrency_pool_bytes": 8589934592,
+    "single_address_space_bytes": 12884901888,
+    "preflight_address_space_bytes": 17179869184,
+    "concurrency_address_space_bytes": 21474836480,
+    "spill_limit_bytes": 8589934592,
+    "preflight_process_timeout_seconds": 300,
+    "preflight_timeout_seconds": 1800,
+    "profile_iterations": 3,
+    "profile_frequency_hz": 199,
+    "profile_stack_bytes": 8192,
+    "profile_max_cases": 0,
+    "runs": [
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "cast_strings",
+        "replica": 1,
+        "arm": "a",
+        "process": "noise-01-cast_strings-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "cast_strings",
+        "replica": 1,
+        "arm": "b",
+        "process": "noise-01-cast_strings-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "cast_date",
+        "replica": 1,
+        "arm": "b",
+        "process": "noise-01-cast_date-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "cast_date",
+        "replica": 1,
+        "arm": "a",
+        "process": "noise-01-cast_date-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "cast_decimal",
+        "replica": 1,
+        "arm": "a",
+        "process": "noise-01-cast_decimal-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "cast_decimal",
+        "replica": 1,
+        "arm": "b",
+        "process": "noise-01-cast_decimal-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "cast_strings",
+        "replica": 2,
+        "arm": "b",
+        "process": "noise-02-cast_strings-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "cast_strings",
+        "replica": 2,
+        "arm": "a",
+        "process": "noise-02-cast_strings-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "cast_date",
+        "replica": 2,
+        "arm": "a",
+        "process": "noise-02-cast_date-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "cast_date",
+        "replica": 2,
+        "arm": "b",
+        "process": "noise-02-cast_date-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "cast_decimal",
+        "replica": 2,
+        "arm": "b",
+        "process": "noise-02-cast_decimal-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "cast_decimal",
+        "replica": 2,
+        "arm": "a",
+        "process": "noise-02-cast_decimal-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "cast_strings",
+        "replica": 3,
+        "arm": "a",
+        "process": "noise-03-cast_strings-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "cast_strings",
+        "replica": 3,
+        "arm": "b",
+        "process": "noise-03-cast_strings-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "cast_date",
+        "replica": 3,
+        "arm": "b",
+        "process": "noise-03-cast_date-b"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "cast_date",
+        "replica": 3,
+        "arm": "a",
+        "process": "noise-03-cast_date-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "cast_decimal",
+        "replica": 3,
+        "arm": "a",
+        "process": "noise-03-cast_decimal-a"
+      },
+      {
+        "series": "noise",
+        "configuration": "native",
+        "query": "cast_decimal",
+        "replica": 3,
+        "arm": "b",
+        "process": "noise-03-cast_decimal-b"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "cast_strings",
+        "replica": 1,
+        "process": "main-01-cast_strings-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "cast_strings",
+        "replica": 1,
+        "process": "main-01-cast_strings-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "cast_strings",
+        "replica": 1,
+        "process": "main-01-cast_strings-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "cast_date",
+        "replica": 1,
+        "process": "main-01-cast_date-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "cast_date",
+        "replica": 1,
+        "process": "main-01-cast_date-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "cast_date",
+        "replica": 1,
+        "process": "main-01-cast_date-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "cast_decimal",
+        "replica": 1,
+        "process": "main-01-cast_decimal-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "cast_decimal",
+        "replica": 1,
+        "process": "main-01-cast_decimal-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "cast_decimal",
+        "replica": 1,
+        "process": "main-01-cast_decimal-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "cast_strings",
+        "replica": 2,
+        "process": "main-02-cast_strings-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "cast_strings",
+        "replica": 2,
+        "process": "main-02-cast_strings-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "cast_strings",
+        "replica": 2,
+        "process": "main-02-cast_strings-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "cast_date",
+        "replica": 2,
+        "process": "main-02-cast_date-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "cast_date",
+        "replica": 2,
+        "process": "main-02-cast_date-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "cast_date",
+        "replica": 2,
+        "process": "main-02-cast_date-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "cast_decimal",
+        "replica": 2,
+        "process": "main-02-cast_decimal-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "cast_decimal",
+        "replica": 2,
+        "process": "main-02-cast_decimal-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "cast_decimal",
+        "replica": 2,
+        "process": "main-02-cast_decimal-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "cast_strings",
+        "replica": 3,
+        "process": "main-03-cast_strings-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "cast_strings",
+        "replica": 3,
+        "process": "main-03-cast_strings-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "cast_strings",
+        "replica": 3,
+        "process": "main-03-cast_strings-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "cast_date",
+        "replica": 3,
+        "process": "main-03-cast_date-native"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "cast_date",
+        "replica": 3,
+        "process": "main-03-cast_date-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "cast_date",
+        "replica": 3,
+        "process": "main-03-cast_date-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-off",
+        "query": "cast_decimal",
+        "replica": 3,
+        "process": "main-03-cast_decimal-spark-off"
+      },
+      {
+        "series": "main",
+        "configuration": "spark-on",
+        "query": "cast_decimal",
+        "replica": 3,
+        "process": "main-03-cast_decimal-spark-on"
+      },
+      {
+        "series": "main",
+        "configuration": "native",
+        "query": "cast_decimal",
+        "replica": 3,
+        "process": "main-03-cast_decimal-native"
+      }
+    ],
+    "concurrency": []
+  },
+  "protocol_commit": {
+    "protocol_commit": "03313bab7739e0945be5d2e872ad52a7591b8483",
+    "parent": "176a5761abe19eeb6a2058c9008d97ce1647b7ef",
+    "committed_at": "2026-11-19T00:44:23-07:00",
+    "freeze_manifest_sha256": "36368aab691477462fed586380b9c2b18e28a511039b8f61a27319f9568365b3",
+    "worktree_clean": true,
+    "benchmark_timings_started": false
+  },
+  "committed_source_build": {
+    "status": "passed",
+    "source_commit": "03313bab7739e0945be5d2e872ad52a7591b8483",
+    "product_baseline_commit": "176a5761abe19eeb6a2058c9008d97ce1647b7ef",
+    "exit_code": 0,
+    "command": "CARGO_TARGET_DIR=/home/hanbo/.cache/delta-arrow-reader/casts-1385-2026-11-19 CARGO_BUILD_JOBS=2 CARGO_PROFILE_RELEASE_DEBUG=1 cargo +1.96.0 build --manifest-path crates/delta-arrow-reader-spark-sql/Cargo.toml --locked --release --bench execution --message-format=json-render-diagnostics",
+    "workdir": "/home/hanbo/repo/delta-arrow-reader-casts-1385",
+    "binary_path": "/home/hanbo/.cache/delta-arrow-reader/casts-1385-2026-11-19/release/deps/execution-87be9fc3f891d603",
+    "binary_sha256": "ab282d8c8b774b15f68d6709cf3ff4e6cc089b805646ace2a148fc1ba9326373",
+    "matches_successful_preflight_binary": true,
+    "source_hashes": {
+      "crates/delta-arrow-reader-spark-sql/benches/execution.rs": "438c6315eb60baec14c3c9df22fecfdbe4da87b78d244e82aee19d0a832eb4ba",
+      "crates/delta-arrow-reader-spark-sql/benches/casts/queries.json": "46d310bb37efe03d969e20ff588c583d5c503d6974c8242defdb1af30fa50195",
+      "crates/delta-arrow-reader-spark-sql/benches/casts/schedule.json": "dcebf23408f7b552dd7f3d2026c7d47fbadf258c813d6a5a9b47ba529f3316c2",
+      "crates/delta-arrow-reader-spark-sql/Cargo.toml": "d06f9f2fc6a258b2d4d898fe596d0279827765047b4bee79befd119073d7208f",
+      "crates/delta-arrow-reader-spark-sql/Cargo.lock": "75061d138984fcd08fe4543c0cfa3ffc52fb928e54423feceaff5ec08a2e8fe8",
+      ".cargo/config.toml": "0c71bcd3923baf58500bd5ff3444897aa5143e805085bb8f1fd507b04fb2887b"
+    },
+    "frozen_files_verified": 8,
+    "freeze_inventory_sha256": "36368aab691477462fed586380b9c2b18e28a511039b8f61a27319f9568365b3",
+    "rustc": "rustc 1.96.0 (ac68faa20 2026-05-25)\nbinary: rustc\ncommit-hash: ac68faa20c58cbccd01ee7208bf3b6e93a7d7f96\ncommit-date: 2026-05-25\nhost: x86_64-unknown-linux-gnu\nrelease: 1.96.0\nLLVM version: 22.1.2\n",
+    "build_stdout_sha256": "289b68e176f830375baf62067241ac19887c6aa96bc7a7f2a04ff72a2430178e",
+    "build_stderr_sha256": "50e82adc667ae53cfb008161daf12edf664479b2ac08dd34b2c8ec7c17c40982",
+    "preserved_binary": {
+      "path": "/home/hanbo/.local/share/delta-arrow-reader-review/casts-1385-2026-11-19/artifacts/baseline-03313bab-execution",
+      "sha256": "ab282d8c8b774b15f68d6709cf3ff4e6cc089b805646ace2a148fc1ba9326373",
+      "bytes": 1263323048,
+      "mode": "0o555",
+      "device": 64514,
+      "inode": 1214514351,
+      "link_count": 1
+    },
+    "cache_binary": {
+      "path": "/home/hanbo/.cache/delta-arrow-reader/casts-1385-2026-11-19/release/deps/execution-87be9fc3f891d603",
+      "device": 64514,
+      "inode": 1212393354
+    },
+    "benchmark_timing_samples": 0
+  },
+  "timing_authorization": {
+    "authorized": true,
+    "authorized_utc": "2026-11-19T07:48:01.880392+00:00",
+    "source_commit": "03313bab7739e0945be5d2e872ad52a7591b8483",
+    "freeze_inventory_sha256": "36368aab691477462fed586380b9c2b18e28a511039b8f61a27319f9568365b3",
+    "binary_sha256": "ab282d8c8b774b15f68d6709cf3ff4e6cc089b805646ace2a148fc1ba9326373",
+    "destination": "/home/hanbo/.local/share/delta-arrow-reader-review/casts-1385-2026-11-19/before-once",
+    "max_invocations": 1,
+    "processes": 45,
+    "warmups": 45,
+    "retained_iterations": 135,
+    "timeout_seconds": 3600,
+    "profiles": 0,
+    "concurrency_checks": 0,
+    "no_other_local_build_or_review_work": true
+  },
+  "timing_command": {
+    "command": [
+      "python3",
+      "/home/hanbo/repo/delta-arrow-reader-casts-1385/crates/delta-arrow-reader-spark-sql/benches/execution/run.py",
+      "--casts-1385",
+      "measure",
+      "/home/hanbo/.cache/delta-arrow-reader/casts-1385-2026-11-19/release/deps/execution-87be9fc3f891d603",
+      "/home/hanbo/.local/share/delta-arrow-reader-review/measurements-2026-11-18/1380/delta-snapshot",
+      "/home/hanbo/.local/share/delta-arrow-reader-review/casts-1385-2026-11-19/before-once"
+    ],
+    "workdir": "/home/hanbo/repo/delta-arrow-reader-casts-1385",
+    "authorization_file": "/home/hanbo/.local/share/delta-arrow-reader-review/casts-1385-2026-11-19/timing-authorization.json"
+  },
+  "timing_exit": {
+    "exit_code": 0
+  },
+  "frozen_files": [
+    {
+      "path": "crates/delta-arrow-reader-spark-sql/benches/execution.rs",
+      "absolute_path": "/home/hanbo/repo/delta-arrow-reader-casts-1385/crates/delta-arrow-reader-spark-sql/benches/execution.rs",
+      "bytes": 30172,
+      "sha256": "438c6315eb60baec14c3c9df22fecfdbe4da87b78d244e82aee19d0a832eb4ba"
+    },
+    {
+      "path": "crates/delta-arrow-reader-spark-sql/benches/execution/run.py",
+      "absolute_path": "/home/hanbo/repo/delta-arrow-reader-casts-1385/crates/delta-arrow-reader-spark-sql/benches/execution/run.py",
+      "bytes": 17863,
+      "sha256": "74118b357d47cd15d9ef3b228eaaa741c8a8aad943a4f6b93ed165a2d0da7caa"
+    },
+    {
+      "path": "crates/delta-arrow-reader-spark-sql/benches/execution/summarize.py",
+      "absolute_path": "/home/hanbo/repo/delta-arrow-reader-casts-1385/crates/delta-arrow-reader-spark-sql/benches/execution/summarize.py",
+      "bytes": 9126,
+      "sha256": "b52a8a75b809cbfb15b8a1e6a4516fb3067a243145db5d2562645df394f15afc"
+    },
+    {
+      "path": "crates/delta-arrow-reader-spark-sql/benches/casts/queries.json",
+      "absolute_path": "/home/hanbo/repo/delta-arrow-reader-casts-1385/crates/delta-arrow-reader-spark-sql/benches/casts/queries.json",
+      "bytes": 1649,
+      "sha256": "46d310bb37efe03d969e20ff588c583d5c503d6974c8242defdb1af30fa50195"
+    },
+    {
+      "path": "crates/delta-arrow-reader-spark-sql/benches/casts/schedule.json",
+      "absolute_path": "/home/hanbo/repo/delta-arrow-reader-casts-1385/crates/delta-arrow-reader-spark-sql/benches/casts/schedule.json",
+      "bytes": 8575,
+      "sha256": "dcebf23408f7b552dd7f3d2026c7d47fbadf258c813d6a5a9b47ba529f3316c2"
+    },
+    {
+      "path": "crates/delta-arrow-reader-spark-sql/benches/casts/preflight-receipt.json",
+      "absolute_path": "/home/hanbo/repo/delta-arrow-reader-casts-1385/crates/delta-arrow-reader-spark-sql/benches/casts/preflight-receipt.json",
+      "bytes": 5620,
+      "sha256": "6d581b05c7479e69820eacbe0628104f2a68f7157bddadf673db5c7274441bf6"
+    },
+    {
+      "path": "crates/delta-arrow-reader-spark-sql/benches/reports/casts-1385-protocol.md",
+      "absolute_path": "/home/hanbo/repo/delta-arrow-reader-casts-1385/crates/delta-arrow-reader-spark-sql/benches/reports/casts-1385-protocol.md",
+      "bytes": 12436,
+      "sha256": "efdbd74557ce0d5108ba7b2530ce42281ace6af3fd1214a92bc8220387501bdd"
+    },
+    {
+      "path": "crates/delta-arrow-reader-spark-sql/benches/reports/casts-1385-preflight.json.gz",
+      "absolute_path": "/home/hanbo/repo/delta-arrow-reader-casts-1385/crates/delta-arrow-reader-spark-sql/benches/reports/casts-1385-preflight.json.gz",
+      "bytes": 21054,
+      "sha256": "f3760b645799d44b0485b8cf0c546327f4e15f5cf5459d96b46bf0b0f2e3cee7"
+    }
+  ],
+  "raw_samples_sha256": "7a0f5269c8f2213911038761fa6bdcdfde8f0f6a8f2de5a888951a22fd35f348",
+  "raw_samples_source": "/home/hanbo/.local/share/delta-arrow-reader-review/casts-1385-2026-11-19/before-once/samples.jsonl.gz"
+}
