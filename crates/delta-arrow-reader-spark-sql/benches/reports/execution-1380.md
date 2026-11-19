@@ -290,7 +290,7 @@ visible on both paths. Shape-specific differences include the following.
 
 | Shapes | Plan differences and retained work |
 | --- | --- |
-| projection_five, partition_filter, statistics_filter, empty_filter | Output alias/projection differences; same Delta snapshot and pruned scan behavior. Empty relation has no scan. |
+| projection_five, partition_filter, statistics_filter, empty_filter | Output alias/projection differences; same Delta snapshot and pruned scan behavior. The empty filter opens no source files. |
 | ordered_limit | Internal aliases around the filtered sort/limit; one output partition in both paths. |
 | group_low, group_high | Internal aggregate/projection aliases; same required grouping and three aggregate outputs. |
 | count_distinct | Internal aggregate/output aliases; same executed BIGINT result. |
@@ -361,7 +361,8 @@ planning. It is not a kernel-only before/after comparison, and does not complete
 The one concurrency check ran four independently planned executions through a
 shared start barrier for each shape/configuration, on the same four-core mask
 with four runtime workers and an 8 GiB shared tracked pool. Group time starts
-at barrier release after planning; it excludes session setup and planning.
+immediately before the coordinator waits on the start barrier, after planning;
+it includes the wait for tasks to arrive, and excludes session setup and planning.
 These six single observations are a bounded concurrency check, not a throughput
 curve or independently repeated concurrency medians. Each execution returned
 its exact preflight row count. RSS includes process setup; pool is the aggregate
