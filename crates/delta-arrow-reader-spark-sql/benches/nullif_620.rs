@@ -115,7 +115,7 @@ fn session(batches: &[RecordBatch], batch_rows: usize) -> BenchResult<SessionCon
                 .with_config(
                     SessionConfig::new()
                         .with_batch_size(batch_rows)
-                        .with_target_partitions(2),
+                        .with_target_partitions(1),
                 ),
         )
         .build(),
@@ -219,6 +219,18 @@ fn partitions(plan: &dyn ExecutionPlan) -> Value {
         "inputs":plan.children().iter().map(|child| partitions(child.as_ref())).collect::<Vec<_>>()})
 }
 
+fn assert_single_partition(plan: &dyn ExecutionPlan) {
+    assert_eq!(
+        plan.output_partitioning().partition_count(),
+        1,
+        "{} partition count changed",
+        plan.name()
+    );
+    for child in plan.children() {
+        assert_single_partition(child.as_ref());
+    }
+}
+
 fn write_ipc(path: &Path, plan: &dyn ExecutionPlan, batches: &[RecordBatch]) -> BenchResult {
     let mut writer = FileWriter::try_new(File::create(path)?, plan.schema().as_ref())?;
     for batch in batches {
@@ -233,12 +245,18 @@ fn read_ipc(path: &str) -> BenchResult<(Arc<Schema>, Vec<RecordBatch>)> {
     Ok((reader.schema(), reader.collect::<Result<Vec<_>, _>>()?))
 }
 
-fn projection(plan: &dyn ExecutionPlan) -> BenchResult<&ProjectionExec> {
-    if let Some(projection) = plan.downcast_ref::<ProjectionExec>() {
+fn nullif_projection(plan: &dyn ExecutionPlan) -> BenchResult<&ProjectionExec> {
+    if let Some(projection) = plan.downcast_ref::<ProjectionExec>()
+        && projection.expr().len() == 1
+        && projection.expr()[0]
+            .expr
+            .downcast_ref::<ScalarFunctionExpr>()
+            .is_some_and(|function| function.name() == "nullif")
+    {
         return Ok(projection);
     }
     for child in plan.children() {
-        if let Ok(found) = projection(child.as_ref()) {
+        if let Ok(found) = nullif_projection(child.as_ref()) {
             return Ok(found);
         }
     }
@@ -351,6 +369,7 @@ async fn effects(manifest: &Value) -> BenchResult {
                     "SELECT NULLIF(left_effect(a),right_effect(b)) AS r FROM inputs",
                 )
                 .await?;
+                assert_single_partition(plan.as_ref());
                 assert_eq!(counts.each_ref().map(|c| c.load(Ordering::SeqCst)), [0, 0]);
                 let result = collect(plan.clone(), session.task_ctx()).await?;
                 let formula_match = validate(
@@ -497,6 +516,9 @@ async fn main() -> BenchResult {
     if !["preflight", "measure", "attribute"].contains(&command) {
         return Err("unknown command".into());
     }
+    if command == "attribute" && (family != "nullif" || !["spark-off", "spark-on"].contains(&arm)) {
+        return Err("stage replay supports only Spark NULLIF".into());
+    }
     let mut configurations = vec!["native", "spark-off", "spark-on"];
     if command == "attribute" {
         configurations = vec![arm];
@@ -530,26 +552,36 @@ async fn main() -> BenchResult {
                 for configuration in &configurations {
                     if command == "attribute" {
                         let (plan, _) = plan(&session, configuration, &sql).await?;
-                        let projection = projection(plan.as_ref())?;
+                        assert_single_partition(plan.as_ref());
+                        let projection = nullif_projection(plan.as_ref())?;
                         let expression = &projection.expr()[0].expr;
                         let function = expression
                             .downcast_ref::<ScalarFunctionExpr>()
                             .ok_or("expected scalar function")?;
-                        let columns = projection
-                            .input()
-                            .schema()
-                            .fields()
-                            .iter()
-                            .map(|f| batches[0].schema().index_of(f.name()))
-                            .collect::<Result<Vec<_>, _>>()?;
+                        let input_schema = projection.input().schema();
+                        let input_batches =
+                            collect(projection.input().clone(), session.task_ctx()).await?;
+                        assert_eq!(
+                            input_batches
+                                .iter()
+                                .map(RecordBatch::num_rows)
+                                .sum::<usize>(),
+                            rows
+                        );
+                        for batch in &input_batches {
+                            assert_eq!(batch.num_columns(), input_schema.fields().len());
+                            for (column, field) in batch.columns().iter().zip(input_schema.fields())
+                            {
+                                assert_eq!(column.data_type(), field.data_type());
+                            }
+                        }
                         for sample in 0..4 {
                             let mut ns = [0; 7];
                             let mut selected_rows = 0;
-                            for batch in &batches {
-                                let batch = batch.project(&columns)?;
-                                let (replayed, selected) = replay(function, &batch, &mut ns)?;
+                            for batch in &input_batches {
+                                let (replayed, selected) = replay(function, batch, &mut ns)?;
                                 let actual =
-                                    expression.evaluate(&batch)?.into_array(batch.num_rows())?;
+                                    expression.evaluate(batch)?.into_array(batch.num_rows())?;
                                 assert_eq!(replayed.data_type(), actual.data_type());
                                 let schema = Arc::new(Schema::new(vec![Field::new(
                                     "r",
@@ -568,7 +600,7 @@ async fn main() -> BenchResult {
                             if sample > 0 {
                                 println!(
                                     "{}",
-                                    json!({"kind":"attribution","id":id,"configuration":configuration,"sample":sample-1,"rows":rows,"input_batches":batches.len(),"selected_rows":selected_rows,"stage_ns":ns})
+                                    json!({"kind":"attribution","id":id,"configuration":configuration,"sample":sample-1,"rows":rows,"input_batches":input_batches.len(),"input_types":input_schema.fields().iter().map(|field|format!("{:?}",field.data_type())).collect::<Vec<_>>(),"input_plan":displayable(projection.input().as_ref()).indent(true).to_string(),"selected_rows":selected_rows,"stage_ns":ns})
                                 );
                             }
                         }
@@ -578,6 +610,7 @@ async fn main() -> BenchResult {
                         let started = (command == "measure").then(Instant::now);
                         let (plan, logical_field) = plan(&session, configuration, &sql).await?;
                         let planning_ns = started.map(|t| t.elapsed().as_nanos());
+                        assert_single_partition(plan.as_ref());
                         let started = (command == "measure").then(Instant::now);
                         let result = collect(plan.clone(), session.task_ctx()).await?;
                         let execution_ns = started.map(|t| t.elapsed().as_nanos());

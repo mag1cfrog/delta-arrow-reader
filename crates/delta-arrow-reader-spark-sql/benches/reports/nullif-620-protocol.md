@@ -44,9 +44,24 @@ ANSI on yield 216 cells. All values are ordinary nonnegative DOUBLE integers;
 computed operands add one. Preserve the computed expressions in retained plans.
 
 Native uses the native planner in the same Spark-configured SessionContext,
-executable and dependency forks. Sessions use two runtime workers, two target
-partitions and the selected batch size. Actual batches/partitions are recorded;
-target partitions do not promise two physical output partitions.
+executable and dependency forks. Sessions use two runtime workers, one target
+partition and the selected batch size. After planning, outside both timers,
+assert that every planned operator and source has exactly one output partition.
+Record actual source batches and the complete partition tree. The fixed input
+partition and projection preserve generated row order; canonical results retain
+exact positional checks without sorting. This measures single-partition row
+cost and does not establish parallel throughput.
+
+The initial untimed preflight requested two target partitions. The in-memory
+source repartitioned multi-batch inputs and unordered collection permuted rows,
+invalidating 114 positional assertions. The diagnostic source at
+`22e723a753dcb4b8c686069c62145e1e3410cebc` decoded all 216 retained IPCs and
+confirmed complete NULL/value-bit multiset and Float64 agreement. The effects
+diagnostic also confirmed the exact 17-row multiset and required/actual operand
+counts `[17,17]`; row 16 arrived between rows 7 and 8. All failed artifacts and
+diagnostic results remain under `620/baseline-preflight` and
+`620/ordering-diagnostic`. This harness amendment precedes every valid timing;
+the failed preflight is not an accepted baseline campaign.
 
 Untimed preflight checks every result row against the independent input formula,
 including NULL position, exact valid-value bits and executed Arrow DataType.
@@ -84,14 +99,23 @@ controls before its candidate timing and compare native/non-NULL controls too.
 Run the existing checked/TRY arithmetic, `date_day_arithmetic`,
 `local_day_arithmetic`, LIKE and `array_access` correctness suites for affected
 owners. Further caller timings require a concrete scope amendment before timing.
+The checked family supplies end-to-end/native/non-NULL controls only. ANSI-off
+arithmetic can be a BinaryExpr; the NULLIF stage replay does not apply to it.
 
 ## Baseline attribution before candidate choice
 
 The harness-only replay cites the frozen product baseline's
 `scalar_function.rs:233-360` for argument fields/invocation and the NULL-first
 sequence, and `datafusion-physical-expr-common/src/utils.rs:77` for scatter.
-It uses the actual planned physical operands and UDF, rebasing source batches to
-the projection's input schema. Separately time first evaluation, logical NULL
+It finds the projection whose top expression is the NULLIF ScalarFunctionExpr,
+recursing past alias-only projections. Collect that projection's actual planned
+input once outside all stage timers, then assert its full row count, column
+types and single partition. Replay those exact batches with the actual planned
+physical operands and UDF; record their batch count, types and input plan.
+Upstream input preparation, including any precomputed expressions, is outside
+these function-boundary stage timings. Canonical execution still includes all
+upstream work. The attribution command accepts only Spark NULLIF.
+Separately time first evaluation, logical NULL
 selection, batch filtering, first-argument selection/reuse, later argument
 evaluation, kernel invocation and scatter. Assert full type/bit/NULL agreement
 between replay and actual physical evaluation on every input batch.
@@ -160,6 +184,13 @@ and the sealed binary remain identical; record both identities. Source, binary,
 manifest, harness, controller or protocol changes require a new exact preflight.
 Root retains the corresponding build/toolchain/seal record alongside these
 controller metadata. The controller never builds or retries a binary.
+For read-only reproduction of the ordering diagnosis, the benchmark also accepts
+`BINARY inspect-retained RETAINED_IPC_DIRECTORY`; it checks complete value-bit
+multisets against unchanged formulas without running SQL. `BINARY effects` runs
+only the untimed effect controls. Failed effect checks retain actual/expected
+values, schemas, counters and plan before the original assertion. Sorting is
+confined to diagnostic multiset checks and does not enter canonical validation
+or either timer.
 
 Run untimed baseline preflight and commit its compact receipt, then rebuild and
 verify the final exact binary before baseline execution and attribution. After

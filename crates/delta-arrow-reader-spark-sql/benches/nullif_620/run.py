@@ -211,7 +211,7 @@ def check():
     assert len(cells("checked")) * 3 == 108
     assert len(set(cells("nullif"))) == 72
     assert MANIFEST["warmups"] == 1 and MANIFEST["samples"] == 3
-    assert MANIFEST["workers"] == MANIFEST["target_partitions"] == 2
+    assert MANIFEST["workers"] == 2 and MANIFEST["target_partitions"] == 1
     assert sorted((p["arm"], p["replica"]) for p in MANIFEST["processes"]) == sorted((arm, replica) for arm in ["main", "native-b"] for replica in [1, 2, 3])
     for family in MANIFEST["families"].values():
         assert len({case["name"] for case in family}) == len(family)
@@ -243,6 +243,8 @@ def main():
     if args.command == "summarize":
         summarize(pathlib.Path(args.arguments[0]))
         return
+    if args.command == "attribute" and args.arguments[2] != "nullif":
+        parser.error("stage replay supports only Spark NULLIF")
     binary, output = pathlib.Path(args.arguments[0]).resolve(), pathlib.Path(args.arguments[1]).resolve()
     if not output.is_relative_to(EVIDENCE):
         raise RuntimeError("keep this protocol's evidence under its owned directory")

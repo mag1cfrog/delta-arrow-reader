@@ -37,7 +37,7 @@
   "attribution_stages": ["first_argument", "logical_null_selection", "filter_batch", "select_first_argument", "later_arguments", "kernel", "scatter"],
   "cpus": [2, 3, 4, 5],
   "workers": 2,
-  "target_partitions": 2,
+  "target_partitions": 1,
   "process_timeout_seconds": 180,
   "campaign_timeout_seconds": 1800,
   "evidence_limit_bytes": 1073741824,
