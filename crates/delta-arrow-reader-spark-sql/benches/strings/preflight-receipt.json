@@ -1,0 +1,217 @@
+{
+  "status": "complete",
+  "baseline_commit": "8260c58ba48e0a65ca7cb7668dd2d8c64b1434f1",
+  "binary_sha256": "ca86a5dc0313d80ec7311e642f86d23a906cc4aad063c7445b6b085201064dfc",
+  "snapshot_root": "/home/hanbo/.local/share/delta-arrow-reader-review/measurements-2026-11-18/1380/delta-snapshot",
+  "snapshot_log_sha256": "21d2257a5c6d201f74c2c3516a134095c2f4efb680595cbd56228ae6581e71cb",
+  "file_hashes": {
+    "benches/strings/queries.json": "82e08edf20e562d54ec2b794ee174611e4d6a6b52aed698d3dd130b8599b8ecd",
+    "benches/strings/schedule.json": "8086a8932ff51dd2c7390fdeadf214a95083b3c84eea758cc8b261947af16dfa",
+    "benches/strings/run.py": "ee34b1e1de1f2c1d2ea466ec1a0358e4d54b870dcd23448f8239664f37ebcf7b",
+    "benches/execution.rs": "80ff880e1281f30c64cdef0a5ca8d7d42bb6141c30a865d0ffa734532004d000",
+    "Cargo.toml": "d06f9f2fc6a258b2d4d898fe596d0279827765047b4bee79befd119073d7208f",
+    "Cargo.lock": "75061d138984fcd08fe4543c0cfa3ffc52fb928e54423feceaff5ec08a2e8fe8",
+    "benches/execution/run.py": "9406949f27193dc04540bb1265a0790d4fa191ef28c85829de5bcd2166057324",
+    "benches/execution/summarize.py": "0cbad0b6d1128bb4aeb7d7c52016f4529722090a98e8d1c98ff9fbc919bf6bd4",
+    "benches/reports/execution-1380-fixture.json": "9eb1e98be9381de74bd8908ac540c91eec6f0b0862089d1655baca537f43301d",
+    "benches/reports/strings-1388-protocol.md": "26c86ac19641296fbadd5e5c2c678555a684c4b2680f164509f9763cba69684e",
+    "benches/reports/strings-1388-preflight.json.gz": "86ba69d21e3ac0a817313b5b73a4a88b99840b03c59ca66d03c26867185f2b30"
+  },
+  "eligible_shapes": [
+    "string_functions",
+    "substring_only",
+    "concat_only",
+    "upper_only"
+  ],
+  "excluded_shapes": {},
+  "preflight_result_count": 12,
+  "exact_comparison_count": 8,
+  "expected_rows": {
+    "string_functions": {
+      "native": 6001215,
+      "spark-off": 6001215,
+      "spark-on": 6001215
+    },
+    "substring_only": {
+      "native": 6001215,
+      "spark-off": 6001215,
+      "spark-on": 6001215
+    },
+    "concat_only": {
+      "native": 6001215,
+      "spark-off": 6001215,
+      "spark-on": 6001215
+    },
+    "upper_only": {
+      "native": 6001215,
+      "spark-off": 6001215,
+      "spark-on": 6001215
+    }
+  },
+  "expected_source_io": {
+    "string_functions": {
+      "native": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 81807546,
+        "recorded_range_bytes": 81807546
+      },
+      "spark-off": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 81807546,
+        "recorded_range_bytes": 81807546
+      },
+      "spark-on": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 81807546,
+        "recorded_range_bytes": 81807546
+      }
+    },
+    "substring_only": {
+      "native": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 80224680,
+        "recorded_range_bytes": 80224680
+      },
+      "spark-off": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 80224680,
+        "recorded_range_bytes": 80224680
+      },
+      "spark-on": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 80224680,
+        "recorded_range_bytes": 80224680
+      }
+    },
+    "concat_only": {
+      "native": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 27144204,
+        "recorded_range_bytes": 27144204
+      },
+      "spark-off": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 27144204,
+        "recorded_range_bytes": 27144204
+      },
+      "spark-on": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 27144204,
+        "recorded_range_bytes": 27144204
+      }
+    },
+    "upper_only": {
+      "native": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 80224680,
+        "recorded_range_bytes": 80224680
+      },
+      "spark-off": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 80224680,
+        "recorded_range_bytes": 80224680
+      },
+      "spark-on": {
+        "distinct_source_files": [
+          "part-00000.parquet",
+          "part-00001.parquet",
+          "part-00002.parquet",
+          "part-00003.parquet",
+          "part-00004.parquet",
+          "part-00005.parquet"
+        ],
+        "source_file_count": 6,
+        "source_bytes_received": 80224680,
+        "recorded_range_bytes": 80224680
+      }
+    }
+  }
+}

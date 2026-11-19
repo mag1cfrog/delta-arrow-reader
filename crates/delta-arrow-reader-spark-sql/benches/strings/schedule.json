@@ -1,0 +1,478 @@
+{
+  "cpus": [
+    2,
+    3,
+    4,
+    5
+  ],
+  "target_partitions": 2,
+  "batch_rows": 8192,
+  "runtime_workers": 2,
+  "warmups": 1,
+  "samples": 3,
+  "process_timeout_seconds": 180,
+  "schedule_timeout_seconds": 3600,
+  "single_pool_bytes": 2147483648,
+  "preflight_pool_bytes": 4294967296,
+  "concurrency_pool_bytes": 8589934592,
+  "single_address_space_bytes": 12884901888,
+  "preflight_address_space_bytes": 17179869184,
+  "concurrency_address_space_bytes": 21474836480,
+  "spill_limit_bytes": 8589934592,
+  "preflight_process_timeout_seconds": 300,
+  "preflight_timeout_seconds": 1800,
+  "profile_iterations": 3,
+  "profile_frequency_hz": 199,
+  "profile_stack_bytes": 8192,
+  "profile_max_cases": 4,
+  "runs": [
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "string_functions",
+      "replica": 1,
+      "arm": "a",
+      "process": "noise-01-string_functions-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "string_functions",
+      "replica": 1,
+      "arm": "b",
+      "process": "noise-01-string_functions-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "substring_only",
+      "replica": 1,
+      "arm": "b",
+      "process": "noise-01-substring_only-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "substring_only",
+      "replica": 1,
+      "arm": "a",
+      "process": "noise-01-substring_only-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "concat_only",
+      "replica": 1,
+      "arm": "a",
+      "process": "noise-01-concat_only-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "concat_only",
+      "replica": 1,
+      "arm": "b",
+      "process": "noise-01-concat_only-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "upper_only",
+      "replica": 1,
+      "arm": "b",
+      "process": "noise-01-upper_only-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "upper_only",
+      "replica": 1,
+      "arm": "a",
+      "process": "noise-01-upper_only-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "string_functions",
+      "replica": 2,
+      "arm": "b",
+      "process": "noise-02-string_functions-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "string_functions",
+      "replica": 2,
+      "arm": "a",
+      "process": "noise-02-string_functions-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "substring_only",
+      "replica": 2,
+      "arm": "a",
+      "process": "noise-02-substring_only-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "substring_only",
+      "replica": 2,
+      "arm": "b",
+      "process": "noise-02-substring_only-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "concat_only",
+      "replica": 2,
+      "arm": "b",
+      "process": "noise-02-concat_only-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "concat_only",
+      "replica": 2,
+      "arm": "a",
+      "process": "noise-02-concat_only-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "upper_only",
+      "replica": 2,
+      "arm": "a",
+      "process": "noise-02-upper_only-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "upper_only",
+      "replica": 2,
+      "arm": "b",
+      "process": "noise-02-upper_only-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "string_functions",
+      "replica": 3,
+      "arm": "a",
+      "process": "noise-03-string_functions-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "string_functions",
+      "replica": 3,
+      "arm": "b",
+      "process": "noise-03-string_functions-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "substring_only",
+      "replica": 3,
+      "arm": "b",
+      "process": "noise-03-substring_only-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "substring_only",
+      "replica": 3,
+      "arm": "a",
+      "process": "noise-03-substring_only-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "concat_only",
+      "replica": 3,
+      "arm": "a",
+      "process": "noise-03-concat_only-a"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "concat_only",
+      "replica": 3,
+      "arm": "b",
+      "process": "noise-03-concat_only-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "upper_only",
+      "replica": 3,
+      "arm": "b",
+      "process": "noise-03-upper_only-b"
+    },
+    {
+      "series": "noise",
+      "configuration": "native",
+      "query": "upper_only",
+      "replica": 3,
+      "arm": "a",
+      "process": "noise-03-upper_only-a"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "string_functions",
+      "replica": 1,
+      "process": "main-01-string_functions-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "string_functions",
+      "replica": 1,
+      "process": "main-01-string_functions-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "string_functions",
+      "replica": 1,
+      "process": "main-01-string_functions-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "substring_only",
+      "replica": 1,
+      "process": "main-01-substring_only-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "substring_only",
+      "replica": 1,
+      "process": "main-01-substring_only-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "substring_only",
+      "replica": 1,
+      "process": "main-01-substring_only-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "concat_only",
+      "replica": 1,
+      "process": "main-01-concat_only-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "concat_only",
+      "replica": 1,
+      "process": "main-01-concat_only-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "concat_only",
+      "replica": 1,
+      "process": "main-01-concat_only-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "upper_only",
+      "replica": 1,
+      "process": "main-01-upper_only-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "upper_only",
+      "replica": 1,
+      "process": "main-01-upper_only-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "upper_only",
+      "replica": 1,
+      "process": "main-01-upper_only-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "string_functions",
+      "replica": 2,
+      "process": "main-02-string_functions-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "string_functions",
+      "replica": 2,
+      "process": "main-02-string_functions-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "string_functions",
+      "replica": 2,
+      "process": "main-02-string_functions-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "substring_only",
+      "replica": 2,
+      "process": "main-02-substring_only-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "substring_only",
+      "replica": 2,
+      "process": "main-02-substring_only-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "substring_only",
+      "replica": 2,
+      "process": "main-02-substring_only-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "concat_only",
+      "replica": 2,
+      "process": "main-02-concat_only-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "concat_only",
+      "replica": 2,
+      "process": "main-02-concat_only-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "concat_only",
+      "replica": 2,
+      "process": "main-02-concat_only-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "upper_only",
+      "replica": 2,
+      "process": "main-02-upper_only-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "upper_only",
+      "replica": 2,
+      "process": "main-02-upper_only-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "upper_only",
+      "replica": 2,
+      "process": "main-02-upper_only-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "string_functions",
+      "replica": 3,
+      "process": "main-03-string_functions-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "string_functions",
+      "replica": 3,
+      "process": "main-03-string_functions-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "string_functions",
+      "replica": 3,
+      "process": "main-03-string_functions-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "substring_only",
+      "replica": 3,
+      "process": "main-03-substring_only-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "substring_only",
+      "replica": 3,
+      "process": "main-03-substring_only-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "substring_only",
+      "replica": 3,
+      "process": "main-03-substring_only-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "concat_only",
+      "replica": 3,
+      "process": "main-03-concat_only-spark-off"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "concat_only",
+      "replica": 3,
+      "process": "main-03-concat_only-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "concat_only",
+      "replica": 3,
+      "process": "main-03-concat_only-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-on",
+      "query": "upper_only",
+      "replica": 3,
+      "process": "main-03-upper_only-spark-on"
+    },
+    {
+      "series": "main",
+      "configuration": "native",
+      "query": "upper_only",
+      "replica": 3,
+      "process": "main-03-upper_only-native"
+    },
+    {
+      "series": "main",
+      "configuration": "spark-off",
+      "query": "upper_only",
+      "replica": 3,
+      "process": "main-03-upper_only-spark-off"
+    }
+  ],
+  "concurrency": [],
+  "profile_timeout_seconds": 180,
+  "profile_total_timeout_seconds": 900,
+  "profile_max_bytes": 536870912
+}

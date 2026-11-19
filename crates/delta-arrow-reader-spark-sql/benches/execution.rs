@@ -831,11 +831,70 @@ async fn async_main(args: &[String], manifest: &Manifest, schedule: &Schedule) -
         _ => Err("invalid execution mode".into()),
     }
 }
+
+async fn profile_strings(args: &[String], manifest: &Manifest, schedule: &Schedule) -> TestResult {
+    use std::io::{Read, Write};
+
+    if args.len() != 5 || !matches!(args[3].as_str(), "native" | "spark-off" | "spark-on") {
+        return Err("usage: --strings-1388 profile SNAPSHOT WORK CONFIGURATION QUERY".into());
+    }
+    let query = manifest
+        .queries
+        .iter()
+        .find(|query| query.id == args[4])
+        .ok_or("unknown frozen string query")?;
+    let work = Path::new(&args[2]);
+    let session = build_registered_session(
+        manifest,
+        schedule,
+        Path::new(&args[1]),
+        work,
+        schedule.single_pool_bytes,
+    )
+    .await?;
+    std::hint::black_box(measure_query(&session, query, &args[3]).await?);
+    let mut control = fs::OpenOptions::new()
+        .write(true)
+        .open(work.join("perf-control"))?;
+    let mut acknowledgments = fs::File::open(work.join("perf-ack"))?;
+    let mut toggle = |command: &str| -> TestResult {
+        writeln!(control, "{command}")?;
+        control.flush()?;
+        let mut acknowledgment = [0_u8; 5];
+        acknowledgments.read_exact(&mut acknowledgment)?;
+        if &acknowledgment != b"ack\n\0" {
+            return Err("missing or invalid perf control acknowledgment".into());
+        }
+        Ok(())
+    };
+    toggle("enable")?;
+    let mut samples = Vec::new();
+    for _ in 0..schedule.profile_iterations {
+        samples.push(measure_query(&session, query, &args[3]).await?);
+    }
+    toggle("disable")?;
+    println!(
+        "{}",
+        json!({"kind":"profile","id":query.id,"configuration":args[3],"warmups":1,"executions":schedule.profile_iterations,"samples":samples})
+    );
+    Ok(())
+}
+
 fn main() -> TestResult {
     let mut args = std::env::args().skip(1).collect::<Vec<_>>();
     let date_stage = args.first().is_some_and(|arg| arg == "--casts-1385-date");
     let casts = date_stage || args.first().is_some_and(|arg| arg == "--casts-1385");
-    let (manifest_json, schedule_json) = if casts {
+    let strings = args.first().is_some_and(|arg| arg == "--strings-1388");
+    let (manifest_json, schedule_json) = if strings {
+        args.remove(0);
+        if args.first().is_some_and(|mode| mode == "concurrency") {
+            return Err("string attribution does not run concurrency checks".into());
+        }
+        (
+            include_str!("strings/queries.json"),
+            include_str!("strings/schedule.json"),
+        )
+    } else if casts {
         args.remove(0);
         if args.first().is_some_and(|mode| mode == "concurrency") {
             return Err("cast attribution does not run concurrency checks".into());
@@ -874,5 +933,11 @@ fn main() -> TestResult {
         .max_blocking_threads(8)
         .enable_all()
         .build()?
-        .block_on(async_main(&args, &manifest, &schedule))
+        .block_on(async {
+            if strings && args.first().is_some_and(|mode| mode == "profile") {
+                profile_strings(&args, &manifest, &schedule).await
+            } else {
+                async_main(&args, &manifest, &schedule).await
+            }
+        })
 }
