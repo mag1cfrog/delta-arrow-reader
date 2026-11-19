@@ -322,6 +322,11 @@ impl ScalarUDF {
         self.inner.short_circuits()
     }
 
+    /// See [`ScalarUDFImpl::kernel_accepts_null_first_arg`].
+    pub fn kernel_accepts_null_first_arg(&self, arg_types: &[DataType]) -> bool {
+        self.inner.kernel_accepts_null_first_arg(arg_types)
+    }
+
     /// Computes the output interval for a [`ScalarUDF`], given the input
     /// intervals.
     ///
@@ -908,6 +913,15 @@ pub trait ScalarUDFImpl: Debug + DynEq + DynHash + Send + Sync + Any {
         false
     }
 
+    /// Whether this kernel safely accepts rows whose first argument is NULL for
+    /// these actual physical argument types and valid, equal-length operands.
+    /// It must return NULL without errors or effects on those rows, preserving
+    /// other rows' values, errors and effects. This does not permit evaluating skipped expressions;
+    /// the evaluator must establish their evaluation safety separately.
+    fn kernel_accepts_null_first_arg(&self, _arg_types: &[DataType]) -> bool {
+        false
+    }
+
     /// Whether each NULL argument skips later arguments for that row. The kernel
     /// still receives the original rows; skipped scalar arguments can stay scalar.
     /// Implementations must return NULL when any argument is NULL, regardless of
@@ -1229,6 +1243,10 @@ impl ScalarUDFImpl for AliasedScalarUDFImpl {
 
     fn short_circuits_on_null_first_arg(&self) -> bool {
         self.inner.short_circuits_on_null_first_arg()
+    }
+
+    fn kernel_accepts_null_first_arg(&self, arg_types: &[DataType]) -> bool {
+        self.inner.kernel_accepts_null_first_arg(arg_types)
     }
 
     fn short_circuits_on_any_null_argument(&self) -> bool {
