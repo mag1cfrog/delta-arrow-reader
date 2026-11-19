@@ -2,11 +2,10 @@
 members = [
     "crates/delta-arrow-reader-core",
     "crates/delta-arrow-reader-cli",
-    "crates/delta-arrow-reader-python",
     "xtask",
 ]
 default-members = ["crates/delta-arrow-reader-core"]
-exclude = ["crates/delta-arrow-reader-spark-sql"]
+exclude = ["crates/delta-arrow-reader-spark-sql", "crates/delta-arrow-reader-python"]
 resolver = "3"
 
 [workspace.package]

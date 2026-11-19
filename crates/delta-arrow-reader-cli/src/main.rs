@@ -35,7 +35,40 @@ use cli::{Cli, Command};
 #[cfg(target_os = "linux")]
 use snafu::ResultExt;
 
+fn plan_spark_query_for_measurement(sql: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
+    runtime.block_on(async {
+        let state = delta_arrow_reader_spark_sql::configure_spark_sql(
+            datafusion::execution::SessionStateBuilder::new().with_default_features(),
+        )
+        .build();
+        let session = datafusion::prelude::SessionContext::new_with_state(state);
+        let query = delta_arrow_reader_spark_sql::plan_query(
+            &session,
+            sql,
+            &delta_arrow_reader_spark_sql::SparkSqlOptions::default(),
+        )
+        .await?;
+        drop(std::hint::black_box(
+            query.create_physical_plan(&session).await?,
+        ));
+        Ok::<(), datafusion::error::DataFusionError>(())
+    })?;
+    Ok(())
+}
+
 fn main() -> ExitCode {
+    if let Ok(sql) = std::env::var("DAR_1381_SPARK_SQL") {
+        return match plan_spark_query_for_measurement(&sql) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("measurement Spark planning failed: {error}");
+                ExitCode::FAILURE
+            }
+        };
+    }
     let diagnostic_format = diagnostics::DiagnosticFormat::from_cli_args();
     runtime::install_panic_hook(diagnostic_format);
     #[cfg(target_os = "linux")]
