@@ -43,26 +43,29 @@ Evaluation includes xee's typed conversion. Output includes list-node
 materialization and Arrow builders. The residual includes destructors, loop
 overhead and the phase clocks.
 
-| Function | ANSI | XML parse/setup | Compiler context | Wrap/compile | Evaluate | Output | Residual |
-| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `xpath` | off | 1,667 | 56 | 61,481 | 4,224 | 161 | 753 |
-| `xpath` | on | 1,627 | 58 | 61,285 | 4,339 | 152 | 758 |
-| `xpath_boolean` | off | 1,630 | 56 | 38,931 | 3,437 | 30 | 685 |
-| `xpath_boolean` | on | 1,621 | 56 | 38,985 | 3,442 | 29 | 669 |
-| `xpath_double` | off | 1,740 | 55 | 38,990 | 3,668 | 30 | 709 |
-| `xpath_double` | on | 1,718 | 49 | 38,874 | 3,714 | 27 | 726 |
-| `xpath_float` | off | 1,668 | 51 | 39,810 | 3,724 | 40 | 759 |
-| `xpath_float` | on | 1,738 | 48 | 38,943 | 3,808 | 38 | 737 |
-| `xpath_int` | off | 1,689 | 51 | 39,149 | 3,727 | 30 | 711 |
-| `xpath_int` | on | 1,688 | 47 | 38,980 | 3,745 | 29 | 730 |
-| `xpath_long` | off | 1,700 | 49 | 39,153 | 3,725 | 31 | 734 |
-| `xpath_long` | on | 1,674 | 49 | 38,751 | 3,656 | 29 | 724 |
-| `xpath_number` | off | 1,686 | 49 | 38,962 | 3,763 | 28 | 729 |
-| `xpath_number` | on | 1,646 | 49 | 38,929 | 3,819 | 30 | 715 |
-| `xpath_short` | off | 1,675 | 47 | 38,918 | 3,729 | 29 | 719 |
-| `xpath_short` | on | 1,685 | 49 | 39,831 | 3,873 | 34 | 768 |
-| `xpath_string` | off | 1,690 | 57 | 39,933 | 3,713 | 50 | 747 |
-| `xpath_string` | on | 1,643 | 56 | 38,989 | 3,553 | 43 | 708 |
+| Function | ANSI | XML parse/setup | Compiler context | Wrap/compile | Evaluate | Output | Residual | Instrumented batch wall |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `xpath` | off | 1,667 | 56 | 61,481 | 4,224 | 161 | 753 | 68,221 [67,614-70,090] |
+| `xpath` | on | 1,627 | 58 | 61,285 | 4,339 | 152 | 758 | 67,989 [67,984-68,497] |
+| `xpath_boolean` | off | 1,630 | 56 | 38,931 | 3,437 | 30 | 685 | 44,738 [44,415-48,556] |
+| `xpath_boolean` | on | 1,621 | 56 | 38,985 | 3,442 | 29 | 669 | 44,798 [44,744-45,272] |
+| `xpath_double` | off | 1,740 | 55 | 38,990 | 3,668 | 30 | 709 | 45,164 [45,137-45,631] |
+| `xpath_double` | on | 1,718 | 49 | 38,874 | 3,714 | 27 | 726 | 45,349 [44,636-45,569] |
+| `xpath_float` | off | 1,668 | 51 | 39,810 | 3,724 | 40 | 759 | 45,917 [45,054-46,332] |
+| `xpath_float` | on | 1,738 | 48 | 38,943 | 3,808 | 38 | 737 | 45,302 [44,938-46,331] |
+| `xpath_int` | off | 1,689 | 51 | 39,149 | 3,727 | 30 | 711 | 45,462 [45,407-45,557] |
+| `xpath_int` | on | 1,688 | 47 | 38,980 | 3,745 | 29 | 730 | 45,222 [45,029-46,321] |
+| `xpath_long` | off | 1,700 | 49 | 39,153 | 3,725 | 31 | 734 | 45,319 [45,172-45,748] |
+| `xpath_long` | on | 1,674 | 49 | 38,751 | 3,656 | 29 | 724 | 44,949 [44,816-45,555] |
+| `xpath_number` | off | 1,686 | 49 | 38,962 | 3,763 | 28 | 729 | 45,255 [44,575-46,645] |
+| `xpath_number` | on | 1,646 | 49 | 38,929 | 3,819 | 30 | 715 | 45,023 [44,957-45,427] |
+| `xpath_short` | off | 1,675 | 47 | 38,918 | 3,729 | 29 | 719 | 45,127 [44,733-46,416] |
+| `xpath_short` | on | 1,685 | 49 | 39,831 | 3,873 | 34 | 768 | 46,219 [44,628-47,855] |
+| `xpath_string` | off | 1,690 | 57 | 39,933 | 3,713 | 50 | 747 | 46,237 [45,047-46,276] |
+| `xpath_string` | on | 1,643 | 56 | 38,989 | 3,553 | 43 | 708 | 44,981 [44,927-45,176] |
+
+Batch wall is also normalized per input row. Batch medians and ranges
+come from the same phase records and discard the same warmup.
 
 Compiler context construction and destruction cost 46 to 58 ns per row
 and occur only when compiling. Reusing the compiled query addresses both

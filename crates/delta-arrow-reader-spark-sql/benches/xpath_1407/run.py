@@ -97,7 +97,8 @@ def phase_samples(path, rows):
         spent = [document, context, compile_ns, evaluate, output]
         residual = int(wall) - sum(spent)
         assert int(batch_rows) == rows and documents == compiled == rows - rows // 16 and residual >= 0, line
-        records.append(dict(zip(PHASES, [*(v / rows for v in spent), residual / rows])))
+        phases = dict(zip(PHASES, [*(v / rows for v in spent), residual / rows]))
+        records.append(phases | {"batch_wall": int(wall) / rows})
     assert len(records) == 4, path
     return records[1:]
 
@@ -175,7 +176,7 @@ def measure(builds, out, protocol):
                     if variant == "phases":
                         data = phase_samples(work / "stderr.log", rows)
                         classified.update({phase: statistics.median(row[phase] for row in data)
-                                           for phase in PHASES})
+                                           for phase in (*PHASES, "batch_wall")})
                     else:
                         for component in ("execution_ns", "projection_ns", "increment_ns"):
                             classified[component] = statistics.median(
