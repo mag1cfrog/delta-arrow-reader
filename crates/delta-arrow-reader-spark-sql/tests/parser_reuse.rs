@@ -240,6 +240,101 @@ fn assert_same_result(actual: Result<ArrayRef>, expected: Result<ArrayRef>, cont
     }
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn ordinary_timestamp_casts_match_original_calendar_and_fallback_results() -> TestResult {
+    let categories: std::collections::BTreeMap<String, Vec<String>> =
+        serde_json::from_str(include_str!(
+            "../vendor/sail/crates/sail-function/tests/fixtures/timestamp-cast-1389-inputs.json"
+        ))?;
+    for kind in [
+        StringConversion::TimestampLtz,
+        StringConversion::TimestampNtz,
+    ] {
+        for timezone in ["UTC", "America/New_York", "Asia/Kathmandu"] {
+            for (category, corpus) in &categories {
+                let values = corpus
+                    .iter()
+                    .map(|value| Some(value.as_str()))
+                    .chain([None])
+                    .collect::<Vec<_>>();
+                for storage in [DataType::Utf8, DataType::LargeUtf8, DataType::Utf8View] {
+                    for dictionary in [false, true] {
+                        let decoded = cast(&StringViewArray::from(values.clone()), &storage)?;
+                        let input: ArrayRef = if dictionary {
+                            Arc::new(DictionaryArray::<Int32Type>::try_new(
+                                Int32Array::from_iter_values(0..decoded.len() as i32),
+                                decoded,
+                            )?)
+                        } else {
+                            decoded
+                        };
+                        let session = SessionContext::new_with_state(
+                            configure_spark_sql(
+                                SessionStateBuilder::new()
+                                    .with_default_features()
+                                    .with_config(
+                                        SessionConfig::new()
+                                            .with_target_partitions(1)
+                                            .with_batch_size(8),
+                                    ),
+                            )
+                            .build(),
+                        );
+                        session.register_batch(
+                            "inputs",
+                            RecordBatch::try_from_iter(vec![("s", input)])?,
+                        )?;
+                        for ansi in [false, true] {
+                            for is_try in [false, true] {
+                                let context = format!(
+                                    "{kind:?}, {category}, {storage}, dictionary={dictionary}, {timezone}, ansi={ansi}, try={is_try}"
+                                );
+                                let actual =
+                                    query(&session, &kind.sql(is_try), ansi, timezone).await;
+                                let expected = original_array_conversion(
+                                    kind, &values, ansi, is_try, timezone,
+                                );
+                                match actual {
+                                    Ok(actual) => {
+                                        assert_same_result(Ok(actual), expected, &context)
+                                    }
+                                    Err((phase, actual)) => {
+                                        assert_eq!(phase, "execution", "{context}");
+                                        assert_same_result(Err(actual), expected, &context);
+                                    }
+                                }
+                                let udf = kind.udf(ansi, is_try, timezone)?;
+                                for value in &values {
+                                    let actual = invoke(
+                                        udf.as_ref(),
+                                        vec![ColumnarValue::Scalar(ScalarValue::Utf8(
+                                            value.map(str::to_owned),
+                                        ))],
+                                        1,
+                                    )
+                                    .and_then(|value| value.into_array(1));
+                                    assert_same_result(
+                                        actual,
+                                        original_array_conversion(
+                                            kind,
+                                            &[*value],
+                                            ansi,
+                                            is_try,
+                                            timezone,
+                                        ),
+                                        &format!("scalar {context}, {value:?}"),
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 #[test]
 fn direct_row_kernels_match_frozen_unformatted_conversions() -> TestResult {
     for kind in [

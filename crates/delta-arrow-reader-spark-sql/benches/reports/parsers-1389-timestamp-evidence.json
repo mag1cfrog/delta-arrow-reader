@@ -1,0 +1,441 @@
+{
+  "measured_candidate": "8f23729b56aa1b665f95f47b21c382e2644fd8a6",
+  "preflight_source": "98aa647c5860301f1ebc5b2061c18fb9a7b6924c",
+  "product_baseline": "bc5ac56fc6630c76dadbba6582f704616e22eae0",
+  "before_timing_commit": "997278f7f73ad53b050f3d4b4ca381dd5eaf5e34",
+  "parser_reuse_measured_candidate": "1f6cb4fcd6ebbce3b993f411b9f66571ec6d230d",
+  "retained_parser_reuse_binary_timed": false,
+  "binary_sha256": "1228376c67f9eab307b06297ad412f7b7aed1029b3fa4eb3c6502a9730288451",
+  "artifacts": [
+    {
+      "path": "parsers-1389-timestamp-samples.jsonl.gz",
+      "bytes": 38276,
+      "sha256": "72b6c89c8f7e99546ef1aa4578cd3062100c91b2b08c7004331ec7729a066a9e",
+      "uncompressed_sha256": "31c7cf6c3f2c07c287ba16f2b837d9df078aa3c55532ef24bdfd68cff6621c92",
+      "source": "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1389/pr3/after-once/samples.jsonl.gz",
+      "source_sha256": "72b6c89c8f7e99546ef1aa4578cd3062100c91b2b08c7004331ec7729a066a9e",
+      "processes": 30,
+      "retained_iterations": 90
+    },
+    {
+      "path": "parsers-1389-timestamp-summary.json.gz",
+      "bytes": 760,
+      "sha256": "1a1da5336f930e9643d68d13a3d94ea2c80f0f7ac760b7fbe9ad86d0dcfe26e1",
+      "uncompressed_sha256": "a35ca80f0ea82ff6b6a3b0fcd9e78c4172ac85101bfde59c646cce4dd8550f4d",
+      "uncompressed_bytes": 3328,
+      "source": "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1389/pr3/after-summary/parsers-1389-timestamp-summary.json",
+      "source_sha256": "16a542bff3bb918674b4f9efdac75892ffd09ae440e894168db715c05fce9189"
+    },
+    {
+      "path": "parsers-1389-timestamp-metrics.json.gz",
+      "bytes": 2713,
+      "sha256": "388d5a981151c332b8592b03343b1f7c742d944437112fa7e5f55d1308c6fdab",
+      "uncompressed_sha256": "8c864ec6d400baa19d6170f41c6c780e7411b2e13864463f947ff22fafa8759c",
+      "uncompressed_bytes": 32241,
+      "source": "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1389/pr3/after-summary/parsers-1389-timestamp-metrics.json",
+      "source_sha256": "13e77d217d9b26b7137fea7b5b8be137c58201f950a1d8462801b8fb94a42cc5"
+    },
+    {
+      "path": "parsers-1389-timestamp-metadata.json.gz",
+      "bytes": 11269,
+      "sha256": "813b5bc9267883857c730eef148db955f3e1dc5b822f94f671305fba83ede44c",
+      "uncompressed_sha256": "6bfd45a033cf5d64daee01d1db93ccef500fc76a8e6d34251805c49754d1f954",
+      "uncompressed_bytes": 104369,
+      "source_members": [
+        {
+          "path": "pr3/after-once/metadata.json",
+          "sha256": "9d722ff81ee193a1e032f3a3c4273df4dd3422a0730539c9b793d38ed71d239a"
+        },
+        {
+          "path": "pr3/after-once/complete.json",
+          "sha256": "711aa30da6929e48c3909ab5e9efb20f441087a633dc48263463946a6a983dac"
+        },
+        {
+          "path": "pr3/preflight/metadata.json",
+          "sha256": "8262f419b6900f4019424e805bd5668ea9765b9b13344d78098ad83775ed3fe4"
+        },
+        {
+          "path": "pr3/preflight-audit.json",
+          "sha256": "2bba23c961db3faf8e678a29d0c41a52c7bdf8404f9efa9528688b7fd4b3a5a3"
+        },
+        {
+          "path": "pr3/comparison.json",
+          "sha256": "c274d738445f2779c25941955671cb07268bc8ab884c5790cc5ef511293c08c7"
+        },
+        {
+          "path": "pr3/linux-gates/intent.json",
+          "sha256": "0c47e67f2b9d9e493188e2723432d1f83532ed961b366da4f3723ae13c396137"
+        },
+        {
+          "path": "pr3/linux-gates/results.json",
+          "sha256": "7a2ed37f1c2f7a8e1e691b6e8ea7e9c78560571a64162a36271df91ecbb56076"
+        },
+        {
+          "path": "pr3/linux-gates-retry/intent.json",
+          "sha256": "06db7621eb8f4bda74af1cbed1a16fbd9cf082d19c01398a7bbc672f4dbe6178"
+        },
+        {
+          "path": "pr3/linux-gates-retry/result.json",
+          "sha256": "8de6282b5baf20100f1b273110805a945a585e032f731b72e9623d991b0c5fe6"
+        },
+        {
+          "path": "pr3/linux-gates-retry/linux-results.json",
+          "sha256": "cb38b11eb158b4c45e9d773bb47e99d7d699616d617cee8086b8e53b0485c529"
+        },
+        {
+          "path": "pr3-preflight-build/intent.json",
+          "sha256": "7cf3aa763464b77e555b993e2fe20357f2817af809b3d10f273573ec683d6417"
+        },
+        {
+          "path": "pr3-preflight-build/result.json",
+          "sha256": "be2976024f6ea559a5e14594d2954660b1d6a47d3f1e7807b9bf4236524f83ea"
+        },
+        {
+          "path": "pr3-timing-build/intent.json",
+          "sha256": "fc41df7d4c696bb32bfe9df6c9b13c3f05bc04f3808951d8ea834becbed4d1c2"
+        },
+        {
+          "path": "pr3-timing-build/result.json",
+          "sha256": "25b09994ef71e2fd07f6113dd84bee810374bfa91fc517a56f132af01376fb23"
+        }
+      ]
+    },
+    {
+      "path": "parsers-1389-timestamp-plans.tar.gz",
+      "bytes": 1438,
+      "sha256": "e9ea42c39b3002c767d360889a6bb78d8f80915e5d1ad78a3c6a39cf49744bd8",
+      "members": [
+        {
+          "path": "pr3/preflight/date_fallback/native/physical-plan.txt",
+          "bytes": 269,
+          "sha256": "7660e49d927ef6c6e21f95fe71cf9a1663a8ca18a02925effa66ffd1504b69a1"
+        },
+        {
+          "path": "pr3/preflight/date_fallback/native-spark-off.plan.diff",
+          "bytes": 671,
+          "sha256": "5ab8c7d5bc3f2424dc74908ad9cb1703f30c3a0aed5a14cdde5dfafdf9dda4f3"
+        },
+        {
+          "path": "pr3/preflight/date_fallback/native-spark-on.plan.diff",
+          "bytes": 670,
+          "sha256": "87dde65d155ed007755cd541153e3848e51c5fcae61ee4aceb9cc49fca42d3ed"
+        },
+        {
+          "path": "pr3/preflight/date_fallback/spark-off/physical-plan.txt",
+          "bytes": 356,
+          "sha256": "cff3167dc8d2832111fedd89893da1c0a01b824d8ca27d3bc0755a18bc5815ae"
+        },
+        {
+          "path": "pr3/preflight/date_fallback/spark-on/physical-plan.txt",
+          "bytes": 356,
+          "sha256": "cff3167dc8d2832111fedd89893da1c0a01b824d8ca27d3bc0755a18bc5815ae"
+        },
+        {
+          "path": "pr3/preflight/date_format_string/native/physical-plan.txt",
+          "bytes": 330,
+          "sha256": "9cfa4575ed269fe5197527fc5ff9a7745e5002f46f7ff8697e1b6645dee93651"
+        },
+        {
+          "path": "pr3/preflight/date_format_string/native-spark-off.plan.diff",
+          "bytes": 725,
+          "sha256": "f6144207e49c4639d8a7bc9e7bf3975bd1529c72ba2bd42f306da8b253dc9994"
+        },
+        {
+          "path": "pr3/preflight/date_format_string/native-spark-on.plan.diff",
+          "bytes": 724,
+          "sha256": "eb0babdd4881e77174a6bd341938909dd4d761dbc2488b7738c0c8742e7e8062"
+        },
+        {
+          "path": "pr3/preflight/date_format_string/spark-off/physical-plan.txt",
+          "bytes": 349,
+          "sha256": "137bdbe99c2223ecb6f9f919bfcbe71cc334ee55da37726fcfd2b67456695e6e"
+        },
+        {
+          "path": "pr3/preflight/date_format_string/spark-on/physical-plan.txt",
+          "bytes": 349,
+          "sha256": "137bdbe99c2223ecb6f9f919bfcbe71cc334ee55da37726fcfd2b67456695e6e"
+        },
+        {
+          "path": "pr3/preflight/interval_calendar/native/physical-plan.txt",
+          "bytes": 292,
+          "sha256": "c4abcd708381af5825bb0f57579694558569606786ba309365f0e79cb683250b"
+        },
+        {
+          "path": "pr3/preflight/interval_calendar/native-spark-off.plan.diff",
+          "bytes": 714,
+          "sha256": "719a25b05d23cc0d7be5b2b27cc924cf0ab4110f6cea6e9134b25ca6379c3d35"
+        },
+        {
+          "path": "pr3/preflight/interval_calendar/native-spark-on.plan.diff",
+          "bytes": 713,
+          "sha256": "9238d65453b77359d3540901d4cd60dd2c9e6a1d14086790bedd0cd10ad199f1"
+        },
+        {
+          "path": "pr3/preflight/interval_calendar/spark-off/physical-plan.txt",
+          "bytes": 376,
+          "sha256": "77853edb373ee4b1f28fd8a222b09316bc539cc5d9821526a1caad95a584095e"
+        },
+        {
+          "path": "pr3/preflight/interval_calendar/spark-on/physical-plan.txt",
+          "bytes": 376,
+          "sha256": "77853edb373ee4b1f28fd8a222b09316bc539cc5d9821526a1caad95a584095e"
+        },
+        {
+          "path": "pr3/preflight/interval_day_time/spark-off/physical-plan.txt",
+          "bytes": 366,
+          "sha256": "03024f83e51fe3af715e4f2ceb843ba5f212eff5e6c6dc07820508664a4afc09"
+        },
+        {
+          "path": "pr3/preflight/interval_day_time/spark-off-spark-on.plan.diff",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "pr3/preflight/interval_day_time/spark-on/physical-plan.txt",
+          "bytes": 366,
+          "sha256": "03024f83e51fe3af715e4f2ceb843ba5f212eff5e6c6dc07820508664a4afc09"
+        },
+        {
+          "path": "pr3/preflight/interval_day_time_input/spark-off/physical-plan.txt",
+          "bytes": 318,
+          "sha256": "99aceee694639ed05a721daa2bd4db47cbc788c7694603c01386aa9ccd95b0cc"
+        },
+        {
+          "path": "pr3/preflight/interval_day_time_input/spark-off-spark-on.plan.diff",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "pr3/preflight/interval_day_time_input/spark-on/physical-plan.txt",
+          "bytes": 318,
+          "sha256": "99aceee694639ed05a721daa2bd4db47cbc788c7694603c01386aa9ccd95b0cc"
+        },
+        {
+          "path": "pr3/preflight/interval_year_month/native/physical-plan.txt",
+          "bytes": 273,
+          "sha256": "10c499faa2b6daac517298f69bc6328278bf28f4d4c08aaf0f5440c98f62cb6f"
+        },
+        {
+          "path": "pr3/preflight/interval_year_month/native-spark-off.plan.diff",
+          "bytes": 681,
+          "sha256": "6d8caac9ad89208c5233cac1a39dca2c86441344523cb93ff31a711dc0ae7072"
+        },
+        {
+          "path": "pr3/preflight/interval_year_month/native-spark-on.plan.diff",
+          "bytes": 680,
+          "sha256": "37d02364ddef2368348d7cd8dbb7834fdda7a8c579385efb8e179471af36a8c1"
+        },
+        {
+          "path": "pr3/preflight/interval_year_month/spark-off/physical-plan.txt",
+          "bytes": 362,
+          "sha256": "cdbcd77e8c7c9f87bd88b0294c13b27cec3d91424ed2411ba52b787273f2e979"
+        },
+        {
+          "path": "pr3/preflight/interval_year_month/spark-on/physical-plan.txt",
+          "bytes": 362,
+          "sha256": "cdbcd77e8c7c9f87bd88b0294c13b27cec3d91424ed2411ba52b787273f2e979"
+        },
+        {
+          "path": "pr3/preflight/timestamp_ltz/native/physical-plan.txt",
+          "bytes": 275,
+          "sha256": "066f8e06c3b819e29b275cba904c462d1abbd91ceb996ff8fda0cae0045be1c3"
+        },
+        {
+          "path": "pr3/preflight/timestamp_ltz/native-spark-off.plan.diff",
+          "bytes": 670,
+          "sha256": "2ca766f792708775f37a0904037f64164c153c15d42a2e6dd89383a4cb1168c0"
+        },
+        {
+          "path": "pr3/preflight/timestamp_ltz/native-spark-on.plan.diff",
+          "bytes": 669,
+          "sha256": "2fbcf59cb8065dd842bcf514b26b0e6f5b7e1cfcea9d4b21ff9878e1dfe7de87"
+        },
+        {
+          "path": "pr3/preflight/timestamp_ltz/spark-off/physical-plan.txt",
+          "bytes": 349,
+          "sha256": "bf49db275a683f227c722ed948f155c31477d034095197ae5a06bc196a681436"
+        },
+        {
+          "path": "pr3/preflight/timestamp_ltz/spark-on/physical-plan.txt",
+          "bytes": 349,
+          "sha256": "bf49db275a683f227c722ed948f155c31477d034095197ae5a06bc196a681436"
+        },
+        {
+          "path": "pr3/preflight/timestamp_ntz/native/physical-plan.txt",
+          "bytes": 268,
+          "sha256": "6a057722cd7461c1ae0dfd9126234e5bb1b27c91d20f35f65f1538d4e8a2166c"
+        },
+        {
+          "path": "pr3/preflight/timestamp_ntz/native-spark-off.plan.diff",
+          "bytes": 667,
+          "sha256": "182a908f09c7c93f26e63ca76f20e5515d1aa67515dffc7f802f64337ab1ab21"
+        },
+        {
+          "path": "pr3/preflight/timestamp_ntz/native-spark-on.plan.diff",
+          "bytes": 666,
+          "sha256": "e897aeb4c275d4e9357668b44439d76ec5a6e3604f3cd03ebc2da6d13fb9c22f"
+        },
+        {
+          "path": "pr3/preflight/timestamp_ntz/spark-off/physical-plan.txt",
+          "bytes": 353,
+          "sha256": "e7770ac1a45a8c0ae7066ace13364a8b20cf162883d0d77fe214b2e33cfcfdfa"
+        },
+        {
+          "path": "pr3/preflight/timestamp_ntz/spark-on/physical-plan.txt",
+          "bytes": 353,
+          "sha256": "e7770ac1a45a8c0ae7066ace13364a8b20cf162883d0d77fe214b2e33cfcfdfa"
+        }
+      ]
+    },
+    {
+      "path": "parsers-1389-timestamp-validation.tar.gz",
+      "bytes": 98167,
+      "sha256": "606bef50575d939d0410b737c6448116d42b8f31024a9edc4d514c7379e64e98",
+      "members": [
+        {
+          "path": "pr3/after-once.log",
+          "bytes": 936,
+          "sha256": "876780108a5f4e6c9a75d4c39604c4019805377cd21b104ba0a9c60fc3127bc3"
+        },
+        {
+          "path": "pr3/focused/parser-reuse.log",
+          "bytes": 957,
+          "sha256": "22a2e2a8ab0d4bc0a82e10f9806cfc7108d25eb542c62b8435878c127a39bbcc"
+        },
+        {
+          "path": "pr3/focused/timestamp-unit.log",
+          "bytes": 893,
+          "sha256": "6cf216c8a38b92240692112c128d5ae33f774bbd73b4ecae010e0f039f2af560"
+        },
+        {
+          "path": "pr3/linux-gates/clippy.log",
+          "bytes": 498,
+          "sha256": "afc8696a0c42300e9d3a98fc5a51ebf91d4f78068e633efd918e7c2aa7b85a44"
+        },
+        {
+          "path": "pr3/linux-gates/format.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "pr3/linux-gates/intent.json",
+          "bytes": 1714,
+          "sha256": "0c47e67f2b9d9e493188e2723432d1f83532ed961b366da4f3723ae13c396137"
+        },
+        {
+          "path": "pr3/linux-gates/results.json",
+          "bytes": 249,
+          "sha256": "7a2ed37f1c2f7a8e1e691b6e8ea7e9c78560571a64162a36271df91ecbb56076"
+        },
+        {
+          "path": "pr3/linux-gates/workspace.log",
+          "bytes": 88415,
+          "sha256": "d68b0b903cf9eaf7b248f848b068cf287d0883be99029ac975a0bebcf131fb79"
+        },
+        {
+          "path": "pr3/linux-gates-retry/check-local-log.py",
+          "bytes": 2726,
+          "sha256": "1f57cbb176f7173e05d34d22f39fbc2b7937f06aab727489a1ed9308c4fdfd0a"
+        },
+        {
+          "path": "pr3/linux-gates-retry/intent.json",
+          "bytes": 1933,
+          "sha256": "06db7621eb8f4bda74af1cbed1a16fbd9cf082d19c01398a7bbc672f4dbe6178"
+        },
+        {
+          "path": "pr3/linux-gates-retry/linux-inventory.json",
+          "bytes": 468247,
+          "sha256": "9c3234839d9acae501fed091a859ce3b8dda20078ec8c56d9d7915484306b43c"
+        },
+        {
+          "path": "pr3/linux-gates-retry/linux-results.json",
+          "bytes": 967,
+          "sha256": "cb38b11eb158b4c45e9d773bb47e99d7d699616d617cee8086b8e53b0485c529"
+        },
+        {
+          "path": "pr3/linux-gates-retry/linux.log",
+          "bytes": 328254,
+          "sha256": "02a5ecf5b28382ec924693bf73004570514655cec1c020d8d0f31d8f9c6e8819"
+        },
+        {
+          "path": "pr3/linux-gates-retry/result.json",
+          "bytes": 124,
+          "sha256": "8de6282b5baf20100f1b273110805a945a585e032f731b72e9623d991b0c5fe6"
+        },
+        {
+          "path": "pr3/linux-gates.py",
+          "bytes": 2583,
+          "sha256": "c6eccb2929a48016086215f9ce5a60e99bc33872a0f54c1aaaaca2338e2d4093"
+        },
+        {
+          "path": "pr3/preflight.log",
+          "bytes": 795,
+          "sha256": "e4f93a71c230587f2f57fd8001000c3eeadae872ef277d1722963037ec555b4f"
+        },
+        {
+          "path": "pr3/protected-pr2-assets.json",
+          "bytes": 2631,
+          "sha256": "d9c0d62dae33c1bef5dc6a6769ac39d25d1cd715d6a561501564ed07705dc0d3"
+        },
+        {
+          "path": "pr3-preflight-build/cargo.stderr",
+          "bytes": 502,
+          "sha256": "be0328c097da7528ae64c6b2bb583c2044c94652870b926a6d0c13700362cd4a"
+        },
+        {
+          "path": "pr3-timing-build/cargo.stderr",
+          "bytes": 74,
+          "sha256": "e961ae42928e1b700647823fb73675fb7e76a1c4b94c00b730a9adb6bdc4d091"
+        }
+      ]
+    }
+  ],
+  "existing_evidence": [
+    {
+      "path": "parsers-1389-timestamp-protocol.md",
+      "sha256": "d7c2d5b0a16df4c27d40f355be974facbb502a0f74a5603cec828111b3176afe"
+    },
+    {
+      "path": "parsers-1389-timestamp-preflight.json.gz",
+      "sha256": "ce7d675ba0522c436d9a018f54b5ba5ef3bf1d2546d4089a85373af76330dabc"
+    },
+    {
+      "path": "../parsers/timestamp-preflight-receipt.json",
+      "sha256": "11374e43f21cbae450c8033c7c05bd445fbf449005d0b7d03dcd8f6383496494"
+    },
+    {
+      "path": "parsers-1389-retained-validation.json",
+      "sha256": "a0a06ff0e008b6190bdb2bcbc73f943e5fa61bfc23ffbbed38f8e966b313043b"
+    },
+    {
+      "path": "parsers-1389-summary.json.gz",
+      "sha256": "8eef9a5a48519f1fba364bf316654c9ad9ff57e91aa20bee2c7491b2807eeb82"
+    },
+    {
+      "path": "parsers-1389-metrics.json.gz",
+      "sha256": "f774a45c01896c431963c6d4076ca25ea142ccfd3a78c6cb495a1eef924adf5e"
+    },
+    {
+      "path": "parsers-1389-samples.jsonl.gz",
+      "sha256": "d25698d85467b33597076855965751c17a9d62f46af65a055dadea426cfd24d1"
+    },
+    {
+      "path": "parsers-1389-reuse-summary.json.gz",
+      "sha256": "6c8073be7dcd2f481f6331d24ee243e421e8a298f7e8911179b2868ff1199afa"
+    },
+    {
+      "path": "parsers-1389-reuse-metrics.json.gz",
+      "sha256": "d46d6c0136b76aca975415c0920d36d9d79df504f088910de0932a09e6894fcd"
+    },
+    {
+      "path": "parsers-1389-reuse-samples.jsonl.gz",
+      "sha256": "71bdc99f1f9a93b86b4f916b30d549199bdfd5bcbacfa857b59d873928b982e0"
+    }
+  ],
+  "omitted_duplicate_log": {
+    "path": "pr3/linux-gates-retry/workspace.log",
+    "same_bytes_as": "pr3/linux-gates-retry/linux.log",
+    "sha256": "02a5ecf5b28382ec924693bf73004570514655cec1c020d8d0f31d8f9c6e8819"
+  },
+  "note": "JSON whitespace is compacted without changing values. Raw samples and tar members retain original bytes. Binaries and raw IPC are excluded. The first workspace failure and sole unchanged retry are both retained."
+}
