@@ -284,7 +284,8 @@ def measure(directories, output):
 
 
 def main():
-    assert __debug__, "Do not disable validation"
+    if not __debug__:
+        raise SystemExit("Run with Python validation enabled.")
     parser = argparse.ArgumentParser(description=__doc__)
     subs = parser.add_subparsers(dest="action", required=True)
     builder = subs.add_parser("build")
