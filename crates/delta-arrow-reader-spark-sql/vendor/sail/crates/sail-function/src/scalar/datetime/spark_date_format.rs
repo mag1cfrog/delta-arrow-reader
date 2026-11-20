@@ -258,17 +258,17 @@ fn null_string_array(len: usize) -> ColumnarValue {
     ])))
 }
 
-/// Parse a timestamp string to microseconds since epoch.
+/// Parse an ordinary timestamp directly and use the supplied parser for other forms.
 fn parse_timestamp_string<'a>(
     value: &'a str,
     timezone: &str,
-    parse: impl FnOnce(&'a str) -> SqlResult<TimestampValue<'a>>,
+    parse_fallback: impl FnOnce(&'a str) -> SqlResult<TimestampValue<'a>>,
 ) -> Result<Option<i64>> {
     let (datetime, parsed_timezone) =
         if let Some(datetime) = parse_ascii_whole_second_timestamp(value) {
             (datetime, "")
         } else {
-            match parse(value).and_then(TimestampValue::into_naive) {
+            match parse_fallback(value).and_then(TimestampValue::into_naive) {
                 Ok(parsed) => parsed,
                 Err(_) => return Ok(None),
             }

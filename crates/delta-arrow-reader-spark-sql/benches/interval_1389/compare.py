@@ -17,8 +17,15 @@ PARSERS = HERE.parent / "parsers"
 parsers = runpy.run_path(str(PARSERS / "run.py"))
 execution, strings = (parsers[name] for name in ("execution", "strings"))
 modes = parsers["modes"]
-compare = parsers["comparison_failure"]
+compare_results = parsers["comparison_failure"]
 expected_type = parsers["expected_type"]
+
+
+def comparison_failure(binary, left, right, output, deadline, schedule):
+    if left["arrow_types"] != right["arrow_types"]:
+        return f"executed Arrow types differ: {left['arrow_types']} versus {right['arrow_types']}"
+    _, failure = compare_results(binary, left, right, output, deadline, schedule)
+    return failure
 
 
 def validate_preflight(binaries, snapshot, output, schedule, deadline, queries):
@@ -41,8 +48,9 @@ def validate_preflight(binaries, snapshot, output, schedule, deadline, queries):
                     )
                 outputs[role, name, mode] = result
             left, right = [outputs[role, name, mode] for role in binaries]
-            _, failure = compare(binaries["candidate"], left, right,
-                                 output / "across-builds" / name / mode, deadline, schedule)
+            failure = comparison_failure(
+                binaries["candidate"], left, right, output / "across-builds" / name / mode, deadline, schedule,
+            )
             if failure:
                 excluded.setdefault(name, []).append({"mode": mode, "reason": failure, "pair": "across builds"})
         reference_mode = "native" if "native" in modes(name) else "spark-off"
@@ -50,8 +58,10 @@ def validate_preflight(binaries, snapshot, output, schedule, deadline, queries):
             for mode in ("spark-off", "spark-on"):
                 if mode == reference_mode:
                     continue
-                _, failure = compare(binary, outputs[role, name, reference_mode], outputs[role, name, mode],
-                                     output / "reference" / role / name / mode, deadline, schedule)
+                failure = comparison_failure(
+                    binary, outputs[role, name, reference_mode], outputs[role, name, mode],
+                    output / "reference" / role / name / mode, deadline, schedule,
+                )
                 if failure:
                     excluded.setdefault(name, []).append({"mode": mode, "reason": failure, "pair": role})
     if any(query["id"] == "interval_day_time" for query in queries):
