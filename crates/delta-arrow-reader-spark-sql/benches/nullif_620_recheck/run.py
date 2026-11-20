@@ -12,6 +12,9 @@ from statistics import median
 import subprocess
 import time
 
+if not __debug__:
+    raise RuntimeError("validation requires Python without -O")
+
 HERE = Path(__file__).resolve().parent
 WORKSPACE = HERE.parents[1]
 MANIFEST = json.loads((HERE / "manifest.json").read_text())
@@ -128,10 +131,12 @@ def measure(output, binaries, identities, receipt):
     selected = set(MANIFEST["native_gates"]) | set(MANIFEST["fallback_splits_ns"]) | set(MANIFEST["spark_speedup_anchors"])
     matrices = {"nullif":selected,"checked":cell_ids("checked")}
     schedules = []
-    for block in range(1, MANIFEST["blocks"] + 1):
+    for block in range(1, max(MANIFEST["blocks"].values()) + 1):
         order = ("staging", "candidate", "candidate", "staging") if block % 2 else (
             "candidate", "staging", "staging", "candidate")
         for family in FAMILIES if block % 2 else reversed(FAMILIES):
+            if block > MANIFEST["blocks"][family]:
+                continue
             for position, build in enumerate(order, 1):
                 schedules.append({"block":block,"family":family,"position":position,"build":build})
     write_json(output / "schedule.json", {"protocol_commit":source,"preflight_sha256":digest(receipt),
@@ -162,10 +167,14 @@ def sign_probability(deltas):
 
 def paired_metric(key, pairs):
     deltas = [median(b) - median(a) for a,b in pairs]
-    noise = max((abs(median(differences)) if differences else 0)
-                for index in range(2)
-                for differences in [[p[index][1]-p[index][0] for p in pairs if len(p[index])==2]])
+    repeat_noise = []
+    for build in range(2):
+        differences = [abs(pair[build][1] - pair[build][0])
+                       for pair in pairs if len(pair[build]) == 2]
+        repeat_noise.append(median(differences) if differences else None)
+    noise = max((v for v in repeat_noise if v is not None), default=0)
     return {"key":key,"pairs":len(pairs),"delta":median(deltas) if deltas else None,
+            "pair_deltas":deltas,"repeat_noise":repeat_noise,
             "staging":median([x for a,_ in pairs for x in a]) if pairs else None,
             "candidate":median([x for _,b in pairs for x in b]) if pairs else None,
             "noise":noise,"probability":sign_probability(deltas)}
@@ -174,7 +183,7 @@ def paired_metric(key, pairs):
 def summarize(output):
     schedule = json.loads((output / "schedule.json").read_text())["slots"]
     complete = json.loads((output / "complete.json").read_text())
-    assert complete["processes"] == len(schedule) == MANIFEST["blocks"] * 8
+    assert complete["processes"] == len(schedule) == 4 * sum(MANIFEST["blocks"].values())
     observed = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
     for slot in schedule:
         block, family, position, build = (slot[key] for key in ("block","family","position","build"))
@@ -188,22 +197,24 @@ def summarize(output):
             assert len(valid)==3
             observed[key][block][build].append(median(valid))
 
-    results, gates, regimes = [], [], []
+    results, controls, fallback_gates, regimes = [], [], [], []
     for key, blocks in sorted(observed.items()):
         cell, mode, phase = key
         pairs = [(b["staging"],b["candidate"]) for b in blocks.values()]
-        assert len(pairs)==MANIFEST["blocks"] and all(len(a)==len(b)==2 for a,b in pairs)
+        family = cell.split("-",1)[0]
+        assert len(pairs)==MANIFEST["blocks"][family] and all(len(a)==len(b)==2 for a,b in pairs)
         metric = paired_metric(key, pairs)
         results.append(metric)
         fallback = cell in MANIFEST["fallback_splits_ns"] and mode != "native" and phase == "execution_ns"
         if (cell.startswith("checked-") or
-            (mode == "native" and MANIFEST["native_gates"].get(cell)==phase) or fallback):
-            gates.append(metric)
+            (mode == "native" and MANIFEST["native_gates"].get(cell)==phase)):
+            controls.append(metric)
         if not fallback:
             continue
+        fallback_gates.append(metric)
         split = MANIFEST["fallback_splits_ns"][cell]
         occupancy = [([sum(v >= split for v in a)],[sum(v >= split for v in b)]) for a,b in pairs]
-        gates.append(paired_metric((*key,"upper-mode-count"),occupancy))
+        fallback_gates.append(paired_metric((*key,"upper-mode-count"),occupancy))
         for label, high in (("lower",False),("upper",True)):
             allocated = [([v for v in a if (v>=split)==high],[v for v in b if (v>=split)==high]) for a,b in pairs]
             matched = [p for p in allocated if all(p)]
@@ -212,20 +223,27 @@ def summarize(output):
             regime["counts"] = counts
             regime["steady_values"] = [median(values) if values else None
                                         for index in (0,1) for values in [[v for p in allocated for v in p[index]]]]
-            regime["sufficient"] = (counts == [0,0] or (min(counts)>=3 and len(matched)>=3))
+            usable = sum(delta != 0 for delta in regime["pair_deltas"])
+            regime["sufficient"] = (usable >= MANIFEST["minimum_matched_fallback_blocks"]
+                                     and all(value is not None for value in regime["repeat_noise"]))
             regimes.append(regime)
-            gates.append(regime)
+            fallback_gates.append(regime)
 
-    ordered = sorted(gates, key=lambda row:row["probability"])
-    blocked = False
-    for index, metric in enumerate(ordered):
-        blocked = blocked or metric["probability"] > .05/(len(ordered)-index)
-        metric["detected_slower"] = not blocked and metric["delta"] is not None and metric["delta"] > metric["noise"]
+    for group, gates in (("native_and_checked", controls), ("fallback", fallback_gates)):
+        ordered = sorted(gates, key=lambda row:row["probability"])
+        blocked = False
+        for index, metric in enumerate(ordered):
+            threshold = .025 / (len(ordered)-index)
+            blocked = blocked or metric["probability"] > threshold
+            metric.update(group=group, threshold=threshold,
+                          detected_slower=(not blocked and metric["delta"] is not None
+                                           and metric["delta"] > metric["noise"]))
+    gates = controls + fallback_gates
     regressions = [m["key"] for m in gates if m["detected_slower"]]
     unresolved = [m["key"] for m in regimes if not m["sufficient"]]
     write_json(output / "summary.json", {"all_metrics":results,"regimes":regimes,
                                         "detected_regressions":regressions,
-                                        "inconclusive_regimes":unresolved,"gate_count":len(gates)})
+                                        "inconclusive_regimes":unresolved,"gate_metrics":gates})
     print(json.dumps({"detected_regressions":regressions,"inconclusive_regimes":unresolved}),flush=True)
 
 
@@ -233,11 +251,14 @@ def check():
     assert len(cell_ids("nullif"))==72 and len(cell_ids("checked"))==36
     selected = set(MANIFEST["native_gates"]) | set(MANIFEST["fallback_splits_ns"]) | set(MANIFEST["spark_speedup_anchors"])
     assert len(selected)==7 and selected <= cell_ids("nullif")
-    assert MANIFEST["blocks"]==24
+    assert MANIFEST["blocks"]=={"nullif":48,"checked":24}
+    assert 2 ** (-MANIFEST["minimum_matched_fallback_blocks"]) <= .025/16
     assert sign_probability([1]*24)==2**-24
     assert sign_probability([0]*24)==1
     result = paired_metric(("test",), [([10,12],[21,23])] * 24)
     assert result["delta"]==11 and result["noise"]==2 and result["probability"]==2**-24
+    balanced = paired_metric(("test",), [([30,10],[20,40]),([10,30],[40,20])] * 12)
+    assert balanced["delta"]==10 and balanced["noise"]==20
 
 
 def main():
