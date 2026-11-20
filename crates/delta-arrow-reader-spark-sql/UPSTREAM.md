@@ -2477,3 +2477,37 @@ input and STRING date_format are unchanged. The
 [additional differential inputs](vendor/sail/crates/sail-function/tests/fixtures/timestamp-cast-1389-inputs.json)
 compare with the original normalized parser and frozen conversion bodies in
 direct and connected CAST/TRY_CAST cases across both ANSI modes.
+
+### Statement parser success path (#1390)
+
+`parse_statements` first runs the existing default lexer and statement grammar
+with Chumsky 0.12.0's `EmptyErr`. Only a complete, error-free result uses this
+route. Any rejection reruns the original `parse!` macro with `Rich`, including
+its lexer, byte spans and error conversion. `parse_one_statement` retains its
+cardinality checks and unsupported-command diagnostics. Read-only admission,
+metadata dispatch and the separate type, object-name and row-value parsers are
+unchanged. Both statement factories share the existing whitespace and semicolon
+sequence. No dependency or grammar-rule changes are included.
+
+The grammar creates errors to reject input or attach labels; it does not inspect
+their contents or recover from them. `EmptyErr` lets the locked Chumsky input
+implementation skip Rich alternative-error comparison and merging. The
+[additional inputs](vendor/sail/crates/sail-sql-analyzer/tests/fixtures/statement-parser-1390-inputs.rs)
+provide 100 controls for lexer/parser rejection, multi-statement and empty input,
+nested comments, quoted strings and identifiers, reserved ANSI keywords,
+metadata forms and unsupported commands. New unit tests compare the original
+Rich path with the public entry points on full AST Debug, error variants,
+Display, Debug and source chains, and read-only admission. A test-only counter
+verifies success and fallback routing. The existing #1379 planning manifest
+supplies the 309 statement texts for the separate replay. Existing tests and
+fixtures are unchanged. Validation results and timings are recorded separately.
+
+The diagnostic-free statement factory uses `recursive()` weak backedges and the
+existing scoped expression factory. Its strong ownership forms no cycle, so the
+scoped graph can be released after either success or rejection. Sharing the
+expression factory adds separate top-level Query, TableRelation and DataType
+constructor graphs; it copies no parsing rules. The Rich fallback retains the
+original `Recursive::declare` factory and its inherited strong-reference cycles.
+Parser construction still runs for each call, and rejected input pays for the
+failed diagnostic-free attempt before the Rich fallback. No construction savings
+or measured performance result is claimed here.
