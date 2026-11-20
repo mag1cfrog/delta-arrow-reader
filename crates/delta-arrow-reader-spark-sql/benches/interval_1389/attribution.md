@@ -21,10 +21,10 @@ The launcher runs the analyzer test in a disposable Git archive. Its timing
 hooks separate lexer and parser construction, lexing, parsing including stream
 handling, and AST-to-interval conversion. The conversion bucket subtracts any
 nested construction, lexing, and parsing it triggered, so quoted layers do
-not count twice. Count parser constructions too. The remaining time includes
-destruction of scoped parser graphs, measurement overhead and the loop. The
-probe ends at `IntervalValue`, before the Arrow batch builder and SQL engine.
-A before/after acceptance run will compare uninstrumented release binaries.
+not count twice. Count parser constructions too. The probe ends at
+`IntervalValue`, before the Arrow batch builder and SQL engine. A before/after
+acceptance run will compare uninstrumented release binaries.
 
-Measurement note: destruction of a scoped parser for a decoded quoted layer
-is included in Value. Other includes destruction of the top-level batch parser.
+Measurement note: Value includes destruction of scoped parsers for decoded
+quoted layers. Other includes the top-level batch parser drop, measurement
+overhead and the loop.
