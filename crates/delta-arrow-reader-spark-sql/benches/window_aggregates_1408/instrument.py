@@ -174,7 +174,7 @@ def cast_conversion(source):
     source = add_import(source, EXPR_IMPORT)
     return replace(source, "        value.cast_to(self.cast_type(), Some(&self.cast_options))\n",
                    """        let cast = || value.cast_to(self.cast_type(), Some(&self.cast_options));
-        if self.cast_type() == &DataType::Utf8 && value.data_type() == DataType::LargeUtf8 {
+        if self.cast_type() == &Utf8 && value.data_type() == LargeUtf8 {
             probe::time(Phase::Convert, batch.num_rows(), cast)
         } else {
             cast()
