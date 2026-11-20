@@ -3,6 +3,9 @@
 // ANSI configuration applies after parsing; reserved identifier branches are covered below.
 
 pub const VALID: &[&str] = &[
+    // These forms exercise valid grammar branches in Sail's default dialect.
+    "SELECT 'a' /*",
+    "SELECT 1 AS from",
     "SELECT id,customer_name FROM source WHERE id>=2 ORDER BY id",
     "WITH selected AS (SELECT id,customer_name FROM source WHERE id>=2) SELECT id,customer_name FROM selected ORDER BY id",
     "VALUES (1,'SELECT; DROP'),(2,NULL)",
@@ -89,7 +92,6 @@ pub const LEX_INVALID: &[&str] = &[
 pub const PARSER_INVALID: &[&str] = &[
     // Unterminated comments fall back to slash and asterisk tokens.
     "SELECT /* unterminated",
-    "SELECT 'a' /*",
     "SELECT",
     "SELECT 1 +",
     "SELECT (1",
@@ -98,7 +100,6 @@ pub const PARSER_INVALID: &[&str] = &[
     "SELECT 'x' ESCAPE '!'",
     "SELECT 1 FROM",
     "SELECT 1; SELECT",
-    "SELECT 1 AS from",
     "SELECT * FROM t AS join",
     "SELECT 1 UNION",
     "SELECT 1; SELECT 2 +; SELECT 3 +",
