@@ -116,8 +116,10 @@ def verify_build(path):
     return receipt
 
 
-def build(source, target, destination):
-    check()
+def build(source, target, destination, *, refresh_paths=None):
+    if refresh_paths is None:
+        check()
+        refresh_paths, _, _ = assemble.patch_sources()
     source, target = pathlib.Path(source).resolve(), pathlib.Path(target).resolve()
     assert not target.is_relative_to(source), "use an external owned target directory"
     destination = fresh(destination)
@@ -129,8 +131,7 @@ def build(source, target, destination):
         assert assemble.digest(workspace / name) == expected
     # Cargo can reuse path-dependency fingerprints across these two copies.
     # Refresh the files that differ so the next build cannot use the other mode.
-    changed, _, _ = assemble.patch_sources()
-    for name in changed:
+    for name in refresh_paths:
         (workspace / name).touch(exist_ok=True)
     before = tree_hash(source)
     assert before == assembly["tree_sha256"], "assembled source changed before build"
