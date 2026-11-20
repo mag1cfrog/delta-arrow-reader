@@ -27,7 +27,7 @@ spec.loader.exec_module(runner)
 
 MODES = ("spark-off", "spark-on")
 VARIANTS = ("plain", "phases")
-PHASES = ("document", "compiler_context", "compile", "evaluate", "output", "residual")
+PHASES = ("document", "queries_setup_drop", "compile", "evaluate", "output", "residual")
 
 
 def write(path, value):
@@ -93,8 +93,8 @@ def phase_samples(path, rows):
         if not line.startswith("xpath-phases "):
             continue
         _, batch_rows, wall, counters = line.split(" ", 3)
-        document, context, compile_ns, evaluate, output, documents, compiled = json.loads(counters)
-        spent = [document, context, compile_ns, evaluate, output]
+        document, queries_setup_drop, compile_ns, evaluate, output, documents, compiled = json.loads(counters)
+        spent = [document, queries_setup_drop, compile_ns, evaluate, output]
         residual = int(wall) - sum(spent)
         assert int(batch_rows) == rows and documents == compiled == rows - rows // 16 and residual >= 0, line
         phases = dict(zip(PHASES, [*(v / rows for v in spent), residual / rows]))

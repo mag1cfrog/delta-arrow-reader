@@ -28,8 +28,8 @@ including the paired projection-subtracted time. Do not replace a completed
 observation with a retry.
 
 The scratch phase clocks separate XML document construction and parsing,
-XPath compiler context construction and destruction, path wrapping and
-compilation, query execution (with xee's typed conversion), and output
+`Queries` builder creation and destruction, path wrapping and compilation
+(including construction of xee's static context), query execution (with xee's typed conversion), and output
 building. Output includes list node conversion, Arrow appends, and builder
 finalization. Report separate batch wall and the residual, which includes
 destructors and instrumentation. The phase runner prints one record per

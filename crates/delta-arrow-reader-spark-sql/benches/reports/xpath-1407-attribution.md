@@ -1,8 +1,9 @@
 # XPath baseline and phase costs (#1407)
 
 Per-row XPath compilation accounts for 86% to 90% of the sum
-of phase medians including the residual. The list function spends about 61 microseconds per input row
-compiling its path, and the typed functions spend about 39. Each original
+of phase medians including the residual. The list function spends about 61
+microseconds per input row compiling its path, and the typed functions
+spend about 39. Each original
 statement supplies one literal path. The next change can reuse its compiled
 query while still parsing and evaluating each row independently.
 
@@ -43,7 +44,7 @@ Evaluation includes xee's typed conversion. Output includes list-node
 materialization and Arrow builders. The residual includes destructors, loop
 overhead and the phase clocks.
 
-| Function | ANSI | XML parse/setup | Compiler context | Wrap/compile | Evaluate | Output | Residual | Instrumented batch wall |
+| Function | ANSI | XML parse/setup | Queries setup/drop | Wrap/compile | Evaluate | Output | Residual | Instrumented batch wall |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | `xpath` | off | 1,667 | 56 | 61,481 | 4,224 | 161 | 753 | 68,221 [67,614-70,090] |
 | `xpath` | on | 1,627 | 58 | 61,285 | 4,339 | 152 | 758 | 67,989 [67,984-68,497] |
@@ -67,9 +68,9 @@ overhead and the phase clocks.
 Batch wall is also normalized per input row. Batch medians and ranges
 come from the same phase records and discard the same warmup.
 
-Compiler context construction and destruction cost 46 to 58 ns per row
-and occur only when compiling. Reusing the compiled query addresses both
-costs. The remaining measured phases operate on the current row or its
+Creating and dropping the `Queries` builder takes 46 to 58 ns per row and
+occurs only when compiling. Building the static context is included in
+wrap/compile. Reusing the compiled query addresses both costs. The remaining measured phases operate on the current row or its
 output. This measurement identifies one optimization for the scope of #1407.
 
 ## Evidence
