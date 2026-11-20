@@ -18,3 +18,25 @@ differences are positive and the median difference exceeds its median
 absolute deviation. This excludes array construction and planning.
 A separate whole-query comparison will decide whether the change reaches
 native noise on the one-million-row fixture.
+
+## Complete array controls
+
+The small padded guard probe had two negative differences and does not
+identify the source of the full cost. Use the original UDF and Arrow cast
+in one release library test. Append `attribute.rs` in a disposable staging
+checkout. For the controlled row loop, copy staging's
+`SparkDate::string_to_date32` to `string_to_date32_without_shape_check`
+in the same `impl`. In that copy only, remove the canonical shape guard
+before the first `Date32Type::parse` call. The seven known-valid complete
+input dates guarantee that all calls use this branch. Include one-in-sixteen
+NULLs as in #1391. Compare original UDF, guarded row loop, the same loop with
+the guard removed, and the existing Arrow cast. Require exact Date32 values
+and NULLs before clocks. This diagnostic copy is never a product candidate.
+
+Use the same release workspace build settings and CPU limit as the other
+phase attribution tests. Allow one 60-second test execution with 4 GiB
+address space. Warm one batch per case, then seven rotations of 64 batches
+of 8,192 rows. Report median and MAD for each case and paired differences.
+Use the same direction and median-above-MAD rule per paired difference.
+This allows a distinction between date shape checks and row/array handling
+without relying on a difference between separate timing campaigns.
