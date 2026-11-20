@@ -56,6 +56,29 @@ where
     statement
 }
 
+fn statement_with_weak_backedges<'a, I, E>(
+    options: &'a ParserOptions,
+) -> impl Parser<'a, I, Statement, E> + Clone
+where
+    I: Input<'a, Token = Token<'a>> + ValueInput<'a>,
+    I::Span: Into<TokenSpan> + Clone,
+    E: ParserExtra<'a, I> + 'a,
+    E::Error: LabelError<'a, I, TokenLabel>,
+{
+    recursive(|statement| {
+        let data_type = recursive(|data_type| DataType::parser(data_type, options));
+        // A separate top-level query keeps every recursive backedge weak.
+        let expression = expression(options);
+        let query = recursive(|query| {
+            let table_relation = recursive(|table_relation| {
+                TableRelation::parser((query.clone(), expression.clone(), table_relation), options)
+            });
+            Query::parser((query, expression.clone(), table_relation), options)
+        });
+        Statement::parser((statement, query, expression, data_type), options)
+    })
+}
+
 fn data_type<'a, I, E>(options: &'a ParserOptions) -> impl Parser<'a, I, DataType, E> + Clone
 where
     I: Input<'a, Token = Token<'a>> + ValueInput<'a>,
@@ -85,7 +108,7 @@ where
     E: ParserExtra<'a, I> + 'a,
     E::Error: LabelError<'a, I, TokenLabel>,
 {
-    // This factory is interval-only; weak recursive backedges let each graph be dropped.
+    // Weak recursive backedges let interval and scoped statement graphs be dropped.
     recursive(|expression| {
         let data_type = recursive(|data_type| DataType::parser(data_type, options));
         let query = recursive(|query| {
@@ -119,6 +142,32 @@ where
     E: ParserExtra<'a, I> + 'a,
     E::Error: LabelError<'a, I, TokenLabel>,
 {
+    statement_list(statement(options), options)
+}
+
+pub fn create_scoped_statement_parser<'a, I, E>(
+    options: &'a ParserOptions,
+) -> impl Parser<'a, I, Vec<Statement>, E> + Clone
+where
+    I: Input<'a, Token = Token<'a>> + ValueInput<'a>,
+    I::Span: Into<TokenSpan> + Clone,
+    E: ParserExtra<'a, I> + 'a,
+    E::Error: LabelError<'a, I, TokenLabel>,
+{
+    statement_list(statement_with_weak_backedges(options), options)
+}
+
+fn statement_list<'a, I, E, P>(
+    statement: P,
+    options: &'a ParserOptions,
+) -> impl Parser<'a, I, Vec<Statement>, E> + Clone
+where
+    I: Input<'a, Token = Token<'a>> + ValueInput<'a>,
+    I::Span: Into<TokenSpan> + Clone,
+    E: ParserExtra<'a, I> + 'a,
+    E::Error: LabelError<'a, I, TokenLabel>,
+    P: Parser<'a, I, Statement, E> + Clone,
+{
     let semicolon = Semicolon::parser((), options);
     // We only need to consume whitespaces explicitly at the beginning.
     // All other whitespaces are consumed implicitly by the statement or semicolon parsers.
@@ -126,7 +175,7 @@ where
         .repeated()
         .ignore_then(semicolon.clone().repeated())
         .ignore_then(
-            statement(options)
+            statement
                 .then_ignore(semicolon.clone().ignored().or(end()))
                 .then_ignore(semicolon.repeated())
                 .repeated()

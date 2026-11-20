@@ -180,7 +180,7 @@ def assemble(destination, observed):
     assert not subprocess.check_output(["git", "status", "--porcelain", "--untracked-files=all"], cwd=REPO, text=True).strip(), "commit the reviewed protocol and harness before assembly"
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip()
     subprocess.run(["git", "merge-base", "--is-ancestor", BASELINE, commit], cwd=REPO, check=True)
-    changed, modules, anchors = patch_sources()
+    changed, modules, anchors = patch_sources() if observed else ({}, [], [])
     destination.mkdir(parents=True)
     with tempfile.TemporaryFile() as archive:
         subprocess.run(["git", "archive", "--format=tar", commit], cwd=REPO, stdout=archive, check=True)

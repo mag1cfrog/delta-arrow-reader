@@ -12,7 +12,7 @@ use sail_sql_parser::lexer::create_lexer;
 use sail_sql_parser::options::ParserOptions;
 use sail_sql_parser::parser::{
     create_data_type_parser, create_interval_literal_parser, create_object_name_parser,
-    create_parser,
+    create_parser, create_scoped_statement_parser,
 };
 use sail_sql_parser::token::{Punctuation, Token};
 
@@ -28,6 +28,7 @@ use crate::literal::interval::{
 #[cfg(test)]
 thread_local! {
     static INTERVAL_LITERAL_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static STATEMENT_RICH_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 fn map_parser_input<'a, C>(
@@ -65,7 +66,26 @@ pub fn parse_data_type(s: &str) -> SqlResult<DataType> {
 }
 
 pub fn parse_statements(s: &str) -> SqlResult<Vec<Statement>> {
+    if let Some(statements) = parse_statements_without_diagnostics(s) {
+        return Ok(statements);
+    }
+    #[cfg(test)]
+    STATEMENT_RICH_CALLS.with(|calls| calls.set(calls.get() + 1));
     parse!(s, create_parser)
+}
+
+fn parse_statements_without_diagnostics(s: &str) -> Option<Vec<Statement>> {
+    let options = ParserOptions::default();
+    let lexer = create_lexer::<_, chumsky::extra::Err<chumsky::error::EmptyErr>>(&options);
+    let tokens = lexer.parse(s).into_result().ok()?;
+    let tokens = tokens
+        .as_slice()
+        .map((s.len()..s.len()).into(), map_parser_input);
+    let parser = create_scoped_statement_parser::<_, chumsky::extra::Err<chumsky::error::EmptyErr>>(
+        &options,
+    );
+    // Only complete, error-free parses bypass the original Rich diagnostic path.
+    parser.parse(tokens).into_result().ok()
 }
 
 /// Parses a SQL string containing exactly one statement into an AST.
@@ -242,11 +262,128 @@ pub fn parse_time(s: &str) -> SqlResult<TimeValue> {
 
 #[cfg(test)]
 mod tests {
+    use std::error::Error;
+    use std::fmt::Debug;
+
+    use chumsky::Parser;
+    use chumsky::input::Input;
     use sail_sql_parser::ast::query::Query;
     use sail_sql_parser::ast::statement::Statement;
+    use sail_sql_parser::options::ParserOptions;
 
-    use crate::error::SqlResult;
-    use crate::parser::{parse_one_statement, parse_statements, parse_time, parse_timestamp};
+    use crate::error::{SqlError, SqlResult};
+    use crate::parser::{
+        STATEMENT_RICH_CALLS, create_lexer, create_parser, map_parser_input, parse_one_statement,
+        parse_statements, parse_time, parse_timestamp, unsupported_statement_kind,
+    };
+    use crate::statement::from_ast_read_only_statement;
+
+    mod inputs {
+        include!("../tests/fixtures/statement-parser-1390-inputs.rs");
+    }
+
+    // The pre-change public path, including the original lexer, spans and Rich error conversion.
+    fn original_statements(sql: &str) -> SqlResult<Vec<Statement>> {
+        parse!(sql, create_parser)
+    }
+
+    fn original_one_statement(
+        sql: &str,
+        statements: SqlResult<Vec<Statement>>,
+    ) -> SqlResult<Statement> {
+        let mut plan = statements.map_err(|error| {
+            unsupported_statement_kind(sql).map_or(error, |kind| SqlError::unsupported(kind))
+        })?;
+        match (plan.pop(), plan.is_empty()) {
+            (Some(statement), true) => Ok(statement),
+            _ => Err(SqlError::invalid("expected one statement")),
+        }
+    }
+
+    fn error_chain(error: &dyn Error) -> Vec<String> {
+        let mut chain = vec![error.to_string()];
+        let mut source = error.source();
+        while let Some(error) = source {
+            chain.push(error.to_string());
+            source = error.source();
+        }
+        chain
+    }
+
+    fn assert_result<T: Debug>(actual: &SqlResult<T>, expected: &SqlResult<T>, label: &str) {
+        // AST Debug compares every field, including source spans and identifier flags.
+        assert_eq!(format!("{actual:?}"), format!("{expected:?}"), "{label}");
+        if let (Err(actual), Err(expected)) = (actual, expected) {
+            assert_eq!(
+                std::mem::discriminant(actual),
+                std::mem::discriminant(expected),
+                "{label}"
+            );
+            assert_eq!(actual.to_string(), expected.to_string(), "{label}");
+            assert_eq!(error_chain(actual), error_chain(expected), "{label}");
+        }
+    }
+
+    fn assert_equivalent(label: &str, sql: &str, without_diagnostics: bool) {
+        let expected = original_statements(sql);
+        assert_eq!(
+            expected.is_ok(),
+            without_diagnostics,
+            "{label}: reference route"
+        );
+        STATEMENT_RICH_CALLS.with(|calls| calls.set(0));
+        let actual = parse_statements(sql);
+        STATEMENT_RICH_CALLS.with(|calls| {
+            assert_eq!(
+                calls.replace(0),
+                usize::from(!without_diagnostics),
+                "{label}: statements route"
+            )
+        });
+        assert_result(&actual, &expected, label);
+
+        let actual = parse_one_statement(sql);
+        STATEMENT_RICH_CALLS.with(|calls| {
+            assert_eq!(
+                calls.replace(0),
+                usize::from(!without_diagnostics),
+                "{label}: one-statement route"
+            )
+        });
+        let expected = original_one_statement(sql, expected);
+        assert_result(&actual, &expected, label);
+        // Equal ASTs must also retain read-only admission and its exact errors.
+        let actual = actual
+            .and_then(from_ast_read_only_statement)
+            .map(|statement| std::mem::discriminant(&statement));
+        let expected = expected
+            .and_then(from_ast_read_only_statement)
+            .map(|statement| std::mem::discriminant(&statement));
+        assert_result(&actual, &expected, label);
+    }
+
+    #[test]
+    fn statement_scoped_and_rich_paths_preserve_boundaries() {
+        for &sql in inputs::VALID.iter().chain(inputs::METADATA) {
+            assert_equivalent(sql, sql, true);
+        }
+        let options = ParserOptions::default();
+        let lexer = create_lexer::<_, chumsky::extra::Err<chumsky::error::Rich<_, _>>>(&options);
+        for &sql in inputs::LEX_INVALID {
+            assert!(
+                lexer.parse(sql).into_result().is_err(),
+                "{sql:?}: lexer route"
+            );
+            assert_equivalent(sql, sql, false);
+        }
+        for &sql in inputs::PARSER_INVALID.iter().chain(inputs::UNSUPPORTED) {
+            assert!(
+                lexer.parse(sql).into_result().is_ok(),
+                "{sql:?}: parser route"
+            );
+            assert_equivalent(sql, sql, false);
+        }
+    }
 
     #[test]
     fn decoded_interval_literals_retain_only_their_scoped_parser_calls() -> SqlResult<()> {

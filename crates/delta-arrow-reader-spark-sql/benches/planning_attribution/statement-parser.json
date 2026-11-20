@@ -1,0 +1,9 @@
+{
+  "base": "42cbac183328fceb13ad175d02477fd8758d85c7",
+  "baseline_walls": "planning-1390-walls.csv",
+  "changed_sources": [
+    "vendor/sail/crates/sail-sql-analyzer/src/parser.rs",
+    "vendor/sail/crates/sail-sql-parser/src/parser.rs"
+  ],
+  "baseline_noise": "planning-1390-noise.csv"
+}
