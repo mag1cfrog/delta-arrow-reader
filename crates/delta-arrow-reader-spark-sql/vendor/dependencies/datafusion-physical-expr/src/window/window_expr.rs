@@ -22,6 +22,7 @@ use std::ops::Range;
 use std::sync::Arc;
 
 use crate::PhysicalExpr;
+use crate::expressions::Column;
 
 use arrow::array::BooleanArray;
 use arrow::array::{Array, ArrayRef, make_comparator, new_empty_array};
@@ -393,6 +394,17 @@ pub trait AggregateWindowExpr: WindowExpr {
                     }
                 };
                 if !safe {
+                    if self
+                        .get_window_frame()
+                        .has_nonzero_spark_integer_range_offset()
+                        && !self.get_window_frame().has_null_offset()
+                        && matches!(order_bys.as_slice(), [column] if column.data_type().is_signed_integer())
+                        && matches!(self.order_by(), [order] if order.expr.downcast_ref::<Column>().is_some())
+                    {
+                        window_frame_ctx.record_pending_range_search(
+                            last_range, &cur_range, length, idx,
+                        );
+                    }
                     break;
                 }
             }
