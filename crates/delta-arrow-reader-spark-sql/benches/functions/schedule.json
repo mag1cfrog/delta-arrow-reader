@@ -1,0 +1,30 @@
+{
+  "cpus": [2, 3, 4, 5],
+  "input_rows": 1000000,
+  "batch_rows": 8192,
+  "target_partitions": 1,
+  "runtime_workers": 1,
+  "warmups_per_case": 1,
+  "samples_per_case": 3,
+  "replicas": 3,
+  "shard_size": 16,
+  "case_timeout_seconds": 120,
+  "process_timeout_seconds": 2000,
+  "preflight_process_timeout_seconds": 300,
+  "preflight_timeout_seconds": 21600,
+  "schedule_timeout_seconds": 43200,
+  "address_space_bytes": 12884901888,
+  "pool_bytes": 2147483648,
+  "preflight_order": ["native", "spark-off", "spark-on"],
+  "main_orders": [
+    ["native", "spark-off", "spark-on"],
+    ["spark-off", "spark-on", "native"],
+    ["spark-on", "native", "spark-off"]
+  ],
+  "noise_orders": [["a", "b"], ["b", "a"], ["a", "b"]],
+  "case_order": "eligible manifest IDs sorted; rotate left by replica*floor(count/3); shard into at most 16; reverse each second shard",
+  "noise_control": "native function plus projection for paired; native projection versus itself for Spark-only",
+  "noise_floor": "max(abs(median(A)-median(B)),(max(A)-min(A))/2,(max(B)-min(B))/2), all signed projection-subtracted ns/input-row",
+  "ratio": "Spark increment/native increment only when native increment is positive and above its A/A floor",
+  "oversize_policy": "No row downsampling or changed shapes. Planning/execution errors, 300-second preflight timeout or memory cap are explicit exclusions. Five-row sliding frames bound window list/string outputs. A timed case failure leaves that function untimable and continues the remaining original schedule without reruns."
+}

@@ -163,6 +163,10 @@ harness = false
 name = "execution"
 harness = false
 
+[[bench]]
+name = "functions"
+harness = false
+
 [patch.crates-io]
 arrow-arith = { path = "vendor/dependencies/arrow-arith" }
 arrow-array = { path = "vendor/dependencies/arrow-array" }
