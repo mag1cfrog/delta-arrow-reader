@@ -170,7 +170,8 @@ Linux address space is capped at 12 GiB per process, including encoded result
 memory outside DataFusion's pool. No shape is downsampled or replaced to fit a
 bound. A case failure, missing arm or missing replica makes the entire function
 untimable. Retain its raw partial evidence and continue the remaining original
-schedule without rerunning completed samples. Hard process failures identify
+schedule without rerunning completed samples. Each retained iteration flushes
+a sample outside its clocks, so it survives a later case or process failure. Hard process failures identify
 missing shard cells. An overall deadline leaves the unrun cells explicitly
 excluded. These exclusions have no accepted timing fields.
 

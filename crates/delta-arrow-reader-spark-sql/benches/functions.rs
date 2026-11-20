@@ -1,6 +1,8 @@
 //! Frozen, execution-only function measurements for issue #1391.
 
-use std::{collections::BTreeSet, error::Error, fs, path::Path, sync::Arc, time::Instant};
+use std::{
+    collections::BTreeSet, error::Error, fs, io::Write, path::Path, sync::Arc, time::Instant,
+};
 
 use arrow::{
     array::{
@@ -804,7 +806,13 @@ async fn measure(context: &SessionContext, case: &Case, configuration: &str) -> 
             return Err("timed projection input rows changed".into());
         }
         if iteration > 0 {
-            samples.push(json!({"iteration":iteration,"execution_ns":elapsed,"projection_ns":projection,"increment_ns":elapsed as i128 - projection as i128,"output_rows":rows,"input_rows":ROWS}));
+            let sample = json!({"iteration":iteration,"execution_ns":elapsed,"projection_ns":projection,"increment_ns":elapsed as i128 - projection as i128,"output_rows":rows,"input_rows":ROWS});
+            let event = json!({"kind":"retained_sample","id":case.id,"configuration":configuration,"types":executed_types,"sample":sample});
+            let mut stdout = std::io::stdout().lock();
+            serde_json::to_writer(&mut stdout, &event)?;
+            writeln!(stdout)?;
+            stdout.flush()?;
+            samples.push(sample);
         }
     }
     let status = fs::read_to_string("/proc/self/status")?;

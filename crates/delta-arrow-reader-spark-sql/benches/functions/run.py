@@ -91,6 +91,30 @@ def invoke(binary, args, work, schedule, deadline, preflight=False):
     return {"status":"ok","records":records,"command":command}
 
 
+def assemble_cases(result, ids, configuration):
+    events = collections.defaultdict(list)
+    completed = {}
+    for record in result.get("records",[]):
+        if record.get("kind") == "retained_sample":
+            events[record["id"]].append(record)
+        elif "id" in record:
+            completed[record["id"]] = record
+    rows = []
+    for id in ids:
+        row = dict(completed.get(id,{"id":id,"configuration":configuration,"status":result["status"] if result["status"] != "ok" else "missing_case","error":result.get("error") or "case did not finish in the original bounded process"}))
+        streamed = events[id]
+        samples = [event["sample"] for event in streamed]
+        event_types = streamed[0]["types"] if streamed else row.get("types")
+        consistent = all(event["configuration"] == configuration and event["types"] == event_types for event in streamed)
+        if row.get("status") == "ok" and (row.get("configuration") != configuration or not consistent or [sample.get("iteration") for sample in samples] != [1,2,3] or row.get("samples") != samples or row.get("types") != event_types):
+            row.update(status="timed_validation_failure",error="retained sample events disagree with the completed case")
+        row["samples"] = samples
+        if streamed:
+            row["types"] = event_types
+        rows.append(row)
+    return rows
+
+
 def eligibility(case, receipt):
     if case["exclusion"]:
         return {"class":case["class"],"status":"excluded","reason":case["exclusion"]["kind"]+": "+case["exclusion"]["reason"]}
@@ -131,6 +155,21 @@ def self_check():
         try: parse_lines(invalid,interrupted)
         except json.JSONDecodeError: pass
         else: raise AssertionError("invalid complete/interior JSONL record accepted")
+
+    sample = {"iteration":1,"execution_ns":100,"projection_ns":25,"increment_ns":75,"input_rows":1_000_000,"output_rows":1_000_000}
+    event = {"kind":"retained_sample","id":"case","configuration":"spark-off","types":["Int64"],"sample":sample}
+    late = {"id":"case","configuration":"spark-off","status":"execution_error","error":"later iteration failed"}
+    failed = assemble_cases({"status":"ok","records":[event,late]},["case"],"spark-off")[0]
+    assert failed["status"] == "execution_error" and failed["samples"] == [sample]
+    killed = parse_lines(json.dumps(event)+'\n{"kind":"retained_sample",',True)
+    partial = assemble_cases({"status":"process_error","records":killed},["case"],"spark-off")[0]
+    assert partial["status"] == "process_error" and partial["samples"] == [sample]
+    events = [dict(event,sample=dict(sample,iteration=iteration)) for iteration in (1,2,3)]
+    complete = {"id":"case","configuration":"spark-off","status":"ok","types":["Int64"],"samples":[entry["sample"] for entry in events]}
+    assert assemble_cases({"status":"ok","records":events+[complete]},["case"],"spark-off") == [complete]
+    duplicate = assemble_cases({"status":"ok","records":events+[events[0],complete]},["case"],"spark-off")[0]
+    assert duplicate["status"] == "timed_validation_failure"
+    assert len(duplicate["samples"]) == 4
 
 
 def preflight(binary, destination, manifest, schedule, build_receipt):
@@ -214,12 +253,9 @@ def measure(binary, destination, frozen_commit, build_receipt, manifest, schedul
                     print(process_id,len(chosen),flush=True)
                     result = invoke(binary,["measure-set",MANIFEST,idfile,configuration],destination/process_id,schedule,deadline)
                     spawned_processes += result["status"] != "schedule_timeout"
-                    observed = {row["id"]:row for row in result.get("records",[]) if "id" in row}
-                    records = []
-                    for id in chosen:
-                        row = observed.get(id,{"id":id,"configuration":configuration,"status":result["status"] if result["status"] != "ok" else "missing_case","error":result.get("error","case did not finish in the original bounded process")})
+                    records = assemble_cases(result,chosen,configuration)
+                    for row in records:
                         row.update(process=process_id,series=series,replica=replica+1,arm=arm,shard=shard_number+1)
-                        records.append(row)
                         if row.get("status") != "ok":
                             continue
                         expected = selected[row["id"]]["preflight"]

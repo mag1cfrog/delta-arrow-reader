@@ -4335,19 +4335,15 @@
       "id": "scalar.datetime.convert_timezone",
       "aliases": [],
       "spark_sql": "SELECT id,convert_timezone('UTC','UTC',CAST(ts AS TIMESTAMP_NTZ)) AS value FROM bench",
-      "native_sql": null,
-      "native_unavailable": [
-        "convert_timezone"
-      ],
-      "native_rationale": "Native catalogue has no matching column implementation for the Spark datetime behavior; rejected native calls: convert_timezone. This is a source/registry classification, not a failed semantic comparison.",
+      "native_sql": "SELECT id,arrow_cast(ts,'Timestamp(Microsecond, None)') AS value FROM bench",
       "input_columns": [
         "id",
         "ts"
       ],
       "projection_sql": "SELECT id,ts FROM bench",
       "exclusion": null,
-      "class": "Spark only",
-      "class_evidence": "Native catalogue has no matching column implementation for the Spark datetime behavior; rejected native calls: convert_timezone. This is a source/registry classification, not a failed semantic comparison."
+      "class": "paired",
+      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
     },
     {
       "kind": "scalar",
@@ -4930,19 +4926,15 @@
       "id": "scalar.datetime.from_utc_timestamp",
       "aliases": [],
       "spark_sql": "SELECT id,from_utc_timestamp(ts,'UTC') AS value FROM bench",
-      "native_sql": null,
-      "native_unavailable": [
-        "from_utc_timestamp"
-      ],
-      "native_rationale": "Native catalogue has no matching column implementation for the Spark datetime behavior; rejected native calls: from_utc_timestamp. This is a source/registry classification, not a failed semantic comparison.",
+      "native_sql": "SELECT id,ts AS value FROM bench",
       "input_columns": [
         "id",
         "ts"
       ],
       "projection_sql": "SELECT id,ts FROM bench",
       "exclusion": null,
-      "class": "Spark only",
-      "class_evidence": "Native catalogue has no matching column implementation for the Spark datetime behavior; rejected native calls: from_utc_timestamp. This is a source/registry classification, not a failed semantic comparison."
+      "class": "paired",
+      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
     },
     {
       "kind": "scalar",
@@ -6045,19 +6037,15 @@
       "id": "scalar.datetime.to_utc_timestamp",
       "aliases": [],
       "spark_sql": "SELECT id,to_utc_timestamp(ts,'UTC') AS value FROM bench",
-      "native_sql": null,
-      "native_unavailable": [
-        "to_utc_timestamp"
-      ],
-      "native_rationale": "Native catalogue has no matching column implementation for the Spark datetime behavior; rejected native calls: to_utc_timestamp. This is a source/registry classification, not a failed semantic comparison.",
+      "native_sql": "SELECT id,ts AS value FROM bench",
       "input_columns": [
         "id",
         "ts"
       ],
       "projection_sql": "SELECT id,ts FROM bench",
       "exclusion": null,
-      "class": "Spark only",
-      "class_evidence": "Native catalogue has no matching column implementation for the Spark datetime behavior; rejected native calls: to_utc_timestamp. This is a source/registry classification, not a failed semantic comparison."
+      "class": "paired",
+      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
     },
     {
       "kind": "scalar",
@@ -6248,20 +6236,17 @@
       ],
       "id": "scalar.datetime.try_to_time",
       "aliases": [],
+      "native_type_alignment": "Time64(Microsecond)",
       "spark_sql": "SELECT id,try_to_time(time_s) AS value FROM bench",
-      "native_sql": null,
-      "native_unavailable": [
-        "try_to_time"
-      ],
-      "native_rationale": "Native catalogue has no matching column implementation for the Spark datetime behavior; rejected native calls: try_to_time. This is a source/registry classification, not a failed semantic comparison.",
+      "native_sql": "SELECT id,arrow_cast(to_time(time_s),'Time64(Microsecond)') AS value FROM bench",
       "input_columns": [
         "id",
         "time_s"
       ],
       "projection_sql": "SELECT id,time_s FROM bench",
       "exclusion": null,
-      "class": "Spark only",
-      "class_evidence": "Native catalogue has no matching column implementation for the Spark datetime behavior; rejected native calls: try_to_time. This is a source/registry classification, not a failed semantic comparison."
+      "class": "paired",
+      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
     },
     {
       "kind": "scalar",
@@ -12592,19 +12577,15 @@
       "id": "scalar.string.regexp_substr",
       "aliases": [],
       "spark_sql": "SELECT id,regexp_substr(s,'[0-9]+') AS value FROM bench",
-      "native_sql": null,
-      "native_unavailable": [
-        "regexp_substr"
-      ],
-      "native_rationale": "Native catalogue has no matching column implementation for the Spark string behavior; rejected native calls: regexp_substr. This is a source/registry classification, not a failed semantic comparison.",
+      "native_sql": "SELECT id,array_element(regexp_match(s,'([0-9]+)'),1) AS value FROM bench",
       "input_columns": [
         "id",
         "s"
       ],
       "projection_sql": "SELECT id,s FROM bench",
       "exclusion": null,
-      "class": "Spark only",
-      "class_evidence": "Native catalogue has no matching column implementation for the Spark string behavior; rejected native calls: regexp_substr. This is a source/registry classification, not a failed semantic comparison."
+      "class": "paired",
+      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
     },
     {
       "kind": "scalar",
@@ -13003,19 +12984,15 @@
       "id": "scalar.string.to_binary",
       "aliases": [],
       "spark_sql": "SELECT id,to_binary(hex_s,'hex') AS value FROM bench",
-      "native_sql": null,
-      "native_unavailable": [
-        "to_binary"
-      ],
-      "native_rationale": "Native catalogue has no matching column implementation for the Spark string behavior; rejected native calls: to_binary. This is a source/registry classification, not a failed semantic comparison.",
+      "native_sql": "SELECT id,decode(hex_s,'hex') AS value FROM bench",
       "input_columns": [
         "id",
         "hex_s"
       ],
       "projection_sql": "SELECT id,hex_s FROM bench",
       "exclusion": null,
-      "class": "Spark only",
-      "class_evidence": "Native catalogue has no matching column implementation for the Spark string behavior; rejected native calls: to_binary. This is a source/registry classification, not a failed semantic comparison."
+      "class": "paired",
+      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
     },
     {
       "kind": "scalar",
@@ -13182,19 +13159,15 @@
       "id": "scalar.string.try_to_binary",
       "aliases": [],
       "spark_sql": "SELECT id,try_to_binary(hex_s,'hex') AS value FROM bench",
-      "native_sql": null,
-      "native_unavailable": [
-        "try_to_binary"
-      ],
-      "native_rationale": "Native catalogue has no matching column implementation for the Spark string behavior; rejected native calls: try_to_binary. This is a source/registry classification, not a failed semantic comparison.",
+      "native_sql": "SELECT id,decode(hex_s,'hex') AS value FROM bench",
       "input_columns": [
         "id",
         "hex_s"
       ],
       "projection_sql": "SELECT id,hex_s FROM bench",
       "exclusion": null,
-      "class": "Spark only",
-      "class_evidence": "Native catalogue has no matching column implementation for the Spark string behavior; rejected native calls: try_to_binary. This is a source/registry classification, not a failed semantic comparison."
+      "class": "paired",
+      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
     },
     {
       "kind": "scalar",

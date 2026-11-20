@@ -164,7 +164,7 @@ NATIVE_EXPR = {
     "negative":"-i", "positive":"+i", "nvl2":"CASE WHEN i IS NOT NULL THEN i ELSE CAST(p AS BIGINT) END",
     "nullifzero":"nullif(i,0)", "zeroifnull":"coalesce(i,0)", "nanvl":"CASE WHEN isnan(d) THEN d+1.0 ELSE d END",
     "if":"CASE WHEN flag THEN i ELSE CAST(p AS BIGINT) END", "equal_null":"i IS NOT DISTINCT FROM CAST(p AS BIGINT)",
-    "map_contains_key":"array_has(map_keys(m),'a')", "sha2":"sha256(s)", "base64":"encode(b,'base64')", "unbase64":"decode(CAST(b AS VARCHAR),'base64')",
+    "map_contains_key":"array_has(map_keys(m),'a')", "base64":"encode(b,'base64')", "unbase64":"decode(CAST(b AS VARCHAR),'base64')",
     "to_date":"CAST(date_s AS DATE)", "try_to_date":"TRY_CAST(date_s AS DATE)", "to_timestamp":"CAST(ts_s AS TIMESTAMP)", "to_timestamp_ltz":"CAST(ts_s AS TIMESTAMP)", "to_timestamp_ntz":"CAST(ts_s AS TIMESTAMP)", "try_to_timestamp":"TRY_CAST(ts_s AS TIMESTAMP)",
     "date_from_unix_date":"CAST(p AS DATE)", "unix_date":"CAST(dt AS INT)", "array_repeat":"array_repeat(i,CAST(3 AS BIGINT))",
     "sort_array":"array_sort(arr,'ASC','NULLS FIRST')", "array_sort":"array_sort(arr,'ASC','NULLS LAST')",
@@ -205,9 +205,12 @@ NATIVE_EXPR.update({
     "hex":"upper(to_hex(i))", "unhex":"decode(hex_s,'hex')", "mod":"i%CAST(p AS BIGINT)", "pmod":"((i%CAST(p AS BIGINT))+CAST(p AS BIGINT))%CAST(p AS BIGINT)",
     "div":"CAST(CAST(i AS DOUBLE)/CAST(p AS DOUBLE) AS BIGINT)", "expm1":"exp(d)-1.0", "log1p":"ln(d+1.0)", "sign":"CAST(signum(i) AS DOUBLE)",
     "space":"repeat(' ',p)", "array_repeat":"array_repeat(i,CAST(3 AS BIGINT))", "slice":"array_slice(arr,1,2)", "sequence":"range(p,p+3)",
-    "bitwise_not":"~i", "shiftrightunsigned":"((i & 9223372036854775807) >> 1) + CASE WHEN i < 0 THEN 4611686018427387904 ELSE 0 END",
+    "shiftrightunsigned":"((i & 9223372036854775807) >> 1) + CASE WHEN i < 0 THEN 4611686018427387904 ELSE 0 END",
     "bitmap_bit_position":"CASE WHEN i>0 THEN (i-1)%32768 ELSE (-i)%32768 END", "bitmap_bucket_number":"CASE WHEN i>0 THEN 1+(i-1)/32768 ELSE i/32768 END",
     "typeof":"'bigint'", "array_from_arrays":"map(make_array(s,s2),make_array(i,CAST(p AS BIGINT)))",
+    "convert_timezone":"arrow_cast(ts,'Timestamp(Microsecond, None)')", "from_utc_timestamp":"ts", "to_utc_timestamp":"ts",
+    "to_binary":"decode(hex_s,'hex')", "try_to_binary":"decode(hex_s,'hex')", "try_to_time":"to_time(time_s)",
+    "regexp_substr":"array_element(regexp_match(s,'([0-9]+)'),1)",
     "reverse":"array_reverse(arr)", "deep_size":"cardinality(arr)", "bitwise_not":"-1-i",
     "decode":"arrow_cast(b,'Utf8')", "encode":"arrow_cast(s,'Binary')",
     "position":"strpos(s,s2)", "locate":"strpos(s,s2)",
@@ -223,7 +226,7 @@ NATIVE_TYPES = {
 
     "sequence":"List(non-null Int32)",
     "listagg":"Utf8", "string_agg":"Utf8", "substr":"Utf8", "substring":"Utf8", "substring_index":"Utf8View",
-    "to_time":"Time64(Microsecond)", "timestamp_micros":'Timestamp(Microsecond, Some("UTC"))', "timestamp_millis":'Timestamp(Microsecond, Some("UTC"))', "timestamp_seconds":'Timestamp(Microsecond, Some("UTC"))',
+    "to_time":"Time64(Microsecond)", "try_to_time":"Time64(Microsecond)", "timestamp_micros":'Timestamp(Microsecond, Some("UTC"))', "timestamp_millis":'Timestamp(Microsecond, Some("UTC"))', "timestamp_seconds":'Timestamp(Microsecond, Some("UTC"))',
     "to_timestamp":'Timestamp(Microsecond, Some("UTC"))', "to_timestamp_ltz":'Timestamp(Microsecond, Some("UTC"))', "to_timestamp_ntz":"Timestamp(Microsecond, None)", "try_to_timestamp":'Timestamp(Microsecond, Some("UTC"))',
 }
 
@@ -391,7 +394,7 @@ def build():
                 sql = re.sub(r"'(?:''|[^'])*'", "''", row["native_sql"])
                 calls = set(re.findall(r"\b([a-zA-Z_]\w*)\s*\(", sql)) - {"CAST","TRY_CAST","OVER","FILTER","WHERE","GROUP","SETS","IN","AS","DECIMAL","ARRAY","GROUPING","AND","OR","THEN","ELSE","extract"}
                 unavailable = sorted(calls - native_names - {"unnest"})
-                if unavailable or name in ("format_number","format_string","printf","to_number","try_to_number","to_char","to_varchar","to_binary","try_to_binary","hash","xxhash64","shuffle"):
+                if unavailable or name in ("format_number","format_string","printf","to_number","try_to_number","to_char","to_varchar","hash","xxhash64","shuffle"):
                     row["native_sql"] = None
                     row["native_unavailable"] = unavailable
                     row["native_rationale"] = "Native catalogue has no matching column implementation for the Spark " + row["category"] + " behavior; rejected native calls: " + (", ".join(unavailable) or "same spelling has different formatting/encoding/random/typed-hash semantics") + ". This is a source/registry classification, not a failed semantic comparison."
