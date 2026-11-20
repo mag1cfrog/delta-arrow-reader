@@ -2519,6 +2519,14 @@ offsets, leap seconds and invalid inputs. The frozen DATE_FORMAT differential
 tests compare UTC and DST-zone output on supported string layouts and SQL
 inputs.
 
+### Ten-byte STRING DATE shape check (#1389, second round)
+
+The ten-byte DATE path matches the two hyphens at their fixed positions,
+then checks the eight digits. It recognizes the same complete ASCII
+`YYYY-MM-DD` shape as the indexed validation loop. Arrow still validates
+calendar fields. The differential test checks every possible byte at each
+position, and the DATE conversion tests cover original values and errors.
+
 ### Ordinary STRING timestamp casts (#1389)
 
 SparkTimestamp LTZ/NTZ uses Chrono calendar and clock validation directly for

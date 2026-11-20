@@ -35,11 +35,7 @@ impl SparkDate {
     fn string_to_date32(value: &str, is_try: bool) -> Result<Option<i32>> {
         // Match a complete numeric date before invoking Arrow's broader parser.
         let bytes = value.as_bytes();
-        if bytes.len() == 10
-            && bytes.iter().enumerate().all(|(index, byte)| match index {
-                4 | 7 => *byte == b'-',
-                _ => byte.is_ascii_digit(),
-            })
+        if has_padded_date_shape(bytes)
             && let Some(date) = Date32Type::parse(value)
         {
             return Ok(Some(date));
@@ -75,6 +71,36 @@ impl SparkDate {
             Err(e) => Err(e),
         }
     }
+}
+
+fn has_padded_date_shape(bytes: &[u8]) -> bool {
+    let [
+        year_thousands,
+        year_hundreds,
+        year_tens,
+        year_ones,
+        b'-',
+        month_tens,
+        month_ones,
+        b'-',
+        day_tens,
+        day_ones,
+    ] = bytes
+    else {
+        return false;
+    };
+    [
+        year_thousands,
+        year_hundreds,
+        year_tens,
+        year_ones,
+        month_tens,
+        month_ones,
+        day_tens,
+        day_ones,
+    ]
+    .into_iter()
+    .all(u8::is_ascii_digit)
 }
 
 fn has_unpadded_date_shape(bytes: &[u8]) -> bool {
@@ -315,6 +341,27 @@ fn get_or_parse_format<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn padded_date_shape_matches_the_original_byte_check() {
+        let ordinary = *b"2024-02-29";
+        for index in 0..ordinary.len() {
+            for byte in 0..=u8::MAX {
+                let mut input = ordinary;
+                input[index] = byte;
+                let expected = input
+                    .iter()
+                    .enumerate()
+                    .all(|(position, byte)| match position {
+                        4 | 7 => *byte == b'-',
+                        _ => byte.is_ascii_digit(),
+                    });
+                assert_eq!(has_padded_date_shape(&input), expected, "{input:?}");
+            }
+            assert!(!has_padded_date_shape(&ordinary[..index]));
+        }
+        assert!(!has_padded_date_shape(b"2024-02-29T"));
+    }
 
     #[test]
     fn unpadded_date_route_matches_the_original_grammar() -> Result<()> {
