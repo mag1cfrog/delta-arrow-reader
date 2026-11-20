@@ -174,7 +174,7 @@ fn inspect(plan: &Arc<dyn ExecutionPlan>, windows: &mut Vec<(String, Vec<String>
         assert_eq!(expression.order_by().len(), 1);
         let order = &expression.order_by()[0];
         assert!(
-            order.expr.as_any().is::<Column>(),
+            order.expr.downcast_ref::<Column>().is_some(),
             "ORDER expression must remain a Column"
         );
         assert_eq!(
