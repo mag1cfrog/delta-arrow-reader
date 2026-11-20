@@ -1,0 +1,191 @@
+{
+  "all_78_process_stderr_empty": true,
+  "baseline": "9fa5b4cd98fecc7a2e95debc67128c394b25fb9a",
+  "canonical_observed_public_snapshots_equal": true,
+  "canonical_reference_records": 678,
+  "empty_stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "exact_build_receipts": {
+    "canonical": {
+      "path": "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1390/build-canonical-cache-corrected/receipt.json",
+      "sha256": "491e7eda215ae79711d93beb721732c7a8fe583677431ff3e5dfbbc758538022"
+    },
+    "observed": {
+      "path": "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1390/build-observed-cache-corrected/receipt.json",
+      "sha256": "5de769613279cb0b4ab02d6f3bc13faf2361e09028f7a8cc5b5757ab30fdd47d"
+    }
+  },
+  "frozen_file_hashes_checked": 30,
+  "generated_csv_recomputed_identically": true,
+  "linux_gates": {
+    "intent": {
+      "source_commit": "d2dffd3793b20dc1dc5803c64b90f9a4418335be",
+      "cwd": "/home/hanbo/repo/delta-arrow-reader-costs-168/crates/delta-arrow-reader-spark-sql",
+      "commands": {
+        "format": [
+          "cargo",
+          "+1.96.0",
+          "fmt",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "clippy": [
+          "cargo",
+          "+1.96.0",
+          "clippy",
+          "--locked",
+          "-p",
+          "delta-arrow-reader-spark-sql",
+          "--all-targets",
+          "--no-deps",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "workspace": [
+          "cargo",
+          "+1.96.0",
+          "test",
+          "--locked",
+          "--workspace"
+        ]
+      },
+      "environment": {
+        "CARGO_TARGET_DIR": "/home/hanbo/.cache/delta-arrow-reader/costs-168-2026-11-19",
+        "CARGO_BUILD_JOBS": "2"
+      },
+      "historical_assets_verified": 86
+    },
+    "commands": {
+      "format": {
+        "exit_code": 0,
+        "elapsed_seconds": 27.44227563899767
+      },
+      "clippy": {
+        "exit_code": 0,
+        "elapsed_seconds": 0.7863436199986609
+      },
+      "workspace": {
+        "exit_code": 0,
+        "elapsed_seconds": 377.9924148620048
+      }
+    },
+    "named_outcomes": {
+      "platform": "linux",
+      "passed": 3182,
+      "failed": 0,
+      "ignored": 3,
+      "measured": 0,
+      "filtered_out": 0,
+      "summaries": 234,
+      "named_outcomes": 3185,
+      "prior_outcomes_unchanged": 3185,
+      "new_named_outcomes": [],
+      "ignored_tests": [
+        [
+          "binary:floating_extrema",
+          "floating_extrema_bounded_cost",
+          "ignored"
+        ],
+        [
+          "doc:sail_function",
+          "vendor/sail/crates/sail-function/src/aggregate/mod.rs - aggregate::interval_none (line 39)",
+          "ignored"
+        ],
+        [
+          "doc:sail_function",
+          "vendor/sail/crates/sail-function/src/aggregate/mod.rs - aggregate::match_string_type (line 14)",
+          "ignored"
+        ]
+      ]
+    },
+    "log_sha256": {
+      "format": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "clippy": "1aad4f0617f5f755f78b86e8cee81b556d3bf962f9571d958af92c1e45ff5800",
+      "workspace": "9481d9b6059986134497d507a920fed8d93cdc056ba46d5918362f4ee9436661"
+    },
+    "inventory_sha256": "9c3234839d9acae501fed091a859ce3b8dda20078ec8c56d9d7915484306b43c"
+  },
+  "local_only_build_logs": [
+    {
+      "bytes": 520790,
+      "path": "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1390/build-canonical/build.jsonl",
+      "sha256": "d110b11ee798e63338fcfd8f1360f3f5d95ee48d028ccc0d92ec6b13e2d0dc3c"
+    },
+    {
+      "bytes": 7627,
+      "path": "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1390/build-canonical/build.stderr",
+      "sha256": "fbca4351dc1ca0ecf20ca240abb1f4f77cdbc3fb98696a5c8a748ab807b91481"
+    },
+    {
+      "bytes": 521779,
+      "path": "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1390/build-canonical-lint-corrected/build.jsonl",
+      "sha256": "3ea41bd6a77941169df123dc50002b26c0e1a543094cf546f98f875bc3a6e8dc"
+    },
+    {
+      "bytes": 256,
+      "path": "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1390/build-canonical-lint-corrected/build.stderr",
+      "sha256": "5443bb30bab310b4ddf15fcf8d8495bacde9ae4085ab7c8ea379e68eb7c624b8"
+    },
+    {
+      "bytes": 520649,
+      "path": "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1390/build-observed/build.jsonl",
+      "sha256": "7822720234a00f210931fffd589d4d1a7e4552a9420f445856eeb7bfe6fefcf2"
+    },
+    {
+      "bytes": 2320,
+      "path": "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1390/build-observed/build.stderr",
+      "sha256": "aae9d6c0a2c1c0089b69e8ec93fda5d9cdb6d10a21c055280f0301977c7a4ccc"
+    },
+    {
+      "bytes": 521789,
+      "path": "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1390/build-canonical-cache-corrected/build.jsonl",
+      "sha256": "d0736d45164de756b0684ff0cdaaff5b056598f784e2d7f999f6b94046de41b7"
+    },
+    {
+      "bytes": 1728,
+      "path": "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1390/build-canonical-cache-corrected/build.stderr",
+      "sha256": "ccd0a6fe318e83bb7b087cb903172dca0efdfa4a59fbdb45517e02586de4740d"
+    },
+    {
+      "bytes": 521707,
+      "path": "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1390/build-observed-cache-corrected/build.jsonl",
+      "sha256": "fe6a1d3c2b26df50f43518e032cd2974ac7d2ce106cfe85d30dcb5a562dc4c00"
+    },
+    {
+      "bytes": 1720,
+      "path": "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1390/build-observed-cache-corrected/build.stderr",
+      "sha256": "1babd60f53a74f62da3afc8fde4d247caf6da29f014bdb34cd3268fbc7e8b7d4"
+    }
+  ],
+  "measured_iterations": 18900,
+  "measurement_processes": 70,
+  "no_trace_delta_data_bytes": true,
+  "ordinary_spark_configuration_cases": 558,
+  "paired_stress_configuration_cases": 120,
+  "preparation_failures": "Lint failure in first build and wrong-mode Cargo artifact reuse in an observed build were corrected before the single accepted schedule under the final protocol. Full logs remain local.",
+  "protocol_commit": "d2dffd3793b20dc1dc5803c64b90f9a4418335be",
+  "query_process_records": 2100,
+  "samples_per_query_process": 9,
+  "trace_pairs_byte_identical": {
+    "native-configured": {
+      "records": 30,
+      "sha256": "87e7f32a720ac3af106f329adac9747b19b3ebe6f8074e77a93b1f859b1e08fe"
+    },
+    "native-plain": {
+      "records": 30,
+      "sha256": "5818e119c178fae96bc4ec635b3a6cfd7a18afc7b53f9c2162f8317ad8b08045"
+    },
+    "spark-off": {
+      "records": 309,
+      "sha256": "9327af0ffd81e6d1e590dc1a7cb10820b51f4ee1cd34c00ee375fa4e4a919c4c"
+    },
+    "spark-on": {
+      "records": 309,
+      "sha256": "a96352d3c1384f3daeb6bfd69d23778b8b44e2311f3f303be1eacd3c2f61ff7b"
+    }
+  },
+  "trace_processes": 8,
+  "trace_records": 1356,
+  "warmups_per_query_process": 2
+}

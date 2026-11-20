@@ -1,0 +1,18 @@
+{
+  "optimize_projections": {
+    "file": "vendor/dependencies/datafusion-optimizer/src/optimize_projections/mod.rs",
+    "source_sha256": "79126ed977e2f1903904e9dfa5cf10cd440505b8313c493b54831e637935569b",
+    "symbol": "OptimizeProjections::rewrite"
+  },
+  "preserve_spark_expression_errors": {
+    "file": "vendor/sail/crates/sail-plan/src/expression_errors.rs",
+    "note": "The rule label is literal after an inline comment; automatic raw metadata mapping omitted it.",
+    "source_sha256": "45b4bb68bacc5f0480630e66433053f11d68b56faddf898175258c2c056299b4",
+    "symbol": "PrepareSparkExpressions::analyze"
+  },
+  "type_coercion": {
+    "file": "vendor/dependencies/datafusion-optimizer/src/analyzer/type_coercion.rs",
+    "source_sha256": "b23d1e53c5323efee0b746d8db9b65698962e1c3d4621a58105552a915f84e18",
+    "symbol": "TypeCoercion::analyze"
+  }
+}

@@ -1,0 +1,202 @@
+configuration,id,stage,median_ms,native_phase_ms,stage_noise_ms,source
+native-configured,paired/array_projection,logical.residual,0.049612,0.049021,0.000611,src/lib.rs::plan_query; residual includes framework/teardown and observer overhead
+native-configured,paired/correlated_scalar,logical.residual,0.114683,0.113341,0.000661,src/lib.rs::plan_query; residual includes framework/teardown and observer overhead
+native-configured,paired/projection,logical.residual,0.056184,0.049202,0.000532,src/lib.rs::plan_query; residual includes framework/teardown and observer overhead
+native-configured,stress/case_200,logical.residual,1.262505,1.252576,0.002704,src/lib.rs::plan_query; residual includes framework/teardown and observer overhead
+native-configured,stress/wide_400,logical.residual,1.687014,1.686412,0.004589,src/lib.rs::plan_query; residual includes framework/teardown and observer overhead
+native-plain,paired/projection,logical.residual,0.05378,0.049202,0.001442,src/lib.rs::plan_query; residual includes framework/teardown and observer overhead
+native-plain,stress/case_200,logical.residual,1.262745,1.252576,0.000692,src/lib.rs::plan_query; residual includes framework/teardown and observer overhead
+native-plain,stress/in_1000,logical.residual,0.758538,0.750704,0.01655,src/lib.rs::plan_query; residual includes framework/teardown and observer overhead
+native-plain,stress/wide_400,logical.residual,1.692324,1.686412,0.002025,src/lib.rs::plan_query; residual includes framework/teardown and observer overhead
+spark-off,paired/array_projection,logical.parsing,0.075441,0.049021,0.00076,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-off,paired/array_projection,physical.frame,0.214359,0.058067,0.003516,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-off,paired/array_projection,physical.optimizer,0.100747,0.058067,0.000301,vendor/dependencies/datafusion-optimizer/src/optimizer.rs::optimize
+spark-off,paired/correlated_scalar,logical.parsing,0.167542,0.113341,0.000281,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-off,paired/correlated_scalar,logical.parsing.parse,0.120133,0.113341,0.00026,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-off,paired/correlated_scalar,physical.frame,0.992814,0.552716,0.002374,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-off,paired/cte_chain,logical.parsing,0.26945,0.156651,0.001333,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-off,paired/cte_chain,logical.parsing.parse,0.208127,0.156651,0.000641,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-off,paired/cte_chain,physical.frame,0.798934,0.361822,0.003277,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-off,paired/delta_aggregate,logical.parsing,0.13998,0.111868,0.000932,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-off,paired/delta_aggregate,physical.frame,0.483969,0.320545,0.004188,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-off,paired/delta_filter,logical.parsing,0.137024,0.07023,0.001173,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-off,paired/delta_filter,logical.parsing.parse,0.102751,0.07023,0.0004,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-off,paired/delta_filter,physical.frame,0.479891,0.261195,0.001263,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-off,paired/delta_projection,logical.parsing,0.088575,0.057106,0.00042,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-off,paired/delta_projection,logical.parsing.parse,0.05941,0.057106,0.000401,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-off,paired/delta_projection,physical.frame,0.35511,0.13982,0.002193,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-off,paired/delta_projection,physical.optimizer,0.158214,0.13982,0.000521,vendor/dependencies/datafusion-optimizer/src/optimizer.rs::optimize
+spark-off,paired/distinct,logical.parsing,0.061915,0.049792,6e-05,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-off,paired/distinct,physical.frame,0.224717,0.112138,0.001162,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-off,paired/except,logical.parsing,0.117468,0.082403,0.000611,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-off,paired/except,logical.resolution,0.139078,0.082403,0.001092,sail-plan/src/resolver/plan.rs::resolve_named_plan
+spark-off,paired/except,physical.frame,0.432944,0.295429,0.000461,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-off,paired/exists,logical.parsing,0.145751,0.090538,0.000652,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-off,paired/exists,logical.parsing.parse,0.10239,0.090538,0.00034,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-off,paired/exists,physical.frame,0.542207,0.273548,0.002214,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-off,paired/filter,logical.parsing,0.133819,0.065301,0.000471,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-off,paired/filter,logical.parsing.parse,0.099074,0.065301,0.000491,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-off,paired/filter,physical.frame,0.27449,0.137244,0.002033,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-off,paired/global_aggregates,logical.parsing,0.204099,0.144759,0.000712,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-off,paired/global_aggregates,logical.parsing.parse,0.153395,0.144759,0.00034,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-off,paired/global_aggregates,physical.frame,0.477107,0.289397,0.000491,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-off,paired/grouped_aggregates,logical.parsing,0.234625,0.155269,0.001092,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-off,paired/grouped_aggregates,logical.parsing.parse,0.179634,0.155269,0.000311,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-off,paired/grouped_aggregates,physical.frame,0.50102,0.29612,0.002945,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-off,paired/having,logical.parsing,0.164595,0.110275,0.001644,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-off,paired/having,logical.parsing.parse,0.120965,0.110275,0.000881,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-off,paired/having,logical.resolution,0.11285,0.110275,0.001021,sail-plan/src/resolver/plan.rs::resolve_named_plan
+spark-off,paired/having,physical.frame,0.57606,0.2802,0.003076,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-off,paired/inner_join,logical.parsing,0.129651,0.0808,0.000561,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-off,paired/inner_join,logical.parsing.parse,0.089466,0.0808,0.00034,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-off,paired/inner_join,physical.frame,0.545384,0.300818,0.003006,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-off,paired/intersect,logical.parsing,0.11825,0.083375,0.000381,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-off,paired/intersect,logical.resolution,0.153014,0.083375,0.001182,sail-plan/src/resolver/plan.rs::resolve_named_plan
+spark-off,paired/intersect,physical.frame,0.440839,0.303354,0.001843,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-off,paired/left_join,logical.parsing,0.131224,0.08105,5e-05,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-off,paired/left_join,logical.parsing.parse,0.089547,0.08105,3.1e-05,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-off,paired/left_join,physical.frame,0.519626,0.284208,0.001343,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-off,paired/map_access,logical.parsing,0.091801,0.070772,0.000952,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-off,paired/map_access,physical.frame,0.304226,0.170747,0.003858,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-off,paired/null_filter,logical.parsing,0.10781,0.061024,0.002555,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-off,paired/null_filter,logical.parsing.parse,0.073988,0.061024,0.001813,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-off,paired/null_filter,physical.frame,0.259161,0.119121,0.001172,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-off,paired/null_filter,physical.optimizer,0.122207,0.119121,0.000852,vendor/dependencies/datafusion-optimizer/src/optimizer.rs::optimize
+spark-off,paired/ordered_limit,logical.parsing,0.116497,0.063949,0.000512,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-off,paired/ordered_limit,logical.parsing.parse,0.080329,0.063949,0.001192,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-off,paired/ordered_limit,physical.frame,0.309826,0.15067,0.002455,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-off,paired/projection,logical.parsing,0.094315,0.049202,0.000111,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-off,paired/projection,logical.parsing.parse,0.063438,0.049202,0.001342,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-off,paired/projection,physical.frame,0.207646,0.057757,0.001293,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-off,paired/projection,physical.optimizer,0.101428,0.057757,0.000731,vendor/dependencies/datafusion-optimizer/src/optimizer.rs::optimize
+spark-off,paired/projection,physical.planner,0.05929,0.057757,3.1e-05,sail-plan/src/physical_plan/mod.rs::SparkQueryPlanner::create_physical_plan
+spark-off,paired/row_number,logical.parsing,0.15084,0.098573,0.000211,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-off,paired/row_number,logical.parsing.parse,0.105345,0.098573,4e-05,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-off,paired/row_number,physical.frame,0.417386,0.251887,0.000191,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-off,paired/struct_access,logical.parsing,0.095958,0.081161,0.000281,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-off,paired/struct_access,physical.frame,0.369346,0.215561,0.000711,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-off,paired/three_way_join,logical.parsing,0.18339,0.101989,0.0004,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-off,paired/three_way_join,logical.parsing.parse,0.133327,0.101989,0.000181,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-off,paired/three_way_join,physical.frame,0.824231,0.464092,0.000882,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-off,paired/union_all,logical.parsing,0.088174,0.065482,0.000781,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-off,paired/union_all,logical.resolution,0.083705,0.065482,0.000311,sail-plan/src/resolver/plan.rs::resolve_named_plan
+spark-off,paired/union_all,physical.frame,0.337908,0.13984,0.003767,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-off,paired/window_sum,logical.parsing,0.170797,0.109573,0.000621,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-off,paired/window_sum,logical.parsing.parse,0.120253,0.109573,0.001633,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-off,paired/window_sum,physical.frame,0.398831,0.24266,0.006662,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-off,stress/case_200,logical.parsing,7.45634,1.252576,0.000461,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-off,stress/case_200,logical.parsing.parse,6.701788,1.252576,0.001053,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-off,stress/case_200,logical.resolution,1.646879,1.252576,0.002885,sail-plan/src/resolver/plan.rs::resolve_named_plan
+spark-off,stress/case_200,physical.frame,5.183119,4.48992,0.001384,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-off,stress/cte_eight,physical.frame,0.953431,0.318913,0.004499,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-off,stress/cte_eight,physical.optimizer,0.482646,0.318913,0.001904,vendor/dependencies/datafusion-optimizer/src/optimizer.rs::optimize
+spark-off,stress/in_1000,logical.parsing,10.058283,0.750704,0.002415,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-off,stress/in_1000,logical.parsing.lexing,0.801929,0.750704,0.006814,sail-sql-analyzer/src/parser.rs::parse! lexer.parse
+spark-off,stress/in_1000,logical.parsing.parse,9.22221,0.750704,0.015439,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-off,stress/in_1000,physical.frame,4.668312,3.93554,0.012012,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-off,stress/join_six,logical.parsing,0.25259,0.127948,0.001963,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-off,stress/join_six,logical.parsing.parse,0.187298,0.127948,0.001713,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-off,stress/join_six,logical.resolution,0.164495,0.127948,0.000561,sail-plan/src/resolver/plan.rs::resolve_named_plan
+spark-off,stress/join_six,physical.frame,1.532096,0.929536,0.000692,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-off,stress/wide_400,logical.resolution,3.012967,1.686412,0.021561,sail-plan/src/resolver/plan.rs::resolve_named_plan
+spark-off,stress/wide_400,physical.analyzer,4.050514,2.495054,0.000852,vendor/dependencies/datafusion-optimizer/src/analyzer/mod.rs::execute_and_check
+spark-off,stress/wide_400,physical.frame,15.568499,2.495054,0.001092,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-off,stress/wide_400,physical.optimizer,8.360039,2.495054,0.002083,vendor/dependencies/datafusion-optimizer/src/optimizer.rs::optimize
+spark-off,stress/wide_400,physical.optimizer.rule/optimize_projections/body,4.848326,2.495054,0.030536,vendor/dependencies/datafusion-optimizer/src/optimize_projections/mod.rs
+spark-off,stress/wide_400,physical.planner,3.064572,2.495054,0.007985,sail-plan/src/physical_plan/mod.rs::SparkQueryPlanner::create_physical_plan
+spark-on,paired/array_projection,logical.parsing,0.076172,0.049021,0.000752,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-on,paired/array_projection,physical.frame,0.217905,0.058067,0.003616,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-on,paired/array_projection,physical.optimizer,0.10244,0.058067,0.001532,vendor/dependencies/datafusion-optimizer/src/optimizer.rs::optimize
+spark-on,paired/correlated_scalar,logical.parsing,0.167942,0.113341,0.001343,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-on,paired/correlated_scalar,logical.parsing.parse,0.120594,0.113341,0.001022,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-on,paired/correlated_scalar,physical.frame,0.993566,0.552716,0.00523,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-on,paired/cte_chain,logical.parsing,0.26944,0.156651,0.000822,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-on,paired/cte_chain,logical.parsing.parse,0.208086,0.156651,0.000962,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-on,paired/cte_chain,physical.frame,0.795548,0.361822,0.002225,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-on,paired/delta_aggregate,logical.parsing,0.140051,0.111868,0.000552,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-on,paired/delta_aggregate,physical.frame,0.484991,0.320545,0.002445,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-on,paired/delta_filter,logical.parsing,0.136914,0.07023,0.001452,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-on,paired/delta_filter,logical.parsing.parse,0.10209,0.07023,0.001143,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-on,paired/delta_filter,physical.frame,0.484139,0.261195,0.002644,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-on,paired/delta_projection,logical.parsing,0.089086,0.057106,0.000512,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-on,paired/delta_projection,logical.parsing.parse,0.059691,0.057106,7e-05,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-on,paired/delta_projection,physical.frame,0.361412,0.13982,0.002485,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-on,paired/delta_projection,physical.optimizer,0.160158,0.13982,0.001273,vendor/dependencies/datafusion-optimizer/src/optimizer.rs::optimize
+spark-on,paired/distinct,logical.parsing,0.062085,0.049792,0.000261,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-on,paired/distinct,physical.frame,0.22619,0.112138,0.001152,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-on,paired/except,logical.parsing,0.1185,0.082403,0.000752,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-on,paired/except,logical.resolution,0.139539,0.082403,0.002124,sail-plan/src/resolver/plan.rs::resolve_named_plan
+spark-on,paired/except,physical.frame,0.435269,0.295429,0.005581,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-on,paired/exists,logical.parsing,0.146091,0.090538,0.001162,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-on,paired/exists,logical.parsing.parse,0.103031,0.090538,0.001012,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-on,paired/exists,physical.frame,0.544903,0.273548,0.001875,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-on,paired/filter,logical.parsing,0.13475,0.065301,0.002334,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-on,paired/filter,logical.parsing.parse,0.099936,0.065301,0.001763,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-on,paired/filter,physical.frame,0.278047,0.137244,0.001482,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-on,paired/global_aggregates,logical.parsing,0.205562,0.144759,0.000351,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-on,paired/global_aggregates,logical.parsing.parse,0.153535,0.144759,0.000341,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-on,paired/global_aggregates,physical.frame,0.475764,0.289397,0.001232,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-on,paired/grouped_aggregates,logical.parsing,0.234776,0.155269,0.001172,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-on,paired/grouped_aggregates,logical.parsing.parse,0.179513,0.155269,4e-05,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-on,paired/grouped_aggregates,physical.frame,0.5113,0.29612,0.008767,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-on,paired/having,logical.parsing,0.164976,0.110275,0.000431,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-on,paired/having,logical.parsing.parse,0.121787,0.110275,0.000482,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-on,paired/having,logical.resolution,0.113581,0.110275,0.001863,sail-plan/src/resolver/plan.rs::resolve_named_plan
+spark-on,paired/having,physical.frame,0.584045,0.2802,0.006532,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-on,paired/inner_join,logical.parsing,0.130152,0.0808,5e-05,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-on,paired/inner_join,logical.parsing.parse,0.089997,0.0808,0.000221,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-on,paired/inner_join,physical.frame,0.546385,0.300818,0.000531,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-on,paired/intersect,logical.parsing,0.118931,0.083375,0.000912,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-on,paired/intersect,logical.resolution,0.152914,0.083375,0.001242,sail-plan/src/resolver/plan.rs::resolve_named_plan
+spark-on,paired/intersect,physical.frame,0.44136,0.303354,0.001613,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-on,paired/left_join,logical.parsing,0.131044,0.08105,0.000381,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-on,paired/left_join,logical.parsing.parse,0.089767,0.08105,0.00013,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-on,paired/left_join,physical.frame,0.518644,0.284208,0.000681,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-on,paired/map_access,logical.parsing,0.091891,0.070772,2.1e-05,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-on,paired/map_access,physical.frame,0.304275,0.170747,3.1e-05,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-on,paired/null_filter,logical.parsing,0.109373,0.061024,0.000972,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-on,paired/null_filter,logical.parsing.parse,0.07534,0.061024,0.000582,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-on,paired/null_filter,physical.frame,0.259452,0.119121,0.000351,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-on,paired/null_filter,physical.optimizer,0.122648,0.119121,8e-05,vendor/dependencies/datafusion-optimizer/src/optimizer.rs::optimize
+spark-on,paired/ordered_limit,logical.parsing,0.117408,0.063949,0.0003,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-on,paired/ordered_limit,logical.parsing.parse,0.080459,0.063949,1e-05,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-on,paired/ordered_limit,physical.frame,0.313813,0.15067,0.002165,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-on,paired/projection,logical.parsing,0.095127,0.049202,0.000801,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-on,paired/projection,logical.parsing.parse,0.063418,0.049202,0.000531,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-on,paired/projection,physical.frame,0.207596,0.057757,0.001292,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-on,paired/projection,physical.optimizer,0.101468,0.057757,3e-05,vendor/dependencies/datafusion-optimizer/src/optimizer.rs::optimize
+spark-on,paired/projection,physical.planner,0.05923,0.057757,0.00032,sail-plan/src/physical_plan/mod.rs::SparkQueryPlanner::create_physical_plan
+spark-on,paired/row_number,logical.parsing,0.153395,0.098573,0.002635,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-on,paired/row_number,logical.parsing.parse,0.106798,0.098573,0.001182,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-on,paired/row_number,physical.frame,0.42009,0.251887,0.002965,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-on,paired/struct_access,logical.parsing,0.09672,0.081161,0.000281,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-on,paired/struct_access,physical.frame,0.372391,0.215561,0.002985,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-on,paired/three_way_join,logical.parsing,0.183541,0.101989,0.000501,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-on,paired/three_way_join,logical.parsing.parse,0.132967,0.101989,0.000641,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-on,paired/three_way_join,physical.frame,0.823529,0.464092,0.000422,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-on,paired/union_all,logical.parsing,0.089125,0.065482,0.0003,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-on,paired/union_all,logical.resolution,0.084547,0.065482,0.000641,sail-plan/src/resolver/plan.rs::resolve_named_plan
+spark-on,paired/union_all,physical.frame,0.341414,0.13984,0.002645,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-on,paired/window_sum,logical.parsing,0.17185,0.109573,0.003087,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-on,paired/window_sum,logical.parsing.parse,0.120193,0.109573,0.001964,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-on,paired/window_sum,physical.frame,0.40912,0.24266,0.01076,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-on,stress/case_200,logical.parsing,7.460649,1.252576,0.012714,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-on,stress/case_200,logical.parsing.parse,6.701969,1.252576,0.006412,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-on,stress/case_200,logical.resolution,1.644044,1.252576,0.001643,sail-plan/src/resolver/plan.rs::resolve_named_plan
+spark-on,stress/case_200,physical.frame,5.192094,4.48992,0.002474,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-on,stress/cte_eight,physical.frame,0.955073,0.318913,0.007656,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-on,stress/cte_eight,physical.optimizer,0.48436,0.318913,0.010079,vendor/dependencies/datafusion-optimizer/src/optimizer.rs::optimize
+spark-on,stress/in_1000,logical.parsing,10.047374,0.750704,0.058288,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-on,stress/in_1000,logical.parsing.lexing,0.803042,0.750704,0.000841,sail-sql-analyzer/src/parser.rs::parse! lexer.parse
+spark-on,stress/in_1000,logical.parsing.parse,9.229173,0.750704,0.050835,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-on,stress/in_1000,physical.frame,4.663563,3.93554,0.018093,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-on,stress/join_six,logical.parsing,0.253351,0.127948,0.00012,sail-sql-analyzer/src/parser.rs::parse_one_statement
+spark-on,stress/join_six,logical.parsing.parse,0.189101,0.127948,0.000321,sail-sql-analyzer/src/parser.rs::parse! parser.parse
+spark-on,stress/join_six,logical.resolution,0.166049,0.127948,0.001073,sail-plan/src/resolver/plan.rs::resolve_named_plan
+spark-on,stress/join_six,physical.frame,1.535592,0.929536,0.002183,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-on,stress/wide_400,logical.resolution,2.984915,1.686412,0.01051,sail-plan/src/resolver/plan.rs::resolve_named_plan
+spark-on,stress/wide_400,physical.analyzer,4.041057,2.495054,0.013434,vendor/dependencies/datafusion-optimizer/src/analyzer/mod.rs::execute_and_check
+spark-on,stress/wide_400,physical.frame,15.602612,2.495054,0.09657,datafusion-54.1.0/src/execution/session_state.rs::create_physical_plan
+spark-on,stress/wide_400,physical.optimizer,8.36617,2.495054,0.055522,vendor/dependencies/datafusion-optimizer/src/optimizer.rs::optimize
+spark-on,stress/wide_400,physical.optimizer.rule/optimize_projections/body,4.794165,2.495054,0.008897,vendor/dependencies/datafusion-optimizer/src/optimize_projections/mod.rs
+spark-on,stress/wide_400,physical.planner,3.064052,2.495054,0.008787,sail-plan/src/physical_plan/mod.rs::SparkQueryPlanner::create_physical_plan

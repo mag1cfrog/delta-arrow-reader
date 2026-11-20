@@ -72,7 +72,7 @@ def write_csv(path, rows):
     rows = list(rows)
     assert rows
     with path.open("x", newline="") as output:
-        writer = csv.DictWriter(output, fieldnames=list(rows[0]))
+        writer = csv.DictWriter(output, fieldnames=list(rows[0]), lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
 
