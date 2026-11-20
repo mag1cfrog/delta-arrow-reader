@@ -46,3 +46,11 @@ frames. No additional elapsed timings enter the before/after comparison.
 The hardware event could not be opened for recording. The failed attempt
 produced no samples. Use the same bounded schedule with the supported
 `cpu-clock:u` event and `--user-callchains`.
+
+If the SQL stacks cannot reliably reach the row parser, sample one direct
+analyzer process per shape. Link the same candidate release analyzer into
+`sample_analyzer.rs`, with Rust optimization level 3 and debug level 1.
+Cycle inputs 1-7 from the phase probe for 64 batches of 8,192 calls each.
+Use the supported user CPU event and frequency above, a 32 KiB stack,
+the same affinity and 30 seconds per process. Analyze parser frames only.
+This is separate from whole-query timing.
