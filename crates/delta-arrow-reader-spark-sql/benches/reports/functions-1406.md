@@ -35,7 +35,7 @@ times and the projection-adjusted values. [Protocol](functions-1406-protocol.md)
 | `cardinality` | scalar | Matches Spark | 52.23 | 48.69 | [Spark capture](functions-1406-comparisons.jsonl.gz) |
 | `concat` | scalar | Matches Spark | 14.52 | 14.46 | [Spark capture](functions-1406-comparisons.jsonl.gz) |
 | `size` | scalar | Matches Spark | 53.86 | 50.38 | [Spark capture](functions-1406-comparisons.jsonl.gz) |
-| `date_format` | scalar | Matches Spark | 197.24 | 197.84 | [Spark capture](functions-1406-comparisons.jsonl.gz) |
+| `date_format` | scalar | Matches Spark | 197.24 | 197.84 | [Temporal fixture](../../tests/fixtures/temporal-contracts/temporal-contracts-spark.jsonl), [benchmark capture](functions-1406-comparisons.jsonl.gz) |
 | `map_entries` | scalar | Same panic in the stock build |  |  | [Stock probe](../functions_1406/stock_map_entries.rs) |
 | `expm1` | scalar | Matches Spark | 9.04 | 9.02 | [Spark capture](functions-1406-comparisons.jsonl.gz) |
 | `aes_decrypt` | scalar | Column-input failure |  |  | [#1405](https://github.com/mag1cfrog/delta-arrow-reader/issues/1405) |
@@ -120,3 +120,12 @@ The local Linux timing session ran from 2026-11-20T17:40:02Z to
 2026-11-20T17:43:17Z, using the committed protocol at `ae29c9f4`.
 All 64 timing cells completed, with 576 retained samples. Staging product
 code was pinned at `6a520463`.
+
+## Existing reference checks
+
+The committed temporal fixture tests `DATE_FORMAT(ts, 'yyyy-MM-dd')` on a
+nullable timestamp column in UTC in both ANSI modes. Its existing
+`temporal_contracts_match_spark` test checks the DAR rows and executed types
+against that capture. The reduced benchmark capture covers the exact #1391
+statement on this report's input. The temporal, array, collection and
+approximate percentile fixture suites passed all 210 tests on Linux.
