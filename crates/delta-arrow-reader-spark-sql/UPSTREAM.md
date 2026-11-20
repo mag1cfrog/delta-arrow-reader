@@ -2465,3 +2465,15 @@ on values, recursive ASTs, lexer/parser errors and source positions. Connected
 for all three string encodings, SQL dictionary inputs, NULL/empty/scalar/array
 forms, both ANSI modes and CAST/TRY_CAST. Existing test outcomes and captures are
 retained. No dependency fork or explicit-input-format parser changes.
+
+### Ordinary STRING timestamp casts (#1389)
+
+SparkTimestamp LTZ/NTZ uses Chrono calendar and clock validation directly for
+exact ASCII `YYYY-MM-DD HH:MM:SS` input. The same existing localization applies
+the session timezone, including DST gap/overlap behavior, or NTZ wall-clock
+semantics. Invalid fields and every other spelling retain the existing parser
+and its errors, including fractions, explicit zones and leap seconds. Formatted
+input and STRING date_format are unchanged. The
+[additional differential inputs](vendor/sail/crates/sail-function/tests/fixtures/timestamp-cast-1389-inputs.json)
+compare with the original normalized parser and frozen conversion bodies in
+direct and connected CAST/TRY_CAST cases across both ANSI modes.

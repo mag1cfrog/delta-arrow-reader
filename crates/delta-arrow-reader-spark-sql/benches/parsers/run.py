@@ -22,9 +22,11 @@ BASELINE = "298015f9def26cc97a271bdbc0316e64083d7874"
 PREFIX = "parsers-1389"
 RECEIPT = SUITE / "preflight-receipt.json"
 REUSE_STAGE = False
+TIMESTAMP_STAGE = False
 PRODUCT_BASELINE = "be3c663a8380d5094cb52003f351d5b9a5d48383"
 IDS = ("date_fallback", "timestamp_ltz", "timestamp_ntz", "interval_year_month",
        "interval_day_time", "interval_calendar", "date_format_string", "interval_day_time_input")
+TIMESTAMP_IDS = ("timestamp_ltz", "timestamp_ntz")
 PROJECTION = ("interval_day_time", "interval_day_time_input")
 INTERVALS = ("interval_year_month", "interval_day_time", "interval_calendar", "interval_day_time_input")
 MODES = ("native", "spark-off", "spark-on")
@@ -44,6 +46,12 @@ def product_source_objects():
 
 def modes(query):
     return MODES[1:] if query in PROJECTION else MODES
+
+
+def timing_schedule(schedule):
+    if not TIMESTAMP_STAGE:
+        return schedule
+    return dict(schedule, runs=[run for run in schedule["runs"] if run["query"] in TIMESTAMP_IDS])
 
 
 def expected_runs():
@@ -112,6 +120,9 @@ def bound_hashes():
         paths += [REPORTS / "parsers-1389-preflight.json.gz", SUITE / "preflight-receipt.json",
                   WORKSPACE / "UPSTREAM.md", WORKSPACE / "tests/parser_reuse.rs",
                   WORKSPACE / "tests/fixtures/row-parser-1389-original.rs"]
+    if TIMESTAMP_STAGE:
+        paths += [REPORTS / "parsers-1389-retained-validation.json",
+                  WORKSPACE / "vendor/sail/crates/sail-function/tests/fixtures/timestamp-cast-1389-inputs.json"]
     return {str(path.relative_to(WORKSPACE)): execution.digest(path) for path in paths}
 
 
@@ -244,6 +255,7 @@ def validate_receipt(binary, snapshot):
 
 def summarize(destination, output):
     _, schedule = load_and_validate_workload()
+    schedule = timing_schedule(schedule)
     complete = execution.read(destination / "complete.json")
     receipt = execution.read(RECEIPT)
     assert complete["eligible_shapes"] == receipt["eligible_shapes"]
@@ -270,7 +282,7 @@ def summarize_shapes(data, excluded):
     shapes = []
     def timing(query, mode, series="main", arm=None):
         return data[series, arm, mode, query, "query_complete_ns"]
-    for query in IDS[:-1]:
+    for query in (TIMESTAMP_IDS if TIMESTAMP_STAGE else IDS[:-1]):
         if query in excluded:
             shapes.append(dict(id=query, excluded=excluded[query]))
             continue
@@ -303,12 +315,18 @@ def self_check():
     assert len(schedule["runs"]) == len({run["process"] for run in schedule["runs"]}) == 126
     assert sum(run["series"] == "noise" for run in schedule["runs"]) == 60
     assert sum(len(modes(query)) for query in IDS) == 22
+    if TIMESTAMP_STAGE:
+        selected = timing_schedule(schedule)
+        assert len(selected["runs"]) == 30
+        assert sum(run["series"] == "noise" for run in selected["runs"]) == 12
+        assert selected["runs"] == [run for run in expected_runs() if run["query"] in TIMESTAMP_IDS]
+        assert {key: value for key, value in selected.items() if key != "runs"} == {key: value for key, value in schedule.items() if key != "runs"}
     assert command("execution", "check") == ["execution", "--parsers-1389", "check"]
     timestamp = manifest["queries"][1]
     assert expected_type(timestamp, dict(arrow_types=["Int64", "Int32", 'Timestamp(\N{MICRO SIGN}s, "UTC")']))
     for wrong in ('Timestamp(ns, "UTC")', "Timestamp(us)", "Date32"):
         assert not expected_type(timestamp, dict(arrow_types=["Int64", "Int32", wrong]))
-    summary_self_check(schedule)
+    summary_self_check(timing_schedule(schedule))
     child = subprocess.run([sys.executable, "-O", str(pathlib.Path(__file__).resolve()), "--check"], capture_output=True, text=True, timeout=10)
     assert child.returncode != 0 and child.stderr.strip() == "validation requires Python assertions"
 
@@ -329,12 +347,14 @@ def summary_self_check(schedule):
                             process_peak_rss_bytes=100, setup_rss_bytes=100, samples=[sample] * 3))
     shapes = summarize_shapes(aggregation.aggregate(records), {})
     native = shapes[0]["configurations"]["spark-off"]
-    projection = shapes[4]["configurations"]["spark-on"]
     assert (native["delta_ns"], native["noise_ns"], native["completion_gap_exceeds_noise"]) == (100, 1, True)
-    assert (projection["delta_ns"], projection["noise_ns"], projection["delta_ns_per_row"]) == (900, 7, 450)
-    assert projection["completion_gap_exceeds_noise"] is None
-    excluded = summarize_shapes(aggregation.aggregate(records), {IDS[0]: "mismatch"})
-    assert excluded[0] == dict(id=IDS[0], excluded="mismatch")
+    if not TIMESTAMP_STAGE:
+        projection = shapes[4]["configurations"]["spark-on"]
+        assert (projection["delta_ns"], projection["noise_ns"], projection["delta_ns_per_row"]) == (900, 7, 450)
+        assert projection["completion_gap_exceeds_noise"] is None
+    first = TIMESTAMP_IDS[0] if TIMESTAMP_STAGE else IDS[0]
+    excluded = summarize_shapes(aggregation.aggregate(records), {first: "mismatch"})
+    assert excluded[0] == dict(id=first, excluded="mismatch")
 
 
 # Bind only this controller's imported helpers; historical files are unchanged.
@@ -350,14 +370,23 @@ if __name__ == "__main__":
         REUSE_STAGE = True
         PREFIX = strings.PREFIX = "parsers-1389-reuse"
         RECEIPT = SUITE / "reuse-preflight-receipt.json"
+    elif sys.argv[1:2] == ["--ordinary-timestamp-cast"]:
+        del sys.argv[1]
+        REUSE_STAGE = TIMESTAMP_STAGE = True
+        PRODUCT_BASELINE = "bc5ac56fc6630c76dadbba6582f704616e22eae0"
+        PREFIX = strings.PREFIX = "parsers-1389-timestamp"
+        RECEIPT = SUITE / "timestamp-preflight-receipt.json"
     self_check()
     if sys.argv[1:] == ["--check"]:
-        print("seven parser kernels, one projection, fixed schedule and helper checks passed")
+        print("22 preflight outputs and selected 30-process timestamp schedule checks passed" if TIMESTAMP_STAGE
+              else "seven parser kernels, one projection, fixed schedule and helper checks passed")
     elif len(sys.argv) == 4 and sys.argv[1] == "summarize":
         summarize(pathlib.Path(sys.argv[2]).resolve(), pathlib.Path(sys.argv[3]).resolve())
     elif len(sys.argv) == 5 and sys.argv[1] in ("preflight", "measure"):
         assert platform.system() == "Linux", "execution/RSS runs require Linux"
         manifest, schedule = load_and_validate_workload()
+        if sys.argv[1] == "measure":
+            schedule = timing_schedule(schedule)
         binary, snapshot, destination = map(lambda path: pathlib.Path(path).resolve(), sys.argv[2:])
         assert not destination.exists(), "retain existing evidence; no unchanged reruns"
         destination.mkdir(parents=True)
@@ -365,7 +394,11 @@ if __name__ == "__main__":
         metadata.update(product_source_objects=product_source_objects(), controller_sha256=execution.digest(pathlib.Path(__file__)))
         if REUSE_STAGE:
             metadata.update(product_baseline_commit=PRODUCT_BASELINE, before_timing_commit="997278f7f73ad53b050f3d4b4ca381dd5eaf5e34")
+        if TIMESTAMP_STAGE:
+            metadata.update(timed_shapes=list(TIMESTAMP_IDS),
+                            prior_measured_candidate="1f6cb4fcd6ebbce3b993f411b9f66571ec6d230d",
+                            prior_retained_binary_has_timing=False)
         strings.write_json(destination / "metadata.json", metadata)
         (preflight if sys.argv[1] == "preflight" else strings.measure)(binary, snapshot, destination, manifest, schedule)
     else:
-        raise SystemExit("usage: run.py [--reuse-row-parsers] --check | preflight/measure BINARY SNAPSHOT NEW_DIRECTORY | summarize RUN_DIRECTORY OUTPUT_DIRECTORY")
+        raise SystemExit("usage: run.py [--reuse-row-parsers | --ordinary-timestamp-cast] --check | preflight/measure BINARY SNAPSHOT NEW_DIRECTORY | summarize RUN_DIRECTORY OUTPUT_DIRECTORY")

@@ -4,7 +4,7 @@ use std::collections::hash_map::Entry;
 use std::fmt::Debug;
 use std::sync::Arc;
 
-use chrono::NaiveDateTime;
+use chrono::{NaiveDate, NaiveDateTime};
 use datafusion::arrow::array::Array;
 use datafusion::arrow::array::timezone::Tz;
 use datafusion::arrow::datatypes::{DataType, TimeUnit, TimestampMicrosecondType};
@@ -48,6 +48,31 @@ enum ScalarFormat {
     Omitted,
     Null,
     Format(DateTimeFormat),
+}
+
+fn parse_ascii_whole_second_timestamp(value: &str) -> Option<NaiveDateTime> {
+    let bytes = value.as_bytes();
+    if bytes.len() != 19
+        || !bytes.iter().enumerate().all(|(index, byte)| match index {
+            4 | 7 => *byte == b'-',
+            10 => *byte == b' ',
+            13 | 16 => *byte == b':',
+            _ => byte.is_ascii_digit(),
+        })
+    {
+        return None;
+    }
+    // The original parser validates these same calendar and clock fields with Chrono.
+    NaiveDate::from_ymd_opt(
+        value[..4].parse().ok()?,
+        value[5..7].parse().ok()?,
+        value[8..10].parse().ok()?,
+    )?
+    .and_hms_opt(
+        value[11..13].parse().ok()?,
+        value[14..16].parse().ok()?,
+        value[17..19].parse().ok()?,
+    )
 }
 
 impl TimestampParser {
@@ -122,7 +147,19 @@ impl TimestampParser {
     }
 
     fn string_to_microseconds(&self, value: &str, safe: bool) -> Result<Option<i64>> {
-        self.parsed_timestamp_to_microseconds(parse_timestamp(value), safe)
+        self.string_to_microseconds_with_parser(value, safe, &mut parse_timestamp)
+    }
+
+    fn string_to_microseconds_with_parser<'a>(
+        &self,
+        value: &'a str,
+        safe: bool,
+        parse: &mut impl FnMut(&'a str) -> SqlResult<TimestampValue<'a>>,
+    ) -> Result<Option<i64>> {
+        if let Some(datetime) = parse_ascii_whole_second_timestamp(value) {
+            return self.localize(datetime, "", safe);
+        }
+        self.parsed_timestamp_to_microseconds(parse(value), safe)
     }
 
     fn parsed_timestamp_to_microseconds(
@@ -291,9 +328,9 @@ impl ScalarUDFImpl for SparkTimestamp {
                                 ScalarFormat::Format(format) => self
                                     .parser
                                     .formatted_string_to_microseconds(v, format, safe),
-                                ScalarFormat::Omitted => {
-                                    self.parser.parsed_timestamp_to_microseconds(parse(v), safe)
-                                }
+                                ScalarFormat::Omitted => self
+                                    .parser
+                                    .string_to_microseconds_with_parser(v, safe, &mut parse),
                                 ScalarFormat::Null => Ok(None),
                             })
                             .transpose()
@@ -307,9 +344,9 @@ impl ScalarUDFImpl for SparkTimestamp {
                                 ScalarFormat::Format(format) => self
                                     .parser
                                     .formatted_string_to_microseconds(v, format, safe),
-                                ScalarFormat::Omitted => {
-                                    self.parser.parsed_timestamp_to_microseconds(parse(v), safe)
-                                }
+                                ScalarFormat::Omitted => self
+                                    .parser
+                                    .string_to_microseconds_with_parser(v, safe, &mut parse),
                                 ScalarFormat::Null => Ok(None),
                             })
                             .transpose()
@@ -323,9 +360,9 @@ impl ScalarUDFImpl for SparkTimestamp {
                                 ScalarFormat::Format(format) => self
                                     .parser
                                     .formatted_string_to_microseconds(v, format, safe),
-                                ScalarFormat::Omitted => {
-                                    self.parser.parsed_timestamp_to_microseconds(parse(v), safe)
-                                }
+                                ScalarFormat::Omitted => self
+                                    .parser
+                                    .string_to_microseconds_with_parser(v, safe, &mut parse),
                                 ScalarFormat::Null => Ok(None),
                             })
                             .transpose()
@@ -474,6 +511,70 @@ fn get_or_parse_format<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ordinary_timestamp_route_matches_original_parser_and_fallbacks() -> Result<()> {
+        let categories: std::collections::BTreeMap<String, Vec<String>> = serde_json::from_str(
+            include_str!("../../../tests/fixtures/timestamp-cast-1389-inputs.json"),
+        )
+        .map_err(|error| exec_datafusion_err!("{error}"))?;
+        assert_eq!(categories.values().map(Vec::len).sum::<usize>(), 72);
+        for parser in [
+            TimestampParser::Ntz,
+            TimestampParser::Ltz {
+                default_timezone: "UTC".into(),
+            },
+            TimestampParser::Ltz {
+                default_timezone: "America/New_York".into(),
+            },
+            TimestampParser::Ltz {
+                default_timezone: "Asia/Kathmandu".into(),
+            },
+            TimestampParser::Ltz {
+                default_timezone: "Invalid/Zone".into(),
+            },
+        ] {
+            for (category, values) in &categories {
+                for value in values {
+                    for safe in [false, true] {
+                        let mut fallback_calls = 0;
+                        let actual =
+                            parser.string_to_microseconds_with_parser(value, safe, &mut |text| {
+                                fallback_calls += 1;
+                                parse_timestamp(text)
+                            });
+                        let expected =
+                            parser.parsed_timestamp_to_microseconds(parse_timestamp(value), safe);
+                        let context = format!("{parser:?}, {category}, {value:?}, safe={safe}");
+                        assert_eq!(
+                            fallback_calls,
+                            usize::from(category != "ordinary_whole_seconds"),
+                            "{context}"
+                        );
+                        match (actual, expected) {
+                            (Ok(actual), Ok(expected)) => assert_eq!(actual, expected, "{context}"),
+                            (Err(actual), Err(expected)) => {
+                                assert_eq!(
+                                    std::mem::discriminant(actual.find_root()),
+                                    std::mem::discriminant(expected.find_root()),
+                                    "{context}"
+                                );
+                                assert_eq!(actual.to_string(), expected.to_string(), "{context}");
+                            }
+                            (actual, expected) => {
+                                assert_eq!(
+                                    format!("{actual:?}"),
+                                    format!("{expected:?}"),
+                                    "{context}"
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
 
     #[test]
     fn unformatted_parser_rejects_leap_seconds_in_safe_and_strict_modes() -> Result<()> {
