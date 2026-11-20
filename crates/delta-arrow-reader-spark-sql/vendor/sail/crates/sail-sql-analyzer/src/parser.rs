@@ -434,7 +434,6 @@ mod tests {
 
         let options = ParserOptions::default();
         let lexer = create_lexer::<_, Err<EmptyErr>>(&options);
-        let numeric = create_numeric_interval_literal_parser::<_, Err<EmptyErr>>(&options);
         let ordinary = [
             "1 months",
             "2 days 2 hours",
@@ -461,7 +460,10 @@ mod tests {
                 let input = tokens
                     .as_slice()
                     .map((text.len()..text.len()).into(), map_parser_input);
-                numeric.parse(input).into_result().ok()
+                create_numeric_interval_literal_parser::<_, Err<EmptyErr>>(&options)
+                    .parse(input)
+                    .into_result()
+                    .ok()
             });
             if require_numeric {
                 assert!(parsed.is_some(), "{text:?} missed the numeric grammar");

@@ -23,7 +23,8 @@ the remaining cases must match across ANSI modes. Exclude a shape with a
 result or type mismatch. Time day-time against its same-mode projection,
 whose different type prevents a native value comparison.
 
-Report medians for query completion in milliseconds and the reference gap
+Take the median of the three process medians. Report query completion in
+milliseconds and the reference gap
 in nanoseconds per row. For each build and ANSI mode, a positive
 year-month or calendar gap is above noise when it exceeds the absolute
 difference of the native A/B repeat medians, as in the first round. Report

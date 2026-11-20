@@ -28,7 +28,7 @@ def validate_preflight(binaries, snapshot, output, schedule, deadline, queries):
         for mode in modes(name):
             for role, binary in binaries.items():
                 result = strings.invoke(binary, snapshot, output / role / name / mode, schedule, deadline,
-                             "preflight", name, mode)
+                                        mode="preflight", configuration=mode, query=name)
                 assert result["id"] == name and result["configuration"] == mode
                 assert result["rows"] == query["expected_rows"]
                 strings.validate_telemetry(result, schedule)
@@ -39,8 +39,7 @@ def validate_preflight(binaries, snapshot, output, schedule, deadline, queries):
                 outputs[role, name, mode] = result
             left, right = [outputs[role, name, mode] for role in binaries]
             _, failure = compare(binaries["candidate"], left, right,
-                                 output / "across-builds" / name / mode, deadline,
-                                 schedule["preflight_address_space_bytes"])
+                                 output / "across-builds" / name / mode, deadline, schedule)
             if failure:
                 excluded.setdefault(name, []).append({"mode": mode, "reason": failure, "pair": "across builds"})
         reference_mode = "native" if "native" in modes(name) else "spark-off"
@@ -49,8 +48,7 @@ def validate_preflight(binaries, snapshot, output, schedule, deadline, queries):
                 if mode == reference_mode:
                     continue
                 _, failure = compare(binary, outputs[role, name, reference_mode], outputs[role, name, mode],
-                                     output / "reference" / role / name / mode, deadline,
-                                     schedule["preflight_address_space_bytes"])
+                                     output / "reference" / role / name / mode, deadline, schedule)
                 if failure:
                     excluded.setdefault(name, []).append({"mode": mode, "reason": failure, "pair": role})
     strings.write_json(output / "observations.json", [
@@ -63,11 +61,14 @@ def validate_preflight(binaries, snapshot, output, schedule, deadline, queries):
 
 def statistics_by_shape(records, queries, excluded):
     def timing(build, name, mode, series="main", arm=None):
-        samples = [sample["query_complete_ns"] for record in records
-                   if (record["build"], record["query"], record["configuration"],
-                       record["series"], record.get("arm")) == (build, name, mode, series, arm)
-                   for sample in record["samples"]]
-        return statistics.median(samples)
+        process_medians = [
+            statistics.median(sample["query_complete_ns"] for sample in record["samples"])
+            for record in records
+            if (record["build"], record["query"], record["configuration"], record["series"], record.get("arm"))
+            == (build, name, mode, series, arm)
+        ]
+        assert len(process_medians) == 3
+        return statistics.median(process_medians)
 
     summary = {}
     for query in queries:
@@ -135,7 +136,7 @@ def main():
         for role in order:
             print(role, scheduled["process"], flush=True)
             result = strings.invoke(binaries[role], snapshot, output / role / scheduled["process"], schedule,
-                         deadline, "measure", name, mode)
+                                    deadline, mode="measure", configuration=mode, query=name)
             assert result["id"] == name and result["configuration"] == mode
             assert len(result["samples"]) == schedule["samples"]
             expected = preflight[role, name, mode]
