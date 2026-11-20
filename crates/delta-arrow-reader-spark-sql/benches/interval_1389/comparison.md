@@ -33,3 +33,12 @@ difference of the native A/B repeat medians, as in the first round. Report
 day-time's projection delta and A/B spread descriptively. The candidate must
 preserve preflight results in both modes. To meet the performance target,
 neither native-paired shape can retain a gap above that run's noise.
+
+## Residual profiling
+
+If a native-paired candidate gap remains, profile the three interval
+conversions on that same candidate binary. Use one `perf record` process
+per cast with `cycles:u`, 997 Hz and an 8 KiB DWARF stack. Use the ANSI-off
+statements, the original fixture and affinity, and 30 seconds per process.
+Report interval-related call stacks and any uncertainty from unresolved
+frames. No additional elapsed timings enter the before/after comparison.
