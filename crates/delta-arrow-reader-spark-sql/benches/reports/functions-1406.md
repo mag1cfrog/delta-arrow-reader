@@ -105,7 +105,8 @@ emits a frame per input row in this workload. At one million rows, the payload
 alone would total 3.81 GiB, and a hex copy would take 7.63 GiB before row
 strings and allocation overhead. This explains the pressure from retaining
 and encoding the original results under the 12 GiB address-space cap. The
-RSS observations include process setup and execution buffers.
+RSS columns are medians of the peak RSS reported by each process. The peaks
+include process setup and execution buffers.
 
 ## Stock map_entries
 

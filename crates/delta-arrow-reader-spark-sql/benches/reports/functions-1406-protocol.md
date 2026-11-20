@@ -42,7 +42,7 @@ process per group of at most four cases. Rotate case order by the replica index
 and reverse ANSI order in the middle replica.
 Each process keeps three executions after one warmup. Report execution nanoseconds
 per input row and the increment above the plain projection as medians of process
-medians. Record timeouts as incomplete outcomes.
+medians. Record a cooperative case timeout as an incomplete cell.
 
 The bitmap window clocks use 512 and 2,048 input rows. Use eight rounds in 64
 and 256 groups, respectively, with the same ID formula. Check all three
@@ -55,7 +55,8 @@ timing run. Report payload bytes separately from process memory.
 
 Use a 65-minute outer session bound. The old exact per-case execution bound of
 120 seconds applies to the full `measure-set` driver, with a separate 600-second
-subprocess bound. The reduced driver has a 180-second subprocess bound.
+subprocess bound. The reduced driver has a 180-second subprocess bound. A hard
+subprocess or session timeout ends the run and leaves the raw output for review.
 
 ## Commands
 
