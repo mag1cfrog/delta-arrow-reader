@@ -1,6 +1,6 @@
 //! Wide projection merges retain DataFusion's ordered column lookup and native results.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use arrow::array::{ArrayRef, Int32Array, Int64Array, StringArray};
@@ -129,22 +129,25 @@ fn projection_merge_matches_original_column_lookup() -> TestResult {
             ))?);
             for name in ["c0", "c1", "c2", "c3", "shared", "missing", "C0"] {
                 for qualifier in &qualifiers {
-                    let requests = (0..output_width)
-                        .map(|index| {
-                            if index == 0 {
-                                Column::new(qualifier.clone(), name)
-                            } else {
-                                Column::from(schema.qualified_field(index % input_width))
-                            }
-                        })
+                    let requested = Column::new(qualifier.clone(), name);
+                    let mut seen = HashSet::from([requested.clone()]);
+                    // Repeated request keys invoke a separate compute-once merge guard.
+                    let requests = std::iter::once(Expr::Column(requested))
+                        .chain(
+                            schema
+                                .columns()
+                                .into_iter()
+                                .filter(|column| seen.insert(column.clone()))
+                                .map(Expr::Column),
+                        )
+                        .chain(std::iter::repeat_n(lit(-1_i32), output_width))
+                        .take(output_width)
                         .collect::<Vec<_>>();
                     let plan = LogicalPlan::Projection(Projection::try_new_with_schema(
                         requests
                             .iter()
                             .enumerate()
-                            .map(|(index, column)| {
-                                Expr::Column(column.clone()).alias(format!("out{index}"))
-                            })
+                            .map(|(index, expr)| expr.clone().alias(format!("out{index}")))
                             .collect(),
                         Arc::clone(&prior),
                         Arc::clone(&output_schema),
@@ -153,13 +156,14 @@ fn projection_merge_matches_original_column_lookup() -> TestResult {
                     let expected = requests
                         .iter()
                         .enumerate()
-                        .map(|(index, column)| {
-                            let old_index = schema.index_of_column(column)?;
-                            Ok(prior_exprs[old_index]
-                                .clone()
-                                .unalias_nested()
-                                .data
-                                .alias(format!("out{index}")))
+                        .map(|(index, expr)| {
+                            let resolved = if let Expr::Column(column) = expr {
+                                let old_index = schema.index_of_column(column)?;
+                                prior_exprs[old_index].clone().unalias_nested().data
+                            } else {
+                                expr.clone()
+                            };
+                            Ok(resolved.alias(format!("out{index}")))
                         })
                         .collect::<Result<Vec<_>>>()
                         .and_then(|exprs| {
