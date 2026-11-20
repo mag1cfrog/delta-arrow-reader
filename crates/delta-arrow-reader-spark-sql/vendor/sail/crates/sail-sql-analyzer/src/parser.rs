@@ -2,6 +2,8 @@
 use std::sync::LazyLock;
 
 use chumsky::Parser;
+use chumsky::error::{EmptyErr, Rich};
+use chumsky::extra::Err;
 use chumsky::input::{Input, Stream};
 use chumsky::span::SimpleSpan;
 use sail_sql_parser::ast::data_type::DataType;
@@ -11,8 +13,9 @@ use sail_sql_parser::ast::statement::Statement;
 use sail_sql_parser::lexer::create_lexer;
 use sail_sql_parser::options::ParserOptions;
 use sail_sql_parser::parser::{
-    create_data_type_parser, create_interval_literal_parser, create_object_name_parser,
-    create_parser, create_scoped_statement_parser,
+    create_data_type_parser, create_interval_literal_parser,
+    create_numeric_interval_literal_parser, create_object_name_parser, create_parser,
+    create_scoped_statement_parser,
 };
 use sail_sql_parser::token::{Punctuation, Token};
 
@@ -190,7 +193,24 @@ pub fn parse_object_name(s: &str) -> SqlResult<ObjectName> {
 pub(crate) fn parse_interval_literal(s: &str) -> SqlResult<IntervalLiteral> {
     #[cfg(test)]
     INTERVAL_LITERAL_CALLS.with(|calls| calls.set(calls.get() + 1));
-    parse!(s, create_interval_literal_parser)
+    let options = ParserOptions::default();
+    let lexer = create_lexer::<_, Err<Rich<_, _>>>(&options);
+    let tokens = lexer.parse(s).into_result().map_err(SqlError::parser)?;
+    let input = || {
+        tokens
+            .as_slice()
+            .map((s.len()..s.len()).into(), map_parser_input)
+    };
+    if let Ok(interval) = create_numeric_interval_literal_parser::<_, Err<EmptyErr>>(&options)
+        .parse(input())
+        .into_result()
+    {
+        return Ok(interval);
+    }
+    create_interval_literal_parser::<_, Err<Rich<_, _>>>(&options)
+        .parse(input())
+        .into_result()
+        .map_err(SqlError::parser)
 }
 
 /// Parses an interval string converted at run time, such as a string cast or a `window`
@@ -229,6 +249,7 @@ pub fn interval_parser<'a>() -> impl FnMut(&'a str) -> SqlResult<IntervalValue> 
     static OPTIONS: LazyLock<ParserOptions> = LazyLock::new(ParserOptions::default);
     let options = &*OPTIONS;
     let mut lexer = None;
+    let mut numeric_parser = None;
     let mut parser = None;
     move |s| {
         let tokens = lexer
@@ -238,9 +259,19 @@ pub fn interval_parser<'a>() -> impl FnMut(&'a str) -> SqlResult<IntervalValue> 
             .parse(s)
             .into_result()
             .map_err(SqlError::parser)?;
-        // Owning the token vector avoids tying this parser to a temporary row-local slice.
-        let tokens =
-            Stream::from_iter(tokens).map((s.len()..s.len()).into(), |(token, span)| (token, span));
+        // Owning the token vector avoids tying these parsers to a row-local slice.
+        let input = |tokens| {
+            Stream::from_iter(tokens).map((s.len()..s.len()).into(), |(token, span)| (token, span))
+        };
+        if let Ok(interval) = numeric_parser
+            .get_or_insert_with(|| {
+                create_numeric_interval_literal_parser::<_, Err<EmptyErr>>(options)
+            })
+            .parse(input(tokens.clone()))
+            .into_result()
+        {
+            return from_ast_unqualified_interval(interval);
+        }
         let interval =
             parser
                 .get_or_insert_with(|| {
@@ -249,7 +280,7 @@ pub fn interval_parser<'a>() -> impl FnMut(&'a str) -> SqlResult<IntervalValue> 
                         chumsky::extra::Err<chumsky::error::Rich<_, _>>,
                     >(options)
                 })
-                .parse(tokens)
+                .parse(input(tokens))
                 .into_result()
                 .map_err(SqlError::parser)?;
         from_ast_unqualified_interval(interval)
@@ -382,6 +413,66 @@ mod tests {
                 "{sql:?}: parser route"
             );
             assert_equivalent(sql, sql, false);
+        }
+    }
+
+    #[test]
+    fn numeric_interval_grammar_preserves_original_asts_and_errors() {
+        use super::{
+            EmptyErr, Err, create_numeric_interval_literal_parser, parse_interval_literal,
+        };
+        use sail_sql_parser::parser::create_interval_literal_parser;
+
+        #[allow(dead_code)]
+        mod interval_inputs {
+            include!("../tests/fixtures/string-parser-1389-inputs.rs");
+        }
+
+        fn original(s: &str) -> SqlResult<sail_sql_parser::ast::expression::IntervalLiteral> {
+            parse!(s, create_interval_literal_parser)
+        }
+
+        let options = ParserOptions::default();
+        let lexer = create_lexer::<_, Err<EmptyErr>>(&options);
+        let ordinary = [
+            "1 months",
+            "2 days 2 hours",
+            "3 months 1 day 2 seconds",
+            "'1 months'",
+        ];
+        let additional_inputs = [
+            "1E+1 seconds",
+            "1.5d seconds",
+            "2 /* comment */ DAYS 1 HOUR",
+            "1 day TO HOUR",
+            "1 AND 2 days",
+            "1 day AND 2 hours",
+            "1 months 'extra'",
+            "\"'3 days'\"",
+        ];
+        for (text, require_numeric) in ordinary.into_iter().map(|text| (text, true)).chain(
+            additional_inputs
+                .into_iter()
+                .chain(interval_inputs::INTERVALS.iter().copied())
+                .map(|text| (text, false)),
+        ) {
+            let parsed = lexer.parse(text).into_result().ok().and_then(|tokens| {
+                let input = tokens
+                    .as_slice()
+                    .map((text.len()..text.len()).into(), map_parser_input);
+                create_numeric_interval_literal_parser::<_, Err<EmptyErr>>(&options)
+                    .parse(input)
+                    .into_result()
+                    .ok()
+            });
+            if require_numeric {
+                assert!(parsed.is_some(), "{text:?} missed the numeric grammar");
+            }
+            let expected = original(text);
+            if let Some(actual) = parsed {
+                assert_result(&Ok(actual), &expected, text);
+            }
+            assert_result(&parse_interval_literal(text), &expected, text);
         }
     }
 

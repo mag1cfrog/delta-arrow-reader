@@ -2476,6 +2476,22 @@ for all three string encodings, SQL dictionary inputs, NULL/empty/scalar/array
 forms, both ANSI modes and CAST/TRY_CAST. Existing test outcomes and captures are
 retained. No dependency fork or explicit-input-format parser changes.
 
+### Numeric STRING interval operands (#1389, second round)
+
+Runtime interval parsing first tries the existing `IntervalLiteral` grammar
+with `NumberLiteral` as its value expression. The outer grammar still recognizes
+quoted intervals. On an incomplete or rejected parse, the same tokens and spans
+go through the original expression grammar with Rich diagnostics. Array calls
+reuse both parsers lazily, and a decoded quoted layer can take the smaller
+grammar before constructing the recursive expression graph. Unit precedence,
+numeric tokens and AST-to-value conversion are shared. SQL statement grammar
+and dependency forks are unchanged.
+
+The analyzer's differential test compares AST values, byte spans and errors
+against the original Rich parser over the committed interval corpus. The
+existing row conversion tests cover values, NULLs, failures and executed types
+through CAST and TRY_CAST in both ANSI modes.
+
 ### Ordinary STRING timestamp casts (#1389)
 
 SparkTimestamp LTZ/NTZ uses Chrono calendar and clock validation directly for

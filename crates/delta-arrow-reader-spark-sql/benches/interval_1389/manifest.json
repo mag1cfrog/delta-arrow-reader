@@ -1,0 +1,13 @@
+{
+  "issue": 1389,
+  "baseline": "1ec4b096432007a0d9f0f8f9347cfce5e47cddc4",
+  "statements": [
+    "interval_year_month",
+    "interval_day_time",
+    "interval_calendar",
+    "interval_day_time_input"
+  ],
+  "queries_sha256": "4f3d9a0a5f7755b1524fcb2ca9641b97c0b3f0b232ab9923141176869c5c2359",
+  "schedule_sha256": "301fb5ae06d7ee99f65c17658f595038a40f0a27b58b55eb34b6cddade389996",
+  "session_limit_seconds": 1800
+}

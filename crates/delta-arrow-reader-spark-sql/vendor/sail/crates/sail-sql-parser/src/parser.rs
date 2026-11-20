@@ -6,8 +6,9 @@ use chumsky::prelude::{Recursive, end, recursive};
 use chumsky::{IterParser, Parser};
 
 use crate::ast::data_type::DataType;
-use crate::ast::expression::{Expr, IntervalLiteral};
+use crate::ast::expression::{AtomExpr, Expr, IntervalLiteral};
 use crate::ast::identifier::ObjectName;
+use crate::ast::literal::NumberLiteral;
 use crate::ast::operator::Semicolon;
 use crate::ast::query::{Query, TableRelation};
 use crate::ast::statement::Statement;
@@ -133,6 +134,21 @@ where
     IntervalLiteral::parser(expression(options), options)
 }
 
+fn numeric_interval_literal<'a, I, E>(
+    options: &'a ParserOptions,
+) -> impl Parser<'a, I, IntervalLiteral, E> + Clone
+where
+    I: Input<'a, Token = Token<'a>> + ValueInput<'a>,
+    I::Span: Into<TokenSpan> + Clone,
+    E: ParserExtra<'a, I> + 'a,
+    E::Error: LabelError<'a, I, TokenLabel>,
+{
+    let number = NumberLiteral::parser((), options)
+        .map(|literal| Expr::Atom(AtomExpr::NumberLiteral(literal)));
+    // Keep the same interval grammar and use a smaller parser for numeric operands.
+    IntervalLiteral::parser(number, options)
+}
+
 pub fn create_parser<'a, I, E>(
     options: &'a ParserOptions,
 ) -> impl Parser<'a, I, Vec<Statement>, E> + Clone
@@ -206,4 +222,9 @@ define_sub_parser!(
     create_interval_literal_parser,
     IntervalLiteral,
     interval_literal,
+);
+define_sub_parser!(
+    create_numeric_interval_literal_parser,
+    IntervalLiteral,
+    numeric_interval_literal,
 );
