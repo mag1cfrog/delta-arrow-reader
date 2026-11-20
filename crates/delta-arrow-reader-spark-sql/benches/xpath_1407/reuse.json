@@ -1,0 +1,11 @@
+{
+  "staging_source": "6c774893052e5eea5da25a02ac1b079223e5f1df",
+  "candidate_source": "100991ce5394e8fbe8e3bc116e9f55cb50e14136",
+  "paired_rows": 16384,
+  "full_rows": 1000000,
+  "per_process_seconds": 130,
+  "session_seconds": 14400,
+  "replicas": 3,
+  "edge_fixture_sha256": "b919b21e2edb6513283dbfc30384f898c596dc455fce7530f021df4ab59d8f8d",
+  "edge_test_sha256": "030dbb0303b5ebac1b6da9fd439d1378c39642cdfeb396ff96776f463880620c"
+}

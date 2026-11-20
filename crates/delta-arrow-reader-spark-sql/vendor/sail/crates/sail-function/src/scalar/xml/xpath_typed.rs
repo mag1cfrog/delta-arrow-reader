@@ -2,7 +2,7 @@
 use std::sync::Arc;
 
 use datafusion::arrow::array::{
-    Array, ArrayRef, BooleanBuilder, Float32Builder, Float64Builder, Int16Builder, Int32Builder,
+    ArrayRef, BooleanBuilder, Float32Builder, Float64Builder, Int16Builder, Int32Builder,
     Int64Builder, StringArray, StringBuilder,
 };
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
@@ -11,8 +11,10 @@ use datafusion_common::{DataFusionError, Result, internal_err, plan_err};
 use datafusion_expr::{
     ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
 };
-use xee_xpath::{Documents, Queries, Query};
+use xee_xpath::query::Convert;
+use xee_xpath::{Documents, Item, Queries, Query};
 
+use super::xpath::for_each_xpath_row;
 use crate::functions_utils::make_scalar_function;
 
 /// The kind of typed XPath function.
@@ -147,161 +149,103 @@ fn xpath_typed_inner(kind: XpathTypedKind, args: &[ArrayRef]) -> Result<ArrayRef
     }
 }
 
-fn evaluate_xpath_boolean(xml: &str, path: &str) -> Result<Option<bool>> {
-    if xml.is_empty() || path.is_empty() {
-        return Ok(None);
-    }
-    let wrapped = format!("boolean({path})");
-    let mut documents = Documents::new();
-    let document = documents
-        .add_string_without_uri(xml)
-        .map_err(|e| DataFusionError::Execution(format!("Invalid XML document: {e}")))?;
-    let query = Queries::default()
-        .one(&wrapped, |_, item| Ok(item.try_into_value::<bool>()?))
-        .map_err(|e| DataFusionError::Execution(format!("Invalid XPath '{path}': {e}")))?;
-    let result = query
-        .execute(&mut documents, document)
-        .map_err(|e| DataFusionError::Execution(format!("Error evaluating XPath '{path}': {e}")))?;
-    Ok(Some(result))
-}
-
-fn evaluate_xpath_number(xml: &str, path: &str) -> Result<Option<f64>> {
-    if xml.is_empty() || path.is_empty() {
-        return Ok(None);
-    }
-    let wrapped = format!("number({path})");
-    let mut documents = Documents::new();
-    let document = documents
-        .add_string_without_uri(xml)
-        .map_err(|e| DataFusionError::Execution(format!("Invalid XML document: {e}")))?;
-    let query = Queries::default()
-        .one(&wrapped, |_, item| Ok(item.try_into_value::<f64>()?))
-        .map_err(|e| DataFusionError::Execution(format!("Invalid XPath '{path}': {e}")))?;
-    let result = query
-        .execute(&mut documents, document)
-        .map_err(|e| DataFusionError::Execution(format!("Error evaluating XPath '{path}': {e}")))?;
-    Ok(Some(result))
-}
-
-fn evaluate_xpath_string(xml: &str, path: &str) -> Result<Option<String>> {
-    if xml.is_empty() || path.is_empty() {
-        return Ok(None);
-    }
-    let wrapped = format!("string({path})");
-    let mut documents = Documents::new();
-    let document = documents
-        .add_string_without_uri(xml)
-        .map_err(|e| DataFusionError::Execution(format!("Invalid XML document: {e}")))?;
-    let query = Queries::default()
-        .one(&wrapped, |_, item| Ok(item.try_into_value::<String>()?))
-        .map_err(|e| DataFusionError::Execution(format!("Invalid XPath '{path}': {e}")))?;
-    let result = query
-        .execute(&mut documents, document)
-        .map_err(|e| DataFusionError::Execution(format!("Error evaluating XPath '{path}': {e}")))?;
-    Ok(Some(result))
+fn for_each_typed_xpath_row<T>(
+    xmls: &StringArray,
+    paths: &StringArray,
+    xpath_function: &str,
+    convert_item: impl Convert<T>,
+    append: impl FnMut(Option<T>),
+) -> Result<()> {
+    for_each_xpath_row(
+        xmls,
+        paths,
+        |path| {
+            let wrapped = format!("{xpath_function}({path})");
+            Queries::default()
+                .one(&wrapped, &convert_item)
+                .map_err(|e| DataFusionError::Execution(format!("Invalid XPath '{path}': {e}")))
+        },
+        |documents, document, path, query| {
+            query.execute(documents, document).map_err(|e| {
+                DataFusionError::Execution(format!("Error evaluating XPath '{path}': {e}"))
+            })
+        },
+        append,
+    )
 }
 
 fn build_boolean_array(xmls: &StringArray, paths: &StringArray) -> Result<ArrayRef> {
     let mut builder = BooleanBuilder::new();
-    for row in 0..xmls.len() {
-        if xmls.is_null(row) || paths.is_null(row) {
-            builder.append_null();
-        } else {
-            match evaluate_xpath_boolean(xmls.value(row), paths.value(row))? {
-                Some(v) => builder.append_value(v),
-                None => builder.append_null(),
-            }
-        }
-    }
+    for_each_typed_xpath_row(
+        xmls,
+        paths,
+        "boolean",
+        |_: &mut Documents, item: &Item| Ok(item.try_into_value::<bool>()?),
+        |value| builder.append_option(value),
+    )?;
     Ok(Arc::new(builder.finish()))
 }
 
 fn build_float64_array(xmls: &StringArray, paths: &StringArray) -> Result<ArrayRef> {
     let mut builder = Float64Builder::new();
-    for row in 0..xmls.len() {
-        if xmls.is_null(row) || paths.is_null(row) {
-            builder.append_null();
-        } else {
-            match evaluate_xpath_number(xmls.value(row), paths.value(row))? {
-                Some(v) => builder.append_value(v),
-                None => builder.append_null(),
-            }
-        }
-    }
+    for_each_numeric_xpath_row(xmls, paths, |value| builder.append_option(value))?;
     Ok(Arc::new(builder.finish()))
 }
 
 fn build_float32_array(xmls: &StringArray, paths: &StringArray) -> Result<ArrayRef> {
     let mut builder = Float32Builder::new();
-    for row in 0..xmls.len() {
-        if xmls.is_null(row) || paths.is_null(row) {
-            builder.append_null();
-        } else {
-            match evaluate_xpath_number(xmls.value(row), paths.value(row))? {
-                Some(v) => builder.append_value(v as f32),
-                None => builder.append_null(),
-            }
-        }
-    }
+    for_each_numeric_xpath_row(xmls, paths, |value| {
+        builder.append_option(value.map(|n| n as f32))
+    })?;
     Ok(Arc::new(builder.finish()))
 }
 
 fn build_int32_array(xmls: &StringArray, paths: &StringArray) -> Result<ArrayRef> {
     let mut builder = Int32Builder::new();
-    for row in 0..xmls.len() {
-        if xmls.is_null(row) || paths.is_null(row) {
-            builder.append_null();
-        } else {
-            match evaluate_xpath_number(xmls.value(row), paths.value(row))? {
-                Some(v) => builder.append_value(v as i32),
-                None => builder.append_null(),
-            }
-        }
-    }
+    for_each_numeric_xpath_row(xmls, paths, |value| {
+        builder.append_option(value.map(|n| n as i32))
+    })?;
     Ok(Arc::new(builder.finish()))
 }
 
 fn build_int64_array(xmls: &StringArray, paths: &StringArray) -> Result<ArrayRef> {
     let mut builder = Int64Builder::new();
-    for row in 0..xmls.len() {
-        if xmls.is_null(row) || paths.is_null(row) {
-            builder.append_null();
-        } else {
-            match evaluate_xpath_number(xmls.value(row), paths.value(row))? {
-                Some(v) => builder.append_value(v as i64),
-                None => builder.append_null(),
-            }
-        }
-    }
+    for_each_numeric_xpath_row(xmls, paths, |value| {
+        builder.append_option(value.map(|n| n as i64))
+    })?;
     Ok(Arc::new(builder.finish()))
 }
 
 fn build_int16_array(xmls: &StringArray, paths: &StringArray) -> Result<ArrayRef> {
     let mut builder = Int16Builder::new();
-    for row in 0..xmls.len() {
-        if xmls.is_null(row) || paths.is_null(row) {
-            builder.append_null();
-        } else {
-            match evaluate_xpath_number(xmls.value(row), paths.value(row))? {
-                Some(v) => builder.append_value(v as i16),
-                None => builder.append_null(),
-            }
-        }
-    }
+    for_each_numeric_xpath_row(xmls, paths, |value| {
+        builder.append_option(value.map(|n| n as i16))
+    })?;
     Ok(Arc::new(builder.finish()))
+}
+
+fn for_each_numeric_xpath_row(
+    xmls: &StringArray,
+    paths: &StringArray,
+    append: impl FnMut(Option<f64>),
+) -> Result<()> {
+    for_each_typed_xpath_row(
+        xmls,
+        paths,
+        "number",
+        |_: &mut Documents, item: &Item| Ok(item.try_into_value::<f64>()?),
+        append,
+    )
 }
 
 fn build_string_array(xmls: &StringArray, paths: &StringArray) -> Result<ArrayRef> {
     let mut builder = StringBuilder::new();
-    for row in 0..xmls.len() {
-        if xmls.is_null(row) || paths.is_null(row) {
-            builder.append_null();
-        } else {
-            match evaluate_xpath_string(xmls.value(row), paths.value(row))? {
-                Some(v) => builder.append_value(v),
-                None => builder.append_null(),
-            }
-        }
-    }
+    for_each_typed_xpath_row(
+        xmls,
+        paths,
+        "string",
+        |_: &mut Documents, item: &Item| Ok(item.try_into_value::<String>()?),
+        |value| builder.append_option(value),
+    )?;
     Ok(Arc::new(builder.finish()))
 }

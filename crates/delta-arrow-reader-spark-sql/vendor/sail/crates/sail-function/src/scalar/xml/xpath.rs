@@ -1,13 +1,16 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
+use std::collections::HashMap;
 use std::sync::Arc;
 
-use datafusion::arrow::array::{Array, ArrayRef, ListBuilder, StringArray, StringBuilder};
+use datafusion::arrow::array::{ArrayRef, ListBuilder, StringArray, StringBuilder};
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
 use datafusion_common::utils::take_function_args;
 use datafusion_common::{DataFusionError, Result, internal_err, plan_err};
 use datafusion_expr::{
     ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
 };
-use xee_xpath::{Documents, Item, Queries, Query};
+use xee_xpath::query::SequenceQuery;
+use xee_xpath::{DocumentHandle, Documents, Item, Queries, Query};
 
 use crate::functions_utils::make_scalar_function;
 
@@ -95,13 +98,16 @@ fn xpath_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
         })?;
 
     let mut builder = ListBuilder::new(StringBuilder::new());
-    for row in 0..xmls.len() {
-        let values = if xmls.is_null(row) || paths.is_null(row) {
-            None
-        } else {
-            evaluate_xpath(xmls.value(row), paths.value(row))?
-        };
-        match values {
+    for_each_xpath_row(
+        xmls,
+        paths,
+        |path| {
+            Queries::default().sequence(path).map_err(|error| {
+                DataFusionError::Execution(format!("Invalid XPath '{path}': {error}"))
+            })
+        },
+        evaluate_xpath_list,
+        |values| match values {
             Some(values) => {
                 for value in values {
                     builder.values().append_option(value);
@@ -109,38 +115,88 @@ fn xpath_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
                 builder.append(true);
             }
             None => builder.append(false),
-        }
-    }
+        },
+    )?;
     Ok(Arc::new(builder.finish()))
 }
 
-fn evaluate_xpath(xml: &str, path: &str) -> Result<Option<Vec<Option<String>>>> {
-    if xml.is_empty() || path.is_empty() {
-        return Ok(None);
+struct BatchXpathPath<Q> {
+    last_row: usize,
+    query: Option<Q>,
+}
+
+pub(super) fn for_each_xpath_row<Q, T>(
+    xmls: &StringArray,
+    paths: &StringArray,
+    compile: impl Fn(&str) -> Result<Q>,
+    evaluate: impl Fn(&mut Documents, DocumentHandle, &str, &Q) -> Result<T>,
+    mut append: impl FnMut(Option<T>),
+) -> Result<()> {
+    let paired_inputs = || {
+        xmls.iter()
+            .zip(paths.iter())
+            .map(|(xml, path)| match (xml, path) {
+                (Some(xml), Some(path)) if !xml.is_empty() && !path.is_empty() => Some((xml, path)),
+                _ => None,
+            })
+    };
+    // Retain each compiled query only until its final usable row.
+    let mut batch_paths = HashMap::new();
+    for (row, input) in paired_inputs().enumerate() {
+        if let Some((_, path)) = input {
+            batch_paths.insert(
+                path,
+                BatchXpathPath {
+                    last_row: row,
+                    query: None,
+                },
+            );
+        }
     }
 
-    let mut documents = Documents::new();
-    let document = documents
-        .add_string_without_uri(xml)
-        .map_err(|error| DataFusionError::Execution(format!("Invalid XML document: {error}")))?;
-    let query = Queries::default()
-        .sequence(path)
-        .map_err(|error| DataFusionError::Execution(format!("Invalid XPath '{path}': {error}")))?;
-    let value = query.execute(&mut documents, document).map_err(|error| {
+    for (row, input) in paired_inputs().enumerate() {
+        let Some((xml, path)) = input else {
+            append(None);
+            continue;
+        };
+        // An invalid document takes precedence over an invalid path on the same row.
+        let mut documents = Documents::new();
+        let document = documents.add_string_without_uri(xml).map_err(|error| {
+            DataFusionError::Execution(format!("Invalid XML document: {error}"))
+        })?;
+        let batch_path = batch_paths.get_mut(path).ok_or_else(|| {
+            DataFusionError::Internal("XPath path missing from batch index".into())
+        })?;
+        let query = match &mut batch_path.query {
+            Some(query) => query,
+            slot @ None => slot.insert(compile(path)?),
+        };
+        append(Some(evaluate(&mut documents, document, path, query)?));
+        if batch_path.last_row == row {
+            batch_path.query = None;
+        }
+    }
+    Ok(())
+}
+
+fn evaluate_xpath_list(
+    documents: &mut Documents,
+    document: DocumentHandle,
+    path: &str,
+    query: &SequenceQuery,
+) -> Result<Vec<Option<String>>> {
+    let value = query.execute(documents, document).map_err(|error| {
         DataFusionError::Execution(format!("Error loading expression '{path}': {error}"))
     })?;
-
-    Ok(Some(
-        value
-            .iter()
-            .map(|item| match item {
-                Item::Node(node) => Ok(node_value(documents.xot(), node)),
-                Item::Atomic(_) | Item::Function(_) => Err(DataFusionError::Execution(format!(
-                    "Error loading expression '{path}': Cannot convert XPath result to a NodeList"
-                ))),
-            })
-            .collect::<Result<Vec<_>>>()?,
-    ))
+    value
+        .iter()
+        .map(|item| match item {
+            Item::Node(node) => Ok(node_value(documents.xot(), node)),
+            Item::Atomic(_) | Item::Function(_) => Err(DataFusionError::Execution(format!(
+                "Error loading expression '{path}': Cannot convert XPath result to a NodeList"
+            ))),
+        })
+        .collect()
 }
 
 fn node_value(xot: &xot::Xot, node: xot::Node) -> Option<String> {
@@ -155,5 +211,50 @@ fn node_value(xot: &xot::Xot, node: xot::Node) -> Option<String> {
         xot::Value::ProcessingInstruction(instruction) => {
             Some(instruction.data().unwrap_or("").to_string())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::RefCell;
+
+    use super::*;
+
+    #[test]
+    fn xpath_compiles_each_valid_path_once_in_a_batch() -> Result<()> {
+        let names: Vec<_> = (0..300).map(|index| format!("path_{index}")).collect();
+        let paths = StringArray::from_iter(
+            names
+                .iter()
+                .map(String::as_str)
+                .cycle()
+                .take(600)
+                .map(Some)
+                .chain([Some("unused"), Some(""), None]),
+        );
+        let xmls = StringArray::from_iter((0..600).map(|_| Some("<r/>")).chain([
+            None,
+            Some("bad XML"),
+            Some("bad XML"),
+        ]));
+        let counts = RefCell::new(HashMap::new());
+        let mut output = Vec::new();
+        for_each_xpath_row(
+            &xmls,
+            &paths,
+            |path| {
+                *counts.borrow_mut().entry(path.to_owned()).or_insert(0) += 1;
+                Ok(path.to_owned())
+            },
+            |_, _, _, path| Ok(path.clone()),
+            |value| output.push(value),
+        )?;
+
+        let counts = counts.into_inner();
+        assert_eq!(counts.len(), names.len());
+        assert!(counts.values().all(|count| *count == 1));
+        assert_eq!(&output[..300], &output[300..600]);
+        assert_eq!(&output[600..], &[None, None, None]);
+        Ok(())
     }
 }
