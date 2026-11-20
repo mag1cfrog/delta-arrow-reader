@@ -70,6 +70,9 @@ impl WindowAggState {
             Some(WindowFrameContext::Rows(_)) => {}
             Some(WindowFrameContext::Range { state, .. }) => {
                 state.peer_comparator = None;
+                if n_prune != 0 {
+                    state.pending_range_search = None;
+                }
             }
             Some(WindowFrameContext::Groups { state, .. }) => {
                 let mut n_group_to_del = 0;
@@ -127,8 +130,7 @@ impl WindowAggState {
 pub enum WindowFrameContext {
     /// ROWS frames are inherently stateless.
     Rows(Arc<WindowFrame>),
-    /// RANGE frames retain committed search indices. Their forward movement
-    /// totals O(n) for n rows; pending rows may rescan buffered input.
+    /// RANGE frames retain committed search indices and eligible pending searches.
     Range {
         window_frame: Arc<WindowFrame>,
         state: WindowFrameStateRange,
@@ -155,6 +157,26 @@ impl WindowFrameContext {
                 window_frame,
                 state: WindowFrameStateGroups::default(),
             },
+        }
+    }
+
+    /// Retain a deferred candidate separately from the accumulator's committed range.
+    /// The caller must ensure a Spark signed-integer RANGE without NULL offsets,
+    /// and an immutable ORDER BY column prefix until completion or pruning.
+    pub fn record_pending_range_search(
+        &mut self,
+        committed_range: &Range<usize>,
+        range: &Range<usize>,
+        length: usize,
+        idx: usize,
+    ) {
+        if let Self::Range { state, .. } = self {
+            state.pending_range_search = Some(PendingRangeSearch {
+                idx,
+                length,
+                committed_range: committed_range.clone(),
+                range: range.clone(),
+            });
         }
     }
 
@@ -309,6 +331,15 @@ impl PartitionBatchState {
 pub struct WindowFrameStateRange {
     sort_options: Vec<SortOptions>,
     peer_comparator: Option<(Vec<ArrayRef>, Arc<LexicographicalComparator>)>,
+    pending_range_search: Option<PendingRangeSearch>,
+}
+
+#[derive(Clone)]
+struct PendingRangeSearch {
+    idx: usize,
+    length: usize,
+    committed_range: Range<usize>,
+    range: Range<usize>,
 }
 
 impl fmt::Debug for WindowFrameStateRange {
@@ -539,13 +570,12 @@ impl WindowFrameStateRange {
         Self {
             sort_options,
             peer_comparator: None,
+            pending_range_search: None,
         }
     }
 
     /// This function calculates beginning/ending indices for the frame of the current row.
-    // `last_range` stores the previous committed indices. They only advance,
-    // so committed cursor movement totals O(n) for n rows. Pending rows may
-    // rescan buffered rows as more input arrives.
+    // Candidate cursors never stand in for ranges already applied to the accumulator.
     fn calculate_range(
         &mut self,
         window_frame: &Arc<WindowFrame>,
@@ -554,6 +584,13 @@ impl WindowFrameStateRange {
         length: usize,
         idx: usize,
     ) -> Result<Range<usize>> {
+        if !self.pending_range_search.as_ref().is_some_and(|pending| {
+            pending.idx == idx
+                && pending.length <= length
+                && pending.committed_range == *last_range
+        }) {
+            self.pending_range_search = None;
+        }
         let date32_wrapping_bound = range_columns.first().is_some_and(|column| {
             [&window_frame.start_bound, &window_frame.end_bound]
                 .iter()
@@ -748,6 +785,20 @@ impl WindowFrameStateRange {
             };
             Ok(if SIDE { cmp.is_lt() } else { cmp.is_le() })
         };
+        // Revalidate targets first so an exhausted hint cannot hide a late arithmetic error.
+        let search_start =
+            self.pending_range_search
+                .as_ref()
+                .map_or(search_start, |pending| {
+                    search_start.max(
+                        if SIDE {
+                            pending.range.start
+                        } else {
+                            pending.range.end
+                        }
+                        .min(length),
+                    )
+                });
         search_in_slice(range_columns, &end_range, compare_fn, search_start, length)
     }
 }
@@ -976,6 +1027,173 @@ mod tests {
     };
     use arrow::buffer::OffsetBuffer;
     use arrow::datatypes::{Field, Int32Type};
+
+    #[test]
+    fn test_pending_range_search_matches_committed_cursors_on_append() -> Result<()> {
+        for key_type in [
+            DataType::Int8,
+            DataType::Int16,
+            DataType::Int32,
+            DataType::Int64,
+        ] {
+            let one = ScalarValue::new_one(&key_type)?;
+            let minimum = ScalarValue::try_from_string(
+                match key_type {
+                    DataType::Int8 => i8::MIN.to_string(),
+                    DataType::Int16 => i16::MIN.to_string(),
+                    DataType::Int32 => i32::MIN.to_string(),
+                    _ => i64::MIN.to_string(),
+                },
+                &key_type,
+            )?;
+            for (keys, start, end) in [
+                (
+                    vec![ScalarValue::new_zero(&key_type)?; 6],
+                    WindowFrameBound::Preceding(ScalarValue::Null),
+                    WindowFrameBound::Following(one.clone()),
+                ),
+                (
+                    vec![minimum; 6],
+                    WindowFrameBound::Preceding(ScalarValue::Null),
+                    WindowFrameBound::Preceding(one.clone()),
+                ),
+                (
+                    [0, 1, 1, 2, 3, 4]
+                        .into_iter()
+                        .map(|key| ScalarValue::Int32(Some(key)).cast_to(&key_type))
+                        .collect::<Result<Vec<_>>>()?,
+                    WindowFrameBound::Following(one.clone()),
+                    WindowFrameBound::Following(one),
+                ),
+            ] {
+                let frame = Arc::new(
+                    WindowFrame::new_bounds(WindowFrameUnits::Range, start, end)
+                        .with_range_offset_arithmetic(RangeOffsetArithmetic::Spark {
+                            ansi_mode: false,
+                        }),
+                );
+                let column = ScalarValue::iter_to_array(keys)?;
+                let mut hinted =
+                    WindowFrameContext::new(frame.clone(), vec![SortOptions::default()]);
+                let mut original =
+                    WindowFrameContext::new(frame, vec![SortOptions::default()]);
+                let committed = 0..0;
+                for length in 1..=column.len() {
+                    let columns = [column.slice(0, length)];
+                    let candidate =
+                        hinted.calculate_range(&columns, &committed, length, 0)?;
+                    assert_eq!(
+                        candidate,
+                        original.calculate_range(&columns, &committed, length, 0)?
+                    );
+                    assert_eq!(committed, 0..0);
+                    hinted.record_pending_range_search(&committed, &candidate, length, 0);
+                    assert_eq!(
+                        candidate,
+                        hinted.calculate_range(&columns, &committed, length, 0)?
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_pending_range_search_invalidates_shifted_rows_and_pruning() -> Result<()> {
+        let frame = Arc::new(
+            WindowFrame::new_bounds(
+                WindowFrameUnits::Range,
+                WindowFrameBound::Preceding(ScalarValue::Null),
+                WindowFrameBound::Following(ScalarValue::Int32(Some(1))),
+            )
+            .with_range_offset_arithmetic(RangeOffsetArithmetic::Spark {
+                ansi_mode: true,
+            }),
+        );
+        let columns: [ArrayRef; 1] = [Arc::new(Int32Array::from(vec![0, 0, 2, 4]))];
+        for (recorded_idx, idx, length, committed) in
+            [(3, 0, 4, 0..0), (0, 0, 2, 0..0), (3, 3, 4, 0..1)]
+        {
+            let mut context =
+                WindowFrameContext::new(frame.clone(), vec![SortOptions::default()]);
+            let candidate =
+                context.calculate_range(&columns, &(0..0), 4, recorded_idx)?;
+            context.record_pending_range_search(&(0..0), &candidate, 4, recorded_idx);
+            let actual = context.calculate_range(&columns, &committed, length, idx)?;
+            let mut original =
+                WindowFrameContext::new(frame.clone(), vec![SortOptions::default()]);
+            assert_eq!(
+                actual,
+                original.calculate_range(&columns, &committed, length, idx)?
+            );
+            let WindowFrameContext::Range { state, .. } = context else {
+                unreachable!()
+            };
+            assert!(state.pending_range_search.is_none());
+        }
+        let mut aggregate = WindowAggState::new(&DataType::Int64)?;
+        aggregate.window_frame_range = 1..2;
+        aggregate.last_calculated_index = 2;
+        let mut context = WindowFrameContext::new(frame, vec![SortOptions::default()]);
+        context.record_pending_range_search(&(1..2), &(1..4), 4, 2);
+        aggregate.window_frame_ctx = Some(context);
+        aggregate.prune_state(0);
+        let Some(WindowFrameContext::Range { state, .. }) = &aggregate.window_frame_ctx
+        else {
+            unreachable!()
+        };
+        assert!(state.pending_range_search.is_some());
+        aggregate.prune_state(1);
+        let Some(WindowFrameContext::Range { state, .. }) = &aggregate.window_frame_ctx
+        else {
+            unreachable!()
+        };
+        assert!(state.pending_range_search.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn test_pending_range_search_preserves_exhausted_cursor_errors() -> Result<()> {
+        let frame = Arc::new(
+            WindowFrame::new_bounds(
+                WindowFrameUnits::Range,
+                WindowFrameBound::Preceding(ScalarValue::Null),
+                WindowFrameBound::Following(ScalarValue::Int32(Some(1))),
+            )
+            .with_range_offset_arithmetic(RangeOffsetArithmetic::Spark {
+                ansi_mode: true,
+            }),
+        );
+        let columns: [ArrayRef; 1] =
+            [Arc::new(Int32Array::from(vec![i32::MAX, i32::MAX]))];
+        let mut context =
+            WindowFrameContext::new(frame.clone(), vec![SortOptions::default()]);
+        let committed = 0..1;
+        let candidate = context.calculate_range(&columns, &committed, 1, 0)?;
+        assert_eq!(candidate, 0..1);
+        context.record_pending_range_search(&committed, &candidate, 1, 0);
+        assert_eq!(
+            context.calculate_range(&columns, &committed, 1, 0)?,
+            candidate
+        );
+        let error = context
+            .calculate_range(&columns, &committed, 2, 0)
+            .unwrap_err();
+        let mut original = WindowFrameContext::new(frame, vec![SortOptions::default()]);
+        assert_eq!(
+            error.to_string(),
+            original
+                .calculate_range(&columns, &committed, 2, 0)
+                .unwrap_err()
+                .to_string()
+        );
+        assert!(
+            error
+                .to_string()
+                .contains("[ARITHMETIC_OVERFLOW] RANGE comparison target")
+        );
+        Ok(())
+    }
 
     #[test]
     fn test_date_range_wrapping_offsets_keep_unconsumed_rows() -> Result<()> {

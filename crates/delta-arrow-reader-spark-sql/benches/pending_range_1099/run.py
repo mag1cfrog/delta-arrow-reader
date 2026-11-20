@@ -111,8 +111,8 @@ def patch_sources():
     old = "                        let safe = is_end_bound_safe(\n                            window_frame_ctx,\n                            &order_bys,\n                            most_recent_row_order_bys.as_deref(),\n                            self.order_by(),\n                            idx,\n                        )?;"
     replace(EXPR, old, f"                        let safe = {{\n                            let _span = {prefix}Span::new(6);\n"
             f"                            {prefix}add(22, 1);\n" + old.replace("                        let safe = ", "                            ").removesuffix(";") + "\n                        };")
-    replace(EXPR, "                if !safe {\n                    break;\n                }",
-            "                if !safe {\n                    " + prefix + "pending(idx, length, last_range, &cur_range);\n                    break;\n                }")
+    replace(EXPR, "                if !safe {\n",
+            "                if !safe {\n                    " + prefix + "pending(idx, length, last_range, &cur_range);\n")
     old = "            let value = self.get_aggregate_result_inside_range(\n                last_range,\n                &cur_range,\n                &values,\n                accumulator,\n                filter_mask,\n            )?;"
     replace(EXPR, old, f"            let value = {{\n                let _span = {prefix}Span::new(7);\n"
             f"                {prefix}add(27, 1);\n" + old.replace("            let value = ", "                ").removesuffix(";") + "\n            };")

@@ -2381,10 +2381,21 @@ proofs let sparse partitions advance.
 A failed speculative target proof defers completion without creating a comparison
 error. These frames disable causal output-order inference and plan reversal.
 Retention still depends on peer groups, lookahead and open partitions.
-While a row waits for more input, execution can repeat searches over earlier
-batches. Single-row batches and a large unfinished peer group can require
-quadratic comparison work and retain the whole group. This inherited limit is
-tracked in [#1099](https://github.com/mag1cfrog/delta-arrow-reader/issues/1099).
+For a deferred aggregate row ordered by an actual signed-integer column,
+Spark RANGE state retains candidate search cursors separately from the range
+already applied to the accumulator (#1099). Retries reuse those cursors only
+for the same row and committed range as immutable input prefixes grow.
+Index changes, shorter input and nonzero pruning discard the candidate.
+Target arithmetic and its errors still run before a cursor hint is used;
+completion, lookahead, retraction and pruning retain their existing rules.
+Native frames, computed ORDER BY expressions and explicit NULL offsets keep
+their existing searches. The DataFusion expression and physical-expression
+forks contain this local adaptation. The [retry inputs](tests/fixtures/pending-range-1099-inputs.rs)
+compare aggregate Column and computed-expression paths with append, unchanged
+input, pruning, progressive output and late overflow errors.
+Large unfinished groups still retain their rows. Growing-buffer concatenation
+and whole-prefix argument evaluation can still require quadratic work with
+single-row batches.
 
 With matching window and outer ordering, the bounded executor can absorb a LIMIT
 and stop evaluating unrequested output rows while retaining frame lookahead.
