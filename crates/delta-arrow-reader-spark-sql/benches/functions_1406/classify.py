@@ -47,9 +47,10 @@ def classify(actual, reference):
     return "equal" if computed["schema"] == expected else "field-flags-only"
 
 
-def compare(driver, capture, output):
+def compare(driver, capture, output, bitmap):
     output.mkdir(parents=True, exist_ok=False)
-    reference_cases = [c for c in cases() if c["reference"] == "spark"]
+    reference_group = "bitmap-reduced" if bitmap else "spark"
+    reference_cases = [c for c in cases() if c["reference"] == reference_group]
     observe = output / "observation-manifest.json"
     write(observe, {"functions": reference_cases})
     with capture.open() as source:
@@ -92,8 +93,9 @@ def main():
     parser.add_argument("driver", type=Path)
     parser.add_argument("capture", type=Path)
     parser.add_argument("output", type=Path)
+    parser.add_argument("--bitmap", action="store_true")
     args = parser.parse_args()
-    compare(args.driver.resolve(), args.capture.resolve(), args.output.resolve())
+    compare(args.driver.resolve(), args.capture.resolve(), args.output.resolve(), args.bitmap)
 
 
 if __name__ == "__main__":

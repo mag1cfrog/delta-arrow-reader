@@ -40,6 +40,7 @@ def capture_with_typed_table(spark, case, encode):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path)
+    parser.add_argument("--bitmap", action="store_true", help="capture the three bitmap windows")
     args = parser.parse_args()
     input_path, manifest_path = HERE / "input.json", HERE / "manifest.json"
     source = json.loads(input_path.read_text())
@@ -58,9 +59,10 @@ def main():
         if row[7] is not None:
             row[7] = json.dumps([int(value) if value is not None else None for value in row[7]])
     manifest = json.loads(manifest_path.read_text())
+    group = "bitmap-reduced" if args.bitmap else "spark"
     cases = [dict(corpus="reduced-bench", id=case["id"], ansi=ansi,
                   sql=case["spark_sql"], ordered=False)
-             for case in manifest["functions"] if case["reference"] == "spark"
+             for case in manifest["functions"] if case["reference"] == group
              for ansi in (False, True)]
     request = {"issue": 1406, "expected_record_count": len(cases), "corpora": [{
         "corpus": "reduced-bench",
