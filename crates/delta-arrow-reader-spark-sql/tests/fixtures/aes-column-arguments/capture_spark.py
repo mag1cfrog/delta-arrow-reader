@@ -3,6 +3,7 @@
 
 import argparse
 import hashlib
+import json
 from pathlib import Path
 import sys
 
@@ -129,10 +130,47 @@ def requests():
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path)
+    parser.add_argument("--compact", type=Path, help="write executable results and fields for the Rust test")
+    parser.add_argument("--use-capture", action="store_true", help="read an existing raw capture at output")
     args = parser.parse_args()
-    driver = Path(__file__)
-    capture_requested_queries(requests(), args.output, [driver], [driver],
-                              spark_settings={"spark.sql.adaptive.enabled": "false"})
+    if not args.use_capture:
+        driver = Path(__file__)
+        capture_requested_queries(requests(), args.output, [driver], [driver],
+                                  spark_settings={"spark.sql.adaptive.enabled": "false"})
+    if args.compact is not None:
+        compact_results(args.output, args.compact)
+
+
+def compact_results(raw, output):
+    records = [json.loads(line) for line in raw.read_text().splitlines()]
+    header, cases = records[0], records[1:]
+    reference = requests()
+    corpus = reference["corpora"][0]
+    assert header["spark_version"] == "4.2.0" and header["spark_only"]
+    assert header["effective_settings"]["spark.sql.session.timeZone"] == "UTC"
+    assert header["corpora"][0]["metadata"] == corpus["metadata"]
+    assert len(cases) == len(corpus["cases"]) == reference["expected_record_count"]
+    compact = [{
+        "spark_version": header["spark_version"], "spark_revision": header["spark_build"]["SPARK_REVISION"]["value"],
+        "timezone": "UTC", "raw_capture_sha256": hashlib.sha256(raw.read_bytes()).hexdigest(),
+        "expected_cases": len(cases), **corpus["metadata"],
+    }]
+    for observed, expected in zip(cases, corpus["cases"], strict=True):
+        assert all(observed[key] == expected[key] for key in ("id", "ansi", "sql", "dar_sql", "scope"))
+        assert observed["effective_settings"]["spark.sql.ansi.enabled"] == str(expected["ansi"]).lower()
+        row = {key: observed[key] for key in ("id", "ansi", "ordered", "scope", "status")}
+        row["sql"] = observed["dar_sql"]
+        if observed["dar_sql"] != observed["sql"]:
+            row["spark_sql"] = observed["sql"]
+        if observed["status"] == "ok":
+            row["expected"] = {"schema": observed["schema_stages"]["executed"], "rows": observed["rows_raw"]}
+        else:
+            assert observed["status"] == "error"
+            row["expected"] = observed["expected"]
+        compact.append(row)
+    with output.open("x") as destination:
+        for row in compact:
+            print(json.dumps(row, separators=(",", ":")), file=destination)
 
 
 if __name__ == "__main__":
