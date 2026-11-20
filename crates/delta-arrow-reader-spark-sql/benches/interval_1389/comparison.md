@@ -42,3 +42,7 @@ per cast with `cycles:u`, 997 Hz and an 8 KiB DWARF stack. Use the ANSI-off
 statements, the original fixture and affinity, and 30 seconds per process.
 Report interval-related call stacks and any uncertainty from unresolved
 frames. No additional elapsed timings enter the before/after comparison.
+
+The hardware event could not be opened for recording. The failed attempt
+produced no samples. Use the same bounded schedule with the supported
+`cpu-clock:u` event and `--user-callchains`.
