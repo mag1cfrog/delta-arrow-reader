@@ -4,7 +4,7 @@ use super::*;
 use std::io::Cursor;
 
 use arrow::ipc::{reader::StreamReader, writer::StreamWriter};
-use datafusion::common::tree_node::{TreeNode, TreeNodeRecursion};
+use datafusion::common::tree_node::TreeNodeRecursion;
 use datafusion::logical_expr::LogicalPlan;
 use datafusion::physical_plan::displayable;
 

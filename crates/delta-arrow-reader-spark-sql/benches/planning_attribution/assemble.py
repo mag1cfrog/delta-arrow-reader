@@ -195,7 +195,9 @@ def assemble(destination, observed):
             generated[str(pathlib.Path(path).parent / "planning_attribution.rs")] = (HERE / "events.rs").read_text()
     generated["benches/planning_attribution/driver.rs"] = driver_source(observed)
     generated["benches/planning_attribution_fixture.rs"] = (WORKSPACE / "benches/planning.rs").read_text() + '\n#[path = "planning_attribution/driver.rs"]\npub mod attribution;\n'
-    generated["benches/planning_attribution_entry.rs"] = '''#[allow(dead_code)]
+    generated["benches/planning_attribution_entry.rs"] = '''//! Run the planning-only attribution benchmark.
+
+#[allow(dead_code)]
 #[path = "planning_attribution_fixture.rs"]
 mod frozen;
 #[tokio::main(flavor = "current_thread")]
