@@ -1,0 +1,570 @@
+{
+  "cpu": 2,
+  "warmups": 2,
+  "samples": 9,
+  "process_timeout_seconds": 300,
+  "trace_processes": 8,
+  "process_cap": 78,
+  "runs": [
+    {
+      "mode": "canonical",
+      "configuration": "native-configured",
+      "series": "noise",
+      "arm": "a",
+      "pair": 1,
+      "process": "canonical-noise-01-a"
+    },
+    {
+      "mode": "canonical",
+      "configuration": "native-configured",
+      "series": "noise",
+      "arm": "b",
+      "pair": 1,
+      "process": "canonical-noise-01-b"
+    },
+    {
+      "mode": "canonical",
+      "configuration": "native-configured",
+      "series": "noise",
+      "arm": "b",
+      "pair": 2,
+      "process": "canonical-noise-02-b"
+    },
+    {
+      "mode": "canonical",
+      "configuration": "native-configured",
+      "series": "noise",
+      "arm": "a",
+      "pair": 2,
+      "process": "canonical-noise-02-a"
+    },
+    {
+      "mode": "canonical",
+      "configuration": "native-configured",
+      "series": "noise",
+      "arm": "a",
+      "pair": 3,
+      "process": "canonical-noise-03-a"
+    },
+    {
+      "mode": "canonical",
+      "configuration": "native-configured",
+      "series": "noise",
+      "arm": "b",
+      "pair": 3,
+      "process": "canonical-noise-03-b"
+    },
+    {
+      "mode": "canonical",
+      "configuration": "native-configured",
+      "series": "noise",
+      "arm": "b",
+      "pair": 4,
+      "process": "canonical-noise-04-b"
+    },
+    {
+      "mode": "canonical",
+      "configuration": "native-configured",
+      "series": "noise",
+      "arm": "a",
+      "pair": 4,
+      "process": "canonical-noise-04-a"
+    },
+    {
+      "mode": "canonical",
+      "configuration": "native-configured",
+      "series": "noise",
+      "arm": "a",
+      "pair": 5,
+      "process": "canonical-noise-05-a"
+    },
+    {
+      "mode": "canonical",
+      "configuration": "native-configured",
+      "series": "noise",
+      "arm": "b",
+      "pair": 5,
+      "process": "canonical-noise-05-b"
+    },
+    {
+      "mode": "canonical",
+      "configuration": "native-plain",
+      "series": "main",
+      "arm": null,
+      "pair": 1,
+      "process": "canonical-main-01-native-plain"
+    },
+    {
+      "mode": "observed",
+      "configuration": "native-plain",
+      "series": "main",
+      "arm": "a",
+      "pair": 1,
+      "process": "observed-01-native-plain-a"
+    },
+    {
+      "mode": "observed",
+      "configuration": "native-plain",
+      "series": "noise",
+      "arm": "b",
+      "pair": 1,
+      "process": "observed-01-native-plain-b"
+    },
+    {
+      "mode": "canonical",
+      "configuration": "native-configured",
+      "series": "main",
+      "arm": null,
+      "pair": 1,
+      "process": "canonical-main-01-native-configured"
+    },
+    {
+      "mode": "observed",
+      "configuration": "native-configured",
+      "series": "main",
+      "arm": "a",
+      "pair": 1,
+      "process": "observed-01-native-configured-a"
+    },
+    {
+      "mode": "observed",
+      "configuration": "native-configured",
+      "series": "noise",
+      "arm": "b",
+      "pair": 1,
+      "process": "observed-01-native-configured-b"
+    },
+    {
+      "mode": "canonical",
+      "configuration": "spark-off",
+      "series": "main",
+      "arm": null,
+      "pair": 1,
+      "process": "canonical-main-01-spark-off"
+    },
+    {
+      "mode": "observed",
+      "configuration": "spark-off",
+      "series": "main",
+      "arm": "a",
+      "pair": 1,
+      "process": "observed-01-spark-off-a"
+    },
+    {
+      "mode": "observed",
+      "configuration": "spark-off",
+      "series": "noise",
+      "arm": "b",
+      "pair": 1,
+      "process": "observed-01-spark-off-b"
+    },
+    {
+      "mode": "canonical",
+      "configuration": "spark-on",
+      "series": "main",
+      "arm": null,
+      "pair": 1,
+      "process": "canonical-main-01-spark-on"
+    },
+    {
+      "mode": "observed",
+      "configuration": "spark-on",
+      "series": "main",
+      "arm": "a",
+      "pair": 1,
+      "process": "observed-01-spark-on-a"
+    },
+    {
+      "mode": "observed",
+      "configuration": "spark-on",
+      "series": "noise",
+      "arm": "b",
+      "pair": 1,
+      "process": "observed-01-spark-on-b"
+    },
+    {
+      "mode": "canonical",
+      "configuration": "spark-on",
+      "series": "main",
+      "arm": null,
+      "pair": 2,
+      "process": "canonical-main-02-spark-on"
+    },
+    {
+      "mode": "observed",
+      "configuration": "spark-on",
+      "series": "noise",
+      "arm": "b",
+      "pair": 2,
+      "process": "observed-02-spark-on-b"
+    },
+    {
+      "mode": "observed",
+      "configuration": "spark-on",
+      "series": "main",
+      "arm": "a",
+      "pair": 2,
+      "process": "observed-02-spark-on-a"
+    },
+    {
+      "mode": "canonical",
+      "configuration": "spark-off",
+      "series": "main",
+      "arm": null,
+      "pair": 2,
+      "process": "canonical-main-02-spark-off"
+    },
+    {
+      "mode": "observed",
+      "configuration": "spark-off",
+      "series": "noise",
+      "arm": "b",
+      "pair": 2,
+      "process": "observed-02-spark-off-b"
+    },
+    {
+      "mode": "observed",
+      "configuration": "spark-off",
+      "series": "main",
+      "arm": "a",
+      "pair": 2,
+      "process": "observed-02-spark-off-a"
+    },
+    {
+      "mode": "canonical",
+      "configuration": "native-configured",
+      "series": "main",
+      "arm": null,
+      "pair": 2,
+      "process": "canonical-main-02-native-configured"
+    },
+    {
+      "mode": "observed",
+      "configuration": "native-configured",
+      "series": "noise",
+      "arm": "b",
+      "pair": 2,
+      "process": "observed-02-native-configured-b"
+    },
+    {
+      "mode": "observed",
+      "configuration": "native-configured",
+      "series": "main",
+      "arm": "a",
+      "pair": 2,
+      "process": "observed-02-native-configured-a"
+    },
+    {
+      "mode": "canonical",
+      "configuration": "native-plain",
+      "series": "main",
+      "arm": null,
+      "pair": 2,
+      "process": "canonical-main-02-native-plain"
+    },
+    {
+      "mode": "observed",
+      "configuration": "native-plain",
+      "series": "noise",
+      "arm": "b",
+      "pair": 2,
+      "process": "observed-02-native-plain-b"
+    },
+    {
+      "mode": "observed",
+      "configuration": "native-plain",
+      "series": "main",
+      "arm": "a",
+      "pair": 2,
+      "process": "observed-02-native-plain-a"
+    },
+    {
+      "mode": "canonical",
+      "configuration": "native-configured",
+      "series": "main",
+      "arm": null,
+      "pair": 3,
+      "process": "canonical-main-03-native-configured"
+    },
+    {
+      "mode": "observed",
+      "configuration": "native-configured",
+      "series": "main",
+      "arm": "a",
+      "pair": 3,
+      "process": "observed-03-native-configured-a"
+    },
+    {
+      "mode": "observed",
+      "configuration": "native-configured",
+      "series": "noise",
+      "arm": "b",
+      "pair": 3,
+      "process": "observed-03-native-configured-b"
+    },
+    {
+      "mode": "canonical",
+      "configuration": "spark-off",
+      "series": "main",
+      "arm": null,
+      "pair": 3,
+      "process": "canonical-main-03-spark-off"
+    },
+    {
+      "mode": "observed",
+      "configuration": "spark-off",
+      "series": "main",
+      "arm": "a",
+      "pair": 3,
+      "process": "observed-03-spark-off-a"
+    },
+    {
+      "mode": "observed",
+      "configuration": "spark-off",
+      "series": "noise",
+      "arm": "b",
+      "pair": 3,
+      "process": "observed-03-spark-off-b"
+    },
+    {
+      "mode": "canonical",
+      "configuration": "spark-on",
+      "series": "main",
+      "arm": null,
+      "pair": 3,
+      "process": "canonical-main-03-spark-on"
+    },
+    {
+      "mode": "observed",
+      "configuration": "spark-on",
+      "series": "main",
+      "arm": "a",
+      "pair": 3,
+      "process": "observed-03-spark-on-a"
+    },
+    {
+      "mode": "observed",
+      "configuration": "spark-on",
+      "series": "noise",
+      "arm": "b",
+      "pair": 3,
+      "process": "observed-03-spark-on-b"
+    },
+    {
+      "mode": "canonical",
+      "configuration": "native-plain",
+      "series": "main",
+      "arm": null,
+      "pair": 3,
+      "process": "canonical-main-03-native-plain"
+    },
+    {
+      "mode": "observed",
+      "configuration": "native-plain",
+      "series": "main",
+      "arm": "a",
+      "pair": 3,
+      "process": "observed-03-native-plain-a"
+    },
+    {
+      "mode": "observed",
+      "configuration": "native-plain",
+      "series": "noise",
+      "arm": "b",
+      "pair": 3,
+      "process": "observed-03-native-plain-b"
+    },
+    {
+      "mode": "canonical",
+      "configuration": "native-plain",
+      "series": "main",
+      "arm": null,
+      "pair": 4,
+      "process": "canonical-main-04-native-plain"
+    },
+    {
+      "mode": "observed",
+      "configuration": "native-plain",
+      "series": "noise",
+      "arm": "b",
+      "pair": 4,
+      "process": "observed-04-native-plain-b"
+    },
+    {
+      "mode": "observed",
+      "configuration": "native-plain",
+      "series": "main",
+      "arm": "a",
+      "pair": 4,
+      "process": "observed-04-native-plain-a"
+    },
+    {
+      "mode": "canonical",
+      "configuration": "spark-on",
+      "series": "main",
+      "arm": null,
+      "pair": 4,
+      "process": "canonical-main-04-spark-on"
+    },
+    {
+      "mode": "observed",
+      "configuration": "spark-on",
+      "series": "noise",
+      "arm": "b",
+      "pair": 4,
+      "process": "observed-04-spark-on-b"
+    },
+    {
+      "mode": "observed",
+      "configuration": "spark-on",
+      "series": "main",
+      "arm": "a",
+      "pair": 4,
+      "process": "observed-04-spark-on-a"
+    },
+    {
+      "mode": "canonical",
+      "configuration": "spark-off",
+      "series": "main",
+      "arm": null,
+      "pair": 4,
+      "process": "canonical-main-04-spark-off"
+    },
+    {
+      "mode": "observed",
+      "configuration": "spark-off",
+      "series": "noise",
+      "arm": "b",
+      "pair": 4,
+      "process": "observed-04-spark-off-b"
+    },
+    {
+      "mode": "observed",
+      "configuration": "spark-off",
+      "series": "main",
+      "arm": "a",
+      "pair": 4,
+      "process": "observed-04-spark-off-a"
+    },
+    {
+      "mode": "canonical",
+      "configuration": "native-configured",
+      "series": "main",
+      "arm": null,
+      "pair": 4,
+      "process": "canonical-main-04-native-configured"
+    },
+    {
+      "mode": "observed",
+      "configuration": "native-configured",
+      "series": "noise",
+      "arm": "b",
+      "pair": 4,
+      "process": "observed-04-native-configured-b"
+    },
+    {
+      "mode": "observed",
+      "configuration": "native-configured",
+      "series": "main",
+      "arm": "a",
+      "pair": 4,
+      "process": "observed-04-native-configured-a"
+    },
+    {
+      "mode": "canonical",
+      "configuration": "spark-off",
+      "series": "main",
+      "arm": null,
+      "pair": 5,
+      "process": "canonical-main-05-spark-off"
+    },
+    {
+      "mode": "observed",
+      "configuration": "spark-off",
+      "series": "main",
+      "arm": "a",
+      "pair": 5,
+      "process": "observed-05-spark-off-a"
+    },
+    {
+      "mode": "observed",
+      "configuration": "spark-off",
+      "series": "noise",
+      "arm": "b",
+      "pair": 5,
+      "process": "observed-05-spark-off-b"
+    },
+    {
+      "mode": "canonical",
+      "configuration": "spark-on",
+      "series": "main",
+      "arm": null,
+      "pair": 5,
+      "process": "canonical-main-05-spark-on"
+    },
+    {
+      "mode": "observed",
+      "configuration": "spark-on",
+      "series": "main",
+      "arm": "a",
+      "pair": 5,
+      "process": "observed-05-spark-on-a"
+    },
+    {
+      "mode": "observed",
+      "configuration": "spark-on",
+      "series": "noise",
+      "arm": "b",
+      "pair": 5,
+      "process": "observed-05-spark-on-b"
+    },
+    {
+      "mode": "canonical",
+      "configuration": "native-plain",
+      "series": "main",
+      "arm": null,
+      "pair": 5,
+      "process": "canonical-main-05-native-plain"
+    },
+    {
+      "mode": "observed",
+      "configuration": "native-plain",
+      "series": "main",
+      "arm": "a",
+      "pair": 5,
+      "process": "observed-05-native-plain-a"
+    },
+    {
+      "mode": "observed",
+      "configuration": "native-plain",
+      "series": "noise",
+      "arm": "b",
+      "pair": 5,
+      "process": "observed-05-native-plain-b"
+    },
+    {
+      "mode": "canonical",
+      "configuration": "native-configured",
+      "series": "main",
+      "arm": null,
+      "pair": 5,
+      "process": "canonical-main-05-native-configured"
+    },
+    {
+      "mode": "observed",
+      "configuration": "native-configured",
+      "series": "main",
+      "arm": "a",
+      "pair": 5,
+      "process": "observed-05-native-configured-a"
+    },
+    {
+      "mode": "observed",
+      "configuration": "native-configured",
+      "series": "noise",
+      "arm": "b",
+      "pair": 5,
+      "process": "observed-05-native-configured-b"
+    }
+  ]
+}
