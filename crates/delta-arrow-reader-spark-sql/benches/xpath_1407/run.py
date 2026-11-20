@@ -116,11 +116,19 @@ def measure(builds, out, protocol):
         assert runner.digest(path / "functions") == receipt[name]["sha256"]
         assert runner.digest(path / "patch.json") == receipt[name]["patch_sha256"]
         assert receipt[name]["source"] == protocol["baseline_source"] and receipt[name]["variant"] == name
-    schedule = runner.read(FROZEN / "schedule.json")
-    schedule.update(process_timeout_seconds=protocol["per_process_seconds"],
-                    preflight_process_timeout_seconds=protocol["per_process_seconds"])
-    deadline = time.monotonic() + 4 * 3600
+    frozen = runner.read(FROZEN / "schedule.json")
     rows = protocol["reduced_rows"]
+    schedule = {key: frozen[key] for key in (
+        "cpus", "batch_rows", "target_partitions", "runtime_workers", "warmups_per_case",
+        "samples_per_case", "address_space_bytes", "pool_bytes",
+    )}
+    schedule.update(input_rows=rows, case_timeout_seconds=frozen["case_timeout_seconds"],
+                    process_timeout_seconds=protocol["per_process_seconds"],
+                    preflight_process_timeout_seconds=protocol["per_process_seconds"],
+                    schedule_timeout_seconds=4 * 3600, replicas=protocol["replicas"],
+                    case_order="sorted eligible IDs rotated left by three per replica",
+                    mode_and_build_order="reverse on the second replica")
+    deadline = time.monotonic() + schedule["schedule_timeout_seconds"]
     eligible, excluded = {}, {}
     for function in protocol["functions"]:
         name = function["id"]

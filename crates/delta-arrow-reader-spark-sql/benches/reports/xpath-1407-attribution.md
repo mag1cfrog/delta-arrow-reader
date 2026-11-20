@@ -1,7 +1,7 @@
 # XPath baseline and phase costs (#1407)
 
 Per-row XPath compilation accounts for 86% to 90% of the sum
-of phase medians. The list function spends about 61 microseconds per input row
+of phase medians including the residual. The list function spends about 61 microseconds per input row
 compiling its path, and the typed functions spend about 39. Each original
 statement supplies one literal path. The next change can reuse its compiled
 query while still parsing and evaluating each row independently.
@@ -94,4 +94,7 @@ Rust 1.96.0, opt level 3 and debug level 1 on x86-64 Linux 7.2.14
 
 Local evidence is under `costs-168-2026-11-20/1407/attribution-run`.
 It includes the complete rows before timing, phase counters,
-process spreads and both build receipts.
+process spreads and both build receipts. The original session receipt
+retained some unused #1391 schedule fields. The local
+`effective-attribution-schedule.json` records the actual input, order and
+overall deadline alongside the unchanged original receipt.
