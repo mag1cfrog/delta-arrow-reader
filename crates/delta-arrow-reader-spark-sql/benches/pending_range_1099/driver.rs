@@ -34,7 +34,7 @@ use datafusion::{
     prelude::{SessionConfig, SessionContext},
 };
 use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
-use futures_util::{FutureExt, StreamExt, stream};
+use futures_util::{StreamExt, future::poll_fn, stream};
 use sail_plan::expression_errors::SparkSqlExpressionSemantics;
 use serde_json::{Value, json};
 
@@ -52,6 +52,7 @@ struct Gate {
     queue: VecDeque<RecordBatch>,
     eof: bool,
     eof_polled: bool,
+    waiting_for_input: bool,
     delivered: Vec<usize>,
 }
 
@@ -82,6 +83,7 @@ impl PartitionStream for Source {
                 gate.eof_polled = true;
                 Poll::Ready(None)
             } else {
+                gate.waiting_for_input = true;
                 Poll::Pending
             }
         });
@@ -294,9 +296,22 @@ struct Execution {
 async fn drain(
     output: &mut SendableRecordBatchStream,
     batches: &mut Vec<RecordBatch>,
+    gate: &Mutex<Gate>,
 ) -> Result<bool> {
+    gate.lock()
+        .map_err(|_| "probe gate poisoned")?
+        .waiting_for_input = false;
     loop {
-        match output.next().now_or_never() {
+        // The execution plan can yield to Tokio even with input ready.
+        let next = poll_fn(|cx| match output.poll_next_unpin(cx) {
+            Poll::Ready(item) => Poll::Ready(Some(item)),
+            Poll::Pending if gate.lock().expect("probe gate poisoned").waiting_for_input => {
+                Poll::Ready(None)
+            }
+            Poll::Pending => Poll::Pending,
+        })
+        .await;
+        match next {
             None => return Ok(false),
             Some(None) => return Ok(true),
             Some(Some(batch)) => batches.push(batch?),
@@ -322,7 +337,7 @@ async fn execute(
             .map_err(|_| "probe gate poisoned")?
             .queue
             .push_back(input.clone());
-        match drain(&mut output, &mut batches).await {
+        match drain(&mut output, &mut batches, &planned.gate).await {
             Ok(ended) => assert!(!ended, "input EOF was not released"),
             Err(cause) => {
                 error = Some(cause.to_string());
@@ -339,7 +354,7 @@ async fn execute(
             .map_err(|_| "probe gate poisoned")?
             .queue
             .push_back(batch(&planned.input_schema, 4, 1, 2)?);
-        assert!(!drain(&mut output, &mut batches).await?);
+        assert!(!drain(&mut output, &mut batches, &planned.gate).await?);
         assert_eq!(
             batches.iter().map(RecordBatch::num_rows).sum::<usize>(),
             4,
@@ -357,7 +372,7 @@ async fn execute(
     );
     if error.is_none() {
         planned.gate.lock().map_err(|_| "probe gate poisoned")?.eof = true;
-        match drain(&mut output, &mut batches).await {
+        match drain(&mut output, &mut batches, &planned.gate).await {
             Ok(ended) => assert!(ended, "finite source remained pending after EOF"),
             Err(cause) => error = Some(cause.to_string()),
         }
