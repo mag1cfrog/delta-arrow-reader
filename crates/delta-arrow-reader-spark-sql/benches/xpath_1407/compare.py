@@ -20,7 +20,7 @@ def fixture_value(row):
     value = (row + 0x13915EED20261119) & mask
     value = ((value ^ (value >> 30)) * 0xBF58476D1CE4E5B9) & mask
     value = ((value ^ (value >> 27)) * 0x94D049BB133111EB) & mask
-    return (value ^ (value >> 31)) % 1000
+    return (value ^ (value >> 31)) % 31
 
 
 def observe(binary, name, work, rows, schedule, deadline):
@@ -56,7 +56,7 @@ def row_reference(path, rows):
         key = fixture_value(index) if index % 16 else None
         if known.setdefault(key, value) != value:
             raise ValueError("same XML input had different staging results")
-    if len(seen) != rows or set(known) != {None, *range(1000)} or known[None] is not None:
+    if len(seen) != rows or set(known) != {None, *range(31)} or known[None] is not None:
         raise ValueError("staging reference does not cover every seeded XML payload and NULL")
     return known
 
@@ -111,6 +111,8 @@ def samples(binary, name, mode, work, rows, types, schedule, deadline):
     execution = runner.invoke(binary, ["measure-set", MANIFEST, id_file, mode],
                               work, schedule, deadline)
     result, = runner.assemble_cases(execution, [name], mode)
+    if execution["status"] != "ok":
+        return result | {"status": execution["status"]}
     if result["status"] == "ok":
         assert result["types"] == types, (name, mode, result)
         assert all(s["output_rows"] == s["input_rows"] == rows for s in result["samples"])
@@ -129,6 +131,15 @@ def summarized(records):
 
 def measure(directories, output, protocol):
     assert not runner.git("status", "--porcelain", "--", str(HERE))
+    edge_receipt = runner.read(output.parent / "edge-differential.json")
+    assert edge_receipt["staging"] == protocol["staging_source"]
+    assert edge_receipt["candidate"] == protocol["candidate_source"]
+    assert edge_receipt["fixture_sha256"] == protocol["edge_fixture_sha256"]
+    assert edge_receipt["test_sha256"] == protocol["edge_test_sha256"]
+    assert edge_receipt["test_results"] == {"staging": 2, "candidate": 2}
+    tests = HERE.parents[1] / "tests"
+    assert runner.digest(tests / "xpath_batch_reuse.rs") == protocol["edge_test_sha256"]
+    assert runner.digest(tests / "fixtures/xpath-batch-reuse/staging.json") == protocol["edge_fixture_sha256"]
     output.mkdir()
     binaries, receipts = {}, {}
     for arm, path in directories.items():
@@ -154,6 +165,7 @@ def measure(directories, output, protocol):
     eligible, excluded = select(binaries, ids, output / "preflight", schedule, deadline, protocol)
     write(output / "session.json", {"protocol_commit": runner.git("rev-parse", "HEAD"),
           "protocol": protocol, "schedule": schedule, "binaries": receipts,
+          "edge_differential": edge_receipt,
           "eligible": eligible, "excluded": excluded})
     ids = sorted(eligible)
     records = {name: {mode: {arm: [] for arm in (*ARMS, "full")} for mode in MODES} for name in ids}
@@ -193,6 +205,8 @@ def main():
     args = parser.parse_args()
     protocol = runner.read(PROTOCOL)
     if args.action == "build":
+        if args.arm != "staging":
+            assert protocol.get("edge_fixture_sha256"), "freeze the staging oracle first"
         source = protocol["staging_source" if args.arm == "staging" else "candidate_source"]
         rows = protocol["full_rows" if args.arm == "full" else "paired_rows"]
         build(args.repository.resolve(), args.target.resolve(), args.output.resolve(), "plain",
@@ -202,10 +216,12 @@ def main():
                 args.output.resolve(), protocol)
     else:
         manifest()
+        fixture_source = (HERE.parent / "functions.rs").read_text()
+        assert '"xml_s",\n                string_column(&|v| format!("<r><x>{}</x></r>", v % 31))' in fixture_source
         short = protocol["paired_rows"]
-        assert {fixture_value(row) for row in range(short) if row % 16} == set(range(1000))
+        assert {fixture_value(row) for row in range(short) if row % 16} == set(range(31))
         assert protocol["full_rows"] == runner.read(FROZEN / "schedule.json")["input_rows"]
-        print("All 1,000 XML payloads present in paired prefix; frozen cases verified")
+        print("All 31 XML payloads present in paired prefix; frozen cases verified")
 
 
 if __name__ == "__main__":

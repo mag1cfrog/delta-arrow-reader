@@ -8,7 +8,7 @@ The larger run uses the full million-row fixture.
 
 ## Result gate
 
-The paired prefix has 16,384 rows and includes all 1,000 non-NULL seeded XML
+The paired prefix has 16,384 rows and includes all 31 non-NULL seeded XML
 payloads and NULL. Execute each query in both ANSI modes on both paired builds
 before timing. Require exact rows by ID, executed Arrow types and the original
 physical function. For each candidate full-input row, use the corresponding
@@ -18,9 +18,13 @@ uses non-NaN floating results, so comparison includes their exact bits.
 Exclude any failing function. Review differences without timing it.
 
 Before timing, run the focused SQL differential tests against both sources.
-They exercise interleaved and literal paths, empty and NULL arguments,
+They compare 684 values with exact Arrow types and 54 complete first errors
+to the [staging capture](../../tests/fixtures/xpath-batch-reuse/staging.json).
+Inputs cover interleaved and literal paths, empty and NULL arguments,
 conversion boundaries, malformed XML and XPath, and evaluation errors.
 The shared batch-loop test checks compile counts with 300 alternating paths.
+The runner reads the local edge-differential receipt with both source
+commits, test and fixture hashes, and successful test counts before starting.
 
 ## Schedule and pass rule
 
