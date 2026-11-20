@@ -2589,3 +2589,13 @@ includes deterministic ciphertexts, random-IV round trips, invalid inputs and
 both ANSI modes. Spark supplies `try_aes_decrypt`. The DAR-only
 `try_aes_encrypt` uses Spark's encryption output for valid rows and NULL for
 the rows where the strict Spark encryption call fails.
+
+### Batch-local XPath compilation (#1407)
+
+The Sail list and typed XPath functions lazily compile each distinct nonempty
+path once per Arrow batch. Each row still parses its own XML and creates its
+own execution context. Skipped rows compile nothing. Invalid XML is still
+reported before an invalid XPath on that row. A compiled program is released
+after its last use in the batch, so single-use paths do not accumulate.
+The [XPath differential tests](tests/xpath_batch_reuse.rs) address both ANSI
+modes, literal and varying paths, conversion limits, NULLs, and errors.
