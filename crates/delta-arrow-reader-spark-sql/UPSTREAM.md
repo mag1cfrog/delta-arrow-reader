@@ -148,6 +148,16 @@ their scalar arguments and keys can still share a computed input. The
 [window references](tests/fixtures/README.md#equivalent-window-offsets) check
 folded offsets and predicates above partitioned windows.
 
+The DataFusion optimizer's consecutive projection merge indexes unique input
+field names when both projections have at least 64 columns. Repeated lookups
+share that index and retain request-to-field qualifier matching. Duplicate names,
+unmatched qualifiers and missing fields use the existing ordered schema lookup
+and errors. This local adaptation addresses the `OptimizeProjections::rewrite`
+cost attributed in [#1390's planning report](benches/reports/planning-1390.md).
+The [projection tests](tests/projection_column_lookup.rs) compare the public rule
+with the original lookup and check native values, NULLs and executed types with
+and without Spark configuration.
+
 Two original overrides, `datafusion-expr-common` and `arrow-select`, were identical
 to their pinned registry packages. They use those packages directly; the inventory
 retains their accepted file hashes and registry mappings.
