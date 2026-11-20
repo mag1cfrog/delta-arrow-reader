@@ -82,13 +82,14 @@ pub const LEX_INVALID: &[&str] = &[
     "CREATE 'unterminated",
     "SELECT \"unterminated",
     "SELECT `unterminated",
-    "SELECT /* unterminated",
-    "SELECT 'a' /*",
     "SELECT \0",
     "SELECT \u{a0}1",
 ];
 
 pub const PARSER_INVALID: &[&str] = &[
+    // Unterminated comments fall back to slash and asterisk tokens.
+    "SELECT /* unterminated",
+    "SELECT 'a' /*",
     "SELECT",
     "SELECT 1 +",
     "SELECT (1",
