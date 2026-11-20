@@ -39,12 +39,18 @@ def classify(actual, reference):
     if actual["status"] != "ok":
         return "dar-fails"
     computed = actual["result"]
-    expected = reference["schema_stages"]["executed"]
+    expected = reference["schema"]
     if result_types(computed["schema"]) != result_types(expected):
         return "executed-type-difference"
-    if ordered_rows(computed["rows"]) != ordered_rows(reference["rows_raw"]):
+    if ordered_rows(computed["rows"]) != ordered_rows(reference["rows"]):
         return "value-difference"
     return "equal" if computed["schema"] == expected else "field-flags-only"
+
+
+def captured_result(record):
+    if record["status"] == "ok":
+        return {"status": "ok", "schema": record["schema_stages"]["executed"], "rows": record["rows_raw"]}
+    return {"status": record["status"], "failure": record.get("expected")}
 
 
 def compare(driver, capture, output, bitmap):
@@ -76,7 +82,7 @@ def compare(driver, capture, output, bitmap):
             key = id_, mode
             reference, actual = spark[key], observed[key]
             assert reference["sql"] == case["spark_sql"]
-            row[mode] = classify(actual, reference)
+            row[mode] = classify(actual, captured_result(reference))
             if row[mode] not in {"equal", "field-flags-only"}:
                 differences.append({"id": id_, "sql": case["spark_sql"], "configuration": mode,
                                     "class": row[mode], "dar": actual, "spark": reference})

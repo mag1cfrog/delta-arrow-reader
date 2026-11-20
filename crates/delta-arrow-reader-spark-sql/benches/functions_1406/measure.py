@@ -3,6 +3,7 @@
 
 import argparse
 from collections import defaultdict
+import gzip
 import json
 from pathlib import Path
 from statistics import median
@@ -10,8 +11,26 @@ import subprocess
 import sys
 
 sys.dont_write_bytecode = True
-from classify import MODES, write
-from run import cases, invoke, probe, sha
+from classify import MODES, classify, write
+from run import HERE, cases, invoke, probe, sha
+
+
+def check_eligibility(manifest, selected):
+    comparison = HERE.parent / "reports/functions-1406-comparisons.jsonl.gz"
+    assert sha(comparison) == manifest["reference_evidence_sha256"]
+    assert sha(HERE / "input.json") == manifest["input_sha256"]
+    with gzip.open(comparison, "rt") as source:
+        header = json.loads(next(source))
+        assert header["spark_version"] == "4.2.0" and header["input_sha256"] == manifest["input_sha256"]
+        records = {}
+        for line in source:
+            row = json.loads(line)
+            key = row["id"], row["configuration"]
+            assert key not in records and row["sql"] == selected[row["id"]]["spark_sql"]
+            records[key] = classify(row["dar"], row["spark"])
+    assert set(records) == {(id_, mode) for id_ in selected for mode in MODES}
+    accepted = {id_ for id_ in selected if all(records[id_, mode] in {"equal", "field-flags-only"} for mode in MODES)}
+    assert accepted == {c["id"] for c in manifest["functions"] + manifest["bitmap_functions"]}
 
 
 def retain(records, ids, input_rows, mode, timings):
@@ -41,11 +60,12 @@ def measure(full, reduced, manifest, output):
                    stdout=subprocess.DEVNULL)
     subprocess.run(["git", "diff", "HEAD", "--exit-code", "--", str(manifest)], check=True)
     assert not subprocess.check_output(["git", "status", "--porcelain"], text=True).strip()
-    eligible = json.loads(manifest.read_text())["functions"]
-    verified = {c["id"]: c for c in cases() if c["reference"] == "spark"}
-    assert len({case["id"] for case in eligible}) == len(eligible)
-    assert all(case == verified[case["id"]] | {"native_sql": None} for case in eligible)
-    bitmaps = [c for c in cases() if c["reference"] == "bitmap-reduced"]
+    declared = json.loads(manifest.read_text())
+    eligible, bitmaps = declared["functions"], declared["bitmap_functions"]
+    verified = {c["id"]: c for c in cases() if c["reference"] in {"spark", "bitmap-reduced"}}
+    assert len({c["id"] for c in eligible + bitmaps}) == len(eligible) + len(bitmaps)
+    assert all(case == verified[case["id"]] | {"native_sql": None} for case in eligible + bitmaps)
+    check_eligibility(declared, verified)
     output.mkdir(parents=True, exist_ok=False)
     write(output / "receipt.json", {"protocol_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
                                    "manifest_sha256": sha(manifest), "full_sha256": sha(full), "reduced_sha256": sha(reduced)})

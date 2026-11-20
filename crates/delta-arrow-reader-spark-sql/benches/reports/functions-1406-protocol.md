@@ -45,7 +45,8 @@ per input row and the increment above the plain projection as medians of process
 medians. Record timeouts as incomplete outcomes.
 
 The bitmap window clocks use 512 and 2,048 input rows. Use eight rounds in 64
-and 256 groups, respectively, with the same ID formula. Use the same three
+and 256 groups, respectively, with the same ID formula. Check all three
+bitmap functions against Spark at 96 rows before timing. Use the same three
 replicas per case, size and ANSI mode, each in its own process. Separately count
 the binary payload bytes and the number of values produced by the window and by
 one aggregate over the same input. This compares payload growth against output
@@ -68,7 +69,18 @@ python3 benches/functions_1406/run.py check
 python3 benches/functions_1406/run.py build TARGET REDUCED_BUILD
 python3 benches/functions_1406/run.py input REDUCED_BINARY RAW_INPUT_OUTPUT
 TZ=UTC JAVA_HOME=JDK_21 SPARK_42_PYTHON benches/functions_1406/capture_spark.py SPARK_CAPTURE
+TZ=UTC JAVA_HOME=JDK_21 SPARK_42_PYTHON benches/functions_1406/capture_spark.py --bitmap BITMAP_CAPTURE
 python3 benches/functions_1406/classify.py REDUCED_BINARY SPARK_CAPTURE CLASSIFICATION_OUTPUT
+python3 benches/functions_1406/classify.py --bitmap REDUCED_BINARY BITMAP_CAPTURE BITMAP_COMPARISON
 timeout 65m python3 benches/functions_1406/measure.py \
   FULL_BINARY REDUCED_BINARY COMMITTED_TIMING_MANIFEST MEASUREMENT_OUTPUT
+```
+
+For the stock comparison, place `stock_map_entries.rs` at
+`crates/delta-arrow-reader-cli/tests/stock_map_entries_1406.rs` in a disposable
+checkout of the pinned commit. Run the following command from its root.
+
+```sh
+cargo +1.96.0 test --locked -p delta-arrow-reader-cli \
+  --features datafusion/nested_expressions --test stock_map_entries_1406 -- --nocapture
 ```

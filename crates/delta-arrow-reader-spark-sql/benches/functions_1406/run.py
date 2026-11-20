@@ -9,6 +9,9 @@ from pathlib import Path
 import resource
 import subprocess
 
+if not __debug__:
+    raise RuntimeError("validation requires Python without -O")
+
 HERE = Path(__file__).resolve().parent
 WORKSPACE = HERE.parents[1]
 ORIGINAL = HERE.parent / "functions.rs"

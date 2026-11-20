@@ -261,7 +261,40 @@
       "reference": "spark"
     }
   ],
-  "reference_evidence_sha256": "f29ec5a59cad887eee864ae9d3b344a1c6eb23ac3f96ec5a954485b68dbbb2cc",
+  "reference_evidence_sha256": "24f672ae2c913d9f5501cab824530921a78bcad978138cb19bce926797f48d8b",
   "raw_capture_sha256": "484febca88d10d6f16d8dc22cd60fb978db1b630e16d47ef93fbdf7770290607",
-  "input_sha256": "9c014d6457987009f6697316340a5b379eb223757859358f589a5cf6a314d9ec"
+  "input_sha256": "9c014d6457987009f6697316340a5b379eb223757859358f589a5cf6a314d9ec",
+  "bitmap_capture_sha256": "884b81be763741671327b49c632add7bd2865ad7baec7e42373ed25cf2833d42",
+  "bitmap_functions": [
+    {
+      "id": "window.window.bitmap_and_agg",
+      "name": "bitmap_and_agg",
+      "kind": "window",
+      "spark_sql": "SELECT id,bitmap_and_agg(b) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,grp,b FROM bench",
+      "1391_status": "setup_failure",
+      "reference": "bitmap-reduced"
+    },
+    {
+      "id": "window.window.bitmap_construct_agg",
+      "name": "bitmap_construct_agg",
+      "kind": "window",
+      "spark_sql": "SELECT id,bitmap_construct_agg(CAST(p AS BIGINT)) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,grp,p FROM bench",
+      "1391_status": "setup_failure",
+      "reference": "bitmap-reduced"
+    },
+    {
+      "id": "window.window.bitmap_or_agg",
+      "name": "bitmap_or_agg",
+      "kind": "window",
+      "spark_sql": "SELECT id,bitmap_or_agg(b) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,grp,b FROM bench",
+      "1391_status": "setup_failure",
+      "reference": "bitmap-reduced"
+    }
+  ]
 }
