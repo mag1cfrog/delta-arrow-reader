@@ -79,10 +79,11 @@ def patch_sources(workspace=WORKSPACE):
     path = SAIL + "sail-sql-analyzer/src/parser.rs"
     first = "        let options = ParserOptions::default();\n        let length = $input.len();"
     replace(path, first, first + '\n        let __statement = stringify!($parser) == "create_parser";')
-    before(path, "        let lexer = create_lexer::<_, chumsky::extra::Err<chumsky::error::Rich<_, _>>>(&options);",
-           '        let __lexer = crate::planning_attribution::Span::when("logical.parsing.lexer_construction", __statement);\n')
-    after(path, "        let lexer = create_lexer::<_, chumsky::extra::Err<chumsky::error::Rich<_, _>>>(&options);",
-          '\n        drop(__lexer);\n        let __lex = crate::planning_attribution::Span::when("logical.parsing.lexing", __statement);')
+    macro_lexer = ('        let __statement = stringify!($parser) == "create_parser";\n'
+                   "        let lexer = create_lexer::<_, chumsky::extra::Err<chumsky::error::Rich<_, _>>>(&options);")
+    replace(path, macro_lexer,
+            macro_lexer.replace("        let lexer =", '        let __lexer = crate::planning_attribution::Span::when("logical.parsing.lexer_construction", __statement);\n        let lexer =')
+            + '\n        drop(__lexer);\n        let __lex = crate::planning_attribution::Span::when("logical.parsing.lexing", __statement);')
     replace(path, "            .map_err(SqlError::parser)?;\n        let tokens = tokens",
             '            .map_err(SqlError::parser)?;\n        drop(__lex);\n        let __input = crate::planning_attribution::Span::when("logical.parsing.token_input", __statement);\n        let tokens = tokens')
     after(path, "            .map((length..length).into(), map_parser_input);",

@@ -1,0 +1,10 @@
+{
+  "base": "fa71ede95fa1b6ea68dc5e6217a3b142feb8df79",
+  "baseline_walls": "planning-1390-parser-walls.csv",
+  "baseline_noise": "planning-1390-noise.csv",
+  "changed_sources": [
+    "vendor/sail/crates/sail-sql-analyzer/src/parser.rs",
+    "vendor/sail/crates/sail-sql-parser/src/parser.rs",
+    "vendor/dependencies/datafusion-optimizer/src/optimize_projections/mod.rs"
+  ]
+}
