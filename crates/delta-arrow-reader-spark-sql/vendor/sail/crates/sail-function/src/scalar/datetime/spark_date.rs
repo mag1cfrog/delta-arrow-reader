@@ -33,7 +33,7 @@ impl SparkDate {
     }
 
     fn string_to_date32(value: &str, is_try: bool) -> Result<Option<i32>> {
-        // Native parsing agrees with Spark on this subset, not its other date forms.
+        // Match a complete numeric date before invoking Arrow's broader parser.
         let bytes = value.as_bytes();
         if bytes.len() == 10
             && bytes.iter().enumerate().all(|(index, byte)| match index {
@@ -44,7 +44,7 @@ impl SparkDate {
         {
             return Ok(Some(date));
         }
-        if is_unpadded_date(bytes)
+        if has_unpadded_date_shape(bytes)
             && let Some(date) = Date32Type::parse(value)
         {
             return Ok(Some(date));
@@ -77,7 +77,7 @@ impl SparkDate {
     }
 }
 
-fn is_unpadded_date(bytes: &[u8]) -> bool {
+fn has_unpadded_date_shape(bytes: &[u8]) -> bool {
     let [
         year_thousands,
         year_hundreds,
@@ -318,7 +318,7 @@ mod tests {
 
     #[test]
     fn unpadded_date_route_matches_the_original_grammar() -> Result<()> {
-        for (text, uses_unpadded_route) in [
+        for (text, matches_unpadded_shape) in [
             ("2024-1-2", true),
             ("2024-1-02", true),
             ("2024-01-2", true),
@@ -334,8 +334,8 @@ mod tests {
             ("2024-１-2", false),
         ] {
             assert_eq!(
-                is_unpadded_date(text.as_bytes()),
-                uses_unpadded_route,
+                has_unpadded_date_shape(text.as_bytes()),
+                matches_unpadded_shape,
                 "{text}"
             );
             let original = parse_date(text)
