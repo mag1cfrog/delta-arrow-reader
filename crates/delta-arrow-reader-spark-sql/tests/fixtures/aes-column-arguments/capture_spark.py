@@ -46,6 +46,8 @@ def requests():
         ["9", "6162", KEYS[0].encode().hex(), "GCM", "NONE", IVS["GCM"], None, None],
         ["10", "6162", "73686f7274", "ECB", "PKCS", "", "", None],
         ["11", "6162", KEYS[0].encode().hex(), "CBC", "PKCS", "0102", "", None],
+        ["12", bytes(range(16)).hex(), KEYS[0].encode().hex(), "ECB", "PKCS", "", "", None],
+        ["13", bytes(range(40)).hex(), KEYS[0].encode().hex(), "ECB", "PKCS", "", "", None],
     ]
     queries = []
 
@@ -105,8 +107,14 @@ def requests():
     for mode in ("CBC", "GCM"):
         add_encrypt(f"literal_{mode.lower()}_control", f"'ab', {key}, '{mode}', 'DEFAULT', {binary(IVS[mode])}")
     add_encrypt("string_column", f"CAST(message AS STRING), {key}, 'ECB'")
+    add_encrypt("ecb_block_boundaries", f"message, {key}, 'ECB'", "id >= 12")
+    for fn in ("aes_decrypt", "try_aes_decrypt"):
+        add(f"{fn}_ecb_block_boundaries",
+            f"{fn}(aes_encrypt(message, {key}, 'ECB'), {key}, 'ECB')", "id >= 12")
     add("strict_invalid_key", "aes_encrypt(message, key_bytes, 'ECB')", "id = 10")
     add("strict_invalid_iv", "aes_encrypt(message, key_bytes, 'CBC', 'PKCS', iv_bytes)", "id = 11")
+    add("strict_invalid_padding",
+        f"aes_encrypt(message, {key}, 'GCM', padding_name, {binary(IVS['GCM'])})", "id = 1")
     add("strict_short_cipher", f"aes_decrypt(ciphertext, {key}, 'GCM')", "id = 1")
     add("strict_short_cbc_cipher", f"aes_decrypt(ciphertext, {key}, 'CBC')", "id = 1")
     add("strict_bad_tag", f"aes_decrypt(X'{'00' * 28}', {key}, 'GCM')")
@@ -115,6 +123,10 @@ def requests():
         "CASE WHEN id = 0 THEN aes_encrypt(message, key_bytes, 'ECB') END", scope="dar-try-encrypt")
     add("try_mixed_invalid_iv", "try_aes_encrypt(message, key_bytes, 'CBC', 'PKCS', iv_bytes)", "id IN (1,11)",
         "CASE WHEN id = 1 THEN aes_encrypt(message, key_bytes, 'CBC', 'PKCS', iv_bytes) END", scope="dar-try-encrypt")
+    add("try_mixed_invalid_padding",
+        f"try_aes_encrypt(message, {key}, 'GCM', padding_name, {binary(IVS['GCM'])})", "id IN (1,2)",
+        f"CASE WHEN id = 2 THEN aes_encrypt(message, {key}, 'GCM', padding_name, {binary(IVS['GCM'])}) END",
+        scope="dar-try-encrypt")
     add("try_short_cipher", f"try_aes_decrypt(ciphertext, {key}, 'GCM')", "id IN (1,2)")
     add("spark_try_encrypt_registration", f"try_aes_encrypt(message, {key}, 'ECB')", "id = 0", scope="spark-surface")
 
