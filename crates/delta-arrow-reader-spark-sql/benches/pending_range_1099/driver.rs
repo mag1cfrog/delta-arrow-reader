@@ -124,7 +124,7 @@ impl TableProvider for Provider {
         Ok(Arc::new(StreamingTableExec::try_new(
             Arc::clone(&self.0.schema),
             vec![self.0.clone()],
-            projection.cloned(),
+            projection,
             Some(ordering),
             false,
             None,
