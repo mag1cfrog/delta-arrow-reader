@@ -26,6 +26,39 @@ mod inputs;
 #[path = "fixtures/row-parser-1389-original.rs"]
 mod original;
 
+const DATES: &[&str] = &[
+    "2024-02-29",
+    "2024-2-9",
+    "2024",
+    "2024-2",
+    " 2024-02-29 ",
+    "\t2024-2-9\r\n",
+    "2024-02-29 12:34:56",
+    "2024-02-29Tanything",
+    "0000-1-1",
+    "-0001-1-1",
+    "+10000-1-1",
+    "9999999-12-31",
+    "1900-02-29",
+    "2000-02-29",
+    "2024-13-1",
+    "2024-1-32",
+    "2024-00-1",
+    "2024-1-0",
+    "2024-02-29x",
+    "2024-2 12:00:00",
+    "",
+    " ",
+    "bad",
+    "202",
+    "2024/2/9",
+    "2024-2-9\0",
+    "\u{a0}2024-2-9",
+    "2024-2-9\u{a0}",
+    "2024-02-29T",
+    "2024-02-29 t",
+];
+
 type TestResult<T = ()> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 #[derive(Clone, Copy, Debug)]
@@ -71,7 +104,7 @@ impl StringConversion {
 
     fn corpus(self) -> &'static [&'static str] {
         match self {
-            Self::Date => inputs::DATES,
+            Self::Date => DATES,
             Self::TimestampLtz | Self::TimestampNtz | Self::DateFormatDisplay => inputs::TIMESTAMPS,
             _ => inputs::INTERVALS,
         }

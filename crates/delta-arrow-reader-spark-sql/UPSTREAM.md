@@ -2436,12 +2436,17 @@ host function restrictions remain in force. Native SQL registration is unchanged
 
 ### STRING row parser construction (#1389)
 
-Unformatted STRING conversions in SparkDate, SparkTimestamp LTZ/NTZ,
-SparkDateFormat and the three interval UDFs reuse their existing Chumsky parsers
-within each array invocation. Construction is lazy, so NULL-only/empty inputs
-and the exact ASCII DATE fast route build no unused parser. Scalar calls retain
-their original single-value route. Input trimming, grammar, Rich errors,
-timezone conversion, leap-second handling and CAST/TRY_CAST modes are unchanged.
+Unformatted STRING conversions in SparkTimestamp LTZ/NTZ, SparkDateFormat and
+the three interval UDFs reuse their existing Chumsky parsers within each array
+invocation. Construction is lazy, so NULL-only/empty inputs build no unused
+parser. Scalar calls retain their original single-value route. Input trimming,
+grammar, Rich errors, timezone conversion, leap-second handling and CAST/TRY_CAST
+modes are unchanged.
+
+SparkDate remains byte-identical to the merged PR 1 source. Its exact ASCII DATE
+fast route is unchanged, and other DATE strings retain their original per-row
+parser construction. The measured DATE reuse route was omitted after its
+execution regression. The DATE corpus and connected coverage remain in place.
 
 The interval row factory feeds the same lexed tokens and byte spans through an
 owning Chumsky Stream, avoiding a borrow of a row-local token vector. Its private

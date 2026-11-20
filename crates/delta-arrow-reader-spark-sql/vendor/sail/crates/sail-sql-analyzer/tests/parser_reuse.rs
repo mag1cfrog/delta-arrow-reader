@@ -3,7 +3,7 @@ use chumsky::input::{Input, Stream};
 use chumsky::span::SimpleSpan;
 use sail_sql_analyzer::error::{SqlError, SqlResult};
 use sail_sql_analyzer::parser::{
-    date_parser, interval_parser, parse_date, parse_interval, parse_timestamp, timestamp_parser,
+    interval_parser, parse_interval, parse_timestamp, timestamp_parser,
 };
 use sail_sql_parser::ast::expression::IntervalLiteral;
 use sail_sql_parser::lexer::create_lexer;
@@ -36,17 +36,9 @@ fn original_interval(s: &str) -> SqlResult<IntervalLiteral> {
 
 #[test]
 fn reused_parsers_preserve_values_and_exact_errors() {
-    let mut date = date_parser();
     let mut timestamp = timestamp_parser();
     let mut interval = interval_parser();
     for _ in 0..2 {
-        for value in inputs::DATES {
-            assert_eq!(
-                format!("{:?}", date(value)),
-                format!("{:?}", parse_date(value)),
-                "{value:?}"
-            );
-        }
         for value in inputs::TIMESTAMPS {
             assert_eq!(
                 format!("{:?}", timestamp(value)),

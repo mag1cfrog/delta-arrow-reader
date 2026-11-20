@@ -189,21 +189,6 @@ pub fn parse_timestamp(s: &str) -> SqlResult<TimestampValue<'_>> {
     parse_simple!(s, create_timestamp_parser)
 }
 
-/// Reuse the existing DATE parser within an input batch, constructing it only on first use.
-pub fn date_parser<'a>() -> impl FnMut(&'a str) -> SqlResult<DateValue> {
-    let mut parser = None;
-    move |s| {
-        let s = s.trim_matches(|c: char| c.is_ascii_control() || c == ' ');
-        parser
-            .get_or_insert_with(
-                create_date_parser::<chumsky::extra::Err<chumsky::error::Rich<_, _>>>,
-            )
-            .parse(s)
-            .into_result()
-            .map_err(SqlError::parser)
-    }
-}
-
 /// Reuse the existing TIMESTAMP parser within an input batch; timezone text borrows that input.
 pub fn timestamp_parser<'a>() -> impl FnMut(&'a str) -> SqlResult<TimestampValue<'a>> {
     let mut parser = None;
