@@ -1,0 +1,22 @@
+{
+  "staging": "7b4495a183ec2c8b74735a6f38910d1ee144c773",
+  "candidate": "107aa88224aaf0f22aa558c1d9c4cb61c13e7f09",
+  "blocks": 24,
+  "cpus": [2, 3, 4, 5],
+  "process_seconds": 180,
+  "preflight_seconds": 1500,
+  "timing_seconds": 2700,
+  "native_gates": {
+    "nullif-columns-none-1024": "execution_ns",
+    "nullif-computed_left-none-1024": "execution_ns",
+    "nullif-column_nonzero-none-1024": "planning_ns"
+  },
+  "fallback_splits_ns": {
+    "nullif-computed_right-sparse-262144": 3450000,
+    "nullif-computed_right-half-262144": 1590000
+  },
+  "spark_speedup_anchors": [
+    "nullif-columns-sparse-8192",
+    "nullif-columns-sparse-262144"
+  ]
+}
