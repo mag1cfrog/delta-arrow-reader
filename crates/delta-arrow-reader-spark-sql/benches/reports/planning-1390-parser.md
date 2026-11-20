@@ -12,7 +12,7 @@ The first attempt uses the same grammar with a parser graph that can be freed.
 | 200-branch CASE, ANSI off | 9.197194 | 2.654451 | 1.267264 | 1.387187 | 0.005170 |
 | 200-branch CASE, ANSI on | 9.216149 | 2.633812 | 1.267264 | 1.366548 | 0.005170 |
 
-The middle paired statement improved by 0.0818 ms (ANSI off) and 0.0820 ms
+The middle paired statement improved by 0.0655 ms (ANSI off) and 0.0661 ms
 (ANSI on), taking the median change across the 25 paired shapes. Their
 median positive logical gaps to native-configured are now 0.0656 and
 0.0655 ms. All 25 in each mode still cost more than their native A/B
