@@ -1,0 +1,9 @@
+{
+  "staging_source": "6c774893052e5eea5da25a02ac1b079223e5f1df",
+  "candidate_source": "696f387a31341aed23364fa1c0f598cc72aa57f0",
+  "paired_rows": 16384,
+  "full_rows": 1000000,
+  "per_process_seconds": 130,
+  "session_seconds": 14400,
+  "replicas": 3
+}
