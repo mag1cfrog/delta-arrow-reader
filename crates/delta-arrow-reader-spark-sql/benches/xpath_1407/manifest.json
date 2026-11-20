@@ -1,0 +1,63 @@
+{
+  "baseline_source": "eaabba0ba3c43c2bd9f011378f1e0040997c7c2d",
+  "frozen_manifest_sha256": "ec6528b17cb072224aec6ea0ea3c1e910b9aa8cf6f5cadb0296f85b3f86f1f06",
+  "functions": [
+    {
+      "id": "scalar.xml.xpath",
+      "spark_sql": "SELECT id,xpath(xml_s,'/r/x/text()') AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,xml_s FROM bench"
+    },
+    {
+      "id": "scalar.xml.xpath_boolean",
+      "spark_sql": "SELECT id,xpath_boolean(xml_s,'/r/x') AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,xml_s FROM bench"
+    },
+    {
+      "id": "scalar.xml.xpath_double",
+      "spark_sql": "SELECT id,xpath_double(xml_s,'/r/x') AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,xml_s FROM bench"
+    },
+    {
+      "id": "scalar.xml.xpath_float",
+      "spark_sql": "SELECT id,xpath_float(xml_s,'/r/x') AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,xml_s FROM bench"
+    },
+    {
+      "id": "scalar.xml.xpath_int",
+      "spark_sql": "SELECT id,xpath_int(xml_s,'/r/x') AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,xml_s FROM bench"
+    },
+    {
+      "id": "scalar.xml.xpath_long",
+      "spark_sql": "SELECT id,xpath_long(xml_s,'/r/x') AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,xml_s FROM bench"
+    },
+    {
+      "id": "scalar.xml.xpath_number",
+      "spark_sql": "SELECT id,xpath_number(xml_s,'/r/x') AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,xml_s FROM bench"
+    },
+    {
+      "id": "scalar.xml.xpath_short",
+      "spark_sql": "SELECT id,xpath_short(xml_s,'/r/x') AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,xml_s FROM bench"
+    },
+    {
+      "id": "scalar.xml.xpath_string",
+      "spark_sql": "SELECT id,xpath_string(xml_s,'/r/x') AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,xml_s FROM bench"
+    }
+  ],
+  "reduced_rows": 256,
+  "replicas": 3,
+  "per_process_seconds": 120
+}
