@@ -5,8 +5,8 @@ workspace, Rust 1.96.0 and the #1385 Linux release profile (opt level 3,
 debug 1, 16 codegen units). Pass the two build receipts to the runner.
 It verifies source revisions, binary hashes, Rust version, optimization
 level and debuginfo. The builds use Cargo's default 16 release codegen
-units. Use the
-unchanged [#1391 driver](../functions.rs) with the
+units. Run from the measured candidate checkout, which binds its receipt
+to HEAD. Use the unchanged [#1391 driver](../functions.rs) with the
 [one-case manifest](manifest.json). Both executables use the same one
 million rows, null positions, seeded dates, CPU affinity and memory limit.
 Keep 60 seconds per timed process, 120 seconds per preflight process,

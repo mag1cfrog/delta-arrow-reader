@@ -25,7 +25,7 @@ The [array probe](canonical-date-1389-attribution.md) assigned 1.360 ns per
 row to the existing padded shape check in a controlled Spark row loop.
 This measures the original cost of checking the input. The failed
 candidate changes how it checks the same shape. Its paired SQL
-measurements show that the new predicate did not remove that cost.
+measurements show no improvement in end-to-end execution.
 The safe Arrow control in the array probe also has a different row
 loop from the strict SQL native reference. It cannot assign the rest
 of the strict SQL gap to individual array operations.
