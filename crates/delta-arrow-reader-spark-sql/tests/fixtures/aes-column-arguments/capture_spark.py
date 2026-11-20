@@ -102,6 +102,8 @@ def requests():
             add(f"{fn}_{mode.lower()}_random_iv_roundtrip",
                 f"{fn}(aes_encrypt(message, {key}, '{mode}'), {key}, '{mode}')")
         add(f"{fn}_literal_control", f"{fn}(X'5e973c583b41baf1447882f2f219ecb7', {key}, 'ECB')")
+        add(f"{fn}_empty_ecb_body", f"{fn}(X'', {key}, 'ECB')")
+        add(f"{fn}_empty_cbc_body", f"{fn}({binary(IVS['CBC'])}, {key}, 'CBC')")
 
     add_encrypt("literal_control", f"'aGVsbG8=', {key}, 'ECB'")
     for mode in ("CBC", "GCM"):
