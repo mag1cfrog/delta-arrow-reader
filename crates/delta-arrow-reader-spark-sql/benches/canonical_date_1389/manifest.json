@@ -1,0 +1,30 @@
+{
+  "source_commit": "9c2e5855e9cc6d704c562936e9e517c3f4cd32cb",
+  "source_manifest_sha256": "ec6528b17cb072224aec6ea0ea3c1e910b9aa8cf6f5cadb0296f85b3f86f1f06",
+  "functions": [
+    {
+      "kind": "scalar",
+      "category": "datetime",
+      "name": "to_date",
+      "registration": "F::custom(to_date)",
+      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/datetime.rs:2309",
+      "implementation_anchors": [
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-function/src/scalar/datetime/spark_date.rs:18",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/datetime.rs:1074",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/datetime.rs:2309"
+      ],
+      "id": "scalar.datetime.to_date",
+      "aliases": [],
+      "spark_sql": "SELECT id,to_date(date_s) AS value FROM bench",
+      "native_sql": "SELECT id,CAST(date_s AS DATE) AS value FROM bench",
+      "input_columns": [
+        "id",
+        "date_s"
+      ],
+      "projection_sql": "SELECT id,date_s FROM bench",
+      "exclusion": null,
+      "class": "paired",
+      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+    }
+  ]
+}
