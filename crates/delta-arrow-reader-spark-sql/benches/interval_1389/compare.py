@@ -21,17 +21,13 @@ compare = parsers["comparison_failure"]
 expected_type = parsers["expected_type"]
 
 
-def run(binary, snapshot, output, schedule, deadline, command, name, mode):
-    return strings.invoke(binary, snapshot, output, schedule, deadline, command, mode, name)
-
-
 def validate_preflight(binaries, snapshot, output, schedule, deadline, queries):
     outputs, excluded = {}, {}
     for query in queries:
         name = query["id"]
         for mode in modes(name):
             for role, binary in binaries.items():
-                result = run(binary, snapshot, output / role / name / mode, schedule, deadline,
+                result = strings.invoke(binary, snapshot, output / role / name / mode, schedule, deadline,
                              "preflight", name, mode)
                 assert result["id"] == name and result["configuration"] == mode
                 assert result["rows"] == query["expected_rows"]
@@ -138,7 +134,7 @@ def main():
         order = tuple(binaries) if (index + scheduled["replica"]) % 2 else tuple(reversed(binaries))
         for role in order:
             print(role, scheduled["process"], flush=True)
-            result = run(binaries[role], snapshot, output / role / scheduled["process"], schedule,
+            result = strings.invoke(binaries[role], snapshot, output / role / scheduled["process"], schedule,
                          deadline, "measure", name, mode)
             assert result["id"] == name and result["configuration"] == mode
             assert len(result["samples"]) == schedule["samples"]
