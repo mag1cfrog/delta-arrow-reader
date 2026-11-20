@@ -33,13 +33,18 @@ impl SparkDate {
     }
 
     fn string_to_date32(value: &str, is_try: bool) -> Result<Option<i32>> {
-        // Native parsing agrees with Spark on this subset, not its other date forms.
+        // Match a complete numeric date before invoking Arrow's broader parser.
         let bytes = value.as_bytes();
         if bytes.len() == 10
             && bytes.iter().enumerate().all(|(index, byte)| match index {
                 4 | 7 => *byte == b'-',
                 _ => byte.is_ascii_digit(),
             })
+            && let Some(date) = Date32Type::parse(value)
+        {
+            return Ok(Some(date));
+        }
+        if has_unpadded_date_shape(bytes)
             && let Some(date) = Date32Type::parse(value)
         {
             return Ok(Some(date));
@@ -70,6 +75,32 @@ impl SparkDate {
             Err(e) => Err(e),
         }
     }
+}
+
+fn has_unpadded_date_shape(bytes: &[u8]) -> bool {
+    let [
+        year_thousands,
+        year_hundreds,
+        year_tens,
+        year_ones,
+        b'-',
+        month,
+        tail @ ..,
+    ] = bytes
+    else {
+        return false;
+    };
+    // The whole-input check excludes Arrow's broader prefix and compact forms.
+    [year_thousands, year_hundreds, year_tens, year_ones, month]
+        .into_iter()
+        .all(u8::is_ascii_digit)
+        && match tail {
+            [b'-', day] => day.is_ascii_digit(),
+            [b'-', first, second] | [first, b'-', second] => {
+                first.is_ascii_digit() && second.is_ascii_digit()
+            }
+            _ => false,
+        }
 }
 
 impl ScalarUDFImpl for SparkDate {
@@ -284,6 +315,41 @@ fn get_or_parse_format<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unpadded_date_route_matches_the_original_grammar() -> Result<()> {
+        for (text, matches_unpadded_shape) in [
+            ("2024-1-2", true),
+            ("2024-1-02", true),
+            ("2024-01-2", true),
+            ("0000-2-29", true),
+            ("9999-12-1", true),
+            ("2024-2-30", true),
+            ("2024-1-2x", false),
+            ("2024-1-2T", false),
+            ("2024-1-2 ", false),
+            ("2024-1-2-0", false),
+            ("20240102", false),
+            ("+024-1-2", false),
+            ("2024-１-2", false),
+        ] {
+            assert_eq!(
+                has_unpadded_date_shape(text.as_bytes()),
+                matches_unpadded_shape,
+                "{text}"
+            );
+            let original = parse_date(text)
+                .and_then(|date| Ok(Date32Type::from_naive_date(date.try_into()?)))
+                .ok();
+            assert_eq!(SparkDate::string_to_date32(text, true)?, original, "{text}");
+            let strict = SparkDate::string_to_date32(text, false);
+            assert_eq!(strict.is_err(), original.is_none(), "{text}");
+            if let Some(days) = original {
+                assert_eq!(strict?, Some(days), "{text}");
+            }
+        }
+        Ok(())
+    }
 
     #[test]
     fn date_row_path_matches_existing_parser() -> std::result::Result<(), Box<dyn std::error::Error>>
