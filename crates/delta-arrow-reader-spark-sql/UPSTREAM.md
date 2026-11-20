@@ -2521,3 +2521,28 @@ original `Recursive::declare` factory and its inherited strong-reference cycles.
 Parser construction still runs for each call, and rejected input pays for the
 failed diagnostic-free attempt before the Rich fallback. No construction savings
 or measured performance result is claimed here.
+
+### AES scalar and column arguments (#1405)
+
+The local Sail AES functions evaluate inputs, keys, modes, padding, IVs and
+associated data for each row. Scalar arguments apply to every row and a call
+with all scalar arguments retains its scalar result. NULL arguments propagate.
+The tolerant forms return NULL for the failing row and preserve valid neighbors.
+
+ECB uses the RustCrypto AES block cipher and PKCS padding. Its ciphertext has
+no IV prefix, matching Spark. Earlier Sail code treated ECB as CBC. CBC and GCM
+still use the locked RustCrypto implementations and prepend their IVs. Decryption
+checks that the IV bytes are present before splitting the input. The four
+functions still produce binary values.
+
+Read ciphertext written by the old ECB spelling by specifying CBC, which is
+the wire format that implementation emitted. For Spark's ECB format, decryption
+ignores nonnull associated data as Spark does.
+Spark rejects empty or whitespace-padded explicit mode names. DAR retains the
+earlier mode trimming and empty-string GCM default for literals and columns.
+
+The [Spark 4.2.0 capture](tests/fixtures/aes-column-arguments/spark-results.jsonl)
+includes deterministic ciphertexts, random-IV round trips, invalid inputs and
+both ANSI modes. Spark supplies `try_aes_decrypt`. The DAR-only
+`try_aes_encrypt` uses Spark's encryption output for valid rows and NULL for
+the rows where the strict Spark encryption call fails.

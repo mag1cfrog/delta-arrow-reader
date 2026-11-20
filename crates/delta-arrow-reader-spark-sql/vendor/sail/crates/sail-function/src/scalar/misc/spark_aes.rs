@@ -1,97 +1,351 @@
-use std::fmt;
+// Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
+
+use std::borrow::Cow;
 use std::sync::Arc;
 
-use aes::cipher::block_padding::Pkcs7;
-use aes::cipher::consts::U12;
-use aes::cipher::{BlockEncryptMut, KeyIvInit};
+use aes::cipher::block_padding::{Pkcs7, RawPadding};
+use aes::cipher::consts::{U12, U16};
+use aes::cipher::{
+    Block, BlockCipher, BlockDecrypt, BlockDecryptMut, BlockEncrypt, BlockEncryptMut, KeyIvInit,
+};
 use aes::{Aes128, Aes192, Aes256};
 use aes_gcm::aead::rand_core::{OsRng, RngCore};
 use aes_gcm::aead::{Aead, KeyInit, Payload};
 use aes_gcm::{Aes128Gcm, Aes256Gcm, AesGcm, Nonce};
-use cbc::cipher::BlockDecryptMut;
-use datafusion::arrow::array::{
-    BinaryArray, BinaryViewArray, FixedSizeBinaryArray, LargeBinaryArray, LargeStringArray,
-    StringArray, StringViewArray,
-};
+use datafusion::arrow::array::BinaryBuilder;
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
-use datafusion_common::{
-    DataFusionError, Result, ScalarValue, exec_datafusion_err, exec_err, internal_err,
-};
+use datafusion_common::{Result, ScalarValue, exec_datafusion_err, exec_err, internal_err};
 use datafusion_expr::{
     ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
 };
 
-pub type Aes192Gcm = AesGcm<Aes192, U12>;
+type Aes192Gcm = AesGcm<Aes192, U12>;
+const AES_BLOCK_BYTES: usize = 16;
 
-/// ECB mode is not supported because it is insecure.
-/// We swap ECB for CBC because CBC builds on the foundational block encryption operation that ECB uses
-/// and adds important security improvements through its chaining mechanism.
-pub fn encryption_name_to_mode(mode: &str) -> Result<EncryptionMode> {
-    match mode.trim().to_uppercase().as_str() {
-        "" | "GCM" => Ok(EncryptionMode::GCM),
-        "CBC" | "ECB" => Ok(EncryptionMode::CBC),
-        other => Err(DataFusionError::Plan(format!(
-            "Invalid encryption mode, must be one of 'GCM', 'CBC', or 'ECB'. Got {other}"
-        ))),
-    }
+#[derive(Clone, Copy)]
+enum AesMode {
+    Ecb,
+    Cbc,
+    Gcm,
 }
 
-pub fn generate_iv(mode: &EncryptionMode) -> Vec<u8> {
-    match &mode {
-        EncryptionMode::GCM => {
-            let mut iv = [0u8; 12];
-            OsRng.fill_bytes(&mut iv);
-            iv.to_vec()
-        }
-        EncryptionMode::CBC => {
-            let mut iv = [0u8; 16];
-            OsRng.fill_bytes(&mut iv);
-            iv.to_vec()
+impl AesMode {
+    fn parse(value: &str) -> Result<Self> {
+        let name = value.trim();
+        if name.eq_ignore_ascii_case("ECB") {
+            Ok(Self::Ecb)
+        } else if name.eq_ignore_ascii_case("CBC") {
+            Ok(Self::Cbc)
+        } else if name.is_empty() || name.eq_ignore_ascii_case("GCM") {
+            Ok(Self::Gcm)
+        } else {
+            exec_err!("Spark AES mode must be ECB, CBC or GCM")
         }
     }
-}
 
-#[expect(clippy::upper_case_acronyms)]
-#[derive(Debug, Clone)]
-pub enum EncryptionMode {
-    GCM,
-    CBC,
-}
-
-impl fmt::Display for EncryptionMode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn iv_len(self) -> usize {
         match self {
-            EncryptionMode::GCM => write!(f, "GCM"),
-            EncryptionMode::CBC => write!(f, "CBC"),
+            Self::Ecb => 0,
+            Self::Cbc => AES_BLOCK_BYTES,
+            Self::Gcm => 12,
+        }
+    }
+
+    fn validate_padding(self, padding: &str) -> Result<()> {
+        let mode_padding = if matches!(self, Self::Gcm) {
+            "NONE"
+        } else {
+            "PKCS"
+        };
+        if padding.eq_ignore_ascii_case("DEFAULT") || padding.eq_ignore_ascii_case(mode_padding) {
+            Ok(())
+        } else {
+            exec_err!("Spark AES padding is unsupported for the selected mode")
         }
     }
 }
 
-/// Arguments
-///   - `expr`: The BINARY expression to be encrypted.
-///   - `key`: A BINARY expression. The key to be used to encrypt expr. It must be 16, 24, or 32 bytes long.
-///     The algorithm depends on the length of the `key`:
-///     - 16 bytes: AES-128
-///     - 24 bytes: AES-192
-///     - 32 bytes: AES-256
-///   - `mode`: An optional STRING expression describing the encryption mode.
-///     `mode` must be one of (case-insensitive):
-///     - `GCM`: Use Galois/Counter Mode (GCM). This is the default.
-///     - `CBC`: Use Cipher-Block Chaining (CBC) mode.
-///     - `ECB`: Use Electronic CodeBook (ECB) mode.
-///   - `padding`: (USELESS) An optional STRING expression describing how encryption handles padding of the value to key length.
-///     `padding` must be one of (case-insensitive):
-///     - `NONE`: Uses no padding. Valid only for `GCM`.
-///     - `DEFAULT`: Uses `NONE` for `GCM` and `PKCS` for `ECB`, and `CBC` mode.
-///     - `PKCS`: Uses Public Key Cryptography Standards (PKCS) padding. Valid only for `ECB` and `CBC`.
-///       PKCS padding adds between 1 and key-length number of bytes to pad expr to a multiple of key length.
-///       The value of each pad byte is the number of bytes being padded.
-///   - `iv`: An optional STRING expression providing an initialization vector (IV) for GCM or CBC modes.
-///     `iv`, when specified, must be 12-bytes long for GCM and 16 bytes for CBC.
-///     If not provided, a random vector will be generated and prepended to the output.
-///   - `aad`: An optional STRING expression providing authenticated additional data (AAD) in GCM mode.
-///     Optional additional authenticated data (AAD) is only supported for GCM.
-///     If provided for encryption, the identical AAD value must be provided for decryption.
+#[derive(Clone, Copy)]
+enum AesOperation {
+    Encrypt,
+    Decrypt,
+}
+
+impl AesOperation {
+    fn sql_name(self) -> &'static str {
+        match self {
+            Self::Encrypt => "aes_encrypt",
+            Self::Decrypt => "aes_decrypt",
+        }
+    }
+
+    fn max_args(self) -> usize {
+        match self {
+            Self::Encrypt => 6,
+            Self::Decrypt => 5,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum AesErrorPolicy {
+    ReturnError,
+    ReturnNull,
+}
+
+fn binary_argument<'a>(value: &'a ScalarValue, name: &str) -> Result<&'a [u8]> {
+    match value {
+        ScalarValue::Binary(Some(bytes))
+        | ScalarValue::BinaryView(Some(bytes))
+        | ScalarValue::LargeBinary(Some(bytes))
+        | ScalarValue::FixedSizeBinary(_, Some(bytes)) => Ok(bytes),
+        ScalarValue::Utf8(Some(text))
+        | ScalarValue::Utf8View(Some(text))
+        | ScalarValue::LargeUtf8(Some(text)) => Ok(text.as_bytes()),
+        _ => exec_err!("Spark AES {name} must be BINARY or STRING"),
+    }
+}
+
+fn string_argument<'a>(value: &'a ScalarValue, name: &str) -> Result<&'a str> {
+    match value {
+        ScalarValue::Utf8(Some(text))
+        | ScalarValue::Utf8View(Some(text))
+        | ScalarValue::LargeUtf8(Some(text)) => Ok(text),
+        _ => exec_err!("Spark AES {name} must be STRING"),
+    }
+}
+
+fn apply_gcm<C: Aead<NonceSize = U12> + KeyInit>(
+    operation: AesOperation,
+    key: &[u8],
+    iv: &[u8],
+    message: &[u8],
+    associated_data: &[u8],
+) -> Result<Vec<u8>> {
+    let cipher = C::new_from_slice(key)
+        .map_err(|_| exec_datafusion_err!("Spark AES GCM key length is invalid"))?;
+    let nonce = Nonce::from_slice(iv);
+    let payload = Payload {
+        msg: message,
+        aad: associated_data,
+    };
+    let result = match operation {
+        AesOperation::Encrypt => cipher.encrypt(nonce, payload),
+        AesOperation::Decrypt => cipher.decrypt(nonce, payload),
+    };
+    result.map_err(|_| exec_datafusion_err!("Spark AES GCM {} failed", operation.sql_name()))
+}
+
+fn apply_ecb<C>(operation: AesOperation, key: &[u8], input: &[u8]) -> Result<Vec<u8>>
+where
+    C: BlockCipher<BlockSize = U16> + BlockEncrypt + BlockDecrypt + KeyInit,
+{
+    let cipher = C::new_from_slice(key)
+        .map_err(|_| exec_datafusion_err!("Spark AES ECB key length is invalid"))?;
+    let mut bytes = input.to_vec();
+    match operation {
+        AesOperation::Encrypt => {
+            let remainder = input.len() % AES_BLOCK_BYTES;
+            let last_block = input.len() - remainder;
+            bytes.resize(last_block + AES_BLOCK_BYTES, 0);
+            Pkcs7::raw_pad(&mut bytes[last_block..], remainder);
+            for block in bytes.chunks_exact_mut(AES_BLOCK_BYTES) {
+                cipher.encrypt_block(Block::<C>::from_mut_slice(block));
+            }
+        }
+        AesOperation::Decrypt => {
+            if !bytes.len().is_multiple_of(AES_BLOCK_BYTES) {
+                return exec_err!("Spark AES ECB ciphertext has an invalid length");
+            }
+            for block in bytes.chunks_exact_mut(AES_BLOCK_BYTES) {
+                cipher.decrypt_block(Block::<C>::from_mut_slice(block));
+            }
+            let last_block = bytes.len() - AES_BLOCK_BYTES;
+            let tail = Pkcs7::raw_unpad(&bytes[last_block..]).map_err(|_| {
+                exec_datafusion_err!("Spark AES ECB ciphertext has invalid padding")
+            })?;
+            bytes.truncate(last_block + tail.len());
+        }
+    }
+    Ok(bytes)
+}
+
+fn apply_block_mode<C>(
+    operation: AesOperation,
+    mode: AesMode,
+    key: &[u8],
+    iv: &[u8],
+    message: &[u8],
+) -> Result<Vec<u8>>
+where
+    C: BlockCipher<BlockSize = U16> + BlockEncrypt + BlockDecrypt + KeyInit,
+{
+    // Spark's block modes accept an empty ciphertext body. GCM still requires its tag.
+    if matches!(operation, AesOperation::Decrypt) && message.is_empty() {
+        return Ok(Vec::new());
+    }
+    if matches!(mode, AesMode::Ecb) {
+        return apply_ecb::<C>(operation, key, message);
+    }
+    let invalid_key_or_iv = |_| exec_datafusion_err!("Spark AES CBC key or IV length is invalid");
+    match operation {
+        AesOperation::Encrypt => Ok(cbc::Encryptor::<C>::new_from_slices(key, iv)
+            .map_err(invalid_key_or_iv)?
+            .encrypt_padded_vec_mut::<Pkcs7>(message)),
+        AesOperation::Decrypt => cbc::Decryptor::<C>::new_from_slices(key, iv)
+            .map_err(invalid_key_or_iv)?
+            .decrypt_padded_vec_mut::<Pkcs7>(message)
+            .map_err(|_| exec_datafusion_err!("Spark AES CBC ciphertext is invalid")),
+    }
+}
+
+fn apply_aes_mode(
+    operation: AesOperation,
+    mode: AesMode,
+    key: &[u8],
+    iv: &[u8],
+    message: &[u8],
+    associated_data: &[u8],
+) -> Result<Vec<u8>> {
+    match (mode, key.len()) {
+        (AesMode::Gcm, 16) => apply_gcm::<Aes128Gcm>(operation, key, iv, message, associated_data),
+        (AesMode::Gcm, 24) => apply_gcm::<Aes192Gcm>(operation, key, iv, message, associated_data),
+        (AesMode::Gcm, 32) => apply_gcm::<Aes256Gcm>(operation, key, iv, message, associated_data),
+        (_, 16) => apply_block_mode::<Aes128>(operation, mode, key, iv, message),
+        (_, 24) => apply_block_mode::<Aes192>(operation, mode, key, iv, message),
+        (_, 32) => apply_block_mode::<Aes256>(operation, mode, key, iv, message),
+        _ => exec_err!("Spark AES key length must be 16, 24 or 32 bytes"),
+    }
+}
+
+fn evaluate_aes_row(
+    operation: AesOperation,
+    arguments: &[Cow<'_, ScalarValue>],
+) -> Result<Option<Vec<u8>>> {
+    if arguments.iter().any(|value| value.is_null()) {
+        return Ok(None);
+    }
+    let message = binary_argument(&arguments[0], "input")?;
+    let key = binary_argument(&arguments[1], "key")?;
+    let mode = match arguments.get(2) {
+        Some(value) => AesMode::parse(string_argument(value, "mode")?)?,
+        None => AesMode::Gcm,
+    };
+    if let Some(padding) = arguments.get(3) {
+        mode.validate_padding(string_argument(padding, "padding")?)?;
+    }
+    let aad_position = match operation {
+        AesOperation::Encrypt => 5,
+        AesOperation::Decrypt => 4,
+    };
+    let associated_data = arguments
+        .get(aad_position)
+        .map(|value| binary_argument(value, "associated data"))
+        .transpose()?
+        .unwrap_or_default();
+    // Spark accepts the ECB decrypt argument and never passes it to the block cipher.
+    let accepts_associated_data = matches!(
+        (operation, mode),
+        (_, AesMode::Gcm) | (AesOperation::Decrypt, AesMode::Ecb)
+    );
+    if !associated_data.is_empty() && !accepts_associated_data {
+        return exec_err!("Spark AES associated data requires GCM mode");
+    }
+    let iv_bytes = mode.iv_len();
+    let result = match operation {
+        AesOperation::Encrypt => {
+            let supplied_iv = arguments
+                .get(4)
+                .map(|value| binary_argument(value, "IV"))
+                .transpose()?
+                .unwrap_or_default();
+            let mut generated_iv = [0; AES_BLOCK_BYTES];
+            let iv = if supplied_iv.is_empty() {
+                let iv = &mut generated_iv[..iv_bytes];
+                if !iv.is_empty() {
+                    OsRng
+                        .try_fill_bytes(iv)
+                        .map_err(|_| exec_datafusion_err!("Spark AES could not generate an IV"))?;
+                }
+                iv
+            } else if iv_bytes != 0 && supplied_iv.len() == iv_bytes {
+                supplied_iv
+            } else {
+                return exec_err!("Spark AES IV length is invalid for the selected mode");
+            };
+            let mut ciphertext = iv.to_vec();
+            ciphertext.extend(apply_aes_mode(
+                operation,
+                mode,
+                key,
+                iv,
+                message,
+                associated_data,
+            )?);
+            ciphertext
+        }
+        AesOperation::Decrypt => {
+            let (iv, ciphertext) = message.split_at_checked(iv_bytes).ok_or_else(|| {
+                exec_datafusion_err!("Spark AES ciphertext is shorter than its IV")
+            })?;
+            apply_aes_mode(operation, mode, key, iv, ciphertext, associated_data)?
+        }
+    };
+    Ok(Some(result))
+}
+
+fn evaluate_aes(
+    args: ScalarFunctionArgs,
+    operation: AesOperation,
+    on_error: AesErrorPolicy,
+) -> Result<ColumnarValue> {
+    if !(2..=operation.max_args()).contains(&args.args.len()) {
+        if matches!(on_error, AesErrorPolicy::ReturnNull) {
+            return Ok(ColumnarValue::Scalar(ScalarValue::Binary(None)));
+        }
+        return exec_err!(
+            "Spark `{}` requires 2 to {} arguments, got {}",
+            operation.sql_name(),
+            operation.max_args(),
+            args.args.len()
+        );
+    }
+    if args.args.iter().any(
+        |value| matches!(value, ColumnarValue::Array(array) if array.len() != args.number_rows),
+    ) {
+        return internal_err!("AES argument length differs from the batch row count");
+    }
+    let evaluate_row = |index| {
+        let values = args
+            .args
+            .iter()
+            .map(|value| match value {
+                ColumnarValue::Scalar(scalar) => Ok(Cow::Borrowed(scalar)),
+                ColumnarValue::Array(array) => {
+                    ScalarValue::try_from_array(array, index).map(Cow::Owned)
+                }
+            })
+            .collect::<Result<Vec<_>>>()?;
+        match evaluate_aes_row(operation, &values) {
+            Err(_) if matches!(on_error, AesErrorPolicy::ReturnNull) => Ok(None),
+            result => result,
+        }
+    };
+    if args
+        .args
+        .iter()
+        .all(|value| matches!(value, ColumnarValue::Scalar(_)))
+    {
+        return Ok(ColumnarValue::Scalar(ScalarValue::Binary(evaluate_row(0)?)));
+    }
+    let mut builder = BinaryBuilder::new();
+    for index in 0..args.number_rows {
+        builder.append_option(evaluate_row(index)?);
+    }
+    Ok(ColumnarValue::Array(Arc::new(builder.finish())))
+}
+
+/// Encrypt data using Spark's AES modes.
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkAESEncrypt {
     signature: Signature,
@@ -111,7 +365,6 @@ impl SparkAESEncrypt {
     }
 }
 
-// TODO: Support array batch
 impl ScalarUDFImpl for SparkAESEncrypt {
     fn name(&self) -> &str {
         "spark_aes_encrypt"
@@ -141,468 +394,11 @@ impl ScalarUDFImpl for SparkAESEncrypt {
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
-        let ScalarFunctionArgs { args, .. } = args;
-        if args.len() < 2 || args.len() > 6 {
-            return exec_err!(
-                "Spark `aes_encrypt` function requires 2 to 6 arguments, got {}",
-                args.len()
-            );
-        }
-
-        let expr = match &args[0] {
-            ColumnarValue::Scalar(ScalarValue::Binary(Some(expr)))
-            | ColumnarValue::Scalar(ScalarValue::BinaryView(Some(expr)))
-            | ColumnarValue::Scalar(ScalarValue::FixedSizeBinary(_, Some(expr)))
-            | ColumnarValue::Scalar(ScalarValue::LargeBinary(Some(expr))) => Ok(expr.as_slice()),
-            ColumnarValue::Scalar(ScalarValue::Utf8(Some(expr)))
-            | ColumnarValue::Scalar(ScalarValue::LargeUtf8(Some(expr)))
-            | ColumnarValue::Scalar(ScalarValue::Utf8View(Some(expr))) => Ok(expr.as_bytes()),
-            ColumnarValue::Array(array) => {
-                if array.len() != 1 {
-                    return exec_err!(
-                        "Spark `aes_encrypt`: Expr requires a single value, got {array:?}"
-                    );
-                }
-                match array.data_type() {
-                    DataType::Binary => {
-                        let array = array.as_any().downcast_ref::<BinaryArray>().ok_or_else(
-                            || {
-                                exec_datafusion_err!(
-                                    "Spark `aes_encrypt`: Failed to downcast Expr to BinaryArray"
-                                )
-                            },
-                        )?;
-                        Ok(array.value(0))
-                    }
-                    DataType::BinaryView => {
-                        let array = array.as_any().downcast_ref::<BinaryViewArray>()
-                            .ok_or_else(|| exec_datafusion_err!("Spark `aes_encrypt`: Failed to downcast Expr to LargeBinaryArray"))?;
-                        Ok(array.value(0))
-                    }
-                    DataType::FixedSizeBinary(_) => {
-                        let array = array.as_any().downcast_ref::<FixedSizeBinaryArray>()
-                            .ok_or_else(|| exec_datafusion_err!("Spark `aes_encrypt`: Failed to downcast Expr to FixedSizeBinaryArray"))?;
-                        Ok(array.value(0))
-                    }
-                    DataType::LargeBinary => {
-                        let array = array.as_any().downcast_ref::<LargeBinaryArray>()
-                            .ok_or_else(|| exec_datafusion_err!("Spark `aes_encrypt`: Failed to downcast Expr to LargeBinaryArray"))?;
-                        Ok(array.value(0))
-                    }
-                    DataType::Utf8 => {
-                        let array = array.as_any().downcast_ref::<StringArray>().ok_or_else(
-                            || {
-                                exec_datafusion_err!(
-                                    "Spark `aes_encrypt`: Failed to downcast Expr to StringArray"
-                                )
-                            },
-                        )?;
-                        Ok(array.value(0).as_bytes())
-                    }
-                    DataType::LargeUtf8 => {
-                        let array = array.as_any().downcast_ref::<LargeStringArray>()
-                            .ok_or_else(|| exec_datafusion_err!("Spark `aes_encrypt`: Failed to downcast Expr to LargeStringArray"))?;
-                        Ok(array.value(0).as_bytes())
-                    }
-                    DataType::Utf8View => {
-                        let array = array.as_any().downcast_ref::<StringViewArray>()
-                            .ok_or_else(|| exec_datafusion_err!("Spark `aes_encrypt`: Failed to downcast Expr to StringViewArray"))?;
-                        Ok(array.value(0).as_bytes())
-                    }
-                    other => exec_err!(
-                        "Spark `aes_encrypt`: Expr array must be BINARY or STRING, got array of type {other}"
-                    ),
-                }
-            }
-            other => exec_err!("Spark `aes_encrypt`: Expr must be BINARY or STRING, got {other:?}"),
-        }?;
-
-        let key = match &args[1] {
-            ColumnarValue::Scalar(ScalarValue::Binary(Some(key)))
-            | ColumnarValue::Scalar(ScalarValue::BinaryView(Some(key)))
-            | ColumnarValue::Scalar(ScalarValue::FixedSizeBinary(_, Some(key)))
-            | ColumnarValue::Scalar(ScalarValue::LargeBinary(Some(key))) => Ok(key.as_slice()),
-            ColumnarValue::Scalar(ScalarValue::Utf8(Some(key)))
-            | ColumnarValue::Scalar(ScalarValue::LargeUtf8(Some(key)))
-            | ColumnarValue::Scalar(ScalarValue::Utf8View(Some(key))) => Ok(key.as_bytes()),
-            ColumnarValue::Array(array) => {
-                if array.len() != 1 {
-                    return exec_err!(
-                        "Spark `aes_encrypt`: Key requires a single value, got {array:?}"
-                    );
-                }
-                match array.data_type() {
-                    DataType::Binary => {
-                        let array =
-                            array
-                                .as_any()
-                                .downcast_ref::<BinaryArray>()
-                                .ok_or_else(|| {
-                                    exec_datafusion_err!(
-                                        "Spark `aes_encrypt`: Failed to downcast Key to BinaryArray"
-                                    )
-                                })?;
-                        Ok(array.value(0))
-                    }
-                    DataType::BinaryView => {
-                        let array = array.as_any().downcast_ref::<BinaryViewArray>()
-                            .ok_or_else(|| exec_datafusion_err!("Spark `aes_encrypt`: Failed to downcast Key to LargeBinaryArray"))?;
-                        Ok(array.value(0))
-                    }
-                    DataType::FixedSizeBinary(_) => {
-                        let array = array.as_any().downcast_ref::<FixedSizeBinaryArray>()
-                            .ok_or_else(|| exec_datafusion_err!("Spark `aes_encrypt`: Failed to downcast Key to FixedSizeBinaryArray"))?;
-                        Ok(array.value(0))
-                    }
-                    DataType::LargeBinary => {
-                        let array = array.as_any().downcast_ref::<LargeBinaryArray>()
-                            .ok_or_else(|| exec_datafusion_err!("Spark `aes_encrypt`: Failed to downcast Key to LargeBinaryArray"))?;
-                        Ok(array.value(0))
-                    }
-                    DataType::Utf8 => {
-                        let array =
-                            array
-                                .as_any()
-                                .downcast_ref::<StringArray>()
-                                .ok_or_else(|| {
-                                    exec_datafusion_err!(
-                                        "Spark `aes_encrypt`: Failed to downcast Key to StringArray"
-                                    )
-                                })?;
-                        Ok(array.value(0).as_bytes())
-                    }
-                    DataType::LargeUtf8 => {
-                        let array = array.as_any().downcast_ref::<LargeStringArray>()
-                            .ok_or_else(|| exec_datafusion_err!("Spark `aes_encrypt`: Failed to downcast Key to LargeStringArray"))?;
-                        Ok(array.value(0).as_bytes())
-                    }
-                    DataType::Utf8View => {
-                        let array = array
-                            .as_any()
-                            .downcast_ref::<StringViewArray>()
-                            .ok_or_else(|| {
-                                exec_datafusion_err!(
-                                    "Spark `aes_encrypt`: Failed to downcast Key to StringViewArray"
-                                )
-                            })?;
-                        Ok(array.value(0).as_bytes())
-                    }
-                    other => exec_err!(
-                        "Spark `aes_encrypt`: Key array must be BINARY or STRING, got array of type {other}"
-                    ),
-                }
-            }
-            other => exec_err!("Spark `aes_encrypt`: Key must be BINARY, got {other:?}"),
-        }?;
-
-        let mode = if args.len() >= 3 {
-            match &args[2] {
-                ColumnarValue::Scalar(ScalarValue::Utf8(Some(mode)))
-                | ColumnarValue::Scalar(ScalarValue::LargeUtf8(Some(mode)))
-                | ColumnarValue::Scalar(ScalarValue::Utf8View(Some(mode))) => {
-                    encryption_name_to_mode(mode)
-                }
-                ColumnarValue::Array(array) => {
-                    if array.len() != 1 {
-                        return exec_err!(
-                            "Spark `aes_encrypt`: Mode requires a single value, got {array:?}"
-                        );
-                    }
-                    match array.data_type() {
-                        DataType::Utf8 => {
-                            let array = array.as_any().downcast_ref::<StringArray>()
-                                .ok_or_else(|| exec_datafusion_err!("Spark `aes_encrypt`: Failed to downcast Mode to StringArray"))?;
-                            encryption_name_to_mode(array.value(0))
-                        }
-                        DataType::LargeUtf8 => {
-                            let array = array.as_any().downcast_ref::<LargeStringArray>()
-                                .ok_or_else(|| exec_datafusion_err!("Spark `aes_encrypt`: Failed to downcast Mode to LargeStringArray"))?;
-                            encryption_name_to_mode(array.value(0))
-                        }
-                        DataType::Utf8View => {
-                            let array = array.as_any().downcast_ref::<StringViewArray>()
-                                .ok_or_else(|| exec_datafusion_err!("Spark `aes_encrypt`: Failed to downcast Mode to StringViewArray"))?;
-                            encryption_name_to_mode(array.value(0))
-                        }
-                        other => exec_err!(
-                            "Spark `aes_encrypt`: Mode array must be STRING, got array of type {other}"
-                        ),
-                    }
-                }
-                other => exec_err!("Spark `aes_encrypt`: Mode must be a STRING, got {other:?}"),
-            }
-        } else {
-            Ok(EncryptionMode::GCM)
-        }?;
-
-        let iv: Option<Vec<u8>> = if args.len() >= 5 {
-            let iv = match &args[4] {
-                ColumnarValue::Scalar(ScalarValue::Utf8(Some(iv)))
-                | ColumnarValue::Scalar(ScalarValue::LargeUtf8(Some(iv)))
-                | ColumnarValue::Scalar(ScalarValue::Utf8View(Some(iv))) => Ok(iv.as_bytes()),
-                ColumnarValue::Scalar(ScalarValue::Binary(Some(iv)))
-                | ColumnarValue::Scalar(ScalarValue::BinaryView(Some(iv)))
-                | ColumnarValue::Scalar(ScalarValue::FixedSizeBinary(_, Some(iv)))
-                | ColumnarValue::Scalar(ScalarValue::LargeBinary(Some(iv))) => Ok(iv.as_slice()),
-                ColumnarValue::Array(array) => {
-                    if array.len() != 1 {
-                        return exec_err!(
-                            "Spark `aes_encrypt`: Key requires a single value, got {array:?}"
-                        );
-                    }
-                    match array.data_type() {
-                        DataType::Binary => {
-                            let array = array.as_any().downcast_ref::<BinaryArray>().ok_or_else(
-                                || {
-                                    exec_datafusion_err!(
-                                        "Spark `aes_encrypt`: Failed to downcast IV to BinaryArray"
-                                    )
-                                },
-                            )?;
-                            Ok(array.value(0))
-                        }
-                        DataType::BinaryView => {
-                            let array = array.as_any().downcast_ref::<BinaryViewArray>()
-                                .ok_or_else(|| exec_datafusion_err!("Spark `aes_encrypt`: Failed to downcast IV to LargeBinaryArray"))?;
-                            Ok(array.value(0))
-                        }
-                        DataType::FixedSizeBinary(_) => {
-                            let array = array.as_any().downcast_ref::<FixedSizeBinaryArray>()
-                                .ok_or_else(|| exec_datafusion_err!("Spark `aes_encrypt`: Failed to downcast IV to FixedSizeBinaryArray"))?;
-                            Ok(array.value(0))
-                        }
-                        DataType::LargeBinary => {
-                            let array = array.as_any().downcast_ref::<LargeBinaryArray>()
-                                .ok_or_else(|| exec_datafusion_err!("Spark `aes_encrypt`: Failed to downcast IV to LargeBinaryArray"))?;
-                            Ok(array.value(0))
-                        }
-                        DataType::Utf8 => {
-                            let array = array.as_any().downcast_ref::<StringArray>().ok_or_else(
-                                || {
-                                    exec_datafusion_err!(
-                                        "Spark `aes_encrypt`: Failed to downcast Key to StringArray"
-                                    )
-                                },
-                            )?;
-                            Ok(array.value(0).as_bytes())
-                        }
-                        DataType::LargeUtf8 => {
-                            let array = array.as_any().downcast_ref::<LargeStringArray>()
-                                .ok_or_else(|| exec_datafusion_err!("Spark `aes_encrypt`: Failed to downcast Key to LargeStringArray"))?;
-                            Ok(array.value(0).as_bytes())
-                        }
-                        DataType::Utf8View => {
-                            let array = array.as_any().downcast_ref::<StringViewArray>()
-                                .ok_or_else(|| exec_datafusion_err!("Spark `aes_encrypt`: Failed to downcast Key to StringViewArray"))?;
-                            Ok(array.value(0).as_bytes())
-                        }
-                        other => exec_err!(
-                            "Spark `aes_encrypt`: IV must be BINARY or STRING, got array of type {other}"
-                        ),
-                    }
-                }
-                other => {
-                    exec_err!("Spark `aes_encrypt`: IV must be BINARY or STRING, got {other:?}")
-                }
-            }?;
-            match &mode {
-                EncryptionMode::GCM => {
-                    if iv.is_empty() {
-                        // If none is provided, Spark passes up an empty string.
-                        Ok(Some(generate_iv(&mode)))
-                    } else if iv.len() != 12 {
-                        exec_err!(
-                            "Spark `aes_encrypt`: IV must be 12 bytes long for GCM mode, got {}",
-                            iv.len()
-                        )
-                    } else {
-                        Ok(Some(iv.to_vec()))
-                    }
-                }
-                EncryptionMode::CBC => {
-                    if iv.is_empty() {
-                        // If none is provided, Spark passes up an empty string.
-                        Ok(Some(generate_iv(&mode)))
-                    } else if iv.len() != 16 {
-                        exec_err!(
-                            "Spark `aes_encrypt`: IV must be 16 bytes long for CBC mode, got {}",
-                            iv.len()
-                        )
-                    } else {
-                        Ok(Some(iv.to_vec()))
-                    }
-                }
-            }
-        } else {
-            Ok(Some(generate_iv(&mode)))
-        }?;
-
-        let aad = if args.len() >= 6 {
-            match &args[5] {
-                ColumnarValue::Scalar(ScalarValue::Utf8(Some(aad)))
-                | ColumnarValue::Scalar(ScalarValue::LargeUtf8(Some(aad)))
-                | ColumnarValue::Scalar(ScalarValue::Utf8View(Some(aad))) => {
-                    if aad.is_empty() {
-                        // If none is provided, Spark passes up an empty string.
-                        Ok(None)
-                    } else {
-                        Ok(Some(aad.as_bytes()))
-                    }
-                }
-                ColumnarValue::Array(array) => {
-                    if array.len() != 1 {
-                        return exec_err!(
-                            "Spark `aes_encrypt`: AAD requires a single value, got {array:?}"
-                        );
-                    }
-                    let aad = match array.data_type() {
-                        DataType::Utf8 => {
-                            let array = array.as_any().downcast_ref::<StringArray>().ok_or_else(
-                                || {
-                                    exec_datafusion_err!(
-                                        "Spark `aes_encrypt`: Failed to downcast AAD to StringArray"
-                                    )
-                                },
-                            )?;
-                            Ok(array.value(0))
-                        }
-                        DataType::LargeUtf8 => {
-                            let array = array.as_any().downcast_ref::<LargeStringArray>()
-                                .ok_or_else(|| exec_datafusion_err!("Spark `aes_encrypt`: Failed to downcast AAD to LargeStringArray"))?;
-                            Ok(array.value(0))
-                        }
-                        DataType::Utf8View => {
-                            let array = array.as_any().downcast_ref::<StringViewArray>()
-                                .ok_or_else(|| exec_datafusion_err!("Spark `aes_encrypt`: Failed to downcast AAD to StringViewArray"))?;
-                            Ok(array.value(0))
-                        }
-                        other => exec_err!(
-                            "Spark `aes_encrypt`: AAD array must be STRING, got array of type {other}"
-                        ),
-                    }?;
-                    if aad.is_empty() {
-                        // If none is provided, Spark passes up an empty string.
-                        Ok(None)
-                    } else {
-                        Ok(Some(aad.as_bytes()))
-                    }
-                }
-                other => exec_err!("Spark `aes_encrypt`: AAD must be STRING, got {other:?}"),
-            }
-        } else {
-            Ok(None)
-        }?;
-
-        if aad.is_some() {
-            match &mode {
-                EncryptionMode::GCM => {}
-                _ => return exec_err!("Spark `aes_decrypt`: AAD is only supported for GCM mode"),
-            };
-        }
-
-        let ciphertext = match &mode {
-            EncryptionMode::GCM => {
-                let iv = iv.as_ref().ok_or_else(|| {
-                    exec_datafusion_err!("Spark `aes_encrypt`: IV must be provided for GCM mode")
-                })?;
-                let nonce = Nonce::from_slice(iv);
-                let result = match key.len() {
-                    16 => {
-                        let cipher = Aes128Gcm::new_from_slice(key).map_err(|e| {
-                            exec_datafusion_err!(
-                                "Spark `aes_encrypt`: Error creating AES-128 cipher: {e}"
-                            )
-                        })?;
-                        let result = match aad {
-                            Some(aad) => cipher.encrypt(nonce, Payload { msg: expr, aad }),
-                            None => cipher.encrypt(nonce, expr),
-                        }
-                        .map_err(|e| {
-                            exec_datafusion_err!("Spark `aes_encrypt`: GCM Encryption error: {e}")
-                        })?;
-                        Ok(result)
-                    }
-                    24 => {
-                        let cipher = Aes192Gcm::new_from_slice(key).map_err(|e| {
-                            exec_datafusion_err!(
-                                "Spark `aes_encrypt`: Error creating AES-192 cipher: {e}"
-                            )
-                        })?;
-                        let result = match aad {
-                            Some(aad) => cipher.encrypt(nonce, Payload { msg: expr, aad }),
-                            None => cipher.encrypt(nonce, expr),
-                        }
-                        .map_err(|e| {
-                            exec_datafusion_err!("Spark `aes_encrypt`: GCM Encryption error: {e}")
-                        })?;
-                        Ok(result)
-                    }
-                    32 => {
-                        let cipher = Aes256Gcm::new_from_slice(key).map_err(|e| {
-                            exec_datafusion_err!(
-                                "Spark `aes_encrypt`: Error creating AES-256 cipher: {e}"
-                            )
-                        })?;
-                        let result = match aad {
-                            Some(aad) => cipher.encrypt(nonce, Payload { msg: expr, aad }),
-                            None => cipher.encrypt(nonce, expr),
-                        }
-                        .map_err(|e| {
-                            exec_datafusion_err!("Spark `aes_encrypt`: GCM Encryption error: {e}")
-                        })?;
-                        Ok(result)
-                    }
-                    other => exec_err!(
-                        "Spark `aes_encrypt`: Key length must be 16, 24, or 32 bytes, got {other}"
-                    ),
-                }
-                .map_err(|e| {
-                    exec_datafusion_err!("Spark `aes_encrypt`: GCM Encryption error: {e}")
-                })?;
-                let mut ciphertext = iv.to_vec();
-                ciphertext.extend_from_slice(&result);
-                Ok::<Vec<u8>, DataFusionError>(ciphertext)
-            }
-            EncryptionMode::CBC => {
-                let iv = iv.as_ref().ok_or_else(|| {
-                    exec_datafusion_err!("Spark `aes_encrypt`: IV must be provided for CBC mode")
-                })?;
-                let result = match key.len() {
-                    16 => cbc::Encryptor::<Aes128>::new_from_slices(key, iv)
-                        .map_err(|e| {
-                            exec_datafusion_err!(
-                                "Spark `aes_encrypt`: Error creating AES-128 cipher: {e}"
-                            )
-                        })
-                        .map(|enc| enc.encrypt_padded_vec_mut::<Pkcs7>(expr)),
-                    24 => cbc::Encryptor::<Aes192>::new_from_slices(key, iv)
-                        .map_err(|e| {
-                            exec_datafusion_err!(
-                                "Spark `aes_encrypt`: Error creating AES-192 cipher: {e}"
-                            )
-                        })
-                        .map(|enc| enc.encrypt_padded_vec_mut::<Pkcs7>(expr)),
-                    32 => cbc::Encryptor::<Aes256>::new_from_slices(key, iv)
-                        .map_err(|e| {
-                            exec_datafusion_err!(
-                                "Spark `aes_encrypt`: Error creating AES-256 cipher: {e}"
-                            )
-                        })
-                        .map(|enc| enc.encrypt_padded_vec_mut::<Pkcs7>(expr)),
-                    other => exec_err!(
-                        "Spark `aes_encrypt`: Key length must be 16, 24, or 32 bytes, got {other}"
-                    ),
-                }?;
-                let mut ciphertext = iv.to_vec();
-                ciphertext.extend_from_slice(&result);
-                Ok(ciphertext)
-            }
-        }?;
-
-        Ok(ColumnarValue::Scalar(ScalarValue::Binary(Some(ciphertext))))
+        evaluate_aes(args, AesOperation::Encrypt, AesErrorPolicy::ReturnError)
     }
 }
 
+/// Decrypt data using Spark's AES modes.
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkAESDecrypt {
     signature: Signature,
@@ -622,7 +418,6 @@ impl SparkAESDecrypt {
     }
 }
 
-// TODO: Support array batch
 impl ScalarUDFImpl for SparkAESDecrypt {
     fn name(&self) -> &str {
         "spark_aes_decrypt"
@@ -652,392 +447,11 @@ impl ScalarUDFImpl for SparkAESDecrypt {
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
-        let ScalarFunctionArgs { args, .. } = args;
-        if args.len() < 2 || args.len() > 5 {
-            return exec_err!(
-                "Spark `aes_decrypt` function requires 2 to 5 arguments, got {}",
-                args.len()
-            );
-        }
-
-        let expr = match &args[0] {
-            ColumnarValue::Scalar(ScalarValue::Binary(Some(expr)))
-            | ColumnarValue::Scalar(ScalarValue::BinaryView(Some(expr)))
-            | ColumnarValue::Scalar(ScalarValue::FixedSizeBinary(_, Some(expr)))
-            | ColumnarValue::Scalar(ScalarValue::LargeBinary(Some(expr))) => Ok(expr.as_slice()),
-            ColumnarValue::Scalar(ScalarValue::Utf8(Some(expr)))
-            | ColumnarValue::Scalar(ScalarValue::LargeUtf8(Some(expr)))
-            | ColumnarValue::Scalar(ScalarValue::Utf8View(Some(expr))) => Ok(expr.as_bytes()),
-            ColumnarValue::Array(array) => {
-                if array.len() != 1 {
-                    return exec_err!(
-                        "Spark `aes_decrypt`: Expr requires a single value, got {array:?}"
-                    );
-                }
-                match array.data_type() {
-                    DataType::Binary => {
-                        let array = array.as_any().downcast_ref::<BinaryArray>().ok_or_else(
-                            || {
-                                exec_datafusion_err!(
-                                    "Spark `aes_decrypt`: Failed to downcast Expr to BinaryArray"
-                                )
-                            },
-                        )?;
-                        Ok(array.value(0))
-                    }
-                    DataType::BinaryView => {
-                        let array = array.as_any().downcast_ref::<BinaryViewArray>()
-                            .ok_or_else(|| exec_datafusion_err!("Spark `aes_decrypt`: Failed to downcast Expr to LargeBinaryArray"))?;
-                        Ok(array.value(0))
-                    }
-                    DataType::FixedSizeBinary(_) => {
-                        let array = array.as_any().downcast_ref::<FixedSizeBinaryArray>()
-                            .ok_or_else(|| exec_datafusion_err!("Spark `aes_decrypt`: Failed to downcast Expr to FixedSizeBinaryArray"))?;
-                        Ok(array.value(0))
-                    }
-                    DataType::LargeBinary => {
-                        let array = array.as_any().downcast_ref::<LargeBinaryArray>()
-                            .ok_or_else(|| exec_datafusion_err!("Spark `aes_decrypt`: Failed to downcast Expr to LargeBinaryArray"))?;
-                        Ok(array.value(0))
-                    }
-                    DataType::Utf8 => {
-                        let array = array.as_any().downcast_ref::<StringArray>().ok_or_else(
-                            || {
-                                exec_datafusion_err!(
-                                    "Spark `aes_decrypt`: Failed to downcast Expr to StringArray"
-                                )
-                            },
-                        )?;
-                        Ok(array.value(0).as_bytes())
-                    }
-                    DataType::LargeUtf8 => {
-                        let array = array.as_any().downcast_ref::<LargeStringArray>()
-                            .ok_or_else(|| exec_datafusion_err!("Spark `aes_decrypt`: Failed to downcast Expr to LargeStringArray"))?;
-                        Ok(array.value(0).as_bytes())
-                    }
-                    DataType::Utf8View => {
-                        let array = array.as_any().downcast_ref::<StringViewArray>()
-                            .ok_or_else(|| exec_datafusion_err!("Spark `aes_decrypt`: Failed to downcast Expr to StringViewArray"))?;
-                        Ok(array.value(0).as_bytes())
-                    }
-                    other => exec_err!(
-                        "Spark `aes_decrypt`: Expr array must be BINARY or STRING, got array of type {other}"
-                    ),
-                }
-            }
-            other => exec_err!("Spark `aes_decrypt`: Expr must be BINARY or STRING, got {other:?}"),
-        }?;
-
-        let key = match &args[1] {
-            ColumnarValue::Scalar(ScalarValue::Binary(Some(key)))
-            | ColumnarValue::Scalar(ScalarValue::BinaryView(Some(key)))
-            | ColumnarValue::Scalar(ScalarValue::FixedSizeBinary(_, Some(key)))
-            | ColumnarValue::Scalar(ScalarValue::LargeBinary(Some(key))) => Ok(key.as_slice()),
-            ColumnarValue::Scalar(ScalarValue::Utf8(Some(key)))
-            | ColumnarValue::Scalar(ScalarValue::LargeUtf8(Some(key)))
-            | ColumnarValue::Scalar(ScalarValue::Utf8View(Some(key))) => Ok(key.as_bytes()),
-            ColumnarValue::Array(array) => {
-                if array.len() != 1 {
-                    return exec_err!(
-                        "Spark `aes_decrypt`: Key requires a single value, got {array:?}"
-                    );
-                }
-                match array.data_type() {
-                    DataType::Binary => {
-                        let array =
-                            array
-                                .as_any()
-                                .downcast_ref::<BinaryArray>()
-                                .ok_or_else(|| {
-                                    exec_datafusion_err!(
-                                        "Spark `aes_decrypt`: Failed to downcast Key to BinaryArray"
-                                    )
-                                })?;
-                        Ok(array.value(0))
-                    }
-                    DataType::BinaryView => {
-                        let array = array.as_any().downcast_ref::<BinaryViewArray>()
-                            .ok_or_else(|| exec_datafusion_err!("Spark `aes_decrypt`: Failed to downcast Key to LargeBinaryArray"))?;
-                        Ok(array.value(0))
-                    }
-                    DataType::FixedSizeBinary(_) => {
-                        let array = array.as_any().downcast_ref::<FixedSizeBinaryArray>()
-                            .ok_or_else(|| exec_datafusion_err!("Spark `aes_decrypt`: Failed to downcast Key to FixedSizeBinaryArray"))?;
-                        Ok(array.value(0))
-                    }
-                    DataType::LargeBinary => {
-                        let array = array.as_any().downcast_ref::<LargeBinaryArray>()
-                            .ok_or_else(|| exec_datafusion_err!("Spark `aes_decrypt`: Failed to downcast Key to LargeBinaryArray"))?;
-                        Ok(array.value(0))
-                    }
-                    DataType::Utf8 => {
-                        let array =
-                            array
-                                .as_any()
-                                .downcast_ref::<StringArray>()
-                                .ok_or_else(|| {
-                                    exec_datafusion_err!(
-                                        "Spark `aes_decrypt`: Failed to downcast Key to StringArray"
-                                    )
-                                })?;
-                        Ok(array.value(0).as_bytes())
-                    }
-                    DataType::LargeUtf8 => {
-                        let array = array.as_any().downcast_ref::<LargeStringArray>()
-                            .ok_or_else(|| exec_datafusion_err!("Spark `aes_decrypt`: Failed to downcast Key to LargeStringArray"))?;
-                        Ok(array.value(0).as_bytes())
-                    }
-                    DataType::Utf8View => {
-                        let array = array
-                            .as_any()
-                            .downcast_ref::<StringViewArray>()
-                            .ok_or_else(|| {
-                                exec_datafusion_err!(
-                                    "Spark `aes_decrypt`: Failed to downcast Key to StringViewArray"
-                                )
-                            })?;
-                        Ok(array.value(0).as_bytes())
-                    }
-                    other => exec_err!(
-                        "Spark `aes_decrypt`: Key array must be BINARY or STRING, got array of type {other}"
-                    ),
-                }
-            }
-            other => exec_err!("Spark `aes_decrypt`: Key must be BINARY, got {other:?}"),
-        }?;
-
-        let mode = if args.len() >= 3 {
-            match &args[2] {
-                ColumnarValue::Scalar(ScalarValue::Utf8(Some(mode)))
-                | ColumnarValue::Scalar(ScalarValue::LargeUtf8(Some(mode)))
-                | ColumnarValue::Scalar(ScalarValue::Utf8View(Some(mode))) => {
-                    encryption_name_to_mode(mode)
-                }
-                ColumnarValue::Array(array) => {
-                    if array.len() != 1 {
-                        return exec_err!(
-                            "Spark `aes_decrypt`: Mode requires a single value, got {array:?}"
-                        );
-                    }
-                    match array.data_type() {
-                        DataType::Utf8 => {
-                            let array = array.as_any().downcast_ref::<StringArray>()
-                                .ok_or_else(|| exec_datafusion_err!("Spark `aes_decrypt`: Failed to downcast Mode to StringArray"))?;
-                            encryption_name_to_mode(array.value(0))
-                        }
-                        DataType::LargeUtf8 => {
-                            let array = array.as_any().downcast_ref::<LargeStringArray>()
-                                .ok_or_else(|| exec_datafusion_err!("Spark `aes_decrypt`: Failed to downcast Mode to LargeStringArray"))?;
-                            encryption_name_to_mode(array.value(0))
-                        }
-                        DataType::Utf8View => {
-                            let array = array.as_any().downcast_ref::<StringViewArray>()
-                                .ok_or_else(|| exec_datafusion_err!("Spark `aes_decrypt`: Failed to downcast Mode to StringViewArray"))?;
-                            encryption_name_to_mode(array.value(0))
-                        }
-                        other => exec_err!(
-                            "Spark `aes_decrypt`: Mode array must be STRING, got array of type {other}"
-                        ),
-                    }
-                }
-                other => exec_err!("Spark `aes_decrypt`: Mode must be a STRING, got {other:?}"),
-            }
-        } else {
-            Ok(EncryptionMode::GCM)
-        }?;
-
-        let aad = if args.len() >= 5 {
-            match &args[4] {
-                ColumnarValue::Scalar(ScalarValue::Utf8(Some(aad)))
-                | ColumnarValue::Scalar(ScalarValue::LargeUtf8(Some(aad)))
-                | ColumnarValue::Scalar(ScalarValue::Utf8View(Some(aad))) => {
-                    if aad.is_empty() {
-                        // If none is provided, Spark passes up an empty string.
-                        Ok(None)
-                    } else {
-                        Ok(Some(aad.as_bytes()))
-                    }
-                }
-                ColumnarValue::Array(array) => {
-                    if array.len() != 1 {
-                        return exec_err!(
-                            "Spark `aes_decrypt`: AAD requires a single value, got {array:?}"
-                        );
-                    }
-                    let aad = match array.data_type() {
-                        DataType::Utf8 => {
-                            let array = array.as_any().downcast_ref::<StringArray>().ok_or_else(
-                                || {
-                                    exec_datafusion_err!(
-                                        "Spark `aes_decrypt`: Failed to downcast AAD to StringArray"
-                                    )
-                                },
-                            )?;
-                            Ok(array.value(0))
-                        }
-                        DataType::LargeUtf8 => {
-                            let array = array.as_any().downcast_ref::<LargeStringArray>()
-                                .ok_or_else(|| exec_datafusion_err!("Spark `aes_decrypt`: Failed to downcast AAD to LargeStringArray"))?;
-                            Ok(array.value(0))
-                        }
-                        DataType::Utf8View => {
-                            let array = array.as_any().downcast_ref::<StringViewArray>()
-                                .ok_or_else(|| exec_datafusion_err!("Spark `aes_decrypt`: Failed to downcast AAD to StringViewArray"))?;
-                            Ok(array.value(0))
-                        }
-                        other => exec_err!(
-                            "Spark `aes_decrypt`: AAD array must be STRING, got array of type {other}"
-                        ),
-                    }?;
-                    if aad.is_empty() {
-                        // If none is provided, Spark passes up an empty string.
-                        Ok(None)
-                    } else {
-                        Ok(Some(aad.as_bytes()))
-                    }
-                }
-                other => exec_err!("Spark `aes_decrypt`: AAD must be STRING, got {other:?}"),
-            }
-        } else {
-            Ok(None)
-        }?;
-
-        if aad.is_some() {
-            match &mode {
-                EncryptionMode::GCM => {}
-                _ => return exec_err!("Spark `aes_decrypt`: AAD is only supported for GCM mode"),
-            };
-        }
-
-        let result = match &mode {
-            EncryptionMode::GCM => {
-                // iv is prepended to the ciphertext
-                let iv = &expr[..12];
-                let expr = &expr[12..];
-                let nonce = Nonce::from_slice(iv);
-                let decrypted = match key.len() {
-                    16 => {
-                        let cipher = Aes128Gcm::new_from_slice(key).map_err(|e| {
-                            exec_datafusion_err!(
-                                "Spark `aes_decrypt`: Error creating AES-128 cipher: {e}"
-                            )
-                        })?;
-                        let result = match aad {
-                            Some(aad) => cipher.decrypt(nonce, Payload { msg: expr, aad }),
-                            None => cipher.decrypt(nonce, expr),
-                        }
-                        .map_err(|e| {
-                            exec_datafusion_err!("Spark `aes_decrypt`: GCM Encryption error: {e}")
-                        })?;
-                        Ok(result)
-                    }
-                    24 => {
-                        let cipher = Aes192Gcm::new_from_slice(key).map_err(|e| {
-                            exec_datafusion_err!(
-                                "Spark `aes_decrypt`: Error creating AES-192 cipher: {e}"
-                            )
-                        })?;
-                        let result = match aad {
-                            Some(aad) => cipher.decrypt(nonce, Payload { msg: expr, aad }),
-                            None => cipher.decrypt(nonce, expr),
-                        }
-                        .map_err(|e| {
-                            exec_datafusion_err!("Spark `aes_decrypt`: GCM Encryption error: {e}")
-                        })?;
-                        Ok(result)
-                    }
-                    32 => {
-                        let cipher = Aes256Gcm::new_from_slice(key).map_err(|e| {
-                            exec_datafusion_err!(
-                                "Spark `aes_decrypt`: Error creating AES-256 cipher: {e}"
-                            )
-                        })?;
-                        let result = match aad {
-                            Some(aad) => cipher.decrypt(nonce, Payload { msg: expr, aad }),
-                            None => cipher.decrypt(nonce, expr),
-                        }
-                        .map_err(|e| {
-                            exec_datafusion_err!("Spark `aes_decrypt`: GCM Encryption error: {e}")
-                        })?;
-                        Ok(result)
-                    }
-                    other => exec_err!(
-                        "Spark `aes_decrypt`: Key length must be 16, 24, or 32 bytes, got {other}"
-                    ),
-                }
-                .map_err(|e| {
-                    exec_datafusion_err!("Spark `aes_decrypt`: GCM Encryption error: {e}")
-                })?;
-                Ok::<Vec<u8>, DataFusionError>(decrypted)
-            }
-            EncryptionMode::CBC => {
-                // iv is prepended to the ciphertext
-                let iv = &expr[..16];
-                let expr = &expr[16..];
-                let decrypted = match key.len() {
-                    16 => {
-                        let decryptor = cbc::Decryptor::<Aes128>::new_from_slices(key, iv)
-                            .map_err(|e| {
-                                exec_datafusion_err!(
-                                    "Spark `aes_decrypt`: Error creating AES-128 cipher: {e}"
-                                )
-                            })?;
-                        let result =
-                            decryptor
-                                .decrypt_padded_vec_mut::<Pkcs7>(expr)
-                                .map_err(|e| {
-                                    exec_datafusion_err!(
-                                        "Spark `aes_decrypt`: CBC Decryption error: {e}"
-                                    )
-                                })?;
-                        Ok(result)
-                    }
-                    24 => {
-                        let decryptor = cbc::Decryptor::<Aes192>::new_from_slices(key, iv)
-                            .map_err(|e| {
-                                exec_datafusion_err!(
-                                    "Spark `aes_decrypt`: Error creating AES-192 cipher: {e}"
-                                )
-                            })?;
-                        let result =
-                            decryptor
-                                .decrypt_padded_vec_mut::<Pkcs7>(expr)
-                                .map_err(|e| {
-                                    exec_datafusion_err!(
-                                        "Spark `aes_decrypt`: CBC Decryption error: {e}"
-                                    )
-                                })?;
-                        Ok(result)
-                    }
-                    32 => {
-                        let decryptor = cbc::Decryptor::<Aes256>::new_from_slices(key, iv)
-                            .map_err(|e| {
-                                exec_datafusion_err!(
-                                    "Spark `aes_decrypt`: Error creating AES-256 cipher: {e}"
-                                )
-                            })?;
-                        let result =
-                            decryptor
-                                .decrypt_padded_vec_mut::<Pkcs7>(expr)
-                                .map_err(|e| {
-                                    exec_datafusion_err!(
-                                        "Spark `aes_decrypt`: CBC Decryption error: {e}"
-                                    )
-                                })?;
-                        Ok(result)
-                    }
-                    other => exec_err!(
-                        "Spark `aes_decrypt`: Key length must be 16, 24, or 32 bytes, got {other}"
-                    ),
-                }?;
-                Ok(decrypted)
-            }
-        }?;
-
-        Ok(ColumnarValue::Scalar(ScalarValue::Binary(Some(result))))
+        evaluate_aes(args, AesOperation::Decrypt, AesErrorPolicy::ReturnError)
     }
 }
 
+/// Encrypt data, returning NULL when an individual row fails.
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkTryAESEncrypt {
     signature: Signature,
@@ -1080,14 +494,11 @@ impl ScalarUDFImpl for SparkTryAESEncrypt {
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
-        let result = SparkAESEncrypt::new().invoke_with_args(args);
-        match result {
-            Ok(result) => Ok(result),
-            Err(_) => Ok(ColumnarValue::Scalar(ScalarValue::Binary(None))),
-        }
+        evaluate_aes(args, AesOperation::Encrypt, AesErrorPolicy::ReturnNull)
     }
 }
 
+/// Decrypt data, returning NULL when an individual row fails.
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkTryAESDecrypt {
     signature: Signature,
@@ -1130,10 +541,6 @@ impl ScalarUDFImpl for SparkTryAESDecrypt {
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
-        let result = SparkAESDecrypt::new().invoke_with_args(args);
-        match result {
-            Ok(result) => Ok(result),
-            Err(_) => Ok(ColumnarValue::Scalar(ScalarValue::Binary(None))),
-        }
+        evaluate_aes(args, AesOperation::Decrypt, AesErrorPolicy::ReturnNull)
     }
 }
