@@ -33,7 +33,7 @@ times and the projection-adjusted values. [Protocol](functions-1406-protocol.md)
 | `array_prepend` | scalar | Matches Spark | 45.66 | 49.54 | [Spark capture](functions-1406-comparisons.jsonl.gz) |
 | `arrays_zip` | scalar | Matches Spark | 59.01 | 53.18 | [Spark capture](functions-1406-comparisons.jsonl.gz) |
 | `cardinality` | scalar | Matches Spark | 52.23 | 48.69 | [Spark capture](functions-1406-comparisons.jsonl.gz) |
-| `concat` | scalar | Matches Spark | 14.52 | 14.46 | [Spark capture](functions-1406-comparisons.jsonl.gz) |
+| `concat` | scalar | Matches Spark | 14.52 | 14.46 | [String fixture](../../tests/fixtures/binary-concat-spark.jsonl), [benchmark capture](functions-1406-comparisons.jsonl.gz) |
 | `size` | scalar | Matches Spark | 53.86 | 50.38 | [Spark capture](functions-1406-comparisons.jsonl.gz) |
 | `date_format` | scalar | Matches Spark | 197.24 | 197.84 | [Temporal fixture](../../tests/fixtures/temporal-contracts/temporal-contracts-spark.jsonl), [benchmark capture](functions-1406-comparisons.jsonl.gz) |
 | `map_entries` | scalar | Same panic in the stock build |  |  | [Stock probe](../functions_1406/stock_map_entries.rs) |
@@ -127,6 +127,19 @@ code was pinned at `6a520463`.
 The committed temporal fixture tests `DATE_FORMAT(ts, 'yyyy-MM-dd')` on a
 nullable timestamp column in UTC in both ANSI modes. Its existing
 `temporal_contracts_match_spark` test checks the DAR rows and executed types
-against that capture. The reduced benchmark capture covers the exact #1391
-statement on this report's input. The temporal, array, collection and
-approximate percentile fixture suites passed all 210 tests on Linux.
+against that capture. The string fixture checks `CONCAT` on two nullable
+string columns in both modes. The reduced benchmark capture covers the exact
+#1391 statements on this report's input.
+[Temporal fixture](../../tests/fixtures/temporal-contracts/temporal-contracts-spark.jsonl),
+[string fixture](../../tests/fixtures/binary-concat-spark.jsonl).
+
+Additional committed captures exercise literal pattern and replacement
+arguments for `regexp_replace`, the 0.5 argument for DOUBLE approximate
+percentiles, and `array_compact`, `size` and `cardinality` on nullable integer
+arrays. The benchmark captures cover its own regex, the five-row percentile
+frames and BIGINT elements. The six retained fixture suites passed all 233
+tests on Linux.
+[Regex fixture](../../tests/fixtures/regex-word-categories-spark.jsonl),
+[approximate percentiles](../../tests/fixtures/approx-percentile-ranks/spark-results.jsonl),
+[array compaction](../../tests/fixtures/array-compact-fields-spark.jsonl),
+[collection length](../../tests/fixtures/collection-length-fields/spark-reference.jsonl).
