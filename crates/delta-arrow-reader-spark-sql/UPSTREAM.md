@@ -2505,6 +2505,20 @@ The DATE differential tests compare valid dates, NULL handling and malformed
 inputs against the original parser. The connected tests exercise both ANSI
 modes and CAST and TRY_CAST.
 
+### Whole-second strings in DATE_FORMAT (#1389, second round)
+
+DATE_FORMAT reuses the existing whole-second timestamp parser for complete
+ASCII strings of the form `YYYY-MM-DD HH:mm:ss`. It sends the parsed
+datetime through the same session timezone conversion as the Sail parser.
+The calendar and clock checks use Chrono in both paths. Fractions, explicit
+zones, other spellings and leap seconds remain on the original parser.
+The formatter and the typed timestamp input paths use the existing code.
+
+The runtime test checks route selection, negative epochs, exact microseconds,
+offsets, leap seconds and invalid inputs. The frozen DATE_FORMAT differential
+tests compare UTC and DST-zone output on supported string layouts and SQL
+inputs.
+
 ### Ordinary STRING timestamp casts (#1389)
 
 SparkTimestamp LTZ/NTZ uses Chrono calendar and clock validation directly for

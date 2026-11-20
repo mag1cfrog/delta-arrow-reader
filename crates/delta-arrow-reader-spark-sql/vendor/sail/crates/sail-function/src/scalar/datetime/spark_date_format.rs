@@ -25,6 +25,7 @@ use sail_sql_analyzer::parser::{parse_timestamp, timestamp_parser};
 
 use crate::scalar::datetime::format::{DateTimeFormat, DateTimeFormatInput, TimeZoneDisplay};
 use crate::scalar::datetime::local_datetime_to_ltz::cast_local_timestamp_value_to_ltz;
+use crate::scalar::datetime::spark_timestamp::parse_ascii_whole_second_timestamp;
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkDateFormat {
@@ -154,7 +155,11 @@ impl ScalarUDFImpl for SparkDateFormat {
                     ScalarValue::Utf8(Some(value))
                     | ScalarValue::LargeUtf8(Some(value))
                     | ScalarValue::Utf8View(Some(value)) => {
-                        let micros = parse_timestamp_string(&value, &self.session_timezone)?;
+                        let micros = parse_timestamp_string(
+                            &value,
+                            &self.session_timezone,
+                            parse_timestamp,
+                        )?;
                         match micros {
                             Some(micros) => format_timestamp_value(
                                 micros,
@@ -206,7 +211,11 @@ impl ScalarUDFImpl for SparkDateFormat {
                     ScalarValue::Utf8(Some(value))
                     | ScalarValue::LargeUtf8(Some(value))
                     | ScalarValue::Utf8View(Some(value)) => {
-                        let micros = parse_timestamp_string(&value, &self.session_timezone)?;
+                        let micros = parse_timestamp_string(
+                            &value,
+                            &self.session_timezone,
+                            parse_timestamp,
+                        )?;
                         match micros {
                             Some(micros) => ScalarValue::TimestampMicrosecond(
                                 Some(micros),
@@ -249,20 +258,21 @@ fn null_string_array(len: usize) -> ColumnarValue {
     ])))
 }
 
-/// Parse a timestamp string to microseconds since epoch.
-fn parse_timestamp_string(value: &str, timezone: &str) -> Result<Option<i64>> {
-    parsed_timestamp_to_microseconds(parse_timestamp(value), timezone)
-}
-
-fn parsed_timestamp_to_microseconds(
-    parsed: SqlResult<TimestampValue<'_>>,
+/// Parse an ordinary timestamp directly and use the supplied parser for other forms.
+fn parse_timestamp_string<'a>(
+    value: &'a str,
     timezone: &str,
+    parse_fallback: impl FnOnce(&'a str) -> SqlResult<TimestampValue<'a>>,
 ) -> Result<Option<i64>> {
-    let parsed = parsed.and_then(|x| x.into_naive());
-    let (datetime, parsed_timezone) = match parsed {
-        Ok(v) => v,
-        Err(_e) => return Ok(None),
-    };
+    let (datetime, parsed_timezone) =
+        if let Some(datetime) = parse_ascii_whole_second_timestamp(value) {
+            (datetime, "")
+        } else {
+            match parse_fallback(value).and_then(TimestampValue::into_naive) {
+                Ok(parsed) => parsed,
+                Err(_) => return Ok(None),
+            }
+        };
     // Use the timezone from the parsed string if present, otherwise use the provided timezone
     let timezone: Tz = if parsed_timezone.is_empty() {
         match timezone.parse() {
@@ -288,14 +298,15 @@ fn parse_string_array_to_timestamp(
     timezone: &str,
 ) -> Result<TimestampMicrosecondArray> {
     let mut builder = TimestampMicrosecondArray::builder(array.len());
-    let mut parse = timestamp_parser();
+    let mut batch_parser = timestamp_parser();
+    let mut parse_row = |value| parse_timestamp_string(value, timezone, &mut batch_parser);
 
     match array.data_type() {
         DataType::Utf8 => {
             let string_array = as_string_array(array)?;
             for value in string_array.iter() {
                 match value {
-                    Some(v) => match parsed_timestamp_to_microseconds(parse(v), timezone)? {
+                    Some(v) => match parse_row(v)? {
                         Some(micros) => builder.append_value(micros),
                         None => builder.append_null(),
                     },
@@ -307,7 +318,7 @@ fn parse_string_array_to_timestamp(
             let string_array = as_large_string_array(array)?;
             for value in string_array.iter() {
                 match value {
-                    Some(v) => match parsed_timestamp_to_microseconds(parse(v), timezone)? {
+                    Some(v) => match parse_row(v)? {
                         Some(micros) => builder.append_value(micros),
                         None => builder.append_null(),
                     },
@@ -319,7 +330,7 @@ fn parse_string_array_to_timestamp(
             let string_array = as_string_view_array(array)?;
             for value in string_array.iter() {
                 match value {
-                    Some(v) => match parsed_timestamp_to_microseconds(parse(v), timezone)? {
+                    Some(v) => match parse_row(v)? {
                         Some(micros) => builder.append_value(micros),
                         None => builder.append_null(),
                     },
@@ -823,4 +834,31 @@ fn format_timestamp_array_nanosecond(
         .collect::<Result<Vec<_>>>()?;
 
     Ok(StringArray::from(result))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ordinary_date_format_timestamps_preserve_fallback_localization() -> Result<()> {
+        for (input, expected_micros, expects_fallback) in [
+            ("1970-01-01 00:00:01", Some(1_000_000), false),
+            ("1969-12-31 23:59:59", Some(-1_000_000), false),
+            ("1970-01-01 00:00:01.123456", Some(1_123_456), true),
+            ("1970-01-01T00:00:01Z", Some(1_000_000), true),
+            ("1970-01-01 01:00:01+01:00", Some(1_000_000), true),
+            ("1970-01-01 23:59:60", Some(86_400_000_000), true),
+            ("1970-02-30 00:00:01", None, true),
+        ] {
+            let mut used_fallback = false;
+            let micros = parse_timestamp_string(input, "UTC", |value| {
+                used_fallback = true;
+                parse_timestamp(value)
+            })?;
+            assert_eq!(micros, expected_micros, "{input}");
+            assert_eq!(used_fallback, expects_fallback, "{input}");
+        }
+        Ok(())
+    }
 }

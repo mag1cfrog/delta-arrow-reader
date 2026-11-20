@@ -50,7 +50,7 @@ enum ScalarFormat {
     Format(DateTimeFormat),
 }
 
-fn parse_ascii_whole_second_timestamp(value: &str) -> Option<NaiveDateTime> {
+pub(super) fn parse_ascii_whole_second_timestamp(value: &str) -> Option<NaiveDateTime> {
     let bytes = value.as_bytes();
     if bytes.len() != 19
         || !bytes.iter().enumerate().all(|(index, byte)| match index {
