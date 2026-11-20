@@ -20,3 +20,12 @@ ANSI modes. Exclude a shape if a comparison fails. Record both build receipts.
 The speed target is met only if candidate Spark completion minus its native
 reference is within the measured native repeat spread in each ANSI mode.
 Earlier campaigns are context and do not enter this test.
+
+For a residual above native noise, isolate the additional input shape check.
+Use `sample_guard.rs` with the exact candidate guard appended from
+`spark_date.rs` and the candidate's Arrow release library. Compile with Rust
+1.96.0, opt level 3 and debuginfo 1. Use CPUs 2-5, 4 GiB and a 60-second
+deadline. Compare the guard plus Arrow with Arrow alone in one process.
+Check equal results before clocks. Each path gets seven samples of 131,072
+valid input rows, with alternating first position. Report median paired
+cost and dispersion. The probe excludes DataFusion and array construction.
