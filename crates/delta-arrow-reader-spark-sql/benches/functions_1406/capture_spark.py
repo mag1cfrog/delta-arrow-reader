@@ -23,7 +23,18 @@ def capture_with_typed_table(spark, case, encode):
             CAST(ts AS TIMESTAMP) AS ts, b, theta_b
         FROM bench_encoded
     """)
-    return capture(spark, case, encode)
+    record = capture(spark, case, encode)
+    # Spark's sketch exception has no Spark SQL condition. Keep its Java cause as evidence.
+    if case["id"] == "window.window.theta_intersection_agg" and "capture_failure" in record:
+        failure = record["capture_failure"]
+        if failure["phase"] == "collect" and failure["cause_chain_complete"]:
+            for cause in failure["java_causes"]:
+                if (cause["class"] == "org.apache.datasketches.common.SketchesStateException"
+                        and "no intervening intersections" in cause["message"]):
+                    del record["capture_failure"]
+                    record.update(status="error", expected={"java_exception": cause["class"]})
+                    break
+    return record
 
 
 def main():
