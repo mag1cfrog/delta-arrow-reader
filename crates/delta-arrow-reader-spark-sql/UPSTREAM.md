@@ -2538,6 +2538,8 @@ functions still produce binary values.
 Read ciphertext written by the old ECB spelling by specifying CBC, which is
 the wire format that implementation emitted. For Spark's ECB format, decryption
 ignores nonnull associated data as Spark does.
+Spark rejects empty or whitespace-padded explicit mode names. DAR retains the
+earlier mode trimming and empty-string GCM default for literals and columns.
 
 The [Spark 4.2.0 capture](tests/fixtures/aes-column-arguments/spark-results.jsonl)
 includes deterministic ciphertexts, random-IV round trips, invalid inputs and
