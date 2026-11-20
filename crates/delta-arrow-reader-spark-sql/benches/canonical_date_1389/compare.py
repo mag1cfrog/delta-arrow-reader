@@ -77,8 +77,9 @@ def summarize(runner, records):
 
 def main():
     cli = argparse.ArgumentParser(description=__doc__)
-    for name in ("staging", "candidate", "output"):
-        cli.add_argument(name, type=Path)
+    cli.add_argument("staging_receipt", type=Path)
+    cli.add_argument("candidate_receipt", type=Path)
+    cli.add_argument("output", type=Path)
     args = cli.parse_args()
     assert not subprocess.check_output(["git", "status", "--porcelain"], cwd=HERE, text=True).strip()
     sys.path.insert(0, str(FROZEN))
@@ -90,17 +91,28 @@ def main():
     assert case in read(FROZEN / "manifest.json")["functions"]
     schedule = read(FROZEN / "schedule.json")
     schedule.update(process_timeout_seconds=60, preflight_process_timeout_seconds=120)
-    binaries = {name: getattr(args, name).resolve() for name in ("staging", "candidate")}
-    hashes = {name: digest(binary) for name, binary in binaries.items()}
-    assert len(set(hashes.values())) == 2
+    head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=HERE, text=True).strip()
+    receipts = {"staging": read(args.staging_receipt), "candidate": read(args.candidate_receipt)}
+    expected_sources = {"staging": manifest["source_commit"], "candidate": head}
+    binaries = {}
+    for role, receipt in receipts.items():
+        binary = Path(receipt["executable"]).resolve()
+        assert receipt["source"] == expected_sources[role] and digest(binary) == receipt["sha256"]
+        assert receipt["profile"]["opt_level"] == "3" and receipt["profile"]["debuginfo"] == 1
+        assert receipt["rustc"].startswith("rustc 1.96.0 ")
+        binaries[role] = binary
+    assert receipts["staging"]["sha256"] != receipts["candidate"]["sha256"]
     output = args.output.resolve()
     output.mkdir()
-    (output / "session.json").write_text(json.dumps({"binaries": hashes, "manifest": manifest,
-        "protocol_head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=HERE, text=True).strip()
+    (output / "session.json").write_text(json.dumps({
+        "binaries": receipts, "manifest": manifest, "protocol_head": head,
     }, indent=2) + "\n")
-    deadline = time.monotonic() + 240
-    types = {}
+    deadline = time.monotonic() + 360
+    registry, types, plans = read(FROZEN / "native-registry.json"), {}, {}
     for role, binary in binaries.items():
+        registration = runner["invoke"](binary, ["registry"], output / "registry" / role,
+                                        schedule, deadline, preflight=True)
+        assert registration["status"] == "ok" and registration["records"] == [registry]
         work = output / "preflight" / role
         result = runner["invoke"](binary, ["preflight", MANIFEST, case["id"], work / "plans"],
                                   work, schedule, deadline, preflight=True)
@@ -112,6 +124,9 @@ def main():
         assert all(row["rows"] == ROWS for row in preflight["results"])
         assert all(row["rows"] == ROWS for row in preflight["baselines"])
         types[role] = {row["configuration"]: row["types"] for row in preflight["results"]}
+        plans[role] = (work / "plans/native.plan").read_text()
+        assert "CAST(date_s@1 AS Date32) as value" in plans[role]
+    assert plans["staging"] == plans["candidate"]
     if types["staging"] != types["candidate"]:
         (output / "excluded.json").write_text(json.dumps({"type_mismatch": types}, indent=2) + "\n")
         return

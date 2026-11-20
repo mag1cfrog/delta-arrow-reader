@@ -2,14 +2,17 @@
 
 Build staged and candidate `functions` executables with the locked #1391
 workspace, Rust 1.96.0 and the #1385 Linux release profile (opt level 3,
-debug 1, 16 codegen units). Record build revisions and hashes. Use the
+debug 1, 16 codegen units). Pass the two build receipts to the runner.
+It verifies sources, Rust release profile and executable hashes. Use the
 unchanged [#1391 driver](../functions.rs) with the
 [one-case manifest](manifest.json). Both executables use the same one
 million rows, null positions, seeded dates, CPU affinity and memory limit.
 Keep 60 seconds per timed process, 120 seconds per preflight process,
 and ten minutes for the whole timed session. Run alone on Linux.
 
-Run the full preflight in each build. Both Spark ANSI outputs must match
+Verify the runtime registry against the #1391 capture and the native DATE
+physical plan against the fixed statement and the other build. Run the full
+preflight in each build. Both Spark ANSI outputs must match
 the complete native result multiset and exact executed types. Check
 native and both Spark types across builds and the input consumption
 guard. The native statement and seeded fixture use byte-identical source
