@@ -16,7 +16,9 @@ about 82% of their measured cost.
 Each cell is a median in nanoseconds per non-null call. Independent medians
 can differ from the sum. Plain inputs constructed two objects per batch of
 8,192 rows. Quoted inputs added two objects per decoded layer per row.
-The original SQL inputs are unquoted.
+The original SQL inputs are unquoted. Scoped drops in decoded layers are
+within the Value timer. Other includes the top-level per-batch drop, loop
+and measurement overhead.
 
 `sail-sql-parser/src/parser.rs` supplies the recursive `expression` parser as
 the dependency of `IntervalLiteral::parser`. For each operand, that parser

@@ -10,7 +10,8 @@ analyzer from the phase probe is excluded from these builds.
 The [manifest](manifest.json) pins the four original interval SQL statements,
 the SF1 snapshot verified by the #1380 fixture receipt, and the frozen
 #1389 schedule. Keep only the interval processes. Run both builds for each
-scheduled process, alternating which goes first by schedule position and replica.
+scheduled process. Alternate which build goes first across replicas within each
+statement, mode and noise arm.
 Use CPUs 2-5 and the same batch size, memory limits, warmups and samples as
 #1389. Stop after 1,800 seconds of serial timing and allow up to 1,800 seconds
 for preflight. Run once on Linux after builds and preflight, without other
@@ -21,7 +22,8 @@ types and source I/O across builds for every statement and mode. Native
 year-month and calendar cases must also match their Spark results, and
 the remaining cases must match across ANSI modes. Exclude a shape with a
 result or type mismatch. Time day-time against its same-mode projection,
-whose different type prevents a native value comparison.
+whose different type prevents a native value comparison. Require the
+projection to read the same files and bytes as the cast in each build and ANSI mode.
 
 Take the median of the three process medians. Report query completion in
 milliseconds and the reference gap

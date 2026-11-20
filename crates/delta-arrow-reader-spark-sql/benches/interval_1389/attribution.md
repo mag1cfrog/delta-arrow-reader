@@ -25,3 +25,6 @@ not count twice. Count parser constructions too. The remaining time includes
 destruction of scoped parser graphs, measurement overhead and the loop. The
 probe ends at `IntervalValue`, before the Arrow batch builder and SQL engine.
 A before/after acceptance run will compare uninstrumented release binaries.
+
+Measurement note: destruction of a scoped parser for a decoded quoted layer
+is included in Value. Other includes destruction of the top-level batch parser.

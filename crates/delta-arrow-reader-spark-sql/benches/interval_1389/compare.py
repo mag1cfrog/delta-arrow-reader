@@ -30,7 +30,10 @@ def validate_preflight(binaries, snapshot, output, schedule, deadline, queries):
                 result = strings.invoke(binary, snapshot, output / role / name / mode, schedule, deadline,
                                         mode="preflight", configuration=mode, query=name)
                 assert result["id"] == name and result["configuration"] == mode
-                assert result["rows"] == query["expected_rows"]
+                if result["rows"] != query["expected_rows"]:
+                    excluded.setdefault(name, []).append(
+                        {"mode": mode, "reason": f"unexpected row count {result['rows']}", "pair": role}
+                    )
                 strings.validate_telemetry(result, schedule)
                 if not expected_type(query, result):
                     excluded.setdefault(name, []).append(
@@ -51,6 +54,16 @@ def validate_preflight(binaries, snapshot, output, schedule, deadline, queries):
                                      output / "reference" / role / name / mode, deadline, schedule)
                 if failure:
                     excluded.setdefault(name, []).append({"mode": mode, "reason": failure, "pair": role})
+    for role in binaries:
+        for mode in ("spark-off", "spark-on"):
+            cast = outputs[role, "interval_day_time", mode]
+            projection = outputs[role, "interval_day_time_input", mode]
+            try:
+                execution.require_same_source_io(cast["source_io"], projection["source_io"])
+            except AssertionError as error:
+                excluded.setdefault("interval_day_time", []).append(
+                    {"mode": mode, "reason": str(error), "pair": f"{role} projection"}
+                )
     strings.write_json(output / "observations.json", [
         dict(result, build=role, ipc_sha256=execution.digest(Path(result["ipc_path"])))
         for (role, _, _), result in outputs.items()
@@ -112,27 +125,32 @@ def main():
     queries = [query for query in workload["queries"] if query["id"] in names]
     assert [query["id"] for query in queries] == names
     fixture = strings.check_fixture(snapshot)
+    receipts = {role: {"path": str(binary), "sha256": execution.digest(binary)} for role, binary in binaries.items()}
+    assert receipts["staging"]["sha256"] != receipts["candidate"]["sha256"], "build executables are identical"
     output.mkdir()
     strings.write_json(output / "session.json", {
         "protocol_git_head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=HERE, text=True).strip(),
         "protocol": manifest,
         "snapshot": fixture,
-        "binaries": {role: {"path": str(binary), "sha256": execution.digest(binary)} for role, binary in binaries.items()},
+        "binaries": receipts,
     })
     preflight, excluded = validate_preflight(
         binaries, snapshot, output / "preflight", schedule,
         time.monotonic() + schedule["preflight_timeout_seconds"], queries,
     )
     if "interval_day_time_input" in excluded:
-        excluded["interval_day_time"] = [{"reason": "same-mode input projection failed its control"}]
-    names = set(names) - excluded.keys()
+        excluded.setdefault("interval_day_time", []).append(
+            {"reason": "same-mode input projection failed its control"}
+        )
+    eligible = set(names) - excluded.keys()
     deadline = time.monotonic() + manifest["session_limit_seconds"]
     records = []
-    for index, scheduled in enumerate(schedule["runs"]):
+    for scheduled in schedule["runs"]:
         name, mode = scheduled["query"], scheduled["configuration"]
-        if name not in names:
+        if name not in eligible:
             continue
-        order = tuple(binaries) if (index + scheduled["replica"]) % 2 else tuple(reversed(binaries))
+        offset = names.index(name) + modes(name).index(mode) + (scheduled.get("arm") == "b")
+        order = tuple(binaries) if (scheduled["replica"] + offset) % 2 else tuple(reversed(binaries))
         for role in order:
             print(role, scheduled["process"], flush=True)
             result = strings.invoke(binaries[role], snapshot, output / role / scheduled["process"], schedule,
@@ -145,7 +163,7 @@ def main():
                 strings.validate_telemetry(sample, schedule)
                 execution.require_same_source_io(sample["source_io"], expected["source_io"])
             records.append(dict(result, **scheduled, build=role))
-    assert len(records) == 2 * sum(run["query"] in names for run in schedule["runs"])
+    assert len(records) == 2 * sum(run["query"] in eligible for run in schedule["runs"])
     with gzip.GzipFile(output / "samples.jsonl.gz", "xb", mtime=0) as samples:
         for record in records:
             samples.write((json.dumps(record, separators=(",", ":")) + "\n").encode())
