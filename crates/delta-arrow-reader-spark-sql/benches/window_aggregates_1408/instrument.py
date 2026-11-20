@@ -67,7 +67,7 @@ def driver(source, instrumented):
                      '        fs::write(work.join(format!("{configuration}.rows.json")), '
                      'serde_json::to_vec(&rows.0)?)?;\n        let comparison = native.as_ref()')
     if instrumented:
-        source = add_import(source, "use datafusion_physical_expr::aggregate::dar_aggregate_probe;\n")
+        source = add_import(source, "use datafusion::physical_expr::aggregate::dar_aggregate_probe;\n")
         source = replace(source, "drain(context, physical).await?", "profile_query(context, physical).await?", 2)
         source += """
 
