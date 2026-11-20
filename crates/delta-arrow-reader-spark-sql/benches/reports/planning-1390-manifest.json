@@ -1,0 +1,122 @@
+{
+  "artifacts": {
+    "planning-1390-canonical-receipt.json.gz": {
+      "bytes": 1050,
+      "encoding": "gzip; mtime=0; empty filename",
+      "sha256": "f7d30cbd29f870a86c5299a501cec77a47873d186f1ff5736b6371fa86864b33",
+      "source": "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1390/build-canonical-cache-corrected/receipt.json",
+      "source_sha256": "491e7eda215ae79711d93beb721732c7a8fe583677431ff3e5dfbbc758538022"
+    },
+    "planning-1390-frozen.json.gz": {
+      "bytes": 1652,
+      "encoding": "gzip; mtime=0; empty filename",
+      "sha256": "e38286250f8867752a95ef73dc52c10875288e43fa7bb398a60d61f9f76ca1e7",
+      "source": "/home/hanbo/repo/delta-arrow-reader-costs-168/crates/delta-arrow-reader-spark-sql/benches/planning_attribution/frozen.json",
+      "source_sha256": "1d8998a19e36f924bf88ab7542f7c42659ac6ee29bcc27d547d06cab8e947be7"
+    },
+    "planning-1390-generated-summary.md": {
+      "bytes": 2723,
+      "encoding": "unchanged",
+      "sha256": "0be450e58de6001bfa6279e35eee92cf223fff1b19b2556c326c3dff82c7046f",
+      "source": "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1390/report/planning-1390.md",
+      "source_sha256": "0be450e58de6001bfa6279e35eee92cf223fff1b19b2556c326c3dff82c7046f"
+    },
+    "planning-1390-large-parts.csv": {
+      "bytes": 26965,
+      "sha256": "55063dc49a885a0b46d861fa7c069d6e14d0035903825cd2b81ac807b66f6ef0"
+    },
+    "planning-1390-metadata.json.gz": {
+      "bytes": 9355,
+      "encoding": "gzip; mtime=0; empty filename",
+      "sha256": "bc59cf8e79505f7eed876adeb788d979bcd2901f998a5b2e3abadecb5ec2eb7f",
+      "source": "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1390/run-once/metadata.json",
+      "source_sha256": "555e611a28ed61f462f9a828b2ca45ceaa90b7d8a1f5cbc3ebbd3f801875bf61"
+    },
+    "planning-1390-noise.csv": {
+      "bytes": 1668065,
+      "sha256": "5e38bb8971d56c107852566ac0616b9e0043e8fc57b2982027562901972b037d"
+    },
+    "planning-1390-observed-receipt.json.gz": {
+      "bytes": 4161,
+      "encoding": "gzip; mtime=0; empty filename",
+      "sha256": "1831641e1c468a549871e1b6eb34d42ac124961516d1aff107c94c74a984ea6b",
+      "source": "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1390/build-observed-cache-corrected/receipt.json",
+      "source_sha256": "5de769613279cb0b4ab02d6f3bc13faf2361e09028f7a8cc5b5757ab30fdd47d"
+    },
+    "planning-1390-plan-proof.json.gz": {
+      "bytes": 4962,
+      "encoding": "gzip; mtime=0; empty filename",
+      "sha256": "6c2df91544ba88b2dc01d37d1952aff9608be4cac1c8b5930fc3edf28c150e0c",
+      "source": "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1390/plans/complete.json",
+      "source_sha256": "3383743cf60a512a8cfeede5908d68c4afca53896b5b73cf1b1bc7a9aac0631f"
+    },
+    "planning-1390-plans.jsonl.gz": {
+      "bytes": 1005142,
+      "encoding": "unchanged",
+      "sha256": "1b3c232b0dc481fcc33c7cfba1385eab50a70f3e34565310c046b2c4a6b94234",
+      "source": "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1390/plans/plans.jsonl.gz",
+      "source_sha256": "1b3c232b0dc481fcc33c7cfba1385eab50a70f3e34565310c046b2c4a6b94234"
+    },
+    "planning-1390-protocol.md": {
+      "bytes": 14176,
+      "encoding": "unchanged",
+      "sha256": "b9219402589c2ce0348f42f1c46edc28a3c03386d710141e5a1287ef18dd09dc",
+      "source": "/home/hanbo/repo/delta-arrow-reader-costs-168/crates/delta-arrow-reader-spark-sql/benches/reports/planning-1390-protocol.md",
+      "source_sha256": "b9219402589c2ce0348f42f1c46edc28a3c03386d710141e5a1287ef18dd09dc"
+    },
+    "planning-1390-run-proof.json.gz": {
+      "bytes": 124,
+      "encoding": "gzip; mtime=0; empty filename",
+      "sha256": "edc3a9b3fb3420323169baa030abfd275aa877bbaa8bbec06171fdf22d764aac",
+      "source": "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1390/run-once/complete.json",
+      "source_sha256": "beafff46c8c11520655b7ef0144b570a7ddfc39ffa516c9177d2292f20b5cdd1"
+    },
+    "planning-1390-samples.jsonl.gz": {
+      "bytes": 6003304,
+      "encoding": "unchanged",
+      "sha256": "92b64c9ff5d362abfe7616a27ea66e1782643f2b15ac384e8c8363c183d9c036",
+      "source": "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1390/run-once/samples.jsonl.gz",
+      "source_sha256": "92b64c9ff5d362abfe7616a27ea66e1782643f2b15ac384e8c8363c183d9c036"
+    },
+    "planning-1390-source-map.json": {
+      "bytes": 858,
+      "sha256": "626f61c4e7d691dbd50e98de36fba5b3aed9ba6d17c95cc1103e9559d4020bab"
+    },
+    "planning-1390-stages.csv": {
+      "bytes": 1699421,
+      "sha256": "3bf99a7c60503d3926e811ededdc70d7eca01e6329e2999ef178734118a31dd8"
+    },
+    "planning-1390-validation.json": {
+      "bytes": 7086,
+      "sha256": "32bbc3d4adde41ad5620a8e7575091e430e78122212a1cd78be8109a2c5dfe0d"
+    },
+    "planning-1390-verify.py": {
+      "bytes": 2036,
+      "sha256": "2613d804c68fffc3da03d4764ce6ba690f43a4aaff8d82750fabbc6bd43831f5"
+    },
+    "planning-1390-walls.csv": {
+      "bytes": 29876,
+      "sha256": "17cff7e47b780dd314ad72d499e0985a2b76856e0a36f3269e8dbb403e012109"
+    },
+    "planning-1390.md": {
+      "bytes": 7551,
+      "sha256": "f4116199dba4bc20693881f79ca5f7f03870937ee826b74aa8cf4588ef3ee766"
+    }
+  },
+  "baseline": "9fa5b4cd98fecc7a2e95debc67128c394b25fb9a",
+  "executable_files_in_bundle": 0,
+  "issue": 1390,
+  "measured_schedule_repetitions": 1,
+  "note": "The manifest excludes its own hash. Full logs, executables and caches remain local; unchanged gzip artifacts retain their original hashes.",
+  "protocol_commit": "d2dffd3793b20dc1dc5803c64b90f9a4418335be",
+  "source_receipts": {
+    "canonical": {
+      "path": "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1390/build-canonical-cache-corrected/receipt.json",
+      "sha256": "491e7eda215ae79711d93beb721732c7a8fe583677431ff3e5dfbbc758538022"
+    },
+    "observed": {
+      "path": "/home/hanbo/.local/share/delta-arrow-reader-review/costs-168-2026-11-19/1390/build-observed-cache-corrected/receipt.json",
+      "sha256": "5de769613279cb0b4ab02d6f3bc13faf2361e09028f7a8cc5b5757ab30fdd47d"
+    }
+  }
+}
