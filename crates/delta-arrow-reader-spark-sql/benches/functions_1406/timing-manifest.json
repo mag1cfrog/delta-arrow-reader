@@ -1,0 +1,300 @@
+{
+  "functions": [
+    {
+      "id": "aggregate.aggregate.approx_percentile",
+      "name": "approx_percentile",
+      "kind": "aggregate",
+      "spark_sql": "SELECT approx_percentile(d,0.5) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT d FROM bench",
+      "1391_status": "semantic_mismatch",
+      "reference": "spark"
+    },
+    {
+      "id": "aggregate.aggregate.percentile_approx",
+      "name": "percentile_approx",
+      "kind": "aggregate",
+      "spark_sql": "SELECT percentile_approx(d,0.5) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT d FROM bench",
+      "1391_status": "semantic_mismatch",
+      "reference": "spark"
+    },
+    {
+      "id": "aggregate.aggregate.regr_avgx",
+      "name": "regr_avgx",
+      "kind": "aggregate",
+      "spark_sql": "SELECT regr_avgx(d,CAST(p AS DOUBLE)) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT p,d FROM bench",
+      "1391_status": "semantic_mismatch",
+      "reference": "spark"
+    },
+    {
+      "id": "aggregate.aggregate.regr_avgy",
+      "name": "regr_avgy",
+      "kind": "aggregate",
+      "spark_sql": "SELECT regr_avgy(d,CAST(p AS DOUBLE)) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT p,d FROM bench",
+      "1391_status": "semantic_mismatch",
+      "reference": "spark"
+    },
+    {
+      "id": "aggregate.aggregate.regr_r2",
+      "name": "regr_r2",
+      "kind": "aggregate",
+      "spark_sql": "SELECT regr_r2(d,CAST(p AS DOUBLE)) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT p,d FROM bench",
+      "1391_status": "semantic_mismatch",
+      "reference": "spark"
+    },
+    {
+      "id": "aggregate.aggregate.regr_sxy",
+      "name": "regr_sxy",
+      "kind": "aggregate",
+      "spark_sql": "SELECT regr_sxy(d,CAST(p AS DOUBLE)) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT p,d FROM bench",
+      "1391_status": "semantic_mismatch",
+      "reference": "spark"
+    },
+    {
+      "id": "aggregate.aggregate.try_avg",
+      "name": "try_avg",
+      "kind": "aggregate",
+      "spark_sql": "SELECT try_avg(d) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT d FROM bench",
+      "1391_status": "semantic_mismatch",
+      "reference": "spark"
+    },
+    {
+      "id": "scalar.array.array_append",
+      "name": "array_append",
+      "kind": "scalar",
+      "spark_sql": "SELECT id,array_append(arr,i) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,arr FROM bench",
+      "1391_status": "semantic_mismatch",
+      "reference": "spark"
+    },
+    {
+      "id": "scalar.array.array_compact",
+      "name": "array_compact",
+      "kind": "scalar",
+      "spark_sql": "SELECT id,array_compact(arr) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,arr FROM bench",
+      "1391_status": "semantic_mismatch",
+      "reference": "spark"
+    },
+    {
+      "id": "scalar.array.array_insert",
+      "name": "array_insert",
+      "kind": "scalar",
+      "spark_sql": "SELECT id,array_insert(arr,2,i) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,arr FROM bench",
+      "1391_status": "semantic_mismatch",
+      "reference": "spark"
+    },
+    {
+      "id": "scalar.array.array_prepend",
+      "name": "array_prepend",
+      "kind": "scalar",
+      "spark_sql": "SELECT id,array_prepend(arr,i) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,arr FROM bench",
+      "1391_status": "semantic_mismatch",
+      "reference": "spark"
+    },
+    {
+      "id": "scalar.array.arrays_zip",
+      "name": "arrays_zip",
+      "kind": "scalar",
+      "spark_sql": "SELECT id,arrays_zip(arr,arr) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,arr FROM bench",
+      "1391_status": "semantic_mismatch",
+      "reference": "spark"
+    },
+    {
+      "id": "scalar.collection.cardinality",
+      "name": "cardinality",
+      "kind": "scalar",
+      "spark_sql": "SELECT id,cardinality(arr) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,arr FROM bench",
+      "1391_status": "semantic_mismatch",
+      "reference": "spark"
+    },
+    {
+      "id": "scalar.collection.concat",
+      "name": "concat",
+      "kind": "scalar",
+      "spark_sql": "SELECT id,concat(s,s2) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,s,s2 FROM bench",
+      "1391_status": "semantic_mismatch",
+      "reference": "spark"
+    },
+    {
+      "id": "scalar.collection.size",
+      "name": "size",
+      "kind": "scalar",
+      "spark_sql": "SELECT id,size(arr) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,arr FROM bench",
+      "1391_status": "semantic_mismatch",
+      "reference": "spark"
+    },
+    {
+      "id": "scalar.datetime.date_format",
+      "name": "date_format",
+      "kind": "scalar",
+      "spark_sql": "SELECT id,date_format(ts,'yyyy-MM-dd') AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,ts FROM bench",
+      "1391_status": "semantic_mismatch",
+      "reference": "spark"
+    },
+    {
+      "id": "scalar.math.expm1",
+      "name": "expm1",
+      "kind": "scalar",
+      "spark_sql": "SELECT id,expm1(d) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,d FROM bench",
+      "1391_status": "semantic_mismatch",
+      "reference": "spark"
+    },
+    {
+      "id": "scalar.string.base64",
+      "name": "base64",
+      "kind": "scalar",
+      "spark_sql": "SELECT id,base64(b) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,b FROM bench",
+      "1391_status": "semantic_mismatch",
+      "reference": "spark"
+    },
+    {
+      "id": "scalar.string.regexp_replace",
+      "name": "regexp_replace",
+      "kind": "scalar",
+      "spark_sql": "SELECT id,regexp_replace(s,'[0-9]','x') AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,s FROM bench",
+      "1391_status": "semantic_mismatch",
+      "reference": "spark"
+    },
+    {
+      "id": "window.window.approx_percentile",
+      "name": "approx_percentile",
+      "kind": "window",
+      "spark_sql": "SELECT id,approx_percentile(d,0.5) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,grp,d FROM bench",
+      "1391_status": "semantic_mismatch",
+      "reference": "spark"
+    },
+    {
+      "id": "window.window.array_agg",
+      "name": "array_agg",
+      "kind": "window",
+      "spark_sql": "SELECT id,sort_array(array_agg(i) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW)) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,grp,i FROM bench",
+      "1391_status": "semantic_mismatch",
+      "reference": "spark"
+    },
+    {
+      "id": "window.window.collect_list",
+      "name": "collect_list",
+      "kind": "window",
+      "spark_sql": "SELECT id,sort_array(collect_list(i) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW)) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,grp,i FROM bench",
+      "1391_status": "semantic_mismatch",
+      "reference": "spark"
+    },
+    {
+      "id": "window.window.collect_set",
+      "name": "collect_set",
+      "kind": "window",
+      "spark_sql": "SELECT id,sort_array(collect_set(i) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW)) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,grp,i FROM bench",
+      "1391_status": "semantic_mismatch",
+      "reference": "spark"
+    },
+    {
+      "id": "window.window.percentile_approx",
+      "name": "percentile_approx",
+      "kind": "window",
+      "spark_sql": "SELECT id,percentile_approx(d,0.5) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,grp,d FROM bench",
+      "1391_status": "semantic_mismatch",
+      "reference": "spark"
+    },
+    {
+      "id": "window.window.regr_avgx",
+      "name": "regr_avgx",
+      "kind": "window",
+      "spark_sql": "SELECT id,regr_avgx(d,CAST(p AS DOUBLE)) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,grp,p,d FROM bench",
+      "1391_status": "semantic_mismatch",
+      "reference": "spark"
+    },
+    {
+      "id": "window.window.try_avg",
+      "name": "try_avg",
+      "kind": "window",
+      "spark_sql": "SELECT id,try_avg(d) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,grp,d FROM bench",
+      "1391_status": "semantic_mismatch",
+      "reference": "spark"
+    }
+  ],
+  "reference_evidence_sha256": "24f672ae2c913d9f5501cab824530921a78bcad978138cb19bce926797f48d8b",
+  "raw_capture_sha256": "484febca88d10d6f16d8dc22cd60fb978db1b630e16d47ef93fbdf7770290607",
+  "input_sha256": "9c014d6457987009f6697316340a5b379eb223757859358f589a5cf6a314d9ec",
+  "bitmap_capture_sha256": "884b81be763741671327b49c632add7bd2865ad7baec7e42373ed25cf2833d42",
+  "bitmap_functions": [
+    {
+      "id": "window.window.bitmap_and_agg",
+      "name": "bitmap_and_agg",
+      "kind": "window",
+      "spark_sql": "SELECT id,bitmap_and_agg(b) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,grp,b FROM bench",
+      "1391_status": "setup_failure",
+      "reference": "bitmap-reduced"
+    },
+    {
+      "id": "window.window.bitmap_construct_agg",
+      "name": "bitmap_construct_agg",
+      "kind": "window",
+      "spark_sql": "SELECT id,bitmap_construct_agg(CAST(p AS BIGINT)) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,grp,p FROM bench",
+      "1391_status": "setup_failure",
+      "reference": "bitmap-reduced"
+    },
+    {
+      "id": "window.window.bitmap_or_agg",
+      "name": "bitmap_or_agg",
+      "kind": "window",
+      "spark_sql": "SELECT id,bitmap_or_agg(b) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,grp,b FROM bench",
+      "1391_status": "setup_failure",
+      "reference": "bitmap-reduced"
+    }
+  ]
+}
