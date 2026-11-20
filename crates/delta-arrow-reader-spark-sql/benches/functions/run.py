@@ -237,6 +237,7 @@ def measure(binary, destination, frozen_commit, build_receipt, manifest, schedul
     (destination/"metadata.json").write_text(json.dumps(metadata,indent=2)+"\n")
     process_number = 0
     spawned_processes = 0
+    failed_cases = {}
     for series in ("noise","main"):
         for replica in range(3):
             orders = schedule["noise_orders"][replica] if series == "noise" else schedule["main_orders"][replica]
@@ -249,22 +250,35 @@ def measure(binary, destination, frozen_commit, build_receipt, manifest, schedul
                     process_number += 1
                     process_id = f"{process_number:04}-{series}-{replica+1}-{shard_number+1}-{arm}"
                     idfile = destination/(process_id+".json")
-                    idfile.write_text(json.dumps(chosen)+"\n")
-                    print(process_id,len(chosen),flush=True)
-                    result = invoke(binary,["measure-set",MANIFEST,idfile,configuration],destination/process_id,schedule,deadline)
-                    spawned_processes += result["status"] != "schedule_timeout"
+                    requested = [case_id for case_id in chosen if case_id not in failed_cases]
+                    idfile.write_text(json.dumps(requested)+"\n")
+                    print(process_id,len(requested),flush=True)
+                    work = destination/process_id
+                    if requested:
+                        result = invoke(binary,["measure-set",MANIFEST,idfile,configuration],work,schedule,deadline)
+                        spawned_processes += result["status"] != "schedule_timeout"
+                    else:
+                        work.mkdir()
+                        result = {"status":"skipped_after_case_failure","records":[]}
                     records = assemble_cases(result,chosen,configuration)
                     for row in records:
                         row.update(process=process_id,series=series,replica=replica+1,arm=arm,shard=shard_number+1)
-                        if row.get("status") != "ok":
+                        case_id = row["id"]
+                        if case_id in failed_cases:
+                            row.update(status="skipped_after_case_failure",
+                                       error=f"Earlier required cell failed in {failed_cases[case_id]}")
                             continue
-                        expected = selected[row["id"]]["preflight"]
+                        if row.get("status") != "ok":
+                            failed_cases[case_id] = process_id
+                            continue
+                        expected = selected[case_id]["preflight"]
                         reference_config = configuration if selected[row["id"]]["class"] == "paired" or configuration != "native" else None
                         expected_rows = next(result["rows"] for result in expected["results"] if result["configuration"] == reference_config) if reference_config else 1_000_000
                         expected_types = next(result["types"] for result in expected["results"] if result["configuration"] == reference_config) if reference_config else next(result["types"] for result in expected["baselines"] if result["configuration"] == "native")
                         if row["types"] != expected_types or len(row["samples"]) != 3 or not all(sample["input_rows"] == 1_000_000 and sample["output_rows"] == expected_rows and sample["increment_ns"] == sample["execution_ns"]-sample["projection_ns"] for sample in row["samples"]):
                             row.update(status="timed_validation_failure",error="output count/type/sample accounting drifted from committed preflight")
-                    (destination/process_id/"verified.json").write_text(json.dumps(records)+"\n")
+                            failed_cases[case_id] = process_id
+                    (work/"verified.json").write_text(json.dumps(records)+"\n")
     (destination/"complete.json").write_text(json.dumps({"scheduled_processes":process_number,"spawned_processes":spawned_processes,"eligible_functions":len(ids),"status":"complete"})+"\n")
 
 

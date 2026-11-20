@@ -106,7 +106,7 @@ def arguments():
     add("array_contains_all array_except array_intersect array_union arrays_overlap arrays_zip", "arr,arr")
     out.update(array="i,CAST(p AS BIGINT)", array_insert="arr,2,i", array_join="arr,','", array_repeat="i,3", flatten="nested", get="arr,1", sequence="p,p+2", slice="arr,1,2", sort_array="arr", element_at="arr,1", try_element_at="arr,1", concat="s,s2", deep_size="arr")
     out.update(aggregate="arr,CAST(0 AS BIGINT),(a,x) -> a+coalesce(x,0)", reduce="arr,CAST(0 AS BIGINT),(a,x) -> a+coalesce(x,0)", array_sort="arr", exists="arr,x -> x>2", forall="arr,x -> x>2", filter="arr,x -> x>2", transform="arr,x -> x+1", zip_with="arr,arr,(x,y) -> x+y", map_filter="m,(k,v) -> v>2", map_zip_with="m,m,(k,x,y) -> x+y", transform_keys="m,(k,v) -> concat(k,'x')", transform_values="m,(k,v) -> v+1")
-    out.update(map="s,i,s2,CAST(p AS BIGINT)", map_concat="m,m2", map_contains_key="m,'a'", map_entries="m", map_from_arrays="array(s,s2),array(i,CAST(p AS BIGINT))", map_from_entries="map_entries(m)", map_keys="m", map_values="m", str_to_map="map_s")
+    out.update(map="id,i,id-1000000,CAST(p AS BIGINT)", map_concat="m,m2", map_contains_key="m,'a'", map_entries="m", map_from_arrays="array(id,id-1000000),array(i,CAST(p AS BIGINT))", map_from_entries="map_entries(m)", map_keys="m", map_values="m", str_to_map="map_s")
     add("ascii bit_length char_length character_length initcap lcase len length lower luhn_check make_valid_utf8 mask octet_length quote soundex trim ltrim rtrim btrim ucase upper validate_utf8 try_validate_utf8 is_valid_utf8", "s")
     add("char chr space", "p")
     add("contains endswith instr startswith strpos", "s,s2")
@@ -169,7 +169,7 @@ NATIVE_EXPR = {
     "date_from_unix_date":"CAST(p AS DATE)", "unix_date":"CAST(dt AS INT)", "array_repeat":"array_repeat(i,CAST(3 AS BIGINT))",
     "sort_array":"array_sort(arr,'ASC','NULLS FIRST')", "array_sort":"array_sort(arr,'ASC','NULLS LAST')",
     "element_at":"array_element(arr,1)", "try_element_at":"array_element(arr,1)", "get":"array_element(arr,2)",
-    "array_prepend":"array_prepend(i,arr)", "array_join":"array_to_string(arr,',')", "map_from_arrays":"map(array(s,s2),array(i,CAST(p AS BIGINT)))",
+    "array_prepend":"array_prepend(i,arr)", "array_join":"array_to_string(arr,',')", "map_from_arrays":"map(array(id,id-1000000),array(i,CAST(p AS BIGINT)))",
     "array":"make_array(i,CAST(p AS BIGINT))", "struct":"struct(i,p)", "named_struct":"named_struct('x',i)",
     "isnull":"i IS NULL", "isnotnull":"i IS NOT NULL", "like":"s LIKE 'item%'", "ilike":"s ILIKE 'item%'",
     "regexp":"regexp_like(s,'item')", "rlike":"regexp_like(s,'item')", "regexp_like":"regexp_like(s,'item')",
@@ -192,7 +192,7 @@ for spark_name, part in {"day":"day","dayofmonth":"day","dayofyear":"doy","month
     NATIVE_EXPR[spark_name] = f"CAST(date_part('{part}',{'ts' if spark_name in ('hour','minute','second') else 'dt'}) AS INT)"
 for spark_name, unit in {"add_days":"DAY","date_add":"DAY","dateadd":"DAY","date_sub":"DAY","add_months":"MONTH","add_years":"YEAR"}.items():
     sign = "-" if spark_name == "date_sub" else "+"
-    NATIVE_EXPR[spark_name] = f"CAST(dt {sign} CAST(concat(CAST(p AS VARCHAR),' {unit.lower()}s') AS INTERVAL) AS DATE)"
+    NATIVE_EXPR[spark_name] = f"CAST(dt {sign} CAST(CASE WHEN p IS NULL THEN NULL ELSE concat(CAST(p AS VARCHAR),' {unit.lower()}s') END AS INTERVAL) AS DATE)"
 NATIVE_EXPR.update({
     "weekday":"CAST((date_part('dow',dt)+6)%7 AS INT)", "dayofweek":"CAST(date_part('dow',dt)+1 AS INT)",
     "date_diff":"CAST(dt AS INT)-CAST(CAST('2020-01-01' AS DATE) AS INT)", "datediff":"CAST(dt AS INT)-CAST(CAST('2020-01-01' AS DATE) AS INT)",

@@ -4258,7 +4258,7 @@
       "id": "scalar.datetime.add_days",
       "aliases": [],
       "spark_sql": "SELECT id,add_days(dt,p) AS value FROM bench",
-      "native_sql": "SELECT id,CAST(dt + CAST(concat(CAST(p AS VARCHAR),' days') AS INTERVAL) AS DATE) AS value FROM bench",
+      "native_sql": "SELECT id,CAST(dt + CAST(CASE WHEN p IS NULL THEN NULL ELSE concat(CAST(p AS VARCHAR),' days') END AS INTERVAL) AS DATE) AS value FROM bench",
       "input_columns": [
         "id",
         "p",
@@ -4283,7 +4283,7 @@
       "id": "scalar.datetime.add_months",
       "aliases": [],
       "spark_sql": "SELECT id,add_months(dt,p) AS value FROM bench",
-      "native_sql": "SELECT id,CAST(dt + CAST(concat(CAST(p AS VARCHAR),' months') AS INTERVAL) AS DATE) AS value FROM bench",
+      "native_sql": "SELECT id,CAST(dt + CAST(CASE WHEN p IS NULL THEN NULL ELSE concat(CAST(p AS VARCHAR),' months') END AS INTERVAL) AS DATE) AS value FROM bench",
       "input_columns": [
         "id",
         "p",
@@ -4310,7 +4310,7 @@
       "id": "scalar.datetime.add_years",
       "aliases": [],
       "spark_sql": "SELECT id,add_years(dt,p) AS value FROM bench",
-      "native_sql": "SELECT id,CAST(dt + CAST(concat(CAST(p AS VARCHAR),' years') AS INTERVAL) AS DATE) AS value FROM bench",
+      "native_sql": "SELECT id,CAST(dt + CAST(CASE WHEN p IS NULL THEN NULL ELSE concat(CAST(p AS VARCHAR),' years') END AS INTERVAL) AS DATE) AS value FROM bench",
       "input_columns": [
         "id",
         "p",
@@ -4484,7 +4484,7 @@
       "id": "scalar.datetime.date_add",
       "aliases": [],
       "spark_sql": "SELECT id,date_add(dt,p) AS value FROM bench",
-      "native_sql": "SELECT id,CAST(dt + CAST(concat(CAST(p AS VARCHAR),' days') AS INTERVAL) AS DATE) AS value FROM bench",
+      "native_sql": "SELECT id,CAST(dt + CAST(CASE WHEN p IS NULL THEN NULL ELSE concat(CAST(p AS VARCHAR),' days') END AS INTERVAL) AS DATE) AS value FROM bench",
       "input_columns": [
         "id",
         "p",
@@ -4618,7 +4618,7 @@
       "id": "scalar.datetime.date_sub",
       "aliases": [],
       "spark_sql": "SELECT id,date_sub(dt,p) AS value FROM bench",
-      "native_sql": "SELECT id,CAST(dt - CAST(concat(CAST(p AS VARCHAR),' days') AS INTERVAL) AS DATE) AS value FROM bench",
+      "native_sql": "SELECT id,CAST(dt - CAST(CASE WHEN p IS NULL THEN NULL ELSE concat(CAST(p AS VARCHAR),' days') END AS INTERVAL) AS DATE) AS value FROM bench",
       "input_columns": [
         "id",
         "p",
@@ -4666,7 +4666,7 @@
       "id": "scalar.datetime.dateadd",
       "aliases": [],
       "spark_sql": "SELECT id,dateadd(dt,p) AS value FROM bench",
-      "native_sql": "SELECT id,CAST(dt + CAST(concat(CAST(p AS VARCHAR),' days') AS INTERVAL) AS DATE) AS value FROM bench",
+      "native_sql": "SELECT id,CAST(dt + CAST(CASE WHEN p IS NULL THEN NULL ELSE concat(CAST(p AS VARCHAR),' days') END AS INTERVAL) AS DATE) AS value FROM bench",
       "input_columns": [
         "id",
         "p",
@@ -7421,16 +7421,14 @@
       ],
       "id": "scalar.map.map",
       "aliases": [],
-      "spark_sql": "SELECT id,map(s,i,s2,CAST(p AS BIGINT)) AS value FROM bench",
-      "native_sql": "SELECT id,map(s,i,s2,CAST(p AS BIGINT)) AS value FROM bench",
+      "spark_sql": "SELECT id,map(id,i,id-1000000,CAST(p AS BIGINT)) AS value FROM bench",
+      "native_sql": "SELECT id,map(id,i,id-1000000,CAST(p AS BIGINT)) AS value FROM bench",
       "input_columns": [
         "id",
         "i",
-        "p",
-        "s",
-        "s2"
+        "p"
       ],
-      "projection_sql": "SELECT id,i,p,s,s2 FROM bench",
+      "projection_sql": "SELECT id,i,p FROM bench",
       "exclusion": null,
       "class": "paired",
       "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
@@ -7528,16 +7526,14 @@
       ],
       "id": "scalar.map.map_from_arrays",
       "aliases": [],
-      "spark_sql": "SELECT id,map_from_arrays(array(s,s2),array(i,CAST(p AS BIGINT))) AS value FROM bench",
-      "native_sql": "SELECT id,map(make_array(s,s2),make_array(i,CAST(p AS BIGINT))) AS value FROM bench",
+      "spark_sql": "SELECT id,map_from_arrays(array(id,id-1000000),array(i,CAST(p AS BIGINT))) AS value FROM bench",
+      "native_sql": "SELECT id,map(make_array(id,id-1000000),make_array(i,CAST(p AS BIGINT))) AS value FROM bench",
       "input_columns": [
         "id",
         "i",
-        "p",
-        "s",
-        "s2"
+        "p"
       ],
-      "projection_sql": "SELECT id,i,p,s,s2 FROM bench",
+      "projection_sql": "SELECT id,i,p FROM bench",
       "exclusion": null,
       "class": "paired",
       "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."

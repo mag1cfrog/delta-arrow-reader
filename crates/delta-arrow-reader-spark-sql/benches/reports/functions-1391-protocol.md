@@ -18,6 +18,16 @@ any clocks. Timing requires a clean exact B, ancestry from A, an A-to-B diff
 containing only the receipt, matching protocol source hashes and the same binary
 SHA-256. Do not rebuild or change statements between preflight and timing.
 
+The first preflight identified eight setup errors. Six native date controls
+now preserve NULL before casting the interval text. Two map constructors
+now use disjoint nonnull keys and retain their nullable values. The revised
+protocol runs these eight cases before freezing eligibility. It reuses the
+earlier observations for byte-identical manifest rows after verifying the
+same release binary, fixture, schedule and original plan hashes. The
+receipt records the original and corrected evidence. If the binary bytes
+differ, run the complete preflight with the final binary. The original
+paired value and executed type mismatches remain excluded.
+
 `inventory.py --check` parses the top-level registration tuples, follows the
 scalar module list and last-write HashMap behavior, and reconciles public runtime
 keys. The effective inventory has 457 scalar, 84 aggregate, 81 window and 9
@@ -171,7 +181,9 @@ memory outside DataFusion's pool. No shape is downsampled or replaced to fit a
 bound. A case failure, missing arm or missing replica makes the entire function
 untimable. Retain its raw partial evidence and continue the remaining original
 schedule without rerunning completed samples. Each retained iteration flushes
-a sample outside its clocks, so it survives a later case or process failure. Hard process failures identify
+a sample outside its clocks, so it survives a later case or process failure.
+After a required cell fails, record any later cells of that function as
+skipped. Continue the scheduled cells for other eligible functions. Hard process failures identify
 missing shard cells. An overall deadline leaves the unrun cells explicitly
 excluded. These exclusions have no accepted timing fields.
 
