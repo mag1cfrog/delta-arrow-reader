@@ -2385,12 +2385,15 @@ For a deferred aggregate row ordered by an actual signed-integer column,
 Spark RANGE state retains candidate search cursors separately from the range
 already applied to the accumulator (#1099). Retries reuse those cursors only
 for the same row and committed range as immutable input prefixes grow.
-Index changes, shorter input and nonzero pruning discard the candidate.
-Target arithmetic and its errors still run before a cursor hint is used;
+Index changes and shorter input invalidate the candidate. Nonzero pruning
+shifts the saved row and range, so the next resumable calculation discards
+the old cursors before use. Target arithmetic and its errors still run before a cursor hint is used;
 completion, lookahead, retraction and pruning retain their existing rules.
-Native frames, computed ORDER BY expressions and explicit NULL offsets keep
-their existing searches. The DataFusion expression and physical-expression
-forks contain this local adaptation. The [retry inputs](tests/fixtures/pending-range-1099-inputs.rs)
+The aggregate executor selects cursor reuse before the row loop. The
+ordinary specialization keeps the original bound searches and does no
+pending-cursor validation, loads or stores. Native frames, computed ORDER
+BY expressions and explicit NULL offsets use that specialization. The
+DataFusion expression and physical-expression forks contain this local adaptation. The [retry inputs](tests/fixtures/pending-range-1099-inputs.rs)
 compare aggregate Column and computed-expression paths with append, unchanged
 input, pruning, progressive output and late overflow errors.
 Large unfinished groups still retain their rows. Growing-buffer concatenation

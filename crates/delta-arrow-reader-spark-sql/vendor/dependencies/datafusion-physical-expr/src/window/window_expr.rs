@@ -303,7 +303,7 @@ pub trait AggregateWindowExpr: WindowExpr {
         most_recent_row: Option<&RecordBatch>,
         last_range: &mut Range<usize>,
         window_frame_ctx: &mut WindowFrameContext,
-        mut idx: usize,
+        idx: usize,
         not_end: bool,
         output_end_index: Option<usize>,
     ) -> Result<ArrayRef> {
@@ -348,86 +348,134 @@ pub trait AggregateWindowExpr: WindowExpr {
             .transpose()?
             .map(get_orderby_values);
 
-        // We iterate on each row to perform a running calculation.
-        let length = values[0].len();
-        let mut row_wise_results: Vec<ScalarValue> = vec![];
-        let date32_wrapping_end = order_bys.first().is_some_and(|column| {
-            date32_range_can_wrap(
-                column.data_type(),
-                self.get_window_frame().units,
-                &self.get_window_frame().end_bound,
-            )
-        });
-        // A wrapped DATE offset can reach future rows even for PRECEDING.
-        let is_causal = self.get_window_frame().is_causal() && !date32_wrapping_end;
-        let mut end_bound_safe = None;
-        while idx < output_end_index.unwrap_or(length).min(length) {
-            // Start search from the last_range. This squeezes searched range.
-            let cur_range =
-                window_frame_ctx.calculate_range(&order_bys, last_range, length, idx)?;
-            // Exit if the range is non-causal and extends all the way:
-            if cur_range.end == length && !is_causal && not_end {
-                let safe = match end_bound_safe {
-                    Some(safe) => safe,
-                    None => {
-                        let safe = is_end_bound_safe(
-                            window_frame_ctx,
-                            &order_bys,
-                            most_recent_row_order_bys.as_deref(),
-                            self.order_by(),
-                            idx,
-                        )?;
-                        // CURRENT ROW and PRECEDING compare the same batch edges for every row.
-                        if !self.get_window_frame().has_null_offset()
-                            && !self
-                                .get_window_frame()
-                                .has_nonzero_spark_integer_range_offset()
-                            && !date32_wrapping_end
-                            && !matches!(
-                                self.get_window_frame().end_bound,
-                                WindowFrameBound::Following(_)
-                            )
-                        {
-                            end_bound_safe = Some(safe);
-                        }
-                        safe
-                    }
-                };
-                if !safe {
-                    if self
-                        .get_window_frame()
-                        .has_nonzero_spark_integer_range_offset()
-                        && !self.get_window_frame().has_null_offset()
-                        && matches!(order_bys.as_slice(), [column] if column.data_type().is_signed_integer())
-                        && matches!(self.order_by(), [order] if order.expr.downcast_ref::<Column>().is_some())
-                    {
-                        window_frame_ctx.record_pending_range_search(
-                            last_range, &cur_range, length, idx,
-                        );
-                    }
-                    break;
-                }
-            }
-            let value = self.get_aggregate_result_inside_range(
-                last_range,
-                &cur_range,
-                &values,
+        let frame = self.get_window_frame();
+        let resume = frame.has_nonzero_spark_integer_range_offset()
+            && !frame.has_null_offset()
+            && matches!(order_bys.as_slice(), [column] if column.data_type().is_signed_integer())
+            && matches!(self.order_by(), [order] if order.expr.downcast_ref::<Column>().is_some());
+        if resume {
+            evaluate_frame_rows::<true, _>(
+                self,
                 accumulator,
+                &values,
                 filter_mask,
-            )?;
-            // Update last range
-            *last_range = cur_range;
-            row_wise_results.push(value);
-            idx += 1;
-        }
-
-        if row_wise_results.is_empty() {
-            let field = self.field()?;
-            let out_type = field.data_type();
-            Ok(new_empty_array(out_type))
+                &order_bys,
+                most_recent_row_order_bys.as_deref(),
+                last_range,
+                window_frame_ctx,
+                idx,
+                not_end,
+                output_end_index,
+            )
         } else {
-            ScalarValue::iter_to_array(row_wise_results)
+            evaluate_frame_rows::<false, _>(
+                self,
+                accumulator,
+                &values,
+                filter_mask,
+                &order_bys,
+                most_recent_row_order_bys.as_deref(),
+                last_range,
+                window_frame_ctx,
+                idx,
+                not_end,
+                output_end_index,
+            )
         }
+    }
+}
+
+// Select the specialization before the row loop so other frames never read a pending cursor.
+#[expect(clippy::too_many_arguments)]
+fn evaluate_frame_rows<const RESUME: bool, W: AggregateWindowExpr + ?Sized>(
+    window: &W,
+    accumulator: &mut Box<dyn Accumulator>,
+    values: &[ArrayRef],
+    filter_mask: Option<&BooleanArray>,
+    order_bys: &[ArrayRef],
+    most_recent_row_order_bys: Option<&[ArrayRef]>,
+    last_range: &mut Range<usize>,
+    window_frame_ctx: &mut WindowFrameContext,
+    mut idx: usize,
+    not_end: bool,
+    output_end_index: Option<usize>,
+) -> Result<ArrayRef> {
+    // We iterate on each row to perform a running calculation.
+    let length = values[0].len();
+    let mut row_wise_results: Vec<ScalarValue> = vec![];
+    let date32_wrapping_end = order_bys.first().is_some_and(|column| {
+        date32_range_can_wrap(
+            column.data_type(),
+            window.get_window_frame().units,
+            &window.get_window_frame().end_bound,
+        )
+    });
+    // A wrapped DATE offset can reach future rows even for PRECEDING.
+    let is_causal = window.get_window_frame().is_causal() && !date32_wrapping_end;
+    let mut end_bound_safe = None;
+    while idx < output_end_index.unwrap_or(length).min(length) {
+        // Start search from the last_range. This squeezes searched range.
+        let cur_range = if RESUME {
+            window_frame_ctx
+                .calculate_range_resuming(order_bys, last_range, length, idx)?
+        } else {
+            window_frame_ctx.calculate_range(order_bys, last_range, length, idx)?
+        };
+        // Exit if the range is non-causal and extends all the way:
+        if cur_range.end == length && !is_causal && not_end {
+            let safe = match end_bound_safe {
+                Some(safe) => safe,
+                None => {
+                    let safe = is_end_bound_safe(
+                        window_frame_ctx,
+                        order_bys,
+                        most_recent_row_order_bys,
+                        window.order_by(),
+                        idx,
+                    )?;
+                    // CURRENT ROW and PRECEDING compare the same batch edges for every row.
+                    if !window.get_window_frame().has_null_offset()
+                        && !window
+                            .get_window_frame()
+                            .has_nonzero_spark_integer_range_offset()
+                        && !date32_wrapping_end
+                        && !matches!(
+                            window.get_window_frame().end_bound,
+                            WindowFrameBound::Following(_)
+                        )
+                    {
+                        end_bound_safe = Some(safe);
+                    }
+                    safe
+                }
+            };
+            if !safe {
+                if RESUME {
+                    window_frame_ctx
+                        .record_pending_range_search(last_range, &cur_range, length, idx);
+                }
+                break;
+            }
+        }
+        let value = window.get_aggregate_result_inside_range(
+            last_range,
+            &cur_range,
+            values,
+            accumulator,
+            filter_mask,
+        )?;
+        // Update last range
+        *last_range = cur_range;
+        row_wise_results.push(value);
+        idx += 1;
+    }
+
+    if row_wise_results.is_empty() {
+        let field = window.field()?;
+        let out_type = field.data_type();
+        Ok(new_empty_array(out_type))
+    } else {
+        ScalarValue::iter_to_array(row_wise_results)
     }
 }
 
