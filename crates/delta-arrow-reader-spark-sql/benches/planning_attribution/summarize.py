@@ -82,7 +82,7 @@ def source_for(stage, sources):
         return sources.get(stage.rsplit("/", 1)[1], "vendor/dependencies/datafusion-optimizer/src/analyzer/mod.rs (call site; rule source unresolved)")
     if stage.startswith("physical.optimizer.rule/"):
         if stage.endswith("/validation"):
-            return "vendor/dependencies/datafusion-optimizer/src/utils.rs::assert_valid_optimization"
+            return "vendor/dependencies/datafusion-optimizer/src/optimizer.rs::assert_valid_optimization"
         if stage.endswith("/preparation"):
             return "vendor/dependencies/datafusion-optimizer/src/optimizer.rs::optimize plan/schema preparation"
         return sources.get(stage.split("/")[1], "vendor/dependencies/datafusion-optimizer/src/optimizer.rs (call site; rule source unresolved)")
@@ -109,7 +109,7 @@ def source_for(stage, sources):
         "physical.optimizer": "vendor/dependencies/datafusion-optimizer/src/optimizer.rs::optimize",
         "physical.optimizer.input_validation": "datafusion-expr::LogicalPlan::check_invariants(Executable), optimizer input",
         "physical.optimizer.final_validation": "datafusion-expr::LogicalPlan::check_invariants(Executable), optimizer output",
-        "physical.optimizer.final_schema_validation": "vendor/dependencies/datafusion-optimizer/src/utils.rs::assert_valid_optimization",
+        "physical.optimizer.final_schema_validation": "vendor/dependencies/datafusion-optimizer/src/optimizer.rs::assert_valid_optimization",
         "physical.optimizer.initial_signature": "vendor/dependencies/datafusion-optimizer/src/plan_signature.rs::LogicalPlanSignature::new and signature set",
         "physical.optimizer.pass_signature": "vendor/dependencies/datafusion-optimizer/src/plan_signature.rs::LogicalPlanSignature::new and signature set",
         "physical.planner.default_physical_planner": "datafusion-54.1.0/src/physical_planner.rs::DefaultPhysicalPlanner (including physical optimizers)",

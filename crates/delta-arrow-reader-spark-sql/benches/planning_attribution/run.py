@@ -127,6 +127,11 @@ def build(source, target, destination):
     assert assembly["baseline"] == assemble.BASELINE
     for name, expected in assembly["assembly"].items():
         assert assemble.digest(workspace / name) == expected
+    # Cargo can reuse path-dependency fingerprints across these two copies.
+    # Refresh the files that differ so the next build cannot use the other mode.
+    changed, _, _ = assemble.patch_sources()
+    for name in changed:
+        (workspace / name).touch(exist_ok=True)
     before = tree_hash(source)
     assert before == assembly["tree_sha256"], "assembled source changed before build"
     command = ["cargo", "+1.96.0", "build", "--locked", "--release", "--bench", "planning_attribution", "--message-format=json-render-diagnostics"]

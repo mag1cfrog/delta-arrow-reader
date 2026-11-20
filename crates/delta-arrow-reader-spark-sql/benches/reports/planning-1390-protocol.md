@@ -63,7 +63,10 @@ and a hash of the complete assembled source tree. The build checks them before
 and after Cargo. Build receipts retain the exact compiler-reported executable
 path, a sealed executable copy and hash, the compiler version, command,
 environment, assembly receipt and logs. Both builds may share the existing
-external owned Cargo target directory and run serially. The sealed canonical
+external owned Cargo target directory and run serially. Before Cargo starts,
+the runner refreshes the modification times of files that differ between the
+assemblies so it does not reuse the other variant's path-dependency artifacts.
+Content hashes still verify each complete tree. The sealed canonical
 binary cannot be overwritten by the observed build.
 
 Build with `cargo +1.96.0 build --locked --release --bench planning_attribution
