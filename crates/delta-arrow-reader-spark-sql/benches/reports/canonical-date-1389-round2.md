@@ -11,7 +11,7 @@ keeps the existing predicate. The tested candidate is preserved at
 | ANSI off | 19.509 | 19.625 | 0.115 | 5.436 | 0.104 |
 | ANSI on | 19.450 | 19.666 | 0.216 | 5.477 | 0.085 |
 
-Each value is the median of three process medians of the execution cost
+The staging and candidate costs are medians of three process medians
 above projection on one million input rows. The same-session
 [90 samples](../canonical_date_1389/sql-samples.jsonl.gz) also retain
 full execution and projection times. Exact preflight matched both
