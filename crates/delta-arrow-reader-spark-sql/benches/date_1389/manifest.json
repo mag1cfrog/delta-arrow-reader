@@ -1,0 +1,10 @@
+{
+  "issue": 1389,
+  "baseline": "124246cbc61f6b7893df713d18f397bf37e74b6c",
+  "statements": [
+    "date_fallback"
+  ],
+  "queries_sha256": "4f3d9a0a5f7755b1524fcb2ca9641b97c0b3f0b232ab9923141176869c5c2359",
+  "schedule_sha256": "301fb5ae06d7ee99f65c17658f595038a40f0a27b58b55eb34b6cddade389996",
+  "session_limit_seconds": 1800
+}

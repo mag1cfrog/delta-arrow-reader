@@ -26,3 +26,29 @@ control measures construction without parsing. A conversion-only control uses
 preparsed values. These controls are compiler-sensitive and are not additive.
 Report separately whether the changed array path and parser-only path reproduce
 the old regression. Keep an unisolated part of the difference as unexplained.
+
+## Full-query replay of the reverted DATE path
+
+The isolated probe found a faster eager parser. The lazy reuse probe did not
+reproduce the earlier SQL slowdown in every sample. Compare the current whole
+DATE path with a build that restores just the original DATE reuse code from
+`1f6cb4fcd6ebbce3b993f411b9f66571ec6d230d` in a detached scratch checkout.
+Restore `spark_date.rs` and the original `date_parser` factory only. Keep
+the scratch revision separate from the product PR.
+
+Run the [paired runner](../interval_1389/compare.py) with
+`--manifest benches/date_1389/manifest.json`. The schedule keeps the original
+SF1 DATE fallback query, native reference, processes, data and resource limits.
+This is one session, with both executables in each paired process. The prior
+interval candidate executable is eligible as the before build once its whole
+product and benchmark sources are checked against staging. Build the restored
+variant in the same checkout path and release profile. Require full row,
+type and I/O equality before clocks.
+
+The old DATE regression recurs if the reuse path exceeds the before path by
+at least the larger of that build pair's measured native repeat spreads, in
+both ANSI modes, with all three per-process median changes in the same
+direction. A controlled effect here would identify the restored DATE code.
+The isolated parser, construction and conversion timings indicate which
+parts do or do not reproduce the old difference. This replay is attribution
+and does not enter the later product candidate's before/after numbers.

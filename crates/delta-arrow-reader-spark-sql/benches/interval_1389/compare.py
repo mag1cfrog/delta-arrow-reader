@@ -1,4 +1,4 @@
-"""Compare uninstrumented #1389 interval builds in one paired session."""
+"""Compare uninstrumented #1389 builds in one paired session."""
 
 import argparse
 import gzip
@@ -54,16 +54,17 @@ def validate_preflight(binaries, snapshot, output, schedule, deadline, queries):
                                      output / "reference" / role / name / mode, deadline, schedule)
                 if failure:
                     excluded.setdefault(name, []).append({"mode": mode, "reason": failure, "pair": role})
-    for role in binaries:
-        for mode in ("spark-off", "spark-on"):
-            cast = outputs[role, "interval_day_time", mode]
-            projection = outputs[role, "interval_day_time_input", mode]
-            try:
-                execution.require_same_source_io(cast["source_io"], projection["source_io"])
-            except AssertionError as error:
-                excluded.setdefault("interval_day_time", []).append(
-                    {"mode": mode, "reason": str(error), "pair": f"{role} projection"}
-                )
+    if any(query["id"] == "interval_day_time" for query in queries):
+        for role in binaries:
+            for mode in ("spark-off", "spark-on"):
+                cast = outputs[role, "interval_day_time", mode]
+                projection = outputs[role, "interval_day_time_input", mode]
+                try:
+                    execution.require_same_source_io(cast["source_io"], projection["source_io"])
+                except AssertionError as error:
+                    excluded.setdefault("interval_day_time", []).append(
+                        {"mode": mode, "reason": str(error), "pair": f"{role} projection"}
+                    )
     strings.write_json(output / "observations.json", [
         dict(result, build=role, ipc_sha256=execution.digest(Path(result["ipc_path"])))
         for (role, _, _), result in outputs.items()
@@ -113,11 +114,12 @@ def main():
     cli = argparse.ArgumentParser(description=__doc__)
     for name in ("staging", "candidate", "snapshot", "output"):
         cli.add_argument(name, type=Path)
+    cli.add_argument("--manifest", type=Path, default=HERE / "manifest.json")
     args = cli.parse_args()
     binaries = {name: getattr(args, name).resolve() for name in ("staging", "candidate")}
     snapshot, output = args.snapshot.resolve(), args.output.resolve()
     assert not subprocess.check_output(["git", "status", "--porcelain"], cwd=HERE.parents[3], text=True).strip()
-    manifest = execution.read(HERE / "manifest.json")
+    manifest = execution.read(args.manifest)
     assert execution.digest(PARSERS / "queries.json") == manifest["queries_sha256"]
     assert execution.digest(PARSERS / "schedule.json") == manifest["schedule_sha256"]
     workload, schedule = parsers["load_and_validate_workload"]()
