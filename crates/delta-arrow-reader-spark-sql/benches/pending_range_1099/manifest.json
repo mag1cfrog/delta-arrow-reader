@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "issue": 1099,
+  "baseline": "54fab5b9dbcea430307d4e57a66bfd7788f26688",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "row_counts": [1024, 2048, 4096],
+  "batch_sizes": [1, 32, 1024],
+  "normal_batch_size": 1024,
+  "configurations": ["native", "spark-off", "spark-on"],
+  "shapes": [
+    {
+      "id": "constant",
+      "key": 0,
+      "sql": "SELECT id, count(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) AS n FROM pending_peers"
+    },
+    {
+      "id": "wrapped",
+      "key": -2147483648,
+      "sql": "SELECT id, count(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS n FROM pending_peers"
+    }
+  ],
+  "progressive_rows": 4,
+  "diagnostic_pending_limit": 16,
+  "diagnostic_plan_bytes": 16384,
+  "cpu": 2,
+  "warmups": 2,
+  "samples": 7,
+  "process_timeout_seconds": 300,
+  "process_cap_per_revision": 7,
+  "overall_runtime_process_cap": 15,
+  "native_control_schedule": "Three fresh canonical measure processes per revision. Each contains one native arm per eligible constant size/batch with two warmups and seven samples, alongside both Spark ANSI arms in the same binary. Rotate arm order across cells and processes. Native means a plain SessionStateBuilder with default features, target_partitions=1 and the tested batch size; configure_spark_sql is not installed.",
+  "runtime_schedule_per_revision": [
+    "canonical trace: all 54 shape/size/batch/configuration contexts plus 9 progressive controls, no clocks",
+    "observed trace: the same 63 contexts, counts only",
+    "observed regions: the 27 constant contexts, only after exact native eligibility, one untimed warmup and one region observation",
+    "three fresh canonical measure processes: each has the 27 eligible constant contexts in rotating native/Spark arm order, two warmups and seven samples",
+    "optional canonical profile: one eligible constant context, only when coarse regions leave ownership unresolved"
+  ]
+}
