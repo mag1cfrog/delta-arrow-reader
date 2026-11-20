@@ -124,6 +124,7 @@ def measure(builds, out, protocol):
     for function in protocol["functions"]:
         name = function["id"]
         reference = None
+        physical_function = f'name: "{name.rsplit(".", 1)[1]}",'
         for variant in VARIANTS:
             work = out / "preflight" / name / variant
             observed = runner.invoke(builds[variant] / "functions",
@@ -134,7 +135,7 @@ def measure(builds, out, protocol):
             if (
                 [r["configuration"] for r in results] != list(MODES)
                 or any(r["status"] != "ok" or r["rows"] != rows or r["source_guard_rows"] != rows
-                       or name.rsplit(".", 1)[1] + "(" not in str(r["function_evidence"]["expressions"])
+                       or not any(physical_function in expr for expr in r["function_evidence"]["expressions"])
                        for r in results)
                 or len(result.get("baselines", [])) != 3
                 or any(r["rows"] != rows for r in result["baselines"])
