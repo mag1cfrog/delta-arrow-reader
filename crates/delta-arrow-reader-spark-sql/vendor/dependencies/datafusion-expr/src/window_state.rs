@@ -584,10 +584,10 @@ impl WindowFrameStateRange {
         length: usize,
         idx: usize,
     ) -> Result<Range<usize>> {
-        if !self.pending_range_search.as_ref().is_some_and(|pending| {
-            pending.idx == idx
-                && pending.length <= length
-                && pending.committed_range == *last_range
+        if self.pending_range_search.as_ref().is_some_and(|pending| {
+            pending.idx != idx
+                || pending.length > length
+                || pending.committed_range != *last_range
         }) {
             self.pending_range_search = None;
         }
@@ -786,19 +786,10 @@ impl WindowFrameStateRange {
             Ok(if SIDE { cmp.is_lt() } else { cmp.is_le() })
         };
         // Revalidate targets first so an exhausted hint cannot hide a late arithmetic error.
-        let search_start =
-            self.pending_range_search
-                .as_ref()
-                .map_or(search_start, |pending| {
-                    search_start.max(
-                        if SIDE {
-                            pending.range.start
-                        } else {
-                            pending.range.end
-                        }
-                        .min(length),
-                    )
-                });
+        let search_start = self.pending_range_search.as_ref().map_or(search_start, |pending| {
+            let hint = if SIDE { pending.range.start } else { pending.range.end };
+            search_start.max(hint.min(length))
+        });
         search_in_slice(range_columns, &end_range, compare_fn, search_start, length)
     }
 }
@@ -1127,7 +1118,7 @@ mod tests {
                 original.calculate_range(&columns, &committed, length, idx)?
             );
             let WindowFrameContext::Range { state, .. } = context else {
-                unreachable!()
+                return internal_err!("expected RANGE test context");
             };
             assert!(state.pending_range_search.is_none());
         }
@@ -1140,13 +1131,13 @@ mod tests {
         aggregate.prune_state(0);
         let Some(WindowFrameContext::Range { state, .. }) = &aggregate.window_frame_ctx
         else {
-            unreachable!()
+            return internal_err!("expected RANGE test context");
         };
         assert!(state.pending_range_search.is_some());
         aggregate.prune_state(1);
         let Some(WindowFrameContext::Range { state, .. }) = &aggregate.window_frame_ctx
         else {
-            unreachable!()
+            return internal_err!("expected RANGE test context");
         };
         assert!(state.pending_range_search.is_none());
         Ok(())
@@ -1178,13 +1169,15 @@ mod tests {
         );
         let error = context
             .calculate_range(&columns, &committed, 2, 0)
-            .unwrap_err();
+            .err()
+            .ok_or_else(|| internal_datafusion_err!("expected target overflow"))?;
         let mut original = WindowFrameContext::new(frame, vec![SortOptions::default()]);
         assert_eq!(
             error.to_string(),
             original
                 .calculate_range(&columns, &committed, 2, 0)
-                .unwrap_err()
+                .err()
+                .ok_or_else(|| internal_datafusion_err!("expected original target overflow"))?
                 .to_string()
         );
         assert!(
