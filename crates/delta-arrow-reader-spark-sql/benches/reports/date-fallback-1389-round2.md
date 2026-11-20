@@ -37,8 +37,9 @@ separate samples do not enter this candidate's timing comparison.
 | Staging-equivalent | `a2ca19d3548caf3f749998bb1c1cc75dd8d2e7f0` | `d64696e29d6b4ea02ae65b54e056af5f1a240b89565ecebcc6ca185c42578b32` |
 | Candidate | `7e027c72ac4e6595d3c62996ee92fc78fb4c894c` | `6e879737e02d1022717e2725e25512df1bd6fd87b38d5676d4646fbd50e7c73b` |
 
-The reused before executable matches the product and benchmark byte trees
-of staging `124246cbc61f6b7893df713d18f397bf37e74b6c`. The candidate
+The reused before executable matches the product, execution benchmark
+and frozen workload sources of staging
+`124246cbc61f6b7893df713d18f397bf37e74b6c`. The candidate
 switches complete ASCII dates with a one-digit month or day to the existing
 Arrow DATE32 parser. The same Sail parser and CAST/TRY_CAST error handling
 apply when the guard or Arrow's calendar validation declines an input.
