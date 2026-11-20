@@ -37,8 +37,9 @@ Use Rust 1.96.0 release builds with the release settings of #1391. Run one drive
 at a time on CPUs 2 through 5, with a 12 GiB address-space cap. Run eligibility
 checks and all builds before timing. Write and commit the eligibility manifest
 before the clocks start. Use the original `functions` driver and one million rows
-for cases that match Spark. Run three fresh processes per ANSI setting. Rotate
-case order by the replica index and reverse ANSI order in the middle replica.
+for cases that match Spark. Use three replicas per ANSI setting, with a fresh
+process per group of at most four cases. Rotate case order by the replica index
+and reverse ANSI order in the middle replica.
 Each process keeps three executions after one warmup. Report execution nanoseconds
 per input row and the increment above the plain projection as medians of process
 medians. Record timeouts as incomplete outcomes.

@@ -15,14 +15,19 @@ from run import cases, invoke, probe, sha
 
 
 def retain(records, ids, input_rows, mode, timings):
-    completed = {r["id"]: r for r in records if r.get("status") == "ok" or "samples" in r}
+    completed = {r["id"]: r for r in records if "sample" not in r and "id" in r}
     assert set(completed) == set(ids), (set(ids) - set(completed), mode)
     for case, record in completed.items():
-        assert record["configuration"] == mode and len(record["samples"]) == 3
+        assert record["configuration"] == mode
+        if record.get("status", "ok") != "ok":
+            timings[case, mode, input_rows].append({"status": record["status"], "error": record["error"]})
+            continue
+        assert len(record["samples"]) == 3
         for sample in record["samples"]:
             assert sample["input_rows"] == input_rows
             assert sample["execution_ns"] - sample["projection_ns"] == sample["increment_ns"]
         timings[case, mode, input_rows].append({
+            "status": "ok",
             "execution_ns_per_row": median(s["execution_ns"] / input_rows for s in record["samples"]),
             "increment_ns_per_row": median(s["increment_ns"] / input_rows for s in record["samples"]),
             "peak_rss_bytes": record["process_peak_rss_bytes"],
@@ -35,6 +40,7 @@ def measure(full, reduced, manifest, output):
     subprocess.run(["git", "ls-files", "--error-unmatch", str(manifest)], check=True,
                    stdout=subprocess.DEVNULL)
     subprocess.run(["git", "diff", "HEAD", "--exit-code", "--", str(manifest)], check=True)
+    assert not subprocess.check_output(["git", "status", "--porcelain"], text=True).strip()
     eligible = json.loads(manifest.read_text())["functions"]
     verified = {c["id"]: c for c in cases() if c["reference"] == "spark"}
     assert len({case["id"] for case in eligible}) == len(eligible)
@@ -49,14 +55,16 @@ def measure(full, reduced, manifest, output):
     for replica in range(3):
         modes = MODES if replica % 2 == 0 else MODES[::-1]
         ids = [case["id"] for case in eligible[replica:] + eligible[:replica]]
-        id_path = output / f"full-{replica}-ids.json"
-        write(id_path, ids)
+        shards = [ids[start:start + 4] for start in range(0, len(ids), 4)]
+        for index, shard in enumerate(shards):
+            write(output / f"full-{replica}-{index}-ids.json", shard)
         for mode in modes:
-            if ids:
+            for index, shard in enumerate(shards):
+                id_path = output / f"full-{replica}-{index}-ids.json"
                 records = invoke(full, ["measure-set", manifest, id_path, mode],
-                                 output / f"full-{replica}-{mode}.jsonl", {}, 600)
+                                 output / f"full-{replica}-{index}-{mode}.jsonl", {}, 600)
                 assert records[-1] == {"status": "complete"}
-                retain(records, ids, 1_000_000, mode, timings)
+                retain(records, shard, 1_000_000, mode, timings)
             for rows in (512, 2048):
                 for case in bitmaps:
                     name = case["name"]
