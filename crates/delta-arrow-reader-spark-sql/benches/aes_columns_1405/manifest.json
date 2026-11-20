@@ -1,0 +1,29 @@
+{
+  "source_manifest_sha256": "ec6528b17cb072224aec6ea0ea3c1e910b9aa8cf6f5cadb0296f85b3f86f1f06",
+  "functions": [
+    {
+      "id": "scalar.misc.aes_decrypt",
+      "spark_sql": "SELECT id,aes_decrypt(cipher,'0123456789abcdef','ECB') AS value FROM bench",
+      "native_sql": "SELECT id, CASE WHEN cipher IS NULL THEN CAST(NULL AS BINARY) ELSE CAST(X'614756736247383d' AS BINARY) END AS value FROM bench",
+      "projection_sql": "SELECT id,cipher FROM bench"
+    },
+    {
+      "id": "scalar.misc.aes_encrypt",
+      "spark_sql": "SELECT id,aes_encrypt(b,'0123456789abcdef','ECB') AS value FROM bench",
+      "native_sql": "SELECT id, CASE WHEN b IS NULL THEN CAST(NULL AS BINARY) ELSE CAST(X'5e973c583b41baf1447882f2f219ecb7' AS BINARY) END AS value FROM bench",
+      "projection_sql": "SELECT id,b FROM bench"
+    },
+    {
+      "id": "scalar.misc.try_aes_decrypt",
+      "spark_sql": "SELECT id,try_aes_decrypt(cipher,'0123456789abcdef','ECB') AS value FROM bench",
+      "native_sql": "SELECT id, CASE WHEN cipher IS NULL THEN CAST(NULL AS BINARY) ELSE CAST(X'614756736247383d' AS BINARY) END AS value FROM bench",
+      "projection_sql": "SELECT id,cipher FROM bench"
+    },
+    {
+      "id": "scalar.misc.try_aes_encrypt",
+      "spark_sql": "SELECT id,try_aes_encrypt(b,'0123456789abcdef','ECB') AS value FROM bench",
+      "native_sql": "SELECT id, CASE WHEN b IS NULL THEN CAST(NULL AS BINARY) ELSE CAST(X'5e973c583b41baf1447882f2f219ecb7' AS BINARY) END AS value FROM bench",
+      "projection_sql": "SELECT id,b FROM bench"
+    }
+  ]
+}
