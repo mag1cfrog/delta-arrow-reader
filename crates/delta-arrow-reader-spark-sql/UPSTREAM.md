@@ -2597,5 +2597,6 @@ path once per Arrow batch. Each row still parses its own XML and creates its
 own execution context. Skipped rows compile nothing. Invalid XML is still
 reported before an invalid XPath on that row. A compiled program is released
 after its last use in the batch, so single-use paths do not accumulate.
-The [XPath differential tests](tests/xpath_batch_reuse.rs) address both ANSI
+Repeated paths with overlapping uses retain their programs until those uses
+finish. The [XPath differential tests](tests/xpath_batch_reuse.rs) address both ANSI
 modes, literal and varying paths, conversion limits, NULLs, and errors.

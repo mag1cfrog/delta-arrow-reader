@@ -164,7 +164,9 @@ pub(super) fn for_each_xpath_row<Q, T>(
         let document = documents.add_string_without_uri(xml).map_err(|error| {
             DataFusionError::Execution(format!("Invalid XML document: {error}"))
         })?;
-        let batch_path = batch_paths.get_mut(path).expect("path was indexed");
+        let batch_path = batch_paths.get_mut(path).ok_or_else(|| {
+            DataFusionError::Internal("XPath path missing from batch index".into())
+        })?;
         let query = match &mut batch_path.query {
             Some(query) => query,
             slot @ None => slot.insert(compile(path)?),

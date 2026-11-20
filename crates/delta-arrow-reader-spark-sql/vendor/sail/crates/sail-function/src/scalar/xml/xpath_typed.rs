@@ -152,17 +152,17 @@ fn xpath_typed_inner(kind: XpathTypedKind, args: &[ArrayRef]) -> Result<ArrayRef
 fn for_each_typed_xpath_row<T>(
     xmls: &StringArray,
     paths: &StringArray,
-    conversion: &str,
-    convert: impl Convert<T>,
+    xpath_function: &str,
+    convert_item: impl Convert<T>,
     append: impl FnMut(Option<T>),
 ) -> Result<()> {
     for_each_xpath_row(
         xmls,
         paths,
         |path| {
-            let wrapped = format!("{conversion}({path})");
+            let wrapped = format!("{xpath_function}({path})");
             Queries::default()
-                .one(&wrapped, &convert)
+                .one(&wrapped, &convert_item)
                 .map_err(|e| DataFusionError::Execution(format!("Invalid XPath '{path}': {e}")))
         },
         |documents, document, path, query| {

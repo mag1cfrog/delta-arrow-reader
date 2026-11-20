@@ -4,11 +4,13 @@ use std::sync::Arc;
 
 use arrow::array::{ArrayRef, StringArray};
 use arrow::record_batch::RecordBatch;
+use datafusion::common::{DataFusionError, ScalarValue};
 use datafusion::error::Result;
 use datafusion::execution::SessionStateBuilder;
 use datafusion::physical_plan::collect;
 use datafusion::prelude::{SessionConfig, SessionContext};
 use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
+use serde_json::{Value, json};
 
 const FUNCTIONS: [&str; 9] = [
     "xpath",
@@ -59,8 +61,62 @@ async fn execute(
     .await?;
     let physical = planned.create_physical_plan(session).await?;
     let batches = collect(physical, session.task_ctx()).await?;
-    let [batch]: [RecordBatch; 1] = batches.try_into().expect("one input and output batch");
+    let [batch]: [RecordBatch; 1] = batches.try_into().map_err(|batches: Vec<_>| {
+        DataFusionError::Internal(format!(
+            "expected one XPath test batch, got {}",
+            batches.len()
+        ))
+    })?;
     Ok(batch)
+}
+
+fn captured_values(batch: &RecordBatch) -> Result<Value> {
+    let types: Vec<_> = batch
+        .schema()
+        .fields()
+        .iter()
+        .map(|field| format!("{:?}", field.data_type()))
+        .collect();
+    let mut rows = Vec::new();
+    for row in 0..batch.num_rows() {
+        let mut values = Vec::new();
+        for column in batch.columns() {
+            let value = ScalarValue::try_from_array(column, row)?;
+            values.push(match value {
+                value if value.is_null() => Value::Null,
+                ScalarValue::Float32(Some(value)) => json!(format!("{:08x}", value.to_bits())),
+                ScalarValue::Float64(Some(value)) => json!(format!("{:016x}", value.to_bits())),
+                ScalarValue::List(list) => {
+                    let elements = list.value(0);
+                    let strings =
+                        elements
+                            .as_any()
+                            .downcast_ref::<StringArray>()
+                            .ok_or_else(|| {
+                                DataFusionError::Internal(
+                                    "expected XPath to emit a list of strings".into(),
+                                )
+                            })?;
+                    json!(strings.iter().collect::<Vec<_>>())
+                }
+                value => json!(value.to_string()),
+            });
+        }
+        rows.push(values);
+    }
+    Ok(json!({"types": types, "rows": rows}))
+}
+
+fn assert_staging_observations(kind: &str, observations: Vec<Value>) -> Result<()> {
+    let reference: Value =
+        serde_json::from_str(include_str!("fixtures/xpath-batch-reuse/staging.json"))
+            .map_err(|error| DataFusionError::External(Box::new(error)))?;
+    assert_eq!(
+        Value::Array(observations),
+        reference[kind],
+        "{kind} changed"
+    );
+    Ok(())
 }
 
 #[tokio::test]
@@ -87,6 +143,7 @@ async fn xpath_batch_reuse_matches_fresh_rows_in_both_ansi_modes() -> Result<()>
         (Some("invalid XML"), None),
     ];
     let session = session();
+    let mut observations = Vec::new();
     for (argument, fixture) in [
         ("path", rows),
         (
@@ -110,6 +167,9 @@ async fn xpath_batch_reuse_matches_fresh_rows_in_both_ansi_modes() -> Result<()>
         for ansi_mode in [false, true] {
             let actual = execute(&session, &projection, "input", ansi_mode).await?;
             assert_eq!(actual.num_rows(), fixture.len());
+            observations.push(json!({
+                "argument": argument, "ansi_mode": ansi_mode, "result": captured_values(&actual)?,
+            }));
             for row in 0..fixture.len() {
                 session.register_batch("single_row", batch.slice(row, 1))?;
                 let reference = execute(&session, &projection, "single_row", ansi_mode).await?;
@@ -125,12 +185,14 @@ async fn xpath_batch_reuse_matches_fresh_rows_in_both_ansi_modes() -> Result<()>
         }
         session.deregister_table("input")?;
     }
+    assert_staging_observations("values", observations)?;
     Ok(())
 }
 
 #[tokio::test]
 async fn xpath_batch_reuse_preserves_first_error() -> Result<()> {
     let session = session();
+    let mut observations = Vec::new();
     let valid = (Some("<r><x>1</x></r>"), Some("/r/x"));
     let malformed_xml = (Some("<r>"), Some("["));
     let malformed_path = (Some("<r/>"), Some("["));
@@ -164,10 +226,14 @@ async fn xpath_batch_reuse_preserves_first_error() -> Result<()> {
                     .to_string();
                 assert!(reference.contains(message), "{function}: {reference}");
                 assert_eq!(actual, reference, "{function}, ANSI={ansi_mode}");
+                observations.push(json!({
+                    "function": function, "ansi_mode": ansi_mode, "fixture": message, "error": actual,
+                }));
             }
             session.deregister_table("input")?;
             session.deregister_table("single_row")?;
         }
     }
+    assert_staging_observations("errors", observations)?;
     Ok(())
 }
