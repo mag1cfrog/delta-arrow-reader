@@ -18,7 +18,8 @@ from capture_spark_requests import capture_requested_queries
 def capture_with_typed_table(spark, case, encode):
     spark.sql("""
         CREATE OR REPLACE TEMP VIEW bench AS
-        SELECT id, grp, i, p, d, s, s2, from_json(arr, 'ARRAY<BIGINT>') AS arr,
+        SELECT CAST(id AS BIGINT) AS id, grp, CAST(i AS BIGINT) AS i, p, d, s, s2,
+            from_json(arr, 'ARRAY<BIGINT>') AS arr,
             CAST(ts AS TIMESTAMP) AS ts, b, theta_b
         FROM bench_encoded
     """)
@@ -36,7 +37,11 @@ def main():
     assert fields[7]["type"] == {"type": "array", "elementType": "long", "containsNull": True}
     assert fields[8]["type"] == "timestamp"
     assert len(source["rows"]) == 96
-    # The shared capture helper takes primitive source fields. The view restores the exact input types.
+    assert fields[0]["type"] == fields[2]["type"] == "long"
+    assert all(value is None or -(2**31) <= int(value) < 2**31
+               for row in source["rows"] for value in (row[0], row[2]))
+    # The shared capture helper decodes integers as INT. The view restores the original types.
+    fields[0]["type"] = fields[2]["type"] = "integer"
     fields[7]["type"] = fields[8]["type"] = "string"
     for row in source["rows"]:
         if row[7] is not None:

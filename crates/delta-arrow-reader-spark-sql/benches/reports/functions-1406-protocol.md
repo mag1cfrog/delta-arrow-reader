@@ -14,7 +14,7 @@ five-row window frame. Group 0 contains only null payloads. The committed
 [`input.json`](../functions_1406/input.json) holds the resulting columns used in
 Spark. The same SQL runs in DAR and Spark 4.2.0 with UTC and both ANSI settings.
 The capture helper records Spark's exact version, source inputs and executed
-result schema. Spark constructs the original array and timestamp types in a view
+result schema. Spark constructs the original BIGINT, array and timestamp types in a view
 over the primitive capture inputs.
 
 Compare complete row multisets, keeping duplicates. Compare executed types
