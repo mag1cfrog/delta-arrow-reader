@@ -40,3 +40,7 @@ of 8,192 rows. Report median and MAD for each case and paired differences.
 Use the same direction and median-above-MAD rule per paired difference.
 This allows a distinction between date shape checks and row/array handling
 without relying on a difference between separate timing campaigns.
+
+The native control used Arrow's default safe cast options. The primary
+guard comparison is between two Spark row loops. The strict native SQL
+comparison uses the separate full-query protocol.

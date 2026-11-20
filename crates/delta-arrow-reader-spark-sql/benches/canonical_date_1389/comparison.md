@@ -3,7 +3,9 @@
 Build staged and candidate `functions` executables with the locked #1391
 workspace, Rust 1.96.0 and the #1385 Linux release profile (opt level 3,
 debug 1, 16 codegen units). Pass the two build receipts to the runner.
-It verifies sources, Rust release profile and executable hashes. Use the
+It verifies source revisions, binary hashes, Rust version, optimization
+level and debuginfo. The builds use Cargo's default 16 release codegen
+units. Use the
 unchanged [#1391 driver](../functions.rs) with the
 [one-case manifest](manifest.json). Both executables use the same one
 million rows, null positions, seeded dates, CPU affinity and memory limit.
