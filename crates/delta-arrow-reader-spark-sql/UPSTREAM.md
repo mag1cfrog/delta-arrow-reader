@@ -2492,6 +2492,19 @@ against the original Rich parser over the committed interval corpus. The
 existing row conversion tests cover values, NULLs, failures and executed types
 through CAST and TRY_CAST in both ANSI modes.
 
+### Unpadded STRING DATE casts (#1389, second round)
+
+Unformatted Spark DATE casts accept a complete four-digit ASCII year with a
+one-digit month or day through Arrow's existing DATE32 parser. The byte
+check requires two hyphens and a complete numeric input before Arrow sees
+it. This keeps Arrow's compact dates and partial-prefix acceptance outside
+the Spark route. Calendar validation remains in Arrow. Signed, partial and
+other date forms use the existing Sail parser.
+
+The DATE differential tests compare valid dates, NULL handling and malformed
+inputs against the original parser. The connected tests exercise both ANSI
+modes and CAST and TRY_CAST.
+
 ### Ordinary STRING timestamp casts (#1389)
 
 SparkTimestamp LTZ/NTZ uses Chrono calendar and clock validation directly for
