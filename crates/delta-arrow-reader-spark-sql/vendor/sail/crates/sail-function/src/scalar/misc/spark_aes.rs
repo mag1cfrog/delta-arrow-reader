@@ -243,7 +243,12 @@ fn evaluate_aes_row(
         .map(|value| binary_argument(value, "associated data"))
         .transpose()?
         .unwrap_or_default();
-    if !associated_data.is_empty() && !matches!(mode, AesMode::Gcm) {
+    // Spark accepts the ECB decrypt argument and never passes it to the block cipher.
+    let accepts_associated_data = matches!(
+        (operation, mode),
+        (_, AesMode::Gcm) | (AesOperation::Decrypt, AesMode::Ecb)
+    );
+    if !associated_data.is_empty() && !accepts_associated_data {
         return exec_err!("Spark AES associated data requires GCM mode");
     }
     let iv_bytes = mode.iv_len();

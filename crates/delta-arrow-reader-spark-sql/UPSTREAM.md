@@ -2535,6 +2535,10 @@ still use the locked RustCrypto implementations and prepend their IVs. Decryptio
 checks that the IV bytes are present before splitting the input. The four
 functions still produce binary values.
 
+Read ciphertext written by the old ECB spelling by specifying CBC, which is
+the wire format that implementation emitted. For Spark's ECB format, decryption
+ignores nonnull associated data as Spark does.
+
 The [Spark 4.2.0 capture](tests/fixtures/aes-column-arguments/spark-results.jsonl)
 includes deterministic ciphertexts, random-IV round trips, invalid inputs and
 both ANSI modes. Spark supplies `try_aes_decrypt`. The DAR-only

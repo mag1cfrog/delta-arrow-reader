@@ -94,6 +94,17 @@ def requests():
     add("try_decrypt_ciphertext_column", f"try_aes_decrypt(ciphertext, {key}, 'ECB')", "id < 5")
     for fn in ("aes_decrypt", "try_aes_decrypt"):
         add(f"{fn}_all_columns", f"{fn}(aes_encrypt({column_args}), key_bytes, mode_name, padding_name, associated_data)", "id < 10")
+        add(f"{fn}_key_column",
+            f"{fn}(aes_encrypt(message, key_bytes, 'ECB'), key_bytes, 'ECB')")
+        add(f"{fn}_padding_column",
+            f"{fn}(aes_encrypt(message, {key}, 'GCM', 'NONE', {binary(IVS['GCM'])}), {key}, 'GCM', padding_name)",
+            "id IN (0,2,3)")
+        add(f"{fn}_gcm_aad_column",
+            f"{fn}(aes_encrypt(message, {key}, 'GCM', 'NONE', {binary(IVS['GCM'])}, associated_data), {key}, 'GCM', 'NONE', associated_data)",
+            "id < 5")
+        add(f"{fn}_ecb_aad_column",
+            f"{fn}(X'5e973c583b41baf1447882f2f219ecb7', {key}, 'ECB', 'PKCS', associated_data)",
+            "id IN (2,3,9)")
         add(f"{fn}_null_key", f"{fn}(ciphertext, key_bytes, 'ECB')", "id = 5")
         add(f"{fn}_null_mode", f"{fn}(X'5e973c583b41baf1447882f2f219ecb7', {key}, mode_name)", "id = 6")
         add(f"{fn}_null_padding", f"{fn}(X'5e973c583b41baf1447882f2f219ecb7', {key}, 'ECB', padding_name)", "id = 7")
@@ -106,6 +117,7 @@ def requests():
         add(f"{fn}_empty_cbc_body", f"{fn}({binary(IVS['CBC'])}, {key}, 'CBC')")
 
     add_encrypt("literal_control", f"'aGVsbG8=', {key}, 'ECB'")
+    add("default_gcm_roundtrip", f"aes_decrypt(aes_encrypt(message, {key}), {key})")
     for mode in ("CBC", "GCM"):
         add_encrypt(f"literal_{mode.lower()}_control", f"'ab', {key}, '{mode}', 'DEFAULT', {binary(IVS[mode])}")
     add_encrypt("string_column", f"CAST(message AS STRING), {key}, 'ECB'")
@@ -114,6 +126,10 @@ def requests():
         add(f"{fn}_ecb_block_boundaries",
             f"{fn}(aes_encrypt(message, {key}, 'ECB'), {key}, 'ECB')", "id >= 12")
     add("strict_invalid_key", "aes_encrypt(message, key_bytes, 'ECB')", "id = 10")
+    add("strict_mixed_invalid_key", "aes_encrypt(message, key_bytes, 'ECB')", "id IN (0,10)")
+    for fn in ("aes_decrypt", "try_aes_decrypt"):
+        add(f"{fn}_mixed_invalid_key",
+            f"{fn}(X'5e973c583b41baf1447882f2f219ecb7', key_bytes, 'ECB')", "id IN (0,10)")
     add("strict_invalid_iv", "aes_encrypt(message, key_bytes, 'CBC', 'PKCS', iv_bytes)", "id = 11")
     add("strict_invalid_padding",
         f"aes_encrypt(message, {key}, 'GCM', padding_name, {binary(IVS['GCM'])})", "id = 1")
