@@ -23,3 +23,12 @@ shape if preflight finds a difference. Compare medians of the three process
 medians. Candidate parity is reached when both ANSI-mode completion
 medians differ from native by no more than the native A/B repeat spread
 in the slower direction.
+
+## Remaining phase cost
+
+If the paired candidate remains slower than native, apply the committed
+phase probe once to the exact candidate in a disposable checkout. Use the
+original [phase protocol](attribution.md), fixture, limits and schedule.
+Compare Spark and native stages within that candidate probe to locate
+remaining work. Its phase medians are separate from the paired full SQL
+statement results and from the earlier staging probe.
