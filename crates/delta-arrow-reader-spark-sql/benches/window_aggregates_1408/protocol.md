@@ -37,7 +37,9 @@ separately. Evaluation includes the accumulator state or scalar production,
 or the standard window evaluator for the native first/last value cases.
 Output conversion includes scalar-to-Arrow materialization and the final
 list-to-string or Utf8 cast where it occurs. The remainder includes sort,
-window bounds, row result collection and probe overhead.
+window bounds, row result collection and probe overhead. Check for the
+expected string conversion hook, and for zero replay in plain aggregates
+and the native first/last evaluators.
 
 Each driver retains the original 120-second case limit. The parent gives the
 case process 130 seconds including startup, preflight up to 300 seconds, and

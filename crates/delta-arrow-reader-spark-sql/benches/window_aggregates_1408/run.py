@@ -166,7 +166,7 @@ def one_process(binary, id, mode, work, expected, settings, deadline):
     return result
 
 
-def classify_phases(path, samples, rows):
+def classify_phases(path, samples, rows, case_id, mode):
     marker = "aggregate-phases "
     recorded = [json.loads(line[len(marker):]) for line in path.read_text().splitlines()
                 if line.startswith(marker)]
@@ -174,10 +174,18 @@ def classify_phases(path, samples, rows):
     retained = recorded[1:]
     assert all(len(record) == len(PHASES) for record in retained)
     indexed = [dict(zip(PHASES, record)) for record in retained]
-    assert all(record["create"][1] and record["evaluate"][1] and record["materialize"][1]
-               for record in indexed), (path, "missing expected implementation hook")
     assert all(len(values) == 3 and min(values) >= 0
                for record in indexed for values in record.values())
+    name = case_id.rsplit(".", 1)[1]
+    required = ["create", "evaluate", "materialize"]
+    if name in {"array_join", "listagg", "string_agg"}:
+        required.append("convert")
+    absent = [phase for phase in required if any(not record[phase][1] for record in indexed)]
+    if absent:
+        return {"status": "unverified_phase_hooks", "missing": absent}
+    has_replay = any(record["replay"][1] for record in indexed)
+    if has_replay and (case_id.startswith("aggregate.") or (mode == "native" and name in {"max_by", "min_by"})):
+        return {"status": "unexpected_replay_path"}
     return {
         "units": "time is ns per input row; calls and rows are per execution",
         "phases": {phase: {
@@ -249,7 +257,7 @@ def measure(directories, output):
             print(work.relative_to(output), flush=True)
             result = one_process(binaries["phases"], id, mode, work, case, settings, deadline)
             if result["status"] == "ok":
-                profiles[id][mode] = classify_phases(work / "stderr.log", result["samples"], rows)
+                profiles[id][mode] = classify_phases(work / "stderr.log", result["samples"], rows, id, mode)
             else:
                 profiles[id][mode] = {"status": result["status"]}
 
