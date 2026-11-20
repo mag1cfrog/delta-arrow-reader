@@ -22,18 +22,21 @@ def check_eligibility(manifest, selected):
     with gzip.open(comparison, "rt") as source:
         header = json.loads(next(source))
         assert header["spark_version"] == "4.2.0" and header["input_sha256"] == manifest["input_sha256"]
-        records = {}
+        records, executed_types = {}, {}
         for line in source:
             row = json.loads(line)
             key = row["id"], row["configuration"]
             assert key not in records and row["sql"] == selected[row["id"]]["spark_sql"]
             records[key] = classify(row["dar"], row["spark"])
+            if records[key] in {"equal", "field-flags-only"}:
+                executed_types[key] = row["dar"]["result"]["arrow_types"]
     assert set(records) == {(id_, mode) for id_ in selected for mode in MODES}
     accepted = {id_ for id_ in selected if all(records[id_, mode] in {"equal", "field-flags-only"} for mode in MODES)}
     assert accepted == {c["id"] for c in manifest["functions"] + manifest["bitmap_functions"]}
+    return executed_types
 
 
-def retain(records, ids, input_rows, mode, timings):
+def retain(records, ids, input_rows, mode, executed_types, timings):
     completed = {r["id"]: r for r in records if "sample" not in r and "id" in r}
     assert set(completed) == set(ids), (set(ids) - set(completed), mode)
     for case, record in completed.items():
@@ -42,8 +45,11 @@ def retain(records, ids, input_rows, mode, timings):
             timings[case, mode, input_rows].append({"status": record["status"], "error": record["error"]})
             continue
         assert len(record["samples"]) == 3
+        assert record["types"] == executed_types[case, mode]
+        output_rows = 1 if case.startswith("aggregate.") else input_rows
         for sample in record["samples"]:
             assert sample["input_rows"] == input_rows
+            assert sample["output_rows"] == output_rows
             assert sample["execution_ns"] - sample["projection_ns"] == sample["increment_ns"]
         timings[case, mode, input_rows].append({
             "status": "ok",
@@ -65,7 +71,7 @@ def measure(full, reduced, manifest, output):
     verified = {c["id"]: c for c in cases() if c["reference"] in {"spark", "bitmap-reduced"}}
     assert len({c["id"] for c in eligible + bitmaps}) == len(eligible) + len(bitmaps)
     assert all(case == verified[case["id"]] | {"native_sql": None} for case in eligible + bitmaps)
-    check_eligibility(declared, verified)
+    executed_types = check_eligibility(declared, verified)
     output.mkdir(parents=True, exist_ok=False)
     write(output / "receipt.json", {"protocol_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
                                    "manifest_sha256": sha(manifest), "full_sha256": sha(full), "reduced_sha256": sha(reduced)})
@@ -84,13 +90,13 @@ def measure(full, reduced, manifest, output):
                 records = invoke(full, ["measure-set", manifest, id_path, mode],
                                  output / f"full-{replica}-{index}-{mode}.jsonl", {}, 600)
                 assert records[-1] == {"status": "complete"}
-                retain(records, shard, 1_000_000, mode, timings)
+                retain(records, shard, 1_000_000, mode, executed_types, timings)
             for rows in (512, 2048):
                 for case in bitmaps:
                     name = case["name"]
                     records = probe(reduced, f"bitmap-{rows}", ["measure", str(bitmap_manifest), case["id"], mode],
                                     output / f"{name}-{rows}-{replica}-{mode}.jsonl")
-                    retain(records, [case["id"]], rows, mode, timings)
+                    retain(records, [case["id"]], rows, mode, executed_types, timings)
     for case in bitmaps:
         sql = case["spark_sql"]
         aggregate = "SELECT " + sql.split("SELECT id,", 1)[1].split(" OVER (", 1)[0] + " AS value FROM bench"
