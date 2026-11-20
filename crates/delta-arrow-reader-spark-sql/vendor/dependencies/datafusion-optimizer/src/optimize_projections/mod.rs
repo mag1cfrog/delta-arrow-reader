@@ -1,3 +1,4 @@
+// Modified for the DAR Spark SQL runtime. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -515,6 +516,26 @@ fn optimize_subqueries(
     })
 }
 
+fn index_of_projection_column(
+    schema: &DFSchema,
+    column: &Column,
+    unique_names: Option<&HashMap<&str, Option<usize>>>,
+) -> Result<usize> {
+    if let Some(index) = unique_names
+        .and_then(|names| names.get(column.name.as_str()))
+        .copied()
+        .flatten()
+    {
+        let (qualifier, _) = schema.qualified_field(index);
+        if column.relation.as_ref().is_none_or(|relation| {
+            qualifier.is_some_and(|qualifier| relation.resolved_eq(qualifier))
+        }) {
+            return Ok(index);
+        }
+    }
+    schema.index_of_column(column)
+}
+
 /// Given a projection `proj`, this function attempts to merge it with a previous
 /// projection if it exists and if merging is beneficial. Merging is considered
 /// beneficial when expressions in the current projection are non-trivial and
@@ -567,6 +588,21 @@ fn merge_consecutive_projections(proj: Projection) -> Result<Transformed<Project
         .map(Transformed::yes);
     }
 
+    // Amortize the index only across wide projection merges.
+    let prev_schema = (prev_projection.schema.fields().len() >= 64
+        && expr.len() >= 64)
+        .then(|| Arc::clone(&prev_projection.schema));
+    let column_lookup = prev_schema.as_deref().map(|schema| {
+        let mut names = HashMap::with_capacity(schema.fields().len());
+        for (index, (_, field)) in schema.iter().enumerate() {
+            names
+                .entry(field.name().as_str())
+                .and_modify(|index| *index = None)
+                .or_insert(Some(index));
+        }
+        names
+    });
+
     // Count usages (referrals) of each projection expression in its input fields:
     let mut column_referral_map = HashMap::<&Column, usize>::new();
     expr.iter()
@@ -577,7 +613,12 @@ fn merge_consecutive_projections(proj: Projection) -> Result<Transformed<Project
     // For details, see: https://github.com/apache/datafusion/issues/8296
     if column_referral_map.into_iter().any(|(col, usage)| {
         usage > 1
-            && !prev_projection.expr[prev_projection.schema.index_of_column(col).unwrap()]
+            && !prev_projection.expr[index_of_projection_column(
+                &prev_projection.schema,
+                col,
+                column_lookup.as_ref(),
+            )
+            .unwrap()]
                 .placement()
                 .should_push_to_leaves()
     }) {
@@ -604,7 +645,7 @@ fn merge_consecutive_projections(proj: Projection) -> Result<Transformed<Project
                 relation,
                 name,
                 metadata,
-            }) => rewrite_expr(*expr, &prev_projection).map(|result| {
+            }) => rewrite_expr(*expr, &prev_projection, column_lookup.as_ref()).map(|result| {
                 result.update_data(|expr| {
                     // After substitution, the inner expression may now have the
                     // same schema_name as the alias (e.g. when an extraction
@@ -624,7 +665,7 @@ fn merge_consecutive_projections(proj: Projection) -> Result<Transformed<Project
                     }
                 })
             }),
-            e => rewrite_expr(e, &prev_projection),
+            e => rewrite_expr(e, &prev_projection, column_lookup.as_ref()),
         }
     })?;
 
@@ -692,7 +733,11 @@ fn merge_consecutive_projections(proj: Projection) -> Result<Transformed<Project
 /// Projection((a as a1 + b as b1) as sum1)
 /// --Source(a, b)
 /// ```
-fn rewrite_expr(expr: Expr, input: &Projection) -> Result<Transformed<Expr>> {
+fn rewrite_expr(
+    expr: Expr,
+    input: &Projection,
+    column_lookup: Option<&HashMap<&str, Option<usize>>>,
+) -> Result<Transformed<Expr>> {
     expr.transform_up(|expr| {
         match expr {
             //  remove any intermediate aliases if they do not carry metadata
@@ -709,7 +754,7 @@ fn rewrite_expr(expr: Expr, input: &Projection) -> Result<Transformed<Expr>> {
             }
             Expr::Column(col) => {
                 // Find index of column:
-                let idx = input.schema.index_of_column(&col)?;
+                let idx = index_of_projection_column(&input.schema, &col, column_lookup)?;
                 // get the corresponding unaliased input expression
                 //
                 // For example:
