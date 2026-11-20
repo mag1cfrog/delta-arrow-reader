@@ -19,12 +19,12 @@ def write(path, value):
         output.write("\n")
 
 
-def result_types(value):
+def schema_without_field_flags(value):
     if isinstance(value, dict):
-        return {key: result_types(item) for key, item in value.items()
+        return {key: schema_without_field_flags(item) for key, item in value.items()
                 if key not in ("nullable", "containsNull", "valueContainsNull", "metadata")}
     if isinstance(value, list):
-        return [result_types(item) for item in value]
+        return [schema_without_field_flags(item) for item in value]
     return value
 
 
@@ -40,7 +40,7 @@ def classify(actual, reference):
         return "dar-fails"
     computed = actual["result"]
     expected = reference["schema"]
-    if result_types(computed["schema"]) != result_types(expected):
+    if schema_without_field_flags(computed["schema"]) != schema_without_field_flags(expected):
         return "executed-type-difference"
     if ordered_rows(computed["rows"]) != ordered_rows(reference["rows"]):
         return "value-difference"

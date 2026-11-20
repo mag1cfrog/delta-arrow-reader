@@ -36,7 +36,7 @@ def check_eligibility(manifest, selected):
     return executed_types
 
 
-def retain(records, ids, input_rows, mode, executed_types, timings):
+def record_process_summaries(records, ids, input_rows, mode, executed_types, timings):
     completed = {r["id"]: r for r in records if "sample" not in r and "id" in r}
     assert set(completed) == set(ids), (set(ids) - set(completed), mode)
     for case, record in completed.items():
@@ -90,13 +90,13 @@ def measure(full, reduced, manifest, output):
                 records = invoke(full, ["measure-set", manifest, id_path, mode],
                                  output / f"full-{replica}-{index}-{mode}.jsonl", {}, 600)
                 assert records[-1] == {"status": "complete"}
-                retain(records, shard, 1_000_000, mode, executed_types, timings)
+                record_process_summaries(records, shard, 1_000_000, mode, executed_types, timings)
             for rows in (512, 2048):
                 for case in bitmaps:
                     name = case["name"]
                     records = probe(reduced, f"bitmap-{rows}", ["measure", str(bitmap_manifest), case["id"], mode],
                                     output / f"{name}-{rows}-{replica}-{mode}.jsonl")
-                    retain(records, [case["id"]], rows, mode, executed_types, timings)
+                    record_process_summaries(records, [case["id"]], rows, mode, executed_types, timings)
     for case in bitmaps:
         sql = case["spark_sql"]
         aggregate = "SELECT " + sql.split("SELECT id,", 1)[1].split(" OVER (", 1)[0] + " AS value FROM bench"
