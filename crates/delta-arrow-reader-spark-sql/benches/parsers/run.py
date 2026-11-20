@@ -20,6 +20,9 @@ WORKSPACE, REPORTS = strings.WORKSPACE, strings.REPORTS
 REPOSITORY = WORKSPACE.parents[1]
 BASELINE = "298015f9def26cc97a271bdbc0316e64083d7874"
 PREFIX = "parsers-1389"
+RECEIPT = SUITE / "preflight-receipt.json"
+REUSE_STAGE = False
+PRODUCT_BASELINE = "be3c663a8380d5094cb52003f351d5b9a5d48383"
 IDS = ("date_fallback", "timestamp_ltz", "timestamp_ntz", "interval_year_month",
        "interval_day_time", "interval_calendar", "date_format_string", "interval_day_time_input")
 PROJECTION = ("interval_day_time", "interval_day_time_input")
@@ -103,8 +106,12 @@ def bound_hashes():
         "benches/execution.rs", "benches/execution/run.py", "benches/execution/summarize.py",
         "benches/strings/run.py", "tests/support/delta_reads.rs", "tests/support/spark_results.rs",
         "Cargo.toml", "Cargo.lock", "benches/reports/execution-1380-fixture.json",
-        "benches/reports/parsers-1389-protocol.md", "benches/reports/parsers-1389-source-inventory.md",
-        "benches/reports/parsers-1389-preflight.json.gz")]
+        f"benches/reports/{PREFIX}-protocol.md", "benches/reports/parsers-1389-source-inventory.md",
+        f"benches/reports/{PREFIX}-preflight.json.gz")]
+    if REUSE_STAGE:
+        paths += [REPORTS / "parsers-1389-preflight.json.gz", SUITE / "preflight-receipt.json",
+                  WORKSPACE / "UPSTREAM.md", WORKSPACE / "tests/parser_reuse.rs",
+                  WORKSPACE / "tests/fixtures/row-parser-1389-original.rs"]
     return {str(path.relative_to(WORKSPACE)): execution.digest(path) for path in paths}
 
 
@@ -181,6 +188,20 @@ def preflight(binary, snapshot, destination, manifest, schedule):
         execution.require_same_source_io(indexed[PROJECTION[0], mode]["source_io"], indexed[PROJECTION[1], mode]["source_io"])
     full = dict(status="complete", results=results, comparisons=comparisons, input_count_reference=counts,
                 eligible_shapes=eligible, excluded_shapes=excluded)
+    if REUSE_STAGE:
+        with gzip.open(REPORTS / "parsers-1389-preflight.json.gz", "rt") as source:
+            original = {(result["id"], result["configuration"]): result for result in json.load(source)["results"]}
+        baseline_comparisons = []
+        for result in results:
+            before = original[result["id"], result["configuration"]]
+            assert execution.digest(pathlib.Path(before["ipc_path"])) == before["ipc_sha256"], "baseline IPC changed"
+            proof, reason = comparison_failure(binary, before, result,
+                                               destination / result["id"] / ("baseline-" + result["configuration"]), deadline, schedule)
+            assert reason is None and proof["equal"], "before/after result or source I/O differs; stop before timing"
+            assert before["arrow_types"] == result["arrow_types"], "before/after Arrow storage differs"
+            baseline_comparisons.append(dict(proof, id=result["id"], configuration=result["configuration"]))
+        assert len(baseline_comparisons) == 22
+        full.update(product_baseline_commit=PRODUCT_BASELINE, baseline_comparisons=baseline_comparisons)
     strings.write_json(destination / "preflight.json", full)
     with (REPORTS / (PREFIX + "-preflight.json.gz")).open("xb") as output:
         with gzip.GzipFile(fileobj=output, mode="wb", mtime=0) as compressed:
@@ -195,11 +216,13 @@ def preflight(binary, snapshot, destination, manifest, schedule):
                    expected_source_io={q: {mode: {key: indexed[q, mode]["source_io"][key] for key in (
                        "distinct_source_files", "source_file_count", "source_bytes_received", "recorded_range_bytes"
                    )} for mode in modes(q)} for q in eligible})
-    strings.write_json(SUITE / "preflight-receipt.json", receipt)
+    if REUSE_STAGE:
+        receipt.update(product_baseline_commit=PRODUCT_BASELINE, baseline_comparison_count=len(full["baseline_comparisons"]))
+    strings.write_json(RECEIPT, receipt)
 
 
 def validate_receipt(binary, snapshot):
-    receipt = execution.read(SUITE / "preflight-receipt.json")
+    receipt = execution.read(RECEIPT)
     assert receipt["status"] == "complete" and receipt["baseline_commit"] == BASELINE
     assert receipt["product_source_objects"] == product_source_objects()
     assert receipt["file_hashes"] == bound_hashes(), "frozen source or evidence changed"
@@ -210,6 +233,8 @@ def validate_receipt(binary, snapshot):
     assert set(receipt["eligible_shapes"]) | set(receipt["excluded_shapes"]) == set(IDS)
     assert not set(receipt["eligible_shapes"]) & set(receipt["excluded_shapes"])
     assert set(PROJECTION) <= set(receipt["eligible_shapes"])
+    if REUSE_STAGE:
+        assert receipt["product_baseline_commit"] == PRODUCT_BASELINE and receipt["baseline_comparison_count"] == 22
     assert receipt["input_count_reference"] == execution.read(SUITE / "interval-input-count.json")
     for query in execution.read(SUITE / "queries.json")["queries"]:
         if query["id"] in receipt["eligible_shapes"]:
@@ -220,7 +245,7 @@ def validate_receipt(binary, snapshot):
 def summarize(destination, output):
     _, schedule = load_and_validate_workload()
     complete = execution.read(destination / "complete.json")
-    receipt = execution.read(SUITE / "preflight-receipt.json")
+    receipt = execution.read(RECEIPT)
     assert complete["eligible_shapes"] == receipt["eligible_shapes"]
     assert complete["excluded_shapes"] == receipt["excluded_shapes"] and complete["concurrency_processes"] == 0
     with gzip.open(destination / "samples.jsonl.gz", "rt") as source:
@@ -320,6 +345,11 @@ strings.command, strings.validate_receipt = command, validate_receipt
 if __name__ == "__main__":
     if sys.flags.optimize:
         raise SystemExit("validation requires Python assertions")
+    if sys.argv[1:2] == ["--reuse-row-parsers"]:
+        del sys.argv[1]
+        REUSE_STAGE = True
+        PREFIX = strings.PREFIX = "parsers-1389-reuse"
+        RECEIPT = SUITE / "reuse-preflight-receipt.json"
     self_check()
     if sys.argv[1:] == ["--check"]:
         print("seven parser kernels, one projection, fixed schedule and helper checks passed")
@@ -333,7 +363,9 @@ if __name__ == "__main__":
         destination.mkdir(parents=True)
         metadata = execution.metadata(binary, snapshot, manifest, schedule)
         metadata.update(product_source_objects=product_source_objects(), controller_sha256=execution.digest(pathlib.Path(__file__)))
+        if REUSE_STAGE:
+            metadata.update(product_baseline_commit=PRODUCT_BASELINE, before_timing_commit="997278f7f73ad53b050f3d4b4ca381dd5eaf5e34")
         strings.write_json(destination / "metadata.json", metadata)
         (preflight if sys.argv[1] == "preflight" else strings.measure)(binary, snapshot, destination, manifest, schedule)
     else:
-        raise SystemExit("usage: run.py --check | preflight/measure BINARY SNAPSHOT NEW_DIRECTORY | summarize RUN_DIRECTORY OUTPUT_DIRECTORY")
+        raise SystemExit("usage: run.py [--reuse-row-parsers] --check | preflight/measure BINARY SNAPSHOT NEW_DIRECTORY | summarize RUN_DIRECTORY OUTPUT_DIRECTORY")

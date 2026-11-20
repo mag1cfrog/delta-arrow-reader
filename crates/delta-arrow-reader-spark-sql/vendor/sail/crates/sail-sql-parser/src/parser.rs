@@ -2,7 +2,7 @@
 use chumsky::extra::ParserExtra;
 use chumsky::input::{Input, ValueInput};
 use chumsky::label::LabelError;
-use chumsky::prelude::{Recursive, end};
+use chumsky::prelude::{Recursive, end, recursive};
 use chumsky::{IterParser, Parser};
 
 use crate::ast::data_type::DataType;
@@ -85,26 +85,17 @@ where
     E: ParserExtra<'a, I> + 'a,
     E::Error: LabelError<'a, I, TokenLabel>,
 {
-    let mut expression = Recursive::declare();
-    let mut query = Recursive::declare();
-    let mut data_type = Recursive::declare();
-    let mut table_relation = Recursive::declare();
-
-    expression.define(Expr::parser(
-        (expression.clone(), query.clone(), data_type.clone()),
-        options,
-    ));
-    query.define(Query::parser(
-        (query.clone(), expression.clone(), table_relation.clone()),
-        options,
-    ));
-    data_type.define(DataType::parser(data_type.clone(), options));
-    table_relation.define(TableRelation::parser(
-        (query.clone(), expression.clone(), table_relation.clone()),
-        options,
-    ));
-
-    expression
+    // This factory is interval-only; weak recursive backedges let each graph be dropped.
+    recursive(|expression| {
+        let data_type = recursive(|data_type| DataType::parser(data_type, options));
+        let query = recursive(|query| {
+            let table_relation = recursive(|table_relation| {
+                TableRelation::parser((query.clone(), expression.clone(), table_relation), options)
+            });
+            Query::parser((query, expression.clone(), table_relation), options)
+        });
+        Expr::parser((expression, query, data_type), options)
+    })
 }
 
 fn interval_literal<'a, I, E>(

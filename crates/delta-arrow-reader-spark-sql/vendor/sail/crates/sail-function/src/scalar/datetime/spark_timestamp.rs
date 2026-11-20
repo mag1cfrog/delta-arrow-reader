@@ -14,7 +14,9 @@ use datafusion_common::{Result, ScalarValue, exec_datafusion_err, exec_err};
 use datafusion_expr::{ColumnarValue, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility};
 use sail_common_datafusion::utils::datetime::localize_with_fallback;
 use sail_common_datafusion::utils::items::ItemTaker;
-use sail_sql_analyzer::parser::parse_timestamp;
+use sail_sql_analyzer::error::SqlResult;
+use sail_sql_analyzer::literal::datetime::TimestampValue;
+use sail_sql_analyzer::parser::{parse_timestamp, timestamp_parser};
 
 use crate::scalar::datetime::format::DateTimeFormat;
 
@@ -120,7 +122,15 @@ impl TimestampParser {
     }
 
     fn string_to_microseconds(&self, value: &str, safe: bool) -> Result<Option<i64>> {
-        let timestamp = match parse_timestamp(value) {
+        self.parsed_timestamp_to_microseconds(parse_timestamp(value), safe)
+    }
+
+    fn parsed_timestamp_to_microseconds(
+        &self,
+        timestamp: SqlResult<TimestampValue<'_>>,
+        safe: bool,
+    ) -> Result<Option<i64>> {
+        let timestamp = match timestamp {
             Ok(v) => v,
             Err(_e) if safe => return Ok(None),
             Err(e) => return Err(exec_datafusion_err!("{e}")),
@@ -272,6 +282,7 @@ impl ScalarUDFImpl for SparkTimestamp {
             }
             (ColumnarValue::Array(array), format) => {
                 let format = parse_scalar_format(format)?;
+                let mut parse = timestamp_parser();
                 let array: PrimitiveArray<TimestampMicrosecondType> = match array.data_type() {
                     DataType::Utf8 => as_string_array(&array)?
                         .iter()
@@ -281,7 +292,7 @@ impl ScalarUDFImpl for SparkTimestamp {
                                     .parser
                                     .formatted_string_to_microseconds(v, format, safe),
                                 ScalarFormat::Omitted => {
-                                    self.parser.string_to_microseconds(v, safe)
+                                    self.parser.parsed_timestamp_to_microseconds(parse(v), safe)
                                 }
                                 ScalarFormat::Null => Ok(None),
                             })
@@ -297,7 +308,7 @@ impl ScalarUDFImpl for SparkTimestamp {
                                     .parser
                                     .formatted_string_to_microseconds(v, format, safe),
                                 ScalarFormat::Omitted => {
-                                    self.parser.string_to_microseconds(v, safe)
+                                    self.parser.parsed_timestamp_to_microseconds(parse(v), safe)
                                 }
                                 ScalarFormat::Null => Ok(None),
                             })
@@ -313,7 +324,7 @@ impl ScalarUDFImpl for SparkTimestamp {
                                     .parser
                                     .formatted_string_to_microseconds(v, format, safe),
                                 ScalarFormat::Omitted => {
-                                    self.parser.string_to_microseconds(v, safe)
+                                    self.parser.parsed_timestamp_to_microseconds(parse(v), safe)
                                 }
                                 ScalarFormat::Null => Ok(None),
                             })
