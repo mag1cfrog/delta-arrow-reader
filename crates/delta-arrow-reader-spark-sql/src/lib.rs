@@ -29,6 +29,7 @@ use datafusion::error::{DataFusionError, Result};
 use datafusion::execution::SessionStateBuilder;
 use datafusion::logical_expr::LogicalPlan;
 use datafusion::optimizer::Optimizer;
+use datafusion::optimizer::analyzer::{Analyzer, AnalyzerRule};
 use datafusion::physical_optimizer::aggregate_statistics::PreserveAggregateStatisticsSchema;
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::prelude::SessionContext;
@@ -41,6 +42,7 @@ use sail_plan::projection_row_errors::CaptureSparkInputSortBoundaries;
 use sail_plan::relabel_pushdown::UnwrapSessionZoneRelabel;
 
 mod file_metadata;
+mod scan_rename_projections;
 mod statement_planning;
 
 /// Interpretation of timestamp types without an explicit timezone qualifier.
@@ -61,17 +63,34 @@ pub use sail_plan::config::PlanConfig as SparkSqlOptions;
 /// existing state, is kept as it is, without that rule. Call once before building
 /// the session.
 pub fn configure_spark_sql(mut builder: SessionStateBuilder) -> SessionStateBuilder {
+    let spark_rules: [Arc<dyn AnalyzerRule + Send + Sync>; 4] = [
+        Arc::new(PrepareSparkExpressions),
+        Arc::new(LowerSparkCorrelatedSubqueries),
+        Arc::new(PreserveSparkLikeErrors),
+        Arc::new(CaptureSparkInputSortBoundaries),
+    ];
     if builder.optimizer().is_none() {
         let mut optimizer = Optimizer::new();
         UnwrapSessionZoneRelabel::install(&mut optimizer);
+        if builder.analyzer().is_none() {
+            let analyzer = Analyzer::new();
+            let rules = scan_rename_projections::ScanRenameRules {
+                analyzer: analyzer.rules.iter().chain(&spark_rules).cloned().collect(),
+                optimizer: optimizer.rules.clone(),
+            };
+            builder
+                .config()
+                .get_or_insert_with(Default::default)
+                .set_extension(Arc::new(rules));
+            *builder.analyzer() = Some(analyzer);
+        }
         *builder.optimizer() = Some(optimizer);
     }
+    builder = builder.with_query_planner(Arc::new(SparkQueryPlanner));
+    for rule in spark_rules {
+        builder = builder.with_analyzer_rule(rule);
+    }
     builder
-        .with_query_planner(Arc::new(SparkQueryPlanner))
-        .with_analyzer_rule(Arc::new(PrepareSparkExpressions))
-        .with_analyzer_rule(Arc::new(LowerSparkCorrelatedSubqueries))
-        .with_analyzer_rule(Arc::new(PreserveSparkLikeErrors))
-        .with_analyzer_rule(Arc::new(CaptureSparkInputSortBoundaries))
 }
 
 /// A resolved Spark query with its output names before optimizer renaming.
@@ -99,7 +118,10 @@ impl SparkSqlQuery {
         let extensions = &mut state.config_mut().options_mut().extensions;
         extensions.insert(SparkSqlExpressionSemantics::default());
         extensions.insert(PreserveAggregateStatisticsSchema::default());
-        let frame = DataFrame::new(state, self.logical_plan.clone());
+        let planning_input =
+            scan_rename_projections::merge_scan_rename_projections(&self.logical_plan, &state)
+                .unwrap_or_else(|| self.logical_plan.clone());
+        let frame = DataFrame::new(state, planning_input);
         let physical = frame.create_physical_plan().await?;
         rename_physical_plan(physical, &self.column_names)
     }
