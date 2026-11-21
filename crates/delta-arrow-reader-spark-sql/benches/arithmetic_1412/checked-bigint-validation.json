@@ -38,7 +38,7 @@
     },
     {
       "id": "scalar.math.checked_bigint_signed_int_limits",
-      "spark_sql": "WITH operands AS (\n    SELECT id, CASE id WHEN 0 THEN CAST('-2147483648' AS BIGINT)\n                     WHEN 1 THEN CAST('2147483647' AS BIGINT)\n                     WHEN 2 THEN CAST(NULL AS BIGINT) ELSE i END AS lhs,\n               CASE id WHEN 0 THEN CAST('-2147483648' AS BIGINT)\n                       WHEN 1 THEN CAST('2147483647' AS BIGINT)\n                       WHEN 3 THEN CAST(NULL AS BIGINT) ELSE CAST(p AS BIGINT) END AS rhs\n    FROM bench WHERE id < 8\n)\nSELECT id,lhs+rhs AS summed,lhs-rhs AS difference,lhs*rhs AS product FROM operands",
+      "spark_sql": "WITH operands AS (\n    SELECT id, CASE id WHEN 0 THEN CAST('-2147483648' AS BIGINT)\n                     WHEN 1 THEN CAST('2147483647' AS BIGINT)\n                     WHEN 2 THEN CAST(NULL AS BIGINT)\n                     WHEN 4 THEN CAST('-2147483648' AS BIGINT)\n                     WHEN 5 THEN CAST('2147483647' AS BIGINT) ELSE i END AS lhs,\n               CASE id WHEN 0 THEN CAST('-2147483648' AS BIGINT)\n                       WHEN 1 THEN CAST('2147483647' AS BIGINT)\n                       WHEN 3 THEN CAST(NULL AS BIGINT)\n                       WHEN 4 THEN CAST('2147483647' AS BIGINT)\n                       WHEN 5 THEN CAST('-2147483648' AS BIGINT) ELSE CAST(p AS BIGINT) END AS rhs\n    FROM bench WHERE id < 8\n)\nSELECT id,lhs+rhs AS summed,lhs-rhs AS difference,lhs*rhs AS product FROM operands",
       "native_sql": null,
       "projection_sql": "SELECT id,i,p FROM bench"
     },
