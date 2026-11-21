@@ -10,8 +10,8 @@ use datafusion::optimizer::simplify_expressions::ExprSimplifier;
 use datafusion_common::{DFSchemaRef, ScalarValue};
 use datafusion_expr::simplify::SimplifyContextBuilder;
 use datafusion_expr::{
-    BinaryExpr, Expr, ExprSchemable, Operator, ScalarUDF, ScalarUDFImpl, binary_expr, cast, expr,
-    lit, try_cast,
+    BinaryExpr, Expr, ExprSchemable, LogicalPlan, Operator, ScalarUDF, ScalarUDFImpl, binary_expr,
+    cast, expr, lit, try_cast,
 };
 use datafusion_spark::function::math::expr_fn as math_fn;
 use datafusion_spark::function::math::hex::SparkHex;
@@ -63,10 +63,11 @@ use sail_function::scalar::spark_to_string::{SparkToLargeUtf8, SparkToUtf8, Spar
 pub(crate) use super::conditional::SparkNullIfZero;
 pub(crate) use super::integer_divide::SparkIntegerDivide;
 use crate::error::{PlanError, PlanResult};
-use crate::expression_errors::is_locally_evaluable;
+use crate::expression_errors::{is_locally_evaluable, passthrough_column_origin};
 use crate::function::common::{
     FunctionContextInput, ScalarFunction, ScalarFunctionInput, dictionary_string_type,
-    reject_calendar_interval_ordering, without_metadata_annotations,
+    reject_calendar_interval_ordering, without_inherited_column_metadata,
+    without_metadata_annotations,
 };
 use crate::function::result_coercion::{coerce_to_temporal, is_temporal_type};
 use crate::function::scalar::datetime::replan_make_interval_for_try;
@@ -2031,11 +2032,47 @@ pub(crate) fn column_cast(expr: &Expr, schema: &DFSchemaRef) -> bool {
     }
 }
 
+fn is_infallible_scan_operand(expr: &Expr, input: &LogicalPlan, schema: &DFSchemaRef) -> bool {
+    let expr = without_inherited_column_metadata(expr);
+    match expr {
+        Expr::Column(column) => passthrough_column_origin(input, column).is_ok_and(
+            |(origin, _)| matches!(origin, LogicalPlan::TableScan(scan) if scan.source.get_logical_plan().is_none()),
+        ),
+        Expr::Cast(cast) => {
+            matches!(
+                (cast.expr.get_type(schema).ok(), cast.field.data_type()),
+                (Some(DataType::Int32), DataType::Int64 | DataType::Float64)
+                    | (Some(DataType::Int64), DataType::Float64)
+            ) && is_infallible_scan_operand(&cast.expr, input, schema)
+        }
+        Expr::ScalarFunction(function) if function.func.inner().is::<SparkDecimalCast>() => {
+            let [value] = function.args.as_slice() else {
+                return false;
+            };
+            let fits = match (value.get_type(schema).ok(), expr.get_type(schema).ok()) {
+                (
+                    Some(DataType::Decimal128(source_precision, source_scale)),
+                    Some(DataType::Decimal128(precision, scale)),
+                ) => source_scale == scale && source_precision <= precision
+                    && precision <= DECIMAL128_MAX_PRECISION,
+                (Some(DataType::Int32), Some(DataType::Decimal128(precision, scale))) => {
+                    scale >= 0 && precision <= DECIMAL128_MAX_PRECISION
+                        && i16::from(precision) - i16::from(scale) >= 10
+                }
+                _ => false,
+            };
+            fits && is_infallible_scan_operand(value, input, schema)
+        }
+        _ => false,
+    }
+}
+
 // Division/remainder evaluate the divisor first; other arithmetic evaluates
 // the left operand first. Guard fallible column CASTs with native CASE.
 pub(crate) fn guard_cast_arithmetic(
     expr: Expr,
     schema: &DFSchemaRef,
+    projection_input: Option<&LogicalPlan>,
 ) -> datafusion_common::Result<datafusion_common::tree_node::Transformed<Expr>> {
     use datafusion_common::tree_node::Transformed;
     fn simple(expr: &Expr) -> bool {
@@ -2055,7 +2092,11 @@ pub(crate) fn guard_cast_arithmetic(
     }
     let args = match &expr {
         Expr::BinaryExpr(binary) if matches!(binary.op, Operator::Divide | Operator::Modulo) => {
-            Some((binary.left.as_ref(), binary.right.as_ref()))
+            Some((
+                binary.left.as_ref(),
+                binary.right.as_ref(),
+                binary.op == Operator::Divide,
+            ))
         }
         Expr::BinaryExpr(binary)
             if matches!(
@@ -2063,7 +2104,7 @@ pub(crate) fn guard_cast_arithmetic(
                 Operator::Plus | Operator::Minus | Operator::Multiply
             ) =>
         {
-            Some((binary.right.as_ref(), binary.left.as_ref()))
+            Some((binary.right.as_ref(), binary.left.as_ref(), true))
         }
         Expr::ScalarFunction(f)
             if f.func.inner().is::<SparkCheckedDivide>()
@@ -2071,13 +2112,27 @@ pub(crate) fn guard_cast_arithmetic(
                 || f.func.inner().is::<SparkCheckedModulo>()
                 || f.func.inner().is::<SparkIntegerDivide>() =>
         {
-            Some((&f.args[0], &f.args[1]))
+            Some((
+                &f.args[0],
+                &f.args[1],
+                f.func.inner().is::<SparkCheckedDivide>()
+                    || f.func.inner().is::<FusedDecimalDivide>(),
+            ))
         }
         _ => None,
     };
-    if let Some((left, right)) = args {
+    if let Some((left, right, supports_scan_guard_elision)) = args {
         let cast = column_cast(left, schema);
         if cast && (simple(right) || column_cast(right, schema)) && right.nullable(schema)? {
+            // A scan column and a widening cast cannot hide a deferred expression error.
+            if supports_scan_guard_elision
+                && projection_input.is_some_and(|input| {
+                    is_infallible_scan_operand(left, input, schema)
+                        && is_infallible_scan_operand(right, input, schema)
+                })
+            {
+                return Ok(Transformed::no(expr));
+            }
             let data_type = expr.get_type(schema)?;
             // ponytail: live rows repeat the simple divisor; a physical selection
             // node can avoid that copy if the recorded CAST cost warrants it.

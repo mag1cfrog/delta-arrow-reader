@@ -2833,3 +2833,11 @@ TRY_ADD, TRY_SUBTRACT and TRY_MULTIPLY can return Arrow's checked
 result for a batch of same-width signed integers. A failed batch
 uses the original per-row kernel so overflow nulls only the
 affected values. The ANSI operators use the existing error path.
+
+### Skip arithmetic NULL guards for infallible scan operands (#1412)
+
+A projection over stored columns can add, subtract, multiply or divide
+directly when its only conversions are the proven widening integer,
+DOUBLE or DECIMAL casts. Column lineage must reach a table scan without
+a logical view definition. Computed inputs and other conversions retain
+their original arithmetic NULL guards.

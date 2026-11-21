@@ -535,7 +535,7 @@ fn fold_rand_comparison(expr: Expr, simplifier: &ExprSimplifier) -> Result<Trans
     Ok(Transformed::yes(lit(result)))
 }
 
-fn passthrough_column_origin<'a>(
+pub(crate) fn passthrough_column_origin<'a>(
     input: &'a LogicalPlan,
     column: &datafusion_common::Column,
 ) -> Result<(&'a LogicalPlan, usize)> {
@@ -867,6 +867,10 @@ impl PrepareSparkExpressions {
                 } else {
                     Arc::new(DFSchema::empty())
                 };
+                let projection_input = match &node {
+                    LogicalPlan::Projection(projection) => Some(Arc::clone(&projection.input)),
+                    _ => None,
+                };
                 let names = datafusion_expr::expr_rewriter::NamePreserver::new(&node);
                 node.map_expressions(|expr| {
                     let name = names.save(&expr);
@@ -965,7 +969,7 @@ impl PrepareSparkExpressions {
                                 if restored.transformed {
                                     return Ok(restored);
                                 }
-                                guard_cast_arithmetic(restored.data, &schema)
+                                guard_cast_arithmetic(restored.data, &schema, projection_input.as_deref())
                             } else {
                                 Ok(Transformed::no(expr))
                             }
