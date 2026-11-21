@@ -2651,3 +2651,11 @@ its prepared return type when its center type matches the actual input.
 If a physical rewrite retains a different return type, the accumulator
 builds the original fields for the new input. The bin calculation,
 trims, seeded tie choices and output casts are unchanged.
+
+### Literal zones in CONVERT_TIMEZONE (#1409)
+
+Two valid nonnull literal zones let the planner use the scalar conversion
+path because neither can skip evaluation of the timestamp. The converter
+resolves both singular zones once when at least one timestamp is present.
+Dynamic, NULL and invalid zones retain the original argument evaluation
+and error behavior.

@@ -433,11 +433,21 @@ fn convert_tz_inner(
                 (true, true) => {
                     let from_tz = from_tzs.next().flatten();
                     let to_tz = to_tzs.next().flatten();
-
-                    micros_arr
-                        .iter()
-                        .map(|ts| from_to_utc_timestamp_func((ts, from_tz, to_tz)))
-                        .collect::<Result<Int64Array>>()
+                    if micros_arr.null_count() == micros_arr.len()
+                        || from_tz.is_none()
+                        || to_tz.is_none()
+                    {
+                        Ok(Int64Array::new_null(micros_arr.len()))
+                    } else {
+                        let from_tz = parse_tz(from_tz)?;
+                        let to_tz = parse_tz(to_tz)?;
+                        micros_arr
+                            .iter()
+                            .map(|ts| {
+                                eager_from_to_utc_timestamp_func((ts, Ok(from_tz), Ok(to_tz)))
+                            })
+                            .collect::<Result<Int64Array>>()
+                    }
                 }
                 (true, false) => {
                     let from_tz = from_tzs.next().flatten();

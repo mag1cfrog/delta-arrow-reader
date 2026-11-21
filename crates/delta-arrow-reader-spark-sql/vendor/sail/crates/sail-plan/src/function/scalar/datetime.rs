@@ -20,7 +20,9 @@ use sail_common::utils::datetime::time_unit_to_multiplier;
 use sail_common_datafusion::literal::LiteralEvaluator;
 use sail_common_datafusion::utils::items::ItemTaker;
 use sail_common_datafusion::variant::is_variant_storage_field;
-use sail_function::scalar::datetime::convert_tz::{ConvertTz, ConvertTzLazy};
+use sail_function::scalar::datetime::convert_tz::{
+    ConvertTz, ConvertTzLazy, normalize_session_timezone,
+};
 use sail_function::scalar::datetime::spark_date::SparkDate;
 use sail_function::scalar::datetime::spark_date_day_arithmetic::SparkDateDayArithmetic;
 use sail_function::scalar::datetime::spark_date_format::SparkDateFormat;
@@ -1669,7 +1671,12 @@ fn convert_timezone(input: ScalarFunctionInput) -> PlanResult<Expr> {
                 }
             })?;
 
-    if requires_scalar_evaluation {
+    let valid_literal_zones = [&from_tz, &to_tz].into_iter().all(|zone| {
+        matches!(zone, Expr::Literal(value, _) if value.try_as_str().flatten()
+            .and_then(normalize_session_timezone).is_some())
+    });
+    // Both nonnull literal zones leave every timestamp row active.
+    if requires_scalar_evaluation || valid_literal_zones {
         Ok(
             ScalarUDF::from(ConvertTz::new(true).with_null_short_circuit())
                 .call(vec![from_tz, to_tz, ts]),
