@@ -2621,6 +2621,16 @@ conversion for dates outside Chrono's range and for scalar arguments.
 The [differential test](tests/date_boundaries/year_from_epoch_days.rs)
 compares both ANSI modes at the calendar and Date32 storage limits.
 
+### ILIKE with a literal ASCII prefix (#1413)
+
+For a Utf8 column and up to 32 ASCII letters or digits followed by
+`%`, ILIKE uses the native case-insensitive predicate on ASCII
+batches. Unicode batches still lowercase the column and match the
+lowercase prefix with the case-sensitive predicate. The general path
+handles other patterns, storage types and explicit escapes. The
+[differential test](tests/ilike/literal_prefix.rs) compares both paths
+in both ANSI modes.
+
 ### AES scalar and column arguments (#1405)
 
 The local Sail AES functions evaluate inputs, keys, modes, padding, IVs and

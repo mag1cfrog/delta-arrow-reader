@@ -1,5 +1,8 @@
 //! Spark ILIKE lowers original operands before ordinary case-sensitive LIKE.
 
+#[path = "ilike/literal_prefix.rs"]
+mod literal_prefix;
+
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
