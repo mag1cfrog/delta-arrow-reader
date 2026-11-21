@@ -1,6 +1,8 @@
 //! Compare exact weighted numeric percentiles with independent Spark results.
 
+use datafusion::execution::SessionStateBuilder;
 use datafusion::prelude::{SessionConfig, SessionContext};
+use delta_arrow_reader_spark_sql::configure_spark_sql;
 use serde_json::{Value, json};
 
 #[path = "support/spark_inputs.rs"]
@@ -81,10 +83,17 @@ async fn unweighted_double_percentiles_match_unit_frequency_in_window_and_plain_
             .next()
             .ok_or("Missing percentile inputs")?,
     )?;
-    let session = SessionContext::new_with_config(
-        SessionConfig::new()
-            .with_batch_size(4)
-            .with_target_partitions(1),
+    let session = SessionContext::new_with_state(
+        configure_spark_sql(
+            SessionStateBuilder::new()
+                .with_default_features()
+                .with_config(
+                    SessionConfig::new()
+                        .with_batch_size(4)
+                        .with_target_partitions(1),
+                ),
+        )
+        .build(),
     );
     spark_inputs::register_recorded_inputs(&session, &recorded_inputs, 4)?;
     for ansi in [false, true] {
@@ -97,7 +106,7 @@ async fn unweighted_double_percentiles_match_unit_frequency_in_window_and_plain_
             ),
             (
                 "id, ",
-                " OVER (PARTITION BY g ORDER BY CAST(id AS BIGINT) RANGE BETWEEN 3 PRECEDING AND CURRENT ROW) FROM samples ORDER BY id",
+                " OVER (PARTITION BY g ORDER BY id RANGE BETWEEN 3 PRECEDING AND CURRENT ROW) FROM samples ORDER BY id",
             ),
             (
                 "id, ",
