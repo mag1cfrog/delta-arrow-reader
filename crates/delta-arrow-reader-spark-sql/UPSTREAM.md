@@ -2826,3 +2826,10 @@ zero and negative divisors and the existing ANSI behavior.
 A same-scale array cast can share its values and validity when every
 stored value fits the narrower precision. Otherwise it uses the
 original Arrow cast with the existing ANSI and TRY policies.
+
+### Batch checked arithmetic for integer TRY operations (#1412)
+
+TRY_ADD, TRY_SUBTRACT and TRY_MULTIPLY can return Arrow's checked
+result for a batch of same-width signed integers. A failed batch
+uses the original per-row kernel so overflow nulls only the
+affected values. The ANSI operators use the existing error path.
