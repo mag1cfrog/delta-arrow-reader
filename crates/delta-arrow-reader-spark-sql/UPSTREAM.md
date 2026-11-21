@@ -2718,3 +2718,10 @@ in a BIGINT List or LargeList column in one pass through offsets and child value
 Strict lookup returns a prefix and the original bounds error at the first
 out-of-bounds row. Other indexes, expressions, storage and element types
 retain the existing lowering.
+
+### Inner-array validity in FLATTEN (#1410)
+
+FLATTEN checks the inner list validity bitmap for canonical nested BIGINT
+List and LargeList columns. The existing CASE still selects rows for native
+flattening, so NULL parents, NULL inner arrays and NULL scalar elements
+keep their original behavior. Other shapes keep the membership probe.

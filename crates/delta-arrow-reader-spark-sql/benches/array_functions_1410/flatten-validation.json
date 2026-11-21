@@ -1,0 +1,10 @@
+{
+  "functions": [
+    {
+      "id": "scalar.array.flatten_map_leaf",
+      "spark_sql": "SELECT id, FLATTEN(nested_maps) AS value FROM (SELECT id, ARRAY(CASE WHEN id=0 THEN NULL ELSE ARRAY(m) END) AS nested_maps FROM bench WHERE id IN (0,1,2)) b",
+      "native_sql": null,
+      "projection_sql": "SELECT id, m FROM bench"
+    }
+  ]
+}
