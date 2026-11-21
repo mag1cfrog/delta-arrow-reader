@@ -2,9 +2,10 @@
 
 use std::sync::Arc;
 
-use arrow::array::{ArrayRef, BinaryArray, Int64Array, StringArray};
+use arrow::array::{ArrayRef, BinaryArray, BooleanArray, Int64Array, StringArray};
 use arrow::record_batch::RecordBatch;
 use datafusion::common::{DataFusionError, ScalarValue};
+use datafusion::datasource::MemTable;
 use datafusion::error::Result;
 use datafusion::execution::SessionStateBuilder;
 use datafusion::physical_plan::{collect, displayable};
@@ -33,6 +34,11 @@ const CASES: &[(&str, &str, bool)] = &[
     (
         "plain_all_null",
         "SELECT string_agg(s, '|') FROM samples WHERE id = 0",
+        true,
+    ),
+    (
+        "plain_groups_and_filter",
+        "SELECT g, listagg(s, '|') FILTER (WHERE keep) FROM grouped_samples GROUP BY g ORDER BY g",
         true,
     ),
     (
@@ -91,6 +97,7 @@ const CASES: &[(&str, &str, bool)] = &[
         "SELECT id, listagg(s, sep) OVER (ORDER BY id ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) FROM samples ORDER BY id",
         false,
     ),
+    ("plain_missing_value", "SELECT listagg()", false),
 ];
 
 fn make_session() -> Result<SessionContext> {
@@ -137,6 +144,22 @@ fn make_session() -> Result<SessionContext> {
             ("b", bytes),
         ])?,
     )?;
+    let groups: ArrayRef = Arc::new(Int64Array::from(vec![0, 1, 2]));
+    let strings: ArrayRef = Arc::new(StringArray::from(vec!["", "filtered", "repeat"]));
+    let keep: ArrayRef = Arc::new(BooleanArray::from(vec![true, false, true]));
+    let group_batch = RecordBatch::try_from_iter([("g", groups), ("s", strings), ("keep", keep)])?;
+    let grouped = MemTable::try_new(
+        group_batch.schema(),
+        vec![vec![group_batch.clone()], vec![group_batch]],
+    )?;
+    session.register_table("grouped_samples", Arc::new(grouped))?;
+    let long_input: ArrayRef = Arc::new(StringArray::from_iter(
+        std::iter::once(Some("kept")).chain(std::iter::repeat_n(None, 8191)),
+    ));
+    session.register_batch(
+        "long_input",
+        RecordBatch::try_from_iter([("s", long_input)])?,
+    )?;
     Ok(session)
 }
 
@@ -145,6 +168,7 @@ async fn observe(
     sql: &str,
     ansi_mode: bool,
     direct: bool,
+    case_id: &str,
 ) -> Result<Value> {
     let options = SparkSqlOptions {
         ansi_mode,
@@ -154,6 +178,7 @@ async fn observe(
         Ok(plan) => plan,
         Err(error) => return Ok(json!({ "error": error.to_string() })),
     };
+    let resolved = logical.logical_plan.display_indent().to_string();
     let physical = match logical.create_physical_plan(session).await {
         Ok(plan) => plan,
         Err(error) => return Ok(json!({ "error": error.to_string() })),
@@ -162,7 +187,7 @@ async fn observe(
         .indent(true)
         .to_string()
         .to_ascii_lowercase();
-    check_string_path(&plan, direct, sql);
+    check_string_path(&resolved, &plan, direct, case_id);
     let types: Vec<_> = physical
         .schema()
         .fields()
@@ -179,7 +204,7 @@ async fn observe(
                     .iter()
                     .map(|field| format!("{:?}", field.data_type()))
                     .collect();
-                assert_eq!(types, actual_types, "{sql}");
+                assert_eq!(types, actual_types, "{case_id}");
                 for row in 0..batch.num_rows() {
                     let values = batch
                         .columns()
@@ -201,12 +226,32 @@ async fn observe(
     Ok(json!({ "types": types, "rows": rows }))
 }
 
-fn check_string_path(plan: &str, direct: bool, sql: &str) {
-    assert_eq!(
-        plan.contains("string_agg(") && !plan.contains("array_to_string("),
-        direct,
-        "{sql}\n{plan}",
-    );
+fn check_string_path(logical: &str, physical: &str, direct: bool, case_id: &str) {
+    let uses_string_aggregate =
+        physical.contains("aggr=[string_agg(") || physical.contains("wdw=[string_agg(");
+    if direct {
+        assert!(
+            uses_string_aggregate,
+            "{case_id}: expected the direct accumulator"
+        );
+        assert!(
+            physical.contains("utf8view("),
+            "{case_id}: expected a Utf8View delimiter"
+        );
+        assert!(
+            !logical.contains("array_to_string("),
+            "{case_id}: list lowering still present"
+        );
+    } else {
+        assert!(
+            !uses_string_aggregate,
+            "{case_id}: direct accumulator used on fallback"
+        );
+        assert!(
+            logical.contains("array_to_string("),
+            "{case_id}: expected the list lowering"
+        );
+    }
 }
 
 fn check_staging(observations: Vec<Value>) -> Result<()> {
@@ -223,12 +268,21 @@ async fn direct_listagg_matches_staging_in_both_ansi_modes() -> Result<()> {
     let mut observations = Vec::new();
     for (id, sql, direct) in CASES {
         for ansi_mode in [false, true] {
-            let result = observe(&session, sql, ansi_mode, *direct).await?;
+            let result = observe(&session, sql, ansi_mode, *direct, id).await?;
             if *direct {
                 assert!(result.get("rows").is_some(), "{id}: {result}");
             }
             observations.push(json!({ "id": id, "ansi_mode": ansi_mode, "result": result }));
         }
+    }
+    // An offset-based array would try to repeat 2 GiB of delimiter bytes.
+    let delimiter = "x".repeat(262_144);
+    let sql = format!("SELECT listagg(s, '{delimiter}') FROM long_input");
+    for ansi_mode in [false, true] {
+        let id = "plain_long_delimiter";
+        let result = observe(&session, &sql, ansi_mode, true, id).await?;
+        assert_eq!(result, json!({"types":["Utf8"],"rows":[["kept"]]}));
+        observations.push(json!({ "id": id, "ansi_mode": ansi_mode, "result": result }));
     }
     check_staging(observations)
 }

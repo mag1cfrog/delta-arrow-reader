@@ -966,12 +966,18 @@ pub(super) fn coalesce_to_empty_array(
     }
 }
 
-pub(super) fn supports_direct_string_agg(value_type: &DataType, delimiter: &expr::Expr) -> bool {
-    value_type == &DataType::Utf8
-        && matches!(
-            delimiter,
-            expr::Expr::Literal(ScalarValue::Utf8(Some(_)), _)
-        )
+pub(super) fn direct_string_agg_delimiter(
+    value_type: &DataType,
+    delimiter: &expr::Expr,
+) -> Option<expr::Expr> {
+    if value_type == &DataType::Utf8
+        && let expr::Expr::Literal(ScalarValue::Utf8(Some(delimiter)), _) = delimiter
+    {
+        // Scalar expansion shares the bytes of a Utf8View delimiter across the input batch.
+        Some(lit(ScalarValue::Utf8View(Some(delimiter.clone()))))
+    } else {
+        None
+    }
 }
 
 fn listagg(input: AggFunctionInput) -> PlanResult<expr::Expr> {
@@ -988,12 +994,12 @@ fn listagg(input: AggFunctionInput) -> PlanResult<expr::Expr> {
     if !input.distinct
         && input.order_by.is_empty()
         && other_args.len() <= 1
-        && supports_direct_string_agg(&value_type, &delim)
+        && let Some(view_delimiter) = direct_string_agg_delimiter(&value_type, &delim)
     {
         let aggregate = expr::Expr::AggregateFunction(AggregateFunction {
             func: string_agg::string_agg_udaf(),
             params: AggregateFunctionParams {
-                args: vec![agg_col, delim],
+                args: vec![agg_col, view_delimiter],
                 distinct: false,
                 order_by: Vec::new(),
                 filter: input.filter,

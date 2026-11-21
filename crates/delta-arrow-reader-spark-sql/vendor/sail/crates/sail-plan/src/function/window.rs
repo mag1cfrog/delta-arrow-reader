@@ -46,7 +46,7 @@ use sail_function::window::spark_ntile_udwf;
 use crate::error::{PlanError, PlanResult};
 use crate::function::aggregate::{
     coalesce_to_empty_array, coerce_count_if_predicate, coerce_string_numeric_arguments,
-    filtered_count_if_is_constant_zero, string_numeric_argument_count, supports_direct_string_agg,
+    direct_string_agg_delimiter, filtered_count_if_is_constant_zero, string_numeric_argument_count,
 };
 use crate::function::common::{
     WinFunction, WinFunctionInput, count_min_sketch_args, drop_inherited_column_metadata,
@@ -534,12 +534,12 @@ fn listagg(input: WinFunctionInput) -> PlanResult<expr::Expr> {
         && !order_by.is_empty()
         && !distinct
         && other_args.len() <= 1
-        && supports_direct_string_agg(&value_type, &delim)
+        && let Some(view_delimiter) = direct_string_agg_delimiter(&value_type, &delim)
     {
         let aggregate = expr::Expr::WindowFunction(Box::new(expr::WindowFunction {
             fun: WindowFunctionDefinition::AggregateUDF(string_agg::string_agg_udaf()),
             params: WindowFunctionParams {
-                args: vec![agg_col, delim],
+                args: vec![agg_col, view_delimiter],
                 partition_by,
                 order_by,
                 window_frame,

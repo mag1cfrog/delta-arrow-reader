@@ -13,6 +13,8 @@
     {"id": "plain_empty_input", "ansi_mode": true, "result": {"types": ["Utf8"], "rows": [[null]]}},
     {"id": "plain_all_null", "ansi_mode": false, "result": {"types": ["Utf8"], "rows": [[null]]}},
     {"id": "plain_all_null", "ansi_mode": true, "result": {"types": ["Utf8"], "rows": [[null]]}},
+    {"id": "plain_groups_and_filter", "ansi_mode": false, "result": {"types": ["Int64", "Utf8"], "rows": [["0", "|"], ["1", null], ["2", "repeat|repeat"]]}},
+    {"id": "plain_groups_and_filter", "ansi_mode": true, "result": {"types": ["Int64", "Utf8"], "rows": [["0", "|"], ["1", null], ["2", "repeat|repeat"]]}},
     {"id": "plain_distinct", "ansi_mode": false, "result": {"types": ["Utf8"], "rows": [[",a,b,tail,é"]]}},
     {"id": "plain_distinct", "ansi_mode": true, "result": {"types": ["Utf8"], "rows": [[",a,b,tail,é"]]}},
     {"id": "plain_ordered", "ansi_mode": false, "result": {"types": ["Utf8"], "rows": [["tail,é,a,b,é,"]]}},
@@ -36,6 +38,10 @@
     {"id": "window_empty_frame", "ansi_mode": false, "result": {"types": ["Int64", "Utf8"], "rows": [["0", null], ["1", null], ["2", ""], ["3", "|é"], ["4", "é|a,b"], ["5", "a,b|é"], ["6", "é"], ["7", null]]}},
     {"id": "window_empty_frame", "ansi_mode": true, "result": {"types": ["Int64", "Utf8"], "rows": [["0", null], ["1", null], ["2", ""], ["3", "|é"], ["4", "é|a,b"], ["5", "a,b|é"], ["6", "é"], ["7", null]]}},
     {"id": "window_dynamic_delimiter", "ansi_mode": false, "result": {"types": ["Int64", "Utf8"], "rows": [["0", null], ["1", ""], ["2", null], ["3", ":é:a,b"], ["4", "é|a,b|é"], ["5", "a,b-é"], ["6", null], ["7", "tail"]]}},
-    {"id": "window_dynamic_delimiter", "ansi_mode": true, "result": {"types": ["Int64", "Utf8"], "rows": [["0", null], ["1", ""], ["2", null], ["3", ":é:a,b"], ["4", "é|a,b|é"], ["5", "a,b-é"], ["6", null], ["7", "tail"]]}}
+    {"id": "window_dynamic_delimiter", "ansi_mode": true, "result": {"types": ["Int64", "Utf8"], "rows": [["0", null], ["1", ""], ["2", null], ["3", ":é:a,b"], ["4", "é|a,b|é"], ["5", "a,b-é"], ["6", null], ["7", "tail"]]}},
+    {"id": "plain_missing_value", "ansi_mode": false, "result": {"error": "External error: error in DataFusion: Error during planning: expected at least one value, but got an empty vector"}},
+    {"id": "plain_missing_value", "ansi_mode": true, "result": {"error": "External error: error in DataFusion: Error during planning: expected at least one value, but got an empty vector"}},
+    {"id": "plain_long_delimiter", "ansi_mode": false, "result": {"types": ["Utf8"], "rows": [["kept"]]}},
+    {"id": "plain_long_delimiter", "ansi_mode": true, "result": {"types": ["Utf8"], "rows": [["kept"]]}}
   ]
 }

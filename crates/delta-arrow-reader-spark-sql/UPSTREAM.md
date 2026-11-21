@@ -2608,6 +2608,7 @@ LISTAGG and STRING_AGG with a nonnull Utf8 literal delimiter. The plain
 aggregate uses it without DISTINCT or aggregate-local ordering. The window
 aliases use it on ordered bounded ROWS frames that end at the current row.
 DataFusion concatenates the nonnull strings directly and the final cast
-returns Utf8. Other argument forms, binary values, and other window frames
+returns Utf8. A Utf8View literal shares delimiter bytes when the executor
+expands the literal over a batch. Other argument forms, binary values, and other window frames
 use the original list-based lowering. The array_join scalar function is
 separate from the window alias.
