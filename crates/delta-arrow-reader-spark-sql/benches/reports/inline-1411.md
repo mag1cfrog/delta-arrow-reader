@@ -52,8 +52,8 @@ candidate minus staging in ns per input row.
 | Off | -0.648 | -0.648 | +0.050 |
 | On | -0.071 | +0.544 | -0.137 |
 
-The timings establish parity and an unmet target. The small aggregate
-median change lacks consistent paired support. Staging keeps the
+The preflight established parity. The timing target remains unmet. The small
+aggregate median change lacks consistent paired support. Staging keeps the
 original projection. Its two ANSI medians are 8.481 and 8.494 ns per
 row above the staging native control in this session.
 
