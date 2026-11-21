@@ -2621,3 +2621,10 @@ candidates unnecessary. Equal keys keep their arrival order, and a NULL
 value can win on a nonnull key. Retraction removes candidates whose rows
 have left the frame. Ordinary aggregates and other types use the original
 accumulator.
+
+### Direct Float64 percentile counts (#1408)
+
+Numeric percentiles with Float64 input and implicit unit frequency use the
+typed batch directly. Count updates, retraction and interpolation stay
+shared with the original path. Other input types and explicit frequencies
+continue through the original cast and frequency validation.

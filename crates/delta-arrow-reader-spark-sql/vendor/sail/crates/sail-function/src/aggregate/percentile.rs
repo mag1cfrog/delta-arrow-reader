@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::fmt::Debug;
 use std::sync::Arc;
 
@@ -272,6 +273,12 @@ impl NumericPercentileAccumulator {
         let Some(array) = values.first() else {
             return Ok(());
         };
+        if array.data_type() == &DataType::Float64 && values.get(2).is_none() {
+            for value in as_float64_array(array)?.iter().flatten() {
+                self.apply_count(value, 1, retract)?;
+            }
+            return Ok(());
+        }
         let float_array = arrow::compute::cast(array, &DataType::Float64)?;
         let float_array = as_float64_array(&float_array)?;
         let frequencies = values
@@ -1582,6 +1589,58 @@ mod numeric_frequency_tests {
             probabilities,
             Arc::new(Int64Array::from(frequencies)),
         ]
+    }
+
+    #[test]
+    fn unweighted_float64_preserves_bits_across_updates_and_retractions() -> Result<()> {
+        let rows = vec![
+            None,
+            Some(-0.0),
+            Some(0.0),
+            Some(f64::NEG_INFINITY),
+            Some(f64::INFINITY),
+            Some(f64::from_bits(0x7ff8_0000_0000_0001)),
+            Some(f64::from_bits(0xfff8_0000_0000_0002)),
+            Some(f64::MIN_POSITIVE),
+            Some(f64::MAX),
+            Some(f64::MIN),
+        ];
+        let len = rows.len();
+        let weighted_rows = inputs(rows, vec![Some(1); len]);
+        let slices = |start, end| {
+            weighted_rows
+                .iter()
+                .map(|column| column.slice(start, end - start))
+                .collect::<Vec<_>>()
+        };
+        let float_bits = |value: ScalarValue| match value {
+            ScalarValue::Float64(value) => Ok(value.map(f64::to_bits)),
+            other => Err(DataFusionError::Internal(format!(
+                "Expected Float64 percentile, got {}",
+                other.data_type()
+            ))),
+        };
+        for probability in [0.0, 0.25, 0.5, 1.0] {
+            let mut unweighted = NumericPercentileAccumulator::new(probability);
+            let mut original = NumericPercentileAccumulator::new(probability);
+            let mut previous = 0..0;
+            for frame in [0..0, 0..3, 1..5, 3..7, 5..8, 6..10, 10..10] {
+                let added = slices(previous.end, frame.end);
+                let removed = slices(previous.start, frame.start);
+                unweighted.update_batch(&added[..2])?;
+                original.update_batch(&added)?;
+                unweighted.retract_batch(&removed[..2])?;
+                original.retract_batch(&removed)?;
+                assert_eq!(
+                    float_bits(unweighted.evaluate()?)?,
+                    float_bits(original.evaluate()?)?,
+                    "{probability}, {frame:?}"
+                );
+                assert_eq!(unweighted.total_count, original.total_count);
+                previous = frame;
+            }
+        }
+        Ok(())
     }
 
     #[test]
