@@ -130,3 +130,70 @@ async fn configured_native_case_keeps_plain_results() -> TestResult {
     }
     Ok(())
 }
+
+#[tokio::test]
+async fn bigint_case_with_widening_else_matches_native() -> TestResult {
+    use std::sync::Arc;
+
+    use arrow::array::{ArrayRef, BooleanArray, Int32Array, Int64Array, RecordBatch};
+
+    let session = SessionContext::new_with_state(
+        configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
+    );
+    session.register_batch(
+        "operands",
+        RecordBatch::try_from_iter([
+            (
+                "flag",
+                Arc::new(BooleanArray::from(vec![
+                    Some(true),
+                    Some(false),
+                    None,
+                    Some(true),
+                    Some(false),
+                ])) as ArrayRef,
+            ),
+            (
+                "wide",
+                Arc::new(Int64Array::from(vec![
+                    None,
+                    Some(1),
+                    Some(2),
+                    Some(i64::MAX),
+                    Some(i64::MIN),
+                ])),
+            ),
+            (
+                "narrow",
+                Arc::new(Int32Array::from(vec![
+                    Some(3),
+                    Some(i32::MIN),
+                    Some(i32::MAX),
+                    Some(4),
+                    None,
+                ])),
+            ),
+        ])?,
+    )?;
+    for predicate in ["", " WHERE false"] {
+        let sql = format!(
+            "SELECT CASE WHEN flag THEN wide ELSE CAST(narrow AS BIGINT) END AS result FROM operands{predicate}"
+        );
+        let expected = session.sql(&sql).await?.collect().await?;
+        for ansi_mode in [false, true] {
+            let query = plan_query(
+                &session,
+                &sql,
+                &SparkSqlOptions {
+                    ansi_mode,
+                    ..Default::default()
+                },
+            )
+            .await?;
+            let physical = query.create_physical_plan(&session).await?;
+            let actual = collect(physical, session.task_ctx()).await?;
+            assert_eq!(actual, expected, "{sql}, ANSI={ansi_mode}");
+        }
+    }
+    Ok(())
+}

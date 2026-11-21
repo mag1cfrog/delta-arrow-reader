@@ -2775,8 +2775,8 @@ existing per-row encoder.
 
 A single Boolean column guard and BIGINT column result without ELSE
 use the native searched CASE mask. The output keeps its nullable BIGINT
-type. Conditions or results resolved as expressions, additional arms and
-explicit ELSE keep the Spark searched CASE planning path.
+type. Conditions or results resolved as expressions and additional arms
+keep the Spark searched CASE planning path.
 
 ### Native filter for a plain COUNT_IF column (#1411)
 
@@ -2799,3 +2799,10 @@ built by SparkArray directly. Its pre-expansion declaration retains the
 original STRUCT type. Expansion emits the nullable `col0` field and
 retains row order and NULL padding. Other STACK shapes
 retain the existing zip and inline projection.
+
+### Native searched CASE with a widening BIGINT ELSE (#1411)
+
+A single Boolean column guard with a BIGINT column result and an
+INTEGER column widened to BIGINT in ELSE uses native searched CASE.
+The widening expression and its result annotation are retained. Other
+explicit ELSE shapes use the existing Spark searched CASE path.

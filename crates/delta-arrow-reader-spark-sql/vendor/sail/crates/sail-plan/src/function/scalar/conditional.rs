@@ -11,6 +11,7 @@ use sail_common_datafusion::utils::items::ItemTaker;
 use crate::error::{PlanError, PlanResult};
 use crate::function::common::{
     ScalarFunction, ScalarFunctionInput, reject_calendar_interval_ordering,
+    without_inherited_column_metadata,
 };
 use crate::function::numeric_coercion::common_numeric_type;
 use crate::function::result_coercion::{
@@ -59,18 +60,30 @@ fn case(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         .zip(branch_values)
         .map(|(condition, value)| (Box::new(condition), Box::new(value)))
         .collect::<Vec<_>>();
-    if else_expr.is_none()
-        && let [(condition, value)] = when_then_expr.as_slice()
+    let schema = function_context.schema;
+    if let [(condition, value)] = when_then_expr.as_slice()
         && matches!(condition.as_ref(), expr::Expr::Column(_))
         && matches!(value.as_ref(), expr::Expr::Column(_))
-        && value.get_type(function_context.schema)? == DataType::Int64
+        && value.get_type(schema)? == DataType::Int64
     {
-        // Without ELSE, a Boolean column still yields nullable BIGINT in the native mask path.
-        return Ok(expr::Expr::Case(expr::Case::new(
-            None,
-            when_then_expr,
-            None,
-        )));
+        let uses_native_case = match else_expr.as_deref().map(without_inherited_column_metadata) {
+            None => true,
+            Some(expr::Expr::Cast(widening))
+                if widening.field.data_type() == &DataType::Int64
+                    && matches!(widening.expr.as_ref(), expr::Expr::Column(_)) =>
+            {
+                widening.expr.get_type(schema)? == DataType::Int32
+            }
+            _ => false,
+        };
+        if uses_native_case {
+            // Both arms already have the declared BIGINT type and widening cannot fail.
+            return Ok(expr::Expr::Case(expr::Case::new(
+                None,
+                when_then_expr,
+                else_expr,
+            )));
+        }
     }
     Ok(expr::Expr::Case(expr::Case::new_spark_searched(
         when_then_expr,
