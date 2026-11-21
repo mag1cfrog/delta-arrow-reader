@@ -2841,3 +2841,10 @@ directly when its only conversions are the proven widening integer,
 DOUBLE or DECIMAL casts. Column lineage must reach a table scan without
 a logical view definition. Computed inputs and other conversions retain
 their original arithmetic NULL guards.
+
+### Vector negation of ANSI BIGINT arrays (#1412)
+
+An ANSI BIGINT array without the signed minimum uses Arrow's wrapping
+negation with its original validity mask. Arrays with the minimum in
+any slot, scalar operands and other types use the existing checked
+or wrapping Spark kernel for their mode.
