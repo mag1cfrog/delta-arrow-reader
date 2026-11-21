@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use datafusion::arrow::array::{Array, AsArray, BooleanArray, GenericListArray, OffsetSizeTrait};
 use datafusion::arrow::buffer::BooleanBuffer;
-use datafusion::arrow::datatypes::DataType;
+use datafusion::arrow::datatypes::{DataType, Field};
 use datafusion::common::Result;
 use datafusion::logical_expr::{ColumnarValue, ScalarUDFImpl, Signature, Volatility};
 use datafusion_common::plan_err;
@@ -58,12 +58,20 @@ impl ScalarUDFImpl for Explode {
     }
 
     fn return_type(&self, arg_types: &[DataType]) -> Result<DataType> {
-        match &arg_types {
-            &[DataType::List(f)]
-            | &[DataType::LargeList(f)]
-            | &[DataType::FixedSizeList(f, _)]
-            | &[DataType::Map(f, _)] => Ok(f.data_type().clone()),
-            _ => plan_err!("{} should only be called with a list or map", self.name()),
+        let field = match &arg_types {
+            &[DataType::List(field)]
+            | &[DataType::LargeList(field)]
+            | &[DataType::FixedSizeList(field, _)]
+            | &[DataType::Map(field, _)] => field,
+            _ => return plan_err!("{} should only be called with a list or map", self.name()),
+        };
+        if self.kind == ExplodeKind::StackSingleColumn {
+            // Enclosing expressions check the original STRUCT type before generator expansion.
+            let column = Field::new("col0", field.data_type().clone(), true)
+                .with_metadata(field.metadata().clone());
+            Ok(DataType::Struct(vec![Arc::new(column)].into()))
+        } else {
+            Ok(field.data_type().clone())
         }
     }
 

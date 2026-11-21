@@ -2795,6 +2795,7 @@ NANVL kernel, including its widths, values and error behavior.
 ### Direct single-column BIGINT STACK (#1411)
 
 STACK with one output column and supplied BIGINT values unnests the list
-built by SparkArray directly. The generator still emits the nullable
-`col0` field and retains row order and NULL padding. Other STACK shapes
+built by SparkArray directly. Its pre-expansion declaration retains the
+original STRUCT type. Expansion emits the nullable `col0` field and
+retains row order and NULL padding. Other STACK shapes
 retain the existing zip and inline projection.
