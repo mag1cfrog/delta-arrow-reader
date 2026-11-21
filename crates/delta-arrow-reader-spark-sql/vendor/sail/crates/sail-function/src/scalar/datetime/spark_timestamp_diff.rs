@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use datafusion::arrow::array::timezone::Tz;
 use datafusion::arrow::array::types::TimestampMicrosecondType;
-use datafusion::arrow::array::{AsArray, Int64Array};
+use datafusion::arrow::array::{Array, AsArray, Int64Array, TimestampMicrosecondArray};
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef, TimeUnit};
 use datafusion_common::{Result, ScalarValue, exec_err, internal_err};
 use datafusion_expr::{
@@ -94,8 +94,10 @@ impl SparkTimestampDiff {
                 self.unit_text
             );
         };
-        let start = local_micros(start, zone);
-        let end = local_micros(end, zone);
+        Self::difference_in_local_time(unit, local_micros(start, zone), local_micros(end, zone))
+    }
+
+    fn difference_in_local_time(unit: TimestampDiffUnit, start: i128, end: i128) -> Result<i64> {
         let value = match unit.micros() {
             // Java truncates the local difference toward zero.
             Some(length) => (end - start) / length,
@@ -199,6 +201,27 @@ impl ScalarUDFImpl for SparkTimestampDiff {
         let Ok(zone) = Tz::from_str(&self.timezone) else {
             return exec_err!("invalid session time zone {}", self.timezone);
         };
+        if let (
+            Some(unit),
+            ColumnarValue::Array(starts),
+            ColumnarValue::Scalar(ScalarValue::TimestampMicrosecond(end, _)),
+        ) = (self.unit, start, end)
+            && let Some(starts) = starts.as_any().downcast_ref::<TimestampMicrosecondArray>()
+            && starts.len() == args.number_rows
+        {
+            let end = end.map(|end| local_micros(end, &zone));
+            let result = starts
+                .iter()
+                .map(|start| match (start, end) {
+                    (Some(start), Some(end)) => {
+                        Self::difference_in_local_time(unit, local_micros(start, &zone), end)
+                            .map(Some)
+                    }
+                    _ => Ok(None),
+                })
+                .collect::<Result<Int64Array>>()?;
+            return Ok(ColumnarValue::Array(Arc::new(result)));
+        }
         let scalar = matches!(
             (start, end),
             (ColumnarValue::Scalar(_), ColumnarValue::Scalar(_))
@@ -243,6 +266,61 @@ mod tests {
     fn diff(unit: &str, zone: &str, start: &str, end: &str) -> Result<i64> {
         let tz = Tz::from_str(zone)?;
         SparkTimestampDiff::new(unit, zone.into()).difference(micros(start)?, micros(end)?, &tz)
+    }
+
+    #[test]
+    fn literal_end_timestamps_match_broadcast_end_timestamps() -> Result<()> {
+        let before_gap = micros("2024-03-10T09:30:00Z")?;
+        let after_gap = micros("2024-03-10T10:30:00Z")?;
+        let starts = TimestampMicrosecondArray::from(vec![
+            None,
+            Some(before_gap),
+            Some(after_gap),
+            Some(i64::MIN),
+            Some(i64::MAX),
+        ]);
+        for zone in ["UTC", "America/Los_Angeles", "invalid zone"] {
+            for unit in ["MICROSECOND", "SECOND", "DAY", "MONTH", "invalid unit"] {
+                let function = SparkTimestampDiff::new(unit, zone.into());
+                for length in [0, 1, 3, starts.len()] {
+                    let invoke = |end: ColumnarValue| {
+                        let args =
+                            vec![ColumnarValue::Array(Arc::new(starts.slice(0, length))), end];
+                        function.invoke_with_args(ScalarFunctionArgs {
+                            arg_fields: args
+                                .iter()
+                                .map(|arg| Arc::new(Field::new("arg", arg.data_type(), true)))
+                                .collect(),
+                            args,
+                            number_rows: length,
+                            return_field: Arc::new(Field::new("difference", DataType::Int64, true)),
+                            config_options: Arc::new(Default::default()),
+                        })
+                    };
+                    for end in [None, Some(after_gap), Some(i64::MAX)] {
+                        let scalar = ScalarValue::TimestampMicrosecond(end, Some("UTC".into()));
+                        let expected =
+                            invoke(ColumnarValue::Array(scalar.to_array_of_size(length)?));
+                        let actual = invoke(ColumnarValue::Scalar(scalar));
+                        match (actual, expected) {
+                            (
+                                Ok(ColumnarValue::Array(actual)),
+                                Ok(ColumnarValue::Array(expected)),
+                            ) => {
+                                assert_eq!(actual.to_data(), expected.to_data());
+                            }
+                            (Err(actual), Err(expected)) => {
+                                assert_eq!(actual.to_string(), expected.to_string())
+                            }
+                            outcomes => {
+                                panic!("different timestamp difference outcomes: {outcomes:?}")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     #[test]
