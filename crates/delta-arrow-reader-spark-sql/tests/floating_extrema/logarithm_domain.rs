@@ -50,26 +50,29 @@ async fn logarithm_domain_matches_case_with_exact_float_bits() -> Result<()> {
         Some(f64::NEG_INFINITY),
         Some(f64::NAN),
     ];
+    let values = numbers
+        .into_iter()
+        .flat_map(|number| std::iter::repeat_n(number, bases.len()))
+        .collect::<Vec<_>>();
+    let base_values = bases
+        .into_iter()
+        .cycle()
+        .take(values.len())
+        .collect::<Vec<_>>();
     let batch = RecordBatch::try_from_iter([
-        (
-            "d",
-            Arc::new(Float64Array::from(numbers.to_vec())) as ArrayRef,
-        ),
+        ("d", Arc::new(Float64Array::from(values)) as ArrayRef),
         (
             "base",
-            Arc::new(Float64Array::from(
-                bases
-                    .into_iter()
-                    .cycle()
-                    .take(numbers.len())
-                    .collect::<Vec<_>>(),
-            )) as ArrayRef,
+            Arc::new(Float64Array::from(base_values)) as ArrayRef,
         ),
     ])?;
     let inputs = [
         ("log_values", batch.clone()),
         ("log_sliced", batch.slice(1, batch.num_rows() - 2)),
-        ("log_positive", batch.slice(5, 2)),
+        (
+            "log_positive",
+            batch.slice(5 * bases.len(), 2 * bases.len()),
+        ),
         ("log_empty", batch.slice(0, 0)),
     ];
     for (name, batch) in inputs {
