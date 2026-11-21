@@ -1,12 +1,11 @@
 use std::sync::Arc;
 
 use datafusion::arrow::array::{
-    Array, ArrayRef, AsArray, BinaryArrayType, BinaryBuilder, GenericBinaryArray,
-    GenericBinaryBuilder, GenericStringBuilder, LargeBinaryBuilder, OffsetSizeTrait,
-    StringArrayType,
+    Array, ArrayRef, AsArray, BinaryArrayType, BinaryBuilder, GenericBinaryBuilder,
+    GenericByteArray, GenericStringBuilder, LargeBinaryBuilder, OffsetSizeTrait, StringArrayType,
 };
-use datafusion::arrow::compute::{CastOptions, cast_with_options};
-use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
+use datafusion::arrow::compute::{CastOptions, cast, cast_with_options};
+use datafusion::arrow::datatypes::{ByteArrayType, DataType, Field, FieldRef};
 use datafusion_common::{Result, ScalarValue, exec_datafusion_err, exec_err, internal_err};
 use datafusion_expr::{ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl};
 use datafusion_expr_common::columnar_value::ColumnarValue;
@@ -132,6 +131,31 @@ impl ScalarUDFImpl for SparkEncode {
                         | ScalarValue::LargeUtf8(Some(char_set))
                         | ScalarValue::Utf8View(Some(char_set)),
                     ) => {
+                        if char_set.trim().eq_ignore_ascii_case("UTF-8") {
+                            let binary_type = match string_array.data_type() {
+                                DataType::Utf8
+                                    if null_byte_ranges_are_empty(
+                                        string_array.as_string::<i32>(),
+                                    ) =>
+                                {
+                                    Some(DataType::Binary)
+                                }
+                                DataType::LargeUtf8
+                                    if null_byte_ranges_are_empty(
+                                        string_array.as_string::<i64>(),
+                                    ) =>
+                                {
+                                    Some(DataType::LargeBinary)
+                                }
+                                _ => None,
+                            };
+                            if let Some(binary_type) = binary_type
+                                && let Ok(encoded) = cast(string_array.as_ref(), &binary_type)
+                            {
+                                return Ok(ColumnarValue::Array(encoded));
+                            }
+                        }
+
                         let result = match string_array.data_type() {
                             DataType::Utf8 => {
                                 let string_array = string_array.as_string::<i32>();
@@ -643,7 +667,7 @@ where
 }
 
 // STR_TO_MAP reads the stored delimiter bytes even when the delimiter is NULL.
-fn null_byte_ranges_are_empty<O: OffsetSizeTrait>(array: &GenericBinaryArray<O>) -> bool {
+fn null_byte_ranges_are_empty<T: ByteArrayType>(array: &GenericByteArray<T>) -> bool {
     array.nulls().is_none_or(|nulls| {
         nulls.null_count() == 0
             || nulls
@@ -775,7 +799,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use datafusion::arrow::array::StringArray;
+    use datafusion::arrow::array::{GenericBinaryArray, GenericStringArray, StringArray};
     use datafusion::arrow::buffer::{Buffer, NullBuffer, OffsetBuffer};
     use datafusion_common::config::ConfigOptions;
 
@@ -898,5 +922,88 @@ mod tests {
     fn scalar_decode_matches_per_row_conversion() -> Result<()> {
         check_decode_charsets::<i32>()?;
         check_decode_charsets::<i64>()
+    }
+
+    fn compare_scalar_encode<O: OffsetSizeTrait>(
+        strings: GenericStringArray<O>,
+        charset: &str,
+    ) -> Result<()> {
+        let rows = strings.len();
+        let charsets = StringArray::from(vec![charset; rows]);
+        let expected = process_encode_arrays::<_, _, O>(&strings, &charsets);
+        let string_type = strings.data_type().clone();
+        let output_type = if O::IS_LARGE {
+            DataType::LargeBinary
+        } else {
+            DataType::Binary
+        };
+        let actual = SparkEncode::new()
+            .invoke_with_args(ScalarFunctionArgs {
+                args: vec![
+                    ColumnarValue::Array(Arc::new(strings)),
+                    ColumnarValue::Scalar(ScalarValue::Utf8(Some(charset.into()))),
+                ],
+                arg_fields: vec![
+                    Arc::new(Field::new("text", string_type, true)),
+                    Arc::new(Field::new("charset", DataType::Utf8, false)),
+                ],
+                number_rows: rows,
+                return_field: Arc::new(Field::new("encoded", output_type, true)),
+                config_options: Arc::new(ConfigOptions::default()),
+            })
+            .and_then(|encoded| encoded.into_array(rows));
+        match (actual, expected) {
+            (Ok(actual), Ok(expected)) => {
+                actual.to_data().validate_full()?;
+                assert_eq!(actual.data_type(), expected.data_type());
+                assert_eq!(actual.as_ref(), expected.as_ref(), "{charset}");
+                let actual = actual.as_binary::<O>();
+                let expected = expected.as_binary::<O>();
+                for row in 0..rows {
+                    if expected.is_null(row) {
+                        assert_eq!(actual.value_length(row), expected.value_length(row));
+                    }
+                }
+            }
+            (Err(actual), Err(expected)) => assert_eq!(actual.to_string(), expected.to_string()),
+            (actual, expected) => panic!("{charset}: actual {actual:?}, expected {expected:?}"),
+        }
+        Ok(())
+    }
+
+    fn check_encode_charsets<O: OffsetSizeTrait>() -> Result<()> {
+        let strings: GenericStringArray<O> = [Some("plain"), None, Some("Aé🙂"), Some("")]
+            .into_iter()
+            .collect();
+        for charset in [
+            "US-ASCII",
+            "ISO-8859-1",
+            "UTF-8",
+            "  uTf-8  ",
+            "UTF-16BE",
+            "UTF-16LE",
+            "UTF-16",
+            "unknown",
+        ] {
+            compare_scalar_encode(strings.clone(), charset)?;
+            compare_scalar_encode(strings.slice(1, 3), charset)?;
+            compare_scalar_encode(strings.slice(0, 0), charset)?;
+        }
+        compare_scalar_encode(strings.slice(1, 1), "unknown")?;
+
+        let hidden_null = GenericStringArray::<O>::new(
+            OffsetBuffer::from_lengths([2, 1]),
+            Buffer::from("é:".as_bytes()),
+            Some(NullBuffer::from(vec![false, true])),
+        );
+        compare_scalar_encode(hidden_null.clone(), "UTF-8")?;
+        compare_scalar_encode(hidden_null.slice(0, 1), "UTF-8")?;
+        compare_scalar_encode(hidden_null.slice(1, 1), "UTF-8")
+    }
+
+    #[test]
+    fn scalar_encode_matches_per_row_conversion() -> Result<()> {
+        check_encode_charsets::<i32>()?;
+        check_encode_charsets::<i64>()
     }
 }
