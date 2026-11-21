@@ -1,0 +1,28 @@
+{
+  "functions": [
+    {
+      "kind": "scalar",
+      "category": "conditional",
+      "name": "nanvl",
+      "registration": "F::binary(expr_fn::nanvl)",
+      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional.rs:205",
+      "implementation_anchors": [
+        "crates/delta-arrow-reader-spark-sql/vendor/dependencies/datafusion-functions/src/math/nanvl.rs:126",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs:506",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional.rs:205"
+      ],
+      "id": "scalar.conditional.nanvl_failing_replacement",
+      "aliases": [],
+      "spark_sql": "SELECT id,\n    NANVL(d, CAST(CASE WHEN id = 5 THEN 'bad' ELSE '3.0' END AS DOUBLE)) AS value\nFROM bench WHERE id < 24",
+      "native_sql": null,
+      "input_columns": [
+        "id",
+        "d"
+      ],
+      "projection_sql": "SELECT id,d FROM bench",
+      "exclusion": null,
+      "class": "paired",
+      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+    }
+  ]
+}

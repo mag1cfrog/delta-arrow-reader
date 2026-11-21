@@ -2784,3 +2784,10 @@ A plain Boolean column in COUNT_IF becomes the predicate of a native
 filtered count. The filter counts true rows and skips false and NULL
 rows. The existing COUNT_IF plan handles other arguments and modifiers,
 and the original admission checks run before choosing either shape.
+
+### Reuse the NANVL left buffer when no values need replacement (#1411)
+
+Spark NANVL can return a DOUBLE input buffer directly when its visible
+values contain no NaNs and its NULL slots already have zeroed storage.
+Both arguments are still evaluated. Other inputs retain the native
+NANVL kernel, including its widths, values and error behavior.

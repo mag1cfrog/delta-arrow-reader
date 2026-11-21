@@ -1,0 +1,11 @@
+{
+  "staging_source": "ba88564270b088cfe99948b4c33f6a130d7c1010",
+  "staging_tip": "44dd8401043446ba6496c58907a8a4fa84febad3",
+  "candidate_source": "b8328bf72175d3e2b0aea0a527b46622521d5ce0",
+  "statement_manifest": "manifest.json",
+  "statement_manifest_sha256": "af540f65e327fcfaafa3631b68dc8622a94f84af6feabe2c8c4cf5d4e2e35bd3",
+  "case_ids": [
+    "scalar.conditional.nanvl"
+  ],
+  "overall_timeout_seconds": 14400
+}
