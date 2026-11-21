@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
 use datafusion::arrow::array::{
@@ -10,6 +11,8 @@ use datafusion_expr::{
     Accumulator, ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature,
     Volatility,
 };
+
+use datafusion_functions_nested::min_max::{array_max_udf, array_min_udf};
 
 use crate::functions_nested_utils::make_scalar_function;
 
@@ -69,11 +72,7 @@ impl ScalarUDFImpl for ArrayMin {
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
-        let ScalarFunctionArgs { args, .. } = args;
-        if args[0].data_type() == DataType::Null {
-            return Ok(ColumnarValue::Scalar(ScalarValue::Null));
-        }
-        make_scalar_function(array_min_inner)(&args)
+        invoke_array_extremum(args, ArrayOp::Min)
     }
 }
 
@@ -120,12 +119,52 @@ impl ScalarUDFImpl for ArrayMax {
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
-        let ScalarFunctionArgs { args, .. } = args;
-        if args[0].data_type() == DataType::Null {
-            return Ok(ColumnarValue::Scalar(ScalarValue::Null));
-        }
-        make_scalar_function(array_max_inner)(&args)
+        invoke_array_extremum(args, ArrayOp::Max)
     }
+}
+
+fn invoke_array_extremum(mut args: ScalarFunctionArgs, op: ArrayOp) -> Result<ColumnarValue> {
+    if args.args[0].data_type() == DataType::Null {
+        return Ok(ColumnarValue::Scalar(ScalarValue::Null));
+    }
+
+    if let [ColumnarValue::Array(array)] = args.args.as_slice()
+        && !array.is_empty()
+        && let Some(values) = bigint_extrema_input(array)
+    {
+        args.args[0] = ColumnarValue::Array(values);
+        return match op {
+            ArrayOp::Min => array_min_udf().invoke_with_args(args),
+            ArrayOp::Max => array_max_udf().invoke_with_args(args),
+        };
+    }
+
+    match op {
+        ArrayOp::Min => make_scalar_function(array_min_inner)(&args.args),
+        ArrayOp::Max => make_scalar_function(array_max_inner)(&args.args),
+    }
+}
+
+fn bigint_extrema_input(array: &ArrayRef) -> Option<ArrayRef> {
+    match array.data_type() {
+        DataType::List(field) if field.data_type() == &DataType::Int64 => {
+            list_with_unmasked_child_ranges(as_list_array(array))
+        }
+        DataType::LargeList(field) if field.data_type() == &DataType::Int64 => {
+            list_with_unmasked_child_ranges(as_large_list_array(array))
+        }
+        _ => None,
+    }
+}
+
+fn list_with_unmasked_child_ranges<O: OffsetSizeTrait>(
+    list: &GenericListArray<O>,
+) -> Option<ArrayRef> {
+    // The original extrema loop reads every offset range, including those under NULL parents.
+    let (field, offsets, values, _) = list.clone().into_parts();
+    GenericListArray::try_new(field, offsets, values, None)
+        .ok()
+        .map(|list| Arc::new(list) as ArrayRef)
 }
 
 fn array_min_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
@@ -200,4 +239,123 @@ where
         result_values.push(value);
     }
     Ok(result_values)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use datafusion::arrow::array::{AsArray, Float64Array, Int64Array};
+    use datafusion::arrow::buffer::{NullBuffer, OffsetBuffer};
+    use datafusion::arrow::datatypes::{Float64Type, Int64Type};
+
+    fn extrema_args(array: ArrayRef, return_type: DataType) -> ScalarFunctionArgs {
+        ScalarFunctionArgs {
+            arg_fields: vec![Arc::new(Field::new(
+                "items",
+                array.data_type().clone(),
+                true,
+            ))],
+            number_rows: array.len(),
+            args: vec![ColumnarValue::Array(array)],
+            return_field: Arc::new(Field::new("extremum", return_type, true)),
+            config_options: Arc::default(),
+        }
+    }
+
+    #[test]
+    fn typed_bigint_extrema_match_the_row_accumulators() -> Result<()> {
+        let field = Arc::new(Field::new("item", DataType::Int64, true));
+        let offsets = [0, 2, 4, 4, 6, 8];
+        let children: ArrayRef = Arc::new(Int64Array::from(vec![
+            Some(5),
+            Some(-3),
+            Some(i64::MIN),
+            Some(i64::MAX),
+            None,
+            None,
+            Some(7),
+            None,
+        ]));
+        let parents = NullBuffer::from(vec![false, true, true, true, true]);
+        let lists: [ArrayRef; 2] = [
+            Arc::new(GenericListArray::<i32>::try_new(
+                field.clone(),
+                OffsetBuffer::new(offsets.to_vec().into()),
+                children.clone(),
+                Some(parents.clone()),
+            )?),
+            Arc::new(GenericListArray::<i64>::try_new(
+                field,
+                OffsetBuffer::new(
+                    offsets
+                        .iter()
+                        .map(|&offset| i64::from(offset))
+                        .collect::<Vec<_>>()
+                        .into(),
+                ),
+                children,
+                Some(parents),
+            )?),
+        ];
+        for list in lists {
+            for input in [list.clone(), list.slice(1, 4), list.slice(0, 0)] {
+                for (op, evaluate) in [
+                    (
+                        ArrayOp::Min,
+                        array_min_inner as fn(&[ArrayRef]) -> Result<ArrayRef>,
+                    ),
+                    (ArrayOp::Max, array_max_inner),
+                ] {
+                    let expected = evaluate(std::slice::from_ref(&input));
+                    let actual =
+                        invoke_array_extremum(extrema_args(input.clone(), DataType::Int64), op)
+                            .and_then(|result| result.into_array(input.len()));
+                    let values = |result: Result<ArrayRef>| {
+                        result
+                            .map(|a| a.as_primitive::<Int64Type>().iter().collect::<Vec<_>>())
+                            .map_err(|e| e.to_string())
+                    };
+                    assert_eq!(values(actual), values(expected), "{:?}", input.data_type());
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn floating_array_extrema_keep_nan_and_zero_bits() -> Result<()> {
+        let input: ArrayRef = Arc::new(GenericListArray::<i32>::try_new(
+            Arc::new(Field::new("item", DataType::Float64, true)),
+            OffsetBuffer::new(vec![0_i32, 2, 4, 6].into()),
+            Arc::new(Float64Array::from(vec![
+                Some(-0.0),
+                Some(0.0),
+                Some(f64::NAN),
+                Some(-1.0),
+                Some(f64::from_bits(0xfff8_0000_0000_0001)),
+                None,
+            ])),
+            None,
+        )?);
+        for (op, evaluate) in [
+            (
+                ArrayOp::Min,
+                array_min_inner as fn(&[ArrayRef]) -> Result<ArrayRef>,
+            ),
+            (ArrayOp::Max, array_max_inner),
+        ] {
+            let expected = evaluate(std::slice::from_ref(&input))?;
+            let actual = invoke_array_extremum(extrema_args(input.clone(), DataType::Float64), op)?
+                .into_array(input.len())?;
+            let bits = |array: &ArrayRef| {
+                array
+                    .as_primitive::<Float64Type>()
+                    .iter()
+                    .map(|value| value.map(f64::to_bits))
+                    .collect::<Vec<_>>()
+            };
+            assert_eq!(bits(&actual), bits(&expected));
+        }
+        Ok(())
+    }
 }

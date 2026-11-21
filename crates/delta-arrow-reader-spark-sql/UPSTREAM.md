@@ -2694,3 +2694,11 @@ MAKE_TIME prepares one microsecond contribution when the minute and second
 are valid scalars of the coerced types. It checks each nonnull hour with
 the original hour validator. Invalid literals and column arguments keep
 the existing row validation order.
+
+### Typed BIGINT list extrema (#1410)
+
+ARRAY_MIN and ARRAY_MAX reuse DataFusion's typed buffer implementation for
+nonempty BIGINT list arrays. The original accumulator reads each child's
+offset range even under a NULL parent. A temporary list shares those
+ranges and child values with the input and carries no parent bitmap.
+Other types, scalar values and empty arrays use the original accumulator.
