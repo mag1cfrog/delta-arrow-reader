@@ -15,9 +15,7 @@ use datafusion::logical_expr::expr::{AggregateFunction, Sort};
 use datafusion::logical_expr::function::{AccumulatorArgs, StateFieldsArgs};
 use datafusion::logical_expr::simplify::SimplifyContext;
 use datafusion::logical_expr::utils::format_state_name;
-use datafusion::logical_expr::{
-    Accumulator, AggregateUDFImpl, ExprSchemable, Signature, Volatility, function,
-};
+use datafusion::logical_expr::{Accumulator, AggregateUDFImpl, Signature, Volatility, function};
 use datafusion::prelude::Expr;
 
 #[derive(Debug)]
@@ -389,26 +387,24 @@ impl AggregateUDFImpl for MinByFunction {
     fn simplify(&self) -> Option<function::AggregateFunctionSimplification> {
         let simplify = |mut aggr_func: AggregateFunction, info: &SimplifyContext| {
             let mut order_by = aggr_func.params.order_by;
-            let (second_arg, first_arg) = (
-                aggr_func.params.args.remove(1),
-                aggr_func.params.args.remove(0),
-            );
+            let key = aggr_func.params.args.remove(1);
+            let value = aggr_func.params.args.remove(0);
 
             let filter = match aggr_func.params.filter {
-                Some(existing) => Some(Box::new((*existing).and(second_arg.clone().is_not_null()))),
-                None if matches!(second_arg, Expr::Column(_))
-                    && matches!(second_arg.nullable(info.schema().as_ref()), Ok(false)) =>
+                Some(existing) => Some(Box::new((*existing).and(key.clone().is_not_null()))),
+                None if matches!(key, Expr::Column(_))
+                    && matches!(info.nullable(&key), Ok(false)) =>
                 {
                     None
                 }
-                None => Some(Box::new(second_arg.clone().is_not_null())),
+                None => Some(Box::new(key.clone().is_not_null())),
             };
 
-            order_by.push(Sort::new(second_arg, false, true)); // DESC, NULLS FIRST
+            order_by.push(Sort::new(key, false, true)); // DESC, NULLS FIRST
 
             Ok(Expr::AggregateFunction(AggregateFunction::new_udf(
                 last_value_udaf(),
-                vec![first_arg],
+                vec![value],
                 aggr_func.params.distinct,
                 filter,
                 order_by,
