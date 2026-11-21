@@ -838,7 +838,10 @@ impl ScalarUDFImpl for ArraysOverlapResultField {
             {
                 value.apply(|value| {
                     if let expr::Expr::ScalarFunction(function) = value {
-                        if function.func.name() == "array_has_any" {
+                        if matches!(
+                            function.func.name(),
+                            "array_has_any" | BigIntArraysOverlap::NAME
+                        ) {
                             for operand in &function.args {
                                 datafusion::optimizer::simplify_expressions::ExprSimplifier::new(
                                     info.clone(),

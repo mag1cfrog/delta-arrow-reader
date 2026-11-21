@@ -15,9 +15,13 @@ use datafusion_functions::utils::make_scalar_function;
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub(super) struct BigIntArraysOverlap;
 
+impl BigIntArraysOverlap {
+    pub(super) const NAME: &'static str = "spark_bigint_arrays_overlap";
+}
+
 impl ScalarUDFImpl for BigIntArraysOverlap {
     fn name(&self) -> &str {
-        "spark_bigint_arrays_overlap"
+        Self::NAME
     }
 
     fn signature(&self) -> &Signature {
