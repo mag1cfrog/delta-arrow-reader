@@ -1,0 +1,26 @@
+{
+  "staging_source": "e1580ef0056bdfe70161fe07be94ed10957ed7ec",
+  "statement_manifest": "manifest.json",
+  "statement_manifest_sha256": "d006b18aec9a7e82f864b705d99e60740da2e5e542da2409578cdcfbae52929e",
+  "overall_timeout_seconds": 1800,
+  "staging_tip": "91f4487e67dd8c58bae907980b681b759ebc931d",
+  "candidate_source": "c8d2226b4a410b39482cf938013d28a4f7fa33b0",
+  "case_ids": [
+    "aggregate.aggregate.min_by"
+  ],
+  "spark_plan_contains": {
+    "staging": {
+      "aggregate": [
+        "last_value",
+        "filter (where boolean(true))",
+        "desc nulls first"
+      ]
+    },
+    "candidate": {
+      "aggregate": [
+        "last_value",
+        "desc nulls first"
+      ]
+    }
+  }
+}
