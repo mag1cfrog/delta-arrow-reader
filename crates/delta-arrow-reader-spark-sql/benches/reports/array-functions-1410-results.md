@@ -37,7 +37,7 @@ controls in that session.
 
 Each comparison checked all one million keyed rows and executed Arrow
 types in both builds, both ANSI modes and native before starting clocks.
-The individual reports link the committed differential inputs,
-protocols, release binary hashes and local validation. All nine shapes
-qualified for timing. Five met the native target in both ANSI modes.
+The individual reports describe the committed differential tests and
+local validation, give the release binary hashes, and link the protocols.
+All nine shapes qualified for timing. Five met the native target in both ANSI modes.
 The four remaining costs keep #1410 open after its one change per group.
