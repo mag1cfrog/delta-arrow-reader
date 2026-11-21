@@ -159,14 +159,19 @@ impl ScalarUDFImpl for SparkFromJson {
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
         let session_timezone = self.session_timezone.to_string();
         let ScalarFunctionArgs { args, .. } = args;
-        // Preserve the original empty-schema error and NULL map expansion.
         let scalar_settings = match args.as_slice() {
             [ColumnarValue::Array(json), ColumnarValue::Scalar(_)] => !json.is_empty(),
             [
                 ColumnarValue::Array(json),
                 ColumnarValue::Scalar(_),
-                ColumnarValue::Scalar(options),
-            ] => !json.is_empty() && !options.is_null(),
+                ColumnarValue::Scalar(ScalarValue::Map(options)),
+            ] => {
+                // Broadcasting strips children from NULL or sliced option maps.
+                !json.is_empty()
+                    && matches!(options.value_offsets(), [0, end]
+                        if usize::try_from(*end).ok() == Some(options.entries().len()))
+                    && !options.is_null(0)
+            }
             _ => false,
         };
         let hints = if scalar_settings {
@@ -1470,7 +1475,7 @@ mod tests {
             Some(""),
             Some(r#"{"x":9223372036854775807,"a":[],"dt":"2024-01-05"}"#),
         ]);
-        let date_options = |format: &str, valid: bool| -> Result<ColumnarValue> {
+        let date_options = |formats: &[(&str, bool)]| -> Result<ColumnarValue> {
             let field_names = MapFieldNames {
                 entry: SAIL_MAP_FIELD_NAME.to_owned(),
                 key: SAIL_MAP_KEY_FIELD_NAME.to_owned(),
@@ -1481,18 +1486,25 @@ mod tests {
                 StringBuilder::new(),
                 StringBuilder::new(),
             );
-            options.keys().append_value("dateFormat");
-            options.values().append_value(format);
-            options.append(valid)?;
-            Ok(ColumnarValue::Scalar(ScalarValue::Map(Arc::new(
-                options.finish(),
-            ))))
+            for (format, valid) in formats {
+                options.keys().append_value("dateFormat");
+                options.values().append_value(format);
+                options.append(*valid)?;
+            }
+            let options = options.finish();
+            let scalar = if options.len() > 1 {
+                ScalarValue::try_from_array(&options, 1)?
+            } else {
+                ScalarValue::Map(Arc::new(options))
+            };
+            Ok(ColumnarValue::Scalar(scalar))
         };
         let options = [
             None,
-            Some(date_options("yyyyMMdd", true)?),
-            Some(date_options("yyyyQQ", true)?),
-            Some(date_options("yyyyQQ", false)?),
+            Some(date_options(&[("yyyyMMdd", true)])?),
+            Some(date_options(&[("yyyyQQ", true)])?),
+            Some(date_options(&[("yyyyQQ", false)])?),
+            Some(date_options(&[("yyyyQQ", true), ("yyyyMMdd", true)])?),
         ];
         for length in [0, 1, documents.len()] {
             for schema in [

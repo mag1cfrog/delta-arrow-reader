@@ -2990,4 +2990,5 @@ where it is read.
 
 FROM_JSON supplies one copy of literal schema and options for nonempty
 JSON columns. The parser reads schema and options once per batch. Empty
-input, NULL option maps and array settings keep the original expansion.
+input, NULL or sliced option maps and array settings keep the original
+expansion.
