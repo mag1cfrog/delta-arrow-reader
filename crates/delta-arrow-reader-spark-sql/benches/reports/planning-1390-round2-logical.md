@@ -53,9 +53,9 @@ trial and report are retained on `perf/1390-logical-phase-attribution`.
 Using the retained staging arm of this session, CASE logical
 still exceeds native-configured by 1.437 / 1.432 ms, IN by
 1.044 / 1.118 ms, and the 400-column query by 1.368 / 1.367 ms.
-The median gap across the 25 paired statements is in the full
-table. The ordinary recursive resolution and IN grammar costs
-remain.
+The median gap across the 25 paired statements is 63.688 /
+62.767 µs. The ordinary recursive resolution and IN grammar
+costs remain.
 
 The [matched table](planning-1390-round2-logical.csv) contains all 360 phase rows.
 Each row comes from five alternating process pairs. The floor
