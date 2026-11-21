@@ -1,0 +1,5 @@
+{
+  "staging_source": "fbe7d08522650b823910fb34b311f4d57170d7fc",
+  "query_id": "stress/wide_400",
+  "maximum_trace_processes": 4
+}
