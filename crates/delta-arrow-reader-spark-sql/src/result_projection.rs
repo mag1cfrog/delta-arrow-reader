@@ -71,18 +71,17 @@ mod tests {
         let input: Arc<dyn ExecutionPlan> = Arc::new(EmptyExec::new(schema));
         let renamed = rename_result_columns(input.clone(), &["public".to_owned()])?;
         assert!(Arc::ptr_eq(renamed.children()[0], &input));
-        assert!(rename_result_columns(input.clone(), &[]).is_err());
 
-        let prefix = ProjectionExec::try_new(
+        let projection = ProjectionExec::try_new(
             [(
                 Arc::new(Column::new("source", 0))
                     as Arc<dyn datafusion::physical_expr::PhysicalExpr>,
                 "internal".to_owned(),
             )],
             input,
-        )?
-        .with_row_error_prefix(true);
-        let prefix: Arc<dyn ExecutionPlan> = Arc::new(prefix);
+        )?;
+        assert!(rename_result_columns(Arc::new(projection.clone()), &[]).is_err());
+        let prefix: Arc<dyn ExecutionPlan> = Arc::new(projection.with_row_error_prefix(true));
         let renamed = rename_result_columns(prefix.clone(), &["public".to_owned()])?;
         assert!(Arc::ptr_eq(renamed.children()[0], &prefix));
         assert_eq!(renamed.schema().field(0).name(), "public");
