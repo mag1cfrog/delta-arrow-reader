@@ -2777,3 +2777,11 @@ A single Boolean column guard and BIGINT column result without ELSE
 use the native searched CASE mask. The output keeps its nullable BIGINT
 type. Conditions or results resolved as expressions, additional arms and
 explicit ELSE keep the Spark searched CASE planning path.
+
+### Existing BIGINT child validity in INLINE (#1411)
+
+INLINE over List or LargeList columns can reuse a BIGINT STRUCT child
+when its validity already covers the parent STRUCT's NULLs. Projection
+keeps the same list offsets and element fields. Extra parent NULLs and
+other inputs use the existing validity union, and UNNEST still handles
+row expansion.

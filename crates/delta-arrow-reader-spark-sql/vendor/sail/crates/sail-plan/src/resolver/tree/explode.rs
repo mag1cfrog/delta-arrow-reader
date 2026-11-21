@@ -85,8 +85,7 @@ impl TreeNodeRewriter for ExplodeRewriter<'_> {
         };
         let arg = args.one()?;
         let arg_type = arg.get_type(self.plan.schema())?;
-        let use_list_offsets = is_inline
-            && preserve_nulls
+        let inline_list_column = is_inline
             && matches!(arg, Expr::Column(_))
             && matches!(arg_type, DataType::List(_) | DataType::LargeList(_));
         let return_type = func.return_type(&[arg_type])?;
@@ -114,7 +113,7 @@ impl TreeNodeRewriter for ExplodeRewriter<'_> {
             arg
         };
         let arg = if preserve_nulls {
-            let empty = if use_list_offsets {
+            let empty = if inline_list_column {
                 ScalarUDF::from(InlineOuterListEmpty::default()).call(vec![arg.clone()])
             } else {
                 nested_fn::array_empty(arg.clone())
@@ -144,8 +143,13 @@ impl TreeNodeRewriter for ExplodeRewriter<'_> {
                     .map(|field| {
                         let field_name = field.name().to_string();
                         let field_column = self.state.register_field_name("");
+                        let projection = if inline_list_column && !preserve_nulls {
+                            ArrayStructField::for_inline_column()
+                        } else {
+                            ArrayStructField::new()
+                        };
                         inline_projections.push((
-                            ScalarUDF::from(ArrayStructField::new())
+                            ScalarUDF::from(projection)
                                 .call(vec![arg.clone(), lit(field_name.clone())])
                                 .alias(&field_column),
                             Column::from_name(&field_column),

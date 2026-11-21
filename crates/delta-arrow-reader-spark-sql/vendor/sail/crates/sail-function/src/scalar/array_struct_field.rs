@@ -16,6 +16,7 @@ use datafusion_expr::{
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ArrayStructField {
     signature: Signature,
+    reuse_int64_child: bool,
 }
 
 impl Default for ArrayStructField {
@@ -28,6 +29,14 @@ impl ArrayStructField {
     pub fn new() -> Self {
         Self {
             signature: Signature::any(2, Volatility::Immutable),
+            reuse_int64_child: false,
+        }
+    }
+
+    pub fn for_inline_column() -> Self {
+        Self {
+            reuse_int64_child: true,
+            ..Self::new()
         }
     }
 
@@ -80,7 +89,11 @@ impl ArrayStructField {
         }
     }
 
-    fn struct_values(values: &ArrayRef, field_name: &str) -> Result<(ArrayRef, FieldRef)> {
+    fn struct_values(
+        values: &ArrayRef,
+        field_name: &str,
+        reuse_int64_child: bool,
+    ) -> Result<(ArrayRef, FieldRef)> {
         let Some(struct_array) = values.as_any().downcast_ref::<StructArray>() else {
             return exec_err!(
                 "array_struct_field requires list values to be structs, got {}",
@@ -92,17 +105,32 @@ impl ArrayStructField {
             .find(field_name)
             .ok_or_else(|| exec_datafusion_err!("missing field: {field_name}"))?;
         let values = struct_array.column(index);
+        if reuse_int64_child
+            && values.data_type() == &DataType::Int64
+            && struct_array.nulls().is_none_or(|struct_nulls| {
+                struct_nulls.null_count() == 0
+                    || values
+                        .nulls()
+                        .is_some_and(|child_nulls| child_nulls.contains(struct_nulls))
+            })
+        {
+            return Ok((Arc::clone(values), Arc::clone(field)));
+        }
         let nulls = NullBuffer::union(struct_array.nulls(), values.nulls());
         let data = values.to_data().into_builder().nulls(nulls).build()?;
         Ok((make_array(data), Arc::clone(field)))
     }
 
-    fn project_list<O>(array: &GenericListArray<O>, field_name: &str) -> Result<ArrayRef>
+    fn project_list<O>(
+        array: &GenericListArray<O>,
+        field_name: &str,
+        reuse_int64_child: bool,
+    ) -> Result<ArrayRef>
     where
         O: OffsetSizeTrait,
     {
         let list_field = Self::list_field(array.data_type())?;
-        let (values, child) = Self::struct_values(array.values(), field_name)?;
+        let (values, child) = Self::struct_values(array.values(), field_name, reuse_int64_child)?;
         Ok(Arc::new(GenericListArray::<O>::try_new(
             Self::list_item_field(&child, list_field.is_nullable() || child.is_nullable()),
             array.offsets().clone(),
@@ -117,7 +145,7 @@ impl ArrayStructField {
         field_name: &str,
     ) -> Result<ArrayRef> {
         let list_field = Self::list_field(array.data_type())?;
-        let (values, child) = Self::struct_values(array.values(), field_name)?;
+        let (values, child) = Self::struct_values(array.values(), field_name, false)?;
         Ok(Arc::new(FixedSizeListArray::try_new(
             Self::list_item_field(&child, list_field.is_nullable() || child.is_nullable()),
             size,
@@ -174,9 +202,15 @@ impl ScalarUDFImpl for ArrayStructField {
         let [array] = arrays.as_slice() else {
             return exec_err!("{} requires an array argument", self.name());
         };
+        let reuse_int64_child =
+            self.reuse_int64_child && matches!(args.first(), Some(ColumnarValue::Array(_)));
         let out = match array.data_type() {
-            DataType::List(_) => Self::project_list(as_list_array(array)?, field_name)?,
-            DataType::LargeList(_) => Self::project_list(as_large_list_array(array)?, field_name)?,
+            DataType::List(_) => {
+                Self::project_list(as_list_array(array)?, field_name, reuse_int64_child)?
+            }
+            DataType::LargeList(_) => {
+                Self::project_list(as_large_list_array(array)?, field_name, reuse_int64_child)?
+            }
             DataType::FixedSizeList(_, size) => {
                 let Some(array) = array.as_any().downcast_ref::<FixedSizeListArray>() else {
                     return exec_err!(
@@ -194,5 +228,78 @@ impl ScalarUDFImpl for ArrayStructField {
             }
         };
         Ok(ColumnarValue::Array(out))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use datafusion::arrow::array::{Int64Array, ListArray};
+    use datafusion::arrow::buffer::OffsetBuffer;
+    use datafusion_common::config::ConfigOptions;
+
+    use super::*;
+
+    #[test]
+    fn inline_bigint_projection_matches_the_original_list_projection() -> Result<()> {
+        let field = Field::new("x", DataType::Int64, true)
+            .with_metadata([("origin".into(), "inline_projection".into())].into());
+        let original = ArrayStructField::new();
+        let inline = ArrayStructField::for_inline_column();
+        for (struct_nulls, child_value) in [
+            (None, Some(4)),
+            (
+                Some(NullBuffer::from(vec![true, true, true, false, true])),
+                None,
+            ),
+            (
+                Some(NullBuffer::from(vec![true, true, true, false, true])),
+                Some(4),
+            ),
+        ] {
+            let structs = StructArray::try_new(
+                vec![Arc::new(field.clone())].into(),
+                vec![Arc::new(Int64Array::from(vec![
+                    Some(0),
+                    None,
+                    Some(2),
+                    child_value,
+                    None,
+                ]))],
+                struct_nulls,
+            )?;
+            let item = Arc::new(Field::new_list_field(structs.data_type().clone(), true));
+            let records = ListArray::try_new(
+                item.clone(),
+                OffsetBuffer::from_lengths([1, 0, 2, 1, 1]),
+                Arc::new(structs),
+                Some(NullBuffer::from(vec![true, true, false, true, true])),
+            )?;
+            for storage in [DataType::List(item.clone()), DataType::LargeList(item)] {
+                let records = datafusion::arrow::compute::cast(&records, &storage)?;
+                let result_type = original.return_type_for_list(&storage, "x")?;
+                for input in [records.clone(), records.slice(1, 4), records.slice(0, 0)] {
+                    let rows = input.len();
+                    let args = ScalarFunctionArgs {
+                        args: vec![
+                            ColumnarValue::Array(input),
+                            ColumnarValue::Scalar(ScalarValue::Utf8(Some("x".into()))),
+                        ],
+                        arg_fields: vec![
+                            Arc::new(Field::new("records", storage.clone(), true)),
+                            Arc::new(Field::new("name", DataType::Utf8, false)),
+                        ],
+                        number_rows: rows,
+                        return_field: Arc::new(Field::new("projected", result_type.clone(), true)),
+                        config_options: Arc::new(ConfigOptions::default()),
+                    };
+                    let actual = inline.invoke_with_args(args.clone())?.into_array(rows)?;
+                    let expected = original.invoke_with_args(args)?.into_array(rows)?;
+                    actual.to_data().validate_full()?;
+                    assert_eq!(actual.data_type(), expected.data_type());
+                    assert_eq!(actual.as_ref(), expected.as_ref());
+                }
+            }
+        }
+        Ok(())
     }
 }
