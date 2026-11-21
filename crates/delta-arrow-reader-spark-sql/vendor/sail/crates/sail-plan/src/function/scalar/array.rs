@@ -744,7 +744,7 @@ fn arrays_overlap(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let left = prepare_operand(left, &left_type, left_needs_value_cast)?;
     let right = prepare_operand(right, &right_type, right_needs_value_cast)?;
     // A required ARRAY constructor can still fail while evaluating its elements.
-    let result = when(
+    let mut branches = when(
         is_null(expr_fn::array_length(left.clone())),
         lit(ScalarValue::Null),
     )
@@ -762,7 +762,7 @@ fn arrays_overlap(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let result = if use_bigint_membership {
         // Keep the parent and empty-list gates above so derived operands
         // retain their evaluation before membership.
-        result.otherwise(ScalarUDF::from(BigIntArraysOverlap).call(vec![left, right]))?
+        branches.otherwise(ScalarUDF::from(BigIntArraysOverlap).call(vec![left, right]))?
     } else {
         let same_type_null_only_array = cast(
             make_array(vec![lit(ScalarValue::Null)]),
@@ -771,7 +771,7 @@ fn arrays_overlap(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
 
         let left_has_null = expr_fn::array_has_any(left.clone(), same_type_null_only_array.clone());
         let right_has_null = expr_fn::array_has_any(right.clone(), same_type_null_only_array);
-        result
+        branches
             .when(
                 or(left_has_null, right_has_null),
                 or(
