@@ -2666,3 +2666,10 @@ the offset difference on timestamps safely within Chrono's range. Equal
 zero-offset zones can share the input microsecond array. Ranges near
 Chrono's limits and named zones retain the original calendar conversion.
 Argument evaluation and timestamp unit scaling stay in their existing paths.
+
+### Default UNIX_TIMESTAMP parsing in UTC (#1409)
+
+UNIX_TIMESTAMP and TO_UNIX_TIMESTAMP reuse the checked whole-second
+parser for year 1 through 9999 with the omitted pattern in UTC. Other
+input forms, explicit patterns and other zones use the original
+format parser and localization. Invalid inputs retain the ANSI behavior.
