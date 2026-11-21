@@ -3042,3 +3042,9 @@ prepares the fixed day and time parts once. The row loop keeps the
 existing checked year-to-month calculation. Out-of-range fixed parts,
 NULL literals and other shapes use the original evaluation to preserve
 which error occurs first.
+
+### Literal DOUBLE BROUND scale (#1414)
+
+BROUND computes the factor once for a literal scale and a nonempty
+double column. It uses the same rounding calculation as the scale
+column path. Other argument types and shapes use the original adapter.
