@@ -699,6 +699,8 @@ fn microseconds_to_timestamp(array: Int64Array, time_unit: TimeUnit) -> Result<A
 
 #[cfg(test)]
 mod tests {
+    use std::panic::catch_unwind;
+
     use super::*;
 
     #[test]
@@ -706,7 +708,7 @@ mod tests {
         let min = DateTime::<Utc>::MIN_UTC.timestamp_micros();
         let max = DateTime::<Utc>::MAX_UTC.timestamp_micros();
         let day = 86_400_000_000;
-        let values = Int64Array::from(vec![
+        let timestamps = [
             None,
             Some(i64::MIN),
             Some(min - 1),
@@ -723,7 +725,7 @@ mod tests {
             Some(max),
             Some(max + 1),
             Some(i64::MAX),
-        ]);
+        ];
         let zones = [
             "UTC",
             "Z",
@@ -733,18 +735,28 @@ mod tests {
             "America/Los_Angeles",
         ]
         .map(|zone| ResolvedTimeZone::parse(zone).unwrap());
-        for convert in [
-            convert_tz_classic,
-            convert_tz_non_classic as fn(_, _, _) -> _,
-        ] {
+        let classic =
+            convert_tz_classic as fn(i64, &ResolvedTimeZone, &ResolvedTimeZone) -> Option<i64>;
+        for convert in [classic, convert_tz_non_classic] {
             for from in zones {
                 for to in zones {
-                    let actual = convert_singleton_zones(&values, Some(from), Some(to), convert);
-                    let expected: Int64Array = values
-                        .iter()
-                        .map(|value| value.and_then(|value| convert(value, &from, &to)))
-                        .collect();
-                    assert_eq!(actual, expected, "{from:?} to {to:?}");
+                    for timestamp in timestamps {
+                        let actual = catch_unwind(|| {
+                            let values = Int64Array::from(vec![timestamp]);
+                            convert_singleton_zones(&values, Some(from), Some(to), convert)
+                                .iter()
+                                .next()
+                                .unwrap()
+                        });
+                        let original =
+                            catch_unwind(|| timestamp.and_then(|value| convert(value, &from, &to)));
+                        // Some Chrono offsets panic at its range limits. Compare that outcome too.
+                        assert_eq!(
+                            actual.ok(),
+                            original.ok(),
+                            "{timestamp:?} {from:?} to {to:?}"
+                        );
+                    }
                 }
             }
         }
