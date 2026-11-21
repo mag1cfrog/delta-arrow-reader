@@ -6,29 +6,29 @@ cost 85-158 ns. Literal zone lookup explains part of the CONVERT_TIMEZONE
 cost. The two UTC timestamp functions already resolve their literal
 zones once per batch.
 
-Times are median ns per input row above projection from nine retained
-samples per path. The native A/A floor uses the three process medians
+Times are median [min, max] ns per input row above projection from nine
+retained samples per path. The native A/A floor uses the three process medians
 in each control arm. Native UTC values are near zero because the
 reference selects the existing values.
 
 | Function | Zone or shape | Spark ANSI off | Spark ANSI on | Native | Native A/A floor |
 | --- | --- | ---: | ---: | ---: | ---: |
-| TIME | Frozen #1391 | 90.005 | 89.986 | 10.249 | 0.043 |
-| CONVERT_TIMEZONE | UTC to UTC | 164.740 | 164.665 | 0.084 | 0.002 |
-| CONVERT_TIMEZONE | America/Los_Angeles | 178.920 | 175.830 | n/a | n/a |
-| CONVERT_TIMEZONE | +05:45 | 156.375 | 157.771 | n/a | n/a |
-| FROM_UNIXTIME | Frozen #1391 | 310.379 | 316.296 | 210.570 | 2.730 |
-| FROM_UTC_TIMESTAMP | UTC to UTC | 102.268 | 102.451 | 0.051 | 0.008 |
-| FROM_UTC_TIMESTAMP | America/Los_Angeles | 110.841 | 111.216 | n/a | n/a |
-| FROM_UTC_TIMESTAMP | +05:45 | 87.464 | 87.850 | n/a | n/a |
-| MAKE_TIME | Frozen #1391 | 5.878 | 5.875 | 5.115 | 0.202 |
-| TO_TIME | Frozen #1391 | 90.638 | 89.931 | 87.840 | 0.825 |
-| TO_UNIX_TIMESTAMP | Frozen #1391 | 147.771 | 147.430 | 50.534 | 0.306 |
-| TO_UTC_TIMESTAMP | UTC to UTC | 102.375 | 102.533 | 0.055 | 0.010 |
-| TO_UTC_TIMESTAMP | America/Los_Angeles | 113.519 | 113.660 | n/a | n/a |
-| TO_UTC_TIMESTAMP | +05:45 | 85.162 | 84.984 | n/a | n/a |
-| TRY_TO_TIME | Frozen #1391 | 90.588 | 89.907 | 87.577 | 1.229 |
-| UNIX_TIMESTAMP | Frozen #1391 | 147.600 | 147.580 | 50.675 | 0.280 |
+| TIME | Frozen #1391 | 90.005 [89.781, 90.994] | 89.986 [89.875, 90.629] | 10.249 [10.180, 10.611] | 0.043 |
+| CONVERT_TIMEZONE | UTC to UTC | 164.740 [164.280, 168.833] | 164.665 [164.221, 165.984] | 0.084 [0.075, 0.088] | 0.002 |
+| CONVERT_TIMEZONE | America/Los_Angeles | 178.920 [169.283, 181.193] | 175.830 [170.876, 184.684] | n/a | n/a |
+| CONVERT_TIMEZONE | +05:45 | 156.375 [156.048, 156.856] | 157.771 [155.320, 159.629] | n/a | n/a |
+| FROM_UNIXTIME | Frozen #1391 | 310.379 [306.396, 313.361] | 316.296 [309.250, 337.309] | 210.570 [209.572, 222.297] | 2.730 |
+| FROM_UTC_TIMESTAMP | UTC to UTC | 102.268 [102.187, 102.361] | 102.451 [102.252, 102.739] | 0.051 [0.046, 0.066] | 0.008 |
+| FROM_UTC_TIMESTAMP | America/Los_Angeles | 110.841 [110.669, 111.673] | 111.216 [110.692, 111.568] | n/a | n/a |
+| FROM_UTC_TIMESTAMP | +05:45 | 87.464 [87.273, 88.304] | 87.850 [87.219, 88.378] | n/a | n/a |
+| MAKE_TIME | Frozen #1391 | 5.878 [5.792, 5.944] | 5.875 [5.779, 5.989] | 5.115 [5.037, 5.229] | 0.202 |
+| TO_TIME | Frozen #1391 | 90.638 [90.009, 90.772] | 89.931 [89.820, 90.381] | 87.840 [87.383, 89.025] | 0.825 |
+| TO_UNIX_TIMESTAMP | Frozen #1391 | 147.771 [146.389, 149.128] | 147.430 [146.914, 155.753] | 50.534 [49.914, 50.692] | 0.306 |
+| TO_UTC_TIMESTAMP | UTC to UTC | 102.375 [102.220, 106.026] | 102.533 [102.179, 103.165] | 0.055 [0.045, 0.066] | 0.010 |
+| TO_UTC_TIMESTAMP | America/Los_Angeles | 113.519 [113.164, 113.778] | 113.660 [113.520, 114.407] | n/a | n/a |
+| TO_UTC_TIMESTAMP | +05:45 | 85.162 [85.012, 87.454] | 84.984 [84.923, 85.246] | n/a | n/a |
+| TRY_TO_TIME | Frozen #1391 | 90.588 [89.961, 93.933] | 89.907 [89.619, 90.718] | 87.577 [87.427, 88.941] | 1.229 |
+| UNIX_TIMESTAMP | Frozen #1391 | 147.600 [147.210, 149.082] | 147.580 [146.725, 148.537] | 50.675 [50.007, 50.823] | 0.280 |
 
 ## Where the per-row work comes from
 
