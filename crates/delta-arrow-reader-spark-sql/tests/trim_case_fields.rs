@@ -74,21 +74,28 @@ async fn nullable_utf8_rtrim_matches_the_explicit_space_path() -> TestResult {
         session.register_batch(name, batch)?;
     }
     let sources = [
-        "trim_optional",
-        "trim_optional WHERE s IS NOT NULL",
-        "(SELECT COALESCE(s, '') AS s FROM trim_optional) AS t",
-        "trim_empty",
-        "trim_view",
-        "trim_required",
+        ("s", "trim_optional"),
+        ("s", "trim_optional WHERE s IS NOT NULL"),
+        ("s", "(SELECT COALESCE(s, '') AS s FROM trim_optional) AS t"),
+        ("s", "trim_empty"),
+        ("s", "trim_view"),
+        ("s", "trim_required"),
+        (
+            "b.s",
+            "trim_required a LEFT JOIN trim_required b ON a.s = b.s WHERE b.s IS NOT NULL",
+        ),
     ];
     for ansi_mode in [false, true] {
         let options = SparkSqlOptions {
             ansi_mode,
             ..Default::default()
         };
-        for source in sources {
+        for (column, source) in sources {
             let mut results = Vec::new();
-            for expression in ["rtrim(s)", "TRIM(TRAILING ' ' FROM s)"] {
+            for expression in [
+                format!("rtrim({column})"),
+                format!("TRIM(TRAILING ' ' FROM {column})"),
+            ] {
                 let sql = format!("SELECT {expression} AS trimmed FROM {source}");
                 let plan = plan_query(&session, &sql, &options)
                     .await?
