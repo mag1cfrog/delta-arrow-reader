@@ -6,7 +6,7 @@ use arrow::datatypes::{DataType, Field};
 use datafusion::functions::expr_fn::coalesce;
 use datafusion::functions_aggregate::{
     approx_distinct, array_agg, average, bit_and_or_xor, bool_and_or, correlation, count,
-    covariance, first_last, grouping, percentile_cont, stddev, sum, variance,
+    covariance, first_last, grouping, percentile_cont, stddev, string_agg, sum, variance,
 };
 use datafusion::functions_nested::string::array_to_string;
 use datafusion::optimizer::simplify_expressions::ExprSimplifier;
@@ -966,15 +966,42 @@ pub(super) fn coalesce_to_empty_array(
     }
 }
 
+pub(super) fn supports_direct_string_agg(value_type: &DataType, delimiter: &expr::Expr) -> bool {
+    value_type == &DataType::Utf8
+        && matches!(
+            delimiter,
+            expr::Expr::Literal(ScalarValue::Utf8(Some(_)), _)
+        )
+}
+
 fn listagg(input: AggFunctionInput) -> PlanResult<expr::Expr> {
     let schema = input.function_context.schema;
     let (agg_col, other_args) = input.arguments.at_least_one()?;
-    let agg_col = if agg_col.get_type(schema)? == DataType::Null {
+    let value_type = agg_col.get_type(schema)?;
+    let agg_col = if value_type == DataType::Null {
         cast(agg_col, DataType::Utf8)
     } else {
         agg_col
     };
     let delim = other_args.first().cloned().unwrap_or_else(|| lit(""));
+
+    if !input.distinct
+        && input.order_by.is_empty()
+        && other_args.len() <= 1
+        && supports_direct_string_agg(&value_type, &delim)
+    {
+        let aggregate = expr::Expr::AggregateFunction(AggregateFunction {
+            func: string_agg::string_agg_udaf(),
+            params: AggregateFunctionParams {
+                args: vec![agg_col, delim],
+                distinct: false,
+                order_by: Vec::new(),
+                filter: input.filter,
+                null_treatment: None,
+            },
+        });
+        return Ok(aggregate.cast_to(&DataType::Utf8, schema)?);
+    }
 
     let agg = expr::Expr::AggregateFunction(AggregateFunction {
         func: array_agg::array_agg_udaf(),
@@ -1003,7 +1030,7 @@ fn listagg(input: AggFunctionInput) -> PlanResult<expr::Expr> {
         delim.cast_to(&DataType::Utf8, schema)?,
     );
 
-    let casted_agg = match agg_col.get_type(schema)? {
+    let casted_agg = match value_type {
         DataType::Binary | DataType::BinaryView => string_agg.cast_to(&DataType::Binary, schema)?,
         DataType::LargeBinary => string_agg.cast_to(&DataType::LargeBinary, schema)?,
         _ => string_agg,
