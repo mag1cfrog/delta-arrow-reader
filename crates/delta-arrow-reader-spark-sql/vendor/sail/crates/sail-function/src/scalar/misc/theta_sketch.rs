@@ -1,10 +1,11 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
 use arrow::array::{
     Array, ArrayRef, BinaryArray, BinaryBuilder, Int32Array, Int64Builder, new_null_array,
 };
 use arrow::datatypes::DataType;
-use datafusion_common::{Result, exec_err};
+use datafusion_common::{Result, ScalarValue, exec_err};
 use datafusion_expr::{ScalarFunctionArgs, ScalarUDFImpl};
 use datafusion_expr_common::columnar_value::ColumnarValue;
 use datafusion_expr_common::signature::{Signature, TypeSignature, Volatility};
@@ -115,14 +116,22 @@ impl ScalarUDFImpl for ThetaUnionFunction {
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
         let ScalarFunctionArgs { mut args, .. } = args;
         if args.len() == 2 {
-            args.push(ColumnarValue::Scalar(
-                datafusion_common::ScalarValue::Int32(Some(DEFAULT_LG_NOM_ENTRIES)),
-            ));
+            args.push(ColumnarValue::Scalar(ScalarValue::Int32(Some(
+                DEFAULT_LG_NOM_ENTRIES,
+            ))));
         }
         if args.len() != 3 {
             return exec_err!("theta_union requires 2 or 3 arguments, got {}", args.len());
         }
-        make_scalar_function(theta_union_inner, vec![])(&args)
+        if let ColumnarValue::Scalar(ScalarValue::Int32(Some(entries))) = &args[2]
+            && let Ok(entries) = validate_lg_nom_entries(*entries, "theta_union")
+        {
+            return make_scalar_function(
+                move |arrays| theta_union_inner(arrays, Some(entries)),
+                vec![],
+            )(&args[..2]);
+        }
+        make_scalar_function(|arrays| theta_union_inner(arrays, None), vec![])(&args)
     }
 }
 
@@ -248,7 +257,7 @@ fn theta_sketch_estimate_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
     Ok(Arc::new(builder.finish()))
 }
 
-fn theta_union_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
+fn theta_union_inner(args: &[ArrayRef], constant_entries: Option<u8>) -> Result<ArrayRef> {
     if args
         .iter()
         .any(|arg| matches!(arg.data_type(), DataType::Null))
@@ -257,20 +266,36 @@ fn theta_union_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
     }
     let left = as_binary_array(&args[0], "theta_union")?;
     let right = as_binary_array(&args[1], "theta_union")?;
+    if let Some(entries) = constant_entries {
+        return union_theta_rows(left, right, |_| Ok(Some(entries)));
+    }
     let lg_nom_entries = as_int32_array(&args[2], "theta_union")?;
+    union_theta_rows(left, right, |row| {
+        if lg_nom_entries.is_null(row) {
+            Ok(None)
+        } else {
+            validate_lg_nom_entries(lg_nom_entries.value(row), "theta_union").map(Some)
+        }
+    })
+}
+
+fn union_theta_rows(
+    left: &BinaryArray,
+    right: &BinaryArray,
+    entries_for_row: impl Fn(usize) -> Result<Option<u8>>,
+) -> Result<ArrayRef> {
     let mut builder = BinaryBuilder::new();
     for row in 0..left.len() {
-        if left.is_null(row) || right.is_null(row) || lg_nom_entries.is_null(row) {
+        if left.is_null(row) || right.is_null(row) {
             builder.append_null();
-        } else {
-            let lg_nom_entries = validate_lg_nom_entries(lg_nom_entries.value(row), "theta_union")?;
-            let value = union_sketch_bytes(
-                left.value(row),
-                right.value(row),
-                lg_nom_entries,
-                "theta_union",
-            )?;
+            continue;
+        }
+        if let Some(entries) = entries_for_row(row)? {
+            let value =
+                union_sketch_bytes(left.value(row), right.value(row), entries, "theta_union")?;
             builder.append_value(value);
+        } else {
+            builder.append_null();
         }
     }
     Ok(Arc::new(builder.finish()))
@@ -362,4 +387,57 @@ fn as_int32_array<'a>(array: &'a ArrayRef, function_name: &str) -> Result<&'a In
             array.data_type()
         ))
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use arrow::array::Int64Array;
+    use arrow::datatypes::Field;
+
+    use super::*;
+    use crate::theta_sketch::{
+        compact_update_sketch_bytes, new_update_sketch, update_sketch_from_array,
+    };
+
+    #[test]
+    fn literal_theta_union_entries_match_broadcast_entries() -> Result<()> {
+        let inputs = Arc::new(Int64Array::from(vec![1, 2, 3])) as ArrayRef;
+        let mut sketch = new_update_sketch(12);
+        update_sketch_from_array(&mut sketch, &inputs)?;
+        let bytes = compact_update_sketch_bytes(&sketch, 12)?;
+        let sketches = BinaryArray::from(vec![None, Some(bytes.as_slice()), Some(&[0][..])]);
+        let function = ThetaUnionFunction::new();
+        let previous = make_scalar_function(|arrays| theta_union_inner(arrays, None), vec![]);
+        for length in 0..=sketches.len() {
+            let sketch_column = ColumnarValue::Array(Arc::new(sketches.slice(0, length)));
+            for entries in [None, Some(3), Some(4), Some(12), Some(26), Some(27)] {
+                let args = vec![
+                    sketch_column.clone(),
+                    ColumnarValue::Scalar(ScalarValue::Binary(Some(bytes.clone()))),
+                    ColumnarValue::Scalar(ScalarValue::Int32(entries)),
+                ];
+                let expected = previous(&args);
+                let actual = function.invoke_with_args(ScalarFunctionArgs {
+                    arg_fields: args
+                        .iter()
+                        .map(|arg| Arc::new(Field::new("arg", arg.data_type(), true)))
+                        .collect(),
+                    args,
+                    number_rows: length,
+                    return_field: Arc::new(Field::new("sketch", DataType::Binary, true)),
+                    config_options: Arc::new(Default::default()),
+                });
+                match (actual, expected) {
+                    (Ok(ColumnarValue::Array(actual)), Ok(ColumnarValue::Array(expected))) => {
+                        assert_eq!(actual.to_data(), expected.to_data());
+                    }
+                    (Err(actual), Err(expected)) => {
+                        assert_eq!(actual.to_string(), expected.to_string());
+                    }
+                    outcomes => panic!("different theta union outcomes: {outcomes:?}"),
+                }
+            }
+        }
+        Ok(())
+    }
 }
