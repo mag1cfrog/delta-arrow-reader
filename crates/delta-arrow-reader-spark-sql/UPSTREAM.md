@@ -2770,3 +2770,10 @@ ENCODE shares string buffers for scalar UTF-8 with contiguous offsets and
 empty NULL byte ranges. The result keeps its Binary or LargeBinary width.
 Other charsets, scalar values, views and nonempty NULL byte ranges use the
 existing per-row encoder.
+
+### Boolean masks for simple WHEN (#1411)
+
+A single Boolean column guard and BIGINT column result without ELSE
+use the native searched CASE mask. The output keeps its nullable BIGINT
+type. Conditions or results resolved as expressions, additional arms and
+explicit ELSE keep the Spark searched CASE planning path.
