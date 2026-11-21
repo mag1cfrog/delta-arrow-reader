@@ -17,3 +17,9 @@ Use the [matched Linux release schedule](../window_aggregates_1408/string-aggreg
 The target is at or below the candidate native median plus the native
 repeat floor in both ANSI modes. Record any remaining cost after this
 comparison.
+
+Before clocks, run the [boundary SQL](inline-validation.json) on both
+builds in both ANSI modes. Compare 24 expanded rows and the `id`,
+`x` and `y` columns (INT64, INT64 and STRING). The query covers
+NULL and empty inputs, a NULL struct, NULL fields and two projected
+fields with different types.
