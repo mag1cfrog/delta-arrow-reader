@@ -2613,6 +2613,14 @@ both engines. The original regex expression handles all other inputs.
 The [differential test](tests/regex_operands/literal_matches.rs) evaluates
 the previous scalar regex path against the public functions.
 
+### YEAR from Date32 epoch days (#1413)
+
+The YEAR array implementation gets the calendar date directly from
+the stored days since the Unix epoch. It keeps the previous Arrow
+conversion for dates outside Chrono's range and for scalar arguments.
+The [differential test](tests/date_boundaries/year_from_epoch_days.rs)
+compares both ANSI modes at the calendar and Date32 storage limits.
+
 ### AES scalar and column arguments (#1405)
 
 The local Sail AES functions evaluate inputs, keys, modes, padding, IVs and

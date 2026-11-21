@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 use std::sync::Arc;
 
 use chrono::{Datelike, NaiveDate};
@@ -66,9 +67,11 @@ impl ScalarUDFImpl for SparkYear {
             ColumnarValue::Array(array) => {
                 let result = match array.data_type() {
                     DataType::Date32 => {
-                        let result: Int32Array = array
-                            .as_primitive::<Date32Type>()
-                            .try_unary(date32_to_year)?;
+                        let result: Int32Array =
+                            array.as_primitive::<Date32Type>().try_unary(|days| {
+                                NaiveDate::from_epoch_days(days)
+                                    .map_or_else(|| date32_to_year(days), |date| Ok(date.year()))
+                            })?;
                         Ok(Arc::new(result) as ArrayRef)
                     }
                     other => Err(unsupported_data_type_exec_err("year", "DATE", other)),
