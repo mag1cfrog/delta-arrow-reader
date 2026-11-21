@@ -1,0 +1,7 @@
+{
+  "staging_source": "2bd5002527a7156789115abffb440b96d8af2dc1",
+  "process_replicas": 6,
+  "maximum_processes": 90,
+  "maximum_profile_cases": 3,
+  "timing_timeout_seconds": 1800
+}
