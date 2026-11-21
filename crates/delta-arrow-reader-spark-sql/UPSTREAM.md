@@ -2604,6 +2604,15 @@ without converting them to Utf8View. Other argument types retain their
 existing coercion. The [differential test](tests/string_numeric_operands/padding_and_overlay.rs)
 exercises the previous view signature against the Utf8 signature.
 
+### Short literal regular expressions (#1413)
+
+REGEXP, REGEXP_LIKE and RLIKE use the native contains-shaped LIKE
+expression for a Utf8 value and a nonempty ASCII alphanumeric literal
+of at most 32 bytes. Such a pattern is a case-sensitive substring in
+both engines. The original regex expression handles all other inputs.
+The [differential test](tests/regex_operands/literal_matches.rs) evaluates
+the previous scalar regex path against the public functions.
+
 ### AES scalar and column arguments (#1405)
 
 The local Sail AES functions evaluate inputs, keys, modes, padding, IVs and

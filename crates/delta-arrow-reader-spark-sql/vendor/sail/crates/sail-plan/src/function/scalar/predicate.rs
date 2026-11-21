@@ -119,14 +119,27 @@ impl ScalarUDFImpl for ILikeResult {
     }
 }
 
-fn rlike(expr: expr::Expr, pattern: expr::Expr) -> expr::Expr {
-    expr::Expr::SimilarTo(expr::Like {
+fn rlike(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
+    let ScalarFunctionInput {
+        arguments,
+        function_context,
+    } = input;
+    let (value, pattern) = arguments.two()?;
+    // Short ASCII words have the same unanchored match in regex and LIKE.
+    if let expr::Expr::Literal(ScalarValue::Utf8(Some(word)), _) = &pattern
+        && (1..=32).contains(&word.len())
+        && word.bytes().all(|byte| byte.is_ascii_alphanumeric())
+        && matches!(value.get_type(function_context.schema), Ok(DataType::Utf8))
+    {
+        return Ok(value.like(datafusion_expr::lit(format!("%{word}%"))));
+    }
+    Ok(expr::Expr::SimilarTo(expr::Like {
         negated: false,
-        expr: Box::new(expr),
+        expr: Box::new(value),
         pattern: Box::new(pattern),
         case_insensitive: false,
         escape_char: None,
-    })
+    }))
 }
 
 fn is_in_list(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
@@ -275,8 +288,8 @@ pub(super) fn list_built_in_predicate_functions() -> Vec<(&'static str, ScalarFu
         ("like", F::custom(|input| build_like_expr(input, false))),
         ("not", F::unary(not)),
         ("or", F::binary_op(Operator::Or)),
-        ("regexp", F::binary(rlike)),
-        ("regexp_like", F::binary(rlike)),
-        ("rlike", F::binary(rlike)),
+        ("regexp", F::custom(rlike)),
+        ("regexp_like", F::custom(rlike)),
+        ("rlike", F::custom(rlike)),
     ]
 }
