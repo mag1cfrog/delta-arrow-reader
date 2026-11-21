@@ -1,0 +1,9 @@
+{
+  "staging_source": "09a08d17d4706e80920eb54dc5809288e93d0db8",
+  "staging_tip": "679311cb78a78838d5fbe65227fa3d082c3f31b8",
+  "candidate_source": "3b6b3dd7a8c20a04697d7c8fb5fa77debb1f8778",
+  "case_ids": [
+    "window.window.percentile"
+  ],
+  "overall_timeout_seconds": 14400
+}
