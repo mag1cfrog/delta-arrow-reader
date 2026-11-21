@@ -4,15 +4,15 @@ The [logical phase table](planning-1390-round2-logical-phases.csv)
 covers 25 paired statements and two stress statements. Each row
 reports the median of five process medians, in nanoseconds.
 The largest interval for every paired query and for CASE is
-resolution. Its paired-statement median is 71.664 / 70.852 µs,
-ANSI off / on. Parser construction is 26.209 / 26.219 µs.
+resolution. Its paired-statement median is 71.664 / 70.852 us,
+ANSI off / on. Parser construction is 26.209 / 26.219 us.
 CASE spends 1.588 / 1.573 ms resolving. IN spends most of its
 time in grammar traversal, 1.099 / 1.094 ms.
 
 In the separate [resolver table](planning-1390-round2-logical-resolver.csv),
 recursive query resolution is the largest part for the paired
-queries, 45.284 / 45.454 µs at the median. Set lowering takes
-14.607 / 14.497 µs and includes a 9.528 / 9.368 µs session
+queries, 45.284 / 45.454 us at the median. Set lowering takes
+14.607 / 14.497 us and includes a 9.528 / 9.368 us session
 snapshot even when the query has no set. The candidate moves that
 snapshot after the existing search for pending sets.
 
@@ -40,11 +40,11 @@ snapshot after the existing search for pending sets.
 | stress/in_1000 | logical | spark-on | 1.879 | 1.774 | -0.111 | 0.015 |
 
 Keep the staging implementation. The candidate reduces the median
-paired logical time by 13.284 / 13.073 µs across the 25 statements.
+paired logical time by 13.284 / 13.073 us across the 25 statements.
 23 / 22 reach the row-level improvement criterion. Two
 native-configured rows breach the regression gate. EXCEPT physical
-has a median paired increase of 3.517 µs against a 0.561 µs floor.
-INTERSECT total increases by 3.758 µs against 2.655 µs. Both have
+has a median paired increase of 3.517 us against a 0.561 us floor.
+INTERSECT total increases by 3.758 us against 2.655 us. Both have
 five positive paired deltas and disjoint process ranges. Those
 native paths do not use Spark set lowering. This session therefore
 does not attribute the shifts to the deferred snapshot. The exact
@@ -54,7 +54,7 @@ Using the retained staging arm of this session, CASE logical
 still exceeds native-configured by 1.437 / 1.432 ms, IN by
 1.044 / 1.118 ms, and the 400-column query by 1.368 / 1.367 ms.
 The median gap across the 25 paired statements is 63.688 /
-62.767 µs. The ordinary recursive resolution and IN grammar
+62.767 us. The ordinary recursive resolution and IN grammar
 costs remain.
 
 The [matched table](planning-1390-round2-logical.csv) contains all 360 phase rows.
