@@ -1,0 +1,228 @@
+{
+  "staging": "087925f6a3e56cbde5eec52cfe6009d9aea3377e",
+  "executable_source": "42de836662a847b1059fafc29c8be4ab71d8a3f8",
+  "frozen_manifest_sha256": "ec6528b17cb072224aec6ea0ea3c1e910b9aa8cf6f5cadb0296f85b3f86f1f06",
+  "overall_timeout_seconds": 1200,
+  "profile": {
+    "frequency_hz": 997,
+    "stack_bytes": 8192,
+    "repeats": 3,
+    "timeout_seconds": 45,
+    "max_mib": 96
+  },
+  "functions": [
+    {
+      "kind": "scalar",
+      "category": "array",
+      "name": "array_max",
+      "registration": "F::udf(ArrayMax::new())",
+      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/array.rs:1180",
+      "implementation_anchors": [
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-function/src/scalar/array/spark_array_min_max.rs:81",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/array.rs:1180"
+      ],
+      "id": "scalar.array.array_max",
+      "aliases": [],
+      "spark_sql": "SELECT id,array_max(arr) AS value FROM bench",
+      "native_sql": "SELECT id,array_max(arr) AS value FROM bench",
+      "input_columns": [
+        "id",
+        "arr"
+      ],
+      "projection_sql": "SELECT id,arr FROM bench",
+      "exclusion": null,
+      "class": "paired",
+      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+    },
+    {
+      "kind": "scalar",
+      "category": "array",
+      "name": "array_min",
+      "registration": "F::udf(ArrayMin::new())",
+      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/array.rs:1181",
+      "implementation_anchors": [
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-function/src/scalar/array/spark_array_min_max.rs:30",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/array.rs:1181"
+      ],
+      "id": "scalar.array.array_min",
+      "aliases": [],
+      "spark_sql": "SELECT id,array_min(arr) AS value FROM bench",
+      "native_sql": "SELECT id,array_min(arr) AS value FROM bench",
+      "input_columns": [
+        "id",
+        "arr"
+      ],
+      "projection_sql": "SELECT id,arr FROM bench",
+      "exclusion": null,
+      "class": "paired",
+      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+    },
+    {
+      "kind": "scalar",
+      "category": "array",
+      "name": "arrays_overlap",
+      "registration": "F::custom(arrays_overlap)",
+      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/array.rs:1188",
+      "implementation_anchors": [
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/array.rs:1188",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/array.rs:672"
+      ],
+      "id": "scalar.array.arrays_overlap",
+      "aliases": [],
+      "spark_sql": "SELECT id,arrays_overlap(arr,arr) AS value FROM bench",
+      "native_sql": "SELECT id,array_has_any(arr,arr) AS value FROM bench",
+      "input_columns": [
+        "id",
+        "arr"
+      ],
+      "projection_sql": "SELECT id,arr FROM bench",
+      "exclusion": null,
+      "class": "paired",
+      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+    },
+    {
+      "kind": "scalar",
+      "category": "array",
+      "name": "flatten",
+      "registration": "F::custom(flatten)",
+      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/array.rs:1190",
+      "implementation_anchors": [
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/array.rs:1190",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/array.rs:898"
+      ],
+      "id": "scalar.array.flatten",
+      "aliases": [],
+      "spark_sql": "SELECT id,flatten(nested) AS value FROM bench",
+      "native_sql": "SELECT id,flatten(nested) AS value FROM bench",
+      "input_columns": [
+        "id",
+        "nested"
+      ],
+      "projection_sql": "SELECT id,nested FROM bench",
+      "exclusion": null,
+      "class": "paired",
+      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+    },
+    {
+      "kind": "scalar",
+      "category": "array",
+      "name": "sequence",
+      "registration": "F::custom(sequence)",
+      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/array.rs:1192",
+      "implementation_anchors": [
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-function/src/scalar/array/spark_sequence.rs:53",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-function/src/scalar/array/spark_sequence.rs:80",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/array.rs:1048",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/array.rs:1192"
+      ],
+      "id": "scalar.array.sequence",
+      "aliases": [],
+      "native_type_alignment": "List(non-null Int32)",
+      "spark_sql": "SELECT id,sequence(p,p+2) AS value FROM bench",
+      "native_sql": "SELECT id,arrow_cast(range(p,p+3),'List(non-null Int32)') AS value FROM bench",
+      "input_columns": [
+        "id",
+        "p"
+      ],
+      "projection_sql": "SELECT id,p FROM bench",
+      "exclusion": null,
+      "class": "paired",
+      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+    },
+    {
+      "kind": "scalar",
+      "category": "array",
+      "name": "slice",
+      "registration": "F::custom(slice)",
+      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/array.rs:1194",
+      "implementation_anchors": [
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/array.rs:1194",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/array.rs:158",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/array.rs:191"
+      ],
+      "id": "scalar.array.slice",
+      "aliases": [],
+      "spark_sql": "SELECT id,slice(arr,1,2) AS value FROM bench",
+      "native_sql": "SELECT id,array_slice(arr,1,2) AS value FROM bench",
+      "input_columns": [
+        "id",
+        "arr"
+      ],
+      "projection_sql": "SELECT id,arr FROM bench",
+      "exclusion": null,
+      "class": "paired",
+      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+    },
+    {
+      "kind": "scalar",
+      "category": "collection",
+      "name": "element_at",
+      "registration": "F::custom(|input| element_at(input, false))",
+      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/collection.rs:166",
+      "implementation_anchors": [
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-function/src/scalar/collection/spark_concat.rs:25",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/collection.rs:166",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/collection.rs:99"
+      ],
+      "id": "scalar.collection.element_at",
+      "aliases": [],
+      "spark_sql": "SELECT id,element_at(arr,1) AS value FROM bench",
+      "native_sql": "SELECT id,array_element(arr,1) AS value FROM bench",
+      "input_columns": [
+        "id",
+        "arr"
+      ],
+      "projection_sql": "SELECT id,arr FROM bench",
+      "exclusion": null,
+      "class": "paired",
+      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+    },
+    {
+      "kind": "scalar",
+      "category": "collection",
+      "name": "try_element_at",
+      "registration": "F::custom(|input| element_at(input, true))",
+      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/collection.rs:198",
+      "implementation_anchors": [
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-function/src/scalar/collection/spark_concat.rs:25",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/collection.rs:198",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/collection.rs:99"
+      ],
+      "id": "scalar.collection.try_element_at",
+      "aliases": [],
+      "spark_sql": "SELECT id,try_element_at(arr,1) AS value FROM bench",
+      "native_sql": "SELECT id,array_element(arr,1) AS value FROM bench",
+      "input_columns": [
+        "id",
+        "arr"
+      ],
+      "projection_sql": "SELECT id,arr FROM bench",
+      "exclusion": null,
+      "class": "paired",
+      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+    },
+    {
+      "kind": "scalar",
+      "category": "vector",
+      "name": "vector_inner_product",
+      "registration": "F::udf(VectorInnerProduct::new())",
+      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/vector.rs:13",
+      "implementation_anchors": [
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-function/src/scalar/vector/inner_product.rs:14",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/vector.rs:13"
+      ],
+      "id": "scalar.vector.vector_inner_product",
+      "aliases": [],
+      "spark_sql": "SELECT id,vector_inner_product(CAST(vec AS ARRAY<FLOAT>),CAST(vec AS ARRAY<FLOAT>)) AS value FROM bench",
+      "native_sql": "SELECT id,CAST(inner_product(CAST(vec AS ARRAY<FLOAT>),CAST(vec AS ARRAY<FLOAT>)) AS FLOAT) AS value FROM bench",
+      "input_columns": [
+        "id",
+        "vec"
+      ],
+      "projection_sql": "SELECT id,vec FROM bench",
+      "exclusion": null,
+      "class": "paired",
+      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+    }
+  ]
+}
