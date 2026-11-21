@@ -102,9 +102,9 @@ def build(repository, target, output, variant, source=None):
     })
 
 
-def observe(binary, case, work, settings, deadline):
+def observe(binary, case, work, settings, deadline, manifest=MANIFEST):
     modes = (("native",) if case["native_sql"] else ()) + MODES
-    result = runner.invoke(binary, ["preflight", MANIFEST, case["id"], work / "plans"],
+    result = runner.invoke(binary, ["preflight", manifest, case["id"], work / "plans"],
                            work, settings, deadline, preflight=True)
     if result["status"] != "ok":
         raise ValueError(f"preflight {result['status']}")
@@ -150,11 +150,11 @@ def preflight(binaries, cases, output, settings, deadline):
     return eligible, excluded
 
 
-def one_process(binary, id, mode, work, expected, settings, deadline):
+def one_process(binary, id, mode, work, expected, settings, deadline, manifest=MANIFEST):
     ids = work.with_suffix(".ids.json")
     ids.parent.mkdir(parents=True, exist_ok=True)
     write(ids, [id])
-    execution = runner.invoke(binary, ["measure-set", MANIFEST, ids, mode], work, settings, deadline)
+    execution = runner.invoke(binary, ["measure-set", manifest, ids, mode], work, settings, deadline)
     result, = runner.assemble_cases(execution, [id], mode)
     if execution["status"] != "ok":
         result["status"] = execution["status"]
