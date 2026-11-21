@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare a sliding-aggregate candidate and staging in one release session."""
+"""Compare a SQL function candidate and staging in one release session."""
 
 import argparse
 import filecmp
@@ -9,24 +9,33 @@ import sys
 import time
 
 sys.dont_write_bytecode = True
-from run import HERE, WORKSPACE, build, increments, observe, one_process, process_medians, protocol, runner, schedule, write
+from run import HERE, MANIFEST, WORKSPACE, build, increments, observe, one_process, process_medians, protocol, runner, schedule, write
 
 ARMS = ("staging", "candidate")
 
 
-def selected_cases(settings):
-    cases = {case["id"]: case for case in protocol()["functions"]}
+def statement_manifest(settings_file, settings):
+    if "statement_manifest" not in settings:
+        return MANIFEST
+    path = (settings_file.parent / settings["statement_manifest"]).resolve()
+    assert runner.digest(path) == settings["statement_manifest_sha256"]
+    return path
+
+
+def selected_cases(settings, manifest=MANIFEST):
+    statements = protocol() if manifest == MANIFEST else runner.read(manifest)
+    cases = {case["id"]: case for case in statements["functions"]}
     assert settings["case_ids"] == sorted(set(settings["case_ids"]))
     return [cases[case_id] for case_id in settings["case_ids"]]
 
 
-def preflight(binaries, cases, output, settings, deadline, plan_checks):
+def preflight(binaries, cases, output, settings, deadline, plan_checks, manifest):
     eligible, excluded = {}, {}
     for case in cases:
         case_id = case["id"]
         try:
-            before = observe(binaries["staging"], case, output / case_id / "staging", settings, deadline)
-            after = observe(binaries["candidate"], case, output / case_id / "candidate", settings, deadline)
+            before = observe(binaries["staging"], case, output / case_id / "staging", settings, deadline, manifest)
+            after = observe(binaries["candidate"], case, output / case_id / "candidate", settings, deadline, manifest)
             if before["types"] != after["types"]:
                 raise ValueError("executed types differ between staging and candidate")
             for mode in before["modes"]:
@@ -36,11 +45,11 @@ def preflight(binaries, cases, output, settings, deadline, plan_checks):
                 if mode != "native":
                     for arm, observed in zip(ARMS, (before, after)):
                         fragments = plan_checks.get(arm, {})
-                        group = "aggregate" if case_id.startswith("aggregate.") else "window"
+                        group = case_id.split(".", 1)[0]
                         required = fragments.get(group, [])
                         plan = (observed["plans"] / f"{mode}.plan").read_text().lower()
                         if any(fragment not in plan for fragment in required):
-                            raise ValueError(f"{mode}: {arm} plan lacks expected aggregate path")
+                            raise ValueError(f"{mode}: {arm} plan lacks expected expression")
             eligible[case_id] = {k: v for k, v in before.items() if k != "plans"}
         except ValueError as error:
             excluded[case_id] = str(error)
@@ -54,9 +63,9 @@ def summarize(observations):
     return runner.signed_stats(increments(observations))
 
 
-def timed_case(binary, case_id, mode, work, expected, settings, deadline):
+def timed_case(binary, case_id, mode, work, expected, settings, deadline, manifest):
     print(str(work), flush=True)
-    return one_process(binary, case_id, mode, work, expected, settings, deadline)
+    return one_process(binary, case_id, mode, work, expected, settings, deadline, manifest)
 
 
 def measure(settings_file, directories, output):
@@ -72,7 +81,8 @@ def measure(settings_file, directories, output):
     assert not runner.git("diff", "--name-only", candidate["candidate_source"], head, "--",
                           str(WORKSPACE / "src"), str(WORKSPACE / "vendor"), str(WORKSPACE / "tests"),
                           str(WORKSPACE / "Cargo.toml"), str(WORKSPACE / "Cargo.lock"))
-    cases = selected_cases(candidate)
+    manifest = statement_manifest(settings_file, candidate)
+    cases = selected_cases(candidate, manifest)
     settings = schedule()
     assert settings["replicas"] == 3
     deadline = time.monotonic() + candidate["overall_timeout_seconds"]
@@ -88,7 +98,7 @@ def measure(settings_file, directories, output):
         binaries[arm], receipts[arm] = binary, receipt
     assert receipts["staging"]["patch_sha256"] == receipts["candidate"]["patch_sha256"]
     eligible, excluded = preflight(binaries, cases, output / "preflight", settings, deadline,
-                                   candidate.get("spark_plan_contains", {}))
+                                   candidate.get("spark_plan_contains", {}), manifest)
     write(output / "session.json", {
         "protocol_commit": head, "comparison_sha256": runner.digest(settings_file),
         "comparison": candidate, "builds": receipts, "schedule": settings,
@@ -109,7 +119,7 @@ def measure(settings_file, directories, output):
                     continue
                 for arm in ARMS[::order]:
                     work = output / "paired" / str(replica) / case_id / mode / arm
-                    result = timed_case(binaries[arm], case_id, mode, work, expected, settings, deadline)
+                    result = timed_case(binaries[arm], case_id, mode, work, expected, settings, deadline, manifest)
                     paired[case_id][mode][arm].append(result)
             if case_id in noise:
                 for arm in settings["noise_orders"][replica]:
@@ -118,7 +128,7 @@ def measure(settings_file, directories, output):
                         continue
                     work = output / "noise" / str(replica) / case_id / arm
                     previous.append(timed_case(binaries["candidate"], case_id, "native", work,
-                                               expected, settings, deadline))
+                                               expected, settings, deadline, manifest))
     summary = {}
     for case_id, modes in paired.items():
         result = {mode: {arm: summarize(runs) for arm, runs in comparisons.items()}
@@ -156,7 +166,8 @@ def main():
         measure(args.comparison.resolve(), {arm: getattr(args, arm).resolve() for arm in ARMS},
                 args.output.resolve())
     else:
-        print(f"Checked {len(selected_cases(settings))} frozen comparison cases")
+        manifest = statement_manifest(args.comparison.resolve(), settings)
+        print(f"Checked {len(selected_cases(settings, manifest))} frozen comparison cases")
 
 
 if __name__ == "__main__":
