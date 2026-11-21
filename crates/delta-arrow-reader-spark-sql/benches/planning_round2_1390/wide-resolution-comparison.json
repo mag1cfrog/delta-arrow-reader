@@ -1,0 +1,8 @@
+{
+  "staging_source": "8bdf07b78a3f8ea3cf86646298be380f97d9c20d",
+  "candidate_source": "5bcb981cc460fbb2773e3a48b929aa4ef145e932",
+  "staging_head": "790da65b3a28b1352c0ce125dd13d74e3d740cdb",
+  "query_manifest_sha256": "62edfeefa1d90438fb1feee0f49f26b0bdf80a93145ddb118db0f12085615712",
+  "maximum_processes": 50,
+  "timeout_seconds": 600
+}
