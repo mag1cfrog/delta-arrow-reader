@@ -3,8 +3,9 @@
 The [profile and source trace](../reports/generators-text-conditionals-1411-attribution.md)
 identify repeated charset normalization, copying and validation per value.
 DECODE can share Binary and LargeBinary buffers for a scalar UTF-8 charset
-after Arrow validates the bytes and offsets. A failed validation uses the
-original decoder for the same Spark error.
+after Arrow validates the bytes and offsets. Arrow can rebuild visible
+rows when the surrounding buffer is invalid. Malformed visible values
+use the original decoder and Spark error.
 
 Use [decode.json](decode.json) to pin the executables and select the frozen
 one-million-row DECODE case. Require exact keyed results and executed
