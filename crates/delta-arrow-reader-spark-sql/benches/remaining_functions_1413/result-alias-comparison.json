@@ -1,0 +1,16 @@
+{
+  "staging_source": "f06519e1e237dd94877b908647da031184d0acfe",
+  "staging_tip": "03d75a4dccdb75a3c1501defbdc700cd29793c0f",
+  "candidate_source": "375e97cb02546477d3b79c8aef5b4f152dbad0dd",
+  "statement_manifest": "manifest.json",
+  "statement_manifest_sha256": "d006b18aec9a7e82f864b705d99e60740da2e5e542da2409578cdcfbae52929e",
+  "case_ids": [
+    "scalar.string.char",
+    "scalar.string.repeat",
+    "scalar.string.replace",
+    "scalar.string.right",
+    "window.window.row_number",
+    "window.window.stddev_samp"
+  ],
+  "overall_timeout_seconds": 1800
+}
