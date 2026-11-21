@@ -950,7 +950,8 @@ fn flatten(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         && matches!(&array_type, DataType::List(_) | DataType::LargeList(_))
         && matches!(
             inner.data_type(),
-            DataType::List(_) | DataType::LargeList(_)
+            DataType::List(element) | DataType::LargeList(element)
+                if element.data_type() == &DataType::Int64
         ) {
         ScalarUDF::from(HasNullInnerArray).call(vec![nullable_array])
     } else {
