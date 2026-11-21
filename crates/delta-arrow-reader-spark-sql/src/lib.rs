@@ -33,7 +33,6 @@ use datafusion::optimizer::analyzer::{Analyzer, AnalyzerRule};
 use datafusion::physical_optimizer::aggregate_statistics::PreserveAggregateStatisticsSchema;
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::prelude::SessionContext;
-use sail_common_datafusion::rename::physical_plan::rename_physical_plan;
 use sail_plan::correlated_subquery::LowerSparkCorrelatedSubqueries;
 use sail_plan::expression_errors::{PrepareSparkExpressions, SparkSqlExpressionSemantics};
 use sail_plan::like_errors::{PreserveSparkLikeErrors, set_spark_query_start_time};
@@ -42,6 +41,7 @@ use sail_plan::projection_row_errors::CaptureSparkInputSortBoundaries;
 use sail_plan::relabel_pushdown::UnwrapSessionZoneRelabel;
 
 mod file_metadata;
+mod result_projection;
 mod scan_rename_projections;
 mod statement_planning;
 
@@ -123,7 +123,7 @@ impl SparkSqlQuery {
                 .unwrap_or_else(|| self.logical_plan.clone());
         let frame = DataFrame::new(state, planning_input);
         let physical = frame.create_physical_plan().await?;
-        rename_physical_plan(physical, &self.column_names)
+        result_projection::rename_result_columns(physical, &self.column_names)
     }
 }
 
