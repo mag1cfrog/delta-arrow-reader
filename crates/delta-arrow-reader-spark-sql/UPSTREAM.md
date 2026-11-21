@@ -2673,3 +2673,10 @@ UNIX_TIMESTAMP and TO_UNIX_TIMESTAMP reuse the checked whole-second
 parser for year 1 through 9999 with the omitted pattern in UTC. Other
 input forms, explicit patterns and other zones use the original
 format parser and localization. Invalid inputs retain the ANSI behavior.
+
+### Default FROM_UNIXTIME display zone (#1409)
+
+The default second-resolution format resolves a valid array time zone once
+per batch and uses it to produce the original local clock fields. The default
+pattern has no zone fields. Custom patterns, scalar inputs and unresolved
+zones retain the general formatter.
