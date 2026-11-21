@@ -244,6 +244,28 @@ impl SparkArraySlice {
         let [array, start, length] = args.args.as_slice() else {
             return internal_err!("spark_slice requires three arguments");
         };
+        if let (
+            ColumnarValue::Array(array),
+            ColumnarValue::Scalar(ScalarValue::Int64(Some(start))),
+            ColumnarValue::Scalar(ScalarValue::Int64(Some(length))),
+        ) = (array, start, length)
+            && *start > 0
+            && *length > 0
+            && let Some(end) = start.checked_add(length - 1)
+            && end <= i64::from(i32::MAX)
+            && array.len() == args.number_rows
+            && matches!(
+                array.data_type(),
+                DataType::List(_) | DataType::LargeList(_)
+            )
+        {
+            // Native slicing skips NULL rows and clips representable positive bounds.
+            args.args[2] = ColumnarValue::Scalar(ScalarValue::Int64(Some(end)));
+            return Ok(EvaluatedRowPrefix {
+                values: self.invoke_native_slice(args)?,
+                failure: None,
+            });
+        }
         // Keep scalars at one row instead of broadcasting them for validation.
         let array_values = array.to_array(1)?;
         let start_values = start.to_array(1)?;
@@ -327,6 +349,16 @@ impl SparkArraySlice {
         };
         args.args[1] = coordinate(native_starts.finish());
         args.args[2] = coordinate(native_ends.finish());
+        Ok(EvaluatedRowPrefix {
+            values: self.invoke_native_slice(args)?,
+            failure,
+        })
+    }
+
+    fn invoke_native_slice(
+        &self,
+        mut args: ScalarFunctionArgs,
+    ) -> datafusion_common::Result<ColumnarValue> {
         let required_output_type = if self.required_elements {
             let output_type = args.return_type().clone();
             let scalar_arguments = args
@@ -365,7 +397,7 @@ impl SparkArraySlice {
             }
             (None, value) => value,
         };
-        Ok(EvaluatedRowPrefix { values, failure })
+        Ok(values)
     }
 }
 
@@ -1979,6 +2011,83 @@ mod tests {
                         values.as_primitive::<Int32Type>().values().as_ref(),
                         expected.as_slice()
                     );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn scalar_slice_coordinates_match_row_coordinates() -> PlanResult<()> {
+        use arrow::array::ArrayRef;
+        use arrow::buffer::{NullBuffer, OffsetBuffer};
+
+        let session = SessionContext::new();
+        for nullable in [false, true] {
+            let element = Arc::new(
+                Field::new("kept_element", DataType::Int64, nullable)
+                    .with_metadata([("source".into(), "scalar-coordinates".into())].into()),
+            );
+            let input = ListArray::try_new(
+                element.clone(),
+                OffsetBuffer::from_lengths([1, 4, 2, 0, 1, 1]),
+                Arc::new(Int64Array::from(vec![
+                    Some(0),
+                    Some(1),
+                    (!nullable).then_some(2),
+                    Some(3),
+                    Some(4),
+                    Some(5),
+                    Some(6),
+                    Some(7),
+                    Some(8),
+                ])),
+                Some(NullBuffer::from(vec![true, true, false, true, true, true])),
+            )?;
+            for storage in [
+                DataType::List(element.clone()),
+                DataType::LargeList(element.clone()),
+            ] {
+                let input = arrow::compute::cast(&input.slice(1, 4), &storage)?;
+                for array in [input.clone(), input.slice(0, 0)] {
+                    for (start, length) in [
+                        (1_i64, 2_i64),
+                        (2, 2),
+                        (5, 1),
+                        (i64::from(i32::MAX), 1),
+                        (1, i64::from(i32::MAX)),
+                        (2, i64::from(i32::MAX)),
+                        (i64::MAX, 2),
+                        (1, 0),
+                        (-2, 3),
+                    ] {
+                        let rows = array.len();
+                        let batch = RecordBatch::try_from_iter([
+                            ("a", array.clone()),
+                            (
+                                "start",
+                                Arc::new(Int64Array::from_value(start, rows)) as ArrayRef,
+                            ),
+                            (
+                                "length",
+                                Arc::new(Int64Array::from_value(length, rows)) as ArrayRef,
+                            ),
+                        ])?;
+                        let schema = Arc::new(DFSchema::try_from(batch.schema())?);
+                        let scalar = slice_expr(col("a"), lit(start), lit(length), &schema)?;
+                        let dynamic = slice_expr(col("a"), col("start"), col("length"), &schema)?;
+                        let evaluate = |expr| {
+                            session
+                                .create_physical_expr(expr, &schema)?
+                                .evaluate(&batch)?
+                                .into_array(rows)
+                        };
+                        let actual = evaluate(scalar)?;
+                        let expected = evaluate(dynamic)?;
+                        actual.to_data().validate_full()?;
+                        assert_eq!(actual.data_type(), &storage);
+                        assert_eq!(actual.as_ref(), expected.as_ref(), "{start}, {length}");
+                    }
                 }
             }
         }
