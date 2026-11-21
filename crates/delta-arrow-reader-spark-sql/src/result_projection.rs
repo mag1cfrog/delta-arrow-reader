@@ -58,12 +58,15 @@ mod tests {
     #[tokio::test]
     async fn result_aliases_preserve_rows_fields_and_failures() -> Result<()> {
         let session = SessionContext::new_with_state(
-            configure_spark_sql(SessionStateBuilder::new().with_default_features())
-                .with_config(SessionConfig::new().with_target_partitions(1))
-                .build(),
+            configure_spark_sql(
+                SessionStateBuilder::new()
+                    .with_default_features()
+                    .with_config(SessionConfig::new().with_target_partitions(1)),
+            )
+            .build(),
         );
         let schema = Arc::new(Schema::new_with_metadata(
-            [
+            vec![
                 Field::new("id", DataType::Int64, false)
                     .with_metadata([("tag".into(), "source".into())].into()),
                 Field::new("s", DataType::Utf8, true),
