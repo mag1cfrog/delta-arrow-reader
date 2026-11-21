@@ -4,7 +4,9 @@ import csv
 import pathlib
 import platform
 import statistics
+import subprocess
 import sys
+import tempfile
 
 HERE = pathlib.Path(__file__).resolve().parent
 LEGACY = HERE.parent / "planning_attribution"
@@ -85,6 +87,30 @@ def apply(workspace):
     return changed
 
 
+def verify_overlay(receipt):
+    workspace_path = assemble.WORKSPACE.relative_to(assemble.REPO)
+    sealed = pathlib.Path(receipt["source"]) / workspace_path
+    assembly = receipt["assembly"]["assembly"]
+    with tempfile.TemporaryDirectory(prefix="dar-1390-logical-") as directory:
+        reference = pathlib.Path(directory)
+        for name in ("src/lib.rs", "src/statement_planning.rs", ANALYZER + "lib.rs", ANALYZER + "parser.rs"):
+            path = reference / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(subprocess.check_output(
+                ["git", "show", f"{receipt['baseline']}:{workspace_path / name}"], cwd=assemble.REPO))
+        driver = reference / "benches/planning_attribution/driver.rs"
+        driver.parent.mkdir(parents=True)
+        driver.write_text(assemble.driver_source(observed=False))
+        overlay = {name: assemble.digest(reference / name) for name in apply(reference)}
+    generated = {"Cargo.toml", "benches/planning_attribution_fixture.rs", "benches/planning_attribution_entry.rs"}
+    assert set(assembly) == set(overlay) | generated
+    assert all(assembly[name] == digest == assemble.digest(sealed / name)
+               for name, digest in overlay.items())
+    manifest = "benches/planning/queries.json"
+    frozen = run.read(LEGACY / "frozen.json")["files"][manifest]
+    assert assemble.digest(sealed / manifest) == assemble.digest(assemble.WORKSPACE / manifest) == frozen
+
+
 def collect(config, receipt, delta, destination):
     manifest = run.read(assemble.WORKSPACE / "benches/planning/queries.json")
     ids = sorted(q["id"] for q in manifest["queries"] if q["group"] == "paired" or q["id"] in STRESS)
@@ -131,6 +157,7 @@ def main():
     assemble.BASELINE = settings["staging_source"]
     receipt = run.verify_build(build)
     assert receipt["mode"] == "observed" and receipt["protocol_commit"] == run.protocol_commit()
+    verify_overlay(receipt)
     assert len(MODES) * settings["processes_per_path"] == 10
     fixture = run.read(assemble.WORKSPACE / "benches/reports/planning-1379-metadata.json")["delta_files"]
     assert run.delta_hashes(delta) == fixture
