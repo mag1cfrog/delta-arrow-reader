@@ -25,9 +25,25 @@ to exercise the diagnostic parser separately.
 Run five fresh processes per ANSI mode, alternating their order,
 with two warmups and nine measured samples. Report the median of
 the five process medians per statement and phase. The 10 processes
-and 2,430 measured statements are bounded by a 600-second controller
-timeout. Use [the observer](logical_phase_observer.py) to patch the
-disposable assembly, then pass its sealed build receipt, Delta fixture
-and new evidence directory. These instrumented samples locate costs.
-The later before-and-after comparison uses uninstrumented release
-binaries and the entire four-path schedule.
+and 2,430 measured statements are bounded by the shell command below.
+The retained `build-serial.py` in the local evidence directory uses
+the existing Cargo worktree, seals the assembly and restores the
+worktree after the build. The observer reconstructs the overlay from
+the pinned source and checks it and the frozen query hash.
+
+From the repository root, set `evidence` to the retained
+`costs-168-2026-11-20/1390/logical-phases` evidence directory, set
+`serial_worktree` and `target_dir` to the local Cargo worktree and
+target directory, and set `delta_root` to the frozen #1379 fixture.
+Use fresh destinations for the build and sample collection.
+
+```sh
+observer="$PWD/crates/delta-arrow-reader-spark-sql/benches/planning_round2_1390/logical_phase_observer.py"
+python3 "$evidence/build-serial.py" "$PWD" "$serial_worktree" "$target_dir" \
+  "$evidence/build" "$evidence/staging-tip.txt" "$observer"
+timeout --kill-after=5s 600s python3 -u "$observer" \
+  "$evidence/build/receipt.json" "$delta_root" "$evidence/attribution"
+```
+
+These instrumented samples locate costs. The later before-and-after
+comparison uses uninstrumented release binaries and all four paths.
