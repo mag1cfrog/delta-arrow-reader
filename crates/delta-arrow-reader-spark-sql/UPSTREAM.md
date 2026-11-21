@@ -2763,3 +2763,10 @@ bytes and offsets. Arrow can rebuild valid
 visible rows when the surrounding bytes prevent buffer sharing. A
 malformed visible value uses the original decoder and Spark error.
 Other charsets, scalar input and binary views use their existing paths.
+
+### Contiguous UTF-8 buffers in ENCODE (#1411)
+
+ENCODE shares string buffers for scalar UTF-8 with contiguous offsets and
+empty NULL byte ranges. The result keeps its Binary or LargeBinary width.
+Other charsets, scalar values, views and nonempty NULL byte ranges use the
+existing per-row encoder.
