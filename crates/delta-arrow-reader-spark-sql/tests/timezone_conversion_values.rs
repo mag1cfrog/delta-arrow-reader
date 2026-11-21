@@ -215,3 +215,51 @@ async fn timezone_conversions_match_staging_in_both_ansi_modes() -> Result<()> {
     }
     check_staging(observations)
 }
+
+fn check_fixed_zone_staging(observations: Vec<Value>) -> Result<()> {
+    let staging: Value = serde_json::from_str(include_str!(
+        "fixtures/timezone-conversion-values/fixed-zones-staging.json"
+    ))
+    .map_err(|error| DataFusionError::External(Box::new(error)))?;
+    assert_eq!(Value::Array(observations), staging["observations"]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn fixed_zone_conversions_preserve_timestamps_and_labels() -> Result<()> {
+    let session = conversion_session()?;
+    let mut observations = Vec::new();
+    for ansi_mode in [false, true] {
+        for session_zone in ["UTC", "America/Los_Angeles"] {
+            let options = SparkSqlOptions {
+                ansi_mode,
+                session_timezone: session_zone.into(),
+                ..SparkSqlOptions::default()
+            };
+            for (expression, filter) in [
+                ("from_utc_timestamp(ltz,'UTC')", ""),
+                ("to_utc_timestamp(ltz,'UTC')", ""),
+                ("from_utc_timestamp(ltz,'UTC')", " WHERE id <= 5"),
+                ("to_utc_timestamp(ltz,'UTC')", " WHERE id <= 5"),
+                ("from_utc_timestamp(ltz,'+05:45')", ""),
+                ("to_utc_timestamp(ltz,'+05:45')", ""),
+                ("from_utc_timestamp(ltz,'-18:00')", ""),
+                ("to_utc_timestamp(ltz,'+18:00')", ""),
+                ("convert_timezone('UTC','Z',ntz)", ""),
+                ("convert_timezone('Z','Z',ntz)", ""),
+            ] {
+                let sql = format!(
+                    "SELECT id,{expression} AS converted FROM observations{filter} ORDER BY id"
+                );
+                let result = execute_conversion(&session, &sql, &options)
+                    .await
+                    .unwrap_or_else(|error| json!({"error":error.to_string()}));
+                observations.push(json!({
+                    "expression":expression,"filter":filter,"ansi_mode":ansi_mode,
+                    "session_zone":session_zone,"result":result
+                }));
+            }
+        }
+    }
+    check_fixed_zone_staging(observations)
+}
