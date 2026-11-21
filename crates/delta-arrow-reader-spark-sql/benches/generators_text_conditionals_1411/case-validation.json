@@ -134,6 +134,33 @@
       "exclusion": null,
       "class": "paired",
       "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+    },
+    {
+      "kind": "scalar",
+      "category": "conditional",
+      "name": "case",
+      "registration": "F::custom(case)",
+      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional.rs:229",
+      "implementation_anchors": [
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional.rs:229",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional.rs:24"
+      ],
+      "id": "scalar.conditional.case_correlated_flag",
+      "aliases": [
+        "when"
+      ],
+      "spark_sql": "WITH operands AS (\n    SELECT id, i IS NOT NULL AS flag, i AS wide, CAST(7 AS INT) AS narrow\n    FROM bench WHERE id < 8\n)\nSELECT id, CASE WHEN flag THEN wide ELSE CAST(narrow AS BIGINT) END AS result FROM operands",
+      "native_sql": null,
+      "input_columns": [
+        "id",
+        "i",
+        "p",
+        "flag"
+      ],
+      "projection_sql": "SELECT id,i,p,flag FROM bench",
+      "exclusion": null,
+      "class": "paired",
+      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
     }
   ]
 }
