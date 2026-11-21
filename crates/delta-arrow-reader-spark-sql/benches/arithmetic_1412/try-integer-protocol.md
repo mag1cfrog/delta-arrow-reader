@@ -14,7 +14,7 @@ TRY operation in each physical plan.
 Compare the [untimed controls](try-integer-validation.json) first.
 Check overflow at both ends and successful rows for BIGINT, INT,
 SMALLINT and TINYINT. Also check nonoverflowing batches of each width,
-NULL operands, scalar broadcasts, a fallible operand and empty input.
+NULL operands, scalar broadcasts, a selected or skipped fallible operand, and empty input.
 Require the same rows and executed data types or original error in
 both ANSI modes. The measured inputs contain no integer overflow.
 

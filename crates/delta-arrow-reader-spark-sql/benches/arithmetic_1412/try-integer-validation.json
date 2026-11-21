@@ -47,6 +47,12 @@
       "spark_sql": "SELECT id, TRY_ADD(i,CAST(p AS BIGINT)) AS add_result,\n    TRY_SUBTRACT(i,CAST(p AS BIGINT)) AS subtract_result, TRY_MULTIPLY(i,CAST(p AS BIGINT)) AS multiply_result\nFROM bench WHERE id < 0",
       "native_sql": null,
       "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "scalar.math.try_integer_selected_fallible_operand",
+      "spark_sql": "WITH operands AS (\n    SELECT id, i AS lhs,\n           CASE id WHEN 1 THEN 'bad' ELSE '2' END AS raw\n    FROM bench WHERE id < 8\n)\nSELECT id, TRY_ADD(lhs,CAST(raw AS BIGINT)) AS result FROM operands",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
     }
   ]
 }
