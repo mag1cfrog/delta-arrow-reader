@@ -1,0 +1,28 @@
+{
+  "staging_source": "e1580ef0056bdfe70161fe07be94ed10957ed7ec",
+  "staging_tip": "b2e64fa2e86d3fa74df9679d0a8715456a1b3aaf",
+  "candidate_source": "8ffa504622725b27663a3adec4e7e68e2172a45a",
+  "statement_manifest": "manifest.json",
+  "statement_manifest_sha256": "d006b18aec9a7e82f864b705d99e60740da2e5e542da2409578cdcfbae52929e",
+  "case_ids": [
+    "aggregate.aggregate.regr_intercept",
+    "aggregate.aggregate.regr_slope",
+    "aggregate.aggregate.regr_sxx",
+    "aggregate.aggregate.regr_syy"
+  ],
+  "overall_timeout_seconds": 1800,
+  "spark_plan_contains": {
+    "staging": {
+      "aggregate": [
+        "aggregateexec",
+        "spark_result_metadata"
+      ]
+    },
+    "candidate": {
+      "aggregate": [
+        "aggregateexec",
+        "spark_result_metadata"
+      ]
+    }
+  }
+}
