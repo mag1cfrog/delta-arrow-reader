@@ -8,7 +8,6 @@ use datafusion::arrow::buffer::{NullBuffer, OffsetBuffer, ScalarBuffer};
 use datafusion::arrow::datatypes::*;
 use datafusion::error::{DataFusionError, Result};
 use datafusion_common::{ScalarValue, exec_err, internal_err, plan_err};
-use datafusion_expr::function::Hint;
 use datafusion_expr::{
     ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature,
 };
@@ -159,29 +158,9 @@ impl ScalarUDFImpl for SparkFromJson {
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
         let session_timezone = self.session_timezone.to_string();
         let ScalarFunctionArgs { args, .. } = args;
-        let scalar_settings = match args.as_slice() {
-            [ColumnarValue::Array(json), ColumnarValue::Scalar(_)] => !json.is_empty(),
-            [
-                ColumnarValue::Array(json),
-                ColumnarValue::Scalar(_),
-                ColumnarValue::Scalar(ScalarValue::Map(options)),
-            ] => {
-                // Broadcasting strips children from NULL or sliced option maps.
-                !json.is_empty()
-                    && matches!(options.value_offsets(), [0, end]
-                        if usize::try_from(*end).ok() == Some(options.entries().len()))
-                    && !options.is_null(0)
-            }
-            _ => false,
-        };
-        let hints = if scalar_settings {
-            vec![Hint::Pad, Hint::AcceptsSingular, Hint::AcceptsSingular]
-        } else {
-            Vec::new()
-        };
         make_scalar_function(
             move |inner_args| from_json_inner(inner_args, session_timezone.as_str()),
-            hints,
+            vec![],
         )(&args)
     }
 
@@ -1463,87 +1442,6 @@ fn find_key_value(options: &MapArray, search_key: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn literal_json_settings_match_broadcast_settings() -> Result<()> {
-        let function = SparkFromJson::new(Arc::from("UTC"));
-        let previous = make_scalar_function(|arrays| from_json_inner(arrays, "UTC"), Vec::new());
-        let documents = StringArray::from(vec![
-            Some(r#"{"x":3,"a":[1,null],"dt":"20240105"}"#),
-            None,
-            Some("not json"),
-            Some(""),
-            Some(r#"{"x":9223372036854775807,"a":[],"dt":"2024-01-05"}"#),
-        ]);
-        let date_options = |formats: &[(&str, bool)]| -> Result<ColumnarValue> {
-            let field_names = MapFieldNames {
-                entry: SAIL_MAP_FIELD_NAME.to_owned(),
-                key: SAIL_MAP_KEY_FIELD_NAME.to_owned(),
-                value: SAIL_MAP_VALUE_FIELD_NAME.to_owned(),
-            };
-            let mut options = MapBuilder::new(
-                Some(field_names),
-                StringBuilder::new(),
-                StringBuilder::new(),
-            );
-            for (format, valid) in formats {
-                options.keys().append_value("dateFormat");
-                options.values().append_value(format);
-                options.append(*valid)?;
-            }
-            let options = options.finish();
-            let scalar = if options.len() > 1 {
-                ScalarValue::try_from_array(&options, 1)?
-            } else {
-                ScalarValue::Map(Arc::new(options))
-            };
-            Ok(ColumnarValue::Scalar(scalar))
-        };
-        let options = [
-            None,
-            Some(date_options(&[("yyyyMMdd", true)])?),
-            Some(date_options(&[("yyyyQQ", true)])?),
-            Some(date_options(&[("yyyyQQ", false)])?),
-            Some(date_options(&[("yyyyQQ", true), ("yyyyMMdd", true)])?),
-        ];
-        for length in [0, 1, documents.len()] {
-            for schema in [
-                Some("x BIGINT, a ARRAY<INT>, dt DATE"),
-                Some("x NOT_A_TYPE"),
-                Some(""),
-                None,
-            ] {
-                for option in &options {
-                    let mut args = vec![
-                        ColumnarValue::Array(Arc::new(documents.slice(0, length))),
-                        ColumnarValue::Scalar(ScalarValue::Utf8(schema.map(str::to_owned))),
-                    ];
-                    args.extend(option.iter().cloned());
-                    let expected = previous(&args);
-                    let actual = function.invoke_with_args(ScalarFunctionArgs {
-                        arg_fields: args
-                            .iter()
-                            .map(|arg| Arc::new(Field::new("arg", arg.data_type(), true)))
-                            .collect(),
-                        args,
-                        number_rows: length,
-                        return_field: Arc::new(Field::new("from_json", DataType::Null, true)),
-                        config_options: Arc::new(Default::default()),
-                    });
-                    match (actual, expected) {
-                        (Ok(ColumnarValue::Array(actual)), Ok(ColumnarValue::Array(expected))) => {
-                            assert_eq!(actual.to_data(), expected.to_data());
-                        }
-                        (Err(actual), Err(expected)) => {
-                            assert_eq!(actual.to_string(), expected.to_string());
-                        }
-                        outcomes => panic!("different JSON outcomes: {outcomes:?}"),
-                    }
-                }
-            }
-        }
-        Ok(())
-    }
 
     #[test]
     fn test_parse_simple_spark_json_schema_string() -> Result<()> {

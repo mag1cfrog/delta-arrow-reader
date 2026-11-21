@@ -1,13 +1,10 @@
-// Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
 use datafusion::arrow::array::{
     Array, ArrayRef, GenericStringBuilder, LargeStringArray, StringArray, StringArrayType,
 };
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
-use datafusion::common::{
-    Result, ScalarValue, exec_datafusion_err, exec_err, internal_err, plan_err,
-};
+use datafusion::common::{Result, exec_datafusion_err, exec_err, internal_err, plan_err};
 use datafusion_common::cast::{as_large_string_array, as_string_array, as_string_view_array};
 use datafusion_expr::{
     ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
@@ -196,8 +193,7 @@ impl ScalarUDFImpl for ParseUrl {
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
         let ScalarFunctionArgs { args, .. } = args;
-        parse_url_with_literal_part(&args, std::convert::identity)
-            .unwrap_or_else(|| make_scalar_function(spark_parse_url, vec![])(&args))
+        make_scalar_function(spark_parse_url, vec![])(&args)
     }
 }
 
@@ -230,32 +226,6 @@ fn is_string_type(dt: &DataType) -> bool {
         dt,
         DataType::Utf8 | DataType::Utf8View | DataType::LargeUtf8
     )
-}
-
-/// Borrow the literal part and pass the absent key directly to the parser.
-pub(super) fn parse_url_with_literal_part(
-    args: &[ColumnarValue],
-    handle_parse_result: impl Fn(Result<Option<String>>) -> Result<Option<String>>,
-) -> Option<Result<ColumnarValue>> {
-    let [
-        ColumnarValue::Array(urls),
-        ColumnarValue::Scalar(ScalarValue::Utf8(Some(part))),
-    ] = args
-    else {
-        return None;
-    };
-    if urls.data_type() != &DataType::Utf8 {
-        return None;
-    }
-    Some(as_string_array(urls).and_then(|urls| {
-        urls.iter()
-            .map(|url| match url {
-                Some(url) => handle_parse_result(ParseUrl::parse(url, part, None)),
-                None => Ok(None),
-            })
-            .collect::<Result<StringArray>>()
-            .map(|values| ColumnarValue::Array(Arc::new(values)))
-    }))
 }
 
 /// Core implementation of URL parsing function.
@@ -630,78 +600,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::scalar::url::spark_try_parse_url::SparkTryParseUrl;
-
-    use super::*;
-
-    #[test]
-    fn literal_url_parts_match_broadcast_parts() {
-        let strict = ParseUrl::new();
-        let tolerant = SparkTryParseUrl::new();
-        let urls = StringArray::from(vec![
-            Some("https://demo@example.test:8080/path?q=2#tag"),
-            None,
-            Some("relative/path?q=3#tag"),
-            Some("file:///tmp/item"),
-            Some("http://[bad]"),
-        ]);
-        for tolerant_mode in [false, true] {
-            let function: &dyn ScalarUDFImpl = if tolerant_mode { &tolerant } else { &strict };
-            let previous = make_scalar_function(
-                move |arrays| {
-                    spark_handled_parse_url(arrays, |result| {
-                        if tolerant_mode {
-                            Ok(result.unwrap_or_default())
-                        } else {
-                            result
-                        }
-                    })
-                },
-                vec![],
-            );
-            for length in [0, 4, urls.len()] {
-                for part in [
-                    "HOST",
-                    "PATH",
-                    "QUERY",
-                    "REF",
-                    "PROTOCOL",
-                    "FILE",
-                    "AUTHORITY",
-                    "USERINFO",
-                    "unknown",
-                ] {
-                    let args = vec![
-                        ColumnarValue::Array(Arc::new(urls.slice(0, length))),
-                        ColumnarValue::Scalar(ScalarValue::Utf8(Some(part.to_owned()))),
-                    ];
-                    let expected = previous(&args);
-                    let actual = function.invoke_with_args(ScalarFunctionArgs {
-                        arg_fields: args
-                            .iter()
-                            .map(|arg| Arc::new(Field::new("arg", arg.data_type(), true)))
-                            .collect(),
-                        args,
-                        number_rows: length,
-                        return_field: Arc::new(Field::new("url_part", DataType::Utf8, true)),
-                        config_options: Arc::new(Default::default()),
-                    });
-                    match (actual, expected) {
-                        (Ok(ColumnarValue::Array(actual)), Ok(ColumnarValue::Array(expected))) => {
-                            assert_eq!(actual.to_data(), expected.to_data());
-                        }
-                        (Err(actual), Err(expected)) => {
-                            assert_eq!(actual.to_string(), expected.to_string());
-                        }
-                        outcomes => panic!("different URL outcomes for {part}: {outcomes:?}"),
-                    }
-                }
-            }
-        }
-    }
-
     use datafusion::arrow::array::StringArray;
     use datafusion_common::Result;
+
+    use super::*;
 
     #[test]
     fn test_parse_url() -> Result<()> {

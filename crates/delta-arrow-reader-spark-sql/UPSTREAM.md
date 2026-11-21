@@ -2968,36 +2968,11 @@ prefixes, other positions and storage types retain their existing
 kernels. Argument preparation and NULL short-circuiting stay in
 the existing planner and evaluation paths.
 
-### Literal TO_NUMBER formats (#1414)
-
-TO_NUMBER and TRY_TO_NUMBER supply one copy of a literal format for a
-nonempty text column. Format interpretation and regex matching use the
-existing parser. Empty batches and column formats keep the old path.
-
-### Literal FROM_CSV settings (#1414)
-
-FROM_CSV supplies one copy of literal schema and options for a nonempty
-CSV column. The parser reads schema and options once per batch. Empty
-input, NULL option maps and array settings keep the original expansion.
-
 ### STR_TO_MAP literal delimiter reuse (#1414)
 
 STR_TO_MAP borrows the already-compiled scalar key/value delimiter
 inside the row loop. A delimiter column is still parsed at the row
 where it is read.
-
-### Literal FROM_JSON settings (#1414)
-
-FROM_JSON supplies one copy of literal schema and options for nonempty
-JSON columns. The parser reads schema and options once per batch. Empty
-input, NULL or sliced option maps and array settings keep the original
-expansion.
-
-### Literal URL parts (#1414)
-
-Two-argument PARSE_URL and TRY_PARSE_URL borrow a present Utf8 literal
-part for a Utf8 input column. They pass the absent key directly to the
-existing parser. Other argument shapes keep their existing adapters.
 
 ### Literal THETA_UNION sketch size (#1414)
 

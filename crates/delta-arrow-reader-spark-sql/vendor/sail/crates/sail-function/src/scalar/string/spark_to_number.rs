@@ -9,7 +9,6 @@ use datafusion::arrow::datatypes::{DataType, *};
 use datafusion_common::{
     DataFusionError, Result, ScalarValue, exec_datafusion_err, exec_err, internal_err,
 };
-use datafusion_expr::function::Hint;
 use datafusion_expr::{
     ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature,
 };
@@ -122,16 +121,7 @@ impl ScalarUDFImpl for SparkToNumber {
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
         let safe = self.safe;
         let ScalarFunctionArgs { args, .. } = args;
-        // The parser reads only the first format. Preserve empty-batch evaluation.
-        let hints = if matches!(
-            args.as_slice(),
-            [ColumnarValue::Array(values), ColumnarValue::Scalar(_)] if !values.is_empty()
-        ) {
-            vec![Hint::Pad, Hint::AcceptsSingular]
-        } else {
-            Vec::new()
-        };
-        make_scalar_function(move |arrays| spark_to_number_impl(arrays, safe), hints)(&args)
+        make_scalar_function(move |a| spark_to_number_impl(a, safe), vec![])(&args)
     }
 
     fn coerce_types(&self, arg_types: &[DataType]) -> Result<Vec<DataType>> {
@@ -693,68 +683,5 @@ fn match_regex<'a>(value: &'a str, regex: &Regex) -> Result<Captures<'a>> {
             .ok_or_else(|| exec_datafusion_err!("Value '{value}' does not match the format"))
     } else {
         exec_err!("String '{value}' does not match the expected regex pattern.")
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::panic::{AssertUnwindSafe, catch_unwind};
-
-    use super::*;
-
-    #[test]
-    fn literal_number_formats_match_broadcast_formats() {
-        let values = StringArray::from(vec![
-            Some("0.00"),
-            Some("9999.99"),
-            None,
-            Some("bad"),
-            Some(""),
-            Some("12345.67"),
-        ]);
-        for safe in [false, true] {
-            let function = SparkToNumber::new(safe);
-            let previous =
-                make_scalar_function(move |arrays| spark_to_number_impl(arrays, safe), Vec::new());
-            for length in [0, 1, 3, values.len()] {
-                for format in [Some("9999.99"), Some("not a numeric format"), None] {
-                    let args = vec![
-                        ColumnarValue::Array(Arc::new(values.slice(0, length))),
-                        ColumnarValue::Scalar(ScalarValue::Utf8(format.map(str::to_owned))),
-                    ];
-                    let expected = catch_unwind(AssertUnwindSafe(|| previous(&args)));
-                    let actual = catch_unwind(AssertUnwindSafe(|| {
-                        function.invoke_with_args(ScalarFunctionArgs {
-                            arg_fields: args
-                                .iter()
-                                .map(|arg| Arc::new(Field::new("arg", arg.data_type(), true)))
-                                .collect(),
-                            args,
-                            number_rows: length,
-                            return_field: Arc::new(Field::new(
-                                "result",
-                                DataType::Decimal256(6, 2),
-                                true,
-                            )),
-                            config_options: Arc::new(Default::default()),
-                        })
-                    }));
-                    match (actual, expected) {
-                        (
-                            Ok(Ok(ColumnarValue::Array(actual))),
-                            Ok(Ok(ColumnarValue::Array(expected))),
-                        ) => {
-                            assert_eq!(actual.to_data(), expected.to_data());
-                        }
-                        (Ok(Err(actual)), Ok(Err(expected))) => {
-                            assert_eq!(actual.to_string(), expected.to_string());
-                        }
-                        // The previous adapter presents an empty format on an empty batch.
-                        (Err(_), Err(_)) => assert_eq!(length, 0),
-                        outcomes => panic!("different number conversion outcomes: {outcomes:?}"),
-                    }
-                }
-            }
-        }
     }
 }
