@@ -7,6 +7,7 @@ use datafusion::arrow::array::*;
 use datafusion::arrow::datatypes::*;
 use datafusion::error::{DataFusionError, Result};
 use datafusion_common::{ScalarValue, exec_err, plan_err};
+use datafusion_expr::function::Hint;
 use datafusion_expr::{
     ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature,
 };
@@ -184,9 +185,24 @@ impl ScalarUDFImpl for SparkFromCSV {
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
         let session_timezone = self.session_timezone.to_string();
         let ScalarFunctionArgs { args, .. } = args;
+        // Keep the original empty schema array and NULL option map expansion.
+        let scalar_settings = match args.as_slice() {
+            [ColumnarValue::Array(csv), ColumnarValue::Scalar(_)] => !csv.is_empty(),
+            [
+                ColumnarValue::Array(csv),
+                ColumnarValue::Scalar(_),
+                ColumnarValue::Scalar(options),
+            ] => !csv.is_empty() && !options.is_null(),
+            _ => false,
+        };
+        let hints = if scalar_settings {
+            vec![Hint::Pad, Hint::AcceptsSingular, Hint::AcceptsSingular]
+        } else {
+            Vec::new()
+        };
         make_scalar_function(
             move |inner_args| spark_from_csv_inner(inner_args, session_timezone.as_str()),
-            vec![],
+            hints,
         )(&args)
     }
 
@@ -708,6 +724,80 @@ mod tests {
     use datafusion_common::internal_err;
 
     use super::*;
+
+    #[test]
+    fn literal_csv_settings_match_broadcast_settings() -> Result<()> {
+        let function = SparkFromCSV::new(Arc::from(DEFAULT_SESSION_TIMEZONE));
+        let previous = make_scalar_function(
+            |arrays| spark_from_csv_inner(arrays, DEFAULT_SESSION_TIMEZONE),
+            Vec::new(),
+        );
+        let documents = StringArray::from(vec![
+            Some("1,alpha"),
+            None,
+            Some("2|beta"),
+            Some("bad number,gamma"),
+            Some(""),
+            Some("9223372036854775807,bound"),
+        ]);
+        let scalar_map = |key: &str, value: Option<&str>, valid: bool| -> Result<ColumnarValue> {
+            let field_names = MapFieldNames {
+                entry: SAIL_MAP_FIELD_NAME.to_owned(),
+                key: SAIL_MAP_KEY_FIELD_NAME.to_owned(),
+                value: SAIL_MAP_VALUE_FIELD_NAME.to_owned(),
+            };
+            let mut builder = MapBuilder::new(
+                Some(field_names),
+                StringBuilder::new(),
+                StringBuilder::new(),
+            );
+            builder.keys().append_value(key);
+            builder.values().append_option(value);
+            builder.append(valid)?;
+            Ok(ColumnarValue::Scalar(ScalarValue::Map(Arc::new(
+                builder.finish(),
+            ))))
+        };
+        let options = [
+            None,
+            Some(scalar_map("sep", Some("|"), true)?),
+            Some(scalar_map("mode", Some("FAILFAST"), true)?),
+            Some(scalar_map("mode", None, true)?),
+            Some(scalar_map("mode", Some("FAILFAST"), false)?),
+        ];
+        for length in [0, 1, documents.len()] {
+            for schema in [Some("x BIGINT, label STRING"), Some("x NOT_A_TYPE"), None] {
+                for option in &options {
+                    let mut args = vec![
+                        ColumnarValue::Array(Arc::new(documents.slice(0, length))),
+                        ColumnarValue::Scalar(ScalarValue::Utf8(schema.map(str::to_owned))),
+                    ];
+                    args.extend(option.iter().cloned());
+                    let expected = previous(&args);
+                    let actual = function.invoke_with_args(ScalarFunctionArgs {
+                        arg_fields: args
+                            .iter()
+                            .map(|arg| Arc::new(Field::new("arg", arg.data_type(), true)))
+                            .collect(),
+                        args,
+                        number_rows: length,
+                        return_field: Arc::new(Field::new("from_csv", DataType::Null, true)),
+                        config_options: Arc::new(Default::default()),
+                    });
+                    match (actual, expected) {
+                        (Ok(ColumnarValue::Array(actual)), Ok(ColumnarValue::Array(expected))) => {
+                            assert_eq!(actual.to_data(), expected.to_data());
+                        }
+                        (Err(actual), Err(expected)) => {
+                            assert_eq!(actual.to_string(), expected.to_string());
+                        }
+                        outcomes => panic!("different CSV outcomes: {outcomes:?}"),
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
 
     /// Unit test for `spark_from_csv_inner` that verifies CSV parsing into a `StructArray`.
     /// This test simulates a column of CSV lines and checks:

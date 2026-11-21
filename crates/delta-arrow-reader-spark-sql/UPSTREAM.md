@@ -2973,3 +2973,9 @@ the existing planner and evaluation paths.
 TO_NUMBER and TRY_TO_NUMBER supply one copy of a literal format for a
 nonempty text column. Format interpretation and regex matching use the
 existing parser. Empty batches and column formats keep the old path.
+
+### Literal FROM_CSV settings (#1414)
+
+FROM_CSV supplies one copy of literal schema and options for a nonempty
+CSV column. The parser reads schema and options once per batch. Empty
+input, NULL option maps and array settings keep the original expansion.
