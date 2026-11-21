@@ -1,0 +1,115 @@
+{
+  "source": "7f66c78cb8a1e03f1f300fe0403f0636e37b122a",
+  "frozen_manifest_sha256": "ec6528b17cb072224aec6ea0ea3c1e910b9aa8cf6f5cadb0296f85b3f86f1f06",
+  "functions": [
+    {
+      "id": "window.window.array_join",
+      "spark_sql": "SELECT id,array_join(s,',') OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "native_sql": "SELECT id,arrow_cast(string_agg(s,',') OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW),'Utf8') AS value FROM bench",
+      "projection_sql": "SELECT id,grp,s FROM bench"
+    },
+    {
+      "id": "window.window.listagg",
+      "spark_sql": "SELECT id,listagg(s,',') OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "native_sql": "SELECT id,arrow_cast(string_agg(s,',') OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW),'Utf8') AS value FROM bench",
+      "projection_sql": "SELECT id,grp,s FROM bench"
+    },
+    {
+      "id": "window.window.string_agg",
+      "spark_sql": "SELECT id,string_agg(s,',') OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "native_sql": "SELECT id,arrow_cast(string_agg(s,',') OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW),'Utf8') AS value FROM bench",
+      "projection_sql": "SELECT id,grp,s FROM bench"
+    },
+    {
+      "id": "window.window.max_by",
+      "spark_sql": "SELECT id,max_by(i,id) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "native_sql": "SELECT id,last_value(i) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "projection_sql": "SELECT id,grp,i FROM bench"
+    },
+    {
+      "id": "window.window.min_by",
+      "spark_sql": "SELECT id,min_by(i,id) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "native_sql": "SELECT id,first_value(i) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "projection_sql": "SELECT id,grp,i FROM bench"
+    },
+    {
+      "id": "window.window.percentile",
+      "spark_sql": "SELECT id,percentile(d,0.5) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "native_sql": "SELECT id,quantile_cont(d,0.5) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "projection_sql": "SELECT id,grp,d FROM bench"
+    },
+    {
+      "id": "window.window.histogram_numeric",
+      "spark_sql": "SELECT id,histogram_numeric(d,4) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,grp,d FROM bench"
+    },
+    {
+      "id": "window.window.theta_union_agg",
+      "spark_sql": "SELECT id,theta_union_agg(theta_b) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,grp,theta_b FROM bench"
+    },
+    {
+      "id": "window.window.hll_union_agg",
+      "spark_sql": "SELECT id,hll_union_agg(hll_b) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,grp,hll_b FROM bench"
+    },
+    {
+      "id": "window.window.count_min_sketch",
+      "spark_sql": "SELECT id,count_min_sketch(i,CAST(0.1 AS DOUBLE),CAST(0.9 AS DOUBLE),7) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,grp,i FROM bench"
+    },
+    {
+      "id": "window.window.theta_sketch_agg",
+      "spark_sql": "SELECT id,theta_sketch_agg(i) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,grp,i FROM bench"
+    },
+    {
+      "id": "window.window.hll_sketch_agg",
+      "spark_sql": "SELECT id,hll_sketch_agg(i) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,grp,i FROM bench"
+    },
+    {
+      "id": "window.window.mode",
+      "spark_sql": "SELECT id,mode(i) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,grp,i FROM bench"
+    },
+    {
+      "id": "window.window.skewness",
+      "spark_sql": "SELECT id,skewness(d) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,grp,d FROM bench"
+    },
+    {
+      "id": "window.window.kurtosis",
+      "spark_sql": "SELECT id,kurtosis(d) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,grp,d FROM bench"
+    },
+    {
+      "id": "window.window.product",
+      "spark_sql": "SELECT id,product(d) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,grp,d FROM bench"
+    },
+    {
+      "id": "aggregate.aggregate.string_agg",
+      "spark_sql": "SELECT string_agg(s,',') AS value FROM bench",
+      "native_sql": "SELECT arrow_cast(string_agg(s,','),'Utf8') AS value FROM bench",
+      "projection_sql": "SELECT s FROM bench"
+    },
+    {
+      "id": "aggregate.aggregate.listagg",
+      "spark_sql": "SELECT listagg(s,',') AS value FROM bench",
+      "native_sql": "SELECT arrow_cast(string_agg(s,','),'Utf8') AS value FROM bench",
+      "projection_sql": "SELECT s FROM bench"
+    }
+  ],
+  "overall_timeout_seconds": 14400
+}
