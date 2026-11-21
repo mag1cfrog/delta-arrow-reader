@@ -220,3 +220,34 @@ async fn sliding_extrema_match_staging_in_both_ansi_modes() -> Result<()> {
     }
     assert_staging(observations)
 }
+
+#[tokio::test]
+async fn min_by_required_key_matches_the_filtered_reducer() -> Result<()> {
+    let session = extrema_session()?;
+    for ansi_mode in [false, true] {
+        for (key, suffix) in [
+            ("id", ""),
+            ("id", " WHERE false"),
+            ("k", ""),
+            ("k", " WHERE k IS NULL"),
+            ("CAST(k AS BIGINT)", ""),
+            ("id", " GROUP BY g ORDER BY g"),
+            ("required_key", ""),
+        ] {
+            let source = if key == "required_key" {
+                "(SELECT v, COALESCE(k, 0) AS required_key FROM samples) AS required_keys"
+            } else {
+                "samples"
+            };
+            let actual = format!("SELECT min_by(v,{key}) FROM {source}{suffix}");
+            let filtered =
+                format!("SELECT min_by(v,{key}) FILTER (WHERE true) FROM {source}{suffix}");
+            assert_eq!(
+                execute_extrema(&session, &actual, ansi_mode).await?,
+                execute_extrema(&session, &filtered, ansi_mode).await?,
+                "{actual}, ANSI={ansi_mode}",
+            );
+        }
+    }
+    Ok(())
+}

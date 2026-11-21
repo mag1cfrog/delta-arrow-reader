@@ -2967,3 +2967,10 @@ and its bytes are ASCII. Scalar calls, longer or multibyte
 prefixes, other positions and storage types retain their existing
 kernels. Argument preparation and NULL short-circuiting stay in
 the existing planner and evaluation paths.
+
+### MIN_BY on required key columns (#1413)
+
+The Spark MIN_BY rewrite omits its synthesized key-null filter for a bare
+required column when no user filter is present. The same ordered reducer
+handles NULL values, ties and empty input. Nullable or computed keys and
+explicit filters keep the original rewrite.

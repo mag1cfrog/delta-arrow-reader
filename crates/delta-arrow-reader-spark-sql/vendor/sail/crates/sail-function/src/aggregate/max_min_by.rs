@@ -15,7 +15,9 @@ use datafusion::logical_expr::expr::{AggregateFunction, Sort};
 use datafusion::logical_expr::function::{AccumulatorArgs, StateFieldsArgs};
 use datafusion::logical_expr::simplify::SimplifyContext;
 use datafusion::logical_expr::utils::format_state_name;
-use datafusion::logical_expr::{Accumulator, AggregateUDFImpl, Signature, Volatility, function};
+use datafusion::logical_expr::{
+    Accumulator, AggregateUDFImpl, ExprSchemable, Signature, Volatility, function,
+};
 use datafusion::prelude::Expr;
 
 #[derive(Debug)]
@@ -385,17 +387,21 @@ impl AggregateUDFImpl for MinByFunction {
     }
 
     fn simplify(&self) -> Option<function::AggregateFunctionSimplification> {
-        let simplify = |mut aggr_func: AggregateFunction, _: &SimplifyContext| {
+        let simplify = |mut aggr_func: AggregateFunction, info: &SimplifyContext| {
             let mut order_by = aggr_func.params.order_by;
             let (second_arg, first_arg) = (
                 aggr_func.params.args.remove(1),
                 aggr_func.params.args.remove(0),
             );
 
-            let null_filter = second_arg.clone().is_not_null();
             let filter = match aggr_func.params.filter {
-                Some(existing) => Some(Box::new((*existing).and(null_filter))),
-                None => Some(Box::new(null_filter)),
+                Some(existing) => Some(Box::new((*existing).and(second_arg.clone().is_not_null()))),
+                None if matches!(second_arg, Expr::Column(_))
+                    && matches!(second_arg.nullable(info.schema().as_ref()), Ok(false)) =>
+                {
+                    None
+                }
+                None => Some(Box::new(second_arg.clone().is_not_null())),
             };
 
             order_by.push(Sort::new(second_arg, false, true)); // DESC, NULLS FIRST
