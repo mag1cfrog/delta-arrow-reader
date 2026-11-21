@@ -1,7 +1,8 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::{Arc, LazyLock};
 
-use datafusion::arrow::datatypes::{DataType, FieldRef};
+use datafusion::arrow::array::AsArray;
+use datafusion::arrow::datatypes::{DataType, FieldRef, Int64Type};
 use datafusion_common::Result;
 use datafusion_common::config::ConfigOptions;
 use datafusion_expr::{
@@ -29,10 +30,10 @@ fn make_config(ansi_mode: bool) -> Arc<ConfigOptions> {
 /// reaches every worker — unlike reading DataFusion's session-level
 /// `execution.enable_ansi_mode`, which only reflects the driver's context.
 ///
-/// Name, signature, return type, and the negate kernel are delegated to upstream
-/// `datafusion_spark::SparkNegative` (its free `spark_negative` helper is private).
-/// We drive the kernel by handing it the matching pinned-ANSI [`ConfigOptions`]
-/// snapshot per batch.
+/// Name, signature and return type are delegated to upstream
+/// `datafusion_spark::SparkNegative`. Its kernel is invoked with the
+/// pinned-ANSI [`ConfigOptions`] unless a BIGINT batch can be negated
+/// without overflow.
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkNegative {
     inner: DataFusionNegative,
@@ -75,6 +76,15 @@ impl ScalarUDFImpl for SparkNegative {
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
+        if self.ansi_mode
+            && let [ColumnarValue::Array(array)] = args.args.as_slice()
+            && let Some(values) = array.as_primitive_opt::<Int64Type>()
+            && !values.values().contains(&i64::MIN)
+        {
+            return Ok(ColumnarValue::Array(Arc::new(
+                values.unary::<_, Int64Type>(i64::wrapping_neg),
+            )));
+        }
         let config_options = if self.ansi_mode {
             Arc::clone(&ANSI_CONFIG)
         } else {
