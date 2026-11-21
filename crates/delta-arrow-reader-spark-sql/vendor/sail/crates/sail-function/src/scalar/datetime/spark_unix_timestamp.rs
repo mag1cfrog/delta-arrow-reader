@@ -18,6 +18,7 @@ use sail_common_datafusion::utils::datetime::localize_with_fallback;
 
 use crate::error::{invalid_arg_count_exec_err, unsupported_data_type_exec_err};
 use crate::scalar::datetime::format::DateTimeFormat;
+use crate::scalar::datetime::spark_timestamp::parse_ascii_whole_second_timestamp;
 
 const DEFAULT_PATTERN: &str = "yyyy-MM-dd HH:mm:ss";
 
@@ -116,6 +117,7 @@ impl ScalarUDFImpl for SparkUnixTimestamp {
                     first,
                     ScalarUnixFormat::Format(DateTimeFormat::for_parsing(DEFAULT_PATTERN)?),
                     safe,
+                    self.session_timezone.as_ref() == "UTC",
                 ),
             },
             DataType::Date64 | DataType::Date32 => self.invoke_with_date(first),
@@ -138,9 +140,12 @@ impl SparkUnixTimestamp {
         safe: bool,
     ) -> Result<ColumnarValue> {
         match format {
-            ColumnarValue::Scalar(format_scalar) => {
-                self.invoke_with_scalar_format(first, parse_format_scalar(format_scalar)?, safe)
-            }
+            ColumnarValue::Scalar(format_scalar) => self.invoke_with_scalar_format(
+                first,
+                parse_format_scalar(format_scalar)?,
+                safe,
+                false,
+            ),
             ColumnarValue::Array(format_array) => match first {
                 ColumnarValue::Array(array) => {
                     self.invoke_array_with_format_array(array, format_array, safe)
@@ -161,42 +166,35 @@ impl SparkUnixTimestamp {
         first: &ColumnarValue,
         format: ScalarUnixFormat,
         safe: bool,
+        parse_utc_whole_seconds: bool,
     ) -> Result<ColumnarValue> {
+        let ScalarUnixFormat::Format(format) = format else {
+            return null_int64(first);
+        };
+        let parse = |value: &str| {
+            // Let the format parser keep handling the year-of-era boundary.
+            if parse_utc_whole_seconds
+                && !value.starts_with("0000")
+                && let Some(datetime) = parse_ascii_whole_second_timestamp(value)
+            {
+                return Ok(Some(datetime.and_utc().timestamp()));
+            }
+            self.formatted_string_to_seconds(value, &format, safe)
+        };
         match first {
             ColumnarValue::Array(array) => {
-                let ScalarUnixFormat::Format(format) = format else {
-                    return Ok(ColumnarValue::Array(new_null_array(
-                        &DataType::Int64,
-                        array.len(),
-                    )));
-                };
                 let array: PrimitiveArray<Int64Type> = match array.data_type() {
                     DataType::Utf8 => as_string_array(array)?
                         .iter()
-                        .map(|value| {
-                            value
-                                .map(|value| self.formatted_string_to_seconds(value, &format, safe))
-                                .transpose()
-                                .map(Option::flatten)
-                        })
+                        .map(|value| value.map(&parse).transpose().map(Option::flatten))
                         .collect::<Result<_>>()?,
                     DataType::LargeUtf8 => as_large_string_array(array)?
                         .iter()
-                        .map(|value| {
-                            value
-                                .map(|value| self.formatted_string_to_seconds(value, &format, safe))
-                                .transpose()
-                                .map(Option::flatten)
-                        })
+                        .map(|value| value.map(&parse).transpose().map(Option::flatten))
                         .collect::<Result<_>>()?,
                     DataType::Utf8View => as_string_view_array(array)?
                         .iter()
-                        .map(|value| {
-                            value
-                                .map(|value| self.formatted_string_to_seconds(value, &format, safe))
-                                .transpose()
-                                .map(Option::flatten)
-                        })
+                        .map(|value| value.map(&parse).transpose().map(Option::flatten))
                         .collect::<Result<_>>()?,
                     other => {
                         return exec_err!(
@@ -207,14 +205,8 @@ impl SparkUnixTimestamp {
                 Ok(ColumnarValue::Array(Arc::new(array)))
             }
             ColumnarValue::Scalar(scalar) => {
-                let ScalarUnixFormat::Format(format) = format else {
-                    return Ok(ColumnarValue::Scalar(ScalarValue::Int64(None)));
-                };
                 let value = match scalar.try_as_str() {
-                    Some(value) => value
-                        .map(|value| self.formatted_string_to_seconds(value, &format, safe))
-                        .transpose()?
-                        .flatten(),
+                    Some(value) => value.map(&parse).transpose()?.flatten(),
                     None => {
                         return exec_err!(
                             "spark_unix_timestamp function expected string scalar for formatted input"
