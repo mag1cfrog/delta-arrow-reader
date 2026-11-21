@@ -40,6 +40,70 @@ fn session(batch_size: usize) -> SessionContext {
     )
 }
 
+#[tokio::test]
+async fn nullable_utf8_rtrim_matches_the_explicit_space_path() -> TestResult {
+    use arrow::compute::{cast, concat_batches};
+
+    let session = session(32);
+    let strings = StringArray::from(vec![
+        Some(""),
+        None,
+        Some("  "),
+        Some(" abc  "),
+        Some("abc\t "),
+        Some("é　 "),
+        Some("🙂"),
+    ]);
+    let nullable = RecordBatch::try_from_iter([("s", Arc::new(strings.clone()) as ArrayRef)])?;
+    let inputs = [
+        ("trim_optional", nullable.clone()),
+        ("trim_empty", nullable.slice(0, 0)),
+        (
+            "trim_view",
+            RecordBatch::try_from_iter([("s", cast(&strings, &DataType::Utf8View)?)])?,
+        ),
+        (
+            "trim_required",
+            RecordBatch::try_from_iter([(
+                "s",
+                Arc::new(StringArray::from(vec!["", "a ", "é ", "🙂"])) as ArrayRef,
+            )])?,
+        ),
+    ];
+    for (name, batch) in inputs {
+        session.register_batch(name, batch)?;
+    }
+    let sources = [
+        "trim_optional",
+        "trim_optional WHERE s IS NOT NULL",
+        "(SELECT COALESCE(s, '') AS s FROM trim_optional) AS t",
+        "trim_empty",
+        "trim_view",
+        "trim_required",
+    ];
+    for ansi_mode in [false, true] {
+        let options = SparkSqlOptions {
+            ansi_mode,
+            ..Default::default()
+        };
+        for source in sources {
+            let mut results = Vec::new();
+            for expression in ["rtrim(s)", "TRIM(TRAILING ' ' FROM s)"] {
+                let sql = format!("SELECT {expression} AS trimmed FROM {source}");
+                let plan = plan_query(&session, &sql, &options)
+                    .await?
+                    .create_physical_plan(&session)
+                    .await?;
+                let schema = plan.schema();
+                let rows = collect(plan, session.task_ctx()).await?;
+                results.push(concat_batches(&schema, &rows)?);
+            }
+            assert_eq!(results[0], results[1], "{source}; ANSI={ansi_mode}");
+        }
+    }
+    Ok(())
+}
+
 fn arity_error_matches(case: &Value, error: &str) -> bool {
     if case["expected"]["condition"] != "WRONG_NUM_ARGS.WITHOUT_SUGGESTION"
         || !error.starts_with("resolve:")

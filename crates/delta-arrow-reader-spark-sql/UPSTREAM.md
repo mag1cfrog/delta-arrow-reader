@@ -2666,6 +2666,14 @@ same Base64 engine and filters nonalphabet bytes after a decode
 failure as before. Scalar decoding, output types and error messages
 retain their existing behavior.
 
+### RTRIM on nullable Utf8 columns (#1413)
+
+When a single RTRIM argument is a nullable Utf8 column, the native
+function already declares the required result field. That call can
+use native RTRIM directly. Other arguments retain the Spark field
+adapter. The [differential test](tests/trim_case_fields.rs) compares
+values and fields with the same space trimming through the adapter.
+
 ### AES scalar and column arguments (#1405)
 
 The local Sail AES functions evaluate inputs, keys, modes, padding, IVs and

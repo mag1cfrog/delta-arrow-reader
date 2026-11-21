@@ -7,7 +7,7 @@ use datafusion::functions::regex::expr_fn as regex_fn;
 use datafusion::functions::regex::regexpcount::RegexpCountFunc;
 use datafusion::functions::regex::regexpinstr::RegexpInstrFunc;
 use datafusion::functions::string as native_string;
-use datafusion::functions::string::{lower::LowerFunc, upper::UpperFunc};
+use datafusion::functions::string::{lower::LowerFunc, rtrim::RtrimFunc, upper::UpperFunc};
 use datafusion::optimizer::simplify_expressions::ExprSimplifier;
 use datafusion_common::tree_node::{Transformed, TreeNode};
 use datafusion_common::{DFSchema, ScalarValue};
@@ -941,6 +941,14 @@ impl ScalarUDFImpl for NullPropagatingStringFunction {
         args: Vec<expr::Expr>,
         info: &SimplifyContext,
     ) -> datafusion_common::Result<ExprSimplifyResult> {
+        if self.function.inner().is::<RtrimFunc>()
+            && let [column @ expr::Expr::Column(_)] = args.as_slice()
+            && matches!(column.get_type(info.schema().as_ref()), Ok(DataType::Utf8))
+            && matches!(column.nullable(info.schema().as_ref()), Ok(true))
+        {
+            // Native RTRIM already declares the required nullable field.
+            return Ok(ExprSimplifyResult::Simplified(self.function.call(args)));
+        }
         if !self.preserve_intermediate_case
             && self.is_case_conversion()
             && let [argument] = args.as_slice()
