@@ -2687,3 +2687,10 @@ TIME, TO_TIME and TRY_TO_TIME reuse Arrow's checked parser for whole-second
 clock strings in the default format. The existing Chrono parser still
 handles other layouts, leap seconds and failures. Explicit patterns and
 nonstring casts keep their existing dispatch.
+
+### Literal minute and second in MAKE_TIME (#1409)
+
+MAKE_TIME prepares one microsecond contribution when the minute and second
+are valid scalars of the coerced types. It checks each nonnull hour with
+the original hour validator. Invalid literals and column arguments keep
+the existing row validation order.
