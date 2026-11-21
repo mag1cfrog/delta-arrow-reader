@@ -18,3 +18,9 @@ Report medians and ranges before and after for both ANSI modes. Keep the
 change if both medians decrease and correctness checks pass. The native
 cast is a cost control on the valid fixture. Record its repeat floor, the
 work in the candidate and the fallback for malformed bytes.
+
+Before clocks, run the [SQL boundary cases](decode-validation.json) on
+both builds in both ANSI modes. Check exact rows and types for DECODE
+with scalar and varying charsets and for the shared TO_CHAR and
+TO_VARCHAR functions. Compare the execution failure and message for
+malformed UTF-8 in a selected row.

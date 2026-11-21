@@ -1,0 +1,50 @@
+{
+  "functions": [
+    {
+      "kind": "scalar",
+      "category": "string",
+      "name": "decode",
+      "registration": "F::udf(SparkDecode::new())",
+      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/string.rs:1302",
+      "implementation_anchors": [
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-function/src/scalar/string/spark_encode_decode.rs:268",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/string.rs:1302"
+      ],
+      "id": "scalar.string.decode_entry_points",
+      "aliases": [],
+      "spark_sql": "SELECT id,\n    DECODE(b, ' uTf-8 ') AS decoded,\n    TO_CHAR(b, 'utf-8') AS formatted,\n    TO_VARCHAR(b, 'utf-8') AS varchar_value,\n    DECODE(b, CASE WHEN id % 2 = 0 THEN 'UTF-8' ELSE 'ISO-8859-1' END) AS dynamic_charset\nFROM bench WHERE id < 24",
+      "native_sql": null,
+      "input_columns": [
+        "id",
+        "b"
+      ],
+      "projection_sql": "SELECT id,b FROM bench",
+      "exclusion": null,
+      "class": "paired",
+      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+    },
+    {
+      "kind": "scalar",
+      "category": "string",
+      "name": "decode",
+      "registration": "F::udf(SparkDecode::new())",
+      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/string.rs:1302",
+      "implementation_anchors": [
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-function/src/scalar/string/spark_encode_decode.rs:268",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/string.rs:1302"
+      ],
+      "id": "scalar.string.decode_invalid_utf8",
+      "aliases": [],
+      "spark_sql": "SELECT id,\n    DECODE(CASE WHEN id = 5 THEN UNHEX('78ff') ELSE b END, 'UTF-8') AS decoded\nFROM bench WHERE id < 8",
+      "native_sql": null,
+      "input_columns": [
+        "id",
+        "b"
+      ],
+      "projection_sql": "SELECT id,b FROM bench",
+      "exclusion": null,
+      "class": "paired",
+      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+    }
+  ]
+}
