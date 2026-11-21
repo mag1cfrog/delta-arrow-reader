@@ -222,13 +222,16 @@ impl ScalarUDFImpl for SparkFromXml {
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
         let session_timezone = self.session_timezone.to_string();
         let ScalarFunctionArgs { args, .. } = args;
-        let scalar_settings = matches!(
-            args.as_slice(),
-            [ColumnarValue::Array(xml), ColumnarValue::Scalar(_)]
-                | [ColumnarValue::Array(xml), ColumnarValue::Scalar(_), ColumnarValue::Scalar(_)]
-                if !xml.is_empty()
-        );
-        // Empty input must retain the original empty schema array and its error.
+        // Preserve the empty-schema error and null-map masking of the original expansion.
+        let scalar_settings = match args.as_slice() {
+            [ColumnarValue::Array(xml), ColumnarValue::Scalar(_)] => !xml.is_empty(),
+            [
+                ColumnarValue::Array(xml),
+                ColumnarValue::Scalar(_),
+                ColumnarValue::Scalar(options),
+            ] => !xml.is_empty() && !options.is_null(),
+            _ => false,
+        };
         let hints = if scalar_settings {
             vec![Hint::Pad, Hint::AcceptsSingular, Hint::AcceptsSingular]
         } else {
@@ -1105,15 +1108,23 @@ mod tests {
             Some(""),
             Some("<row><value>9223372036854775807</value></row>"),
         ]);
-        let scalar_map = |key: &str, value: &str| -> Result<ColumnarValue> {
-            let mut options = MapBuilder::new(None, StringBuilder::new(), StringBuilder::new());
+        let scalar_map = |key: &str, value: &str, valid: bool| -> Result<ColumnarValue> {
+            let field_names = MapFieldNames {
+                entry: SAIL_MAP_FIELD_NAME.to_owned(),
+                key: SAIL_MAP_KEY_FIELD_NAME.to_owned(),
+                value: SAIL_MAP_VALUE_FIELD_NAME.to_owned(),
+            };
+            let mut options = MapBuilder::new(
+                Some(field_names),
+                StringBuilder::new(),
+                StringBuilder::new(),
+            );
             options.keys().append_value(key);
             options.values().append_value(value);
-            options.append(true)?;
-            Ok(ColumnarValue::Scalar(ScalarValue::try_from_array(
-                &options.finish(),
-                0,
-            )?))
+            options.append(valid)?;
+            Ok(ColumnarValue::Scalar(ScalarValue::Map(Arc::new(
+                options.finish(),
+            ))))
         };
         let schemas = [
             Some("value BIGINT, attr_id BIGINT"),
@@ -1123,9 +1134,10 @@ mod tests {
         ];
         let options = [
             None,
-            Some(scalar_map("attributePrefix", "attr_")?),
-            Some(scalar_map("mode", "FAILFAST")?),
-            Some(scalar_map("valueTag", "")?),
+            Some(scalar_map("attributePrefix", "attr_", true)?),
+            Some(scalar_map("mode", "FAILFAST", true)?),
+            Some(scalar_map("valueTag", "", true)?),
+            Some(scalar_map("valueTag", "", false)?),
         ];
         for length in [0, 1, documents.len()] {
             for schema in schemas {

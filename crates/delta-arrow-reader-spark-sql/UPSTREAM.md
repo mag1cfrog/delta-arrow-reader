@@ -2972,4 +2972,4 @@ the existing planner and evaluation paths.
 
 FROM_XML supplies one copy of literal schema and options for a nonempty
 XML column. The parser already reads these settings once per batch.
-Empty input and non-scalar settings follow the original expansion path.
+Empty input, null option maps and array settings keep the original expansion.
