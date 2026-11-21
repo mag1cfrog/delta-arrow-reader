@@ -35,9 +35,12 @@ def preflight(binaries, cases, output, settings, deadline, plan_checks):
                     raise ValueError(f"{mode}: executed rows differ from staging")
                 if mode != "native":
                     for arm, observed in zip(ARMS, (before, after)):
-                        fragment = plan_checks.get(arm)
-                        if fragment and fragment not in (observed["plans"] / f"{mode}.plan").read_text():
-                            raise ValueError(f"{mode}: {arm} plan lacks expected {fragment}")
+                        fragments = plan_checks.get(arm, {})
+                        group = "aggregate" if case_id.startswith("aggregate.") else "window"
+                        required = fragments.get(group, [])
+                        plan = (observed["plans"] / f"{mode}.plan").read_text().lower()
+                        if any(fragment not in plan for fragment in required):
+                            raise ValueError(f"{mode}: {arm} plan lacks expected aggregate path")
             eligible[case_id] = {k: v for k, v in before.items() if k != "plans"}
         except ValueError as error:
             excluded[case_id] = str(error)
@@ -57,7 +60,7 @@ def timed_case(binary, case_id, mode, work, expected, settings, deadline):
 
 
 def measure(settings_file, directories, output):
-    assert not runner.git("status", "--porcelain", "--", str(HERE))
+    assert not runner.git("status", "--porcelain"), "freeze the comparison source before clocks"
     candidate = runner.read(settings_file)
     head = runner.git("rev-parse", "HEAD")
     for key in ("staging_source", "candidate_source", "staging_tip"):

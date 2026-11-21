@@ -18,9 +18,11 @@ function from timing if any output or type differs.
 Before timing, compare the committed boundary corpus with the old staging
 outputs and the candidate. The corpus covers literal and default delimiters,
 NULLs, empty strings and input, distinct and ordered aggregates, binary input,
-and sliding ROWS, RANGE, growing, whole-partition, and empty frames. Confirm
-the direct path is used for the measured and supported fixture shapes,
-with the original list-based route for the other forms.
+and sliding ROWS, RANGE, growing, whole-partition, and empty frames. The
+grouped case merges two partitions with a filter. The long-literal case
+uses a 262,144-byte delimiter and 8,192 input rows with one nonnull value.
+Inspect the actual aggregate or window node and its Utf8View delimiter
+for the direct shapes. Check the logical list lowering for fallback cases.
 
 ## Schedule and pass rule
 
