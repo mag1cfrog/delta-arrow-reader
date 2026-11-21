@@ -1,9 +1,10 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::fmt::Debug;
 use std::sync::Arc;
 
 use datafusion::arrow::array::{Array, ArrayRef, Float64Array, ListArray, StructArray};
 use datafusion::arrow::buffer::{OffsetBuffer, ScalarBuffer};
-use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
+use datafusion::arrow::datatypes::{DataType, Field, FieldRef, Fields};
 use datafusion::common::{DataFusionError, Result, ScalarValue};
 use datafusion::logical_expr::function::{AccumulatorArgs, StateFieldsArgs};
 use datafusion::logical_expr::{Accumulator, AggregateUDFImpl, Signature, Volatility};
@@ -192,18 +193,8 @@ impl AggregateUDFImpl for HistogramNumericFunction {
     }
 
     fn return_type(&self, arg_types: &[DataType]) -> Result<DataType> {
-        let x_type = arg_types[0].clone();
-        Ok(DataType::List(Arc::new(Field::new(
-            "item",
-            DataType::Struct(
-                vec![
-                    Field::new("x", x_type, true),
-                    Field::new("y", DataType::Float64, true),
-                ]
-                .into(),
-            ),
-            true,
-        ))))
+        let (bin_item, _) = histogram_bin_layout(arg_types[0].clone());
+        Ok(DataType::List(bin_item))
     }
 
     fn state_fields(&self, _args: StateFieldsArgs) -> Result<Vec<FieldRef>> {
@@ -227,26 +218,45 @@ impl AggregateUDFImpl for HistogramNumericFunction {
     fn accumulator(&self, acc_args: AccumulatorArgs) -> Result<Box<dyn Accumulator>> {
         let nbins = Self::extract_nbins(&acc_args)?;
         let input_type = acc_args.exprs[0].data_type(acc_args.schema)?;
-        Ok(Box::new(HistogramNumericAccumulator::new(
-            nbins, input_type,
-        )))
+        let (bin_item, bin_fields) = if let DataType::List(bin_item) =
+            acc_args.return_field.data_type()
+            && let DataType::Struct(bin_fields) = bin_item.data_type()
+            && let [center, _count] = bin_fields.as_ref()
+            && center.data_type() == &input_type
+        {
+            (Arc::clone(bin_item), bin_fields.clone())
+        } else {
+            // Physical rewrites can replace arguments while retaining the planned fields.
+            histogram_bin_layout(input_type)
+        };
+        Ok(Box::new(HistogramNumericAccumulator {
+            histogram: NumericHistogram::new(nbins),
+            bin_item,
+            bin_fields,
+        }))
     }
+}
+
+fn histogram_bin_layout(center_type: DataType) -> (FieldRef, Fields) {
+    let bin_fields: Fields = vec![
+        Field::new("x", center_type, true),
+        Field::new("y", DataType::Float64, true),
+    ]
+    .into();
+    let bin_item = Arc::new(Field::new(
+        "item",
+        DataType::Struct(bin_fields.clone()),
+        true,
+    ));
+    (bin_item, bin_fields)
 }
 
 /// Accumulator for the `histogram_numeric` aggregate function.
 #[derive(Debug)]
 struct HistogramNumericAccumulator {
     histogram: NumericHistogram,
-    input_type: DataType,
-}
-
-impl HistogramNumericAccumulator {
-    fn new(nbins: usize, input_type: DataType) -> Self {
-        Self {
-            histogram: NumericHistogram::new(nbins),
-            input_type,
-        }
-    }
+    bin_item: FieldRef,
+    bin_fields: Fields,
 }
 
 impl Accumulator for HistogramNumericAccumulator {
@@ -266,15 +276,8 @@ impl Accumulator for HistogramNumericAccumulator {
 
     fn evaluate(&mut self) -> Result<ScalarValue> {
         if self.histogram.is_empty() {
-            let struct_type = DataType::Struct(
-                vec![
-                    Field::new("x", self.input_type.clone(), true),
-                    Field::new("y", DataType::Float64, true),
-                ]
-                .into(),
-            );
             return Ok(ScalarValue::List(Arc::new(ListArray::new_null(
-                Arc::new(Field::new("item", struct_type, true)),
+                Arc::clone(&self.bin_item),
                 1,
             ))));
         }
@@ -284,27 +287,20 @@ impl Accumulator for HistogramNumericAccumulator {
         let len = xs_f64.len();
 
         let xs_array: ArrayRef = Arc::new(Float64Array::from(xs_f64));
-        let xs_casted = cast_to_type(&xs_array, &self.input_type)?;
+        let xs_casted = cast_to_type(&xs_array, self.bin_fields[0].data_type())?;
 
         let ys_array: ArrayRef = Arc::new(Float64Array::from(ys));
 
-        let struct_fields: Vec<Arc<Field>> = vec![
-            Arc::new(Field::new("x", self.input_type.clone(), true)),
-            Arc::new(Field::new("y", DataType::Float64, true)),
-        ];
-        let struct_array = StructArray::try_new(
-            struct_fields.clone().into(),
-            vec![xs_casted, ys_array],
-            None,
-        )?;
+        let struct_array =
+            StructArray::try_new(self.bin_fields.clone(), vec![xs_casted, ys_array], None)?;
 
-        let field = Arc::new(Field::new(
-            "item",
-            DataType::Struct(struct_fields.into()),
-            true,
-        ));
         let offsets = OffsetBuffer::new(ScalarBuffer::from(vec![0i32, len as i32]));
-        let list_array = ListArray::new(field, offsets, Arc::new(struct_array), None);
+        let list_array = ListArray::new(
+            Arc::clone(&self.bin_item),
+            offsets,
+            Arc::new(struct_array),
+            None,
+        );
 
         Ok(ScalarValue::List(Arc::new(list_array)))
     }
@@ -400,6 +396,51 @@ impl Accumulator for HistogramNumericAccumulator {
             }
             self.histogram.merge(&other);
         }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use datafusion::arrow::array::Int64Array;
+    use datafusion::arrow::datatypes::Schema;
+    use datafusion::physical_expr::PhysicalExpr;
+    use datafusion::physical_expr::expressions::Literal;
+
+    use super::*;
+
+    #[test]
+    fn histogram_preserves_the_actual_center_type_after_an_argument_rewrite() -> Result<()> {
+        let function = HistogramNumericFunction::new();
+        let return_field = Arc::new(Field::new(
+            "histogram",
+            function.return_type(&[DataType::Float64, DataType::Int32])?,
+            true,
+        ));
+        let arguments: [Arc<dyn PhysicalExpr>; 2] = [
+            Arc::new(Literal::new(ScalarValue::Int64(Some(7)))),
+            Arc::new(Literal::new(ScalarValue::Int32(Some(2)))),
+        ];
+        let mut accumulator = function.accumulator(AccumulatorArgs {
+            return_field,
+            schema: &Schema::empty(),
+            expr_fields: &[],
+            ignore_nulls: false,
+            order_bys: &[],
+            is_distinct: false,
+            name: "histogram",
+            is_reversed: false,
+            exprs: &arguments,
+        })?;
+        let (bin_item, _) = histogram_bin_layout(DataType::Int64);
+        let expected_type = DataType::List(bin_item);
+        let empty = accumulator.evaluate()?;
+        assert!(empty.is_null());
+        assert_eq!(empty.data_type(), expected_type);
+        accumulator.update_batch(&[Arc::new(Int64Array::from(vec![7]))])?;
+        let populated = accumulator.evaluate()?;
+        assert!(!populated.is_null());
+        assert_eq!(populated.data_type(), expected_type);
         Ok(())
     }
 }

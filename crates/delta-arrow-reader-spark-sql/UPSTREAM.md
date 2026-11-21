@@ -2643,3 +2643,11 @@ The primitive MODE accumulator decrements the frequency of each departing
 nonnull value and removes entries when their counts reach zero. The
 existing evaluation and tie rules still select the result. Float and
 string windows retain their original replay paths.
+
+### Shared HISTOGRAM_NUMERIC output fields (#1408)
+
+The histogram accumulator reuses the list item and struct fields from
+its prepared return type when its center type matches the actual input.
+If a physical rewrite retains a different return type, the accumulator
+builds the original fields for the new input. The bin calculation,
+trims, seeded tie choices and output casts are unchanged.
