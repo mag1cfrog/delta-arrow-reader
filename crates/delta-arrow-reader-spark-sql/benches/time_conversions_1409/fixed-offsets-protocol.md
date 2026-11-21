@@ -10,7 +10,8 @@ modes before clocks. The three UTC statements must also agree with their
 native projections. Exclude any mismatch. The tests cover Chrono's limits,
 the interior boundary of the arithmetic path, both ends of the Int64
 timestamp range, named and fixed zones, equal and distinct zero offsets,
-NULLs, labels and existing failures.
+NULLs, labels and existing Arrow errors. Check original Chrono boundary
+panics one input at a time so they cannot mask other assertions.
 
 Report median and range of nine retained samples in ns per input row above
 projection. Use native process medians for the UTC A/A floors. Treat UTC
