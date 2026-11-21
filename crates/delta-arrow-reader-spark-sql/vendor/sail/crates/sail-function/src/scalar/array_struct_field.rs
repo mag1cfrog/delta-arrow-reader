@@ -248,17 +248,18 @@ mod tests {
         for (struct_nulls, child_value) in [
             (None, Some(4)),
             (
-                Some(NullBuffer::from(vec![true, true, true, false, true])),
+                Some(NullBuffer::from(vec![true, true, true, true, false, true])),
                 None,
             ),
             (
-                Some(NullBuffer::from(vec![true, true, true, false, true])),
+                Some(NullBuffer::from(vec![true, true, true, true, false, true])),
                 Some(4),
             ),
         ] {
             let structs = StructArray::try_new(
                 vec![Arc::new(field.clone())].into(),
                 vec![Arc::new(Int64Array::from(vec![
+                    Some(99),
                     Some(0),
                     None,
                     Some(2),
@@ -266,7 +267,8 @@ mod tests {
                     None,
                 ]))],
                 struct_nulls,
-            )?;
+            )?
+            .slice(1, 5);
             let item = Arc::new(Field::new_list_field(structs.data_type().clone(), true));
             let records = ListArray::try_new(
                 item.clone(),
