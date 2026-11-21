@@ -87,13 +87,14 @@ def apply(workspace):
     return changed
 
 
-def verify_overlay(receipt):
+def verify_overlay(receipt, make_overlay=apply, extra_sources=()):
     workspace_path = assemble.WORKSPACE.relative_to(assemble.REPO)
     sealed = pathlib.Path(receipt["source"]) / workspace_path
     assembly = receipt["assembly"]["assembly"]
     with tempfile.TemporaryDirectory(prefix="dar-1390-logical-") as directory:
         reference = pathlib.Path(directory)
-        for name in ("src/lib.rs", "src/statement_planning.rs", ANALYZER + "lib.rs", ANALYZER + "parser.rs"):
+        sources = ("src/lib.rs", "src/statement_planning.rs", ANALYZER + "lib.rs", ANALYZER + "parser.rs")
+        for name in (*sources, *extra_sources):
             path = reference / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(subprocess.check_output(
@@ -101,7 +102,7 @@ def verify_overlay(receipt):
         driver = reference / "benches/planning_attribution/driver.rs"
         driver.parent.mkdir(parents=True)
         driver.write_text(assemble.driver_source(observed=False))
-        overlay = {name: assemble.digest(reference / name) for name in apply(reference)}
+        overlay = {name: assemble.digest(reference / name) for name in make_overlay(reference)}
     generated = {"Cargo.toml", "benches/planning_attribution_fixture.rs", "benches/planning_attribution_entry.rs"}
     assert set(assembly) == set(overlay) | generated
     assert all(assembly[name] == digest == assemble.digest(sealed / name)
