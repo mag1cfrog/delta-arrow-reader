@@ -1,0 +1,12 @@
+{
+  "staging_source": "30585ed36142c3a41d863e7590e0534f21eb0c54",
+  "staging_tip": "30585ed36142c3a41d863e7590e0534f21eb0c54",
+  "candidate_source": "30585ed36142c3a41d863e7590e0534f21eb0c54",
+  "statement_manifest": "manifest.json",
+  "statement_manifest_sha256": "890d472f860a879238a8ab45b3df2c43d434b9e926058bba9818de4c6c7b4e2b",
+  "case_ids": [
+    "scalar.math.hex",
+    "scalar.misc.bitmap_bucket_number"
+  ],
+  "overall_timeout_seconds": 600
+}
