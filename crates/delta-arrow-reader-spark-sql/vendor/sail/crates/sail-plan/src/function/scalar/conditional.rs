@@ -57,7 +57,20 @@ fn case(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         .into_iter()
         .zip(branch_values)
         .map(|(condition, value)| (Box::new(condition), Box::new(value)))
-        .collect();
+        .collect::<Vec<_>>();
+    if else_expr.is_none()
+        && let [(condition, value)] = when_then_expr.as_slice()
+        && matches!(condition.as_ref(), expr::Expr::Column(_))
+        && matches!(value.as_ref(), expr::Expr::Column(_))
+        && value.get_type(function_context.schema)? == DataType::Int64
+    {
+        // Without ELSE, a Boolean column still yields nullable BIGINT in the native mask path.
+        return Ok(expr::Expr::Case(expr::Case::new(
+            None,
+            when_then_expr,
+            None,
+        )));
+    }
     Ok(expr::Expr::Case(expr::Case::new_spark_searched(
         when_then_expr,
         else_expr,
@@ -126,6 +139,77 @@ async fn case_retains_branches_and_validates_conditions_before_results() -> Plan
         Err(PlanError::InvalidArgument(message))
             if message == "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] CASE WHEN condition must be BOOLEAN, got Int32"
     ));
+    Ok(())
+}
+
+#[test]
+fn bigint_column_when_matches_the_spark_case_path() -> PlanResult<()> {
+    use arrow::array::{ArrayRef, BooleanArray, Int64Array, RecordBatch, StringArray};
+    use datafusion::prelude::SessionContext;
+    use datafusion_common::DFSchema;
+    use datafusion_expr::{cast, col};
+
+    use crate::config::PlanConfig;
+    use crate::function::common::FunctionContextInput;
+
+    let session = SessionContext::new();
+    let batch = RecordBatch::try_from_iter([
+        (
+            "flag",
+            Arc::new(BooleanArray::from(vec![
+                None,
+                Some(false),
+                Some(true),
+                Some(true),
+            ])) as ArrayRef,
+        ),
+        (
+            "value",
+            Arc::new(Int64Array::from(vec![Some(1), Some(2), None, Some(7)])),
+        ),
+        (
+            "raw",
+            Arc::new(StringArray::from(vec!["bad", "bad", "3", "7"])),
+        ),
+    ])?;
+    let schema = DFSchema::try_from(batch.schema())?;
+    for ansi_mode in [false, true] {
+        let config = PlanConfig {
+            ansi_mode,
+            ..Default::default()
+        };
+        for (value, uses_spark_case) in [
+            (col("value"), false),
+            (cast(col("raw"), DataType::Int64), true),
+        ] {
+            let current = case(ScalarFunctionInput {
+                arguments: vec![col("flag"), value],
+                function_context: FunctionContextInput {
+                    argument_display_names: &[],
+                    plan_config: &config,
+                    session_context: &session,
+                    schema: &schema,
+                },
+            })?;
+            let expr::Expr::Case(resolved) = &current else {
+                panic!("expected CASE")
+            };
+            assert_eq!(resolved.is_spark_searched(), uses_spark_case);
+            let original = expr::Expr::Case(expr::Case::new_spark_searched(
+                resolved.when_then_expr.clone(),
+                None,
+            ));
+            let actual = session.create_physical_expr(current, &schema)?;
+            let expected = session.create_physical_expr(original, &schema)?;
+            for input in [batch.clone(), batch.slice(0, 0)] {
+                let rows = input.num_rows();
+                let actual = actual.evaluate(&input)?.into_array(rows)?;
+                let expected = expected.evaluate(&input)?.into_array(rows)?;
+                assert_eq!(actual.data_type(), &DataType::Int64);
+                assert_eq!(actual.as_ref(), expected.as_ref());
+            }
+        }
+    }
     Ok(())
 }
 
