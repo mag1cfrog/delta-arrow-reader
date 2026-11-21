@@ -1,5 +1,6 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 mod bigint_arrays_overlap;
+mod has_null_inner_array;
 
 use std::sync::Arc;
 
@@ -40,6 +41,7 @@ use sail_function::scalar::datetime::spark_timestamp::SparkTimestamp;
 use sail_function::scalar::misc::raise_error::RaiseError;
 
 use self::bigint_arrays_overlap::BigIntArraysOverlap;
+use self::has_null_inner_array::HasNullInnerArray;
 use super::lambda::lambda_with_fresh_parameter;
 use crate::error::{PlanError, PlanResult};
 use crate::function::common::{
@@ -944,13 +946,20 @@ fn flatten(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let nullable_array_type = normalize_array_input_type_with_nullable_elements(&array_type);
     let nullable_array = cast(array.clone(), nullable_array_type.clone());
 
-    // Cast the null-only array to the nullable type to match
-    let same_type_null_only_array = cast(
-        make_array(vec![lit(ScalarValue::Null)]),
-        nullable_array_type,
-    );
-
-    let array_has_null = expr_fn::array_has_any(nullable_array.clone(), same_type_null_only_array);
+    let array_has_null = if matches!(&array, expr::Expr::Column(_))
+        && matches!(&array_type, DataType::List(_) | DataType::LargeList(_))
+        && matches!(
+            inner.data_type(),
+            DataType::List(_) | DataType::LargeList(_)
+        ) {
+        ScalarUDF::from(HasNullInnerArray).call(vec![nullable_array])
+    } else {
+        let same_type_null_only_array = cast(
+            make_array(vec![lit(ScalarValue::Null)]),
+            nullable_array_type,
+        );
+        expr_fn::array_has_any(nullable_array, same_type_null_only_array)
+    };
 
     Ok(expr::Expr::Case(expr::Case {
         expr: None,
@@ -1614,6 +1623,99 @@ mod tests {
                         .collect::<Vec<_>>();
                     assert_eq!(values(typed.as_ref())?, expected);
                     assert_eq!(values(legacy.as_ref())?, expected);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn flatten_inner_bitmap_matches_the_membership_probe() -> PlanResult<()> {
+        use crate::function::common::FunctionContextInput;
+        use arrow::array::{ArrayRef, GenericListArray};
+        use arrow::buffer::{NullBuffer, OffsetBuffer};
+        use arrow::datatypes::{Int64Type, Schema};
+
+        let session = SessionContext::new();
+        let children = [
+            None,
+            Some(vec![None, Some(7)]),
+            None,
+            Some(vec![]),
+            Some(vec![Some(3)]),
+        ];
+        let inner_lists: [ArrayRef; 2] = [
+            Arc::new(GenericListArray::<i32>::from_iter_primitive::<
+                Int64Type,
+                _,
+                _,
+            >(children.clone())),
+            Arc::new(GenericListArray::<i64>::from_iter_primitive::<
+                Int64Type,
+                _,
+                _,
+            >(children)),
+        ];
+        for inner in inner_lists {
+            let field = Arc::new(Field::new("inner", inner.data_type().clone(), true));
+            let parents = NullBuffer::from(vec![false, true, true, true, true]);
+            let outer_lists: [ArrayRef; 2] = [
+                Arc::new(GenericListArray::<i32>::try_new(
+                    field.clone(),
+                    OffsetBuffer::new(vec![0_i32, 1, 1, 2, 4, 5].into()),
+                    inner.clone(),
+                    Some(parents.clone()),
+                )?),
+                Arc::new(GenericListArray::<i64>::try_new(
+                    field,
+                    OffsetBuffer::new(vec![0_i64, 1, 1, 2, 4, 5].into()),
+                    inner,
+                    Some(parents),
+                )?),
+            ];
+            for outer in outer_lists {
+                let input_schema = Arc::new(Schema::new(vec![Field::new(
+                    "nested",
+                    outer.data_type().clone(),
+                    true,
+                )]));
+                let schema = Arc::new(DFSchema::try_from(input_schema.clone())?);
+                for ansi_mode in [false, true] {
+                    let config = Arc::new(crate::config::PlanConfig {
+                        ansi_mode,
+                        ..Default::default()
+                    });
+                    let expression = |array| {
+                        flatten(ScalarFunctionInput {
+                            arguments: vec![array],
+                            function_context: FunctionContextInput {
+                                argument_display_names: &[],
+                                plan_config: &config,
+                                session_context: &session,
+                                schema: &schema,
+                            },
+                        })
+                    };
+                    let bitmap = expression(col("nested"))?;
+                    let membership = expression(col("nested").alias("legacy_nested"))?;
+                    assert!(bitmap.to_string().contains("spark_has_null_inner_array"));
+                    assert!(membership.to_string().contains("array_has_any"));
+                    let bitmap = session.create_physical_expr(bitmap, &schema)?;
+                    let membership = session.create_physical_expr(membership, &schema)?;
+                    let bitmap_field = bitmap.return_field(schema.inner())?;
+                    let membership_field = membership.return_field(schema.inner())?;
+                    assert_eq!(bitmap_field.data_type(), membership_field.data_type());
+                    assert_eq!(bitmap_field.is_nullable(), membership_field.is_nullable());
+                    for (offset, len) in [(0, outer.len()), (1, outer.len() - 1), (0, 0)] {
+                        let batch = RecordBatch::try_new(
+                            input_schema.clone(),
+                            vec![outer.slice(offset, len)],
+                        )?;
+                        let actual = bitmap.evaluate(&batch)?.into_array(len)?;
+                        let expected = membership.evaluate(&batch)?.into_array(len)?;
+                        actual.to_data().validate_full()?;
+                        assert_eq!(actual.to_data(), expected.to_data(), "ANSI {ansi_mode}");
+                    }
                 }
             }
         }
