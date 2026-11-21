@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 use std::sync::Arc;
 
 use base64::engine::DecodePaddingMode;
@@ -300,22 +301,23 @@ fn encode_spark_base64_array<'a, O: OffsetSizeTrait>(
 
 fn decode_spark_base64(value: &str) -> Result<Vec<u8>> {
     let bytes = value.as_bytes();
-    match SPARK_BASE64_DECODE.decode(bytes) {
-        Ok(value) => Ok(value),
-        Err(error) => {
-            if bytes.iter().any(|byte| !is_spark_base64_byte(*byte)) {
-                let filtered_bytes: Vec<u8> = bytes
-                    .iter()
-                    .copied()
-                    .filter(|byte| is_spark_base64_byte(*byte))
-                    .collect();
-                SPARK_BASE64_DECODE
-                    .decode(filtered_bytes.as_slice())
-                    .map_err(|e| exec_datafusion_err!("Spark `unbase64`: {e}"))
-            } else {
-                Err(exec_datafusion_err!("Spark `unbase64`: {error}"))
-            }
-        }
+    SPARK_BASE64_DECODE
+        .decode(bytes)
+        .or_else(|error| decode_filtered_base64(bytes, error))
+}
+
+fn decode_filtered_base64(bytes: &[u8], error: base64::DecodeError) -> Result<Vec<u8>> {
+    if bytes.iter().any(|byte| !is_spark_base64_byte(*byte)) {
+        let filtered_bytes: Vec<u8> = bytes
+            .iter()
+            .copied()
+            .filter(|byte| is_spark_base64_byte(*byte))
+            .collect();
+        SPARK_BASE64_DECODE
+            .decode(filtered_bytes.as_slice())
+            .map_err(|e| exec_datafusion_err!("Spark `unbase64`: {e}"))
+    } else {
+        Err(exec_datafusion_err!("Spark `unbase64`: {error}"))
     }
 }
 
@@ -329,11 +331,17 @@ fn decode_spark_base64_array<'a, O: OffsetSizeTrait>(
     value: impl Fn(usize) -> &'a str,
 ) -> Result<GenericBinaryArray<O>> {
     let mut builder = GenericBinaryBuilder::<O>::with_capacity(len, 0);
+    let mut decoded = Vec::new();
     for i in 0..len {
         if is_null(i) {
             builder.append_null();
         } else {
-            builder.append_value(decode_spark_base64(value(i))?.as_slice());
+            let bytes = value(i).as_bytes();
+            decoded.clear();
+            match SPARK_BASE64_DECODE.decode_vec(bytes, &mut decoded) {
+                Ok(()) => builder.append_value(&decoded),
+                Err(error) => builder.append_value(decode_filtered_base64(bytes, error)?),
+            }
         }
     }
     Ok(builder.finish())
@@ -544,6 +552,62 @@ mod tests {
             .ok_or_else(|| exec_datafusion_err!("expected LargeBinaryArray"))?;
         assert_eq!(out.value(0), b"hi");
         assert!(out.is_null(1));
+        Ok(())
+    }
+
+    #[test]
+    fn unbase64_array_reuse_matches_the_original_decoder() -> Result<()> {
+        let udf = SparkUnbase64::new();
+        let strings = [
+            Some("aGVsbG8gd29ybGQh"),
+            Some("AA=="),
+            Some("Zh=="),
+            Some("aGk"),
+            Some("a G🙂k="),
+            Some("--%"),
+            None,
+            Some(""),
+            Some("////"),
+        ];
+        let expected = strings
+            .iter()
+            .map(|value| value.map(decode_spark_base64).transpose())
+            .collect::<Result<Vec<_>>>()?;
+        for enable_ansi_mode in [false, true] {
+            for input_type in [DataType::Utf8, DataType::LargeUtf8, DataType::Utf8View] {
+                let observe = |input, start, len| -> Result<ColumnarValue> {
+                    let array = arrow::compute::cast(&StringArray::from(input), &input_type)?;
+                    let return_type = udf.return_type(std::slice::from_ref(&input_type))?;
+                    let mut config = ConfigOptions::default();
+                    config.execution.enable_ansi_mode = enable_ansi_mode;
+                    udf.invoke_with_args(ScalarFunctionArgs {
+                        args: vec![ColumnarValue::Array(array.slice(start, len))],
+                        arg_fields: vec![Arc::new(Field::new("v", input_type.clone(), true))],
+                        number_rows: len,
+                        return_field: Arc::new(Field::new("r", return_type, true)),
+                        config_options: Arc::new(config),
+                    })
+                };
+                for (start, len) in [(0, strings.len()), (1, strings.len() - 1), (0, 0)] {
+                    let actual = observe(strings.to_vec(), start, len)?.into_array(len)?;
+                    let bytes = expected[start..start + len]
+                        .iter()
+                        .map(|value| value.as_deref());
+                    let expected: Arc<dyn Array> = if input_type == DataType::LargeUtf8 {
+                        Arc::new(bytes.collect::<LargeBinaryArray>())
+                    } else {
+                        Arc::new(bytes.collect::<BinaryArray>())
+                    };
+                    assert_eq!(actual.as_ref(), expected.as_ref());
+                }
+                for invalid in ["A", "Y=Q=", "  A% "] {
+                    let prior = decode_spark_base64(invalid);
+                    let array = observe(vec![strings[0], Some(invalid), strings[1]], 0, 3);
+                    assert!(matches!((array, prior), (Err(actual), Err(expected))
+                        if actual.to_string() == expected.to_string()));
+                }
+            }
+        }
         Ok(())
     }
 

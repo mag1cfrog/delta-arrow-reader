@@ -2659,6 +2659,13 @@ overflow uses the original per-row path so the accumulator keeps the
 same successful updates before the error. Weighted input and window
 retractions continue through their existing paths.
 
+### UNBASE64 decoding buffer (#1413)
+
+UNBASE64 reuses one output buffer for an array batch. It uses the
+same Base64 engine and filters nonalphabet bytes after a decode
+failure as before. Scalar decoding, output types and error messages
+retain their existing behavior.
+
 ### AES scalar and column arguments (#1405)
 
 The local Sail AES functions evaluate inputs, keys, modes, padding, IVs and
