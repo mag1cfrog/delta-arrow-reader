@@ -1,8 +1,9 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::{Arc, LazyLock};
 
-use datafusion::arrow::array::AsArray;
-use datafusion::arrow::datatypes::{DataType, Int64Type, UInt64Type};
+use datafusion::arrow::array::{Array, AsArray, UInt64Array};
+use datafusion::arrow::buffer::ScalarBuffer;
+use datafusion::arrow::datatypes::{DataType, Int64Type};
 use datafusion::functions::expr_fn::abs;
 use datafusion::functions::math::abs::AbsFunc;
 use datafusion_common::utils::take_function_args;
@@ -45,9 +46,11 @@ impl ScalarUDFImpl for UnsignedShiftBits {
                 {
                     None
                 } else {
-                    Some(ColumnarValue::Array(Arc::new(
-                        array.reinterpret_cast::<UInt64Type>(),
-                    )))
+                    let values = ScalarBuffer::from(array.values().inner().clone());
+                    Some(ColumnarValue::Array(Arc::new(UInt64Array::new(
+                        values,
+                        array.nulls().cloned(),
+                    ))))
                 }
             }
             ColumnarValue::Scalar(ScalarValue::Int64(Some(i64::MIN))) => None,
@@ -116,4 +119,42 @@ pub(super) fn list_built_in_bitwise_functions() -> Vec<(&'static str, ScalarFunc
         ("|", F::binary_op(Operator::BitwiseOr)),
         ("~", F::unary(|arg| (-arg) - lit(1))),
     ]
+}
+
+#[test]
+fn unsigned_shift_bits_preserve_sliced_values_and_validity() -> Result<()> {
+    use datafusion::arrow::array::Int64Array;
+    use datafusion::arrow::buffer::NullBuffer;
+    use datafusion::arrow::datatypes::{Field, UInt64Type};
+
+    let invoke = |value, number_rows| {
+        UnsignedShiftBits.invoke_with_args(ScalarFunctionArgs {
+            args: vec![value],
+            arg_fields: vec![Arc::new(Field::new("value", DataType::Int64, true))],
+            number_rows,
+            return_field: Arc::new(Field::new("bits", DataType::UInt64, true)),
+            config_options: Arc::new(Default::default()),
+        })
+    };
+    let input = Int64Array::new(
+        vec![7, i64::MIN, -1, i64::MAX, i64::MIN].into(),
+        Some(NullBuffer::from(vec![true, false, true, true, true])),
+    );
+    let sliced = input.slice(1, 3);
+    let value = invoke(ColumnarValue::Array(Arc::new(sliced.clone())), 3)?.into_array(3)?;
+    let unsigned = value.as_primitive::<UInt64Type>();
+    assert!(unsigned.values().inner().ptr_eq(sliced.values().inner()));
+    assert_eq!(unsigned.nulls(), sliced.nulls());
+    assert_eq!(
+        unsigned.iter().collect::<Vec<_>>(),
+        [None, Some(u64::MAX), Some(i64::MAX as u64)],
+    );
+    let error = invoke(ColumnarValue::Array(Arc::new(input)), 5).unwrap_err();
+    assert!(error.to_string().contains("Int64Array overflow on abs("));
+    let scalar = invoke(ColumnarValue::Scalar(ScalarValue::Int64(Some(-1))), 1)?;
+    assert!(matches!(
+        scalar,
+        ColumnarValue::Scalar(ScalarValue::UInt64(Some(u64::MAX)))
+    ));
+    Ok(())
 }
