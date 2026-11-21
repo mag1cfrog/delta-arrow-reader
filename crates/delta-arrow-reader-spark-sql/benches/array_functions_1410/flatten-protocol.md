@@ -10,6 +10,8 @@ Compare the existing membership probe with the inner validity bitmap
 using both input offset widths and both child offset widths. Include
 NULL parents, NULL inner arrays, NULL scalar elements, empty arrays,
 empty batches and slices. Run the existing Spark-reference array tests.
+The [untimed Map leaf probe](flatten-validation.json) must keep the
+original membership error in both ANSI modes.
 
 Report median and range of nine retained samples in ns per input row
 above projection. Each ANSI median must be at or below the same-session
