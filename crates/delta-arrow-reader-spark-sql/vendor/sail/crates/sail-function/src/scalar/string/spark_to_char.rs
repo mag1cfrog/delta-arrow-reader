@@ -8,11 +8,12 @@ use datafusion::arrow::array::{
 use datafusion::arrow::compute::{CastOptions, cast_with_options};
 use datafusion::arrow::datatypes::{DataType, i256};
 use datafusion_common::{Result, ScalarValue, exec_err, internal_err};
+use datafusion_expr::function::Hint;
 use datafusion_expr::{ColumnarValue, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility};
 
 use crate::error::{invalid_arg_count_exec_err, unsupported_data_type_exec_err};
 use crate::functions_nested_utils::downcast_arg;
-use crate::functions_utils::{Hint, make_scalar_function};
+use crate::functions_utils::make_scalar_function;
 
 /// The `to_char` / `to_varchar` function for numeric input, formatting a decimal value
 /// as a string according to a number format such as `'$99,999.99S'`.
@@ -61,10 +62,12 @@ impl ScalarUDFImpl for SparkToChar {
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
         let ansi_mode = self.ansi_mode;
         let ScalarFunctionArgs { args, .. } = args;
+        // Keep the original failure when broadcasting would overflow Utf8 offsets.
         let hints = if matches!(
             args.as_slice(),
-            [ColumnarValue::Array(values), ColumnarValue::Scalar(ScalarValue::Utf8(_))]
+            [ColumnarValue::Array(values), ColumnarValue::Scalar(ScalarValue::Utf8(format))]
                 if !values.is_empty()
+                    && format.as_ref().is_none_or(|format| format.len() <= i32::MAX as usize / values.len())
         ) {
             vec![Hint::Pad, Hint::AcceptsSingular]
         } else {
@@ -874,6 +877,8 @@ fn strip_trailing_lone_decimal_point(result: &mut [u8]) {
 
 #[cfg(test)]
 mod tests {
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+
     use datafusion::arrow::datatypes::Field;
 
     use super::*;
@@ -888,6 +893,18 @@ mod tests {
             let function = SparkToChar::new(ansi_mode);
             let previous =
                 make_scalar_function(move |arrays| spark_to_char_impl(arrays, ansi_mode), vec![]);
+            let invoke = |args: Vec<ColumnarValue>, number_rows| {
+                function.invoke_with_args(ScalarFunctionArgs {
+                    arg_fields: args
+                        .iter()
+                        .map(|arg| Arc::new(Field::new("arg", arg.data_type(), true)))
+                        .collect(),
+                    args,
+                    number_rows,
+                    return_field: Arc::new(Field::new("formatted", DataType::Utf8, true)),
+                    config_options: Arc::new(Default::default()),
+                })
+            };
             for values in &inputs {
                 for length in [0, 1, values.len()] {
                     for format in [Some("9999.99S"), Some("9"), Some(""), Some("bad"), None] {
@@ -896,16 +913,7 @@ mod tests {
                             ColumnarValue::Scalar(ScalarValue::Utf8(format.map(str::to_owned))),
                         ];
                         let expected = previous(&args);
-                        let actual = function.invoke_with_args(ScalarFunctionArgs {
-                            arg_fields: args
-                                .iter()
-                                .map(|arg| Arc::new(Field::new("arg", arg.data_type(), true)))
-                                .collect(),
-                            args,
-                            number_rows: length,
-                            return_field: Arc::new(Field::new("formatted", DataType::Utf8, true)),
-                            config_options: Arc::new(Default::default()),
-                        });
+                        let actual = invoke(args, length);
                         match (actual, expected) {
                             (
                                 Ok(ColumnarValue::Array(actual)),
@@ -923,6 +931,13 @@ mod tests {
                     }
                 }
             }
+            let length = 8192;
+            let oversized = vec![
+                ColumnarValue::Array(Arc::new(Int64Array::new_null(length))),
+                ColumnarValue::Scalar(ScalarValue::Utf8(Some("9".repeat(262_144)))),
+            ];
+            assert!(catch_unwind(AssertUnwindSafe(|| previous(&oversized))).is_err());
+            assert!(catch_unwind(AssertUnwindSafe(|| invoke(oversized, length))).is_err());
         }
         Ok(())
     }

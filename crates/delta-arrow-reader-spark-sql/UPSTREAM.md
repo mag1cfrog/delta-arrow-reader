@@ -3003,4 +3003,5 @@ existing parser. Other argument shapes keep their existing adapters.
 
 The numeric formatter reads a foldable format from its first value. For
 nonempty value columns it supplies a one-element array for a Utf8
-literal format. Other input shapes use the existing adapter.
+literal format when the broadcast fits Utf8 offsets. Other inputs use
+the existing adapter.
