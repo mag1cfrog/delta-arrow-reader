@@ -74,6 +74,16 @@ impl SparkLike {
         pattern: ColumnarValue,
         source_nulls: Option<&NullBuffer>,
     ) -> Result<[ColumnarValue; 2]> {
+        // A plain prefix and trailing wildcard already have Arrow's default escaping.
+        if self.escape == '\\'
+            && let ColumnarValue::Scalar(ScalarValue::Utf8(Some(text))) = &pattern
+            && let Some(prefix) = text.strip_suffix('%')
+            && (1..=32).contains(&prefix.len())
+            && prefix.bytes().all(|byte| byte.is_ascii_alphanumeric())
+            && source.data_type() == DataType::Utf8
+        {
+            return Ok([source, pattern]);
+        }
         let pattern = match pattern {
             ColumnarValue::Scalar(value) => {
                 ColumnarValue::Scalar(self.rewrite_scalar_pattern(value)?)
@@ -224,6 +234,21 @@ mod tests {
     use arrow::array::{Array, ArrayRef, StringArray, StringViewArray};
     use datafusion_common::config::ConfigOptions;
 
+    #[test]
+    fn native_like_reuses_the_plain_prefix_string() -> Result<()> {
+        let prefix = String::from("item%");
+        let original = prefix.as_ptr();
+        let [_, pattern] = SparkLike::new('\\').native_like_args(
+            ColumnarValue::Scalar(ScalarValue::Utf8(Some("item".into()))),
+            ColumnarValue::Scalar(ScalarValue::Utf8(Some(prefix))),
+            None,
+        )?;
+        assert!(
+            matches!(pattern, ColumnarValue::Scalar(ScalarValue::Utf8(Some(text)))
+            if text == "item%" && text.as_ptr() == original)
+        );
+        Ok(())
+    }
     fn invoke(source: ColumnarValue, pattern: ColumnarValue, rows: usize) -> Result<ColumnarValue> {
         invoke_as(SparkLike::new('!'), source, pattern, rows)
     }

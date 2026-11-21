@@ -2631,6 +2631,16 @@ handles other patterns, storage types and explicit escapes. The
 [differential test](tests/ilike/literal_prefix.rs) compares both paths
 in both ANSI modes.
 
+### LIKE with a literal ASCII prefix (#1413)
+
+The LIKE adapter passes a Utf8 scalar pattern directly to Arrow when
+it has up to 32 ASCII letters or digits followed by `%`, the source
+is Utf8 and the escape is the default backslash. Those bytes need
+neither escape rewriting nor a storage conversion. The adapter still
+participates in Spark's local evaluation of expressions containing LIKE.
+The [differential test](tests/like_escapes/literal_prefix.rs) compares
+against the previous preparation path and checks local errors.
+
 ### AES scalar and column arguments (#1405)
 
 The local Sail AES functions evaluate inputs, keys, modes, padding, IVs and
