@@ -1,0 +1,692 @@
+{
+  "frozen_manifest_sha256": "ec6528b17cb072224aec6ea0ea3c1e910b9aa8cf6f5cadb0296f85b3f86f1f06",
+  "output_rows_by_case": {
+    "generator.generator.explode_outer": 2875000,
+    "generator.generator.posexplode": 2812500,
+    "generator.generator.posexplode_outer": 2875000,
+    "generator.generator.variant_explode": 1875000,
+    "generator.generator.variant_explode_outer": 1875000,
+    "scalar.datetime.window": 937500,
+    "scalar.datetime.window_time": 937500
+  },
+  "functions": [
+    {
+      "id": "aggregate.aggregate.bitmap_and_agg",
+      "spark_sql": "SELECT bitmap_and_agg(b) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT b FROM bench"
+    },
+    {
+      "id": "aggregate.aggregate.bitmap_construct_agg",
+      "spark_sql": "SELECT bitmap_construct_agg(CAST(p AS BIGINT)) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT p FROM bench"
+    },
+    {
+      "id": "aggregate.aggregate.bitmap_or_agg",
+      "spark_sql": "SELECT bitmap_or_agg(b) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT b FROM bench"
+    },
+    {
+      "id": "aggregate.aggregate.count_min_sketch",
+      "spark_sql": "SELECT count_min_sketch(i,CAST(0.1 AS DOUBLE),CAST(0.9 AS DOUBLE),7) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT i FROM bench"
+    },
+    {
+      "id": "aggregate.aggregate.histogram_numeric",
+      "spark_sql": "SELECT histogram_numeric(d,4) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT d FROM bench"
+    },
+    {
+      "id": "aggregate.aggregate.hll_sketch_agg",
+      "spark_sql": "SELECT hll_sketch_agg(i) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT i FROM bench"
+    },
+    {
+      "id": "aggregate.aggregate.hll_union_agg",
+      "spark_sql": "SELECT hll_union_agg(hll_b) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT hll_b FROM bench"
+    },
+    {
+      "id": "aggregate.aggregate.kurtosis",
+      "spark_sql": "SELECT kurtosis(d) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT d FROM bench"
+    },
+    {
+      "id": "aggregate.aggregate.mode",
+      "spark_sql": "SELECT mode(i) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT i FROM bench"
+    },
+    {
+      "id": "aggregate.aggregate.percentile_disc",
+      "spark_sql": "SELECT percentile_disc(0.5) WITHIN GROUP (ORDER BY d) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT d FROM bench"
+    },
+    {
+      "id": "aggregate.aggregate.product",
+      "spark_sql": "SELECT product(d) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT d FROM bench"
+    },
+    {
+      "id": "aggregate.aggregate.schema_of_variant_agg",
+      "spark_sql": "SELECT schema_of_variant_agg(parse_json(json_s)) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT json_s FROM bench"
+    },
+    {
+      "id": "aggregate.aggregate.skewness",
+      "spark_sql": "SELECT skewness(d) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT d FROM bench"
+    },
+    {
+      "id": "aggregate.aggregate.theta_intersection_agg",
+      "spark_sql": "SELECT theta_intersection_agg(theta_b) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT theta_b FROM bench"
+    },
+    {
+      "id": "aggregate.aggregate.theta_sketch_agg",
+      "spark_sql": "SELECT theta_sketch_agg(i) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT i FROM bench"
+    },
+    {
+      "id": "aggregate.aggregate.theta_union_agg",
+      "spark_sql": "SELECT theta_union_agg(theta_b) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT theta_b FROM bench"
+    },
+    {
+      "id": "generator.generator.explode_outer",
+      "spark_sql": "SELECT id,explode_outer(arr) FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,arr FROM bench"
+    },
+    {
+      "id": "generator.generator.posexplode",
+      "spark_sql": "SELECT id,posexplode(arr) FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,arr FROM bench"
+    },
+    {
+      "id": "generator.generator.posexplode_outer",
+      "spark_sql": "SELECT id,posexplode_outer(arr) FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,arr FROM bench"
+    },
+    {
+      "id": "generator.generator.variant_explode",
+      "spark_sql": "SELECT id,variant_explode(parse_json(json_s)) FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,json_s FROM bench"
+    },
+    {
+      "id": "generator.generator.variant_explode_outer",
+      "spark_sql": "SELECT id,variant_explode_outer(parse_json(json_s)) FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,json_s FROM bench"
+    },
+    {
+      "id": "scalar.array.shuffle",
+      "spark_sql": "SELECT id,shuffle(arr) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,arr FROM bench"
+    },
+    {
+      "id": "scalar.bitwise.bit_count",
+      "spark_sql": "SELECT id,bit_count(i) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i FROM bench"
+    },
+    {
+      "id": "scalar.csv.from_csv",
+      "spark_sql": "SELECT id,from_csv(csv_s,'x BIGINT, label STRING') AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,csv_s FROM bench"
+    },
+    {
+      "id": "scalar.csv.to_csv",
+      "spark_sql": "SELECT id,to_csv(st) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,st FROM bench"
+    },
+    {
+      "id": "scalar.datetime.make_dt_interval",
+      "spark_sql": "SELECT id,make_dt_interval(p) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,p FROM bench"
+    },
+    {
+      "id": "scalar.datetime.make_interval",
+      "spark_sql": "SELECT id,make_interval(p) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,p FROM bench"
+    },
+    {
+      "id": "scalar.datetime.make_timestamp",
+      "spark_sql": "SELECT id,make_timestamp(2020,1,p,12,34,CAST(56 AS DECIMAL(16,6))) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,p FROM bench"
+    },
+    {
+      "id": "scalar.datetime.make_timestamp_ltz",
+      "spark_sql": "SELECT id,make_timestamp_ltz(2020,1,p,12,34,CAST(56 AS DECIMAL(16,6))) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,p FROM bench"
+    },
+    {
+      "id": "scalar.datetime.make_timestamp_ntz",
+      "spark_sql": "SELECT id,make_timestamp_ntz(2020,1,p,12,34,CAST(56 AS DECIMAL(16,6))) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,p FROM bench"
+    },
+    {
+      "id": "scalar.datetime.make_ym_interval",
+      "spark_sql": "SELECT id,make_ym_interval(p) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,p FROM bench"
+    },
+    {
+      "id": "scalar.datetime.months_between",
+      "spark_sql": "SELECT id,months_between(dt,CAST('2020-01-01' AS DATE)) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,dt FROM bench"
+    },
+    {
+      "id": "scalar.datetime.next_day",
+      "spark_sql": "SELECT id,next_day(dt,'MON') AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,dt FROM bench"
+    },
+    {
+      "id": "scalar.datetime.time_diff",
+      "spark_sql": "SELECT id,time_diff('SECOND',tm,CAST('13:00:00' AS TIME)) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,tm FROM bench"
+    },
+    {
+      "id": "scalar.datetime.time_trunc",
+      "spark_sql": "SELECT id,time_trunc('HOUR',tm) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,tm FROM bench"
+    },
+    {
+      "id": "scalar.datetime.timediff",
+      "spark_sql": "SELECT id,timediff(SECOND,ts,CAST('2020-01-01 12:00:00' AS TIMESTAMP)) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,ts FROM bench"
+    },
+    {
+      "id": "scalar.datetime.timestampadd",
+      "spark_sql": "SELECT id,timestampadd(DAY,p,ts) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,p,ts FROM bench"
+    },
+    {
+      "id": "scalar.datetime.timestampdiff",
+      "spark_sql": "SELECT id,timestampdiff(DAY,ts,ts) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,ts FROM bench"
+    },
+    {
+      "id": "scalar.datetime.try_make_interval",
+      "spark_sql": "SELECT id,try_make_interval(p) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,p FROM bench"
+    },
+    {
+      "id": "scalar.datetime.try_make_timestamp",
+      "spark_sql": "SELECT id,try_make_timestamp(2020,1,p,12,34,CAST(56 AS DECIMAL(16,6))) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,p FROM bench"
+    },
+    {
+      "id": "scalar.datetime.try_make_timestamp_ltz",
+      "spark_sql": "SELECT id,try_make_timestamp_ltz(2020,1,p,12,34,CAST(56 AS DECIMAL(16,6))) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,p FROM bench"
+    },
+    {
+      "id": "scalar.datetime.try_make_timestamp_ntz",
+      "spark_sql": "SELECT id,try_make_timestamp_ntz(2020,1,p,12,34,CAST(56 AS DECIMAL(16,6))) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,p FROM bench"
+    },
+    {
+      "id": "scalar.datetime.window",
+      "spark_sql": "SELECT id,window(ts,'5 minutes') AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,ts FROM bench"
+    },
+    {
+      "id": "scalar.datetime.window_time",
+      "spark_sql": "SELECT id,window_time(window(ts,'5 minutes')) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,ts FROM bench"
+    },
+    {
+      "id": "scalar.geo.st_asbinary",
+      "spark_sql": "SELECT id,st_asbinary(wkb) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,wkb FROM bench"
+    },
+    {
+      "id": "scalar.geo.st_geogfromwkb",
+      "spark_sql": "SELECT id,st_geogfromwkb(wkb) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,wkb FROM bench"
+    },
+    {
+      "id": "scalar.geo.st_geomfromwkb",
+      "spark_sql": "SELECT id,st_geomfromwkb(wkb) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,wkb FROM bench"
+    },
+    {
+      "id": "scalar.hash.crc32",
+      "spark_sql": "SELECT id,crc32(s) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,s FROM bench"
+    },
+    {
+      "id": "scalar.hash.hash",
+      "spark_sql": "SELECT id,hash(i,s) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,s FROM bench"
+    },
+    {
+      "id": "scalar.hash.sha",
+      "spark_sql": "SELECT id,sha(s) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,s FROM bench"
+    },
+    {
+      "id": "scalar.hash.sha1",
+      "spark_sql": "SELECT id,sha1(s) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,s FROM bench"
+    },
+    {
+      "id": "scalar.hash.xxhash64",
+      "spark_sql": "SELECT id,xxhash64(i,s) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,s FROM bench"
+    },
+    {
+      "id": "scalar.json.from_json",
+      "spark_sql": "SELECT id,from_json(json_s,'x BIGINT, a ARRAY<INT>') AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,json_s FROM bench"
+    },
+    {
+      "id": "scalar.json.get_json_object",
+      "spark_sql": "SELECT id,get_json_object(json_s,'$.x') AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,json_s FROM bench"
+    },
+    {
+      "id": "scalar.json.json_array_length",
+      "spark_sql": "SELECT id,json_array_length(json_array_s) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,json_array_s FROM bench"
+    },
+    {
+      "id": "scalar.json.json_object_keys",
+      "spark_sql": "SELECT id,json_object_keys(json_s) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,json_s FROM bench"
+    },
+    {
+      "id": "scalar.json.json_tuple",
+      "spark_sql": "SELECT id,json_tuple(json_s,'x') AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,json_s FROM bench"
+    },
+    {
+      "id": "scalar.json.to_json",
+      "spark_sql": "SELECT id,to_json(st) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,st FROM bench"
+    },
+    {
+      "id": "scalar.lambda.aggregate",
+      "spark_sql": "SELECT id,aggregate(arr,CAST(0 AS BIGINT),(a,x) -> a+coalesce(x,0)) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,arr FROM bench"
+    },
+    {
+      "id": "scalar.lambda.exists",
+      "spark_sql": "SELECT id,exists(arr,x -> x>2) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,arr FROM bench"
+    },
+    {
+      "id": "scalar.lambda.filter",
+      "spark_sql": "SELECT id,filter(arr,x -> x>2) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,arr FROM bench"
+    },
+    {
+      "id": "scalar.lambda.forall",
+      "spark_sql": "SELECT id,forall(arr,x -> x>2) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,arr FROM bench"
+    },
+    {
+      "id": "scalar.lambda.reduce",
+      "spark_sql": "SELECT id,reduce(arr,CAST(0 AS BIGINT),(a,x) -> a+coalesce(x,0)) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,arr FROM bench"
+    },
+    {
+      "id": "scalar.lambda.transform",
+      "spark_sql": "SELECT id,transform(arr,x -> x+1) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,arr FROM bench"
+    },
+    {
+      "id": "scalar.map.map_concat",
+      "spark_sql": "SELECT id,map_concat(m,m2) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,m,m2 FROM bench"
+    },
+    {
+      "id": "scalar.map.map_from_entries",
+      "spark_sql": "SELECT id,map_from_entries(map_entries(m)) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,m FROM bench"
+    },
+    {
+      "id": "scalar.map.str_to_map",
+      "spark_sql": "SELECT id,str_to_map(map_s) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,map_s FROM bench"
+    },
+    {
+      "id": "scalar.math.bin",
+      "spark_sql": "SELECT id,bin(i) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i FROM bench"
+    },
+    {
+      "id": "scalar.math.bround",
+      "spark_sql": "SELECT id,bround(d) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,d FROM bench"
+    },
+    {
+      "id": "scalar.math.conv",
+      "spark_sql": "SELECT id,conv(hex_s,16,10) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,hex_s FROM bench"
+    },
+    {
+      "id": "scalar.math.width_bucket",
+      "spark_sql": "SELECT id,width_bucket(d,0.0,1.0,10) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,d FROM bench"
+    },
+    {
+      "id": "scalar.misc.bitmap_count",
+      "spark_sql": "SELECT id,bitmap_count(b) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,b FROM bench"
+    },
+    {
+      "id": "scalar.misc.hll_sketch_estimate",
+      "spark_sql": "SELECT id,hll_sketch_estimate(hll_b) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,hll_b FROM bench"
+    },
+    {
+      "id": "scalar.misc.hll_union",
+      "spark_sql": "SELECT id,hll_union(hll_b,hll_b) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,hll_b FROM bench"
+    },
+    {
+      "id": "scalar.misc.theta_difference",
+      "spark_sql": "SELECT id,theta_difference(theta_b,theta_b) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,theta_b FROM bench"
+    },
+    {
+      "id": "scalar.misc.theta_intersection",
+      "spark_sql": "SELECT id,theta_intersection(theta_b,theta_b) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,theta_b FROM bench"
+    },
+    {
+      "id": "scalar.misc.theta_sketch_estimate",
+      "spark_sql": "SELECT id,theta_sketch_estimate(theta_b) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,theta_b FROM bench"
+    },
+    {
+      "id": "scalar.misc.theta_union",
+      "spark_sql": "SELECT id,theta_union(theta_b,theta_b) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,theta_b FROM bench"
+    },
+    {
+      "id": "scalar.misc.try_aes_decrypt",
+      "spark_sql": "SELECT id,try_aes_decrypt(cipher,'0123456789abcdef','ECB') AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,cipher FROM bench"
+    },
+    {
+      "id": "scalar.misc.try_aes_encrypt",
+      "spark_sql": "SELECT id,try_aes_encrypt(b,'0123456789abcdef','ECB') AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,b FROM bench"
+    },
+    {
+      "id": "scalar.string.elt",
+      "spark_sql": "SELECT id,elt(p,s,s2) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,p,s,s2 FROM bench"
+    },
+    {
+      "id": "scalar.string.format_number",
+      "spark_sql": "SELECT id,format_number(dec,2) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,dec FROM bench"
+    },
+    {
+      "id": "scalar.string.format_string",
+      "spark_sql": "SELECT id,format_string('%s',s) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,s FROM bench"
+    },
+    {
+      "id": "scalar.string.is_valid_utf8",
+      "spark_sql": "SELECT id,is_valid_utf8(s) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,s FROM bench"
+    },
+    {
+      "id": "scalar.string.luhn_check",
+      "spark_sql": "SELECT id,luhn_check(s) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,s FROM bench"
+    },
+    {
+      "id": "scalar.string.make_valid_utf8",
+      "spark_sql": "SELECT id,make_valid_utf8(s) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,s FROM bench"
+    },
+    {
+      "id": "scalar.string.mask",
+      "spark_sql": "SELECT id,mask(s) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,s FROM bench"
+    },
+    {
+      "id": "scalar.string.printf",
+      "spark_sql": "SELECT id,printf('%s',s) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,s FROM bench"
+    },
+    {
+      "id": "scalar.string.quote",
+      "spark_sql": "SELECT id,quote(s) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,s FROM bench"
+    },
+    {
+      "id": "scalar.string.regexp_extract_all",
+      "spark_sql": "SELECT id,regexp_extract_all(s,'([0-9]+)',1) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,s FROM bench"
+    },
+    {
+      "id": "scalar.string.sentences",
+      "spark_sql": "SELECT id,sentences(s) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,s FROM bench"
+    },
+    {
+      "id": "scalar.string.soundex",
+      "spark_sql": "SELECT id,soundex(s) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,s FROM bench"
+    },
+    {
+      "id": "scalar.string.to_char",
+      "spark_sql": "SELECT id,to_char(dec,'9999.99') AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,dec FROM bench"
+    },
+    {
+      "id": "scalar.string.to_number",
+      "spark_sql": "SELECT id,to_number(num_s,'9999.99') AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,num_s FROM bench"
+    },
+    {
+      "id": "scalar.string.to_varchar",
+      "spark_sql": "SELECT id,to_varchar(dec,'9999.99') AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,dec FROM bench"
+    },
+    {
+      "id": "scalar.string.try_to_number",
+      "spark_sql": "SELECT id,try_to_number(num_s,'9999.99') AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,num_s FROM bench"
+    },
+    {
+      "id": "scalar.string.try_validate_utf8",
+      "spark_sql": "SELECT id,try_validate_utf8(s) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,s FROM bench"
+    },
+    {
+      "id": "scalar.string.validate_utf8",
+      "spark_sql": "SELECT id,validate_utf8(s) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,s FROM bench"
+    },
+    {
+      "id": "scalar.url.parse_url",
+      "spark_sql": "SELECT id,parse_url(url_s,'HOST') AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,url_s FROM bench"
+    },
+    {
+      "id": "scalar.url.try_parse_url",
+      "spark_sql": "SELECT id,try_parse_url(url_s,'HOST') AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,url_s FROM bench"
+    },
+    {
+      "id": "scalar.url.try_url_decode",
+      "spark_sql": "SELECT id,try_url_decode(s) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,s FROM bench"
+    },
+    {
+      "id": "scalar.url.url_decode",
+      "spark_sql": "SELECT id,url_decode(s) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,s FROM bench"
+    },
+    {
+      "id": "scalar.url.url_encode",
+      "spark_sql": "SELECT id,url_encode(s) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,s FROM bench"
+    },
+    {
+      "id": "scalar.variant.is_variant_null",
+      "spark_sql": "SELECT id,is_variant_null(parse_json(json_s)) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,json_s FROM bench"
+    },
+    {
+      "id": "scalar.variant.parse_json",
+      "spark_sql": "SELECT id,parse_json(json_s) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,json_s FROM bench"
+    },
+    {
+      "id": "scalar.variant.schema_of_variant",
+      "spark_sql": "SELECT id,schema_of_variant(parse_json(json_s)) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,json_s FROM bench"
+    },
+    {
+      "id": "scalar.variant.to_variant_object",
+      "spark_sql": "SELECT id,to_variant_object(st) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,st FROM bench"
+    },
+    {
+      "id": "scalar.variant.try_parse_json",
+      "spark_sql": "SELECT id,try_parse_json(json_s) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,json_s FROM bench"
+    },
+    {
+      "id": "scalar.variant.try_variant_get",
+      "spark_sql": "SELECT id,try_variant_get(parse_json(json_s),'$.x','BIGINT') AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,json_s FROM bench"
+    },
+    {
+      "id": "scalar.variant.variant_get",
+      "spark_sql": "SELECT id,variant_get(parse_json(json_s),'$.x','BIGINT') AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,json_s FROM bench"
+    },
+    {
+      "id": "scalar.variant.variant_to_json",
+      "spark_sql": "SELECT id,variant_to_json(parse_json(json_s)) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,json_s FROM bench"
+    },
+    {
+      "id": "scalar.xml.from_xml",
+      "spark_sql": "SELECT id,from_xml(xml_s,'x BIGINT') AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,xml_s FROM bench"
+    },
+    {
+      "id": "scalar.xml.to_xml",
+      "spark_sql": "SELECT id,to_xml(st) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,st FROM bench"
+    }
+  ]
+}
