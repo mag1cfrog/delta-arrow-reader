@@ -1,0 +1,58 @@
+{
+  "functions": [
+    {
+      "id": "aggregate.aggregate.try_sum_small_values",
+      "spark_sql": "SELECT try_sum(i) AS sum_i, try_sum(CAST(p AS INT)) AS sum_p FROM bench WHERE id<8",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i FROM bench"
+    },
+    {
+      "id": "aggregate.aggregate.try_sum_int_width_boundary",
+      "spark_sql": "SELECT \ntry_sum(CASE id WHEN 0 THEN CAST('2147483647' AS BIGINT)\n                WHEN 1 THEN CAST('-2147483648' AS BIGINT)\n                WHEN 2 THEN CAST(NULL AS BIGINT) ELSE i END) AS bounded_sum,\ntry_sum(CASE id WHEN 0 THEN CAST('2147483648' AS BIGINT)\n                WHEN 1 THEN CAST('-2147483649' AS BIGINT)\n                WHEN 2 THEN CAST(NULL AS BIGINT) ELSE i END) AS fallback_sum FROM bench WHERE id<8",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i FROM bench"
+    },
+    {
+      "id": "aggregate.aggregate.try_sum_positive_overflow",
+      "spark_sql": "SELECT try_sum(CASE id\n    WHEN 0 THEN CAST('9223372036854775807' AS BIGINT)\n    WHEN 1 THEN CAST(1 AS BIGINT)\n    WHEN 2 THEN CAST(-1 AS BIGINT)\n    ELSE CAST(NULL AS BIGINT)\nEND) AS result FROM bench WHERE id<4",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i FROM bench"
+    },
+    {
+      "id": "aggregate.aggregate.try_sum_negative_overflow",
+      "spark_sql": "SELECT try_sum(CASE id\n    WHEN 0 THEN CAST('-9223372036854775808' AS BIGINT)\n    WHEN 1 THEN CAST(-1 AS BIGINT)\n    WHEN 2 THEN CAST(1 AS BIGINT)\n    ELSE CAST(NULL AS BIGINT)\nEND) AS result FROM bench WHERE id<4",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i FROM bench"
+    },
+    {
+      "id": "aggregate.aggregate.try_sum_all_nulls",
+      "spark_sql": "SELECT try_sum(CAST(NULL AS BIGINT)) AS result FROM bench WHERE id<8",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i FROM bench"
+    },
+    {
+      "id": "aggregate.aggregate.try_sum_empty",
+      "spark_sql": "SELECT try_sum(i) AS result FROM bench WHERE id<0",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i FROM bench"
+    },
+    {
+      "id": "aggregate.aggregate.try_sum_decimal_and_double",
+      "spark_sql": "SELECT try_sum(dec) AS decimal_sum, try_sum(CAST(i AS DOUBLE)) AS double_sum FROM bench WHERE id<8",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i FROM bench"
+    },
+    {
+      "id": "aggregate.aggregate.try_sum_grouped_distinct_filter",
+      "spark_sql": "SELECT p, try_sum(DISTINCT i) AS distinct_sum, try_sum(i) FILTER (WHERE id % 3 = 0) AS filtered_sum FROM bench WHERE id<20000 GROUP BY p",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i FROM bench"
+    },
+    {
+      "id": "aggregate.aggregate.try_sum_window_unchanged",
+      "spark_sql": "SELECT id, try_sum(i) OVER (ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS total FROM bench WHERE id<8",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i FROM bench"
+    }
+  ]
+}
