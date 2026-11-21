@@ -1,0 +1,52 @@
+{
+  "functions": [
+    {
+      "id": "shape.decimal_precision_same_scale",
+      "spark_sql": "WITH operands AS (\n    SELECT id, CASE id WHEN 0 THEN CAST('9999999999999999.99' AS DECIMAL(21,2))\n                      WHEN 1 THEN CAST('-9999999999999999.99' AS DECIMAL(21,2))\n                      WHEN 2 THEN CAST(NULL AS DECIMAL(21,2))\n                      ELSE CAST(dec AS DECIMAL(21,2)) END AS value\n    FROM bench WHERE id < 8\n)\nSELECT id, CAST(value AS DECIMAL(18,2)) AS result, TRY_CAST(value AS DECIMAL(18,2)) AS tried FROM operands",
+      "native_sql": null,
+      "projection_sql": "SELECT id,dec,p FROM bench"
+    },
+    {
+      "id": "shape.decimal_precision_cast_overflow",
+      "spark_sql": "WITH operands AS (\n    SELECT id, CASE id WHEN 0 THEN CAST('10000000000000000.00' AS DECIMAL(21,2))\n                      WHEN 1 THEN CAST('-10000000000000000.00' AS DECIMAL(21,2))\n                      WHEN 2 THEN CAST(NULL AS DECIMAL(21,2))\n                      ELSE CAST(dec AS DECIMAL(21,2)) END AS value\n    FROM bench WHERE id < 8\n)\nSELECT id, CAST(value AS DECIMAL(18,2)) AS result FROM operands",
+      "native_sql": null,
+      "projection_sql": "SELECT id,dec,p FROM bench"
+    },
+    {
+      "id": "shape.decimal_precision_try_overflow",
+      "spark_sql": "WITH operands AS (\n    SELECT id, CASE id WHEN 0 THEN CAST('10000000000000000.00' AS DECIMAL(21,2))\n                      WHEN 1 THEN CAST('-10000000000000000.00' AS DECIMAL(21,2))\n                      WHEN 2 THEN CAST(NULL AS DECIMAL(21,2))\n                      ELSE CAST(dec AS DECIMAL(21,2)) END AS value\n    FROM bench WHERE id < 8\n)\nSELECT id, TRY_CAST(value AS DECIMAL(18,2)) AS result FROM operands",
+      "native_sql": null,
+      "projection_sql": "SELECT id,dec,p FROM bench"
+    },
+    {
+      "id": "shape.decimal_precision_round_ties",
+      "spark_sql": "WITH operands AS (\n    SELECT id, CASE id WHEN 0 THEN CAST('1.01' AS DECIMAL(18,2))\n                      WHEN 1 THEN CAST('-1.01' AS DECIMAL(18,2))\n                      WHEN 2 THEN CAST(NULL AS DECIMAL(18,2)) ELSE dec END AS dividend,\n               CASE id WHEN 2 THEN CAST(0 AS DECIMAL(18,2))\n                       WHEN 3 THEN CAST(NULL AS DECIMAL(18,2))\n                       ELSE CAST(2 AS DECIMAL(18,2)) END AS divisor\n    FROM bench WHERE id < 8\n)\nSELECT id, CAST(ROUND(dividend/divisor,2) AS DECIMAL(18,2)) AS result FROM operands",
+      "native_sql": null,
+      "projection_sql": "SELECT id,dec,p FROM bench"
+    },
+    {
+      "id": "shape.decimal_precision_non_null_divide_by_zero",
+      "spark_sql": "SELECT id, CAST(ROUND(dec / CAST(CASE WHEN id=1 THEN 0 ELSE p END AS DECIMAL(18,2)),2) AS DECIMAL(18,2)) AS result FROM bench WHERE id < 8",
+      "native_sql": null,
+      "projection_sql": "SELECT id,dec,p FROM bench"
+    },
+    {
+      "id": "shape.decimal_precision_scale_change",
+      "spark_sql": "SELECT id, CAST(CAST('1.005' AS DECIMAL(38,3)) AS DECIMAL(18,2)) AS result FROM bench WHERE id < 8",
+      "native_sql": null,
+      "projection_sql": "SELECT id,dec,p FROM bench"
+    },
+    {
+      "id": "shape.decimal_precision_precision_38",
+      "spark_sql": "SELECT id, CAST(CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0)) AS DECIMAL(37,0)) AS result FROM bench WHERE id < 8",
+      "native_sql": null,
+      "projection_sql": "SELECT id,dec,p FROM bench"
+    },
+    {
+      "id": "shape.decimal_precision_empty",
+      "spark_sql": "SELECT id,CAST(ROUND(CAST(dec AS DECIMAL(18,2))/CAST(p AS DECIMAL(18,2)),2) AS DECIMAL(18,2)) AS result FROM bench WHERE id < 0",
+      "native_sql": null,
+      "projection_sql": "SELECT id,dec,p FROM bench"
+    }
+  ]
+}
