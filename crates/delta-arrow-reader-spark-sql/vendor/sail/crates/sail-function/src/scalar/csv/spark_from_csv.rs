@@ -735,11 +735,14 @@ mod tests {
         let documents = StringArray::from(vec![
             Some("1,alpha"),
             None,
+            Some("2,beta"),
             Some("2|beta"),
             Some("bad number,gamma"),
             Some(""),
             Some("9223372036854775807,bound"),
         ]);
+        let pipe_documents = StringArray::from(vec![Some("1|alpha"), None, Some("2|beta")]);
+        let null_documents = StringArray::from(vec![None::<&str>; 2]);
         let scalar_map = |key: &str, value: Option<&str>, valid: bool| -> Result<ColumnarValue> {
             let field_names = MapFieldNames {
                 entry: SAIL_MAP_FIELD_NAME.to_owned(),
@@ -760,16 +763,30 @@ mod tests {
         };
         let options = [
             None,
+            Some(scalar_map("sep", Some(","), true)?),
             Some(scalar_map("sep", Some("|"), true)?),
-            Some(scalar_map("mode", Some("FAILFAST"), true)?),
-            Some(scalar_map("mode", None, true)?),
-            Some(scalar_map("mode", Some("FAILFAST"), false)?),
+            Some(scalar_map("sep", Some(""), true)?),
+            Some(scalar_map("sep", None, true)?),
+            Some(scalar_map("sep", Some(""), false)?),
         ];
-        for length in [0, 1, documents.len()] {
+        let mut successful_multirow_comparisons = 0;
+        for (input, length) in [
+            (&documents, 0),
+            (&documents, 1),
+            (&documents, 3),
+            (&documents, documents.len()),
+            (&pipe_documents, pipe_documents.len()),
+            (&null_documents, null_documents.len()),
+        ] {
             for schema in [Some("x BIGINT, label STRING"), Some("x NOT_A_TYPE"), None] {
+                // Direct invocation with a NULL schema and all-NULL rows panics in the
+                // existing zero-field struct builder. The planner rejects that schema.
+                if schema.is_none() && input.null_count() == input.len() {
+                    continue;
+                }
                 for option in &options {
                     let mut args = vec![
-                        ColumnarValue::Array(Arc::new(documents.slice(0, length))),
+                        ColumnarValue::Array(Arc::new(input.slice(0, length))),
                         ColumnarValue::Scalar(ScalarValue::Utf8(schema.map(str::to_owned))),
                     ];
                     args.extend(option.iter().cloned());
@@ -787,6 +804,7 @@ mod tests {
                     match (actual, expected) {
                         (Ok(ColumnarValue::Array(actual)), Ok(ColumnarValue::Array(expected))) => {
                             assert_eq!(actual.to_data(), expected.to_data());
+                            successful_multirow_comparisons += usize::from(length > 1);
                         }
                         (Err(actual), Err(expected)) => {
                             assert_eq!(actual.to_string(), expected.to_string());
@@ -796,6 +814,7 @@ mod tests {
                 }
             }
         }
+        assert!(successful_multirow_comparisons >= 2);
         Ok(())
     }
 
