@@ -41,10 +41,11 @@ measurements in this session.
 
 Formatting, root-crate Clippy and 659 workspace library and
 focused integration tests passed. Both native paths and both
-ANSI modes matched all 678 before/after trace records, including
-exact Arrow schemas and error records in the existing sweep.
-The focused tests also check native row results and executed types,
-field declarations, and functional dependency remapping.
+ANSI modes matched all 678 before/after plan traces, including
+exact Arrow schemas. The timed statements all plan successfully.
+Invalid SQL and name-resolution errors are covered by workspace
+and focused tests. The focused tests also check native row results
+and executed types, field declarations, and dependency remapping.
 The timing driver executed no queries and observed no Delta data reads.
 
 The [protocol](../planning_round2_1390/wide-metadata-protocol.md) was committed at
