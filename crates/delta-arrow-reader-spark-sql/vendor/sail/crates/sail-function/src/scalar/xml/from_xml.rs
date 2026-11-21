@@ -6,6 +6,7 @@ use datafusion::arrow::array::*;
 use datafusion::arrow::buffer::{NullBuffer, OffsetBuffer, ScalarBuffer};
 use datafusion::arrow::datatypes::*;
 use datafusion_common::{DataFusionError, Result, ScalarValue, exec_err, internal_err, plan_err};
+use datafusion_expr::function::Hint;
 use datafusion_expr::{
     ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature,
 };
@@ -221,9 +222,21 @@ impl ScalarUDFImpl for SparkFromXml {
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
         let session_timezone = self.session_timezone.to_string();
         let ScalarFunctionArgs { args, .. } = args;
+        let scalar_settings = matches!(
+            args.as_slice(),
+            [ColumnarValue::Array(xml), ColumnarValue::Scalar(_)]
+                | [ColumnarValue::Array(xml), ColumnarValue::Scalar(_), ColumnarValue::Scalar(_)]
+                if !xml.is_empty()
+        );
+        // Empty input must retain the original empty schema array and its error.
+        let hints = if scalar_settings {
+            vec![Hint::Pad, Hint::AcceptsSingular, Hint::AcceptsSingular]
+        } else {
+            Vec::new()
+        };
         make_scalar_function(
             move |inner_args| spark_from_xml_inner(inner_args, session_timezone.as_str()),
-            vec![],
+            hints,
         )(&args)
     }
 }
@@ -1076,6 +1089,76 @@ mod tests {
             .column_by_name(name)
             .unwrap()
             .clone()
+    }
+
+    #[test]
+    fn literal_xml_settings_match_broadcast_settings() -> Result<()> {
+        let from_xml = SparkFromXml::new(Arc::from(DEFAULT_SESSION_TIMEZONE));
+        let previous = make_scalar_function(
+            |args| spark_from_xml_inner(args, DEFAULT_SESSION_TIMEZONE),
+            Vec::new(),
+        );
+        let documents = StringArray::from(vec![
+            Some("<row id='7'><value>42</value></row>"),
+            None,
+            Some("<row><value></row>"),
+            Some(""),
+            Some("<row><value>9223372036854775807</value></row>"),
+        ]);
+        let scalar_map = |key: &str, value: &str| -> Result<ColumnarValue> {
+            let mut options = MapBuilder::new(None, StringBuilder::new(), StringBuilder::new());
+            options.keys().append_value(key);
+            options.values().append_value(value);
+            options.append(true)?;
+            Ok(ColumnarValue::Scalar(ScalarValue::try_from_array(
+                &options.finish(),
+                0,
+            )?))
+        };
+        let schemas = [
+            Some("value BIGINT, attr_id BIGINT"),
+            Some("value NOT_A_TYPE"),
+            Some(""),
+            None,
+        ];
+        let options = [
+            None,
+            Some(scalar_map("attributePrefix", "attr_")?),
+            Some(scalar_map("mode", "FAILFAST")?),
+            Some(scalar_map("valueTag", "")?),
+        ];
+        for length in [0, 1, documents.len()] {
+            for schema in schemas {
+                for option in &options {
+                    let mut args = vec![
+                        ColumnarValue::Array(Arc::new(documents.slice(0, length))),
+                        ColumnarValue::Scalar(ScalarValue::Utf8(schema.map(str::to_owned))),
+                    ];
+                    args.extend(option.iter().cloned());
+                    let expected = previous(&args);
+                    let actual = from_xml.invoke_with_args(ScalarFunctionArgs {
+                        arg_fields: args
+                            .iter()
+                            .map(|arg| Arc::new(Field::new("arg", arg.data_type(), true)))
+                            .collect(),
+                        args,
+                        number_rows: length,
+                        return_field: Arc::new(Field::new("from_xml", DataType::Null, true)),
+                        config_options: Arc::new(Default::default()),
+                    });
+                    match (actual, expected) {
+                        (Ok(ColumnarValue::Array(actual)), Ok(ColumnarValue::Array(expected))) => {
+                            assert_eq!(actual.to_data(), expected.to_data());
+                        }
+                        (Err(actual), Err(expected)) => {
+                            assert_eq!(actual.to_string(), expected.to_string());
+                        }
+                        outcomes => panic!("different XML outcomes: {outcomes:?}"),
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     #[test]

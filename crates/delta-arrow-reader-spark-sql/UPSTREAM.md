@@ -2967,3 +2967,9 @@ and its bytes are ASCII. Scalar calls, longer or multibyte
 prefixes, other positions and storage types retain their existing
 kernels. Argument preparation and NULL short-circuiting stay in
 the existing planner and evaluation paths.
+
+### FROM_XML scalar settings (#1414)
+
+FROM_XML supplies one copy of literal schema and options for a nonempty
+XML column. The parser already reads these settings once per batch.
+Empty input and non-scalar settings follow the original expansion path.
