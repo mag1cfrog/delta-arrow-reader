@@ -24,6 +24,7 @@ pub enum ExplodeKind {
     PosExplodeOuter,
     Inline,
     InlineOuter,
+    StackSingleColumn,
 }
 
 impl Explode {
@@ -48,6 +49,7 @@ impl ScalarUDFImpl for Explode {
             ExplodeKind::PosExplodeOuter => "posexplode_outer",
             ExplodeKind::Inline => "inline",
             ExplodeKind::InlineOuter => "inline_outer",
+            ExplodeKind::StackSingleColumn => "stack",
         }
     }
 

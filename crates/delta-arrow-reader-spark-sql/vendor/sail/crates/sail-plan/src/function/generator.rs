@@ -1,6 +1,6 @@
 use datafusion::arrow::datatypes::DataType;
 use datafusion_common::ScalarValue;
-use datafusion_expr::{Expr, ScalarUDF, lit};
+use datafusion_expr::{Expr, ExprSchemable, ScalarUDF, lit};
 use sail_common_datafusion::utils::items::ItemTaker;
 use sail_function::scalar::array::arrays_zip::ArraysZip;
 use sail_function::scalar::array::spark_array::SparkArray;
@@ -14,7 +14,7 @@ use crate::function::common::{ScalarFunction, ScalarFunctionInput};
 fn stack(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let ScalarFunctionInput {
         arguments,
-        function_context: _,
+        function_context,
     } = input;
 
     let (n_expr, mut args) = arguments.at_least_one()?;
@@ -43,7 +43,18 @@ fn stack(input: ScalarFunctionInput) -> PlanResult<Expr> {
     };
 
     let num_cols = args.len().div_ceil(n);
+    let single_bigint_column = num_cols == 1
+        && args.iter().all(|arg| {
+            arg.get_type(function_context.schema)
+                .is_ok_and(|ty| ty == DataType::Int64)
+        });
     args.resize(num_cols * n, lit(ScalarValue::Null));
+    if single_bigint_column {
+        let column = ScalarUDF::from(SparkArray::new()).call(args);
+        return Ok(
+            ScalarUDF::from(Explode::new(ExplodeKind::StackSingleColumn)).call(vec![column]),
+        );
+    }
 
     let field_names = (0..num_cols).map(|i| format!("col{i}")).collect::<Vec<_>>();
 

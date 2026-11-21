@@ -76,7 +76,7 @@ impl TreeNodeRewriter for ExplodeRewriter<'_> {
             }
         };
         let (with_position, preserve_nulls, is_inline) = match explode.kind() {
-            ExplodeKind::Explode => (false, false, false),
+            ExplodeKind::Explode | ExplodeKind::StackSingleColumn => (false, false, false),
             ExplodeKind::ExplodeOuter => (false, true, false),
             ExplodeKind::PosExplode => (true, false, false),
             ExplodeKind::PosExplodeOuter => (true, true, false),
@@ -131,7 +131,14 @@ impl TreeNodeRewriter for ExplodeRewriter<'_> {
         let output_name = self.state.register_field_name("");
         let mut inline_projections = vec![];
         let out = match (data_type, with_position, is_inline) {
-            (ExplodeDataType::List, false, false) => vec![ident(&output_name).alias("col")],
+            (ExplodeDataType::List, false, false) => {
+                let field_name = if matches!(explode.kind(), ExplodeKind::StackSingleColumn) {
+                    "col0"
+                } else {
+                    "col"
+                };
+                vec![ident(&output_name).alias(field_name)]
+            }
             (ExplodeDataType::List, true, false) => {
                 vec![
                     ident(&output_name).field("pos").alias("pos"),

@@ -2791,3 +2791,10 @@ Spark NANVL can return a DOUBLE input buffer directly when its visible
 values contain no NaNs and its NULL slots already have zeroed storage.
 Both arguments are still evaluated. Other inputs retain the native
 NANVL kernel, including its widths, values and error behavior.
+
+### Direct single-column BIGINT STACK (#1411)
+
+STACK with one output column and supplied BIGINT values unnests the list
+built by SparkArray directly. The generator still emits the nullable
+`col0` field and retains row order and NULL padding. Other STACK shapes
+retain the existing zip and inline projection.
