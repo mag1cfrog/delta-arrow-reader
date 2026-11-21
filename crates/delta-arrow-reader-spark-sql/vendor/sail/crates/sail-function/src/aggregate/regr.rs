@@ -20,7 +20,7 @@
 use std::mem::size_of_val;
 use std::sync::Arc;
 
-use arrow::array::ArrayRef;
+use arrow::array::{ArrayRef, Float64Array};
 use arrow::datatypes::{DataType, Field, FieldRef};
 use datafusion_common::cast::{as_float64_array, as_uint64_array};
 use datafusion_common::{Result, ScalarValue};
@@ -108,7 +108,7 @@ impl AggregateUDFImpl for Regr {
     }
 
     fn accumulator(&self, _acc_args: AccumulatorArgs) -> Result<Box<dyn Accumulator>> {
-        Ok(Box::new(RegrAccumulator::try_new(&self.regr_type)?))
+        Ok(Box::new(RegrAccumulator::for_sql_result(&self.regr_type)?))
     }
 
     fn state_fields(&self, args: StateFieldsArgs) -> Result<Vec<FieldRef>> {
@@ -214,6 +214,7 @@ pub struct RegrAccumulator {
     /// `Average.sum` over Y from `RegrAvgY`.
     sum_y: f64,
     regr_type: RegrType,
+    record_all_moments: bool,
 }
 
 impl RegrAccumulator {
@@ -232,22 +233,28 @@ impl RegrAccumulator {
             sum_x: 0_f64,
             sum_y: 0_f64,
             regr_type: regr_type.clone(),
+            record_all_moments: true,
         })
     }
-}
 
-impl Accumulator for RegrAccumulator {
-    fn update_batch(&mut self, values: &[ArrayRef]) -> Result<()> {
-        // regr_slope(Y, X) calculates k in y = k*x + b
-        let values_y = as_float64_array(&values[0])?;
-        let values_x = as_float64_array(&values[1])?;
+    fn for_sql_result(regr_type: &RegrType) -> Result<Self> {
+        let mut accumulator = Self::try_new(regr_type)?;
+        // These results only read the means and central-moment or covariance buffers.
+        accumulator.record_all_moments = !matches!(
+            regr_type,
+            RegrType::Sxx | RegrType::Syy | RegrType::Slope | RegrType::Intercept
+        );
+        Ok(accumulator)
+    }
 
+    fn update_moments<const RECORD_ALL: bool>(
+        &mut self,
+        values_y: &Float64Array,
+        values_x: &Float64Array,
+    ) {
         for (value_y, value_x) in values_y.iter().zip(values_x) {
-            // skip either x or y is NULL
-            let (value_y, value_x) = match (value_y, value_x) {
-                (Some(y), Some(x)) => (y, x),
-                // skip either x or y is NULL
-                _ => continue,
+            let (Some(value_y), Some(value_x)) = (value_y, value_x) else {
+                continue;
             };
 
             // The update expressions of Spark's `Covariance`, `CentralMomentAgg`,
@@ -263,17 +270,30 @@ impl Accumulator for RegrAccumulator {
 
             self.count += 1;
             self.ck += delta_x * (value_y - new_mean_y);
-            self.corr_ck += delta_y * (value_x - new_mean_x);
             self.m2_x += delta_x * (delta_x - delta_x_n);
             self.m2_y += delta_y * (delta_y - delta_y_n);
-            self.corr_m2_x += delta_x * (value_x - new_mean_x);
-            self.corr_m2_y += delta_y * (value_y - new_mean_y);
-            self.sum_x += value_x;
-            self.sum_y += value_y;
+            if RECORD_ALL {
+                self.corr_ck += delta_y * (value_x - new_mean_x);
+                self.corr_m2_x += delta_x * (value_x - new_mean_x);
+                self.corr_m2_y += delta_y * (value_y - new_mean_y);
+                self.sum_x += value_x;
+                self.sum_y += value_y;
+            }
             self.mean_x = new_mean_x;
             self.mean_y = new_mean_y;
         }
+    }
+}
 
+impl Accumulator for RegrAccumulator {
+    fn update_batch(&mut self, values: &[ArrayRef]) -> Result<()> {
+        let values_y = as_float64_array(&values[0])?;
+        let values_x = as_float64_array(&values[1])?;
+        if self.record_all_moments {
+            self.update_moments::<true>(values_y, values_x);
+        } else {
+            self.update_moments::<false>(values_y, values_x);
+        }
         Ok(())
     }
 
@@ -445,5 +465,86 @@ impl Accumulator for RegrAccumulator {
 
     fn supports_retract_batch(&self) -> bool {
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn result_bits(accumulator: &mut RegrAccumulator) -> Result<Option<u64>> {
+        match accumulator.evaluate()? {
+            ScalarValue::Float64(value) => Ok(value.map(f64::to_bits)),
+            value => panic!("expected a Float64 result, got {value:?}"),
+        }
+    }
+
+    #[test]
+    fn sql_regression_buffers_match_full_moments() -> Result<()> {
+        let data: [ArrayRef; 2] = [
+            Arc::new(Float64Array::from(vec![
+                Some(2.0),
+                Some(3.0),
+                None,
+                Some(4.0),
+                Some(-0.0),
+                Some(f64::INFINITY),
+                Some(1.0),
+                Some(f64::NAN),
+                Some(f64::MAX),
+            ])),
+            Arc::new(Float64Array::from(vec![
+                Some(1.0),
+                Some(1.0),
+                Some(5.0),
+                None,
+                Some(f64::MIN_POSITIVE),
+                Some(-2.0),
+                Some(f64::NEG_INFINITY),
+                Some(0.0),
+                Some(f64::MIN),
+            ])),
+        ];
+        for variant in [
+            RegrType::Sxx,
+            RegrType::Syy,
+            RegrType::Slope,
+            RegrType::Intercept,
+        ] {
+            for (offset, length) in [(0, 0), (0, 1), (0, 2), (2, 2), (0, 5), (4, 5)] {
+                let batch = data.each_ref().map(|array| array.slice(offset, length));
+                let mut previous = RegrAccumulator::try_new(&variant)?;
+                let mut candidate = RegrAccumulator::for_sql_result(&variant)?;
+                previous.update_batch(&batch)?;
+                candidate.update_batch(&batch)?;
+                assert_eq!(result_bits(&mut candidate)?, result_bits(&mut previous)?);
+
+                let partial_state = |accumulator: &mut RegrAccumulator| {
+                    accumulator
+                        .state()?
+                        .into_iter()
+                        .map(|field| field.to_array_of_size(1))
+                        .collect::<Result<Vec<_>>>()
+                };
+                let mut previous_merge = RegrAccumulator::try_new(&variant)?;
+                let mut candidate_merge = RegrAccumulator::for_sql_result(&variant)?;
+                previous_merge.update_batch(&batch)?;
+                candidate_merge.update_batch(&batch)?;
+                previous_merge.merge_batch(&partial_state(&mut previous)?)?;
+                candidate_merge.merge_batch(&partial_state(&mut candidate)?)?;
+                assert_eq!(
+                    result_bits(&mut candidate_merge)?,
+                    result_bits(&mut previous_merge)?
+                );
+
+                if length > 0 {
+                    let head = batch.each_ref().map(|array| array.slice(0, 1));
+                    previous.retract_batch(&head)?;
+                    candidate.retract_batch(&head)?;
+                    assert_eq!(result_bits(&mut candidate)?, result_bits(&mut previous)?);
+                }
+            }
+        }
+        Ok(())
     }
 }

@@ -2967,3 +2967,10 @@ and its bytes are ASCII. Scalar calls, longer or multibyte
 prefixes, other positions and storage types retain their existing
 kernels. Argument preparation and NULL short-circuiting stay in
 the existing planner and evaluation paths.
+
+### Regression accumulator row work (#1413)
+
+Spark REGR_SXX, REGR_SYY, REGR_SLOPE and REGR_INTERCEPT skip accumulation of
+the correlation-only buffers and running sums. Their observed statistics
+follow the same arithmetic and partial-state layout. The full update
+remains available to the other reducers and constructor callers.
