@@ -2820,3 +2820,9 @@ Two BIGINT arrays use one remainder and adjust negative results when
 every visible divisor is positive. The Arrow kernel retains combined
 validity. Other inputs use the original Spark PMOD kernel, including
 zero and negative divisors and the existing ANSI behavior.
+
+### Reuse Decimal128 values when narrowing precision (#1412)
+
+A same-scale array cast can share its values and validity when every
+stored value fits the narrower precision. Otherwise it uses the
+original Arrow cast with the existing ANSI and TRY policies.

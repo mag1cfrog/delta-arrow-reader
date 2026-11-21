@@ -94,6 +94,27 @@ impl SparkDecimalCast {
                     _ => error,
                 });
         }
+        if let (DataType::Decimal128(precision, scale), ColumnarValue::Array(array)) =
+            (&self.target, arg)
+            && let DataType::Decimal128(source_precision, source_scale) = array.data_type()
+            && source_scale == scale
+            && source_precision > precision
+            && (1..=Decimal128Type::MAX_PRECISION).contains(precision)
+        {
+            let values = array.as_primitive::<Decimal128Type>();
+            let limit = 10_u128.pow(u32::from(*precision)) - 1;
+            if values
+                .values()
+                .iter()
+                .all(|value| value.unsigned_abs() <= limit)
+            {
+                return Ok(ColumnarValue::Array(Arc::new(
+                    values
+                        .clone()
+                        .with_precision_and_scale(*precision, *scale)?,
+                )));
+            }
+        }
         match arg.cast_to(&self.target, Some(&options)) {
             Ok(value) => Ok(value),
             Err(error) => {
@@ -341,6 +362,57 @@ mod tests {
             return exec_err!("Decimal scalar CAST returned an array");
         };
         assert_eq!(actual, expected);
+        Ok(())
+    }
+
+    #[test]
+    fn same_scale_decimal_precision_narrowing_matches_arrow() -> Result<()> {
+        let limit = 10_i128.pow(18) - 1;
+        for scale in [-2, 0, 2] {
+            let input = Decimal128Array::from(vec![
+                Some(limit + 1),
+                Some(-limit),
+                None,
+                Some(limit),
+                Some(-limit - 1),
+            ])
+            .with_precision_and_scale(38, scale)?;
+            for (offset, length, fits) in [(1, 3, true), (0, 5, false), (2, 0, true)] {
+                let slice = input.slice(offset, length);
+                let arg = ColumnarValue::Array(Arc::new(slice.clone()));
+                for mode in [
+                    DecimalCastMode::Ansi,
+                    DecimalCastMode::Legacy,
+                    DecimalCastMode::Try,
+                ] {
+                    let cast = SparkDecimalCast::to_decimal(18, scale, mode);
+                    let options = CastOptions {
+                        safe: mode != DecimalCastMode::Ansi,
+                        ..DEFAULT_CAST_OPTIONS
+                    };
+                    match (
+                        cast.convert(&arg),
+                        arg.cast_to(&cast.target, Some(&options)),
+                    ) {
+                        (Ok(actual), Ok(expected)) => {
+                            let actual = actual.into_array(length)?;
+                            let expected = expected.into_array(length)?;
+                            assert_eq!(actual.as_ref(), expected.as_ref());
+                            if fits {
+                                let actual = actual.as_primitive::<Decimal128Type>();
+                                assert!(actual.values().inner().ptr_eq(slice.values().inner()));
+                            }
+                        }
+                        (Err(actual), Err(expected)) => {
+                            assert_eq!(actual.to_string(), expected.to_string())
+                        }
+                        difference => {
+                            panic!("CAST with {mode:?} and scale {scale}: {difference:?}")
+                        }
+                    }
+                }
+            }
+        }
         Ok(())
     }
 
