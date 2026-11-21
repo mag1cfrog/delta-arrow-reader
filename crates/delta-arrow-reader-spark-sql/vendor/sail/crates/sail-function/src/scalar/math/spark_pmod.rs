@@ -1,7 +1,7 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
-use datafusion::arrow::array::{Array, AsArray, Int64Array};
+use datafusion::arrow::array::{AsArray, Int64Array};
 use datafusion::arrow::compute::kernels::{aggregate::min, arity::binary};
 use datafusion::arrow::datatypes::{DataType, FieldRef, Int64Type};
 use datafusion_common::{Result, internal_err};
