@@ -2710,3 +2710,11 @@ for three-valued membership inside the original operand preparation and
 CASE gates for NULL and empty arrays. Those gates retain evaluation of
 derived operands and their failures. Other expressions, storage pairs and
 element conversions retain the original membership lowering.
+
+### Positive literal BIGINT array lookup (#1410)
+
+ELEMENT_AT and TRY_ELEMENT_AT look up a positive literal index that fits INT
+in a BIGINT List or LargeList column in one pass through offsets and child values.
+Strict lookup returns a prefix and the original bounds error at the first
+out-of-bounds row. Other indexes, expressions, storage and element types
+retain the existing lowering.
