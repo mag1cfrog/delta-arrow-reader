@@ -231,6 +231,8 @@ impl ScalarUDFImpl for SparkLike {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use arrow::array::{Array, ArrayRef, StringArray, StringViewArray};
+    use datafusion_common::config::ConfigOptions;
 
     #[test]
     fn native_like_reuses_the_plain_prefix_string() -> Result<()> {
@@ -247,14 +249,6 @@ mod tests {
         );
         Ok(())
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use arrow::array::{Array, ArrayRef, StringArray, StringViewArray};
-    use datafusion_common::config::ConfigOptions;
-
     fn invoke(source: ColumnarValue, pattern: ColumnarValue, rows: usize) -> Result<ColumnarValue> {
         invoke_as(SparkLike::new('!'), source, pattern, rows)
     }
