@@ -1,0 +1,58 @@
+{
+  "functions": [
+    {
+      "id": "scalar.math.negative_bigint_bounds",
+      "spark_sql": "WITH operands AS (\n    SELECT id, CASE id WHEN 0 THEN CAST('9223372036854775807' AS BIGINT)\n                       WHEN 1 THEN CAST('-9223372036854775807' AS BIGINT)\n                       WHEN 2 THEN CAST(NULL AS BIGINT)\n                       WHEN 3 THEN CAST(0 AS BIGINT) ELSE i END AS value\n    FROM bench WHERE id<8\n)\nSELECT id,negative(value) AS result FROM operands",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i FROM bench"
+    },
+    {
+      "id": "scalar.math.negative_bigint_minimum",
+      "spark_sql": "WITH operands AS (\n    SELECT id, CASE WHEN id=0 THEN CAST('-9223372036854775808' AS BIGINT) ELSE i END AS value\n    FROM bench WHERE id<8\n)\nSELECT id,negative(value) AS result FROM operands",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i FROM bench"
+    },
+    {
+      "id": "scalar.math.negative_masked_minimum",
+      "spark_sql": "WITH operands AS (\n    SELECT id, CASE WHEN id=0 THEN CAST('-9223372036854775808' AS BIGINT) ELSE i END AS value\n    FROM bench WHERE id<8\n)\nSELECT id,CASE WHEN id>0 THEN negative(value) END AS result FROM operands",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i FROM bench"
+    },
+    {
+      "id": "scalar.math.negative_scalar_minimum",
+      "spark_sql": "SELECT id,negative(CAST('-9223372036854775808' AS BIGINT)) AS result FROM bench WHERE id<8",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i FROM bench"
+    },
+    {
+      "id": "scalar.math.negative_decimal_and_float",
+      "spark_sql": "SELECT id,negative(dec) AS decimal_value,negative(CAST('-0.0' AS DOUBLE)) AS floating_value\nFROM bench WHERE id<8",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i FROM bench"
+    },
+    {
+      "id": "scalar.math.negative_empty",
+      "spark_sql": "SELECT id,negative(i) AS result FROM bench WHERE id<0",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i FROM bench"
+    },
+    {
+      "id": "scalar.math.negative_tinyint_minimum",
+      "spark_sql": "WITH operands AS (\n    SELECT id, CAST(CASE WHEN id=1 THEN '-128' ELSE CAST(i AS STRING) END AS TINYINT) AS value\n    FROM bench WHERE id<8\n)\nSELECT id,negative(value) AS result FROM operands",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i FROM bench"
+    },
+    {
+      "id": "scalar.math.negative_smallint_minimum",
+      "spark_sql": "WITH operands AS (\n    SELECT id, CAST(CASE WHEN id=1 THEN '-32768' ELSE CAST(i AS STRING) END AS SMALLINT) AS value\n    FROM bench WHERE id<8\n)\nSELECT id,negative(value) AS result FROM operands",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i FROM bench"
+    },
+    {
+      "id": "scalar.math.negative_int_minimum",
+      "spark_sql": "WITH operands AS (\n    SELECT id, CAST(CASE WHEN id=1 THEN '-2147483648' ELSE CAST(i AS STRING) END AS INT) AS value\n    FROM bench WHERE id<8\n)\nSELECT id,negative(value) AS result FROM operands",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i FROM bench"
+    }
+  ]
+}
