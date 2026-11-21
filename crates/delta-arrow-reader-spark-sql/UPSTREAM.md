@@ -2651,3 +2651,10 @@ its prepared return type when its center type matches the actual input.
 If a physical rewrite retains a different return type, the accumulator
 builds the original fields for the new input. The bin calculation,
 trims, seeded tie choices and output casts are unchanged.
+
+### Literal zones in CONVERT_TIMEZONE (#1409)
+
+CONVERT_TIMEZONE retains its lazy argument evaluation. After NULL
+checks, a pair of literal zone strings passes one value per zone to
+the converter. It resolves both strings once for active timestamps,
+with the original source-before-target error order.

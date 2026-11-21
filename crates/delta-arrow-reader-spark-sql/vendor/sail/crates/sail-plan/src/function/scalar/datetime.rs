@@ -1569,14 +1569,18 @@ fn convert_tz(
 ) -> PlanResult<Expr> {
     let func = ConvertTz::new(classic);
     if with_null_short_circuit {
+        let literal_zone_pair = [&from_tz, &to_tz].into_iter().all(|zone| {
+            matches!(zone, Expr::Literal(value, _) if value.try_as_str().flatten().is_some())
+        });
         let arguments = [from_tz, to_tz, ts]
             .into_iter()
             .map(|argument| lambda_with_fresh_parameter(argument, "_convert_tz"))
             .collect::<PlanResult<Vec<_>>>()?;
         Ok(Expr::HigherOrderFunction(expr::HigherOrderFunction::new(
-            Arc::new(HigherOrderUDF::new_from_impl(ConvertTzLazy::new(
-                func.with_null_short_circuit(),
-            ))),
+            Arc::new(HigherOrderUDF::new_from_impl(
+                ConvertTzLazy::new(func.with_null_short_circuit())
+                    .with_literal_zone_pair(literal_zone_pair),
+            )),
             arguments,
         )))
     } else {
