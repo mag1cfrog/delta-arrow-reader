@@ -2702,3 +2702,10 @@ nonempty BIGINT list arrays. The original accumulator reads each child's
 offset range even under a NULL parent. A temporary list shares those
 ranges and child values with the input and carries no parent bitmap.
 Other types, scalar values and empty arrays use the original accumulator.
+
+### Direct BIGINT ARRAYS_OVERLAP (#1410)
+
+Matching List or LargeList BIGINT columns use typed child values and offsets
+for three-valued membership. A NULL left operand still skips the right
+operand through Spark's existing argument evaluation. Other expressions,
+storage pairs and element conversions retain the original CASE lowering.
