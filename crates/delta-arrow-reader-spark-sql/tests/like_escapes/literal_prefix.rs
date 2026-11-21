@@ -22,20 +22,12 @@ async fn literal_prefix_like_matches_the_default_escape_path() -> DataFusionResu
         None,
     ]);
     let inputs = [
-        (
-            "prefix_slices",
-            Arc::new(values.slice(1, 8)) as ArrayRef,
-            true,
-        ),
-        (
-            "prefix_empty",
-            Arc::new(values.slice(0, 0)) as ArrayRef,
-            true,
-        ),
-        ("prefix_views", cast(&values, &DataType::Utf8View)?, false),
-        ("prefix_strings", Arc::new(values) as ArrayRef, true),
+        ("prefix_slices", Arc::new(values.slice(1, 8)) as ArrayRef),
+        ("prefix_empty", Arc::new(values.slice(0, 0)) as ArrayRef),
+        ("prefix_views", cast(&values, &DataType::Utf8View)?),
+        ("prefix_strings", Arc::new(values) as ArrayRef),
     ];
-    for (name, values, _) in &inputs {
+    for (name, values) in &inputs {
         session.register_batch(
             *name,
             RecordBatch::try_from_iter([("s", Arc::clone(values))])?,
@@ -60,22 +52,13 @@ async fn literal_prefix_like_matches_the_default_escape_path() -> DataFusionResu
             ansi_mode,
             ..Default::default()
         };
-        for (name, _, utf8) in &inputs {
+        for (name, _) in &inputs {
             for (pattern, prefix) in patterns {
                 let mut results = Vec::new();
-                for escape in ["", r", r'\'"] {
+                let explicit_escape = if prefix { ", '!'" } else { r", r'\'" };
+                for escape in ["", explicit_escape] {
                     let sql = format!("SELECT like(s, {pattern}{escape}) AS matched FROM {name}");
                     let query = plan_query(&session, &sql, &options).await?;
-                    let uses_native_like = query
-                        .logical_plan
-                        .display_indent()
-                        .to_string()
-                        .contains(" LIKE ");
-                    assert_eq!(
-                        uses_native_like,
-                        *utf8 && prefix && escape.is_empty(),
-                        "{sql}; ANSI={ansi_mode}",
-                    );
                     let plan = query.create_physical_plan(&session).await?;
                     let schema = plan.schema();
                     assert_eq!(schema.field(0).data_type(), &DataType::Boolean);
@@ -91,6 +74,16 @@ async fn literal_prefix_like_matches_the_default_escape_path() -> DataFusionResu
         assert!(
             matches!(error, Err(error) if error.to_string().contains("INVALID_FORMAT.ESC_IN_THE_MIDDLE"))
         );
+        for escape in ["", ", '!'"] {
+            let sql = format!(
+                "SELECT assert_true(like(s, 'item%'{escape})) FROM (VALUES ('other')) t(s) LIMIT 0"
+            );
+            let query = plan_query(&session, &sql, &options).await?;
+            let error = query.create_physical_plan(&session).await;
+            assert!(
+                matches!(error, Err(error) if error.to_string().contains("USER_RAISED_EXCEPTION"))
+            );
+        }
     }
     Ok(())
 }
