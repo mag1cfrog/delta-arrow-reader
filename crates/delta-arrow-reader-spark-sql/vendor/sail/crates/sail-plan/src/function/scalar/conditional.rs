@@ -18,6 +18,7 @@ use crate::function::result_coercion::{
     common_result_type_with_strings, is_nested_result_type, is_temporal_type,
 };
 
+mod nanvl;
 mod nullif;
 pub(crate) use nullif::SparkNullIf;
 
@@ -286,7 +287,12 @@ pub(super) fn list_built_in_conditional_functions() -> Vec<(&'static str, Scalar
         ("coalesce", F::custom(coalesce)),
         ("if", F::custom(if_expr)),
         ("ifnull", F::custom(ifnull)),
-        ("nanvl", F::binary(expr_fn::nanvl)),
+        (
+            "nanvl",
+            F::binary(|left, right| {
+                ScalarUDF::from(nanvl::SparkNanvl::default()).call(vec![left, right])
+            }),
+        ),
         (
             "nullif",
             F::custom(|input| {
