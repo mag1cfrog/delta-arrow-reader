@@ -1534,7 +1534,10 @@ fn check_float_divisor<T: datafusion::arrow::datatypes::ArrowPrimitiveType>(
                 "division array lengths differ".into(),
             ));
         }
-        BooleanArray::from_binary(a, b, |_, b| b.is_zero()).has_true()
+        b.values()
+            .iter()
+            .enumerate()
+            .any(|(index, divisor)| divisor.is_zero() && a.is_valid(index) && b.is_valid(index))
     };
     if has_zero {
         Err(ArrowError::DivideByZero)

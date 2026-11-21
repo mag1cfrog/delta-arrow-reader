@@ -2841,3 +2841,9 @@ directly when its only conversions are the proven widening integer,
 DOUBLE or DECIMAL casts. Column lineage must reach a table scan without
 a logical view definition. Computed inputs and other conversions retain
 their original arithmetic NULL guards.
+
+### Check active floating-point zero divisors directly (#1412)
+
+The shared checked division and remainder helper scans array
+divisors and consults both validity masks at zero slots. Scalar
+broadcasting keeps its existing behavior.
