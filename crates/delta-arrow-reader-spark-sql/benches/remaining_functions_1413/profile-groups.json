@@ -1,0 +1,195 @@
+{
+  "preflight_receipt_sha256": "fbe90b9e98dc6760ae4c672c39b7e27281058b6e9291e534c75e963ba4ed7917",
+  "groups": [
+    {
+      "name": "split-regex",
+      "cases": [
+        "scalar.string.split"
+      ],
+      "plan_difference": "SparkSplit regex and list builder versus native StringToArray",
+      "representative": "scalar.string.split",
+      "configuration": "spark-off",
+      "frozen_total_excess_ns_per_input_row": 58.132148
+    },
+    {
+      "name": "string-view-casts",
+      "cases": [
+        "scalar.string.overlay",
+        "scalar.string.lpad",
+        "scalar.string.rpad"
+      ],
+      "plan_difference": "Spark adds Utf8View input casts before the same named kernels",
+      "representative": "scalar.string.overlay",
+      "configuration": "spark-off",
+      "frozen_total_excess_ns_per_input_row": 20.434635
+    },
+    {
+      "name": "regexp-literal",
+      "cases": [
+        "scalar.predicate.regexp",
+        "scalar.predicate.regexp_like",
+        "scalar.predicate.rlike"
+      ],
+      "plan_difference": "Spark regex comparison versus native LIKE contains for this literal",
+      "representative": "scalar.predicate.regexp_like",
+      "configuration": "spark-on",
+      "frozen_total_excess_ns_per_input_row": 16.937663
+    },
+    {
+      "name": "window-projections",
+      "cases": [
+        "window.window.row_number",
+        "window.window.stddev_samp"
+      ],
+      "plan_difference": "Same named window kernels, extra input and output projections and different NULL ordering",
+      "representative": "window.window.stddev_samp",
+      "configuration": "spark-on",
+      "frozen_total_excess_ns_per_input_row": 7.56033
+    },
+    {
+      "name": "year-extraction",
+      "cases": [
+        "scalar.datetime.year"
+      ],
+      "plan_difference": "SparkYear versus native DatePartFunc",
+      "representative": "scalar.datetime.year",
+      "configuration": "spark-off",
+      "frozen_total_excess_ns_per_input_row": 7.206015
+    },
+    {
+      "name": "output-aliases",
+      "cases": [
+        "scalar.string.char",
+        "scalar.string.repeat",
+        "scalar.string.replace",
+        "scalar.string.right"
+      ],
+      "plan_difference": "Same named scalar kernel and displayed arguments, with one additional Spark alias projection",
+      "representative": "scalar.string.replace",
+      "configuration": "spark-off",
+      "frozen_total_excess_ns_per_input_row": 5.947655
+    },
+    {
+      "name": "ilike-lowercase",
+      "cases": [
+        "scalar.predicate.ilike"
+      ],
+      "plan_difference": "Spark LowerFunc, SparkLike and ILikeResult versus native ILIKE",
+      "representative": "scalar.predicate.ilike",
+      "configuration": "spark-on",
+      "frozen_total_excess_ns_per_input_row": 5.64827
+    },
+    {
+      "name": "like-pattern",
+      "cases": [
+        "scalar.predicate.like"
+      ],
+      "plan_difference": "SparkLike versus native LIKE physical expression",
+      "representative": "scalar.predicate.like",
+      "configuration": "spark-on",
+      "frozen_total_excess_ns_per_input_row": 4.673101
+    },
+    {
+      "name": "log-domain",
+      "cases": [
+        "scalar.math.ln",
+        "scalar.math.log",
+        "scalar.math.log10",
+        "scalar.math.log1p",
+        "scalar.math.log2"
+      ],
+      "plan_difference": "Spark CASE selects the positive argument before the log kernel",
+      "representative": "scalar.math.ln",
+      "configuration": "spark-on",
+      "frozen_total_excess_ns_per_input_row": 4.34929
+    },
+    {
+      "name": "percentile-reduction",
+      "cases": [
+        "aggregate.aggregate.median",
+        "aggregate.aggregate.percentile"
+      ],
+      "plan_difference": "Spark PercentileFunction versus native Median and PercentileCont",
+      "representative": "aggregate.aggregate.median",
+      "configuration": "spark-off",
+      "frozen_total_excess_ns_per_input_row": 3.652054
+    },
+    {
+      "name": "base64-decoder",
+      "cases": [
+        "scalar.string.unbase64"
+      ],
+      "plan_difference": "Spark tolerant decoder with Utf8 cast versus native DecodeFunc with BinaryView",
+      "representative": "scalar.string.unbase64",
+      "configuration": "spark-off",
+      "frozen_total_excess_ns_per_input_row": 3.13884
+    },
+    {
+      "name": "grouping-count-filter",
+      "cases": [
+        "aggregate.aggregate.grouping",
+        "aggregate.aggregate.grouping_id"
+      ],
+      "plan_difference": "Spark adds group counts and a filter before the result projection",
+      "representative": "aggregate.aggregate.grouping_id",
+      "configuration": "spark-on",
+      "frozen_total_excess_ns_per_input_row": 1.388648
+    },
+    {
+      "name": "trim-null-propagation",
+      "cases": [
+        "scalar.string.rtrim"
+      ],
+      "plan_difference": "Spark NULL-propagating adapter around RtrimFunc",
+      "representative": "scalar.string.rtrim",
+      "configuration": "spark-on",
+      "frozen_total_excess_ns_per_input_row": 1.2003
+    },
+    {
+      "name": "date-part-units",
+      "cases": [
+        "scalar.datetime.day",
+        "scalar.datetime.dayofyear",
+        "scalar.datetime.weekofyear",
+        "scalar.datetime.years"
+      ],
+      "plan_difference": "Same DatePartFunc with upper-case unit literal and another Spark alias projection",
+      "representative": "scalar.datetime.dayofyear",
+      "configuration": "spark-on",
+      "frozen_total_excess_ns_per_input_row": 0.781649
+    },
+    {
+      "name": "ordered-minimum",
+      "cases": [
+        "aggregate.aggregate.min_by"
+      ],
+      "plan_difference": "Spark LastValue over reversed order versus native FirstValue",
+      "representative": "aggregate.aggregate.min_by",
+      "configuration": "spark-on",
+      "frozen_total_excess_ns_per_input_row": 0.179172
+    },
+    {
+      "name": "regression-metadata",
+      "cases": [
+        "aggregate.aggregate.regr_intercept",
+        "aggregate.aggregate.regr_slope",
+        "aggregate.aggregate.regr_sxx",
+        "aggregate.aggregate.regr_syy"
+      ],
+      "plan_difference": "Same Regr reducer with SparkResultMetadata around the cast argument",
+      "representative": "aggregate.aggregate.regr_syy",
+      "configuration": "spark-off",
+      "frozen_total_excess_ns_per_input_row": 0.178372
+    },
+    {
+      "name": "character-count",
+      "cases": [
+        "scalar.string.character_length"
+      ],
+      "plan_difference": "SparkLengthFunc versus native CharacterLengthFunc",
+      "representative": "scalar.string.character_length",
+      "configuration": "spark-off",
+      "frozen_total_excess_ns_per_input_row": 0.051035
+    }
+  ]
+}
