@@ -1,5 +1,8 @@
 //! Spark LIKE validates escapes without evaluating dead dynamic arguments.
 
+#[path = "like_escapes/literal_prefix.rs"]
+mod literal_prefix;
+
 use std::collections::{BTreeMap, HashSet};
 use std::sync::{
     Arc,

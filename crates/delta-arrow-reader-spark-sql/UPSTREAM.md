@@ -2631,6 +2631,15 @@ handles other patterns, storage types and explicit escapes. The
 [differential test](tests/ilike/literal_prefix.rs) compares both paths
 in both ANSI modes.
 
+### LIKE with a literal ASCII prefix (#1413)
+
+The same literal prefix check admits plain LIKE directly to the
+case-sensitive native predicate. Its ASCII letters or digits and
+final `%` are valid under the default escape. The general Spark
+adapter retains other patterns and explicit escapes. The
+[differential test](tests/like_escapes/literal_prefix.rs) compares
+against the default escape supplied explicitly.
+
 ### AES scalar and column arguments (#1405)
 
 The local Sail AES functions evaluate inputs, keys, modes, padding, IVs and

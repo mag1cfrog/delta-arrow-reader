@@ -44,16 +44,18 @@ fn build_like_expr(input: ScalarFunctionInput, case_insensitive: bool) -> PlanRe
         function_context,
     } = input;
     let n = arguments.len();
-    if case_insensitive
-        && let [
-            value @ expr::Expr::Column(_),
-            literal @ expr::Expr::Literal(ScalarValue::Utf8(Some(pattern)), _),
-        ] = arguments.as_slice()
+    if let [
+        value @ expr::Expr::Column(_),
+        literal @ expr::Expr::Literal(ScalarValue::Utf8(Some(pattern)), _),
+    ] = arguments.as_slice()
         && let Some(prefix) = pattern.strip_suffix('%')
         && (1..=32).contains(&prefix.len())
         && prefix.bytes().all(|byte| byte.is_ascii_alphanumeric())
         && matches!(value.get_type(function_context.schema), Ok(DataType::Utf8))
     {
+        if !case_insensitive {
+            return Ok(value.clone().like(literal.clone()));
+        }
         let nullable = value.nullable(function_context.schema)?;
         let matches = ScalarUDF::from(ILikeAsciiPrefix).call(vec![value.clone(), literal.clone()]);
         return Ok(ScalarUDF::from(ILikeResult { nullable }).call(vec![matches]));
