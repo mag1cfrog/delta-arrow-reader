@@ -55,8 +55,9 @@ The DECIMAL projection uses two input
 [casts](../../vendor/sail/crates/sail-function/src/scalar/spark_decimal_cast.rs),
 [FusedDecimalDivide](../../vendor/sail/crates/sail-plan/src/function/scalar/math.rs),
 ROUND and a final numeric-to-decimal cast. The cast declarations
-carry Spark result annotations. ANSI on also adds a divisor-NULL
-branch and a projection of the divisor through `guard_cast_arithmetic`. The native plan uses Arrow
+carry Spark result annotations. With ANSI on, `guard_cast_arithmetic`
+adds a divisor-NULL branch. Common-subexpression extraction projects
+the repeated divisor. The native plan uses Arrow
 casts and the native divide operator. The fused kernel computes the
 Spark precision, scale and half-up quotient in one loop. The physical
 difference includes the conversion stages and the ANSI branch. It does
