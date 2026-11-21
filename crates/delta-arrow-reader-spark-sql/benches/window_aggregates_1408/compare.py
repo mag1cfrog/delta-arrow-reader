@@ -9,7 +9,7 @@ import sys
 import time
 
 sys.dont_write_bytecode = True
-from run import HERE, WORKSPACE, build, increments, observe, one_process, protocol, runner, schedule, write
+from run import HERE, WORKSPACE, build, increments, observe, one_process, process_medians, protocol, runner, schedule, write
 
 ARMS = ("staging", "candidate")
 
@@ -124,7 +124,7 @@ def measure(settings_file, directories, output):
         if case_id in noise and all(len(arm) == settings["replicas"]
                                      and all(o["status"] == "ok" for o in arm)
                                      for arm in noise[case_id].values()):
-            floor = runner.noise(*[increments(arm) for arm in noise[case_id].values()])
+            floor = runner.noise(*[process_medians(arm) for arm in noise[case_id].values()])
         result["native_noise_ns"] = floor
         summary[case_id] = result
     write(output / "summary.json", summary)

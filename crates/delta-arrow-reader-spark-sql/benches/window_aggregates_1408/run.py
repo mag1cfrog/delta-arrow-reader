@@ -205,6 +205,10 @@ def increments(observations):
     return [s["increment_ns"] / s["input_rows"] for run in observations for s in run["samples"]]
 
 
+def process_medians(observations):
+    return [statistics.median(increments([observation])) for observation in observations]
+
+
 def measure(directories, output):
     assert not runner.git("status", "--porcelain", "--", str(HERE))
     frozen = protocol()
@@ -277,7 +281,7 @@ def measure(directories, output):
         if id in controls and all(len(arm) == settings["replicas"]
                                   and all(o["status"] == "ok" for o in arm)
                                   for arm in controls[id].values()):
-            noise = runner.noise(*[increments(arm) for arm in controls[id].values()])
+            noise = runner.noise(*[process_medians(arm) for arm in controls[id].values()])
         stats[id] = {"ordinary": {mode: summary(results) for mode, results in timings[id].items()},
                      "native_noise_ns": noise, "profile": profiles[id]}
     write(output / "summary.json", stats)

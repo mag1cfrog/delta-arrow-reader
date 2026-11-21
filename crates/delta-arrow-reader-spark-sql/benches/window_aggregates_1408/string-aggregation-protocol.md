@@ -29,8 +29,8 @@ session. Use three fresh processes per arm and one warmup plus three retained
 query/projection pairs per process. Rotate sorted cases by one position per
 replica. Reverse build and configuration order on replica two. In each
 replica, run two native A/A processes on the candidate binary, alternating
-their label order. Use the #1391 noise formula on native ns per input row
-above projection. Record the median and range of the nine retained samples
+their label order. Use each native process's median ns per input row above projection as
+one observation for the #1391 A/A floor. Record the median and range of the nine retained samples
 per arm in those units.
 
 The target is met when every eligible candidate Spark median stays within
