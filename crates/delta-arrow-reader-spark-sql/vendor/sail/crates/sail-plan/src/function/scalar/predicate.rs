@@ -47,7 +47,7 @@ fn build_like_expr(input: ScalarFunctionInput, case_insensitive: bool) -> PlanRe
     if case_insensitive
         && let [
             value @ expr::Expr::Column(_),
-            expr::Expr::Literal(ScalarValue::Utf8(Some(pattern)), _),
+            literal @ expr::Expr::Literal(ScalarValue::Utf8(Some(pattern)), _),
         ] = arguments.as_slice()
         && let Some(prefix) = pattern.strip_suffix('%')
         && (1..=32).contains(&prefix.len())
@@ -55,10 +55,7 @@ fn build_like_expr(input: ScalarFunctionInput, case_insensitive: bool) -> PlanRe
         && matches!(value.get_type(function_context.schema), Ok(DataType::Utf8))
     {
         let nullable = value.nullable(function_context.schema)?;
-        let matches = ScalarUDF::from(ILikeAsciiPrefix {
-            pattern: pattern.to_ascii_lowercase(),
-        })
-        .call(vec![value.clone()]);
+        let matches = ScalarUDF::from(ILikeAsciiPrefix).call(vec![value.clone(), literal.clone()]);
         return Ok(ScalarUDF::from(ILikeResult { nullable }).call(vec![matches]));
     }
     let nullable = if case_insensitive && (2..=3).contains(&n) {
@@ -104,9 +101,7 @@ fn build_like_expr(input: ScalarFunctionInput, case_insensitive: bool) -> PlanRe
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-struct ILikeAsciiPrefix {
-    pattern: String,
-}
+struct ILikeAsciiPrefix;
 
 impl ScalarUDFImpl for ILikeAsciiPrefix {
     fn name(&self) -> &str {
@@ -115,7 +110,7 @@ impl ScalarUDFImpl for ILikeAsciiPrefix {
 
     fn signature(&self) -> &Signature {
         static SIGNATURE: std::sync::LazyLock<Signature> = std::sync::LazyLock::new(|| {
-            Signature::exact(vec![DataType::Utf8], Volatility::Immutable)
+            Signature::exact(vec![DataType::Utf8, DataType::Utf8], Volatility::Immutable)
         });
         &SIGNATURE
     }
@@ -125,10 +120,17 @@ impl ScalarUDFImpl for ILikeAsciiPrefix {
     }
 
     fn invoke_with_args(&self, mut args: ScalarFunctionArgs) -> Result<ColumnarValue> {
-        let ([value], [field]) = (args.args.as_slice(), args.arg_fields.as_slice()) else {
-            return datafusion_common::internal_err!("{} requires one Utf8 argument", self.name());
+        let [value, pattern] = datafusion_common::utils::take_function_args(
+            self.name(),
+            std::mem::take(&mut args.args),
+        )?;
+        let [field, _] = args.arg_fields.as_slice() else {
+            return datafusion_common::internal_err!(
+                "{} requires two Utf8 argument fields",
+                self.name()
+            );
         };
-        let ascii = match value {
+        let ascii = match &value {
             ColumnarValue::Array(array) => array
                 .as_string_opt::<i32>()
                 .is_some_and(StringArray::is_ascii),
@@ -137,13 +139,18 @@ impl ScalarUDFImpl for ILikeAsciiPrefix {
             }
             _ => false,
         };
-        let pattern = ColumnarValue::Scalar(ScalarValue::Utf8(Some(self.pattern.clone())));
         if ascii {
-            return apply_cmp(Operator::ILikeMatch, value, &pattern);
+            return apply_cmp(Operator::ILikeMatch, &value, &pattern);
         }
         // Unicode case folding differs from lowercasing both operands.
         args.return_field = Arc::clone(field);
+        args.arg_fields.truncate(1);
+        args.args.push(value);
         let lower = native_string::lower().invoke_with_args(args)?;
+        let ColumnarValue::Scalar(ScalarValue::Utf8(Some(prefix))) = pattern else {
+            return datafusion_common::internal_err!("{} requires a literal prefix", self.name());
+        };
+        let pattern = ColumnarValue::Scalar(ScalarValue::Utf8(Some(prefix.to_ascii_lowercase())));
         apply_cmp(Operator::LikeMatch, &lower, &pattern)
     }
 }

@@ -39,7 +39,17 @@ async fn prefix_ilike_matches_existing_lower_then_like() -> Result<()> {
         None,
     ]);
     let inputs = [
+        (
+            "sliced_inputs",
+            Arc::new(ascii.slice(1, 4)) as ArrayRef,
+            true,
+        ),
         ("ascii_inputs", Arc::new(ascii) as ArrayRef, true),
+        (
+            "required_inputs",
+            Arc::new(StringArray::from(vec!["item", "ITEM", "k", ""])) as ArrayRef,
+            true,
+        ),
         ("mixed_inputs", Arc::new(mixed.clone()) as ArrayRef, true),
         (
             "empty_inputs",
@@ -112,6 +122,38 @@ async fn prefix_ilike_matches_existing_lower_then_like() -> Result<()> {
         );
         let error = query.create_physical_plan(&session).await;
         assert!(matches!(error, Err(error) if error.to_string().contains("INVALID_FORMAT")));
+
+        let query = plan_query(
+            &session,
+            "SELECT ilike(lower(s), 'item%') FROM ascii_inputs",
+            &options,
+        )
+        .await?;
+        assert!(
+            !query
+                .logical_plan
+                .display_indent()
+                .to_string()
+                .contains("spark_ilike_ascii_prefix")
+        );
+
+        for second_pattern in ["'s%'", "'ITEM%'"] {
+            let mut grouped = Vec::new();
+            for escape in ["", r", r'\'"] {
+                let sql = format!(
+                    "SELECT ilike(s, 'item%'{escape}) AS a, ilike(s, {second_pattern}{escape}) AS b, count(*) AS n \
+                     FROM mixed_inputs GROUP BY ilike(s, 'item%'{escape}), ilike(s, {second_pattern}{escape}) ORDER BY a, b"
+                );
+                let plan = plan_query(&session, &sql, &options)
+                    .await?
+                    .create_physical_plan(&session)
+                    .await?;
+                let schema = plan.schema();
+                let batches = collect(plan, session.task_ctx()).await?;
+                grouped.push(concat_batches(&schema, &batches)?);
+            }
+            assert_eq!(grouped[0], grouped[1], "{second_pattern}; ANSI={ansi_mode}");
+        }
     }
     Ok(())
 }
