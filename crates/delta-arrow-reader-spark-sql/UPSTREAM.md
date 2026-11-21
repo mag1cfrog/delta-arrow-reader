@@ -2775,5 +2775,5 @@ existing per-row encoder.
 
 A single Boolean column guard and BIGINT column result without ELSE
 use the native searched CASE mask. The output keeps its nullable BIGINT
-type. Computed arms or conditions, additional arms and explicit ELSE
-keep the Spark searched CASE planning path.
+type. Conditions or results resolved as expressions, additional arms and
+explicit ELSE keep the Spark searched CASE planning path.

@@ -19,9 +19,12 @@ Each ANSI median must be at or below the candidate native median plus
 its native repeat floor. Record any remaining difference after this
 comparison.
 
-Before clocks, run the two [derived-column queries](when-validation.json)
+Before clocks, run the [boundary queries](when-validation.json)
 on both executables. The first puts malformed casts under unselected
 rows. The second puts a malformed cast in the condition. Compare the
 execution status, available types, exact rows and any failure text in
 both ANSI modes. These queries check the final physical plans after
 the optimizer has substituted the derived columns.
+The third query selects both BIGINT endpoints and checks false and NULL
+conditions. It compares eight rows and the `id` and `result` names and
+executed INT64 types.
