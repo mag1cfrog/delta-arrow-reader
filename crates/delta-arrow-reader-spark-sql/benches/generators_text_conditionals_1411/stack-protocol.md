@@ -20,3 +20,7 @@ or failure for a cast in the generated values.
 Use the [matched Linux release schedule](../window_aggregates_1408/string-aggregation-protocol.md#schedule-and-pass-rule).
 The target is at or below the candidate native median plus the native
 repeat floor in both ANSI modes. Record any remaining cost.
+
+The scalar-only query checks both BIGINT endpoints under the default
+`col0` name. The empty-source query checks zero output rows and an
+explicit INT64 alias.
