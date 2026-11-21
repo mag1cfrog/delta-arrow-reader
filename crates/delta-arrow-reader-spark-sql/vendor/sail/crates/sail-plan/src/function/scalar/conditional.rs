@@ -172,12 +172,12 @@ fn bigint_column_when_matches_the_spark_case_path() -> PlanResult<()> {
             Arc::new(StringArray::from(vec!["bad", "bad", "3", "7"])),
         ),
     ])?;
-    let schema = DFSchema::try_from(batch.schema())?;
+    let schema = Arc::new(DFSchema::try_from(batch.schema())?);
     for ansi_mode in [false, true] {
-        let config = PlanConfig {
+        let config = Arc::new(PlanConfig {
             ansi_mode,
             ..Default::default()
-        };
+        });
         for (value, uses_spark_case) in [
             (col("value"), false),
             (cast(col("raw"), DataType::Int64), true),
