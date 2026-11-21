@@ -1645,7 +1645,8 @@ mod tests {
             Some(vec![]),
             Some(vec![Some(3)]),
         ];
-        let inner_lists: [ArrayRef; 2] = [
+        let without_nulls = children.clone().map(|row| Some(row.unwrap_or_default()));
+        let inner_lists: [ArrayRef; 3] = [
             Arc::new(GenericListArray::<i32>::from_iter_primitive::<
                 Int64Type,
                 _,
@@ -1656,6 +1657,11 @@ mod tests {
                 _,
                 _,
             >(children)),
+            Arc::new(GenericListArray::<i32>::from_iter_primitive::<
+                Int64Type,
+                _,
+                _,
+            >(without_nulls)),
         ];
         for inner in inner_lists {
             let field = Arc::new(Field::new("inner", inner.data_type().clone(), true));
@@ -1719,6 +1725,68 @@ mod tests {
                     }
                 }
             }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn flatten_preserves_membership_failure_for_nested_map_values() -> PlanResult<()> {
+        use crate::function::common::FunctionContextInput;
+        use arrow::array::{ArrayRef, Int64Builder, ListArray, MapBuilder, StringBuilder};
+        use arrow::buffer::OffsetBuffer;
+        use arrow::datatypes::Schema;
+
+        let mut map = MapBuilder::new(None, StringBuilder::new(), Int64Builder::new());
+        map.keys().append_value("key");
+        map.values().append_value(7);
+        map.append(true)?;
+        let maps: ArrayRef = Arc::new(map.finish());
+        let map_lists: ArrayRef = Arc::new(ListArray::try_new(
+            Arc::new(Field::new_list_field(maps.data_type().clone(), true)),
+            OffsetBuffer::new(vec![0, 1].into()),
+            maps,
+            None,
+        )?);
+        let outer: ArrayRef = Arc::new(ListArray::try_new(
+            Arc::new(Field::new_list_field(map_lists.data_type().clone(), true)),
+            OffsetBuffer::new(vec![0, 1].into()),
+            map_lists,
+            None,
+        )?);
+        let input_schema = Arc::new(Schema::new(vec![Field::new(
+            "nested",
+            outer.data_type().clone(),
+            true,
+        )]));
+        let schema = Arc::new(DFSchema::try_from(input_schema.clone())?);
+        let batch = RecordBatch::try_new(input_schema, vec![outer])?;
+        let session = SessionContext::new();
+        for ansi_mode in [false, true] {
+            let config = Arc::new(crate::config::PlanConfig {
+                ansi_mode,
+                ..Default::default()
+            });
+            let evaluate = |array| -> PlanResult<_> {
+                let expression = flatten(ScalarFunctionInput {
+                    arguments: vec![array],
+                    function_context: FunctionContextInput {
+                        argument_display_names: &[],
+                        plan_config: &config,
+                        session_context: &session,
+                        schema: &schema,
+                    },
+                })?;
+                Ok(session
+                    .create_physical_expr(expression, &schema)?
+                    .evaluate(&batch))
+            };
+            let direct = evaluate(col("nested"))?.expect_err("Map stays on the membership path");
+            let original = evaluate(col("nested").alias("legacy_nested"))?
+                .expect_err("the generic membership probe cannot encode a Map");
+            assert_eq!(
+                direct.find_root().to_string(),
+                original.find_root().to_string()
+            );
         }
         Ok(())
     }
