@@ -2992,3 +2992,9 @@ FROM_JSON supplies one copy of literal schema and options for nonempty
 JSON columns. The parser reads schema and options once per batch. Empty
 input, NULL or sliced option maps and array settings keep the original
 expansion.
+
+### Literal URL parts (#1414)
+
+Two-argument PARSE_URL and TRY_PARSE_URL borrow a present Utf8 literal
+part for a Utf8 input column. They pass the absent key directly to the
+existing parser. Other argument shapes keep their existing adapters.
