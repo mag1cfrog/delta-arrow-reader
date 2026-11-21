@@ -71,3 +71,64 @@ async fn native_continuous_percentile_keeps_its_interpolation() -> TestResult {
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn unweighted_double_percentiles_match_unit_frequency_in_window_and_plain_queries()
+-> TestResult {
+    let recorded_inputs = serde_json::from_str::<Value>(
+        include_str!("fixtures/percentile-frequency/spark-results.jsonl")
+            .lines()
+            .next()
+            .ok_or("Missing percentile inputs")?,
+    )?;
+    let session = SessionContext::new_with_config(
+        SessionConfig::new()
+            .with_batch_size(4)
+            .with_target_partitions(1),
+    );
+    spark_inputs::register_recorded_inputs(&session, &recorded_inputs, 4)?;
+    for ansi in [false, true] {
+        for (prefix, suffix) in [
+            ("", " FROM samples"),
+            ("", " FROM samples WHERE false"),
+            (
+                "id, ",
+                " OVER (PARTITION BY g ORDER BY id ROWS BETWEEN 3 PRECEDING AND CURRENT ROW) FROM samples ORDER BY id",
+            ),
+            (
+                "id, ",
+                " OVER (PARTITION BY g ORDER BY id RANGE BETWEEN 3 PRECEDING AND CURRENT ROW) FROM samples ORDER BY id",
+            ),
+            (
+                "id, ",
+                " OVER (PARTITION BY g ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM samples ORDER BY id",
+            ),
+            ("id, ", " OVER (PARTITION BY g) FROM samples ORDER BY id"),
+            (
+                "id, ",
+                " OVER (PARTITION BY g ORDER BY id ROWS BETWEEN 2 FOLLOWING AND 3 FOLLOWING) FROM samples ORDER BY id",
+            ),
+        ] {
+            let sql =
+                |weight| format!("SELECT {prefix}percentile(v,array(0.0,0.5,1.0){weight}){suffix}");
+            let compare = |statement| json!({"sql":statement,"ansi":ansi,"ordered":true});
+            let direct =
+                spark_results::capture_executed_query_result(&session, &compare(sql(""))).await?;
+            let weighted = spark_results::capture_executed_query_result(
+                &session,
+                &compare(sql(",CAST(1 AS BIGINT)")),
+            )
+            .await?;
+            assert_eq!(direct["rows"], weighted["rows"], "ANSI {ansi}: {suffix}");
+            for result in [&direct, &weighted] {
+                let percentile_field = result["schema"]["fields"]
+                    .as_array()
+                    .and_then(|fields| fields.last())
+                    .ok_or("Missing percentile output field")?;
+                assert_eq!(percentile_field["type"]["type"], "array");
+                assert_eq!(percentile_field["type"]["elementType"], "double");
+            }
+        }
+    }
+    Ok(())
+}
