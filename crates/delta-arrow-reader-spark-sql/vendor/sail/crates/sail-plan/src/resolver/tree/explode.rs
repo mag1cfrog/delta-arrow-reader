@@ -15,7 +15,7 @@ use either::Either;
 use sail_common_datafusion::utils::items::ItemTaker;
 use sail_function::scalar::array::spark_array_item_with_position::ArrayItemWithPosition;
 use sail_function::scalar::array_struct_field::ArrayStructField;
-use sail_function::scalar::explode::{Explode, ExplodeKind};
+use sail_function::scalar::explode::{Explode, ExplodeKind, InlineOuterListEmpty};
 use sail_function::scalar::map::map_entries::SparkMapEntries;
 use sail_function::scalar::multi_expr::MultiExpr;
 
@@ -85,6 +85,10 @@ impl TreeNodeRewriter for ExplodeRewriter<'_> {
         };
         let arg = args.one()?;
         let arg_type = arg.get_type(self.plan.schema())?;
+        let use_list_offsets = is_inline
+            && preserve_nulls
+            && matches!(arg, Expr::Column(_))
+            && matches!(arg_type, DataType::List(_) | DataType::LargeList(_));
         let return_type = func.return_type(&[arg_type])?;
         let data_type = ExplodeDataType::try_from_expr(&arg, self.plan.schema())?;
         let arg = match data_type {
@@ -109,9 +113,15 @@ impl TreeNodeRewriter for ExplodeRewriter<'_> {
         } else {
             arg
         };
-        let arg = match preserve_nulls {
-            true => when(nested_fn::array_empty(arg.clone()).is_false(), arg).end()?,
-            false => arg,
+        let arg = if preserve_nulls {
+            let empty = if use_list_offsets {
+                ScalarUDF::from(InlineOuterListEmpty::default()).call(vec![arg.clone()])
+            } else {
+                nested_fn::array_empty(arg.clone())
+            };
+            when(empty.is_false(), arg).end()?
+        } else {
+            arg
         };
         let arg = match with_position {
             true => ScalarUDF::from(ArrayItemWithPosition::new()).call(vec![arg]),
