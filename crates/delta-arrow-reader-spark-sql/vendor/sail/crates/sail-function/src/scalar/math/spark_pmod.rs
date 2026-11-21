@@ -132,8 +132,8 @@ fn positive_bigint_pmod_matches_the_existing_kernel() -> Result<()> {
             match (expected, actual) {
                 (Ok(expected), Ok(actual)) => {
                     assert_eq!(
-                        expected.into_array(number_rows)?,
-                        actual.into_array(number_rows)?
+                        expected.into_array(number_rows)?.as_ref(),
+                        actual.into_array(number_rows)?.as_ref()
                     );
                 }
                 (Err(expected), Err(actual)) => {
