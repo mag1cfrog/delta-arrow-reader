@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::sync::Arc;
 
-use chrono::{Offset, TimeZone};
+use chrono::{NaiveDateTime, Offset, TimeZone};
 use chrono_tz::OffsetName;
 use datafusion::arrow::array::timezone::Tz;
 use datafusion::arrow::array::{
@@ -102,9 +102,12 @@ impl ScalarUDFImpl for SparkDateFormat {
                     DataType::Timestamp(TimeUnit::Millisecond, tz) => {
                         format_timestamp_array_millisecond(&array, tz.as_ref(), &format)?
                     }
-                    DataType::Timestamp(TimeUnit::Second, tz) => {
-                        format_timestamp_array_second(&array, tz.as_ref(), &format)?
-                    }
+                    DataType::Timestamp(TimeUnit::Second, tz) => format_timestamp_array_second(
+                        &array,
+                        tz.as_ref(),
+                        &format,
+                        format_str == "yyyy-MM-dd HH:mm:ss",
+                    )?,
                     DataType::Timestamp(TimeUnit::Nanosecond, tz) => {
                         format_timestamp_array_nanosecond(&array, tz.as_ref(), &format)?
                     }
@@ -616,24 +619,7 @@ fn format_timestamp_value(
     tz: Option<&Arc<str>>,
     format: &DateTimeFormat,
 ) -> Result<String> {
-    let naive_datetime = match time_unit {
-        TimeUnit::Microsecond => {
-            as_datetime::<datafusion::arrow::datatypes::TimestampMicrosecondType>(value)
-        }
-        TimeUnit::Millisecond => {
-            as_datetime::<datafusion::arrow::datatypes::TimestampMillisecondType>(value)
-        }
-        TimeUnit::Second => as_datetime::<datafusion::arrow::datatypes::TimestampSecondType>(value),
-        TimeUnit::Nanosecond => {
-            as_datetime::<datafusion::arrow::datatypes::TimestampNanosecondType>(value)
-        }
-    }
-    .ok_or_else(|| {
-        exec_datafusion_err!(
-            "spark_date_format: cannot convert timestamp value {} to datetime",
-            value
-        )
-    })?;
+    let naive_datetime = timestamp_to_naive_datetime(value, time_unit)?;
 
     match tz {
         Some(tz_str) => {
@@ -670,6 +656,27 @@ fn format_timestamp_value(
             zone_id: None,
         }),
     }
+}
+
+fn timestamp_to_naive_datetime(value: i64, time_unit: &TimeUnit) -> Result<NaiveDateTime> {
+    match time_unit {
+        TimeUnit::Microsecond => {
+            as_datetime::<datafusion::arrow::datatypes::TimestampMicrosecondType>(value)
+        }
+        TimeUnit::Millisecond => {
+            as_datetime::<datafusion::arrow::datatypes::TimestampMillisecondType>(value)
+        }
+        TimeUnit::Second => as_datetime::<datafusion::arrow::datatypes::TimestampSecondType>(value),
+        TimeUnit::Nanosecond => {
+            as_datetime::<datafusion::arrow::datatypes::TimestampNanosecondType>(value)
+        }
+    }
+    .ok_or_else(|| {
+        exec_datafusion_err!(
+            "spark_date_format: cannot convert timestamp value {} to datetime",
+            value
+        )
+    })
 }
 
 fn format_date32_value(value: i32, format: &DateTimeFormat) -> Result<String> {
@@ -792,6 +799,7 @@ fn format_timestamp_array_second(
     array: &Arc<dyn datafusion::arrow::array::Array>,
     tz: Option<&Arc<str>>,
     format: &DateTimeFormat,
+    is_default_unix_pattern: bool,
 ) -> Result<StringArray> {
     let ts_array = array
         .as_any()
@@ -800,12 +808,26 @@ fn format_timestamp_array_second(
             exec_datafusion_err!("spark_date_format: failed to downcast to TimestampSecondArray")
         })?;
 
+    // The default pattern uses local clock fields without displaying the zone.
+    let prepared_zone = if is_default_unix_pattern {
+        tz.and_then(|name| name.parse::<Tz>().ok())
+    } else {
+        None
+    };
+    let format_second = |value| {
+        let Some(zone) = prepared_zone else {
+            return format_timestamp_value(value, &TimeUnit::Second, tz, format);
+        };
+        let utc = timestamp_to_naive_datetime(value, &TimeUnit::Second)?;
+        format.format(DateTimeFormatInput {
+            datetime: zone.from_utc_datetime(&utc).naive_local(),
+            timezone: None,
+            zone_id: None,
+        })
+    };
     let result: Vec<Option<String>> = ts_array
         .iter()
-        .map(|opt| {
-            opt.map(|value| format_timestamp_value(value, &TimeUnit::Second, tz, format))
-                .transpose()
-        })
+        .map(|opt| opt.map(format_second).transpose())
         .collect::<Result<Vec<_>>>()?;
 
     Ok(StringArray::from(result))
