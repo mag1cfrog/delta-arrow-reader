@@ -401,10 +401,14 @@ mod tests {
 
     #[test]
     fn literal_theta_union_entries_match_broadcast_entries() -> Result<()> {
-        let inputs = Arc::new(Int64Array::from(vec![1, 2, 3])) as ArrayRef;
+        let inputs = Arc::new(Int64Array::from((0..64_i64).collect::<Vec<_>>())) as ArrayRef;
         let mut sketch = new_update_sketch(12);
         update_sketch_from_array(&mut sketch, &inputs)?;
         let bytes = compact_update_sketch_bytes(&sketch, 12)?;
+        assert_ne!(
+            union_sketch_bytes(&bytes, &bytes, 4, "theta_union")?,
+            union_sketch_bytes(&bytes, &bytes, 12, "theta_union")?,
+        );
         let sketches = BinaryArray::from(vec![None, Some(bytes.as_slice()), Some(&[0][..])]);
         let function = ThetaUnionFunction::new();
         let previous = make_scalar_function(|arrays| theta_union_inner(arrays, None), vec![]);
