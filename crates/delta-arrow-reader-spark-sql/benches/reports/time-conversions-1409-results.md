@@ -53,4 +53,3 @@ Spark-only measurements. Their native columns are marked n/a.
 | [time-strings](time-strings-1409.md) | TO_TIME | 91.577 to 14.018 | 90.954 to 14.025 | 87.907 to 87.973 | 0.277 |
 | [time-strings](time-strings-1409.md) | TRY_TO_TIME | 90.879 to 14.013 | 92.143 to 14.057 | 87.855 to 87.907 | 2.735 |
 | [make-time](make-time-1409.md) | MAKE_TIME | 5.859 to 4.211 | 5.912 to 4.273 | 5.159 to 5.096 | 0.043 |
-
