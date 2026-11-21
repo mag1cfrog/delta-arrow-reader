@@ -2651,6 +2651,14 @@ argument expressions retain the original CASE.
 The [differential test](tests/floating_extrema/logarithm_domain.rs)
 compares exact Float64 bits, NULLs and result fields in both ANSI modes.
 
+### MEDIAN and PERCENTILE batch counts (#1413)
+
+An unweighted Double batch checks its total nonnull count once
+before adding values to the same frequency map. A total that would
+overflow uses the original per-row path so the accumulator keeps the
+same successful updates before the error. Weighted input and window
+retractions continue through their existing paths.
+
 ### AES scalar and column arguments (#1405)
 
 The local Sail AES functions evaluate inputs, keys, modes, padding, IVs and

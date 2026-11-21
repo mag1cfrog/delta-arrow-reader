@@ -274,7 +274,19 @@ impl NumericPercentileAccumulator {
             return Ok(());
         };
         if array.data_type() == &DataType::Float64 && values.get(2).is_none() {
-            for value in as_float64_array(array)?.iter().flatten() {
+            let array = as_float64_array(array)?;
+            if !retract
+                && let Ok(batch_count) = u64::try_from(array.len() - array.null_count())
+                && let Some(total_count) = self.total_count.checked_add(batch_count)
+            {
+                // Every key count is bounded by the checked total.
+                for value in array.iter().flatten() {
+                    *self.value_counts.entry(OrderedFloat(value)).or_insert(0) += 1;
+                }
+                self.total_count = total_count;
+                return Ok(());
+            }
+            for value in array.iter().flatten() {
                 self.apply_count(value, 1, retract)?;
             }
             return Ok(());
@@ -1640,6 +1652,25 @@ mod numeric_frequency_tests {
                 previous = frame;
             }
         }
+        Ok(())
+    }
+
+    #[test]
+    fn unweighted_batch_preserves_the_updates_before_overflow() -> Result<()> {
+        let mut unweighted = NumericPercentileAccumulator::new(0.5);
+        let mut original = NumericPercentileAccumulator::new(0.5);
+        for accumulator in [&mut unweighted, &mut original] {
+            accumulator.apply_count(1.0, u64::MAX - 1, false)?;
+        }
+        let rows = inputs(vec![Some(8.0), None, Some(9.0)], vec![Some(1); 3]);
+        let batched = unweighted.update_batch(&rows[..2]);
+        let per_row = original.update_batch(&rows);
+        assert!(matches!((batched, per_row), (Err(actual), Err(expected))
+            if actual.to_string() == expected.to_string() && actual.to_string().contains("frequency overflow")));
+        assert_eq!(unweighted.total_count, u64::MAX);
+        assert_eq!(unweighted.total_count, original.total_count);
+        assert_eq!(unweighted.value_counts, original.value_counts);
+        assert_eq!(unweighted.value_counts.get(&OrderedFloat(8.0)), Some(&1));
         Ok(())
     }
 
