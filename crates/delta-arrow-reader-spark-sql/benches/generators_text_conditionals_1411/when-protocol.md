@@ -18,3 +18,10 @@ Use the [matched Linux release schedule](../window_aggregates_1408/string-aggreg
 Each ANSI median must be at or below the candidate native median plus
 its native repeat floor. Record any remaining difference after this
 comparison.
+
+Before clocks, run the two [derived-column queries](when-validation.json)
+on both executables. The first puts malformed casts under unselected
+rows. The second puts a malformed cast in the condition. Compare the
+execution status, available types, exact rows and any failure text in
+both ANSI modes. These queries check the final physical plans after
+the optimizer has substituted the derived columns.

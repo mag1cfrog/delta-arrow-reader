@@ -1,0 +1,56 @@
+{
+  "functions": [
+    {
+      "kind": "scalar",
+      "category": "conditional",
+      "name": "when",
+      "registration": "F::custom(case)",
+      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional.rs:228",
+      "implementation_anchors": [
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional.rs:228",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional.rs:24"
+      ],
+      "id": "scalar.conditional.when_derived_result",
+      "aliases": [
+        "case"
+      ],
+      "spark_sql": "WITH operands AS (\n    SELECT id,\n        id % 4 = 1 AS flag,\n        CAST(CASE WHEN id % 4 = 1 THEN '7' ELSE 'bad' END AS BIGINT) AS value\n    FROM bench WHERE id < 24\n)\nSELECT id, CASE WHEN flag THEN value END AS result FROM operands",
+      "native_sql": null,
+      "input_columns": [
+        "id",
+        "i",
+        "flag"
+      ],
+      "projection_sql": "SELECT id,i,flag FROM bench",
+      "exclusion": null,
+      "class": "paired",
+      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+    },
+    {
+      "kind": "scalar",
+      "category": "conditional",
+      "name": "when",
+      "registration": "F::custom(case)",
+      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional.rs:228",
+      "implementation_anchors": [
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional.rs:228",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional.rs:24"
+      ],
+      "id": "scalar.conditional.when_derived_condition",
+      "aliases": [
+        "case"
+      ],
+      "spark_sql": "WITH operands AS (\n    SELECT id,\n        CAST(CASE WHEN id % 4 = 1 THEN 'true' ELSE 'bad' END AS BOOLEAN) AS flag,\n        i AS value\n    FROM bench WHERE id < 24\n)\nSELECT id, CASE WHEN flag THEN value END AS result FROM operands",
+      "native_sql": null,
+      "input_columns": [
+        "id",
+        "i",
+        "flag"
+      ],
+      "projection_sql": "SELECT id,i,flag FROM bench",
+      "exclusion": null,
+      "class": "paired",
+      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+    }
+  ]
+}
