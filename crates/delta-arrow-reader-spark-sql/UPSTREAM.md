@@ -2658,3 +2658,11 @@ CONVERT_TIMEZONE retains its lazy argument evaluation. After NULL
 checks, a pair of literal zone strings passes one value per zone to
 the converter. It resolves both strings once for active timestamps,
 with the original source-before-target error order.
+
+### Constant offsets in timestamp conversion (#1409)
+
+When both resolved zones have a constant offset, the converter can use
+the offset difference on timestamps safely within Chrono's range. Equal
+zero-offset zones can share the input microsecond array. Ranges near
+Chrono's limits and named zones retain the original calendar conversion.
+Argument evaluation and timestamp unit scaling stay in their existing paths.

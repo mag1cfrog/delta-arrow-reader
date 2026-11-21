@@ -291,6 +291,14 @@ impl ResolvedTimeZone {
         parse_fixed_zone_offset(offset).map(Self::Fixed)
     }
 
+    fn fixed_offset_seconds(self) -> Option<i32> {
+        match self {
+            Self::Region(Tz::UTC) => Some(0),
+            Self::Fixed(offset) => Some(offset.local_minus_utc()),
+            Self::Region(_) => None,
+        }
+    }
+
     fn local_datetime_at_utc_micros(&self, micros: i64) -> Option<NaiveDateTime> {
         match self {
             Self::Region(zone) => zone
@@ -454,12 +462,12 @@ fn convert_tz_inner(
                     } else {
                         let from_tz = parse_tz(from_tz)?;
                         let to_tz = parse_tz(to_tz)?;
-                        micros_arr
-                            .iter()
-                            .map(|ts| {
-                                eager_from_to_utc_timestamp_func((ts, Ok(from_tz), Ok(to_tz)))
-                            })
-                            .collect::<Result<Int64Array>>()
+                        Ok(convert_singleton_zones(
+                            &micros_arr,
+                            from_tz,
+                            to_tz,
+                            convert,
+                        ))
                     }
                 }
                 (true, false) => {
@@ -498,10 +506,12 @@ fn convert_tz_inner(
                     let from_tz = first(&mut from_tzs)?;
                     let to_tz = first(&mut to_tzs)?;
 
-                    micros_arr
-                        .iter()
-                        .map(|ts| eager_from_to_utc_timestamp_func((ts, Ok(from_tz), Ok(to_tz))))
-                        .collect::<Result<Int64Array>>()
+                    Ok(convert_singleton_zones(
+                        &micros_arr,
+                        from_tz,
+                        to_tz,
+                        convert,
+                    ))
                 }
                 (true, false) => {
                     let from_tz = first(&mut from_tzs)?;
@@ -542,6 +552,49 @@ fn convert_tz_inner(
     };
 
     microseconds_to_timestamp(results, time_unit)
+}
+
+fn convert_singleton_zones(
+    timestamps: &Int64Array,
+    from_zone: Option<ResolvedTimeZone>,
+    to_zone: Option<ResolvedTimeZone>,
+    convert_with_calendar: fn(i64, &ResolvedTimeZone, &ResolvedTimeZone) -> Option<i64>,
+) -> Int64Array {
+    const MICROS_PER_SECOND: i64 = 1_000_000;
+    // Chrono fixed offsets are each less than a day. Allow both to be applied.
+    const CALENDAR_MARGIN: i64 = 2 * 86_400 * MICROS_PER_SECOND;
+    const SAFE_MIN: i64 = DateTime::<Utc>::MIN_UTC.timestamp_micros() + CALENDAR_MARGIN;
+    const SAFE_MAX: i64 = DateTime::<Utc>::MAX_UTC.timestamp_micros() - CALENDAR_MARGIN;
+
+    let (Some(from_zone), Some(to_zone)) = (from_zone, to_zone) else {
+        return Int64Array::new_null(timestamps.len());
+    };
+    let convert = |value| convert_with_calendar(value, &from_zone, &to_zone);
+    match (
+        from_zone.fixed_offset_seconds(),
+        to_zone.fixed_offset_seconds(),
+    ) {
+        (Some(0), Some(0)) if from_zone == to_zone => timestamps.clone(),
+        (Some(from), Some(to)) => {
+            let offset = i64::from(to - from) * MICROS_PER_SECOND;
+            timestamps
+                .iter()
+                .map(|value| {
+                    value.and_then(|value| {
+                        if (SAFE_MIN..=SAFE_MAX).contains(&value) {
+                            Some(value + offset)
+                        } else {
+                            convert(value)
+                        }
+                    })
+                })
+                .collect()
+        }
+        _ => timestamps
+            .iter()
+            .map(|value| value.and_then(convert))
+            .collect(),
+    }
 }
 
 // TODO: Support Spark's full i64 microsecond range for conversions between
@@ -642,4 +695,58 @@ fn microseconds_to_timestamp(array: Int64Array, time_unit: TimeUnit) -> Result<A
         TimeUnit::Nanosecond => numeric::mul(&array, &Int64Array::new_scalar(1_000))?,
     };
     Ok(cast::cast(&values, &DataType::Timestamp(time_unit, None))?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fixed_zones_match_calendar_conversion_at_timestamp_boundaries() {
+        let min = DateTime::<Utc>::MIN_UTC.timestamp_micros();
+        let max = DateTime::<Utc>::MAX_UTC.timestamp_micros();
+        let day = 86_400_000_000;
+        let values = Int64Array::from(vec![
+            None,
+            Some(i64::MIN),
+            Some(min - 1),
+            Some(min),
+            Some(min + day),
+            Some(min + 2 * day - 1),
+            Some(min + 2 * day),
+            Some(-1),
+            Some(0),
+            Some(1),
+            Some(max - 2 * day),
+            Some(max - 2 * day + 1),
+            Some(max - day),
+            Some(max),
+            Some(max + 1),
+            Some(i64::MAX),
+        ]);
+        let zones = [
+            "UTC",
+            "Z",
+            "+05:45",
+            "+18:00",
+            "-18:00",
+            "America/Los_Angeles",
+        ]
+        .map(|zone| ResolvedTimeZone::parse(zone).unwrap());
+        for convert in [
+            convert_tz_classic,
+            convert_tz_non_classic as fn(_, _, _) -> _,
+        ] {
+            for from in zones {
+                for to in zones {
+                    let actual = convert_singleton_zones(&values, Some(from), Some(to), convert);
+                    let expected: Int64Array = values
+                        .iter()
+                        .map(|value| value.and_then(|value| convert(value, &from, &to)))
+                        .collect();
+                    assert_eq!(actual, expected, "{from:?} to {to:?}");
+                }
+            }
+        }
+    }
 }
