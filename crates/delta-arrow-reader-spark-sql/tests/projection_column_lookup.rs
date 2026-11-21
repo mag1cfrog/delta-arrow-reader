@@ -300,3 +300,6 @@ async fn native_projection_merges_preserve_values_nulls_and_executed_types() -> 
     }
     Ok(())
 }
+
+#[path = "projection_columns/dependencies.rs"]
+mod dependencies;
