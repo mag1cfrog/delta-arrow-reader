@@ -3023,3 +3023,9 @@ which error occurs first.
 BROUND computes the factor once for a literal scale and a nonempty
 double column. It uses the same rounding calculation as the scale
 column path. Other argument types and shapes use the original adapter.
+
+### Literal TIME_DIFF end time (#1414)
+
+With a literal unit and end time, TIME_DIFF applies the existing
+subtraction and division to the start column without expanding the end.
+Other argument shapes use the existing evaluation.

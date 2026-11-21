@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
 use datafusion::arrow::array::types::Time64MicrosecondType;
@@ -119,8 +120,22 @@ impl ScalarUDFImpl for SparkTimeDiff {
             )));
         }
 
-        // Broadcast scalar time args to arrays of `number_rows`.
         let starts = to_time64_array(start_arg, "start", "time_diff", number_rows)?;
+        if let (
+            ColumnarValue::Array(_),
+            ColumnarValue::Scalar(
+                ScalarValue::Utf8(Some(unit)) | ScalarValue::LargeUtf8(Some(unit)),
+            ),
+            ColumnarValue::Scalar(ScalarValue::Time64Microsecond(Some(end))),
+        ) = (start_arg, unit_arg, end_arg)
+            && starts.len() == number_rows
+        {
+            let Some(divisor) = unit_divisor(unit) else {
+                return invalid_time_unit_err("time_diff", unit);
+            };
+            let result: Int64Array = starts.unary(|start| (*end - start) / divisor);
+            return Ok(ColumnarValue::Array(Arc::new(result)));
+        }
         let ends = to_time64_array(end_arg, "end", "time_diff", number_rows)?;
 
         let result: ArrayRef = match unit_arg {
@@ -202,4 +217,68 @@ where
         }
     }
     Ok(Arc::new(builder.finish()) as ArrayRef)
+}
+
+#[cfg(test)]
+mod tests {
+    use datafusion::arrow::array::Time64MicrosecondArray;
+    use datafusion::arrow::datatypes::Field;
+
+    use super::*;
+
+    #[test]
+    fn literal_time_diff_end_matches_broadcast_end() -> Result<()> {
+        let starts = Time64MicrosecondArray::from(vec![
+            Some(0),
+            None,
+            Some(3_600_000_001),
+            Some(86_399_999_999),
+        ]);
+        let function = SparkTimeDiff::new();
+        for (length, number_rows) in [(0, 0), (4, 4), (4, 5)] {
+            for unit in [
+                None,
+                Some("microsecond"),
+                Some("MILLISECOND"),
+                Some("SECOND"),
+                Some("MINUTE"),
+                Some("HOUR"),
+                Some("DAY"),
+            ] {
+                for end in [0, 3_600_000_000, 86_399_999_999] {
+                    let invoke = |end: ColumnarValue| {
+                        let args = vec![
+                            ColumnarValue::Scalar(ScalarValue::Utf8(unit.map(str::to_owned))),
+                            ColumnarValue::Array(Arc::new(starts.slice(0, length))),
+                            end,
+                        ];
+                        function.invoke_with_args(ScalarFunctionArgs {
+                            arg_fields: args
+                                .iter()
+                                .map(|arg| Arc::new(Field::new("arg", arg.data_type(), true)))
+                                .collect(),
+                            args,
+                            number_rows,
+                            return_field: Arc::new(Field::new("difference", DataType::Int64, true)),
+                            config_options: Arc::new(Default::default()),
+                        })
+                    };
+                    let scalar = ScalarValue::Time64Microsecond(Some(end));
+                    let expected =
+                        invoke(ColumnarValue::Array(scalar.to_array_of_size(number_rows)?));
+                    let actual = invoke(ColumnarValue::Scalar(scalar));
+                    match (actual, expected) {
+                        (Ok(ColumnarValue::Array(actual)), Ok(ColumnarValue::Array(expected))) => {
+                            assert_eq!(actual.to_data(), expected.to_data());
+                        }
+                        (Err(actual), Err(expected)) => {
+                            assert_eq!(actual.to_string(), expected.to_string())
+                        }
+                        outcomes => panic!("different time difference outcomes: {outcomes:?}"),
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
 }
