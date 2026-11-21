@@ -4,6 +4,7 @@ use datafusion::arrow::array::{
     Array, ArrayRef, AsArray, BinaryArrayType, BinaryBuilder, GenericBinaryBuilder,
     GenericStringBuilder, LargeBinaryBuilder, OffsetSizeTrait, StringArrayType,
 };
+use datafusion::arrow::compute::{CastOptions, cast_with_options};
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
 use datafusion_common::{Result, ScalarValue, exec_datafusion_err, exec_err, internal_err};
 use datafusion_expr::{ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl};
@@ -391,6 +392,25 @@ impl ScalarUDFImpl for SparkDecode {
                         | ScalarValue::LargeUtf8(Some(char_set))
                         | ScalarValue::Utf8View(Some(char_set)),
                     ) => {
+                        let string_type = match binary_array.data_type() {
+                            DataType::Binary => Some(DataType::Utf8),
+                            DataType::LargeBinary => Some(DataType::LargeUtf8),
+                            _ => None,
+                        };
+                        if let Some(string_type) = string_type
+                            && char_set.trim().eq_ignore_ascii_case("UTF-8")
+                            && let Ok(decoded) = cast_with_options(
+                                binary_array.as_ref(),
+                                &string_type,
+                                &CastOptions {
+                                    safe: false,
+                                    ..Default::default()
+                                },
+                            )
+                        {
+                            return Ok(ColumnarValue::Array(decoded));
+                        }
+
                         let result = match binary_array.data_type() {
                             DataType::Binary => {
                                 let binary_array = binary_array.as_binary::<i32>();
@@ -726,4 +746,109 @@ where
         }
     }
     Ok(Arc::new(builder.finish()) as ArrayRef)
+}
+
+#[cfg(test)]
+mod tests {
+    use datafusion::arrow::array::{GenericBinaryArray, StringArray};
+    use datafusion_common::config::ConfigOptions;
+
+    use super::*;
+
+    fn compare_scalar_decode<O: OffsetSizeTrait>(
+        bytes: GenericBinaryArray<O>,
+        charset: &str,
+    ) -> Result<()> {
+        let rows = bytes.len();
+        let charsets = StringArray::from(vec![charset; rows]);
+        let expected = process_decode_arrays::<_, _, O>(&bytes, &charsets);
+        let bytes_type = bytes.data_type().clone();
+        let output_type = if O::IS_LARGE {
+            DataType::LargeUtf8
+        } else {
+            DataType::Utf8
+        };
+        let actual = SparkDecode::new()
+            .invoke_with_args(ScalarFunctionArgs {
+                args: vec![
+                    ColumnarValue::Array(Arc::new(bytes)),
+                    ColumnarValue::Scalar(ScalarValue::Utf8(Some(charset.into()))),
+                ],
+                arg_fields: vec![
+                    Arc::new(Field::new("bytes", bytes_type, true)),
+                    Arc::new(Field::new("charset", DataType::Utf8, false)),
+                ],
+                number_rows: rows,
+                return_field: Arc::new(Field::new("decoded", output_type, true)),
+                config_options: Arc::new(ConfigOptions::default()),
+            })
+            .and_then(|decoded| decoded.into_array(rows));
+        match (actual, expected) {
+            (Ok(actual), Ok(expected)) => {
+                actual.to_data().validate_full()?;
+                assert_eq!(actual.data_type(), expected.data_type());
+                assert_eq!(actual.as_ref(), expected.as_ref(), "{charset}");
+            }
+            (Err(actual), Err(expected)) => assert_eq!(actual.to_string(), expected.to_string()),
+            (actual, expected) => panic!("{charset}: actual {actual:?}, expected {expected:?}"),
+        }
+        Ok(())
+    }
+
+    fn check_decode_charsets<O: OffsetSizeTrait>() -> Result<()> {
+        for charset in [
+            "US-ASCII",
+            "ISO-8859-1",
+            "UTF-8",
+            "  uTf-8  ",
+            "UTF-16BE",
+            "UTF-16LE",
+            "UTF-16",
+        ] {
+            let encoded = ["simple", "Aé🙂", ""]
+                .into_iter()
+                .map(|value| encode(value, charset))
+                .collect::<Result<Vec<_>>>()?;
+            let bytes: GenericBinaryArray<O> = [
+                Some(encoded[0].as_slice()),
+                None,
+                Some(encoded[1].as_slice()),
+                Some(encoded[2].as_slice()),
+            ]
+            .into_iter()
+            .collect();
+            compare_scalar_decode(bytes.clone(), charset)?;
+            compare_scalar_decode(bytes.slice(1, 3), charset)?;
+            compare_scalar_decode(bytes.slice(0, 0), charset)?;
+        }
+
+        let malformed: GenericBinaryArray<O> = [None, Some(&[0xff][..]), Some(&b"clean"[..])]
+            .into_iter()
+            .collect();
+        for charset in [
+            "US-ASCII",
+            "ISO-8859-1",
+            "UTF-8",
+            "UTF-16BE",
+            "UTF-16LE",
+            "UTF-16",
+            "unknown",
+        ] {
+            compare_scalar_decode(malformed.clone(), charset)?;
+        }
+        compare_scalar_decode(malformed.slice(1, 2), "UTF-8")?;
+        compare_scalar_decode(malformed.slice(2, 1), "UTF-8")?;
+        compare_scalar_decode(malformed.slice(0, 1), "unknown")?;
+
+        // The buffer is valid UTF-8, but the two rows split one codepoint.
+        let split_codepoint: GenericBinaryArray<O> =
+            [Some(&[0xc3][..]), Some(&[0xa9][..])].into_iter().collect();
+        compare_scalar_decode(split_codepoint, "UTF-8")
+    }
+
+    #[test]
+    fn scalar_decode_matches_per_row_conversion() -> Result<()> {
+        check_decode_charsets::<i32>()?;
+        check_decode_charsets::<i64>()
+    }
 }
