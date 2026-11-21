@@ -11,6 +11,10 @@ both ANSI modes on committed List and LargeList inputs. Include NULL
 arrays, empty lists and batches, sliced arrays, NULL children, BIGINT
 limits, and larger rows that use either side as the lookup table.
 Run the existing Spark-reference array tests for other storage and types.
+The SQL regression also exercises derived operands, both directions and
+ANSI cast failures with NULL and empty arrays. Compare the base and
+candidate plans and results on the two derived-operand fixture probes
+before clocks.
 
 Report median and range of nine retained samples in ns per input row
 above projection. For each ANSI mode the target is candidate Spark
