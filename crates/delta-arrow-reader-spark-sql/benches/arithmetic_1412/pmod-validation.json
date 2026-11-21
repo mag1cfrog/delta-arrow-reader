@@ -1,0 +1,58 @@
+{
+  "functions": [
+    {
+      "id": "scalar.math.pmod_positive_bounds",
+      "spark_sql": "WITH operands AS (\n    SELECT id,\n           CASE id WHEN 0 THEN CAST('-9223372036854775808' AS BIGINT)\n                   WHEN 1 THEN CAST('9223372036854775807' AS BIGINT)\n                   WHEN 2 THEN CAST(NULL AS BIGINT) ELSE i END AS dividend,\n           CASE id WHEN 0 THEN CAST('9223372036854775807' AS BIGINT)\n                   WHEN 1 THEN CAST(1 AS BIGINT)\n                   WHEN 3 THEN CAST(NULL AS BIGINT) ELSE CAST(3 AS BIGINT) END AS divisor\n    FROM bench WHERE id < 8\n)\nSELECT id, PMOD(dividend,divisor) AS result FROM operands",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "scalar.math.pmod_zero_divisor",
+      "spark_sql": "SELECT id, PMOD(i,CASE WHEN id=1 THEN 0 ELSE p END) AS result FROM bench WHERE id < 8",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "scalar.math.pmod_zero_under_null",
+      "spark_sql": "SELECT id, PMOD(i,CASE WHEN id=0 THEN 0 ELSE p END) AS result FROM bench WHERE id < 8",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "scalar.math.pmod_negative_divisor",
+      "spark_sql": "SELECT id, PMOD(i,CASE WHEN id=1 THEN -3 ELSE p END) AS result FROM bench WHERE id < 8",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "scalar.math.pmod_negative_overflow",
+      "spark_sql": "WITH operands AS (\n    SELECT id, CASE WHEN id=1 THEN CAST('-9223372036854775807' AS BIGINT) ELSE i END AS dividend,\n               CASE WHEN id=1 THEN CAST('-9223372036854775808' AS BIGINT) ELSE CAST(p AS BIGINT) END AS divisor\n    FROM bench WHERE id < 8\n)\nSELECT id, PMOD(dividend,divisor) AS result FROM operands",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "scalar.math.pmod_literal_divisor",
+      "spark_sql": "SELECT id,PMOD(i,7L) AS result FROM bench WHERE id < 8",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "scalar.math.pmod_narrower_integer",
+      "spark_sql": "SELECT id,PMOD(CAST(i AS INT),p) AS result FROM bench WHERE id < 8",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "scalar.math.pmod_floating_and_decimal",
+      "spark_sql": "SELECT id,\n    PMOD(CAST(i AS DOUBLE), CAST(p AS DOUBLE)) AS floating_result,\n    PMOD(CAST(i AS DECIMAL(18,2)), CAST(p AS DECIMAL(18,2))) AS decimal_result\nFROM bench WHERE id < 8",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "scalar.math.pmod_empty",
+      "spark_sql": "SELECT id,PMOD(i,p) AS result FROM bench WHERE id < 0",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    }
+  ]
+}

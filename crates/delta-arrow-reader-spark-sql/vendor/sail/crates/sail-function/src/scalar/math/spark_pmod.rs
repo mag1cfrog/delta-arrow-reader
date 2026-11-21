@@ -1,7 +1,9 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
-use datafusion::arrow::datatypes::{DataType, FieldRef};
+use datafusion::arrow::array::{AsArray, Int64Array};
+use datafusion::arrow::compute::kernels::{aggregate::min, arity::binary};
+use datafusion::arrow::datatypes::{DataType, FieldRef, Int64Type};
 use datafusion_common::{Result, internal_err};
 use datafusion_expr::{
     ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature,
@@ -60,6 +62,86 @@ impl ScalarUDFImpl for SparkPmod {
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
+        if let [ColumnarValue::Array(left), ColumnarValue::Array(right)] = args.args.as_slice()
+            && let (Some(left), Some(right)) = (
+                left.as_primitive_opt::<Int64Type>(),
+                right.as_primitive_opt::<Int64Type>(),
+            )
+            && left.len() == right.len()
+            && min(right).is_some_and(|minimum| minimum > 0)
+        {
+            let result: Int64Array = binary(left, right, |left, right| {
+                // The kernel may visit NULL slots. Only visible divisors must be positive.
+                let remainder = left % right.max(1);
+                if remainder < 0 {
+                    remainder + right
+                } else {
+                    remainder
+                }
+            })?;
+            return Ok(ColumnarValue::Array(Arc::new(result)));
+        }
         spark_pmod(&args.args, self.ansi_mode)
     }
+}
+
+#[test]
+fn positive_bigint_pmod_matches_the_existing_kernel() -> Result<()> {
+    use datafusion::arrow::datatypes::Field;
+    use datafusion_common::ScalarValue;
+
+    let array = |values| ColumnarValue::Array(Arc::new(Int64Array::from(values)));
+    let left = array(vec![
+        None,
+        Some(i64::MIN),
+        Some(i64::MAX),
+        Some(-5),
+        Some(1),
+    ]);
+    let cases = [
+        [
+            left.clone(),
+            array(vec![Some(2), Some(i64::MAX), None, Some(3), Some(1)]),
+        ],
+        [
+            left.clone(),
+            array(vec![Some(0), Some(1), Some(0), None, Some(1)]),
+        ],
+        [
+            left.clone(),
+            array(vec![None, Some(-1), Some(1), Some(i64::MIN), Some(1)]),
+        ],
+        [left, ColumnarValue::Scalar(ScalarValue::Int64(Some(7)))],
+        [array(vec![]), array(vec![])],
+    ];
+    for ansi_mode in [false, true] {
+        for args in &cases {
+            let ColumnarValue::Array(left) = &args[0] else {
+                unreachable!();
+            };
+            let number_rows = left.len();
+            let field = Arc::new(Field::new("value", DataType::Int64, true));
+            let expected = spark_pmod(args, ansi_mode);
+            let actual = SparkPmod::new(ansi_mode).invoke_with_args(ScalarFunctionArgs {
+                args: args.to_vec(),
+                arg_fields: vec![field.clone(), field.clone()],
+                number_rows,
+                return_field: field,
+                config_options: Arc::new(Default::default()),
+            });
+            match (expected, actual) {
+                (Ok(expected), Ok(actual)) => {
+                    assert_eq!(
+                        expected.into_array(number_rows)?.as_ref(),
+                        actual.into_array(number_rows)?.as_ref()
+                    );
+                }
+                (Err(expected), Err(actual)) => {
+                    assert_eq!(actual.to_string(), expected.to_string())
+                }
+                difference => panic!("{difference:?}"),
+            }
+        }
+    }
+    Ok(())
 }
