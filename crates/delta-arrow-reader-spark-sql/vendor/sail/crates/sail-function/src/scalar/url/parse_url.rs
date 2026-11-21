@@ -232,22 +232,7 @@ fn is_string_type(dt: &DataType) -> bool {
     )
 }
 
-/// Core implementation of URL parsing function.
-///
-/// # Arguments
-///
-/// * `args` - A slice of ArrayRef containing the input arrays:
-///   - `args[0]` - URL array: The URLs to parse
-///   - `args[1]` - Part array: The URL components to extract (HOST, PATH, QUERY, etc.)
-///   - `args[2]` - Key array (optional): For QUERY part, the specific parameter names to extract
-///
-/// # Return Value
-///
-/// Returns `Result<ArrayRef>` containing:
-/// - A string array with extracted URL components
-/// - `None` values where extraction failed or component doesn't exist
-/// - The output array type (StringArray or LargeStringArray) is determined by input types
-///
+/// Borrow the literal part and pass the absent key directly to the parser.
 pub(super) fn parse_url_with_literal_part(
     args: &[ColumnarValue],
     handle_parse_result: impl Fn(Result<Option<String>>) -> Result<Option<String>>,
@@ -273,6 +258,22 @@ pub(super) fn parse_url_with_literal_part(
     }))
 }
 
+/// Core implementation of URL parsing function.
+///
+/// # Arguments
+///
+/// * `args` - A slice of ArrayRef containing the input arrays:
+///   - `args[0]` - URL array: The URLs to parse
+///   - `args[1]` - Part array: The URL components to extract (HOST, PATH, QUERY, etc.)
+///   - `args[2]` - Key array (optional): For QUERY part, the specific parameter names to extract
+///
+/// # Return Value
+///
+/// Returns `Result<ArrayRef>` containing:
+/// - A string array with extracted URL components
+/// - `None` values where extraction failed or component doesn't exist
+/// - The output array type (StringArray or LargeStringArray) is determined by input types
+///
 fn spark_parse_url(args: &[ArrayRef]) -> Result<ArrayRef> {
     spark_handled_parse_url(args, |x| x)
 }
