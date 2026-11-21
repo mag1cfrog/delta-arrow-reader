@@ -1,0 +1,29 @@
+{
+  "functions": [
+    {
+      "kind": "generator",
+      "category": "generator",
+      "name": "inline",
+      "registration": "F::udf(Explode::new(ExplodeKind::Inline))",
+      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/generator.rs:76",
+      "implementation_anchors": [
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-function/src/scalar/explode.rs:15",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-function/src/scalar/explode.rs:9",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/generator.rs:76"
+      ],
+      "id": "generator.generator.inline_boundaries",
+      "aliases": [],
+      "spark_sql": "WITH input AS (\n    SELECT id, CASE id % 6\n        WHEN 0 THEN CAST(NULL AS ARRAY<STRUCT<x: BIGINT, y: STRING>>)\n        WHEN 1 THEN CAST(ARRAY() AS ARRAY<STRUCT<x: BIGINT, y: STRING>>)\n        WHEN 2 THEN ARRAY(CAST(NULL AS STRUCT<x: BIGINT, y: STRING>))\n        WHEN 3 THEN ARRAY(NAMED_STRUCT('x', CAST(NULL AS BIGINT), 'y', 'one'))\n        ELSE ARRAY(\n            NAMED_STRUCT('x', id, 'y', CAST(NULL AS STRING)),\n            NAMED_STRUCT('x', id + 1, 'y', 'two')\n        )\n    END AS records\n    FROM bench WHERE id < 24\n)\nSELECT id, INLINE(records) AS (x, y) FROM input",
+      "native_sql": null,
+      "input_columns": [
+        "id",
+        "i",
+        "records"
+      ],
+      "projection_sql": "SELECT id,i,records FROM bench",
+      "exclusion": null,
+      "class": "paired",
+      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+    }
+  ]
+}
