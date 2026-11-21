@@ -511,12 +511,12 @@ mod tests {
             ])),
         ];
         for input in inputs {
-            let mut sliding = CountMinSketchAccumulator::new(0.9, 0.5, -7)?;
+            let mut sliding = CountMinSketchAccumulator::new(0.9, 0.9, -7)?;
             let mut last = 0..0;
             for frame in [0..0, 0..3, 1..5, 2..5, 5..7, 6..8, 8..8] {
                 sliding.update_batch(&[input.slice(last.end, frame.end - last.end)])?;
                 sliding.retract_batch(&[input.slice(last.start, frame.start - last.start)])?;
-                let mut original = CountMinSketchAccumulator::new(0.9, 0.5, -7)?;
+                let mut original = CountMinSketchAccumulator::new(0.9, 0.9, -7)?;
                 original.update_batch(&[input.slice(frame.start, frame.len())])?;
                 assert_eq!(
                     sliding.evaluate()?,
