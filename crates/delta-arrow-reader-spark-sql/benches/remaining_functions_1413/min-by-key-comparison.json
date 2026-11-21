@@ -4,7 +4,7 @@
   "statement_manifest_sha256": "d006b18aec9a7e82f864b705d99e60740da2e5e542da2409578cdcfbae52929e",
   "overall_timeout_seconds": 1800,
   "staging_tip": "91f4487e67dd8c58bae907980b681b759ebc931d",
-  "candidate_source": "c8d2226b4a410b39482cf938013d28a4f7fa33b0",
+  "candidate_source": "107ddd5d1862a71d6787badce9c39dfe8b4cc229",
   "case_ids": [
     "aggregate.aggregate.min_by"
   ],
