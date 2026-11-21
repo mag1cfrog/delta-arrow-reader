@@ -81,6 +81,17 @@ impl ScalarUDFImpl for SparkMonthsBetweenRoundOff {
                 apply_round_off(*months, *round),
             )));
         }
+        if let (ColumnarValue::Array(months), ColumnarValue::Scalar(ScalarValue::Boolean(round))) =
+            (months, round)
+            && let Some(months) = months.as_any().downcast_ref::<Float64Array>()
+        {
+            let result = months
+                .iter()
+                .take(args.number_rows)
+                .map(|months| apply_round_off(months, *round))
+                .collect::<Float64Array>();
+            return Ok(ColumnarValue::Array(Arc::new(result)));
+        }
         let months = months.to_array(args.number_rows)?;
         let round = round.to_array(args.number_rows)?;
         let result = months
@@ -96,6 +107,54 @@ impl ScalarUDFImpl for SparkMonthsBetweenRoundOff {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn literal_rounding_matches_broadcast_rounding() -> Result<()> {
+        let function = SparkMonthsBetweenRoundOff::new();
+        let months = ColumnarValue::Array(Arc::new(Float64Array::from(vec![
+            Some(1.0 / 3.0),
+            None,
+            Some(-1.0 / 3.0),
+            Some(-0.0),
+            Some(f64::INFINITY),
+            Some(f64::NAN),
+        ])));
+        for number_rows in [0, 4, 6, 8] {
+            let invoke = |round: ColumnarValue| {
+                function.invoke_with_args(ScalarFunctionArgs {
+                    args: vec![months.clone(), round],
+                    arg_fields: vec![
+                        Arc::new(Field::new("months", DataType::Float64, true)),
+                        Arc::new(Field::new("round", DataType::Boolean, true)),
+                    ],
+                    return_field: Arc::new(Field::new("result", DataType::Float64, true)),
+                    number_rows,
+                    config_options: Arc::new(Default::default()),
+                })
+            };
+            for round in [Some(true), Some(false), None] {
+                let scalar = ScalarValue::Boolean(round);
+                let expected = invoke(ColumnarValue::Array(scalar.to_array_of_size(number_rows)?))?;
+                let actual = invoke(ColumnarValue::Scalar(scalar))?;
+                let (ColumnarValue::Array(actual), ColumnarValue::Array(expected)) =
+                    (actual, expected)
+                else {
+                    panic!("rounding a month column must return an array");
+                };
+                assert_eq!(actual.data_type(), expected.data_type());
+                assert_eq!(actual.len(), expected.len());
+                let actual = actual.as_primitive::<Float64Type>();
+                let expected = expected.as_primitive::<Float64Type>();
+                assert!(
+                    actual
+                        .iter()
+                        .map(|x| x.map(f64::to_bits))
+                        .eq(expected.iter().map(|x| x.map(f64::to_bits)))
+                );
+            }
+        }
+        Ok(())
+    }
 
     #[test]
     fn rounds_to_eight_digits_and_propagates_null() {
