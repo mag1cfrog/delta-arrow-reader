@@ -62,8 +62,8 @@ def git(path, *args):
     return subprocess.check_output(["git", "-C", str(path), *args], text=True).strip()
 
 
-def build(repository, target, output, variant):
-    source = protocol()["source"]
+def build(repository, target, output, variant, source=None):
+    source = source or protocol()["source"]
     assert git(repository, "rev-parse", "HEAD") == source and not git(repository, "status", "--porcelain")
     workspace = repository / WORKSPACE
     files = dict(changes(workspace, variant == "phases"))

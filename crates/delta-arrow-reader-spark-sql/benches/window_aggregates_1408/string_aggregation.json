@@ -1,0 +1,17 @@
+{
+  "staging_source": "7f66c78cb8a1e03f1f300fe0403f0636e37b122a",
+  "staging_tip": "fa8c95c92644c09e4eefc3eb56d366b27765f17e",
+  "candidate_source": "8ccf74413fababa5c7faa08d970497f353d3ff51",
+  "case_ids": [
+    "aggregate.aggregate.listagg",
+    "aggregate.aggregate.string_agg",
+    "window.window.array_join",
+    "window.window.listagg",
+    "window.window.string_agg"
+  ],
+  "spark_plan_contains": {
+    "staging": "array_to_string(",
+    "candidate": "string_agg("
+  },
+  "overall_timeout_seconds": 14400
+}
