@@ -29,3 +29,8 @@ The scalar-only arguments run over one source row so the observer can
 validate the executed plan. The enclosing CAST and ABS queries check
 the declaration available before generator expansion, including any
 existing planning failure.
+
+The initial candidate passed the enclosing CAST and ABS where staging
+raised planning errors. The timed candidate retains the original STRUCT
+declaration before expansion. Require both queries to produce the
+same staging error in both ANSI modes before clocks.
