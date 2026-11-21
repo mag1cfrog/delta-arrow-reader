@@ -704,20 +704,14 @@ fn arrays_overlap(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         left.nullable(schema)? || left_element.is_nullable(),
         right.nullable(schema)? || right_element.is_nullable(),
     ];
-    if matches!(
+    let use_bigint_membership = matches!(
         (&left, &right),
         (expr::Expr::Column(_), expr::Expr::Column(_))
     ) && matches!(
         (&left_type, &right_type),
         (DataType::List(_), DataType::List(_)) | (DataType::LargeList(_), DataType::LargeList(_))
     ) && left_element.data_type() == &DataType::Int64
-        && right_element.data_type() == &DataType::Int64
-    {
-        return Ok(ScalarUDF::from(BigIntArraysOverlap {
-            result_nullable: operand_nullable.into_iter().any(|nullable| nullable),
-        })
-        .call(vec![left, right]));
-    }
+        && right_element.data_type() == &DataType::Int64;
 
     let left_needs_value_cast =
         !same_positional_logical_type(left_element.data_type(), &element_type);
@@ -749,14 +743,6 @@ fn arrays_overlap(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         };
     let left = prepare_operand(left, &left_type, left_needs_value_cast)?;
     let right = prepare_operand(right, &right_type, right_needs_value_cast)?;
-    let same_type_null_only_array = cast(
-        make_array(vec![lit(ScalarValue::Null)]),
-        nullable_array_type,
-    );
-
-    let left_has_null = expr_fn::array_has_any(left.clone(), same_type_null_only_array.clone());
-    let right_has_null = expr_fn::array_has_any(right.clone(), same_type_null_only_array);
-
     // A required ARRAY constructor can still fail while evaluating its elements.
     let result = when(
         is_null(expr_fn::array_length(left.clone())),
@@ -772,19 +758,33 @@ fn arrays_overlap(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
             expr_fn::array_length(right.clone()).eq(lit(0_i64)),
         ),
         lit(false),
-    )
-    .when(
-        or(left_has_null, right_has_null),
-        or(
-            expr_fn::array_has_any(
-                array_compact_expr(left.clone()),
-                array_compact_expr(right.clone()),
-            ),
-            lit(ScalarValue::Null),
-        ),
-    )
-    .when(lit(true), expr_fn::array_has_any(left, right))
-    .end()?;
+    );
+    let result = if use_bigint_membership {
+        // Keep the parent and empty-list gates above so derived operands
+        // retain their evaluation before membership.
+        result.otherwise(ScalarUDF::from(BigIntArraysOverlap).call(vec![left, right]))?
+    } else {
+        let same_type_null_only_array = cast(
+            make_array(vec![lit(ScalarValue::Null)]),
+            nullable_array_type,
+        );
+
+        let left_has_null = expr_fn::array_has_any(left.clone(), same_type_null_only_array.clone());
+        let right_has_null = expr_fn::array_has_any(right.clone(), same_type_null_only_array);
+        result
+            .when(
+                or(left_has_null, right_has_null),
+                or(
+                    expr_fn::array_has_any(
+                        array_compact_expr(left.clone()),
+                        array_compact_expr(right.clone()),
+                    ),
+                    lit(ScalarValue::Null),
+                ),
+            )
+            .when(lit(true), expr_fn::array_has_any(left, right))
+            .end()?
+    };
     Ok(ScalarUDF::from(ArraysOverlapResultField { operand_nullable }).call(vec![result]))
 }
 

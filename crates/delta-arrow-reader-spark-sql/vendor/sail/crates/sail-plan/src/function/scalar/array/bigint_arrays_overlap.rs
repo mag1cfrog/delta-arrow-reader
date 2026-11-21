@@ -6,18 +6,14 @@ use std::sync::{Arc, LazyLock};
 use datafusion::arrow::array::{
     Array, ArrayRef, AsArray, BooleanBuilder, GenericListArray, Int64Array, OffsetSizeTrait,
 };
-use datafusion::arrow::datatypes::{DataType, Field, FieldRef, Int64Type};
+use datafusion::arrow::datatypes::{DataType, Int64Type};
 use datafusion_common::utils::take_function_args;
 use datafusion_common::{HashSet, Result, ScalarValue, internal_err};
-use datafusion_expr::{
-    ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
-};
+use datafusion_expr::{ColumnarValue, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility};
 use datafusion_functions::utils::make_scalar_function;
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-pub(super) struct BigIntArraysOverlap {
-    pub(super) result_nullable: bool,
-}
+pub(super) struct BigIntArraysOverlap;
 
 impl ScalarUDFImpl for BigIntArraysOverlap {
     fn name(&self) -> &str {
@@ -32,26 +28,6 @@ impl ScalarUDFImpl for BigIntArraysOverlap {
 
     fn return_type(&self, _arguments: &[DataType]) -> Result<DataType> {
         Ok(DataType::Boolean)
-    }
-
-    fn return_field_from_args(&self, _args: ReturnFieldArgs) -> Result<FieldRef> {
-        Ok(Arc::new(Field::new(
-            self.name(),
-            DataType::Boolean,
-            self.result_nullable,
-        )))
-    }
-
-    fn short_circuits(&self) -> bool {
-        true
-    }
-
-    fn short_circuits_on_any_null_argument(&self) -> bool {
-        true
-    }
-
-    fn requires_row_ordered_errors(&self) -> bool {
-        true
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
