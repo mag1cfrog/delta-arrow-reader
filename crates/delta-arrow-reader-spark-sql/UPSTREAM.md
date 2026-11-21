@@ -2636,3 +2636,10 @@ same hash buckets and total that insertion increments. Dimensions, seed,
 hashing, merge behavior and serialization stay shared with the ordinary
 aggregate. A moving frame retains its sketch instead of building and
 populating a new one for each row.
+
+### Retraction for primitive MODE values (#1408)
+
+The primitive MODE accumulator decrements the frequency of each departing
+nonnull value and removes entries when their counts reach zero. The
+existing evaluation and tie rules still select the result. Float and
+string windows retain their original replay paths.
