@@ -1,4 +1,6 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::cmp::Ordering;
+use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::ops::Deref;
 
@@ -6,6 +8,7 @@ use std::ops::Deref;
 use datafusion::arrow::array::ArrayRef;
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
 use datafusion::common::ScalarValue;
+use datafusion::common::cast::as_int64_array;
 use datafusion::error::DataFusionError;
 use datafusion::functions_aggregate::first_last::last_value_udaf;
 use datafusion::logical_expr::expr::{AggregateFunction, Sort};
@@ -80,6 +83,113 @@ impl Accumulator for MaxMinByAccumulator {
     }
 }
 
+#[derive(Debug)]
+struct Int64ExtremumRow {
+    position: usize,
+    key: i64,
+    value: Option<i64>,
+}
+
+#[derive(Debug)]
+struct SlidingInt64ByKeyAccumulator {
+    candidates: VecDeque<Int64ExtremumRow>,
+    rows_added: usize,
+    rows_removed: usize,
+    is_max: bool,
+}
+
+impl SlidingInt64ByKeyAccumulator {
+    fn new(is_max: bool) -> Self {
+        Self {
+            candidates: VecDeque::new(),
+            rows_added: 0,
+            rows_removed: 0,
+            is_max,
+        }
+    }
+}
+
+impl Accumulator for SlidingInt64ByKeyAccumulator {
+    fn update_batch(&mut self, arrays: &[ArrayRef]) -> Result<(), DataFusionError> {
+        let values = as_int64_array(&arrays[0])?;
+        let keys = as_int64_array(&arrays[1])?;
+        let better_ordering = if self.is_max {
+            Ordering::Greater
+        } else {
+            Ordering::Less
+        };
+        for (offset, (key, value)) in keys.iter().zip(values.iter()).enumerate() {
+            let Some(key) = key else { continue };
+            // Keep equal keys in arrival order. The earliest row wins until it leaves.
+            while self
+                .candidates
+                .back()
+                .is_some_and(|row| key.cmp(&row.key) == better_ordering)
+            {
+                self.candidates.pop_back();
+            }
+            self.candidates.push_back(Int64ExtremumRow {
+                position: self.rows_added + offset,
+                key,
+                value,
+            });
+        }
+        self.rows_added += keys.len();
+        Ok(())
+    }
+
+    fn retract_batch(&mut self, arrays: &[ArrayRef]) -> Result<(), DataFusionError> {
+        self.rows_removed += arrays[1].len();
+        while self
+            .candidates
+            .front()
+            .is_some_and(|row| row.position < self.rows_removed)
+        {
+            self.candidates.pop_front();
+        }
+        Ok(())
+    }
+
+    fn supports_retract_batch(&self) -> bool {
+        true
+    }
+
+    fn evaluate(&mut self) -> Result<ScalarValue, DataFusionError> {
+        Ok(ScalarValue::Int64(
+            self.candidates.front().and_then(|row| row.value),
+        ))
+    }
+
+    fn state(&mut self) -> Result<Vec<ScalarValue>, DataFusionError> {
+        let value = self.evaluate()?;
+        let key = self.candidates.front().map(|row| row.key);
+        Ok(vec![value, ScalarValue::Int64(key)])
+    }
+
+    fn merge_batch(&mut self, states: &[ArrayRef]) -> Result<(), DataFusionError> {
+        self.update_batch(states)
+    }
+
+    fn size(&self) -> usize {
+        std::mem::size_of_val(self)
+            + self.candidates.capacity() * std::mem::size_of::<Int64ExtremumRow>()
+    }
+}
+
+fn sliding_by_key_accumulator(
+    args: AccumulatorArgs,
+    is_max: bool,
+) -> Result<Box<dyn Accumulator>, DataFusionError> {
+    let value_type = args.return_field.data_type();
+    let key_type = args.exprs[1].data_type(args.schema)?;
+    if value_type == &DataType::Int64 && key_type == DataType::Int64 {
+        return Ok(Box::new(SlidingInt64ByKeyAccumulator::new(is_max)));
+    }
+    Ok(Box::new(MaxMinByAccumulator::new(
+        value_type, &key_type, is_max,
+    )?))
+}
+
 #[derive(PartialEq, Eq, Hash)]
 pub struct MaxByFunction {
     signature: Signature,
@@ -142,6 +252,13 @@ impl AggregateUDFImpl for MaxByFunction {
             &ordering_type,
             true,
         )?))
+    }
+
+    fn create_sliding_accumulator(
+        &self,
+        args: AccumulatorArgs,
+    ) -> Result<Box<dyn Accumulator>, DataFusionError> {
+        sliding_by_key_accumulator(args, true)
     }
 
     fn state_fields(&self, args: StateFieldsArgs) -> Result<Vec<FieldRef>, DataFusionError> {
@@ -246,6 +363,13 @@ impl AggregateUDFImpl for MinByFunction {
         )?))
     }
 
+    fn create_sliding_accumulator(
+        &self,
+        args: AccumulatorArgs,
+    ) -> Result<Box<dyn Accumulator>, DataFusionError> {
+        sliding_by_key_accumulator(args, false)
+    }
+
     fn state_fields(&self, args: StateFieldsArgs) -> Result<Vec<FieldRef>, DataFusionError> {
         let value_type = args.return_field.data_type().clone();
         let ordering_type = args.input_fields[1].data_type().clone();
@@ -290,5 +414,88 @@ impl AggregateUDFImpl for MinByFunction {
 
     fn coerce_types(&self, arg_types: &[DataType]) -> Result<Vec<DataType>, DataFusionError> {
         get_min_max_by_result_type(arg_types)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use datafusion::arrow::array::Int64Array;
+
+    use super::*;
+
+    #[test]
+    fn sliding_extrema_retain_the_original_state_across_frame_moves() -> Result<(), DataFusionError>
+    {
+        let values: ArrayRef = Arc::new(Int64Array::from(vec![
+            Some(10),
+            None,
+            Some(12),
+            Some(13),
+            Some(14),
+            Some(15),
+            Some(16),
+            Some(i64::MIN),
+            None,
+            Some(i64::MAX),
+            Some(20),
+            Some(21),
+            Some(22),
+            Some(23),
+        ]));
+        let keys: ArrayRef = Arc::new(Int64Array::from(vec![
+            None,
+            Some(9),
+            Some(9),
+            Some(i64::MIN),
+            Some(i64::MIN),
+            Some(-1),
+            None,
+            Some(i64::MAX),
+            Some(i64::MAX),
+            Some(0),
+            Some(0),
+            None,
+            Some(2),
+            Some(2),
+        ]));
+        let slice = |start, end| {
+            [
+                values.slice(start, end - start),
+                keys.slice(start, end - start),
+            ]
+        };
+        for is_max in [false, true] {
+            let mut sliding = SlidingInt64ByKeyAccumulator::new(is_max);
+            let mut last = 0..0;
+            for frame in [
+                0..0,
+                0..3,
+                1..4,
+                2..6,
+                4..7,
+                6..10,
+                8..10,
+                10..10,
+                11..13,
+                11..14,
+                13..14,
+            ] {
+                if frame.is_empty() {
+                    sliding = SlidingInt64ByKeyAccumulator::new(is_max);
+                } else {
+                    sliding.update_batch(&slice(last.end, frame.end))?;
+                    sliding.retract_batch(&slice(last.start, frame.start))?;
+                }
+                let mut original =
+                    MaxMinByAccumulator::new(&DataType::Int64, &DataType::Int64, is_max)?;
+                original.update_batch(&slice(frame.start, frame.end))?;
+                assert_eq!(sliding.evaluate()?, original.evaluate()?, "{frame:?}");
+                assert_eq!(sliding.state()?, original.state()?, "{frame:?}");
+                last = frame;
+            }
+        }
+        Ok(())
     }
 }
