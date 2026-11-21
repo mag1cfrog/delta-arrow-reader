@@ -3012,3 +3012,12 @@ HLL_UNION uses a non-NULL literal `allowDifferentLgConfigK` directly
 in the shared union loop. The default is false. Column and NULL flags
 use the existing row evaluation. Each pair still checks its own sketch
 configuration and is merged by the same sketch code.
+
+### Literal MAKE_TIMESTAMP date and time fields (#1414)
+
+The six-argument timestamp constructor prepares the first timestamp and
+valid day range once when only the day varies. It uses the existing
+calendar and clock validation to prepare the first day. Invalid settings,
+NULL literals and other argument shapes use the existing evaluation.
+MAKE_TIMESTAMP, its LTZ and NTZ variants, and their TRY variants share
+this constructor.
