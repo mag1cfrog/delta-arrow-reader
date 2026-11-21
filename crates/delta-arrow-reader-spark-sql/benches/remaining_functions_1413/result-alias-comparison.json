@@ -1,7 +1,7 @@
 {
   "staging_source": "f06519e1e237dd94877b908647da031184d0acfe",
   "staging_tip": "03d75a4dccdb75a3c1501defbdc700cd29793c0f",
-  "candidate_source": "13b8285eb0f2fc4eb0c2e8799d420cbe660c3dcd",
+  "candidate_source": "1cc8189c8f22dea1fb65ce6c271b1c287307b19e",
   "statement_manifest": "manifest.json",
   "statement_manifest_sha256": "d006b18aec9a7e82f864b705d99e60740da2e5e542da2409578cdcfbae52929e",
   "case_ids": [
@@ -12,5 +12,23 @@
     "window.window.row_number",
     "window.window.stddev_samp"
   ],
-  "overall_timeout_seconds": 1800
+  "overall_timeout_seconds": 1800,
+  "spark_plan_contains": {
+    "staging": {
+      "scalar": [
+        " as value]\n  projectionexec:"
+      ],
+      "window": [
+        " as value]\n  projectionexec:"
+      ]
+    },
+    "candidate": {
+      "scalar": [
+        " as value]\n  datasourceexec:"
+      ],
+      "window": [
+        " as value]\n  boundedwindowaggexec:"
+      ]
+    }
+  }
 }
