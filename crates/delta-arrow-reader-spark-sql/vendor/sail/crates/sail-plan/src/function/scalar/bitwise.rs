@@ -1,11 +1,69 @@
-use datafusion::arrow::datatypes::DataType;
+// Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
+use std::sync::{Arc, LazyLock};
+
+use datafusion::arrow::array::AsArray;
+use datafusion::arrow::datatypes::{DataType, Int64Type, UInt64Type};
 use datafusion::functions::expr_fn::abs;
-use datafusion_expr::{ExprSchemable, Operator, cast, expr, lit, when};
+use datafusion::functions::math::abs::AbsFunc;
+use datafusion_common::utils::take_function_args;
+use datafusion_common::{Result, ScalarValue, internal_err};
+use datafusion_expr::{
+    ColumnarValue, ExprSchemable, Operator, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl,
+    Signature, Volatility, cast, expr, lit, when,
+};
 use datafusion_spark::function::bitwise::expr_fn as bitwise_fn;
 use sail_common_datafusion::utils::items::ItemTaker;
 
 use crate::error::{PlanError, PlanResult};
 use crate::function::common::{ScalarFunction, ScalarFunctionInput};
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+struct UnsignedShiftBits;
+
+impl ScalarUDFImpl for UnsignedShiftBits {
+    fn name(&self) -> &str {
+        "spark_unsigned_shift_bits"
+    }
+
+    fn signature(&self) -> &Signature {
+        static SIGNATURE: LazyLock<Signature> =
+            LazyLock::new(|| Signature::exact(vec![DataType::Int64], Volatility::Immutable));
+        &SIGNATURE
+    }
+
+    fn return_type(&self, _: &[DataType]) -> Result<DataType> {
+        Ok(DataType::UInt64)
+    }
+
+    fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
+        let [value] = take_function_args(self.name(), args.args.as_slice())?;
+        let unsigned = match value {
+            ColumnarValue::Array(array) => {
+                let array = array.as_primitive::<Int64Type>();
+                if array.values().contains(&i64::MIN)
+                    && array.iter().flatten().any(|value| value == i64::MIN)
+                {
+                    None
+                } else {
+                    Some(ColumnarValue::Array(Arc::new(
+                        array.reinterpret_cast::<UInt64Type>(),
+                    )))
+                }
+            }
+            ColumnarValue::Scalar(ScalarValue::Int64(Some(i64::MIN))) => None,
+            ColumnarValue::Scalar(ScalarValue::Int64(value)) => Some(ColumnarValue::Scalar(
+                ScalarValue::UInt64(value.map(|value| value as u64)),
+            )),
+            _ => return internal_err!("{} expects BIGINT", self.name()),
+        };
+        if let Some(unsigned) = unsigned {
+            return Ok(unsigned);
+        }
+        // The original signed-to-unsigned expression rejects BIGINT_MIN via ABS.
+        AbsFunc::new().invoke_with_args(args)?;
+        internal_err!("ABS did not reject BIGINT_MIN")
+    }
+}
 
 fn shiftrightunsigned(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let ScalarFunctionInput {
@@ -25,13 +83,18 @@ fn shiftrightunsigned(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         ))),
     }?;
 
-    let unsigned = when(
-        value.clone().lt(lit(0)),
-        lit(max_const) - (abs(value.clone()) - lit(1)),
-    )
-    .otherwise(value.clone())?;
+    let unsigned = if input_type == DataType::Int64 && matches!(value, expr::Expr::Column(_)) {
+        ScalarUDF::from(UnsignedShiftBits).call(vec![value])
+    } else {
+        let unsigned = when(
+            value.clone().lt(lit(0)),
+            lit(max_const) - (abs(value.clone()) - lit(1)),
+        )
+        .otherwise(value)?;
+        cast(unsigned, unsigned_type)
+    };
 
-    Ok(cast(cast(unsigned, unsigned_type) >> shift, input_type))
+    Ok(cast(unsigned >> shift, input_type))
 }
 
 pub(super) fn list_built_in_bitwise_functions() -> Vec<(&'static str, ScalarFunction)> {
