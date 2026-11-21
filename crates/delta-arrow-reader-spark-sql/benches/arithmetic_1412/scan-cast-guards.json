@@ -1,0 +1,35 @@
+{
+  "staging_source": "4b503cee9e369f57be0b3fef5dfd2595d0ddc985",
+  "staging_tip": "fb906188a4eac1363a480abb5df79a646c7b83db",
+  "candidate_source": "bc5afd42cf0a6902add7b06bd37eb4fa63f73631",
+  "statement_manifest": "manifest.json",
+  "statement_manifest_sha256": "890d472f860a879238a8ab45b3df2c43d434b9e926058bba9818de4c6c7b4e2b",
+  "case_ids": [
+    "scalar.math.op_2a",
+    "scalar.math.op_2b",
+    "scalar.math.op_2d",
+    "scalar.math.op_2f",
+    "shape.decimal_division_round"
+  ],
+  "overall_timeout_seconds": 14400,
+  "spark_plan_contains": {
+    "staging": {
+      "scalar": [
+        "spark_result_metadata("
+      ],
+      "shape": [
+        "fused_decimal_divide(",
+        "round("
+      ]
+    },
+    "candidate": {
+      "scalar": [
+        "spark_result_metadata("
+      ],
+      "shape": [
+        "fused_decimal_divide(",
+        "round("
+      ]
+    }
+  }
+}
