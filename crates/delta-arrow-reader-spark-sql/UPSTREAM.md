@@ -2628,3 +2628,11 @@ Numeric percentiles with Float64 input and implicit unit frequency use the
 typed batch directly. Count updates, retraction and interpolation stay
 shared with the original path. Other input types and explicit frequencies
 continue through the original cast and frequency validation.
+
+### Retraction for COUNT_MIN_SKETCH (#1408)
+
+The window accumulator subtracts each departing non-NULL value from the
+same hash buckets and total that insertion increments. Dimensions, seed,
+hashing, merge behavior and serialization stay shared with the ordinary
+aggregate. A moving frame retains its sketch instead of building and
+populating a new one for each row.

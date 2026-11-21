@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::fmt::Debug;
 
 use arrow::array::{Array, ArrayRef, AsArray, BinaryArray};
@@ -86,7 +87,15 @@ impl CountMinSketchAccumulator {
 
 impl Accumulator for CountMinSketchAccumulator {
     fn update_batch(&mut self, values: &[ArrayRef]) -> Result<()> {
-        self.sketch.update_from_array(&values[0])
+        self.sketch.adjust_counts(&values[0], 1)
+    }
+
+    fn retract_batch(&mut self, values: &[ArrayRef]) -> Result<()> {
+        self.sketch.adjust_counts(&values[0], -1)
+    }
+
+    fn supports_retract_batch(&self) -> bool {
+        true
     }
 
     fn evaluate(&mut self) -> Result<ScalarValue> {
@@ -166,7 +175,7 @@ impl SparkCountMinSketch {
             + self.table.capacity() * std::mem::size_of::<i64>()
     }
 
-    fn update_from_array(&mut self, values: &ArrayRef) -> Result<()> {
+    fn adjust_counts(&mut self, values: &ArrayRef, count_delta: i64) -> Result<()> {
         // Downcast once outside the row loop: the data type and the concrete array
         // are loop-invariant, so dispatching per row would re-pay the match + downcast
         // on every element of the batch. `iter().flatten()` skips nulls without a
@@ -174,42 +183,42 @@ impl SparkCountMinSketch {
         match values.data_type() {
             DataType::Int8 => {
                 for v in values.as_primitive::<Int8Type>().iter().flatten() {
-                    self.add_long(v as i64);
+                    self.adjust_long_count(v as i64, count_delta);
                 }
             }
             DataType::Int16 => {
                 for v in values.as_primitive::<Int16Type>().iter().flatten() {
-                    self.add_long(v as i64);
+                    self.adjust_long_count(v as i64, count_delta);
                 }
             }
             DataType::Int32 => {
                 for v in values.as_primitive::<Int32Type>().iter().flatten() {
-                    self.add_long(v as i64);
+                    self.adjust_long_count(v as i64, count_delta);
                 }
             }
             DataType::Int64 => {
                 for v in values.as_primitive::<Int64Type>().iter().flatten() {
-                    self.add_long(v);
+                    self.adjust_long_count(v, count_delta);
                 }
             }
             DataType::Binary => {
                 for v in values.as_binary::<i32>().iter().flatten() {
-                    self.add_binary(v);
+                    self.adjust_binary_count(v, count_delta);
                 }
             }
             DataType::Utf8 => {
                 for v in values.as_string::<i32>().iter().flatten() {
-                    self.add_binary(v.as_bytes());
+                    self.adjust_binary_count(v.as_bytes(), count_delta);
                 }
             }
             DataType::LargeUtf8 => {
                 for v in values.as_string::<i64>().iter().flatten() {
-                    self.add_binary(v.as_bytes());
+                    self.adjust_binary_count(v.as_bytes(), count_delta);
                 }
             }
             DataType::Utf8View => {
                 for v in values.as_string_view().iter().flatten() {
-                    self.add_binary(v.as_bytes());
+                    self.adjust_binary_count(v.as_bytes(), count_delta);
                 }
             }
             DataType::Null => {}
@@ -224,25 +233,25 @@ impl SparkCountMinSketch {
         Ok(())
     }
 
-    fn add_long(&mut self, item: i64) {
+    fn adjust_long_count(&mut self, item: i64, count_delta: i64) {
         for row in 0..self.depth {
             let bucket = self.hash_long(item, row);
-            self.table[row * self.width + bucket] += 1;
+            self.table[row * self.width + bucket] += count_delta;
         }
-        self.total_count += 1;
+        self.total_count += count_delta;
     }
 
-    fn add_binary(&mut self, item: &[u8]) {
+    fn adjust_binary_count(&mut self, item: &[u8], count_delta: i64) {
         // Compute the two base hashes once, then derive each row's bucket inline
-        // (mirrors `add_long`) so a per-element bucket Vec is never allocated.
+        // so a per-element bucket Vec is never allocated.
         let hash1 = spark_compatible_murmur3_hash(item, 0) as i32;
         let hash2 = spark_compatible_murmur3_hash(item, hash1 as u32) as i32;
         for row in 0..self.depth {
             let hash = hash1.wrapping_add((row as i32).wrapping_mul(hash2));
             let bucket = (hash % self.width as i32).wrapping_abs() as usize;
-            self.table[row * self.width + bucket] += 1;
+            self.table[row * self.width + bucket] += count_delta;
         }
-        self.total_count += 1;
+        self.total_count += count_delta;
     }
 
     fn merge(&mut self, other: &Self) -> Result<()> {
@@ -457,4 +466,67 @@ fn as_binary_array<'a>(array: &'a ArrayRef, context: &str) -> Result<Option<&'a 
                 array.data_type()
             ))
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use arrow::array::{Int64Array, StringArray};
+
+    use super::*;
+
+    #[test]
+    fn retracting_sketch_rows_preserves_the_replayed_frame_bytes() -> Result<()> {
+        let inputs: [ArrayRef; 3] = [
+            Arc::new(Int64Array::from(vec![
+                Some(i64::MIN),
+                Some(1),
+                None,
+                Some(1),
+                Some(i64::MAX),
+                Some(-7),
+                Some(0),
+                None,
+            ])),
+            Arc::new(StringArray::from(vec![
+                Some(""),
+                Some("one"),
+                None,
+                Some("one"),
+                Some("\u{1f600}"),
+                Some("two"),
+                Some(""),
+                None,
+            ])),
+            Arc::new(BinaryArray::from(vec![
+                Some(b"".as_slice()),
+                Some(b"one".as_slice()),
+                None,
+                Some(b"one".as_slice()),
+                Some(b"\x00\xff".as_slice()),
+                Some(b"two".as_slice()),
+                Some(b"".as_slice()),
+                None,
+            ])),
+        ];
+        for input in inputs {
+            let mut sliding = CountMinSketchAccumulator::new(0.9, 0.5, -7)?;
+            let mut last = 0..0;
+            for frame in [0..0, 0..3, 1..5, 2..5, 5..7, 6..8, 8..8] {
+                sliding.update_batch(&[input.slice(last.end, frame.end - last.end)])?;
+                sliding.retract_batch(&[input.slice(last.start, frame.start - last.start)])?;
+                let mut original = CountMinSketchAccumulator::new(0.9, 0.5, -7)?;
+                original.update_batch(&[input.slice(frame.start, frame.len())])?;
+                assert_eq!(
+                    sliding.evaluate()?,
+                    original.evaluate()?,
+                    "{} {frame:?}",
+                    input.data_type()
+                );
+                last = frame;
+            }
+        }
+        Ok(())
+    }
 }
