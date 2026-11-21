@@ -1,0 +1,12 @@
+{
+  "staging_source": "8a384526316d0ce2068927d2874986d41c87c0a7",
+  "candidate_source": "ae904950d6130d3037cf18dab1a95f24134f7b5a",
+  "query_manifest_sha256": "82e08edf20e562d54ec2b794ee174611e4d6a6b52aed698d3dd130b8599b8ecd",
+  "shapes": [
+    "concat_only",
+    "string_functions"
+  ],
+  "process_replicas": 6,
+  "maximum_processes": 96,
+  "timing_timeout_seconds": 1800
+}
