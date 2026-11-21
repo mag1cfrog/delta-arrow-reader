@@ -26,6 +26,9 @@ mod string_binary;
 use spark_results::{capture_native_query_observation, capture_spark_optimized_observation};
 use string_binary::{TestResult, capture_observation, register_inputs};
 
+#[path = "regex_operands/literal_matches.rs"]
+mod literal_matches;
+
 const REFERENCE: &str = include_str!("fixtures/regex-operand-coercion-spark.jsonl");
 const INHERITED_OBSERVATIONS: &str =
     include_str!("fixtures/regex-operand-coercion-inherited-observations.jsonl");
