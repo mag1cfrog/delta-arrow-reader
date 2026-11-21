@@ -3021,3 +3021,9 @@ calendar and clock validation to prepare the first day. Invalid settings,
 NULL literals and other argument shapes use the existing evaluation.
 MAKE_TIMESTAMP, its LTZ and NTZ variants, and their TRY variants share
 this constructor.
+
+### Literal MONTHS_BETWEEN rounding option (#1414)
+
+The round-off kernel reads a literal Boolean directly for a double
+column. It uses the same rounding and NULL handling as the column
+option path and retains the original result length.
