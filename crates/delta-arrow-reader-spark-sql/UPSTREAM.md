@@ -2806,3 +2806,10 @@ A single Boolean column guard with a BIGINT column result and an
 INTEGER column widened to BIGINT in ELSE uses native searched CASE.
 The widening expression and its result annotation are retained. Other
 explicit ELSE shapes use the existing Spark searched CASE path.
+
+### Direct UInt64 bits for BIGINT unsigned right shift (#1412)
+
+SHIFTRIGHTUNSIGNED and its operator alias use an unsigned view of
+a plain BIGINT column for the existing shift and final cast. The
+signed minimum still follows the original ABS error path. Other
+operands retain the signed-to-unsigned CASE and DECIMAL conversion.
