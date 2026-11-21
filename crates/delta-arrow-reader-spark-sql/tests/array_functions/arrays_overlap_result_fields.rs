@@ -55,6 +55,68 @@ async fn overlap_panics_remain_failed_observations_without_sql_errors() -> TestR
 }
 
 #[tokio::test]
+async fn arrays_overlap_retains_evaluation_of_derived_array_columns() -> TestResult {
+    use std::sync::Arc;
+
+    use arrow::array::{ArrayRef, Int64Array, ListArray, StringArray};
+    use arrow::datatypes::Int64Type;
+    use arrow::record_batch::RecordBatch;
+    use datafusion::common::cast::as_boolean_array;
+    use datafusion::physical_plan::collect;
+    use delta_arrow_reader_spark_sql::{SparkSqlOptions, plan_query};
+
+    let session = SessionContext::new_with_state(
+        configure_spark_sql(
+            SessionStateBuilder::new()
+                .with_default_features()
+                .with_config(SessionConfig::new().with_target_partitions(1)),
+        )
+        .build(),
+    );
+    let columns: [(&str, ArrayRef); 3] = [
+        ("id", Arc::new(Int64Array::from(vec![0, 1]))),
+        (
+            "l",
+            Arc::new(ListArray::from_iter_primitive::<Int64Type, _, _>([
+                None,
+                Some(Vec::<Option<i64>>::new()),
+            ])),
+        ),
+        ("t", Arc::new(StringArray::from(vec!["bad", "bad"]))),
+    ];
+    session.register_batch("inputs", RecordBatch::try_from_iter(columns)?)?;
+    for ansi_mode in [false, true] {
+        let options = SparkSqlOptions {
+            ansi_mode,
+            ..Default::default()
+        };
+        for operands in ["l,r", "r,l"] {
+            for id in 0..2 {
+                let sql = format!(
+                    "SELECT arrays_overlap({operands}) FROM (
+                       SELECT l, ARRAY(CAST(t AS BIGINT)) AS r FROM inputs WHERE id = {id}
+                     ) AS prepared"
+                );
+                let query = plan_query(&session, &sql, &options).await?;
+                let plan = query.create_physical_plan(&session).await?;
+                let result = collect(plan, session.task_ctx()).await;
+                if ansi_mode {
+                    let error = result.expect_err("the derived ARRAY is evaluated before overlap");
+                    assert!(error.to_string().contains("CAST_INVALID_INPUT"), "{error}");
+                } else {
+                    let mut values = Vec::new();
+                    for batch in result? {
+                        values.extend(as_boolean_array(batch.column(0))?.iter());
+                    }
+                    assert_eq!(values, vec![(id == 1).then_some(false)]);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn arrays_overlap_result_fields_match_spark() -> TestResult {
     assert_arrays_overlap_result_fields(
         include_str!("../fixtures/arrays-overlap-result-fields-spark.jsonl"),

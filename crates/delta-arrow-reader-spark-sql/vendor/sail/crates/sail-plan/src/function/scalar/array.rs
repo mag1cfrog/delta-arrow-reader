@@ -1,4 +1,6 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
+mod bigint_arrays_overlap;
+
 use std::sync::Arc;
 
 use datafusion::arrow::array::{
@@ -37,6 +39,7 @@ use sail_function::scalar::datetime::spark_date::SparkDate;
 use sail_function::scalar::datetime::spark_timestamp::SparkTimestamp;
 use sail_function::scalar::misc::raise_error::RaiseError;
 
+use self::bigint_arrays_overlap::BigIntArraysOverlap;
 use super::lambda::lambda_with_fresh_parameter;
 use crate::error::{PlanError, PlanResult};
 use crate::function::common::{
@@ -701,6 +704,15 @@ fn arrays_overlap(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         left.nullable(schema)? || left_element.is_nullable(),
         right.nullable(schema)? || right_element.is_nullable(),
     ];
+    let use_bigint_membership = matches!(
+        (&left, &right),
+        (expr::Expr::Column(_), expr::Expr::Column(_))
+    ) && matches!(
+        (&left_type, &right_type),
+        (DataType::List(_), DataType::List(_)) | (DataType::LargeList(_), DataType::LargeList(_))
+    ) && left_element.data_type() == &DataType::Int64
+        && right_element.data_type() == &DataType::Int64;
+
     let left_needs_value_cast =
         !same_positional_logical_type(left_element.data_type(), &element_type);
     let right_needs_value_cast =
@@ -731,16 +743,8 @@ fn arrays_overlap(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         };
     let left = prepare_operand(left, &left_type, left_needs_value_cast)?;
     let right = prepare_operand(right, &right_type, right_needs_value_cast)?;
-    let same_type_null_only_array = cast(
-        make_array(vec![lit(ScalarValue::Null)]),
-        nullable_array_type,
-    );
-
-    let left_has_null = expr_fn::array_has_any(left.clone(), same_type_null_only_array.clone());
-    let right_has_null = expr_fn::array_has_any(right.clone(), same_type_null_only_array);
-
     // A required ARRAY constructor can still fail while evaluating its elements.
-    let result = when(
+    let mut branches = when(
         is_null(expr_fn::array_length(left.clone())),
         lit(ScalarValue::Null),
     )
@@ -754,19 +758,33 @@ fn arrays_overlap(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
             expr_fn::array_length(right.clone()).eq(lit(0_i64)),
         ),
         lit(false),
-    )
-    .when(
-        or(left_has_null, right_has_null),
-        or(
-            expr_fn::array_has_any(
-                array_compact_expr(left.clone()),
-                array_compact_expr(right.clone()),
-            ),
-            lit(ScalarValue::Null),
-        ),
-    )
-    .when(lit(true), expr_fn::array_has_any(left, right))
-    .end()?;
+    );
+    let result = if use_bigint_membership {
+        // Keep the parent and empty-list gates above so derived operands
+        // retain their evaluation before membership.
+        branches.otherwise(ScalarUDF::from(BigIntArraysOverlap).call(vec![left, right]))?
+    } else {
+        let same_type_null_only_array = cast(
+            make_array(vec![lit(ScalarValue::Null)]),
+            nullable_array_type,
+        );
+
+        let left_has_null = expr_fn::array_has_any(left.clone(), same_type_null_only_array.clone());
+        let right_has_null = expr_fn::array_has_any(right.clone(), same_type_null_only_array);
+        branches
+            .when(
+                or(left_has_null, right_has_null),
+                or(
+                    expr_fn::array_has_any(
+                        array_compact_expr(left.clone()),
+                        array_compact_expr(right.clone()),
+                    ),
+                    lit(ScalarValue::Null),
+                ),
+            )
+            .when(lit(true), expr_fn::array_has_any(left, right))
+            .end()?
+    };
     Ok(ScalarUDF::from(ArraysOverlapResultField { operand_nullable }).call(vec![result]))
 }
 
@@ -820,7 +838,10 @@ impl ScalarUDFImpl for ArraysOverlapResultField {
             {
                 value.apply(|value| {
                     if let expr::Expr::ScalarFunction(function) = value {
-                        if function.func.name() == "array_has_any" {
+                        if matches!(
+                            function.func.name(),
+                            "array_has_any" | BigIntArraysOverlap::NAME
+                        ) {
                             for operand in &function.args {
                                 datafusion::optimizer::simplify_expressions::ExprSimplifier::new(
                                     info.clone(),
@@ -1486,6 +1507,113 @@ mod tests {
                             [Some(true), None, Some(false), None][offset..offset + len]
                         );
                     }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn bigint_arrays_overlap_matches_the_case_path() -> PlanResult<()> {
+        use crate::function::common::FunctionContextInput;
+        use arrow::array::{ArrayRef, GenericListArray};
+        use arrow::datatypes::{Int64Type, Schema};
+
+        let session = SessionContext::new();
+        let rows = [
+            (None, Some(vec![Some(1)]), None),
+            (Some(vec![]), Some(vec![None]), Some(false)),
+            (Some(vec![None]), Some(vec![]), Some(false)),
+            (Some(vec![None, Some(1)]), Some(vec![Some(1)]), Some(true)),
+            (Some(vec![None, Some(1)]), Some(vec![Some(2)]), None),
+            (Some(vec![None]), Some(vec![None]), None),
+            (
+                Some(vec![Some(i64::MIN)]),
+                Some(vec![Some(i64::MAX)]),
+                Some(false),
+            ),
+            (Some(vec![Some(1)]), None, None),
+            (
+                Some((0..17).map(Some).collect()),
+                Some((17..38).map(Some).chain([None]).collect()),
+                None,
+            ),
+            (
+                Some((0..22).map(Some).collect()),
+                Some((21..38).map(Some).collect()),
+                Some(true),
+            ),
+        ];
+        let make_input = |wide: bool, column: usize| -> ArrayRef {
+            let values = rows.iter().map(|(left, right, _)| {
+                if column == 0 {
+                    left.clone()
+                } else {
+                    right.clone()
+                }
+            });
+            if wide {
+                Arc::new(GenericListArray::<i64>::from_iter_primitive::<
+                    Int64Type,
+                    _,
+                    _,
+                >(values))
+            } else {
+                Arc::new(GenericListArray::<i32>::from_iter_primitive::<
+                    Int64Type,
+                    _,
+                    _,
+                >(values))
+            }
+        };
+        for wide in [false, true] {
+            let columns = [make_input(wide, 0), make_input(wide, 1)];
+            let input_schema = Arc::new(Schema::new(vec![
+                Field::new("left", columns[0].data_type().clone(), true),
+                Field::new("right", columns[1].data_type().clone(), true),
+            ]));
+            let schema = Arc::new(DFSchema::try_from(input_schema.clone())?);
+            for ansi_mode in [false, true] {
+                let config = Arc::new(crate::config::PlanConfig {
+                    ansi_mode,
+                    ..Default::default()
+                });
+                let expression = |left| {
+                    arrays_overlap(ScalarFunctionInput {
+                        arguments: vec![left, col("right")],
+                        function_context: FunctionContextInput {
+                            argument_display_names: &[],
+                            plan_config: &config,
+                            session_context: &session,
+                            schema: &schema,
+                        },
+                    })
+                };
+                let typed = expression(col("left"))?;
+                let legacy = expression(col("left").alias("legacy_left"))?;
+                assert!(typed.to_string().contains("spark_bigint_arrays_overlap"));
+                assert!(legacy.to_string().contains("CASE"));
+                let typed = session.create_physical_expr(typed, &schema)?;
+                let legacy = session.create_physical_expr(legacy, &schema)?;
+                for (start, len) in [(0, rows.len()), (1, rows.len() - 2), (0, 0)] {
+                    let batch = RecordBatch::try_new(
+                        input_schema.clone(),
+                        columns
+                            .iter()
+                            .map(|array| array.slice(start, len))
+                            .collect(),
+                    )?;
+                    let values = |expression: &dyn datafusion::physical_expr::PhysicalExpr| -> PlanResult<Vec<Option<bool>>> {
+                        let output = expression.evaluate(&batch)?.into_array(len)?;
+                        assert_eq!(output.data_type(), &DataType::Boolean);
+                        Ok(output.as_boolean().iter().collect())
+                    };
+                    let expected = rows[start..start + len]
+                        .iter()
+                        .map(|row| row.2)
+                        .collect::<Vec<_>>();
+                    assert_eq!(values(typed.as_ref())?, expected);
+                    assert_eq!(values(legacy.as_ref())?, expected);
                 }
             }
         }
