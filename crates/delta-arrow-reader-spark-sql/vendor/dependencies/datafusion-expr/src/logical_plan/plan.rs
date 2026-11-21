@@ -1,3 +1,4 @@
+// Modified for the DAR Spark SQL runtime. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -3928,6 +3929,15 @@ fn calc_func_dependencies_for_project(
     exprs: &[Expr],
     input: &LogicalPlan,
 ) -> Result<FunctionalDependencies> {
+    let input_dependencies = input.schema().functional_dependencies();
+    // Output positions are only needed to remap existing dependencies.
+    #[expect(deprecated)]
+    if input_dependencies.is_empty()
+        && !exprs.iter().any(|expr| matches!(expr, Expr::Wildcard { .. }))
+    {
+        return Ok(FunctionalDependencies::empty());
+    }
+
     let input_fields = input.schema().field_names();
     // Calculate expression indices (if present) in the input schema.
     let proj_indices = exprs
@@ -3976,10 +3986,7 @@ fn calc_func_dependencies_for_project(
         .flatten()
         .collect::<Vec<_>>();
 
-    Ok(input
-        .schema()
-        .functional_dependencies()
-        .project_functional_dependencies(&proj_indices, exprs.len()))
+    Ok(input_dependencies.project_functional_dependencies(&proj_indices, exprs.len()))
 }
 
 /// Sorts its input according to a list of sort expressions.

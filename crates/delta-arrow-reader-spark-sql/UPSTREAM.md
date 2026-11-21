@@ -158,6 +158,14 @@ The [projection tests](tests/projection_column_lookup.rs) compare the public rul
 with the original lookup and check native values, NULLs and executed types with
 and without Spark configuration.
 
+DataFusion's `projection_schema` skips remapping column positions when
+the input schema has no functional dependencies and the projection has
+no wildcard. Field resolution and validation still run. Projections over
+constrained inputs and wildcard projections use the original mapping.
+This local change addresses the dependency lookup attributed in the
+[wide planning report](benches/reports/planning-1390-round2-wide-metadata.md).
+The [schema tests](tests/projection_dependencies.rs) check both routes.
+
 Two original overrides, `datafusion-expr-common` and `arrow-select`, were identical
 to their pinned registry packages. They use those packages directly; the inventory
 retains their accepted file hashes and registry mappings.
