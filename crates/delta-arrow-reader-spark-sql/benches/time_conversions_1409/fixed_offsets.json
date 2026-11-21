@@ -1,0 +1,19 @@
+{
+  "staging_source": "a8e0ccf84b58b8f0110f2282dafdef15e52a1e1a",
+  "staging_tip": "19491082c220904982bf075196c9695473b340eb",
+  "candidate_source": "cdfe5f2d801185a286f9f90d04957df9ccaa123f",
+  "statement_manifest": "manifest.json",
+  "statement_manifest_sha256": "f79bbdb2e8920f590a13ccaa153d8dd9244fd5856253130b29cc0db38d4f46f6",
+  "case_ids": [
+    "scalar.datetime.convert_timezone",
+    "scalar.datetime.convert_timezone.los_angeles",
+    "scalar.datetime.convert_timezone.offset",
+    "scalar.datetime.from_utc_timestamp",
+    "scalar.datetime.from_utc_timestamp.los_angeles",
+    "scalar.datetime.from_utc_timestamp.offset",
+    "scalar.datetime.to_utc_timestamp",
+    "scalar.datetime.to_utc_timestamp.los_angeles",
+    "scalar.datetime.to_utc_timestamp.offset"
+  ],
+  "overall_timeout_seconds": 14400
+}
