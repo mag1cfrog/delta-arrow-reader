@@ -1,0 +1,70 @@
+{
+  "functions": [
+    {
+      "kind": "aggregate",
+      "category": "aggregate",
+      "name": "count_if",
+      "registration": "F::custom(count_if)",
+      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/aggregate.rs:1181",
+      "implementation_anchors": [
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/aggregate.rs:1181",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/aggregate.rs:695"
+      ],
+      "id": "aggregate.aggregate.count_if_groups",
+      "aliases": [],
+      "spark_sql": "WITH input AS (\n    SELECT id, id % 3 AS bucket,\n        CASE id % 3 WHEN 0 THEN id % 5 = 1 WHEN 1 THEN false ELSE CAST(NULL AS BOOLEAN) END AS flag\n    FROM bench WHERE id < 30\n)\nSELECT bucket AS id, COUNT_IF(flag) AS value,\n    COUNT_IF(DISTINCT flag) AS distinct_value,\n    COUNT_IF(flag) FILTER (WHERE id % 2 = 0) AS filtered\nFROM input GROUP BY bucket",
+      "native_sql": null,
+      "input_columns": [
+        "flag"
+      ],
+      "projection_sql": "SELECT flag FROM bench",
+      "exclusion": null,
+      "class": "paired",
+      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+    },
+    {
+      "kind": "aggregate",
+      "category": "aggregate",
+      "name": "count_if",
+      "registration": "F::custom(count_if)",
+      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/aggregate.rs:1181",
+      "implementation_anchors": [
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/aggregate.rs:1181",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/aggregate.rs:695"
+      ],
+      "id": "aggregate.aggregate.count_if_empty",
+      "aliases": [],
+      "spark_sql": "SELECT COUNT_IF(flag) AS value FROM bench WHERE id < 0",
+      "native_sql": null,
+      "input_columns": [
+        "flag"
+      ],
+      "projection_sql": "SELECT flag FROM bench",
+      "exclusion": null,
+      "class": "paired",
+      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+    },
+    {
+      "kind": "aggregate",
+      "category": "aggregate",
+      "name": "count_if",
+      "registration": "F::custom(count_if)",
+      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/aggregate.rs:1181",
+      "implementation_anchors": [
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/aggregate.rs:1181",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/aggregate.rs:695"
+      ],
+      "id": "aggregate.aggregate.count_if_failing_predicate",
+      "aliases": [],
+      "spark_sql": "WITH input AS (\n    SELECT CAST(CASE WHEN id = 5 THEN 'bad' ELSE 'true' END AS BOOLEAN) AS flag\n    FROM bench WHERE id < 8\n)\nSELECT COUNT_IF(flag) AS value FROM input",
+      "native_sql": null,
+      "input_columns": [
+        "flag"
+      ],
+      "projection_sql": "SELECT flag FROM bench",
+      "exclusion": null,
+      "class": "paired",
+      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+    }
+  ]
+}
