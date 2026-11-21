@@ -435,6 +435,30 @@ fn regexp_extract_all_downcast<O: OffsetSizeTrait>(args: &[ArrayRef]) -> Result<
             let is_idx_null = idx_len == 1 && idx.is_null(0);
 
             let mut builder = ListBuilder::new(StringBuilder::new());
+            if let (Some(regex), Some(group)) = (pattern_scalar_opt.as_ref(), idx_scalar_opt)
+                && let Ok(group) = usize::try_from(group)
+                && group < regex.captures_len()
+            {
+                for value in values.iter() {
+                    if let Some(value) = value {
+                        let matches = regex
+                            .captures_iter(value)
+                            .map(|captures| {
+                                Some(
+                                    captures
+                                        .get(group)
+                                        .map_or("", |capture| capture.as_str())
+                                        .to_owned(),
+                                )
+                            })
+                            .collect::<Vec<_>>();
+                        builder.append_value(matches);
+                    } else {
+                        builder.append_null();
+                    }
+                }
+                return Ok(Arc::new(builder.finish()));
+            }
             // Compile each distinct column pattern once per batch, not per row.
             let mut regex_memo = StrMemo::new();
             for i in 0..args[0].len() {
@@ -814,6 +838,47 @@ mod tests {
             error.contains("Invalid regex pattern") && error.contains("unclosed character class"),
             "{error}"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn literal_extract_all_groups_match_the_existing_row_kernel() -> Result<()> {
+        let values =
+            StringArray::from(vec![Some("a12a2"), None, Some("βa"), Some(""), Some("123")]);
+        for length in [0, 1, values.len()] {
+            let source = values.slice(0, length);
+            for pattern in ["(a)([0-9]+)?", "(β)", "["] {
+                for group in [0, 1, 2, 3, -1, i64::MAX] {
+                    let previous = || {
+                        let regex = parse_regex(SparkRegexpExtractAll::NAME, pattern)?;
+                        let mut builder = ListBuilder::new(StringBuilder::new());
+                        for value in source.iter() {
+                            if let Some(value) = value {
+                                builder.append_value(extract_all_matches(
+                                    SparkRegexpExtractAll::NAME,
+                                    value,
+                                    &regex,
+                                    group,
+                                )?);
+                            } else {
+                                builder.append_null();
+                            }
+                        }
+                        Ok::<_, datafusion_common::DataFusionError>(builder.finish().to_data())
+                    };
+                    let args = [
+                        Arc::new(source.clone()) as ArrayRef,
+                        strings(vec![Some(pattern)]),
+                        Arc::new(Int64Array::from(vec![group])),
+                    ];
+                    let actual = regexp_extract_all_inner(&args).map(|array| array.to_data());
+                    assert_eq!(
+                        actual.map_err(|err| err.to_string()),
+                        previous().map_err(|err| err.to_string())
+                    );
+                }
+            }
+        }
         Ok(())
     }
 

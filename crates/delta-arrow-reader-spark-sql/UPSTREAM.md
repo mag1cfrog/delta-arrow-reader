@@ -2998,3 +2998,10 @@ expansion.
 Two-argument PARSE_URL and TRY_PARSE_URL borrow a present Utf8 literal
 part for a Utf8 input column. They pass the absent key directly to the
 existing parser. Other argument shapes keep their existing adapters.
+
+### Literal REGEXP_EXTRACT_ALL capture group (#1414)
+
+When the pattern and index are constant and the compiled pattern has
+that group, REGEXP_EXTRACT_ALL checks the index once per batch. The
+existing row checks handle invalid groups and column arguments, preserving
+when an invalid index is reported for input with no matches.
