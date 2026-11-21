@@ -97,7 +97,7 @@ async fn unweighted_double_percentiles_match_unit_frequency_in_window_and_plain_
             ),
             (
                 "id, ",
-                " OVER (PARTITION BY g ORDER BY id RANGE BETWEEN 3 PRECEDING AND CURRENT ROW) FROM samples ORDER BY id",
+                " OVER (PARTITION BY g ORDER BY CAST(id AS BIGINT) RANGE BETWEEN 3 PRECEDING AND CURRENT ROW) FROM samples ORDER BY id",
             ),
             (
                 "id, ",
