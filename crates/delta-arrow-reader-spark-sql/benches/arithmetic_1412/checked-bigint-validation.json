@@ -1,0 +1,64 @@
+{
+  "functions": [
+    {
+      "id": "scalar.math.checked_bigint_add_positive",
+      "spark_sql": "WITH operands AS (\n    SELECT id, CASE WHEN id=1 THEN CAST('9223372036854775807' AS BIGINT) ELSE i END AS lhs,\n               CASE WHEN id=1 THEN CAST('1' AS BIGINT) ELSE CAST(p AS BIGINT) END AS rhs\n    FROM bench WHERE id < 8\n)\nSELECT id, lhs + rhs AS result FROM operands",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "scalar.math.checked_bigint_add_negative",
+      "spark_sql": "WITH operands AS (\n    SELECT id, CASE WHEN id=1 THEN CAST('-9223372036854775808' AS BIGINT) ELSE i END AS lhs,\n               CASE WHEN id=1 THEN CAST('-1' AS BIGINT) ELSE CAST(p AS BIGINT) END AS rhs\n    FROM bench WHERE id < 8\n)\nSELECT id, lhs + rhs AS result FROM operands",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "scalar.math.checked_bigint_subtract_positive",
+      "spark_sql": "WITH operands AS (\n    SELECT id, CASE WHEN id=1 THEN CAST('9223372036854775807' AS BIGINT) ELSE i END AS lhs,\n               CASE WHEN id=1 THEN CAST('-1' AS BIGINT) ELSE CAST(p AS BIGINT) END AS rhs\n    FROM bench WHERE id < 8\n)\nSELECT id, lhs - rhs AS result FROM operands",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "scalar.math.checked_bigint_subtract_negative",
+      "spark_sql": "WITH operands AS (\n    SELECT id, CASE WHEN id=1 THEN CAST('-9223372036854775808' AS BIGINT) ELSE i END AS lhs,\n               CASE WHEN id=1 THEN CAST('1' AS BIGINT) ELSE CAST(p AS BIGINT) END AS rhs\n    FROM bench WHERE id < 8\n)\nSELECT id, lhs - rhs AS result FROM operands",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "scalar.math.checked_bigint_multiply_positive",
+      "spark_sql": "WITH operands AS (\n    SELECT id, CASE WHEN id=1 THEN CAST('9223372036854775807' AS BIGINT) ELSE i END AS lhs,\n               CASE WHEN id=1 THEN CAST('2' AS BIGINT) ELSE CAST(p AS BIGINT) END AS rhs\n    FROM bench WHERE id < 8\n)\nSELECT id, lhs * rhs AS result FROM operands",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "scalar.math.checked_bigint_multiply_negative",
+      "spark_sql": "WITH operands AS (\n    SELECT id, CASE WHEN id=1 THEN CAST('-9223372036854775808' AS BIGINT) ELSE i END AS lhs,\n               CASE WHEN id=1 THEN CAST('2' AS BIGINT) ELSE CAST(p AS BIGINT) END AS rhs\n    FROM bench WHERE id < 8\n)\nSELECT id, lhs * rhs AS result FROM operands",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "scalar.math.checked_bigint_signed_int_limits",
+      "spark_sql": "WITH operands AS (\n    SELECT id, CASE id WHEN 0 THEN CAST('-2147483648' AS BIGINT)\n                     WHEN 1 THEN CAST('2147483647' AS BIGINT)\n                     WHEN 2 THEN CAST(NULL AS BIGINT)\n                     WHEN 4 THEN CAST('-2147483648' AS BIGINT)\n                     WHEN 5 THEN CAST('2147483647' AS BIGINT) ELSE i END AS lhs,\n               CASE id WHEN 0 THEN CAST('-2147483648' AS BIGINT)\n                       WHEN 1 THEN CAST('2147483647' AS BIGINT)\n                       WHEN 3 THEN CAST(NULL AS BIGINT)\n                       WHEN 4 THEN CAST('2147483647' AS BIGINT)\n                       WHEN 5 THEN CAST('-2147483648' AS BIGINT) ELSE CAST(p AS BIGINT) END AS rhs\n    FROM bench WHERE id < 8\n)\nSELECT id,lhs+rhs AS summed,lhs-rhs AS difference,lhs*rhs AS product FROM operands",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "scalar.math.checked_bigint_full_width_without_overflow",
+      "spark_sql": "WITH operands AS (\n    SELECT id, CASE id WHEN 0 THEN CAST('-9223372036854775808' AS BIGINT)\n                     WHEN 1 THEN CAST('9223372036854775807' AS BIGINT)\n                     WHEN 2 THEN CAST(NULL AS BIGINT) ELSE i END AS lhs,\n               CASE id WHEN 0 THEN CAST(0 AS BIGINT)\n                       WHEN 1 THEN CAST(0 AS BIGINT) ELSE CAST(p AS BIGINT) END AS rhs\n    FROM bench WHERE id < 8\n)\nSELECT id,lhs+rhs AS summed,lhs-rhs AS difference,lhs*rhs AS product FROM operands",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "scalar.math.checked_bigint_scalar_inputs",
+      "spark_sql": "SELECT id, i+1L AS summed, 1L-i AS difference, i*2L AS product FROM bench WHERE id<8",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "scalar.math.checked_bigint_empty",
+      "spark_sql": "SELECT id,i+CAST(p AS BIGINT) AS summed,i-CAST(p AS BIGINT) AS difference,i*CAST(p AS BIGINT) AS product FROM bench WHERE id<0",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    }
+  ]
+}
