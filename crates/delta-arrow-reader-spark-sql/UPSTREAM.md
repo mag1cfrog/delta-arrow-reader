@@ -2600,3 +2600,15 @@ after its last use in the batch, so single-use paths do not accumulate.
 Repeated paths with overlapping uses retain their programs until those uses
 finish. The [XPath differential tests](tests/xpath_batch_reuse.rs) address both ANSI
 modes, literal and varying paths, conversion limits, NULLs, and errors.
+
+### Direct string aggregation (#1408)
+
+The Spark planner uses DataFusion's direct string accumulator for Utf8
+LISTAGG and STRING_AGG with a nonnull Utf8 literal delimiter. The plain
+aggregate uses it without DISTINCT or aggregate-local ordering. The window
+aliases use it on ordered bounded ROWS frames that end at the current row.
+DataFusion concatenates the nonnull strings directly and the final cast
+returns Utf8. A Utf8View literal shares delimiter bytes when the executor
+expands the literal over a batch. Other argument forms, binary values, and other window frames
+use the original list-based lowering. The array_join scalar function is
+separate from the window alias.

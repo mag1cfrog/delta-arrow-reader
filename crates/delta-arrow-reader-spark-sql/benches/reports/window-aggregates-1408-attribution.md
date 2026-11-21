@@ -9,27 +9,29 @@ the measured difference in the update and retract paths.
 
 Times are ns per input row above the paired projection. Each table cell
 gives the median and range of nine retained samples from three processes.
-The last column is the same-session native A/A noise floor. Spark-only
+The last column is the same-session native A/A noise floor from three
+process medians per arm. The floor was recomputed from the saved controls.
+Spark-only
 cases have no native function that supplies the required reference.
 
 | Function | Native | Spark ANSI off | Spark ANSI on | Native noise |
 | --- | ---: | ---: | ---: | ---: |
-| `listagg` (aggregate) | 14.6 [14.4-15.0] | 21.0 [18.7-21.9] | 21.2 [18.7-21.4] | 0.3 |
-| `string_agg` (aggregate) | 14.7 [14.5-15.2] | 21.0 [18.8-21.5] | 21.0 [18.6-21.5] | 0.4 |
-| `array_join` (window) | 419.6 [408.4-432.9] | 1,063.7 [1,045.6-1,069.0] | 1,060.9 [1,046.8-1,077.1] | 11.1 |
+| `listagg` (aggregate) | 14.6 [14.4-15.0] | 21.0 [18.7-21.9] | 21.2 [18.7-21.4] | 0.2 |
+| `string_agg` (aggregate) | 14.7 [14.5-15.2] | 21.0 [18.8-21.5] | 21.0 [18.6-21.5] | 0.3 |
+| `array_join` (window) | 419.6 [408.4-432.9] | 1,063.7 [1,045.6-1,069.0] | 1,060.9 [1,046.8-1,077.1] | 6.3 |
 | `count_min_sketch` (window) | n/a | 877.3 [866.5-888.0] | 876.3 [826.0-907.3] | n/a |
 | `histogram_numeric` (window) | n/a | 1,229.7 [1,215.5-1,238.5] | 1,226.7 [1,217.0-1,240.0] | n/a |
 | `hll_sketch_agg` (window) | n/a | 428.4 [422.9-444.6] | 426.2 [422.7-441.6] | n/a |
 | `hll_union_agg` (window) | n/a | 947.0 [935.7-995.4] | 950.4 [927.4-1,043.2] | n/a |
 | `kurtosis` (window) | n/a | 254.0 [252.4-255.3] | 254.2 [252.6-256.8] | n/a |
-| `listagg` (window) | 414.8 [408.0-426.3] | 1,062.4 [1,057.1-1,080.8] | 1,061.1 [1,050.9-1,071.4] | 17.5 |
-| `max_by` (window) | 147.2 [145.8-147.7] | 478.5 [464.7-491.8] | 485.5 [470.2-495.4] | 10.5 |
-| `min_by` (window) | 146.8 [145.9-148.6] | 415.1 [408.3-421.4] | 420.4 [410.3-427.5] | 3.3 |
+| `listagg` (window) | 414.8 [408.0-426.3] | 1,062.4 [1,057.1-1,080.8] | 1,061.1 [1,050.9-1,071.4] | 9.9 |
+| `max_by` (window) | 147.2 [145.8-147.7] | 478.5 [464.7-491.8] | 485.5 [470.2-495.4] | 1.0 |
+| `min_by` (window) | 146.8 [145.9-148.6] | 415.1 [408.3-421.4] | 420.4 [410.3-427.5] | 2.5 |
 | `mode` (window) | n/a | 385.8 [382.5-389.0] | 385.2 [382.6-385.6] | n/a |
-| `percentile` (window) | 486.5 [480.8-490.1] | 636.4 [626.9-646.2] | 632.0 [624.3-638.7] | 4.4 |
+| `percentile` (window) | 486.5 [480.8-490.1] | 636.4 [626.9-646.2] | 632.0 [624.3-638.7] | 1.3 |
 | `product` (window) | n/a | 238.0 [237.1-248.5] | 237.1 [236.3-240.9] | n/a |
 | `skewness` (window) | n/a | 252.0 [250.1-255.7] | 251.8 [250.6-252.9] | n/a |
-| `string_agg` (window) | 415.8 [412.3-426.8] | 1,059.0 [1,046.9-1,069.0] | 1,071.6 [1,056.7-1,082.7] | 7.5 |
+| `string_agg` (window) | 415.8 [412.3-426.8] | 1,059.0 [1,046.9-1,069.0] | 1,071.6 [1,056.7-1,082.7] | 3.7 |
 | `theta_sketch_agg` (window) | n/a | 699.8 [696.1-718.5] | 700.8 [697.9-706.7] | n/a |
 | `theta_union_agg` (window) | n/a | 987.0 [968.0-997.4] | 987.0 [974.6-1,006.7] | n/a |
 

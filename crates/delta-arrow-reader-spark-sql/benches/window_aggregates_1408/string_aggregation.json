@@ -1,0 +1,35 @@
+{
+  "staging_source": "7f66c78cb8a1e03f1f300fe0403f0636e37b122a",
+  "staging_tip": "fa8c95c92644c09e4eefc3eb56d366b27765f17e",
+  "candidate_source": "ee5ea2b31d675524ffd7d1d6d3371dc57c4bd2a3",
+  "case_ids": [
+    "aggregate.aggregate.listagg",
+    "aggregate.aggregate.string_agg",
+    "window.window.array_join",
+    "window.window.listagg",
+    "window.window.string_agg"
+  ],
+  "spark_plan_contains": {
+    "staging": {
+      "aggregate": [
+        "aggr=[array_agg(",
+        "array_to_string("
+      ],
+      "window": [
+        "wdw=[array_agg(",
+        "array_to_string("
+      ]
+    },
+    "candidate": {
+      "aggregate": [
+        "aggr=[string_agg(",
+        "utf8view("
+      ],
+      "window": [
+        "wdw=[string_agg(",
+        "utf8view("
+      ]
+    }
+  },
+  "overall_timeout_seconds": 14400
+}

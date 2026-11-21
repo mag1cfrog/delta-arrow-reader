@@ -6,7 +6,7 @@ use arrow::datatypes::{DataType, Field};
 use datafusion::functions::expr_fn::coalesce;
 use datafusion::functions_aggregate::{
     approx_distinct, array_agg, average, bit_and_or_xor, bool_and_or, correlation, count,
-    covariance, first_last, grouping, median, stddev, sum, variance,
+    covariance, first_last, grouping, median, stddev, string_agg, sum, variance,
 };
 use datafusion::functions_nested::string::array_to_string;
 use datafusion::functions_window::cume_dist::cume_dist_udwf;
@@ -16,7 +16,8 @@ use datafusion::functions_window::row_number::row_number_udwf;
 use datafusion_common::ScalarValue;
 use datafusion_expr::expr::WindowFunctionParams;
 use datafusion_expr::{
-    AggregateUDF, ExprSchemable, WindowFunctionDefinition, cast, expr, lit, when,
+    AggregateUDF, ExprSchemable, WindowFrameBound, WindowFrameUnits, WindowFunctionDefinition,
+    cast, expr, lit, when,
 };
 use datafusion_spark::function::aggregate::try_sum::SparkTrySum;
 use lazy_static::lazy_static;
@@ -45,7 +46,7 @@ use sail_function::window::spark_ntile_udwf;
 use crate::error::{PlanError, PlanResult};
 use crate::function::aggregate::{
     coalesce_to_empty_array, coerce_count_if_predicate, coerce_string_numeric_arguments,
-    filtered_count_if_is_constant_zero, string_numeric_argument_count,
+    direct_string_agg_delimiter, filtered_count_if_is_constant_zero, string_numeric_argument_count,
 };
 use crate::function::common::{
     WinFunction, WinFunctionInput, count_min_sketch_args, drop_inherited_column_metadata,
@@ -518,12 +519,37 @@ fn listagg(input: WinFunctionInput) -> PlanResult<expr::Expr> {
     } = input;
     let schema = function_context.schema;
     let (agg_col, other_args) = arguments.at_least_one()?;
-    let agg_col = if agg_col.get_type(schema)? == DataType::Null {
+    let value_type = agg_col.get_type(schema)?;
+    let agg_col = if value_type == DataType::Null {
         cast(agg_col, DataType::Utf8)
     } else {
         agg_col
     };
     let delim = other_args.first().cloned().unwrap_or_else(|| lit(""));
+
+    let bounded_rows = window_frame.units == WindowFrameUnits::Rows
+        && matches!(&window_frame.start_bound, WindowFrameBound::Preceding(offset) if !offset.is_null())
+        && matches!(window_frame.end_bound, WindowFrameBound::CurrentRow);
+    if bounded_rows
+        && !order_by.is_empty()
+        && !distinct
+        && other_args.len() <= 1
+        && let Some(view_delimiter) = direct_string_agg_delimiter(&value_type, &delim)
+    {
+        let aggregate = expr::Expr::WindowFunction(Box::new(expr::WindowFunction {
+            fun: WindowFunctionDefinition::AggregateUDF(string_agg::string_agg_udaf()),
+            params: WindowFunctionParams {
+                args: vec![agg_col, view_delimiter],
+                partition_by,
+                order_by,
+                window_frame,
+                filter,
+                null_treatment: None,
+                distinct: false,
+            },
+        }));
+        return Ok(aggregate.cast_to(&DataType::Utf8, schema)?);
+    }
 
     let agg = expr::Expr::WindowFunction(Box::new(expr::WindowFunction {
         fun: WindowFunctionDefinition::AggregateUDF(array_agg::array_agg_udaf()),
@@ -555,7 +581,7 @@ fn listagg(input: WinFunctionInput) -> PlanResult<expr::Expr> {
         delim.cast_to(&DataType::Utf8, schema)?,
     );
 
-    let casted_agg = match agg_col.get_type(schema)? {
+    let casted_agg = match value_type {
         DataType::Binary | DataType::BinaryView => string_agg.cast_to(&DataType::Binary, schema)?,
         DataType::LargeBinary => string_agg.cast_to(&DataType::LargeBinary, schema)?,
         _ => string_agg,
