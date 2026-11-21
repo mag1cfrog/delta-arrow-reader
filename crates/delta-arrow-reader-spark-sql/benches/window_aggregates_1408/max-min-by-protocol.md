@@ -12,8 +12,8 @@ Those references agree here because the ordering key is unique and matches
 the sort key. Exclude either function if the full result or type differs.
 The boundary tests compare the candidate against staging with different
 ordering and sort keys, ties, nullable keys and values, filtered rows, BIGINT
-extremes, empty frames, ROWS and RANGE frames, growing and whole partitions,
-the plain aggregate and the non-BIGINT fallback.
+extremes, empty input and frames, ROWS and RANGE frames, growing and whole
+partitions, the plain aggregate and both non-BIGINT fallbacks.
 
 The target is met when the candidate Spark median for each function and ANSI
 mode is at most its candidate native median plus the same-session native A/A
