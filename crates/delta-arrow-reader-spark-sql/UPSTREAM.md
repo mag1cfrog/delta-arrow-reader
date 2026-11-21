@@ -3027,3 +3027,10 @@ this constructor.
 The round-off kernel reads a literal Boolean directly for a double
 column. It uses the same rounding and NULL handling as the column
 option path and retains the original result length.
+
+### Literal TIMEDIFF end timestamp (#1414)
+
+The timestamp-difference kernel keeps a literal end timestamp as a
+single local-time value when the start is a microsecond timestamp column.
+Both paths use the same local difference calculation. Invalid units,
+other timestamp types and column end arguments use the original path.
