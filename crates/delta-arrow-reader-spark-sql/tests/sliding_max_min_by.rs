@@ -228,6 +228,8 @@ async fn min_by_required_key_matches_the_filtered_reducer() -> Result<()> {
         for (key, suffix) in [
             ("id", ""),
             ("id", " WHERE false"),
+            ("id", " WHERE id >= 1"),
+            ("g", ""),
             ("k", ""),
             ("k", " WHERE k IS NULL"),
             ("CAST(k AS BIGINT)", ""),
