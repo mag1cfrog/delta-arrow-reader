@@ -2594,6 +2594,16 @@ route. Storage handling and downcast errors remain the same. The
 [differential test](tests/regex_operands/split_literal_delimiter.rs) compares the old regex
 path with the public query path in both ANSI modes.
 
+### Integer literals in padding and OVERLAY (#1413)
+
+With Utf8 text operands, a nonnull INT literal for an LPAD or RPAD width
+is widened to BIGINT before choosing the DataFusion signature. OVERLAY
+does the same for its integer literal positions and keeps the existing
+omitted-length handling. An exact signature accepts the Utf8 columns
+without converting them to Utf8View. Other argument types retain their
+existing coercion. The [differential test](tests/string_numeric_operands/padding_and_overlay.rs)
+exercises the previous view signature against the Utf8 signature.
+
 ### AES scalar and column arguments (#1405)
 
 The local Sail AES functions evaluate inputs, keys, modes, padding, IVs and
