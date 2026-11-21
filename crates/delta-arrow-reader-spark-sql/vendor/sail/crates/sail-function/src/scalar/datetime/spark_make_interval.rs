@@ -266,10 +266,13 @@ mod tests {
             Some(178_956_970),
             Some(178_956_971),
             Some(i32::MIN),
+            None,
+            Some(178_956_971),
+            Some(0),
         ]);
         for fail_on_error in [false, true] {
             let function = SparkMakeInterval::new(fail_on_error);
-            for length in 0..=years.len() {
+            for (offset, length) in (0..=6).map(|length| (0, length)).chain([(6, 2), (6, 3)]) {
                 let invoke = |args: Vec<ColumnarValue>| {
                     function.invoke_with_args(ScalarFunctionArgs {
                         arg_fields: args
@@ -289,11 +292,13 @@ mod tests {
                 for (parts, seconds) in [
                     ([0, 0, 0, 0, 0], 0),
                     ([1, -2, 3, -4, 5], 6_000_007),
+                    ([-8, 0, 0, 0, 0], 0),
                     ([i32::MAX, 0, 0, 0, 0], 0),
                     ([0, i32::MAX, 0, 0, 0], 0),
                     ([0, 0, 0, 3_000_000, 0], 0),
                 ] {
-                    let mut args = vec![ColumnarValue::Array(Arc::new(years.slice(0, length)))];
+                    let mut args =
+                        vec![ColumnarValue::Array(Arc::new(years.slice(offset, length)))];
                     args.extend(
                         parts
                             .into_iter()
