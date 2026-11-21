@@ -2641,6 +2641,16 @@ participates in Spark's local evaluation of expressions containing LIKE.
 The [differential test](tests/like_escapes/literal_prefix.rs) compares
 against the previous preparation path and checks local errors.
 
+### Logarithm input validity (#1413)
+
+LN, LOG, LOG10, LOG2 and LOG1P use the original greater-than-zero
+comparison over Double columns and share the input value buffer.
+The comparison masks invalid values before calling the existing
+logarithm kernel. LOG1P applies the mask after adding one. Other
+argument expressions retain the original CASE.
+The [differential test](tests/floating_extrema/logarithm_domain.rs)
+compares exact Float64 bits, NULLs and result fields in both ANSI modes.
+
 ### AES scalar and column arguments (#1405)
 
 The local Sail AES functions evaluate inputs, keys, modes, padding, IVs and

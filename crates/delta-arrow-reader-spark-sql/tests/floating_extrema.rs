@@ -1,5 +1,8 @@
 //! Independent Spark extrema rows and schemas, retaining the original float bits.
 
+#[path = "floating_extrema/logarithm_domain.rs"]
+mod logarithm_domain;
+
 use std::path::PathBuf;
 use std::sync::Arc;
 

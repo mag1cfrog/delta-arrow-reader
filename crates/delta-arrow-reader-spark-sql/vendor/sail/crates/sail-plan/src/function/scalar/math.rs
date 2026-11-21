@@ -3,15 +3,18 @@ use datafusion::arrow::datatypes::{DECIMAL128_MAX_PRECISION, DECIMAL256_MAX_PREC
 use std::cmp::{max, min};
 use std::sync::Arc;
 
-use datafusion::arrow::datatypes::{DataType, IntervalUnit, TimeUnit, i256};
+use datafusion::arrow::array::{Array, AsArray, Float64Array};
+use datafusion::arrow::buffer::NullBuffer;
+use datafusion::arrow::datatypes::{DataType, Float64Type, IntervalUnit, TimeUnit, i256};
 use datafusion::arrow::error::ArrowError;
 use datafusion::functions::expr_fn;
 use datafusion::optimizer::simplify_expressions::ExprSimplifier;
-use datafusion_common::{DFSchemaRef, ScalarValue};
+use datafusion::physical_expr_common::datum::apply_cmp;
+use datafusion_common::{DFSchema, DFSchemaRef, ScalarValue};
 use datafusion_expr::simplify::SimplifyContextBuilder;
 use datafusion_expr::{
-    BinaryExpr, Expr, ExprSchemable, LogicalPlan, Operator, ScalarUDF, ScalarUDFImpl, binary_expr,
-    cast, expr, lit, try_cast,
+    BinaryExpr, ColumnarValue, Expr, ExprSchemable, LogicalPlan, Operator, ScalarFunctionArgs,
+    ScalarUDF, ScalarUDFImpl, Signature, Volatility, binary_expr, cast, expr, lit, try_cast,
 };
 use datafusion_spark::function::math::expr_fn as math_fn;
 use datafusion_spark::function::math::hex::SparkHex;
@@ -2428,7 +2431,64 @@ fn rint(expr: Expr) -> Expr {
     cast(expr_fn::round(vec![expr]), DataType::Float64)
 }
 
-fn positive_or_null(expr: Expr) -> Expr {
+#[derive(Debug, PartialEq, Eq, Hash)]
+struct PositiveDoubleOrNull;
+
+impl ScalarUDFImpl for PositiveDoubleOrNull {
+    fn name(&self) -> &str {
+        "spark_positive_double_or_null"
+    }
+
+    fn signature(&self) -> &Signature {
+        static SIGNATURE: std::sync::LazyLock<Signature> = std::sync::LazyLock::new(|| {
+            Signature::exact(vec![DataType::Float64], Volatility::Immutable)
+        });
+        &SIGNATURE
+    }
+
+    fn return_type(&self, _args: &[DataType]) -> datafusion_common::Result<DataType> {
+        Ok(DataType::Float64)
+    }
+
+    fn invoke_with_args(
+        &self,
+        args: ScalarFunctionArgs,
+    ) -> datafusion_common::Result<ColumnarValue> {
+        let [value] = datafusion_common::utils::take_function_args(self.name(), args.args)?;
+        let zero = ColumnarValue::Scalar(ScalarValue::Float64(Some(0.0)));
+        match (apply_cmp(Operator::Gt, &value, &zero)?, value) {
+            (ColumnarValue::Array(positive), ColumnarValue::Array(value)) => {
+                let positive = NullBuffer::new(positive.as_boolean().values().clone());
+                if positive.null_count() == 0 {
+                    return Ok(ColumnarValue::Array(value));
+                }
+                let value = value.as_primitive::<Float64Type>();
+                let nulls = NullBuffer::union(value.nulls(), Some(&positive));
+                Ok(ColumnarValue::Array(Arc::new(Float64Array::new(
+                    value.values().clone(),
+                    nulls,
+                ))))
+            }
+            (ColumnarValue::Scalar(ScalarValue::Boolean(Some(true))), value) => Ok(value),
+            (ColumnarValue::Scalar(ScalarValue::Boolean(_)), _) => {
+                Ok(ColumnarValue::Scalar(ScalarValue::Float64(None)))
+            }
+            _ => datafusion_common::internal_err!(
+                "{} got an unexpected comparison result",
+                self.name()
+            ),
+        }
+    }
+}
+
+fn log_argument(value: Expr, schema: &DFSchema, adjust: impl FnOnce(Expr) -> Expr) -> Expr {
+    let plain_double_column = matches!(&value, Expr::Column(_))
+        && matches!(value.get_type(schema), Ok(DataType::Float64));
+    let expr = adjust(cast(value, DataType::Float64));
+    if plain_double_column {
+        // Use the same comparison as CASE and share the existing values buffer.
+        return ScalarUDF::from(PositiveDoubleOrNull).call(vec![expr]);
+    }
     Expr::Case(expr::Case {
         expr: None,
         when_then_expr: vec![(Box::new(expr.clone().gt(lit(0_f64))), Box::new(expr))],
@@ -2518,24 +2578,28 @@ fn ceil_floor(input: ScalarFunctionInput, name: &str) -> PlanResult<Expr> {
     }))
 }
 
-fn ln(expr: Expr) -> Expr {
-    expr_fn::ln(positive_or_null(expr))
+fn unary_log(input: ScalarFunctionInput, function: impl FnOnce(Expr) -> Expr) -> PlanResult<Expr> {
+    Ok(function(log_argument(
+        input.arguments.one()?,
+        input.function_context.schema,
+        std::convert::identity,
+    )))
 }
 
-fn log(base: Expr, num: Expr) -> Expr {
-    expr_fn::log(base, positive_or_null(num))
+fn log(input: ScalarFunctionInput) -> PlanResult<Expr> {
+    let (base, value) = input.arguments.two()?;
+    Ok(expr_fn::log(
+        cast(base, DataType::Float64),
+        log_argument(value, input.function_context.schema, std::convert::identity),
+    ))
 }
 
-fn log10(expr: Expr) -> Expr {
-    expr_fn::log10(positive_or_null(expr))
-}
-
-fn log1p(expr: Expr) -> Expr {
-    expr_fn::ln(positive_or_null(expr + lit(1.0_f64)))
-}
-
-fn log2(expr: Expr) -> Expr {
-    expr_fn::log2(positive_or_null(expr))
+fn log1p(input: ScalarFunctionInput) -> PlanResult<Expr> {
+    Ok(expr_fn::ln(log_argument(
+        input.arguments.one()?,
+        input.function_context.schema,
+        |value| value + lit(1.0_f64),
+    )))
 }
 
 fn double(func: impl Fn(Expr) -> Expr) -> impl Fn(Expr) -> Expr {
@@ -3108,11 +3172,11 @@ pub(super) fn list_built_in_math_functions() -> Vec<(&'static str, ScalarFunctio
             "least",
             F::custom(|input| extremum_with_temporal_widening(input, "least", expr_fn::least)),
         ),
-        ("ln", F::unary(double(ln))),
-        ("log", F::binary(double2(log))),
-        ("log10", F::unary(double(log10))),
-        ("log1p", F::unary(double(log1p))),
-        ("log2", F::unary(double(log2))),
+        ("ln", F::custom(|input| unary_log(input, expr_fn::ln))),
+        ("log", F::custom(log)),
+        ("log10", F::custom(|input| unary_log(input, expr_fn::log10))),
+        ("log1p", F::custom(log1p)),
+        ("log2", F::custom(|input| unary_log(input, expr_fn::log2))),
         ("mod", F::custom(|input| spark_modulo(input, false))),
         ("negative", F::custom(spark_negative)),
         ("pi", F::nullary(expr_fn::pi)),
