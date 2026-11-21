@@ -47,6 +47,24 @@
       "spark_sql": "SELECT id,i+CAST(p AS BIGINT) AS summed, i/CAST(p AS BIGINT) AS quotient FROM bench WHERE id<0",
       "native_sql": null,
       "projection_sql": "SELECT id,i,p,dec FROM bench"
+    },
+    {
+      "id": "shape.scan_cast_guards_decimal_ten_integer_digits",
+      "spark_sql": "SELECT id, CAST(dec AS DECIMAL(18,2))/CAST(p AS DECIMAL(12,2)) AS result FROM bench WHERE id < 8",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p,dec FROM bench"
+    },
+    {
+      "id": "shape.scan_cast_guards_decimal_nine_integer_digits",
+      "spark_sql": "SELECT id, CAST(dec AS DECIMAL(18,2))/CAST(p AS DECIMAL(11,2)) AS result FROM bench WHERE id < 8",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p,dec FROM bench"
+    },
+    {
+      "id": "shape.scan_cast_guards_decimal_scale_change",
+      "spark_sql": "SELECT id, CAST(dec AS DECIMAL(18,3))/CAST(p AS DECIMAL(18,2)) AS result FROM bench WHERE id < 8",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p,dec FROM bench"
     }
   ]
 }

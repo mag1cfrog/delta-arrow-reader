@@ -18,7 +18,10 @@ Before timing, compare rows, types or original errors for the
 Confirm the physical NULL CASE disappears on the proven scan
 operands, including through a passthrough alias. Also exercise a
 computed operand, a fallible cast on a skipped or selected row,
-division by zero and empty input.
+division by zero and empty input. The registered-table regression
+checks zero and NULL divisors on the stored-column path. The decimal
+controls require the guard with nine integer digits or a scale change
+and omit it when the INT cast reserves all ten integer digits.
 
 Use the [matched Linux release schedule](../window_aggregates_1408/string-aggregation-protocol.md#schedule-and-pass-rule).
 Each shape targets the candidate native median plus its same-session
