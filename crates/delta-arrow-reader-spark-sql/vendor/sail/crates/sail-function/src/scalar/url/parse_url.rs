@@ -631,12 +631,14 @@ where
 mod tests {
     use crate::scalar::url::spark_try_parse_url::SparkTryParseUrl;
 
+    use super::*;
+
     #[test]
     fn literal_url_parts_match_broadcast_parts() {
         let strict = ParseUrl::new();
         let tolerant = SparkTryParseUrl::new();
         let urls = StringArray::from(vec![
-            Some("https://example.test/path?q=2#tag"),
+            Some("https://demo@example.test:8080/path?q=2#tag"),
             None,
             Some("relative/path?q=3#tag"),
             Some("file:///tmp/item"),
@@ -699,8 +701,6 @@ mod tests {
 
     use datafusion::arrow::array::StringArray;
     use datafusion_common::Result;
-
-    use super::*;
 
     #[test]
     fn test_parse_url() -> Result<()> {
