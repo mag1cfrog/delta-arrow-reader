@@ -2612,3 +2612,12 @@ returns Utf8. A Utf8View literal shares delimiter bytes when the executor
 expands the literal over a batch. Other argument forms, binary values, and other window frames
 use the original list-based lowering. The array_join scalar function is
 separate from the window alias.
+
+### Sliding BIGINT extrema by key (#1408)
+
+MAX_BY and MIN_BY use a queue of candidates in sliding windows when both
+the value and key are BIGINT. Strictly better keys make older, worse
+candidates unnecessary. Equal keys keep their arrival order, and a NULL
+value can win on a nonnull key. Retraction removes candidates whose rows
+have left the frame. Ordinary aggregates and other types use the original
+accumulator.
