@@ -17,7 +17,11 @@ builds and both ANSI modes. Require identical rows and types on
 success and the original failures otherwise. Check signed limits,
 NULL values and distances, zero, negative and oversized distances,
 INT and unsupported TINYINT inputs, computed operands and empty
-input.
+input. Check an unselected CASE arm and projected constants with
+and without an empty LIMIT. LIMIT 0 must plan to EmptyExec with
+no scan. The runner's source requirement makes that a plan check.
+The unit test compares a sliced buffer and validity bitmap,
+including a hidden signed minimum.
 
 Use the [matched Linux release schedule](../window_aggregates_1408/string-aggregation-protocol.md#schedule-and-pass-rule).
 The target is at or below candidate native plus the same-session
