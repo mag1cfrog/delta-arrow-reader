@@ -2573,6 +2573,16 @@ Parser construction still runs for each call, and rejected input pays for the
 failed diagnostic-free attempt before the Rich fallback. No construction savings
 or measured performance result is claimed here.
 
+### Wide scan rename projection (#1390)
+
+For scans with at least 64 uniquely named fields, a single table qualifier
+and no functional dependencies, the rename projection takes its output
+fields from the input by position. It keeps the same alias expressions
+and validates the new names with DataFusion. The regular projection
+constructor still handles other schemas. The
+[planning report](benches/reports/planning-1390-round2-wide-resolution.md)
+records the scan alias cost and matched comparison.
+
 ### AES scalar and column arguments (#1405)
 
 The local Sail AES functions evaluate inputs, keys, modes, padding, IVs and
