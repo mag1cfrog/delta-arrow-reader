@@ -59,6 +59,7 @@ def profiles(binary, receipt, commit, settings, checked, groups_path, output, de
     profile.write(output / "receipt.json", dict(
         protocol_commit=commit, profile_manifest_sha256=runner.digest(groups_path),
         preflight_receipt_sha256=runner.digest(checked_path), build=receipt))
+    completed = []
     for group in groups["groups"]:
         if not set(group["cases"]) & before["eligible"].keys():
             assert group["representative"] is None
@@ -72,6 +73,8 @@ def profiles(binary, receipt, commit, settings, checked, groups_path, output, de
         assert group["configuration"] in ("spark-off", "spark-on", "native")
         profile.profile_case(binary, case_id, before["eligible"][case_id], output / name,
                              profile.schedule(), config, deadline)
+        completed.append(name)
+    profile.write(output / "complete.json", dict(profiled_groups=completed, exclusions=before["excluded"]))
 
 
 def main():
