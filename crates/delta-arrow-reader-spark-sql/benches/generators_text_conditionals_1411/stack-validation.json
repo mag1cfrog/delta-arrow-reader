@@ -22,12 +22,22 @@
     },
     {
       "id": "generator.generator.stack_scalar_bounds",
-      "spark_sql": "SELECT STACK(2, CAST('-9223372036854775808' AS BIGINT),\n    CAST('9223372036854775807' AS BIGINT))",
+      "spark_sql": "SELECT STACK(2, CAST('-9223372036854775808' AS BIGINT),\n    CAST('9223372036854775807' AS BIGINT)) FROM bench WHERE id = 1",
       "projection_sql": "SELECT id,i,p FROM bench"
     },
     {
       "id": "generator.generator.stack_empty",
       "spark_sql": "SELECT STACK(1, CAST(1 AS BIGINT)) AS value FROM bench WHERE id < 0",
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "generator.generator.stack_nested_cast",
+      "spark_sql": "SELECT CAST(STACK(1, CAST(1 AS BIGINT)) AS BIGINT) AS value\nFROM bench WHERE id = 1",
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "generator.generator.stack_nested_abs",
+      "spark_sql": "SELECT ABS(STACK(1, CAST(-1 AS BIGINT))) AS value\nFROM bench WHERE id = 1",
       "projection_sql": "SELECT id,i,p FROM bench"
     }
   ]

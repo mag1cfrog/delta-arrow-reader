@@ -24,3 +24,8 @@ repeat floor in both ANSI modes. Record any remaining cost.
 The scalar-only query checks both BIGINT endpoints under the default
 `col0` name. The empty-source query checks zero output rows and an
 explicit INT64 alias.
+
+The scalar-only arguments run over one source row so the observer can
+validate the executed plan. The enclosing CAST and ABS queries check
+the declaration available before generator expansion, including any
+existing planning failure.
