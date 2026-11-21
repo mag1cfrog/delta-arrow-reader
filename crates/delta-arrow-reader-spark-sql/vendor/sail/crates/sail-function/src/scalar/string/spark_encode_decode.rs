@@ -751,6 +751,7 @@ where
 #[cfg(test)]
 mod tests {
     use datafusion::arrow::array::{GenericBinaryArray, StringArray};
+    use datafusion::arrow::buffer::{Buffer, NullBuffer, OffsetBuffer};
     use datafusion_common::config::ConfigOptions;
 
     use super::*;
@@ -788,6 +789,17 @@ mod tests {
                 actual.to_data().validate_full()?;
                 assert_eq!(actual.data_type(), expected.data_type());
                 assert_eq!(actual.as_ref(), expected.as_ref(), "{charset}");
+                let actual = actual.as_string::<O>();
+                let expected = expected.as_string::<O>();
+                for row in 0..rows {
+                    if expected.is_null(row) {
+                        assert_eq!(
+                            actual.value_length(row),
+                            expected.value_length(row),
+                            "NULL byte span at row {row} for {charset}"
+                        );
+                    }
+                }
             }
             (Err(actual), Err(expected)) => assert_eq!(actual.to_string(), expected.to_string()),
             (actual, expected) => panic!("{charset}: actual {actual:?}, expected {expected:?}"),
@@ -839,6 +851,17 @@ mod tests {
         compare_scalar_decode(malformed.slice(1, 2), "UTF-8")?;
         compare_scalar_decode(malformed.slice(2, 1), "UTF-8")?;
         compare_scalar_decode(malformed.slice(0, 1), "unknown")?;
+
+        for hidden in [b'[', 0xff] {
+            let bytes = GenericBinaryArray::<O>::new(
+                OffsetBuffer::from_lengths([1, 1]),
+                Buffer::from(vec![hidden, b':']),
+                Some(NullBuffer::from(vec![false, true])),
+            );
+            compare_scalar_decode(bytes.clone(), "UTF-8")?;
+            compare_scalar_decode(bytes.slice(0, 1), "UTF-8")?;
+            compare_scalar_decode(bytes.slice(1, 1), "UTF-8")?;
+        }
 
         // The buffer is valid UTF-8, but the two rows split one codepoint.
         let split_codepoint: GenericBinaryArray<O> =
