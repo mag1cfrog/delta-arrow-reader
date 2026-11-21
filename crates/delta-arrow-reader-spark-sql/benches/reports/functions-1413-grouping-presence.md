@@ -16,7 +16,7 @@ Positive paired values below mean the trial reduced the process median.
 Staging gaps are Spark staging minus native staging in the same session.
 
 | Function | Paired decrease, ANSI off | Paired decrease, ANSI on | Staging gap, ANSI off | Staging gap, ANSI on | A/A floor |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| --- | ---: | ---: | ---: | ---: | ---: |
 | GROUPING | -0.006 | 0.088 | 0.720 | 0.704 | 0.085 |
 | GROUPING_ID | -0.032 | 0.032 | 0.803 | 0.631 | 0.035 |
 
