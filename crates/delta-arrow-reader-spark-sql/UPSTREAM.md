@@ -2739,3 +2739,11 @@ SLICE can pass positive scalar bounds to native slicing for List and
 LargeList columns when the inclusive end fits INT. Both paths use the
 same native slicing and restore the original element field. Other
 coordinates and storage retain Spark's existing row preparation.
+
+### Default INT ranges in SEQUENCE (#1410)
+
+SEQUENCE validates and stores output offsets directly for two nonnull
+INT argument arrays, then uses checked range lengths to emit INT values.
+The original generator handles explicit steps, NULL inputs and all other
+types. Argument evaluation, size limits and the list element field stay
+in their existing paths.
