@@ -2,8 +2,7 @@
 
 use std::sync::Arc;
 
-use arrow::array::Array;
-use arrow::compute::concat_batches;
+use arrow::compute::{cast, concat_batches};
 use datafusion::physical_plan::{collect, displayable};
 use delta_arrow_reader_spark_sql::{SparkSqlOptions, plan_query};
 
@@ -71,10 +70,17 @@ async fn literal_matches_agree_with_the_previous_scalar_regex() -> TestResult {
             for (name, batch) in [("regex_words", &input), ("empty_regex_words", &empty)] {
                 for function in ["regexp", "regexp_like", "rlike"] {
                     let sql = format!("SELECT {function}(s, {pattern_sql}) AS matched FROM {name}");
-                    let plan = plan_query(&session, &sql, &options)
-                        .await?
-                        .create_physical_plan(&session)
-                        .await?;
+                    let query = plan_query(&session, &sql, &options).await?;
+                    assert_eq!(
+                        query
+                            .logical_plan
+                            .display_indent()
+                            .to_string()
+                            .contains(" SIMILAR TO "),
+                        !literal_word,
+                        "{sql}; ANSI={ansi_mode}",
+                    );
+                    let plan = query.create_physical_plan(&session).await?;
                     let result_schema = plan.schema();
                     assert_eq!(result_schema.field(0).data_type(), &DataType::Boolean);
                     if literal_word && name == "regex_words" {
@@ -93,7 +99,7 @@ async fn literal_matches_agree_with_the_previous_scalar_regex() -> TestResult {
                             let actual = concat_batches(&result_schema, &actual)?;
                             let expected = expected.into_array(batch.num_rows())?;
                             assert_eq!(
-                                actual.column(0).as_ref() as &dyn Array,
+                                actual.column(0).as_ref(),
                                 expected.as_ref(),
                                 "{sql}; ANSI={ansi_mode}",
                             );
@@ -103,11 +109,66 @@ async fn literal_matches_agree_with_the_previous_scalar_regex() -> TestResult {
                             assert!(expected.to_string().contains("unclosed character class"));
                         }
                         (actual, expected) => {
-                            panic!("{sql}; ANSI={ansi_mode}: {actual:?} vs {expected:?}")
+                            return Err(format!(
+                                "{sql}; ANSI={ansi_mode}: {actual:?} vs {expected:?}"
+                            )
+                            .into());
                         }
                     }
                 }
             }
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn literal_matches_keep_the_regex_path_for_other_storage_and_types() -> TestResult {
+    let session = session(32, true);
+    let values = StringArray::from(vec![Some("item"), Some("ITEM"), None]);
+    session.register_batch(
+        "large_regex_words",
+        RecordBatch::try_from_iter([("s", cast(&values, &DataType::LargeUtf8)?)])?,
+    )?;
+    session.register_batch(
+        "view_regex_words",
+        RecordBatch::try_from_iter([("s", cast(&values, &DataType::Utf8View)?)])?,
+    )?;
+    for ansi_mode in [false, true] {
+        let options = SparkSqlOptions {
+            ansi_mode,
+            ..Default::default()
+        };
+        for function in ["regexp", "regexp_like", "rlike"] {
+            for table in ["large_regex_words", "view_regex_words"] {
+                let sql = format!("SELECT {function}(s, 'item') AS matched FROM {table}");
+                let query = plan_query(&session, &sql, &options).await?;
+                assert!(
+                    query
+                        .logical_plan
+                        .display_indent()
+                        .to_string()
+                        .contains(" SIMILAR TO ")
+                );
+                let plan = query.create_physical_plan(&session).await?;
+                let schema = plan.schema();
+                let batches = collect(plan, session.task_ctx()).await?;
+                let actual = concat_batches(&schema, &batches)?;
+                let expected =
+                    arrow::array::BooleanArray::from(vec![Some(true), Some(false), None]);
+                assert_eq!(
+                    actual.column(0).as_ref(),
+                    &expected as &dyn arrow::array::Array
+                );
+            }
+            let sql = format!("SELECT {function}(42, 'item')");
+            let query = plan_query(&session, &sql, &options).await?;
+            let error = query
+                .create_physical_plan(&session)
+                .await
+                .err()
+                .ok_or("expected the nonstring regexp operand to be rejected")?;
+            assert!(error.to_string().contains("SIMILAR TO expression"));
         }
     }
     Ok(())
