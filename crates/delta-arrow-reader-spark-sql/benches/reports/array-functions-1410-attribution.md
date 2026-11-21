@@ -28,7 +28,7 @@ them with the plan and source traces to identify the extra work.
 | FLATTEN | 45.16 | List row encoding had 117 samples and membership had 39. |
 | VECTOR_INNER_PRODUCT | 27.30 | The dot routine had 10 samples. Primitive-array slices were the largest sampled leaf family. |
 | SLICE | 15.24 | The Spark slice wrapper had 40 samples, including 21 in coordinate preparation. |
-| SEQUENCE | 13.21 | Spark sequence implementations had 47 samples. Lazy child evaluation and result scattering had 37 and six. |
+| SEQUENCE | 13.21 | The Spark sequence wrapper had 47 samples, integer emission 59 and range length 27. Lazy child evaluation and result scattering had 37 and six. |
 
 ### ARRAY_MIN and ARRAY_MAX
 
