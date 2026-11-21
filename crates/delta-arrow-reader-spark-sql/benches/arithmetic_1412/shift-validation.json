@@ -1,379 +1,94 @@
 {
   "functions": [
     {
-      "kind": "scalar",
-      "category": "bitwise",
-      "name": "shiftrightunsigned",
-      "registration": "F::custom(shiftrightunsigned)",
-      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:51",
-      "implementation_anchors": [
-        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:10",
-        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:51"
-      ],
       "id": "scalar.bitwise.shift_signed_boundaries",
-      "aliases": [
-        ">>>"
-      ],
       "spark_sql": "WITH operands AS (\n    SELECT id, CASE id WHEN 0 THEN CAST(NULL AS BIGINT)\n                     WHEN 1 THEN CAST('9223372036854775807' AS BIGINT)\n                     WHEN 2 THEN CAST('-9223372036854775807' AS BIGINT)\n                     WHEN 3 THEN CAST(0 AS BIGINT) ELSE CAST(-1 AS BIGINT) END AS value,\n               CASE id WHEN 3 THEN CAST(NULL AS BIGINT)\n                       WHEN 4 THEN CAST(63 AS BIGINT) ELSE CAST(1 AS BIGINT) END AS distance\n    FROM bench WHERE id < 8\n)\nSELECT id, value >>> distance AS result FROM operands",
       "native_sql": null,
-      "input_columns": [
-        "id",
-        "i"
-      ],
-      "projection_sql": "SELECT id,i FROM bench",
-      "exclusion": null,
-      "class": "paired",
-      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+      "projection_sql": "SELECT id,i FROM bench"
     },
     {
-      "kind": "scalar",
-      "category": "bitwise",
-      "name": "shiftrightunsigned",
-      "registration": "F::custom(shiftrightunsigned)",
-      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:51",
-      "implementation_anchors": [
-        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:10",
-        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:51"
-      ],
       "id": "scalar.bitwise.shift_signed_minimum",
-      "aliases": [
-        ">>>"
-      ],
       "spark_sql": "WITH operands AS (\n    SELECT id, CASE id WHEN 0 THEN CAST('-9223372036854775808' AS BIGINT) ELSE i END AS value FROM bench WHERE id < 8\n)\nSELECT id, shiftrightunsigned(value, 1) AS result FROM operands",
       "native_sql": null,
-      "input_columns": [
-        "id",
-        "i"
-      ],
-      "projection_sql": "SELECT id,i FROM bench",
-      "exclusion": null,
-      "class": "paired",
-      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+      "projection_sql": "SELECT id,i FROM bench"
     },
     {
-      "kind": "scalar",
-      "category": "bitwise",
-      "name": "shiftrightunsigned",
-      "registration": "F::custom(shiftrightunsigned)",
-      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:51",
-      "implementation_anchors": [
-        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:10",
-        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:51"
-      ],
       "id": "scalar.bitwise.shift_minimum_with_null_distance",
-      "aliases": [
-        ">>>"
-      ],
       "spark_sql": "WITH operands AS (\n    SELECT id, CASE id WHEN 0 THEN CAST('-9223372036854775808' AS BIGINT) ELSE i END AS value FROM bench WHERE id < 8\n)\nSELECT id, value >>> CAST(NULL AS BIGINT) AS result FROM operands",
       "native_sql": null,
-      "input_columns": [
-        "id",
-        "i"
-      ],
-      "projection_sql": "SELECT id,i FROM bench",
-      "exclusion": null,
-      "class": "paired",
-      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+      "projection_sql": "SELECT id,i FROM bench"
     },
     {
-      "kind": "scalar",
-      "category": "bitwise",
-      "name": "shiftrightunsigned",
-      "registration": "F::custom(shiftrightunsigned)",
-      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:51",
-      "implementation_anchors": [
-        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:10",
-        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:51"
-      ],
       "id": "scalar.bitwise.shift_negative_distance",
-      "aliases": [
-        ">>>"
-      ],
       "spark_sql": "SELECT id, shiftrightunsigned(i, -1) AS result FROM bench WHERE id < 8",
       "native_sql": null,
-      "input_columns": [
-        "id",
-        "i"
-      ],
-      "projection_sql": "SELECT id,i FROM bench",
-      "exclusion": null,
-      "class": "paired",
-      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+      "projection_sql": "SELECT id,i FROM bench"
     },
     {
-      "kind": "scalar",
-      "category": "bitwise",
-      "name": "shiftrightunsigned",
-      "registration": "F::custom(shiftrightunsigned)",
-      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:51",
-      "implementation_anchors": [
-        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:10",
-        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:51"
-      ],
       "id": "scalar.bitwise.shift_zero_distance",
-      "aliases": [
-        ">>>"
-      ],
       "spark_sql": "SELECT id, shiftrightunsigned(i, 0) AS result FROM bench WHERE id < 8",
       "native_sql": null,
-      "input_columns": [
-        "id",
-        "i"
-      ],
-      "projection_sql": "SELECT id,i FROM bench",
-      "exclusion": null,
-      "class": "paired",
-      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+      "projection_sql": "SELECT id,i FROM bench"
     },
     {
-      "kind": "scalar",
-      "category": "bitwise",
-      "name": "shiftrightunsigned",
-      "registration": "F::custom(shiftrightunsigned)",
-      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:51",
-      "implementation_anchors": [
-        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:10",
-        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:51"
-      ],
       "id": "scalar.bitwise.shift_oversized_distance",
-      "aliases": [
-        ">>>"
-      ],
       "spark_sql": "SELECT id, shiftrightunsigned(i, 64) AS result FROM bench WHERE id < 8",
       "native_sql": null,
-      "input_columns": [
-        "id",
-        "i"
-      ],
-      "projection_sql": "SELECT id,i FROM bench",
-      "exclusion": null,
-      "class": "paired",
-      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+      "projection_sql": "SELECT id,i FROM bench"
     },
     {
-      "kind": "scalar",
-      "category": "bitwise",
-      "name": "shiftrightunsigned",
-      "registration": "F::custom(shiftrightunsigned)",
-      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:51",
-      "implementation_anchors": [
-        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:10",
-        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:51"
-      ],
       "id": "scalar.bitwise.shift_int_fallback",
-      "aliases": [
-        ">>>"
-      ],
       "spark_sql": "WITH operands AS (\n    SELECT id, CASE id WHEN 0 THEN CAST('2147483647' AS INT)\n                     WHEN 1 THEN CAST('-2147483647' AS INT) ELSE p END AS value\n    FROM bench WHERE id < 8\n)\nSELECT id, value >>> 1 AS result FROM operands",
       "native_sql": null,
-      "input_columns": [
-        "id",
-        "i"
-      ],
-      "projection_sql": "SELECT id,i FROM bench",
-      "exclusion": null,
-      "class": "paired",
-      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+      "projection_sql": "SELECT id,i FROM bench"
     },
     {
-      "kind": "scalar",
-      "category": "bitwise",
-      "name": "shiftrightunsigned",
-      "registration": "F::custom(shiftrightunsigned)",
-      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:51",
-      "implementation_anchors": [
-        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:10",
-        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:51"
-      ],
       "id": "scalar.bitwise.shift_int_minimum",
-      "aliases": [
-        ">>>"
-      ],
       "spark_sql": "WITH operands AS (\n    SELECT id, CASE id WHEN 0 THEN CAST('-2147483648' AS INT) ELSE p END AS value\n    FROM bench WHERE id < 8\n)\nSELECT id, value >>> 1 AS result FROM operands",
       "native_sql": null,
-      "input_columns": [
-        "id",
-        "i"
-      ],
-      "projection_sql": "SELECT id,i FROM bench",
-      "exclusion": null,
-      "class": "paired",
-      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+      "projection_sql": "SELECT id,i FROM bench"
     },
     {
-      "kind": "scalar",
-      "category": "bitwise",
-      "name": "shiftrightunsigned",
-      "registration": "F::custom(shiftrightunsigned)",
-      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:51",
-      "implementation_anchors": [
-        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:10",
-        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:51"
-      ],
       "id": "scalar.bitwise.shift_unsupported_tinyint",
-      "aliases": [
-        ">>>"
-      ],
       "spark_sql": "SELECT id, shiftrightunsigned(CAST(p AS TINYINT), 1) AS result FROM bench WHERE id < 8",
       "native_sql": null,
-      "input_columns": [
-        "id",
-        "i"
-      ],
-      "projection_sql": "SELECT id,i FROM bench",
-      "exclusion": null,
-      "class": "paired",
-      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+      "projection_sql": "SELECT id,i FROM bench"
     },
     {
-      "kind": "scalar",
-      "category": "bitwise",
-      "name": "shiftrightunsigned",
-      "registration": "F::custom(shiftrightunsigned)",
-      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:51",
-      "implementation_anchors": [
-        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:10",
-        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:51"
-      ],
       "id": "scalar.bitwise.shift_computed_fallback",
-      "aliases": [
-        ">>>"
-      ],
       "spark_sql": "SELECT id, shiftrightunsigned(i + 1L, 1) AS result FROM bench WHERE id < 8",
       "native_sql": null,
-      "input_columns": [
-        "id",
-        "i"
-      ],
-      "projection_sql": "SELECT id,i FROM bench",
-      "exclusion": null,
-      "class": "paired",
-      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+      "projection_sql": "SELECT id,i FROM bench"
     },
     {
-      "kind": "scalar",
-      "category": "bitwise",
-      "name": "shiftrightunsigned",
-      "registration": "F::custom(shiftrightunsigned)",
-      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:51",
-      "implementation_anchors": [
-        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:10",
-        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:51"
-      ],
       "id": "scalar.bitwise.shift_empty",
-      "aliases": [
-        ">>>"
-      ],
       "spark_sql": "SELECT id, shiftrightunsigned(i, 1) AS result FROM bench WHERE id < 0",
       "native_sql": null,
-      "input_columns": [
-        "id",
-        "i"
-      ],
-      "projection_sql": "SELECT id,i FROM bench",
-      "exclusion": null,
-      "class": "paired",
-      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+      "projection_sql": "SELECT id,i FROM bench"
     },
     {
-      "kind": "scalar",
-      "category": "bitwise",
-      "name": "shiftrightunsigned",
-      "registration": "F::custom(shiftrightunsigned)",
-      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:51",
-      "implementation_anchors": [
-        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:10",
-        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:51"
-      ],
       "id": "scalar.bitwise.shift_minimum_with_mixed_distance",
-      "aliases": [
-        ">>>"
-      ],
       "spark_sql": "WITH operands AS (\n    SELECT id, CASE id WHEN 0 THEN CAST('-9223372036854775808' AS BIGINT) ELSE i END AS value,\n               CASE id WHEN 0 THEN CAST(NULL AS BIGINT) ELSE CAST(1 AS BIGINT) END AS distance\n    FROM bench WHERE id < 8\n)\nSELECT id, value >>> distance AS result FROM operands",
       "native_sql": null,
-      "input_columns": [
-        "id",
-        "i"
-      ],
-      "projection_sql": "SELECT id,i FROM bench",
-      "exclusion": null,
-      "class": "paired",
-      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+      "projection_sql": "SELECT id,i FROM bench"
     },
     {
-      "kind": "scalar",
-      "category": "bitwise",
-      "name": "shiftrightunsigned",
-      "registration": "F::custom(shiftrightunsigned)",
-      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:51",
-      "implementation_anchors": [
-        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:10",
-        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:51"
-      ],
       "id": "scalar.bitwise.shift_unselected_minimum",
-      "aliases": [
-        ">>>"
-      ],
       "spark_sql": "WITH operands AS (\n    SELECT id, CASE id WHEN 0 THEN CAST('-9223372036854775808' AS BIGINT) ELSE i END AS value\n    FROM bench WHERE id < 8\n)\nSELECT id, CASE WHEN id > 0 THEN value >>> 1 END AS result FROM operands",
       "native_sql": null,
-      "input_columns": [
-        "id",
-        "i"
-      ],
-      "projection_sql": "SELECT id,i FROM bench",
-      "exclusion": null,
-      "class": "paired",
-      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+      "projection_sql": "SELECT id,i FROM bench"
     },
     {
-      "kind": "scalar",
-      "category": "bitwise",
-      "name": "shiftrightunsigned",
-      "registration": "F::custom(shiftrightunsigned)",
-      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:51",
-      "implementation_anchors": [
-        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:10",
-        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:51"
-      ],
       "id": "scalar.bitwise.shift_projected_minimum_limit_zero",
-      "aliases": [
-        ">>>"
-      ],
       "spark_sql": "WITH operands AS (\n    SELECT id, CAST('-9223372036854775808' AS BIGINT) AS value FROM bench WHERE id < 8\n)\nSELECT id, value >>> 1 AS result FROM operands LIMIT 0",
       "native_sql": null,
-      "input_columns": [
-        "id",
-        "i"
-      ],
-      "projection_sql": "SELECT id,i FROM bench",
-      "exclusion": null,
-      "class": "paired",
-      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+      "projection_sql": "SELECT id,i FROM bench"
     },
     {
-      "kind": "scalar",
-      "category": "bitwise",
-      "name": "shiftrightunsigned",
-      "registration": "F::custom(shiftrightunsigned)",
-      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:51",
-      "implementation_anchors": [
-        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:10",
-        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/bitwise.rs:51"
-      ],
       "id": "scalar.bitwise.shift_projected_minimum",
-      "aliases": [
-        ">>>"
-      ],
       "spark_sql": "WITH operands AS (\n    SELECT id, CAST('-9223372036854775808' AS BIGINT) AS value FROM bench WHERE id < 8\n)\nSELECT id, value >>> 1 AS result FROM operands LIMIT 1",
       "native_sql": null,
-      "input_columns": [
-        "id",
-        "i"
-      ],
-      "projection_sql": "SELECT id,i FROM bench",
-      "exclusion": null,
-      "class": "paired",
-      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+      "projection_sql": "SELECT id,i FROM bench"
     }
   ]
 }
