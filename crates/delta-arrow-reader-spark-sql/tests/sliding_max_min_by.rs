@@ -201,6 +201,18 @@ async fn sliding_extrema_match_staging_in_both_ansi_modes() -> Result<()> {
                 "non_bigint_value",
                 "SELECT id, max_by(CAST(v % 127 AS INT),k) OVER (PARTITION BY g ORDER BY id ROWS BETWEEN 3 PRECEDING AND CURRENT ROW), min_by(CAST(v % 127 AS INT),k) OVER (PARTITION BY g ORDER BY id ROWS BETWEEN 3 PRECEDING AND CURRENT ROW) FROM samples ORDER BY id",
             ),
+            (
+                "non_bigint_key",
+                "SELECT id, max_by(v,CAST(k % 127 AS INT)) OVER (ORDER BY id ROWS BETWEEN 3 PRECEDING AND CURRENT ROW), min_by(v,CAST(k % 127 AS INT)) OVER (ORDER BY id ROWS BETWEEN 3 PRECEDING AND CURRENT ROW) FROM samples ORDER BY id",
+            ),
+            (
+                "empty_plain",
+                "SELECT max_by(v,k), min_by(v,k) FROM samples WHERE false",
+            ),
+            (
+                "empty_window",
+                "SELECT max_by(v,k) OVER w, min_by(v,k) OVER w FROM samples WHERE false WINDOW w AS (ORDER BY id ROWS BETWEEN 3 PRECEDING AND CURRENT ROW)",
+            ),
         ] {
             let result = execute_extrema(&session, sql, ansi_mode).await?;
             observations.push(json!({"id":id,"ansi_mode":ansi_mode,"result":result}));
