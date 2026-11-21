@@ -15,6 +15,12 @@ pending sets, including sets nested in subqueries.
 
 Use [these two product sources](logical-comparison.json) and the
 unaltered [full comparison schedule](wide-merge-protocol.md#plan-and-timing-checks).
+The retained baseline binary uses `8bdf07b7`, the projection
+dependency change merged in #1472. The current staging head
+`e511013a` adds only four files containing that change's protocol
+and report. Verify that source equivalence and match the generated
+driver and fixture hashes before comparing the two executables.
+
 Produce 678 exact matched plan traces, including Arrow schemas,
 before clocks. Test invalid statements separately. Then run 50
 interleaved Linux release processes for all 30 statements and all
