@@ -275,6 +275,9 @@ impl ScalarUDFImpl for SparkSequence {
         match args.first().map(ColumnarValue::data_type) {
             Some(DataType::Int8) => make_scalar_function(gen_sequence_i8)(&args),
             Some(DataType::Int16) => make_scalar_function(gen_sequence_i16)(&args),
+            Some(DataType::Int32) if args.len() == 2 => {
+                make_scalar_function(gen_default_i32_sequence)(&args)
+            }
             Some(DataType::Int32) => make_scalar_function(gen_sequence_i32)(&args),
             Some(DataType::Int64) => make_scalar_function(gen_sequence_i64)(&args),
             Some(DataType::Date32) => {
@@ -643,6 +646,45 @@ where
         );
     }
     Ok(())
+}
+
+fn gen_default_i32_sequence(args: &[ArrayRef]) -> Result<ArrayRef> {
+    let [starts, stops] = args else {
+        return invalid_sequence_arity(args.len());
+    };
+    let starts = starts.as_primitive::<Int32Type>();
+    let stops = stops.as_primitive::<Int32Type>();
+    if starts.null_count() != 0 || stops.null_count() != 0 {
+        return gen_sequence_i32(args);
+    }
+
+    let bounds = starts.values().iter().zip(stops.values().iter());
+    let mut offsets = Vec::with_capacity(starts.len() + 1);
+    offsets.push(0);
+    let mut total = 0;
+    for (&start, &stop) in bounds.clone() {
+        let length = i64::from(start.abs_diff(stop)) + 1;
+        if length > MAX_ROUNDED_ARRAY_LENGTH {
+            return collection_size_limit_error(i128::from(length));
+        }
+        total = checked_batch_length(total, length as usize)?;
+        offsets.push(total as i32);
+    }
+
+    let mut values = Vec::new();
+    reserve(&mut values, total)?;
+    for ((&start, &stop), offsets) in bounds.zip(offsets.windows(2)) {
+        let length = offsets[1] - offsets[0];
+        let step = if start <= stop { 1 } else { -1 };
+        // Every generated value lies between the original INT bounds.
+        values.extend((0..length).map(|index| start + step * index));
+    }
+    list_array(
+        DataType::Int32,
+        offsets,
+        Arc::new(Int32Array::from(values)),
+        &mut NullBufferBuilder::new(starts.len()),
+    )
 }
 
 macro_rules! impl_sequence_for_type {
@@ -1335,6 +1377,44 @@ mod tests {
         ] {
             assert!(!is_fixed_zero_offset_timezone(timezone), "{timezone}");
         }
+    }
+
+    #[test]
+    fn default_i32_sequence_matches_integral_generator() -> Result<()> {
+        let starts = Int32Array::from(vec![17, i32::MIN, i32::MAX, -2, 2, 0, -3, 19]);
+        let stops = Int32Array::from(vec![23, i32::MIN + 3, i32::MAX - 3, 2, -2, 0, -1, 29]);
+        for (starts, stops) in [
+            (starts.slice(1, 6), stops.slice(1, 6)),
+            (starts.slice(0, 0), stops.slice(0, 0)),
+            (
+                Int32Array::from(vec![Some(3), None, Some(i32::MIN)]),
+                Int32Array::from(vec![Some(1), Some(4), None]),
+            ),
+        ] {
+            let args = [Arc::new(starts) as ArrayRef, Arc::new(stops) as ArrayRef];
+            let direct = gen_default_i32_sequence(&args)?;
+            let original = gen_sequence_i32(&args)?;
+            direct.to_data().validate_full()?;
+            assert_eq!(direct.as_ref(), original.as_ref());
+            assert_eq!(direct.data_type(), original.data_type());
+        }
+
+        for (starts, stops) in [
+            (vec![i32::MIN], vec![i32::MAX]),
+            (vec![i32::MAX], vec![i32::MIN]),
+            (vec![0, 0], vec![1_500_000_000, 1_500_000_000]),
+            (vec![1, 0, i32::MIN], vec![3, 1, i32::MAX]),
+        ] {
+            let args = [
+                Arc::new(Int32Array::from(starts)) as ArrayRef,
+                Arc::new(Int32Array::from(stops)) as ArrayRef,
+            ];
+            assert_eq!(
+                gen_default_i32_sequence(&args).unwrap_err().to_string(),
+                gen_sequence_i32(&args).unwrap_err().to_string(),
+            );
+        }
+        Ok(())
     }
 
     #[test]
