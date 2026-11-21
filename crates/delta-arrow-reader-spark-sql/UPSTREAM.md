@@ -2732,3 +2732,10 @@ VECTOR_INNER_PRODUCT uses list offsets to read FLOAT child buffers when
 neither buffer contains NULLs. It retains the Spark-order dot product and
 checks parent validity and dimensions before reading a row. Child buffers
 with NULLs retain the per-row slices and validity checks.
+
+### Positive scalar coordinates in SLICE (#1410)
+
+SLICE can pass positive scalar bounds to native slicing for List and
+LargeList columns when the inclusive end fits INT. Both paths use the
+same native slicing and restore the original element field. Other
+coordinates and storage retain Spark's existing row preparation.
