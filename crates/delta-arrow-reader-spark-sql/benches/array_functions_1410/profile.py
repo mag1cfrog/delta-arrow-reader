@@ -55,12 +55,13 @@ def profile_case(binary, case_id, expected, work, limits, profile, deadline):
     ids = work / "ids.json"
     write(ids, [case_id] * profile["repeats"])
     capture = work / "perf.data"
+    configuration = profile.get("configuration_by_case", {}).get(case_id, "spark-off")
     command = [
         "perf", "record", "-e", "cpu-clock:u", "--user-callchains",
         "--call-graph", f"dwarf,{profile['stack_bytes']}", "-F", str(profile["frequency_hz"]),
         "--max-size", f"{profile['max_mib']}M", "-o", str(capture), "--",
         "taskset", "-c", ",".join(map(str, limits["cpus"])),
-        str(binary), "measure-set", str(MANIFEST), str(ids), "spark-off",
+        str(binary), "measure-set", str(MANIFEST), str(ids), configuration,
     ]
     write(work / "command.json", command)
     stdout = work / "stdout.jsonl"
@@ -83,7 +84,7 @@ def profile_case(binary, case_id, expected, work, limits, profile, deadline):
     runs = [row for row in records if row.get("status") == "ok"]
     assert len(runs) == profile["repeats"]
     for entry in runs:
-        assert entry["id"] == case_id and entry["configuration"] == "spark-off"
+        assert entry["id"] == case_id and entry["configuration"] == configuration
         assert entry["types"] == expected["types"]
         assert len(entry["samples"]) == limits["samples_per_case"]
         assert all(
