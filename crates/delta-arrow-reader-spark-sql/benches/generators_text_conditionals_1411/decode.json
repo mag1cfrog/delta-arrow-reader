@@ -1,7 +1,7 @@
 {
   "staging_source": "edfdafd1bc7afa705fe8825a33d5e7ce7c4e1f1f",
   "staging_tip": "ac3cdf20d06b1b6a3454810c0dbd5f1f18b95495",
-  "candidate_source": "7c6c6ac33bf10354084a3197fe96030b2146c050",
+  "candidate_source": "fa4e9d46fa0a52a0ebb4277b4f16c68d577d89dc",
   "statement_manifest": "manifest.json",
   "statement_manifest_sha256": "af540f65e327fcfaafa3631b68dc8622a94f84af6feabe2c8c4cf5d4e2e35bd3",
   "case_ids": [

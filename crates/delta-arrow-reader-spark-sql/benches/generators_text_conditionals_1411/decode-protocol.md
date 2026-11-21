@@ -3,7 +3,7 @@
 The [profile and source trace](../reports/generators-text-conditionals-1411-attribution.md)
 identify repeated charset normalization, copying and validation per value.
 DECODE can share Binary and LargeBinary buffers for a scalar UTF-8 charset
-after Arrow validates the bytes and offsets. Arrow can rebuild visible
+when NULL slots have empty byte ranges and Arrow validates the bytes and offsets. Arrow can rebuild visible
 rows when the surrounding buffer is invalid. Malformed visible values
 use the original decoder and Spark error.
 
@@ -12,7 +12,8 @@ one-million-row DECODE case. Require exact keyed results and executed
 Int64/Utf8 types across both builds, ANSI modes and native before clocks.
 The differential must also match the original row conversion for every
 admitted charset, malformed bytes, split offsets, sliced and empty arrays
-and NULLs at both offset widths.
+and NULLs at both offset widths. It must preserve empty byte ranges in
+the output's NULL slots even when the input has hidden bytes.
 
 Use the [matched Linux release schedule](../window_aggregates_1408/string-aggregation-protocol.md#schedule-and-pass-rule).
 Report medians and ranges before and after for both ANSI modes. Keep the
