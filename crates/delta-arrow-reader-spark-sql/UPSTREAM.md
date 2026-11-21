@@ -3005,3 +3005,10 @@ THETA_UNION validates an in-range literal `lgNomEntries` once and
 passes it to the shared sketch union loop. Column, NULL and invalid
 values use the original row evaluation, which checks the size only
 for a non-NULL pair of sketches.
+
+### Literal HLL_UNION configuration flag (#1414)
+
+HLL_UNION uses a non-NULL literal `allowDifferentLgConfigK` directly
+in the shared union loop. The default is false. Column and NULL flags
+use the existing row evaluation. Each pair still checks its own sketch
+configuration and is merged by the same sketch code.

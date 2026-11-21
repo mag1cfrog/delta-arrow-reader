@@ -1,10 +1,11 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
 use arrow::array::{
     Array, ArrayRef, BinaryArray, BinaryBuilder, BooleanArray, Int64Builder, new_null_array,
 };
 use arrow::datatypes::{DataType, Field, FieldRef};
-use datafusion_common::{Result, exec_err};
+use datafusion_common::{Result, ScalarValue, exec_err};
 use datafusion_expr::{ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl};
 use datafusion_expr_common::columnar_value::ColumnarValue;
 use datafusion_expr_common::signature::{Signature, TypeSignature, Volatility};
@@ -140,14 +141,19 @@ impl ScalarUDFImpl for HllUnionFunction {
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
         let ScalarFunctionArgs { mut args, .. } = args;
         if args.len() == 2 {
-            args.push(ColumnarValue::Scalar(
-                datafusion_common::ScalarValue::Boolean(Some(false)),
-            ));
+            args.push(ColumnarValue::Scalar(ScalarValue::Boolean(Some(false))));
         }
         if args.len() != 3 {
             return exec_err!("hll_union requires 2 or 3 arguments, got {}", args.len());
         }
-        make_scalar_function(hll_union_inner, vec![])(&args)
+        if let ColumnarValue::Scalar(ScalarValue::Boolean(Some(allow_different))) = &args[2] {
+            let allow_different = *allow_different;
+            return make_scalar_function(
+                move |arrays| hll_union_inner(arrays, Some(allow_different)),
+                vec![],
+            )(&args[..2]);
+        }
+        make_scalar_function(|arrays| hll_union_inner(arrays, None), vec![])(&args)
     }
 }
 
@@ -170,7 +176,7 @@ fn hll_sketch_estimate_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
     Ok(Arc::new(builder.finish()))
 }
 
-fn hll_union_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
+fn hll_union_inner(args: &[ArrayRef], allow_different: Option<bool>) -> Result<ArrayRef> {
     if args
         .iter()
         .any(|arg| matches!(arg.data_type(), DataType::Null))
@@ -179,19 +185,36 @@ fn hll_union_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
     }
     let left = as_binary_array(&args[0], "hll_union")?;
     let right = as_binary_array(&args[1], "hll_union")?;
+    if let Some(allow_different) = allow_different {
+        return union_hll_rows(left, right, |_| Some(allow_different));
+    }
     let allow_different_lg_config_k = as_bool_array(&args[2], "hll_union")?;
+    union_hll_rows(left, right, |row| {
+        (!allow_different_lg_config_k.is_null(row)).then(|| allow_different_lg_config_k.value(row))
+    })
+}
+
+fn union_hll_rows(
+    left: &BinaryArray,
+    right: &BinaryArray,
+    allow_different_for_row: impl Fn(usize) -> Option<bool>,
+) -> Result<ArrayRef> {
     let mut builder = BinaryBuilder::new();
     for row in 0..left.len() {
-        if left.is_null(row) || right.is_null(row) || allow_different_lg_config_k.is_null(row) {
+        if left.is_null(row) || right.is_null(row) {
             builder.append_null();
-        } else {
+            continue;
+        }
+        if let Some(allow_different) = allow_different_for_row(row) {
             let value = union_hll_sketch_bytes(
                 left.value(row),
                 right.value(row),
-                allow_different_lg_config_k.value(row),
+                allow_different,
                 "hll_union",
             )?;
             builder.append_value(value);
+        } else {
+            builder.append_null();
         }
     }
     Ok(Arc::new(builder.finish()))
@@ -237,4 +260,72 @@ fn as_bool_array<'a>(array: &'a ArrayRef, function_name: &str) -> Result<&'a Boo
                 array.data_type()
             ))
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use arrow::array::Int64Array;
+
+    use super::*;
+    use crate::hll_sketch::{new_hll_sketch, update_hll_sketch_from_array};
+
+    #[test]
+    fn literal_hll_union_flags_match_broadcast_flags() -> Result<()> {
+        let values = Arc::new(Int64Array::from(vec![1, 2, 3])) as ArrayRef;
+        let sketch_bytes = |size| {
+            let mut sketch = new_hll_sketch(size);
+            update_hll_sketch_from_array(&mut sketch, &values)?;
+            Ok::<_, datafusion_common::DataFusionError>(sketch.serialize())
+        };
+        let same_config = sketch_bytes(12)?;
+        let different_config = sketch_bytes(10)?;
+        let sketches = BinaryArray::from(vec![
+            None,
+            Some(same_config.as_slice()),
+            Some(different_config.as_slice()),
+            Some(&[0][..]),
+        ]);
+        let function = HllUnionFunction::new();
+        let previous = make_scalar_function(|arrays| hll_union_inner(arrays, None), vec![]);
+        for length in 0..=sketches.len() {
+            let sketch_column = ColumnarValue::Array(Arc::new(sketches.slice(0, length)));
+            for allow_different in [None, Some(false), Some(true)] {
+                let args = vec![
+                    sketch_column.clone(),
+                    ColumnarValue::Scalar(ScalarValue::Binary(Some(same_config.clone()))),
+                    ColumnarValue::Scalar(ScalarValue::Boolean(allow_different)),
+                ];
+                let expected = previous(&args);
+                let actual = function.invoke_with_args(ScalarFunctionArgs {
+                    arg_fields: args
+                        .iter()
+                        .map(|arg| Arc::new(Field::new("arg", arg.data_type(), true)))
+                        .collect(),
+                    args,
+                    number_rows: length,
+                    return_field: Arc::new(Field::new("sketch", DataType::Binary, true)),
+                    config_options: Arc::new(Default::default()),
+                });
+                if length == 3 && allow_different == Some(true) {
+                    let Ok(ColumnarValue::Array(actual)) = &actual else {
+                        panic!("a true flag must allow two different HLL configurations");
+                    };
+                    let union = as_binary_array(actual, "hll_union")?;
+                    assert!(union.is_null(0));
+                    assert!(!union.is_null(2));
+                    assert_eq!(estimate_hll_sketch(union.value(2), "hll_union")?, 3);
+                }
+                match (actual, expected) {
+                    (Ok(ColumnarValue::Array(actual)), Ok(ColumnarValue::Array(expected))) => {
+                        assert_eq!(actual.to_data(), expected.to_data());
+                    }
+                    (Err(actual), Err(expected)) => {
+                        assert_eq!(actual.to_string(), expected.to_string());
+                    }
+                    outcomes => panic!("different HLL union outcomes: {outcomes:?}"),
+                }
+            }
+        }
+        Ok(())
+    }
 }
