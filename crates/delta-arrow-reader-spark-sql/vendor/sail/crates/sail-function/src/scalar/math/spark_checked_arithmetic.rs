@@ -132,7 +132,21 @@ impl ScalarUDFImpl for SparkCheckedArithmetic {
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
+        let kernel = match self.op {
+            Operator::Plus => add,
+            Operator::Minus => sub,
+            Operator::Multiply => mul,
+            _ => unreachable!("constructor validates the operator"),
+        };
         if self.null_on_overflow {
+            if let [left, right] = args.args.as_slice()
+                && left.data_type().is_signed_integer()
+                && left.data_type() == right.data_type()
+                && let Ok(result) = apply(left, right, kernel)
+            {
+                return Ok(result);
+            }
+            // Only the row-wise kernel can retain other results when one row overflows.
             let op = self.op;
             let name = self.name();
             return make_scalar_function(
@@ -151,12 +165,6 @@ impl ScalarUDFImpl for SparkCheckedArithmetic {
         }
         let [left, right] = args.args.as_slice() else {
             return internal_err!("{} requires two arguments", self.name());
-        };
-        let kernel = match self.op {
-            Operator::Plus => add,
-            Operator::Minus => sub,
-            Operator::Multiply => mul,
-            _ => unreachable!("constructor validates the operator"),
         };
         match apply(left, right, kernel) {
             Err(DataFusionError::ArrowError(error, _))

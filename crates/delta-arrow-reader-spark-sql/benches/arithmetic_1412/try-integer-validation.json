@@ -1,0 +1,58 @@
+{
+  "functions": [
+    {
+      "id": "scalar.math.try_integer_overflow_tinyint",
+      "spark_sql": "WITH operands AS (\n    SELECT id, CASE id WHEN 0 THEN CAST('127' AS TINYINT)\n                       WHEN 1 THEN CAST('-128' AS TINYINT)\n                       WHEN 2 THEN CAST('127' AS TINYINT)\n                       WHEN 3 THEN CAST('-128' AS TINYINT)\n                       WHEN 4 THEN CAST('127' AS TINYINT)\n                       WHEN 5 THEN CAST('-128' AS TINYINT)\n                       WHEN 6 THEN CAST(NULL AS TINYINT)\n                       ELSE CAST(i AS TINYINT) END AS lhs,\n           CAST(CASE id WHEN 0 THEN 1 WHEN 1 THEN -1 WHEN 2 THEN -1 WHEN 3 THEN 1\n                        WHEN 4 THEN 2 WHEN 5 THEN -1 WHEN 7 THEN NULL ELSE p END AS TINYINT) AS rhs\n    FROM bench WHERE id < 10\n)\nSELECT id, TRY_ADD(lhs,rhs) AS add_result, TRY_SUBTRACT(lhs,rhs) AS subtract_result, TRY_MULTIPLY(lhs,rhs) AS multiply_result\nFROM operands",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "scalar.math.try_integer_overflow_smallint",
+      "spark_sql": "WITH operands AS (\n    SELECT id, CASE id WHEN 0 THEN CAST('32767' AS SMALLINT)\n                       WHEN 1 THEN CAST('-32768' AS SMALLINT)\n                       WHEN 2 THEN CAST('32767' AS SMALLINT)\n                       WHEN 3 THEN CAST('-32768' AS SMALLINT)\n                       WHEN 4 THEN CAST('32767' AS SMALLINT)\n                       WHEN 5 THEN CAST('-32768' AS SMALLINT)\n                       WHEN 6 THEN CAST(NULL AS SMALLINT)\n                       ELSE CAST(i AS SMALLINT) END AS lhs,\n           CAST(CASE id WHEN 0 THEN 1 WHEN 1 THEN -1 WHEN 2 THEN -1 WHEN 3 THEN 1\n                        WHEN 4 THEN 2 WHEN 5 THEN -1 WHEN 7 THEN NULL ELSE p END AS SMALLINT) AS rhs\n    FROM bench WHERE id < 10\n)\nSELECT id, TRY_ADD(lhs,rhs) AS add_result, TRY_SUBTRACT(lhs,rhs) AS subtract_result, TRY_MULTIPLY(lhs,rhs) AS multiply_result\nFROM operands",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "scalar.math.try_integer_overflow_int",
+      "spark_sql": "WITH operands AS (\n    SELECT id, CASE id WHEN 0 THEN CAST('2147483647' AS INT)\n                       WHEN 1 THEN CAST('-2147483648' AS INT)\n                       WHEN 2 THEN CAST('2147483647' AS INT)\n                       WHEN 3 THEN CAST('-2147483648' AS INT)\n                       WHEN 4 THEN CAST('2147483647' AS INT)\n                       WHEN 5 THEN CAST('-2147483648' AS INT)\n                       WHEN 6 THEN CAST(NULL AS INT)\n                       ELSE CAST(i AS INT) END AS lhs,\n           CAST(CASE id WHEN 0 THEN 1 WHEN 1 THEN -1 WHEN 2 THEN -1 WHEN 3 THEN 1\n                        WHEN 4 THEN 2 WHEN 5 THEN -1 WHEN 7 THEN NULL ELSE p END AS INT) AS rhs\n    FROM bench WHERE id < 10\n)\nSELECT id, TRY_ADD(lhs,rhs) AS add_result, TRY_SUBTRACT(lhs,rhs) AS subtract_result, TRY_MULTIPLY(lhs,rhs) AS multiply_result\nFROM operands",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "scalar.math.try_integer_overflow_bigint",
+      "spark_sql": "WITH operands AS (\n    SELECT id, CASE id WHEN 0 THEN CAST('9223372036854775807' AS BIGINT)\n                       WHEN 1 THEN CAST('-9223372036854775808' AS BIGINT)\n                       WHEN 2 THEN CAST('9223372036854775807' AS BIGINT)\n                       WHEN 3 THEN CAST('-9223372036854775808' AS BIGINT)\n                       WHEN 4 THEN CAST('9223372036854775807' AS BIGINT)\n                       WHEN 5 THEN CAST('-9223372036854775808' AS BIGINT)\n                       WHEN 6 THEN CAST(NULL AS BIGINT)\n                       ELSE CAST(i AS BIGINT) END AS lhs,\n           CAST(CASE id WHEN 0 THEN 1 WHEN 1 THEN -1 WHEN 2 THEN -1 WHEN 3 THEN 1\n                        WHEN 4 THEN 2 WHEN 5 THEN -1 WHEN 7 THEN NULL ELSE p END AS BIGINT) AS rhs\n    FROM bench WHERE id < 10\n)\nSELECT id, TRY_ADD(lhs,rhs) AS add_result, TRY_SUBTRACT(lhs,rhs) AS subtract_result, TRY_MULTIPLY(lhs,rhs) AS multiply_result\nFROM operands",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "scalar.math.try_integer_nonoverflow_all_widths",
+      "spark_sql": "SELECT id,\n    TRY_ADD(CAST(i AS TINYINT), CAST(p % 2 + 1 AS TINYINT)) AS r_tinyint_try_add,\n    TRY_SUBTRACT(CAST(i AS TINYINT), CAST(p % 2 + 1 AS TINYINT)) AS r_tinyint_try_subtract,\n    TRY_MULTIPLY(CAST(i AS TINYINT), CAST(p % 2 + 1 AS TINYINT)) AS r_tinyint_try_multiply,\n    TRY_ADD(CAST(i AS SMALLINT), CAST(p % 2 + 1 AS SMALLINT)) AS r_smallint_try_add,\n    TRY_SUBTRACT(CAST(i AS SMALLINT), CAST(p % 2 + 1 AS SMALLINT)) AS r_smallint_try_subtract,\n    TRY_MULTIPLY(CAST(i AS SMALLINT), CAST(p % 2 + 1 AS SMALLINT)) AS r_smallint_try_multiply,\n    TRY_ADD(CAST(i AS INT), CAST(p % 2 + 1 AS INT)) AS r_int_try_add,\n    TRY_SUBTRACT(CAST(i AS INT), CAST(p % 2 + 1 AS INT)) AS r_int_try_subtract,\n    TRY_MULTIPLY(CAST(i AS INT), CAST(p % 2 + 1 AS INT)) AS r_int_try_multiply,\n    TRY_ADD(CAST(i AS BIGINT), CAST(p % 2 + 1 AS BIGINT)) AS r_bigint_try_add,\n    TRY_SUBTRACT(CAST(i AS BIGINT), CAST(p % 2 + 1 AS BIGINT)) AS r_bigint_try_subtract,\n    TRY_MULTIPLY(CAST(i AS BIGINT), CAST(p % 2 + 1 AS BIGINT)) AS r_bigint_try_multiply\nFROM bench WHERE id < 12",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "scalar.math.try_integer_scalars",
+      "spark_sql": "SELECT id,\n    TRY_ADD(i,1L) AS array_scalar, TRY_SUBTRACT(1L,i) AS scalar_array,\n    TRY_MULTIPLY(2L,3L) AS scalar_scalar, TRY_ADD(CAST('9223372036854775807' AS BIGINT),1L) AS overflow\nFROM bench WHERE id < 8",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "scalar.math.try_integer_fallible_operand",
+      "spark_sql": "WITH operands AS (\n    SELECT id, CASE id WHEN 1 THEN CAST(NULL AS BIGINT) ELSE i END AS lhs,\n           CASE id WHEN 1 THEN 'bad' ELSE '2' END AS raw\n    FROM bench WHERE id < 8\n)\nSELECT id, TRY_ADD(lhs,CAST(raw AS BIGINT)) AS result FROM operands",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "scalar.math.try_integer_empty",
+      "spark_sql": "SELECT id, TRY_ADD(i,CAST(p AS BIGINT)) AS add_result,\n    TRY_SUBTRACT(i,CAST(p AS BIGINT)) AS subtract_result, TRY_MULTIPLY(i,CAST(p AS BIGINT)) AS multiply_result\nFROM bench WHERE id < 0",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "scalar.math.try_integer_selected_fallible_operand",
+      "spark_sql": "WITH operands AS (\n    SELECT id, i AS lhs,\n           CASE id WHEN 1 THEN 'bad' ELSE '2' END AS raw\n    FROM bench WHERE id < 8\n)\nSELECT id, TRY_ADD(lhs,CAST(raw AS BIGINT)) AS result FROM operands",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    }
+  ]
+}
