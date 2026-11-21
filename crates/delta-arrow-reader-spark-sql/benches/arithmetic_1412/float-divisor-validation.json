@@ -1,0 +1,58 @@
+{
+  "functions": [
+    {
+      "id": "scalar.math.float_divisor_positive_zero",
+      "spark_sql": "SELECT id, i / CAST(CASE WHEN id=1 THEN 0 ELSE p END AS DOUBLE) AS result FROM bench WHERE id < 8",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "scalar.math.float_divisor_negative_zero",
+      "spark_sql": "SELECT id, i / CAST(CASE WHEN id=1 THEN '-0.0' ELSE CAST(p AS STRING) END AS DOUBLE) AS result\nFROM bench WHERE id < 8",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "scalar.math.float_divisor_masked_zero",
+      "spark_sql": "SELECT id, i / CAST(CASE id WHEN 0 THEN 0 WHEN 2 THEN NULL ELSE p END AS DOUBLE) AS result\nFROM bench WHERE id < 8",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "scalar.math.float_divisor_nan_and_infinities",
+      "spark_sql": "SELECT id, i / CAST(CASE id WHEN 1 THEN 'NaN' WHEN 2 THEN 'Infinity'\n                                                  WHEN 3 THEN '-Infinity' ELSE CAST(p AS STRING) END AS DOUBLE) AS result\nFROM bench WHERE id < 8",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "scalar.math.float_divisor_scalar_left",
+      "spark_sql": "SELECT id, CAST(1 AS DOUBLE) / CAST(CASE WHEN id=1 THEN 0 ELSE p END AS DOUBLE) AS result FROM bench WHERE id < 8",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "scalar.math.float_divisor_scalar_right",
+      "spark_sql": "SELECT id, i / CAST(0 AS DOUBLE) AS result FROM bench WHERE id < 8",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "scalar.math.float_divisor_float32_modulo",
+      "spark_sql": "SELECT id, CAST(i AS FLOAT) % CAST(CASE WHEN id=1 THEN '-0.0' ELSE CAST(p AS STRING) END AS FLOAT) AS result\nFROM bench WHERE id < 8",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "scalar.math.float_divisor_float64_masked_modulo",
+      "spark_sql": "SELECT id, CAST(i AS DOUBLE) % CAST(CASE id WHEN 0 THEN 0 WHEN 2 THEN NULL ELSE p END AS DOUBLE) AS result\nFROM bench WHERE id < 8",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "scalar.math.float_divisor_empty",
+      "spark_sql": "SELECT id, i / CAST(p AS BIGINT) AS result FROM bench WHERE id < 0",
+      "native_sql": null,
+      "projection_sql": "SELECT id,i,p FROM bench"
+    }
+  ]
+}
