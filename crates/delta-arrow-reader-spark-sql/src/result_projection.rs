@@ -15,7 +15,7 @@ pub(super) fn rename_result_columns(
     if original_schema.fields().len() == names.len()
         && let Some(projection) = plan.downcast_ref::<ProjectionExec>()
         && !projection.preserves_row_error_prefix()
-        && let Ok(renamed) = ProjectionExec::try_new(
+        && let Ok(renamed_projection) = ProjectionExec::try_new(
             projection
                 .expr()
                 .iter()
@@ -24,17 +24,21 @@ pub(super) fn rename_result_columns(
             Arc::clone(projection.input()),
         )
     {
-        let schema = renamed.schema();
-        if schema.metadata() == original_schema.metadata()
+        let renamed_schema = renamed_projection.schema();
+        if renamed_schema.metadata() == original_schema.metadata()
             && original_schema
                 .fields()
                 .iter()
-                .zip(schema.fields())
-                .all(|(original, renamed)| {
-                    original.as_ref().clone().with_name(renamed.name()) == **renamed
+                .zip(renamed_schema.fields())
+                .all(|(previous_field, public_field)| {
+                    previous_field
+                        .as_ref()
+                        .clone()
+                        .with_name(public_field.name())
+                        == **public_field
                 })
         {
-            return Ok(Arc::new(renamed));
+            return Ok(Arc::new(renamed_projection));
         }
     }
     rename_physical_plan(plan, names)
@@ -47,13 +51,43 @@ mod tests {
     use arrow::record_batch::RecordBatch;
     use datafusion::dataframe::DataFrame;
     use datafusion::execution::SessionStateBuilder;
+    use datafusion::physical_expr::expressions::Column;
     use datafusion::physical_optimizer::aggregate_statistics::PreserveAggregateStatisticsSchema;
     use datafusion::physical_plan::collect;
+    use datafusion::physical_plan::empty::EmptyExec;
     use datafusion::prelude::{SessionConfig, SessionContext};
     use sail_plan::expression_errors::SparkSqlExpressionSemantics;
 
     use super::*;
     use crate::{SparkSqlOptions, configure_spark_sql, plan_query};
+
+    #[test]
+    fn other_plan_shapes_keep_the_original_result_rename() -> Result<()> {
+        let schema = Arc::new(Schema::new(vec![Field::new(
+            "source",
+            DataType::Int64,
+            true,
+        )]));
+        let input: Arc<dyn ExecutionPlan> = Arc::new(EmptyExec::new(schema));
+        let renamed = rename_result_columns(input.clone(), &["public".to_owned()])?;
+        assert!(Arc::ptr_eq(renamed.children()[0], &input));
+        assert!(rename_result_columns(input.clone(), &[]).is_err());
+
+        let prefix = ProjectionExec::try_new(
+            [(
+                Arc::new(Column::new("source", 0))
+                    as Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+                "internal".to_owned(),
+            )],
+            input,
+        )?
+        .with_row_error_prefix(true);
+        let prefix: Arc<dyn ExecutionPlan> = Arc::new(prefix);
+        let renamed = rename_result_columns(prefix.clone(), &["public".to_owned()])?;
+        assert!(Arc::ptr_eq(renamed.children()[0], &prefix));
+        assert_eq!(renamed.schema().field(0).name(), "public");
+        Ok(())
+    }
 
     #[tokio::test]
     async fn result_aliases_preserve_rows_fields_and_failures() -> Result<()> {
