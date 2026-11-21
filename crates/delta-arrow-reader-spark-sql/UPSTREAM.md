@@ -3034,3 +3034,11 @@ The timestamp-difference kernel keeps a literal end timestamp as a
 single local-time value when the start is a microsecond timestamp column.
 Both paths use the same local difference calculation. Invalid units,
 other timestamp types and column end arguments use the original path.
+
+### Literal MAKE_INTERVAL and TRY_MAKE_INTERVAL fields (#1414)
+
+With a year column and six valid literal fields, the constructor
+prepares the fixed day and time parts once. The row loop keeps the
+existing checked year-to-month calculation. Out-of-range fixed parts,
+NULL literals and other shapes use the original evaluation to preserve
+which error occurs first.
