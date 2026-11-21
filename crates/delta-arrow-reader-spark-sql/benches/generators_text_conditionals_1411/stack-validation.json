@@ -1,0 +1,44 @@
+{
+  "functions": [
+    {
+      "id": "generator.generator.stack_padded",
+      "spark_sql": "SELECT id, STACK(3, i, CAST(NULL AS BIGINT))\nFROM bench WHERE id < 8",
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "generator.generator.stack_multiple_columns",
+      "spark_sql": "SELECT id,\n    STACK(2, i, CAST(p AS BIGINT), CAST(NULL AS BIGINT), CAST(4 AS BIGINT)) AS (x, y)\nFROM bench WHERE id < 8",
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "generator.generator.stack_lateral",
+      "spark_sql": "SELECT id, value FROM bench\nLATERAL VIEW STACK(1, i) expanded AS value\nWHERE id < 8",
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "generator.generator.stack_failing_argument",
+      "spark_sql": "SELECT id,\n    STACK(2, i, CAST(CASE WHEN id = 5 THEN 'bad' ELSE '7' END AS BIGINT)) AS value\nFROM bench WHERE id < 8",
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "generator.generator.stack_scalar_bounds",
+      "spark_sql": "SELECT STACK(2, CAST('-9223372036854775808' AS BIGINT),\n    CAST('9223372036854775807' AS BIGINT)) FROM bench WHERE id = 1",
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "generator.generator.stack_empty",
+      "spark_sql": "SELECT STACK(1, CAST(1 AS BIGINT)) AS value FROM bench WHERE id < 0",
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "generator.generator.stack_nested_cast",
+      "spark_sql": "SELECT CAST(STACK(1, CAST(1 AS BIGINT)) AS BIGINT) AS value\nFROM bench WHERE id = 1",
+      "projection_sql": "SELECT id,i,p FROM bench"
+    },
+    {
+      "id": "generator.generator.stack_nested_abs",
+      "spark_sql": "SELECT ABS(STACK(1, CAST(-1 AS BIGINT))) AS value\nFROM bench WHERE id = 1",
+      "projection_sql": "SELECT id,i,p FROM bench"
+    }
+  ]
+}
