@@ -7,12 +7,12 @@ use datafusion::arrow::array::{
 };
 use datafusion::arrow::compute::{CastOptions, cast_with_options};
 use datafusion::arrow::datatypes::{DataType, i256};
-use datafusion_common::{Result, exec_err, internal_err};
+use datafusion_common::{Result, ScalarValue, exec_err, internal_err};
 use datafusion_expr::{ColumnarValue, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility};
 
 use crate::error::{invalid_arg_count_exec_err, unsupported_data_type_exec_err};
 use crate::functions_nested_utils::downcast_arg;
-use crate::functions_utils::make_scalar_function;
+use crate::functions_utils::{Hint, make_scalar_function};
 
 /// The `to_char` / `to_varchar` function for numeric input, formatting a decimal value
 /// as a string according to a number format such as `'$99,999.99S'`.
@@ -61,7 +61,16 @@ impl ScalarUDFImpl for SparkToChar {
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
         let ansi_mode = self.ansi_mode;
         let ScalarFunctionArgs { args, .. } = args;
-        make_scalar_function(move |a| spark_to_char_impl(a, ansi_mode), vec![])(&args)
+        let hints = if matches!(
+            args.as_slice(),
+            [ColumnarValue::Array(values), ColumnarValue::Scalar(ScalarValue::Utf8(_))]
+                if !values.is_empty()
+        ) {
+            vec![Hint::Pad, Hint::AcceptsSingular]
+        } else {
+            Vec::new()
+        };
+        make_scalar_function(move |a| spark_to_char_impl(a, ansi_mode), hints)(&args)
     }
 
     fn coerce_types(&self, arg_types: &[DataType]) -> Result<Vec<DataType>> {
@@ -115,7 +124,7 @@ fn spark_to_char_impl(args: &[ArrayRef], ansi_mode: bool) -> Result<ArrayRef> {
     if num_rows == 0 {
         return Ok(Arc::new(StringArray::from(Vec::<Option<String>>::new())));
     }
-    // The format is foldable in Spark, so all (expanded) rows hold the same value.
+    // The format is foldable in Spark. Read its first value once.
     let format_arr = downcast_arg!(&args[1], StringArray);
     if format_arr.is_null(0) {
         return Ok(Arc::new(StringArray::from(vec![None::<String>; num_rows])));
@@ -860,5 +869,61 @@ fn strip_trailing_lone_decimal_point(result: &mut [u8]) {
         && (i == result.len() - 1 || result[i + 1] == b' ')
     {
         result[i] = b' ';
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use datafusion::arrow::datatypes::Field;
+
+    use super::*;
+
+    #[test]
+    fn literal_numeric_formats_match_broadcast_formats() -> Result<()> {
+        let decimals = Decimal128Array::from(vec![Some(0), None, Some(-999_999), Some(999_999)])
+            .with_precision_and_scale(6, 2)?;
+        let floats = Float64Array::from(vec![Some(0.5), None, Some(f64::NAN), Some(f64::INFINITY)]);
+        let inputs: [ArrayRef; 2] = [Arc::new(decimals), Arc::new(floats)];
+        for ansi_mode in [false, true] {
+            let function = SparkToChar::new(ansi_mode);
+            let previous =
+                make_scalar_function(move |arrays| spark_to_char_impl(arrays, ansi_mode), vec![]);
+            for values in &inputs {
+                for length in [0, 1, values.len()] {
+                    for format in [Some("9999.99S"), Some("9"), Some(""), Some("bad"), None] {
+                        let args = vec![
+                            ColumnarValue::Array(values.slice(0, length)),
+                            ColumnarValue::Scalar(ScalarValue::Utf8(format.map(str::to_owned))),
+                        ];
+                        let expected = previous(&args);
+                        let actual = function.invoke_with_args(ScalarFunctionArgs {
+                            arg_fields: args
+                                .iter()
+                                .map(|arg| Arc::new(Field::new("arg", arg.data_type(), true)))
+                                .collect(),
+                            args,
+                            number_rows: length,
+                            return_field: Arc::new(Field::new("formatted", DataType::Utf8, true)),
+                            config_options: Arc::new(Default::default()),
+                        });
+                        match (actual, expected) {
+                            (
+                                Ok(ColumnarValue::Array(actual)),
+                                Ok(ColumnarValue::Array(expected)),
+                            ) => {
+                                assert_eq!(actual.to_data(), expected.to_data());
+                            }
+                            (Err(actual), Err(expected)) => {
+                                assert_eq!(actual.to_string(), expected.to_string());
+                            }
+                            outcomes => {
+                                panic!("different outcomes for format {format:?}: {outcomes:?}")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 }

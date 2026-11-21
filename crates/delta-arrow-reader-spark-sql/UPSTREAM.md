@@ -2998,3 +2998,9 @@ expansion.
 Two-argument PARSE_URL and TRY_PARSE_URL borrow a present Utf8 literal
 part for a Utf8 input column. They pass the absent key directly to the
 existing parser. Other argument shapes keep their existing adapters.
+
+### Literal TO_CHAR and TO_VARCHAR numeric formats (#1414)
+
+The numeric formatter reads a foldable format from its first value. For
+nonempty value columns it supplies a one-element array for a Utf8
+literal format. Other input shapes use the existing adapter.
