@@ -16,6 +16,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("build", type=Path)
     parser.add_argument("output", type=Path)
+    parser.add_argument("--case", action="append", default=[])
     args = parser.parse_args()
 
     source = HERE.parent / "array_functions_1410" / "profile.py"
@@ -23,9 +24,13 @@ def main():
     profile = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(profile)
     profile.MANIFEST = HERE / "manifest.json"
-    profile.capture_profiles(
-        args.build.resolve(), args.output.resolve(), profile.load_manifest()
-    )
+    settings = profile.load_manifest()
+    if args.case:
+        selected = set(args.case)
+        settings["functions"] = [case for case in settings["functions"] if case["id"] in selected]
+        if selected != {case["id"] for case in settings["functions"]}:
+            parser.error("A selected case is missing from the manifest.")
+    profile.capture_profiles(args.build.resolve(), args.output.resolve(), settings)
 
 
 if __name__ == "__main__":

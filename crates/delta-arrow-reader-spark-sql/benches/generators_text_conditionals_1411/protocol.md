@@ -23,3 +23,19 @@ native repeat floor for acceptance.
 
 This captures profiles only. Each change and its matched release
 comparison will use a separate committed protocol.
+
+## Generator output counts
+
+The input has 1,000,000 rows. INLINE emits one result for each
+non-NULL `records` value. The fixture sets `records` to NULL for
+one ID in every sixteen, so its expected result has 937,500 rows.
+STACK with a row count of two emits 2,000,000 rows. The manifest
+records these output counts separately from the one million
+source and projection rows.
+
+The initial protocol's observer assumed one output per input for
+both generators. Their first preflight matched values and executed
+types but stopped before sampling. With the corrected counts, use
+`--case generator.generator.inline --case generator.generator.stack`
+to complete the two missing profiles. Keep the initial session
+and use its other seven profiles.

@@ -232,5 +232,9 @@
       "class": "paired",
       "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
     }
-  ]
+  ],
+  "output_rows_by_case": {
+    "generator.generator.inline": 937500,
+    "generator.generator.stack": 2000000
+  }
 }
