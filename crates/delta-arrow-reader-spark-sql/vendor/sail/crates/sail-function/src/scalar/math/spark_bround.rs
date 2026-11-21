@@ -129,6 +129,18 @@ impl ScalarUDFImpl for SparkBRound {
                 args.len(),
             ));
         };
+        if let (
+            ColumnarValue::Array(values),
+            ColumnarValue::Scalar(ScalarValue::Int32(Some(scale))),
+        ) = (x, d)
+            && values.data_type() == &DataType::Float64
+            && !values.is_empty()
+        {
+            let factor = 10_f64.powi(*scale);
+            let result = as_primitive_array::<Float64Type>(values)
+                .unary::<_, Float64Type>(|value| bround_f64_with_factor(value, factor));
+            return Ok(ColumnarValue::Array(Arc::new(result)));
+        }
         let len = match (x, d) {
             (ColumnarValue::Array(arr), _) => arr.len(),
             (_, ColumnarValue::Array(arr)) => arr.len(),
@@ -368,7 +380,10 @@ fn spark_bround_f32(value: f32, scale: i32) -> f32 {
 }
 
 fn spark_bround_f64(x: f64, scale: i32) -> f64 {
-    let factor: f64 = 10f64.powi(scale);
+    bround_f64_with_factor(x, 10_f64.powi(scale))
+}
+
+fn bround_f64_with_factor(x: f64, factor: f64) -> f64 {
     let shifted: f64 = x * factor;
 
     let rounded = if (shifted - shifted.round()).abs() == 0.5 {
@@ -701,6 +716,72 @@ mod tests {
             .to_string()
             .contains("[NUMERIC_VALUE_OUT_OF_RANGE.WITHOUT_SUGGESTION]")
         );
+        Ok(())
+    }
+
+    #[test]
+    fn literal_bround_scales_match_broadcast_scales() -> Result<()> {
+        let values = Float64Array::from(vec![
+            None,
+            Some(2.5),
+            Some(-3.5),
+            Some(1.25),
+            Some(-0.0),
+            Some(f64::MAX),
+            Some(f64::from_bits(1)),
+            Some(f64::NEG_INFINITY),
+            Some(f64::from_bits(0x7ff8_0000_0000_0001)),
+        ]);
+        let function = SparkBRound::new();
+        for length in [0, 1, values.len()] {
+            let invoke = |scale: ColumnarValue| {
+                let args = vec![
+                    ColumnarValue::Array(Arc::new(values.slice(0, length))),
+                    scale,
+                ];
+                function.invoke_with_args(ScalarFunctionArgs {
+                    arg_fields: args
+                        .iter()
+                        .map(|arg| Arc::new(Field::new("arg", arg.data_type(), true)))
+                        .collect(),
+                    args,
+                    number_rows: length,
+                    return_field: Arc::new(Field::new("rounded", DataType::Float64, true)),
+                    config_options: Arc::new(ConfigOptions::default()),
+                })
+            };
+            for scale in [
+                None,
+                Some(i32::MIN),
+                Some(-309),
+                Some(-1),
+                Some(0),
+                Some(1),
+                Some(308),
+                Some(i32::MAX),
+            ] {
+                let scalar = ScalarValue::Int32(scale);
+                let expected = invoke(ColumnarValue::Array(scalar.to_array_of_size(length)?))?;
+                let actual = invoke(ColumnarValue::Scalar(scalar))?;
+                let (ColumnarValue::Array(actual), ColumnarValue::Array(expected)) =
+                    (actual, expected)
+                else {
+                    panic!("rounding a double column must return an array");
+                };
+                assert_eq!(actual.data_type(), expected.data_type());
+                assert_eq!(actual.len(), expected.len());
+                assert!(
+                    actual
+                        .as_primitive::<Float64Type>()
+                        .iter()
+                        .map(|x| x.map(f64::to_bits))
+                        .eq(expected
+                            .as_primitive::<Float64Type>()
+                            .iter()
+                            .map(|x| x.map(f64::to_bits)))
+                );
+            }
+        }
         Ok(())
     }
 
