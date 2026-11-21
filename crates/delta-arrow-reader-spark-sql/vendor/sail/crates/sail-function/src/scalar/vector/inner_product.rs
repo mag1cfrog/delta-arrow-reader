@@ -107,19 +107,34 @@ fn compute_inner_product<O: OffsetSizeTrait>(
     left: &GenericListArray<O>,
     right: &GenericListArray<O>,
 ) -> Result<ArrayRef> {
+    let child_buffers = left
+        .values()
+        .as_primitive_opt::<Float32Type>()
+        .zip(right.values().as_primitive_opt::<Float32Type>())
+        .filter(|(left, right)| left.null_count() == 0 && right.null_count() == 0);
+
     let values = (0..left.len()).map(|row| {
         if left.is_null(row) || right.is_null(row) {
             return Ok(None);
         }
-        let left = left.value(row);
-        let right = right.value(row);
-        if left.len() != right.len() {
+        let left_length = left.value_length(row).as_usize();
+        let right_length = right.value_length(row).as_usize();
+        if left_length != right_length {
             return exec_err!(
-                "vector_inner_product requires vectors with matching dimensions, got {} and {}",
-                left.len(),
-                right.len()
+                "vector_inner_product requires vectors with matching dimensions, got {left_length} and {right_length}"
             );
         }
+        if let Some((left_values, right_values)) = child_buffers {
+            let left_offsets = left.value_offsets();
+            let right_offsets = right.value_offsets();
+            let left_row = &left_values.values()
+                [left_offsets[row].as_usize()..left_offsets[row + 1].as_usize()];
+            let right_row = &right_values.values()
+                [right_offsets[row].as_usize()..right_offsets[row + 1].as_usize()];
+            return Ok(Some(dot_product_spark(left_row, right_row)));
+        }
+        let left = left.value(row);
+        let right = right.value(row);
         let left = left.as_primitive::<Float32Type>();
         let right = right.as_primitive::<Float32Type>();
         if left.null_count() > 0 || right.null_count() > 0 {
@@ -135,7 +150,7 @@ fn compute_inner_product<O: OffsetSizeTrait>(
 
 #[cfg(test)]
 mod tests {
-    use datafusion::arrow::array::ListArray;
+    use datafusion::arrow::array::{LargeListArray, ListArray};
 
     use super::*;
 
@@ -159,6 +174,66 @@ mod tests {
         let expected = Float32Array::from(vec![Some(32.0), Some(0.0), None, None]);
         assert_eq!(actual, &expected);
         Ok(())
+    }
+
+    #[test]
+    fn direct_child_buffers_match_row_slices() -> Result<()> {
+        fn compare<O: OffsetSizeTrait>(
+            left: GenericListArray<O>,
+            right: GenericListArray<O>,
+        ) -> Result<()> {
+            let left = left.slice(1, left.len() - 2);
+            let right = right.slice(1, right.len() - 2);
+            // The final NULL lies outside the compared rows and forces the row-slice path.
+            let (field, offsets, children, nulls) = right.clone().into_parts();
+            let last = offsets.last().unwrap().as_usize();
+            let direct = GenericListArray::try_new(field, offsets, children.slice(0, last), nulls)?;
+
+            let direct = compute_inner_product(&left, &direct)?;
+            let sliced = compute_inner_product(&left, &right)?;
+            let bits = |array: &ArrayRef| {
+                array
+                    .as_primitive::<Float32Type>()
+                    .iter()
+                    .map(|value| value.map(f32::to_bits))
+                    .collect::<Vec<_>>()
+            };
+            assert_eq!(bits(&direct), bits(&sliced));
+            assert!(compute_inner_product(&left.slice(0, 0), &right.slice(0, 0))?.is_empty());
+            Ok(())
+        }
+
+        let payload_nan = f32::from_bits(0x7fc0_0123);
+        let cancellation = [
+            1.0e20, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0e20, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+            2.0,
+        ];
+        let left = vec![
+            Some(vec![Some(11.0)]),
+            Some(cancellation.into_iter().map(Some).collect()),
+            None,
+            Some(vec![]),
+            Some(vec![Some(-0.0), Some(0.0)]),
+            Some(vec![Some(f32::INFINITY), Some(payload_nan)]),
+            Some(vec![]),
+        ];
+        let right = vec![
+            Some(vec![Some(13.0)]),
+            Some(vec![Some(1.0); cancellation.len()]),
+            Some(vec![Some(3.0)]),
+            Some(vec![]),
+            Some(vec![Some(1.0), Some(-1.0)]),
+            Some(vec![Some(1.0), Some(f32::INFINITY)]),
+            Some(vec![None]),
+        ];
+        compare(
+            ListArray::from_iter_primitive::<Float32Type, _, _>(left.clone()),
+            ListArray::from_iter_primitive::<Float32Type, _, _>(right.clone()),
+        )?;
+        compare(
+            LargeListArray::from_iter_primitive::<Float32Type, _, _>(left),
+            LargeListArray::from_iter_primitive::<Float32Type, _, _>(right),
+        )
     }
 
     #[test]

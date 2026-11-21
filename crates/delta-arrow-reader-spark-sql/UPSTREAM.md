@@ -2725,3 +2725,10 @@ FLATTEN checks the inner list validity bitmap for canonical nested BIGINT
 List and LargeList columns. The existing CASE still selects rows for native
 flattening, so NULL parents, NULL inner arrays and NULL scalar elements
 keep their original behavior. Other shapes keep the membership probe.
+
+### Flat FLOAT buffers in VECTOR_INNER_PRODUCT (#1410)
+
+VECTOR_INNER_PRODUCT uses list offsets to read FLOAT child buffers when
+neither buffer contains NULLs. It retains the Spark-order dot product and
+checks parent validity and dimensions before reading a row. Child buffers
+with NULLs retain the per-row slices and validity checks.
