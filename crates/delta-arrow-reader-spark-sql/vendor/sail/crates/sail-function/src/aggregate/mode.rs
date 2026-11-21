@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::sync::Arc;
@@ -279,6 +280,25 @@ where
         }
 
         Ok(())
+    }
+
+    fn retract_batch(&mut self, values: &[ArrayRef]) -> Result<()> {
+        let Some(array) = values.first() else {
+            return Ok(());
+        };
+        for value in as_primitive_array::<T>(array)?.iter().flatten() {
+            if let Some(count) = self.value_counts.get_mut(&value) {
+                *count -= 1;
+                if *count == 0 {
+                    self.value_counts.remove(&value);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn supports_retract_batch(&self) -> bool {
+        true
     }
 
     fn evaluate(&mut self) -> Result<ScalarValue> {
@@ -656,9 +676,48 @@ impl Accumulator for BytesModeAccumulator {
 mod tests {
     use std::sync::Arc;
 
-    use datafusion::arrow::array::{ArrayRef, GenericByteViewArray, StringArray};
+    use datafusion::arrow::array::{ArrayRef, GenericByteViewArray, Int64Array, StringArray};
 
     use super::*;
+
+    #[test]
+    fn retracted_primitive_frequencies_match_the_replayed_frame() -> Result<()> {
+        let values: ArrayRef = Arc::new(Int64Array::from(vec![
+            Some(i64::MIN),
+            Some(7),
+            Some(7),
+            None,
+            Some(i64::MAX),
+            Some(-7),
+            Some(-7),
+            Some(3),
+            None,
+        ]));
+        for tie_break in [TieBreak::Any, TieBreak::Lowest, TieBreak::Highest] {
+            let mut sliding =
+                PrimitiveModeAccumulator::<Int64Type>::new(&DataType::Int64, tie_break);
+            let mut previous = 0..0;
+            for frame in [0..0, 0..3, 2..5, 3..6, 3..7, 7..9, 8..9, 9..9] {
+                sliding.update_batch(&[values.slice(previous.end, frame.end - previous.end)])?;
+                sliding
+                    .retract_batch(&[values.slice(previous.start, frame.start - previous.start)])?;
+                let mut replayed =
+                    PrimitiveModeAccumulator::<Int64Type>::new(&DataType::Int64, tie_break);
+                replayed.update_batch(&[values.slice(frame.start, frame.len())])?;
+                assert_eq!(
+                    sliding.value_counts, replayed.value_counts,
+                    "{tie_break:?} {frame:?}"
+                );
+                assert_eq!(
+                    sliding.evaluate()?,
+                    replayed.evaluate()?,
+                    "{tie_break:?} {frame:?}"
+                );
+                previous = frame;
+            }
+        }
+        Ok(())
+    }
 
     #[test]
     fn test_mode_accumulator_single_mode_utf8() -> Result<()> {
