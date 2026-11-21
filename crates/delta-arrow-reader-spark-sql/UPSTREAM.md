@@ -2857,3 +2857,12 @@ when the existing sum has headroom for every prefix. The locked
 merge behavior. Batches without a running sum, wider inputs, batches
 near overflow and noninteger results use its existing update path. Window TRY_SUM continues
 to use its existing accumulator directly.
+
+### Inline ASCII view prefixes (#1388)
+
+SUBSTRING at position 1 can build inline view results directly
+when every requested prefix fits in the inline representation
+and its bytes are ASCII. Scalar calls, longer or multibyte
+prefixes, other positions and storage types retain their existing
+kernels. Argument preparation and NULL short-circuiting stay in
+the existing planner and evaluation paths.

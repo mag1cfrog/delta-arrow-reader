@@ -1,9 +1,11 @@
-//! Spark string substring uses the native implementation; binary ranges retain Java INT wrapping.
+// Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
+//! Spark substring preserves character positions for strings and Java INT wrapping for binary ranges.
 
 use std::sync::Arc;
 
 use arrow::array::{
-    Array, ArrayRef, AsArray, GenericBinaryBuilder, Int64Array, OffsetSizeTrait, new_null_array,
+    Array, ArrayRef, AsArray, GenericBinaryBuilder, Int64Array, MAX_INLINE_VIEW_LEN,
+    OffsetSizeTrait, StringViewArray, StringViewBuilder, new_null_array,
 };
 use arrow::compute::cast;
 use arrow::datatypes::{DataType, Field, FieldRef};
@@ -166,6 +168,13 @@ impl ScalarUDFImpl for SparkSubstring {
             && *position == 1
             && *length >= 0
         {
+            if *length <= i64::from(MAX_INLINE_VIEW_LEN)
+                && let ColumnarValue::Array(array) = value
+                && let Some(prefixes) =
+                    inline_ascii_prefixes(array.as_string_view(), *length as usize)
+            {
+                return Ok(ColumnarValue::Array(Arc::new(prefixes)));
+            }
             // A prefix preserves the view type and avoids adding to a possibly large buffer offset.
             return datafusion_functions::unicode::substr().invoke_with_args(args);
         }
@@ -207,6 +216,23 @@ impl ScalarUDFImpl for SparkSubstring {
             vec![],
         )(&args.args)
     }
+}
+
+fn inline_ascii_prefixes(array: &StringViewArray, length: usize) -> Option<StringViewArray> {
+    let mut result = StringViewBuilder::with_capacity(array.len());
+    for value in array {
+        match value {
+            Some(value) => {
+                // Only the prefix must be ASCII for byte and character counts to agree.
+                let prefix = value
+                    .get(..length.min(value.len()))
+                    .filter(|value| value.is_ascii())?;
+                result.append_value(prefix);
+            }
+            None => result.append_null(),
+        }
+    }
+    Some(result.finish())
 }
 
 impl HigherOrderUDFImpl for SparkSubstring {
@@ -380,7 +406,7 @@ fn binary_substring<'a, O: OffsetSizeTrait>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use arrow::array::{BinaryArray, BinaryViewArray, LargeBinaryArray, StringViewArray};
+    use arrow::array::{BinaryArray, BinaryViewArray, LargeBinaryArray};
     use datafusion_common::config::ConfigOptions;
 
     type TestResult = std::result::Result<(), Box<dyn std::error::Error>>;
@@ -538,6 +564,33 @@ mod tests {
             let shared = result.as_string_view().data_buffers()[0].as_ptr()
                 == source.as_string_view().data_buffers()[0].as_ptr();
             assert_eq!(shared, position == 1);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn inline_prefix_agrees_with_native_character_bounds() -> TestResult {
+        for values in [
+            vec![Some(""), Some("x"), None, Some("abcdefghijkl中文")],
+            vec![Some("abcé光def"), Some("é"), None],
+        ] {
+            let source = Arc::new(StringViewArray::from(values));
+            for length in [0, 1, 4, i64::from(MAX_INLINE_VIEW_LEN)] {
+                let args = || {
+                    arguments(
+                        vec![
+                            ColumnarValue::Array(source.clone()),
+                            ColumnarValue::Scalar(ScalarValue::Int64(Some(1))),
+                            ColumnarValue::Scalar(ScalarValue::Int64(Some(length))),
+                        ],
+                        source.len(),
+                    )
+                };
+                assert_same(
+                    ScalarUDFImpl::invoke_with_args(&SparkSubstring::new(), args()?),
+                    datafusion_functions::unicode::substr().invoke_with_args(args()?),
+                )?;
+            }
         }
         Ok(())
     }
