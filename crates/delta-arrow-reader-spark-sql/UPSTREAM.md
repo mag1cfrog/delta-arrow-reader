@@ -2583,6 +2583,17 @@ constructor still handles other schemas. The
 [planning report](benches/reports/planning-1390-round2-wide-resolution.md)
 records the scan alias cost and matched comparison.
 
+### SPLIT with one ASCII delimiter (#1413)
+
+A nonnull scalar pattern consisting of one literal ASCII graphic or space
+uses string splitting and appends borrowed substrings directly to the list
+builder. Positive limits keep the unsplit remainder in the last field.
+Zero and negative limits retain all fields, including trailing empty fields.
+Other patterns, including per-row patterns, keep the existing regex
+route. Storage handling and downcast errors remain the same. The
+[differential test](tests/regex_operands/split_literal_delimiter.rs) compares the old regex
+path with the public query path in both ANSI modes.
+
 ### AES scalar and column arguments (#1405)
 
 The local Sail AES functions evaluate inputs, keys, modes, padding, IVs and

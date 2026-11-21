@@ -869,3 +869,6 @@ fn inherited_regex_phases_require_the_complete_baseline_observation() -> TestRes
     }
     Ok(())
 }
+
+#[path = "regex_operands/split_literal_delimiter.rs"]
+mod split_literal_delimiter;

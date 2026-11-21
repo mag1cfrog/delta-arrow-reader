@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
 use datafusion::arrow::array::{
@@ -122,9 +123,13 @@ where
 
     match (values.as_ref(), format.as_ref(), limit.as_ref()) {
         (Some(values), Some(format), Some(limit)) => {
-            let format_scalar_opt = (format.len() == 1 && format.is_valid(0))
-                .then(|| parse_regex(format.value(0)))
-                .transpose()?;
+            let scalar_format = (format.len() == 1 && format.is_valid(0)).then(|| format.value(0));
+            let delimiter = scalar_format.and_then(ascii_delimiter);
+            let format_scalar_opt = if delimiter.is_none() {
+                scalar_format.map(parse_regex).transpose()?
+            } else {
+                None
+            };
             let limit_scalar_opt = (limit.len() == 1 && limit.is_valid(0)).then(|| limit.value(0));
             let is_format_null = format.len() == 1 && format.is_null(0);
             let is_limit_null = limit.len() == 1 && limit.is_null(0);
@@ -140,6 +145,14 @@ where
                     || limit.is_null(i)
                 {
                     builder.append_null();
+                } else if let Some(delimiter) = delimiter {
+                    let value = values.value(i);
+                    let limit = limit_scalar_opt.unwrap_or_else(|| limit.value(i));
+                    if limit > 0 {
+                        builder.append_value(value.splitn(limit as usize, delimiter).map(Some));
+                    } else {
+                        builder.append_value(value.split(delimiter).map(Some));
+                    }
                 } else {
                     let format_regex = regex_memo.resolve(
                         format_scalar_opt.as_ref(),
@@ -161,6 +174,14 @@ where
             "Could not downcast arguments to arrow arrays",
         )),
     }
+}
+
+fn ascii_delimiter(pattern: &str) -> Option<char> {
+    let [byte] = pattern.as_bytes() else {
+        return None;
+    };
+    let literal = (byte.is_ascii_graphic() || *byte == b' ') && !br"\.^$|?*+()[]{}".contains(byte);
+    literal.then_some(char::from(*byte))
 }
 
 pub fn parse_regex(format: &str) -> Result<Regex> {
@@ -185,6 +206,21 @@ mod tests {
     use datafusion::arrow::array::{Int32Array, ListArray, StringArray};
 
     use super::*;
+
+    #[test]
+    fn view_storage_keeps_the_existing_downcast_error() {
+        use datafusion::arrow::array::StringViewArray;
+
+        let values: ArrayRef = Arc::new(StringViewArray::from(vec!["a-b"]));
+        let format: ArrayRef = Arc::new(StringArray::from(vec!["-"]));
+        let limit: ArrayRef = Arc::new(Int32Array::from(vec![-1]));
+        let error = spark_split_inner(&[values, format, limit]).expect_err("view storage rejected");
+        assert!(
+            error
+                .to_string()
+                .contains("Could not downcast arguments to arrow arrays")
+        );
+    }
 
     /// A delimiter supplied as a column selects the split pattern per row;
     /// null inputs yield null outputs.
