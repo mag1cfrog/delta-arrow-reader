@@ -1,8 +1,10 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
+use datafusion::arrow::array::{AsArray, StringArray};
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
-use datafusion::functions::expr_fn;
+use datafusion::functions::{expr_fn, string as native_string};
+use datafusion::physical_expr_common::datum::apply_cmp;
 use datafusion_common::{Result, ScalarValue};
 use datafusion_expr::type_coercion::binary::like_coercion;
 use datafusion_expr::{
@@ -42,6 +44,23 @@ fn build_like_expr(input: ScalarFunctionInput, case_insensitive: bool) -> PlanRe
         function_context,
     } = input;
     let n = arguments.len();
+    if case_insensitive
+        && let [
+            value @ expr::Expr::Column(_),
+            expr::Expr::Literal(ScalarValue::Utf8(Some(pattern)), _),
+        ] = arguments.as_slice()
+        && let Some(prefix) = pattern.strip_suffix('%')
+        && (1..=32).contains(&prefix.len())
+        && prefix.bytes().all(|byte| byte.is_ascii_alphanumeric())
+        && matches!(value.get_type(function_context.schema), Ok(DataType::Utf8))
+    {
+        let nullable = value.nullable(function_context.schema)?;
+        let matches = ScalarUDF::from(ILikeAsciiPrefix {
+            pattern: pattern.to_ascii_lowercase(),
+        })
+        .call(vec![value.clone()]);
+        return Ok(ScalarUDF::from(ILikeResult { nullable }).call(vec![matches]));
+    }
     let nullable = if case_insensitive && (2..=3).contains(&n) {
         let schema = function_context.schema;
         let nullable = arguments[0].nullable(schema)? || arguments[1].nullable(schema)?;
@@ -82,6 +101,51 @@ fn build_like_expr(input: ScalarFunctionInput, case_insensitive: bool) -> PlanRe
         Some(nullable) => ScalarUDF::from(ILikeResult { nullable }).call(vec![result]),
         None => result,
     })
+}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+struct ILikeAsciiPrefix {
+    pattern: String,
+}
+
+impl ScalarUDFImpl for ILikeAsciiPrefix {
+    fn name(&self) -> &str {
+        "spark_ilike_ascii_prefix"
+    }
+
+    fn signature(&self) -> &Signature {
+        static SIGNATURE: std::sync::LazyLock<Signature> = std::sync::LazyLock::new(|| {
+            Signature::exact(vec![DataType::Utf8], Volatility::Immutable)
+        });
+        &SIGNATURE
+    }
+
+    fn return_type(&self, _args: &[DataType]) -> Result<DataType> {
+        Ok(DataType::Boolean)
+    }
+
+    fn invoke_with_args(&self, mut args: ScalarFunctionArgs) -> Result<ColumnarValue> {
+        let ([value], [field]) = (args.args.as_slice(), args.arg_fields.as_slice()) else {
+            return datafusion_common::internal_err!("{} requires one Utf8 argument", self.name());
+        };
+        let ascii = match value {
+            ColumnarValue::Array(array) => array
+                .as_string_opt::<i32>()
+                .is_some_and(StringArray::is_ascii),
+            ColumnarValue::Scalar(ScalarValue::Utf8(value)) => {
+                value.as_ref().is_none_or(|value| value.is_ascii())
+            }
+            _ => false,
+        };
+        let pattern = ColumnarValue::Scalar(ScalarValue::Utf8(Some(self.pattern.clone())));
+        if ascii {
+            return apply_cmp(Operator::ILikeMatch, value, &pattern);
+        }
+        // Unicode case folding differs from lowercasing both operands.
+        args.return_field = Arc::clone(field);
+        let lower = native_string::lower().invoke_with_args(args)?;
+        apply_cmp(Operator::LikeMatch, &lower, &pattern)
+    }
 }
 
 // Native LOWER supplies the values; ILIKE retains the original operands' fields.
