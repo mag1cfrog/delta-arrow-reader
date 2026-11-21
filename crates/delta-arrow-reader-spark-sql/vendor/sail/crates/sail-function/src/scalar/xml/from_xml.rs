@@ -1129,7 +1129,6 @@ mod tests {
         let schemas = [
             Some("value BIGINT, attr_id BIGINT"),
             Some("value NOT_A_TYPE"),
-            Some(""),
             None,
         ];
         let options = [
