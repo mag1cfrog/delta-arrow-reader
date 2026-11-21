@@ -114,14 +114,18 @@ fn str_to_map_inner(args: &[ArrayRef], last_value_wins: bool) -> Result<ArrayRef
                 if pair_lists.is_null(rn) {
                     continue;
                 }
-                let key_value_delim = key_value_delim_scalar.as_ref().map_or_else(
-                    || parse_regex(key_value_delim_strs.value(rn)),
-                    |delim| Ok(delim.clone()),
-                )?;
+                let row_delimiter;
+                let key_value_delim = match &key_value_delim_scalar {
+                    Some(delimiter) => delimiter,
+                    None => {
+                        row_delimiter = parse_regex(key_value_delim_strs.value(rn))?;
+                        &row_delimiter
+                    }
+                };
 
                 for pair_rn in pair_offsets[rn]..pair_offsets[rn + 1] {
                     let pair = pair_strs.value(pair_rn as usize);
-                    let key_value = split_to_array(pair, &key_value_delim, 2)?;
+                    let key_value = split_to_array(pair, key_value_delim, 2)?;
                     keys.push(key_value.first().cloned().flatten());
                     values.push(key_value.get(1).cloned().flatten());
                 }
@@ -150,5 +154,61 @@ fn str_to_map_inner(args: &[ArrayRef], last_value_wins: bool) -> Result<ArrayRef
             )
         }
         _ => internal_err!("str_to_map: failed to downcast arguments to StringArrays"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use datafusion::arrow::array::{ListBuilder, StringBuilder};
+
+    use super::*;
+
+    #[test]
+    fn literal_key_value_delimiters_match_column_delimiters() -> Result<()> {
+        let mut pairs = ListBuilder::new(StringBuilder::new());
+        for row in [
+            Some(&["a:1", "b:2", "without delimiter"][..]),
+            None,
+            Some(&[][..]),
+            Some(&["a:1", "a:2"][..]),
+            Some(&["a=b", "c|3", "名字：四"][..]),
+        ] {
+            if let Some(row) = row {
+                for pair in row {
+                    pairs.values().append_value(pair);
+                }
+            }
+            pairs.append(row.is_some());
+        }
+        let pairs = Arc::new(pairs.finish()) as ArrayRef;
+        for pair_lists in [Arc::clone(&pairs), pairs.slice(0, 0)] {
+            for delimiter in [":", "[=:]", r"\|", "："] {
+                let literal = Arc::new(StringArray::from(vec![delimiter])) as ArrayRef;
+                let repeated =
+                    Arc::new(StringArray::from(vec![delimiter; pair_lists.len()])) as ArrayRef;
+                for last_value_wins in [false, true] {
+                    let actual = str_to_map_inner(
+                        &[Arc::clone(&pair_lists), Arc::clone(&literal)],
+                        last_value_wins,
+                    );
+                    let expected = str_to_map_inner(
+                        &[Arc::clone(&pair_lists), Arc::clone(&repeated)],
+                        last_value_wins,
+                    );
+                    match (actual, expected) {
+                        (Ok(actual), Ok(expected)) => {
+                            assert_eq!(actual.to_data(), expected.to_data())
+                        }
+                        (Err(actual), Err(expected)) => {
+                            assert_eq!(actual.to_string(), expected.to_string())
+                        }
+                        outcomes => {
+                            panic!("different map outcomes for {delimiter:?}: {outcomes:?}")
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 }
