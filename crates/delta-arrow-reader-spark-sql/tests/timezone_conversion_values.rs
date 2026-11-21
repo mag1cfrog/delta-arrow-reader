@@ -63,6 +63,26 @@ const QUERIES: &[(&str, &str, &str)] = &[
         "convert_timezone('UTC','UTC',CAST('not a timestamp' AS TIMESTAMP_NTZ))",
         " WHERE id = 1",
     ),
+    (
+        "null_source_skips_later_expressions",
+        "convert_timezone(CAST(NULL AS STRING),CAST(CAST(concat('bad',CAST(id AS STRING)) AS INT) AS STRING),CAST(concat('bad',CAST(id AS STRING)) AS TIMESTAMP_NTZ))",
+        " WHERE id = 1",
+    ),
+    (
+        "null_target_skips_timestamp",
+        "convert_timezone('UTC',CAST(NULL AS STRING),CAST(concat('bad',CAST(id AS STRING)) AS TIMESTAMP_NTZ))",
+        " WHERE id = 1",
+    ),
+    (
+        "invalid_source_precedes_invalid_target",
+        "convert_timezone('Bad/Source','Bad/Target',ntz)",
+        " WHERE id = 1",
+    ),
+    (
+        "empty_with_invalid_timestamp",
+        "convert_timezone('UTC','UTC',CAST('not a timestamp' AS TIMESTAMP_NTZ))",
+        " WHERE false",
+    ),
     ("empty", "convert_timezone('UTC','UTC',ntz)", " WHERE false"),
     (
         "from_utc_named",

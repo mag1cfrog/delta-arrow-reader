@@ -2654,8 +2654,7 @@ trims, seeded tie choices and output casts are unchanged.
 
 ### Literal zones in CONVERT_TIMEZONE (#1409)
 
-Two valid nonnull literal zones let the planner use the scalar conversion
-path because neither can skip evaluation of the timestamp. The converter
-resolves both singular zones once when at least one timestamp is present.
-Dynamic, NULL and invalid zones retain the original argument evaluation
-and error behavior.
+CONVERT_TIMEZONE retains its lazy argument evaluation. After NULL
+checks, a pair of literal zone strings passes one value per zone to
+the converter. It resolves both strings once for active timestamps,
+with the original source-before-target error order.

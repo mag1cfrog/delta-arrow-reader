@@ -56,6 +56,7 @@ impl ConvertTz {
 pub struct ConvertTzLazy {
     signature: HigherOrderSignature,
     convert_tz: ConvertTz,
+    literal_zone_pair: bool,
 }
 
 impl ConvertTzLazy {
@@ -63,7 +64,13 @@ impl ConvertTzLazy {
         Self {
             signature: HigherOrderSignature::variadic_any(Volatility::Immutable),
             convert_tz,
+            literal_zone_pair: false,
         }
+    }
+
+    pub fn with_literal_zone_pair(mut self, literal_zone_pair: bool) -> Self {
+        self.literal_zone_pair = literal_zone_pair;
+        self
     }
 }
 
@@ -140,12 +147,18 @@ impl HigherOrderUDFImpl for ConvertTzLazy {
         // TODO: Add single-pass row-level lambda evaluation so errors follow Spark's row-major
         // order. Replaying batches is not equivalent because it re-evaluates volatile/stateful
         // bodies, which Spark requires to run at most once per row.
-        let (values, active_rows) = evaluate_lambdas_until_null(&lambdas, args.number_rows)?;
+        let (mut values, active_rows) = evaluate_lambdas_until_null(&lambdas, args.number_rows)?;
         if active_rows.is_empty() {
             return Ok(ColumnarValue::Array(new_null_array(
                 args.return_type(),
                 args.number_rows,
             )));
+        }
+
+        if self.literal_zone_pair {
+            // Keep arguments lazy, while giving the conversion one copy of each zone.
+            values[0] = values[0].slice(0, 1);
+            values[1] = values[1].slice(0, 1);
         }
 
         let value = ScalarUDFImpl::invoke_with_args(

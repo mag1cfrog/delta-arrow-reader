@@ -20,9 +20,7 @@ use sail_common::utils::datetime::time_unit_to_multiplier;
 use sail_common_datafusion::literal::LiteralEvaluator;
 use sail_common_datafusion::utils::items::ItemTaker;
 use sail_common_datafusion::variant::is_variant_storage_field;
-use sail_function::scalar::datetime::convert_tz::{
-    ConvertTz, ConvertTzLazy, normalize_session_timezone,
-};
+use sail_function::scalar::datetime::convert_tz::{ConvertTz, ConvertTzLazy};
 use sail_function::scalar::datetime::spark_date::SparkDate;
 use sail_function::scalar::datetime::spark_date_day_arithmetic::SparkDateDayArithmetic;
 use sail_function::scalar::datetime::spark_date_format::SparkDateFormat;
@@ -1571,14 +1569,18 @@ fn convert_tz(
 ) -> PlanResult<Expr> {
     let func = ConvertTz::new(classic);
     if with_null_short_circuit {
+        let literal_zone_pair = [&from_tz, &to_tz].into_iter().all(|zone| {
+            matches!(zone, Expr::Literal(value, _) if value.try_as_str().flatten().is_some())
+        });
         let arguments = [from_tz, to_tz, ts]
             .into_iter()
             .map(|argument| lambda_with_fresh_parameter(argument, "_convert_tz"))
             .collect::<PlanResult<Vec<_>>>()?;
         Ok(Expr::HigherOrderFunction(expr::HigherOrderFunction::new(
-            Arc::new(HigherOrderUDF::new_from_impl(ConvertTzLazy::new(
-                func.with_null_short_circuit(),
-            ))),
+            Arc::new(HigherOrderUDF::new_from_impl(
+                ConvertTzLazy::new(func.with_null_short_circuit())
+                    .with_literal_zone_pair(literal_zone_pair),
+            )),
             arguments,
         )))
     } else {
@@ -1671,12 +1673,7 @@ fn convert_timezone(input: ScalarFunctionInput) -> PlanResult<Expr> {
                 }
             })?;
 
-    let valid_literal_zones = [&from_tz, &to_tz].into_iter().all(|zone| {
-        matches!(zone, Expr::Literal(value, _) if value.try_as_str().flatten()
-            .and_then(normalize_session_timezone).is_some())
-    });
-    // Both nonnull literal zones leave every timestamp row active.
-    if requires_scalar_evaluation || valid_literal_zones {
+    if requires_scalar_evaluation {
         Ok(
             ScalarUDF::from(ConvertTz::new(true).with_null_short_circuit())
                 .call(vec![from_tz, to_tz, ts]),
