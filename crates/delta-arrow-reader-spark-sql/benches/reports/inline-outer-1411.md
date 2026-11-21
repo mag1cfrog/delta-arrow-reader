@@ -28,7 +28,7 @@ The boundary SQL matched all 32 expanded rows, field names and types
 in both ANSI modes across the two builds.
 All 645 selected workspace tests, formatting and Spark-root Clippy passed.
 
-The [protocol](../array_functions_1410/inline-outer-protocol.md) was
+The [protocol](../generators_text_conditionals_1411/inline-outer-protocol.md) was
 committed at `e120bd45d25da0181c5e5d65899f7259b7deb07d` before clocks.
 The Linux release session ran 2026-11-21T07:23:26Z to 2026-11-21T07:23:58Z.
 The 18 comparison processes and 6 native controls retained 72 pairs.
