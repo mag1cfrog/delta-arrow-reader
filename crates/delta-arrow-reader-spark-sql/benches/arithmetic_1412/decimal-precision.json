@@ -10,13 +10,13 @@
   "overall_timeout_seconds": 14400,
   "spark_plan_contains": {
     "staging": {
-      "scalar": [
+      "shape": [
         "fused_decimal_divide(",
         "spark_cast_numeric_to_decimal(round("
       ]
     },
     "candidate": {
-      "scalar": [
+      "shape": [
         "fused_decimal_divide(",
         "spark_cast_numeric_to_decimal(round("
       ]
