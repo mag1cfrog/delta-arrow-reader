@@ -1,0 +1,10 @@
+{
+  "staging_source": "ee5ea2b31d675524ffd7d1d6d3371dc57c4bd2a3",
+  "staging_tip": "8d3510f70960ce911a8847c08ff10b1ff3a1275b",
+  "candidate_source": "b11724ddc17d01100e072fdb4cd04122077cea9f",
+  "case_ids": [
+    "window.window.max_by",
+    "window.window.min_by"
+  ],
+  "overall_timeout_seconds": 14400
+}
