@@ -2747,3 +2747,10 @@ INT argument arrays, then uses checked range lengths to emit INT values.
 The original generator handles explicit steps, NULL inputs and all other
 types. Argument evaluation, size limits and the list element field stay
 in their existing paths.
+
+### List offsets in INLINE_OUTER (#1411)
+
+INLINE_OUTER compares adjacent offsets for emptiness on List and
+LargeList columns. This preserves the NULL predicate for NULL parents.
+The existing selection and unnest preserve empty and NULL arrays and
+project their STRUCT fields. Other inputs use native emptiness.
