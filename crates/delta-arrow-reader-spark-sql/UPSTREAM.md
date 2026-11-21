@@ -2573,6 +2573,15 @@ Parser construction still runs for each call, and rejected input pays for the
 failed diagnostic-free attempt before the Rich fallback. No construction savings
 or measured performance result is claimed here.
 
+### Pending set operations during logical resolution (#1390)
+
+The resolver snapshots the DataFusion session after it finds a pending set
+operation. Queries without a pending set keep the existing plan and need no
+session snapshot. If a set is present, the existing lowering still uses a
+snapshot of the session with its query execution start time cleared, including
+for sets inside subqueries. The [planning report](benches/reports/planning-1390-round2-logical.md)
+records the cost of the previous eager snapshot.
+
 ### AES scalar and column arguments (#1405)
 
 The local Sail AES functions evaluate inputs, keys, modes, padding, IVs and
