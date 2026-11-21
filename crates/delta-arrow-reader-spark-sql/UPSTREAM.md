@@ -2866,3 +2866,11 @@ and its bytes are ASCII. Scalar calls, longer or multibyte
 prefixes, other positions and storage types retain their existing
 kernels. Argument preparation and NULL short-circuiting stay in
 the existing planner and evaluation paths.
+
+### Summed view lengths in CONCAT capacity checks (#1388)
+
+CONCAT sums the encoded lengths of Utf8View values before checking
+the remaining Utf8 capacity. A u32 count of u32 lengths fits in
+u64, including bytes encoded at NULL slots. Larger view counts
+retain the original checked fold. The accepted size bound, NULL
+semantics and delegate paths stay the same.

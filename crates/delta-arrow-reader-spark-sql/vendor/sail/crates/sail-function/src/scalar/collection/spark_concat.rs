@@ -281,13 +281,20 @@ fn can_concat_views_with_utf8_limits(values: &[ColumnarValue]) -> bool {
     for value in values {
         let available = match value {
             ColumnarValue::Array(array) if array.len() == rows => match array.data_type() {
-                DataType::Utf8View => array
-                    .as_string_view()
-                    .views()
-                    .iter()
-                    .try_fold(remaining, |bytes, view| {
-                        bytes.checked_sub(*view as u32 as usize)
-                    }),
+                DataType::Utf8View => {
+                    let views = array.as_string_view().views();
+                    if u32::try_from(views.len()).is_ok() {
+                        // A u32 count of u32 lengths fits in a u64 sum.
+                        let bytes: u64 = views.iter().map(|view| u64::from(*view as u32)).sum();
+                        usize::try_from(bytes)
+                            .ok()
+                            .and_then(|bytes| remaining.checked_sub(bytes))
+                    } else {
+                        views.iter().try_fold(remaining, |bytes, view| {
+                            bytes.checked_sub(*view as u32 as usize)
+                        })
+                    }
+                }
                 DataType::Utf8 => remaining.checked_sub(array.as_string::<i32>().values().len()),
                 _ => None,
             },
