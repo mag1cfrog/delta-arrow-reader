@@ -171,3 +171,112 @@ async fn element_at_matches_spark_values_and_executed_types() -> TestResult {
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }
+
+#[tokio::test]
+async fn positive_literal_bigint_lookup_matches_the_bounds_case() -> TestResult {
+    use std::sync::Arc;
+
+    use arrow::array::{ArrayRef, GenericListArray, Int64Array};
+    use arrow::datatypes::{DataType, Int64Type};
+    use arrow::record_batch::RecordBatch;
+    use datafusion::common::cast::as_int64_array;
+    use datafusion::error::Result;
+    use datafusion::physical_plan::{collect, displayable};
+    use delta_arrow_reader_spark_sql::{SparkSqlOptions, plan_query};
+
+    async fn lookup(
+        session: &SessionContext,
+        options: &SparkSqlOptions,
+        sql: &str,
+    ) -> Result<Vec<Option<i64>>> {
+        let query = plan_query(session, sql, options).await?;
+        let plan = query.create_physical_plan(session).await?;
+        assert_eq!(plan.schema().field(0).data_type(), &DataType::Int64);
+        let mut values = Vec::new();
+        for batch in collect(plan, session.task_ctx()).await? {
+            values.extend(as_int64_array(batch.column(0))?.iter());
+        }
+        Ok(values)
+    }
+
+    let session = SessionContext::new_with_state(
+        configure_spark_sql(
+            SessionStateBuilder::new()
+                .with_default_features()
+                .with_config(SessionConfig::new().with_target_partitions(1)),
+        )
+        .build(),
+    );
+    let values = [
+        None,
+        Some(vec![]),
+        Some(vec![None, Some(7)]),
+        Some(vec![Some(i64::MIN), Some(i64::MAX), Some(0)]),
+    ];
+    let ids = Arc::new(Int64Array::from_iter_values(0..values.len() as i64));
+    for (table, items) in [
+        (
+            "list_input",
+            Arc::new(GenericListArray::<i32>::from_iter_primitive::<
+                Int64Type,
+                _,
+                _,
+            >(values.clone())) as ArrayRef,
+        ),
+        (
+            "large_list_input",
+            Arc::new(GenericListArray::<i64>::from_iter_primitive::<
+                Int64Type,
+                _,
+                _,
+            >(values.clone())) as ArrayRef,
+        ),
+    ] {
+        let columns: [(&str, ArrayRef); 2] = [("id", ids.clone()), ("items", items)];
+        session.register_batch(table, RecordBatch::try_from_iter(columns)?)?;
+        for ansi_mode in [false, true] {
+            let options = SparkSqlOptions {
+                ansi_mode,
+                ..Default::default()
+            };
+            for function in ["element_at", "try_element_at"] {
+                let shape = format!("SELECT {function}(items, 1) FROM {table}");
+                let plan = plan_query(&session, &shape, &options)
+                    .await?
+                    .create_physical_plan(&session)
+                    .await?;
+                assert!(
+                    displayable(plan.as_ref())
+                        .indent(false)
+                        .to_string()
+                        .contains("spark_bigint_array_at_literal_index")
+                );
+                for index in [1, 3, i32::MAX] {
+                    for id in 0..=values.len() {
+                        let direct = format!(
+                            "SELECT {function}(items, {index}) FROM {table} WHERE id = {id}"
+                        );
+                        let legacy = format!(
+                            "SELECT {function}(CASE WHEN id >= 0 THEN items ELSE NULL END, {index})
+                             FROM {table} WHERE id = {id}"
+                        );
+                        let direct = lookup(&session, &options, &direct).await;
+                        let legacy = lookup(&session, &options, &legacy).await;
+                        if id == 1 && ansi_mode && function == "element_at" {
+                            assert!(direct.is_err());
+                        }
+                        let root = |error: datafusion::error::DataFusionError| {
+                            error.find_root().to_string()
+                        };
+                        assert_eq!(
+                            direct.map_err(root),
+                            legacy.map_err(root),
+                            "{table}, {function}, ANSI = {ansi_mode}, row {id}, index {index}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}

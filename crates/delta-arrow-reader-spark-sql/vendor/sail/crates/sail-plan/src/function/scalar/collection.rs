@@ -1,4 +1,6 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
+mod bigint_array_literal_index;
+
 use std::sync::Arc;
 
 use datafusion::arrow::datatypes::DataType;
@@ -20,6 +22,7 @@ use crate::function::common::{
     without_metadata_annotations,
 };
 
+use self::bigint_array_literal_index::BigIntArrayAtLiteralIndex;
 use super::lambda::lambda_with_fresh_parameter;
 
 // Lower only after logical optimization, so CombineConcats still sees its raw
@@ -98,6 +101,23 @@ fn size(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
 
 fn element_at(input: ScalarFunctionInput, is_try: bool) -> PlanResult<expr::Expr> {
     let (collection, element) = input.arguments.two()?;
+    let collection_type = collection.get_type(input.function_context.schema)?;
+    let literal_index = match &element {
+        expr::Expr::Literal(ScalarValue::Int32(index), _) => *index,
+        expr::Expr::Literal(ScalarValue::Int64(Some(index)), _) => i32::try_from(*index).ok(),
+        _ => None,
+    };
+    if let (DataType::List(field) | DataType::LargeList(field), expr::Expr::Column(_), Some(index)) =
+        (&collection_type, &collection, literal_index)
+        && field.data_type() == &DataType::Int64
+        && index > 0
+    {
+        return Ok(ScalarUDF::from(BigIntArrayAtLiteralIndex {
+            zero_based_index: index as usize - 1,
+            error_out_of_bounds: !is_try && input.function_context.plan_config.ansi_mode,
+        })
+        .call(vec![collection]));
+    }
     let (name, null_or_out_of_bounds) = if is_try {
         ("try_element_at", lit(ScalarValue::Null))
     } else {
@@ -112,7 +132,7 @@ fn element_at(input: ScalarFunctionInput, is_try: bool) -> PlanResult<expr::Expr
         )
     };
 
-    Ok(match collection.get_type(input.function_context.schema)? {
+    Ok(match collection_type {
         DataType::List(_)
         | DataType::ListView(_)
         | DataType::FixedSizeList(..)
