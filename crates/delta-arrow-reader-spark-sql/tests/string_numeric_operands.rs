@@ -425,3 +425,6 @@ async fn native_sql_keeps_its_numeric_coercion() -> TestResult {
     }
     Ok(())
 }
+
+#[path = "string_numeric_operands/padding_and_overlay.rs"]
+mod padding_and_overlay;

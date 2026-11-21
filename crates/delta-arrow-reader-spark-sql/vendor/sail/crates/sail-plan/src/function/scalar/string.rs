@@ -738,7 +738,44 @@ pub(crate) fn lower_runtime_regexp_extract(
     )))
 }
 
-fn overlay(mut args: Vec<expr::Expr>) -> PlanResult<expr::Expr> {
+fn widen_int32_literal(argument: &mut expr::Expr) {
+    if let expr::Expr::Literal(value, _) = argument
+        && let ScalarValue::Int32(Some(number)) = value
+    {
+        *value = ScalarValue::Int64(Some(i64::from(*number)));
+    }
+}
+
+fn pad_string(
+    input: ScalarFunctionInput,
+    pad: impl FnOnce(Vec<expr::Expr>) -> expr::Expr,
+) -> PlanResult<expr::Expr> {
+    let ScalarFunctionInput {
+        mut arguments,
+        function_context,
+    } = input;
+    let schema = function_context.schema;
+    if let [text, width, padding @ ..] = arguments.as_mut_slice()
+        && padding.len() <= 1
+        && matches!(width, expr::Expr::Literal(ScalarValue::Int32(Some(_)), _))
+        && text
+            .get_type(schema)
+            .is_ok_and(|kind| kind == DataType::Utf8)
+        && padding.iter().all(|text| {
+            text.get_type(schema)
+                .is_ok_and(|kind| kind == DataType::Utf8)
+        })
+    {
+        widen_int32_literal(width);
+    }
+    Ok(pad(arguments))
+}
+
+fn overlay(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
+    let ScalarFunctionInput {
+        arguments: mut args,
+        function_context,
+    } = input;
     if args.len() == 4
         && matches!(
             args[3],
@@ -747,6 +784,23 @@ fn overlay(mut args: Vec<expr::Expr>) -> PlanResult<expr::Expr> {
         )
     {
         args.pop();
+    }
+    let schema = function_context.schema;
+    if let [text, replacement, positions @ ..] = args.as_mut_slice()
+        && matches!(positions.len(), 1 | 2)
+        && positions.iter().all(|position| {
+            matches!(
+                position,
+                expr::Expr::Literal(ScalarValue::Int32(Some(_)) | ScalarValue::Int64(Some(_)), _)
+            )
+        })
+        && [text, replacement].iter().all(|text| {
+            text.get_type(schema)
+                .is_ok_and(|kind| kind == DataType::Utf8)
+        })
+    {
+        // An exact Utf8 signature avoids the view signature chosen during coercion.
+        positions.iter_mut().for_each(widen_int32_literal);
     }
     Ok(expr_fn::overlay(args))
 }
@@ -1316,7 +1370,7 @@ pub(super) fn list_built_in_string_functions() -> Vec<(&'static str, ScalarFunct
         ("levenshtein", F::udf(Levenshtein::new())),
         ("locate", F::custom(position)),
         ("lower", F::custom(lower)),
-        ("lpad", F::var_arg(expr_fn::lpad)),
+        ("lpad", F::custom(|input| pad_string(input, expr_fn::lpad))),
         (
             "ltrim",
             build_trim_function("ltrim", native_string::ltrim()),
@@ -1325,7 +1379,7 @@ pub(super) fn list_built_in_string_functions() -> Vec<(&'static str, ScalarFunct
         ("make_valid_utf8", F::udf(MakeValidUtf8::new())),
         ("mask", F::udf(SparkMask::new())),
         ("octet_length", F::custom(octet_length)),
-        ("overlay", F::var_arg(overlay)),
+        ("overlay", F::custom(overlay)),
         ("position", F::custom(position)),
         ("printf", F::udf(FormatStringFunc::new())),
         ("quote", F::udf(SparkQuote::new())),
@@ -1339,7 +1393,7 @@ pub(super) fn list_built_in_string_functions() -> Vec<(&'static str, ScalarFunct
         ("repeat", F::binary(expr_fn::repeat)),
         ("replace", F::var_arg(replace)),
         ("right", F::binary(expr_fn::right)),
-        ("rpad", F::var_arg(expr_fn::rpad)),
+        ("rpad", F::custom(|input| pad_string(input, expr_fn::rpad))),
         (
             "rtrim",
             build_trim_function("rtrim", native_string::rtrim()),
