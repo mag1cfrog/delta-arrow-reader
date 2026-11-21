@@ -2998,3 +2998,10 @@ expansion.
 Two-argument PARSE_URL and TRY_PARSE_URL borrow a present Utf8 literal
 part for a Utf8 input column. They pass the absent key directly to the
 existing parser. Other argument shapes keep their existing adapters.
+
+### Literal THETA_UNION sketch size (#1414)
+
+THETA_UNION validates an in-range literal `lgNomEntries` once and
+passes it to the shared sketch union loop. Column, NULL and invalid
+values use the original row evaluation, which checks the size only
+for a non-NULL pair of sketches.

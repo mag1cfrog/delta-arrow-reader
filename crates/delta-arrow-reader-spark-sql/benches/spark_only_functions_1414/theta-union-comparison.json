@@ -1,0 +1,11 @@
+{
+  "staging_source": "827528d70d2fe5a9fe4ba0bb38ba4e0fdeee9e96",
+  "staging_tip": "144d8ee2c9d8faf9cfc51eddfbe293a4e6dd9897",
+  "candidate_source": "631dc42b1aa9bae111792698f95074676b106d36",
+  "statement_manifest": "../functions/manifest.json",
+  "statement_manifest_sha256": "ec6528b17cb072224aec6ea0ea3c1e910b9aa8cf6f5cadb0296f85b3f86f1f06",
+  "case_ids": [
+    "scalar.misc.theta_union"
+  ],
+  "overall_timeout_seconds": 1500
+}
