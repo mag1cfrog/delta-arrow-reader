@@ -306,6 +306,15 @@ mod tests {
                     return_field: Arc::new(Field::new("sketch", DataType::Binary, true)),
                     config_options: Arc::new(Default::default()),
                 });
+                if length == 3 && allow_different == Some(true) {
+                    let Ok(ColumnarValue::Array(actual)) = &actual else {
+                        panic!("a true flag must allow two different HLL configurations");
+                    };
+                    let union = as_binary_array(actual, "hll_union")?;
+                    assert!(union.is_null(0));
+                    assert!(!union.is_null(2));
+                    assert_eq!(estimate_hll_sketch(union.value(2), "hll_union")?, 3);
+                }
                 match (actual, expected) {
                     (Ok(ColumnarValue::Array(actual)), Ok(ColumnarValue::Array(expected))) => {
                         assert_eq!(actual.to_data(), expected.to_data());
