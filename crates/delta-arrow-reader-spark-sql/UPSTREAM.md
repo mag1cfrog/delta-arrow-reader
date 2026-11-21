@@ -2967,3 +2967,9 @@ and its bytes are ASCII. Scalar calls, longer or multibyte
 prefixes, other positions and storage types retain their existing
 kernels. Argument preparation and NULL short-circuiting stay in
 the existing planner and evaluation paths.
+
+### Literal TO_NUMBER formats (#1414)
+
+TO_NUMBER and TRY_TO_NUMBER supply one copy of a literal format for a
+nonempty text column. Format interpretation and regex matching use the
+existing parser. Empty batches and column formats keep the old path.
