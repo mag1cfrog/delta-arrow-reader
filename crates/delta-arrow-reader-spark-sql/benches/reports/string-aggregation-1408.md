@@ -54,7 +54,7 @@ The [protocol](../window_aggregates_1408/string-aggregation-protocol.md)
 was committed at `13c12c269481004a5938fe2ff26f43878a3b6f3d` before clocks.
 The single Linux release session ran 2026-11-21 00:52:45 to 00:58:07 UTC.
 It completed 90 comparison and 30 native A/A processes, retaining 360
-retained query/projection pairs. The pinned staging tip has the same
+query/projection pairs. The pinned staging tip has the same
 product source as the staging executable, with benchmark and report
 commits in between.
 
