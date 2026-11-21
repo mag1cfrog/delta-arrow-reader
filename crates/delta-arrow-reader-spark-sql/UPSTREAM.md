@@ -2836,7 +2836,7 @@ affected values. The ANSI operators use the existing error path.
 
 ### Skip arithmetic NULL guards for infallible scan operands (#1412)
 
-A projection over stored columns can use the arithmetic expression
+A projection over stored columns can add, subtract, multiply or divide
 directly when its only conversions are the proven widening integer,
 DOUBLE or DECIMAL casts. Column lineage must reach a table scan without
 a logical view definition. Computed inputs and other conversions retain

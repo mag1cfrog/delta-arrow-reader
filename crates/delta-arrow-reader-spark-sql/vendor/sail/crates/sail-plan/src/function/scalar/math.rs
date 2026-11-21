@@ -2053,9 +2053,11 @@ fn is_infallible_scan_operand(expr: &Expr, input: &LogicalPlan, schema: &DFSchem
                 (
                     Some(DataType::Decimal128(source_precision, source_scale)),
                     Some(DataType::Decimal128(precision, scale)),
-                ) => source_scale == scale && source_precision <= precision,
+                ) => source_scale == scale && source_precision <= precision
+                    && precision <= DECIMAL128_MAX_PRECISION,
                 (Some(DataType::Int32), Some(DataType::Decimal128(precision, scale))) => {
-                    scale >= 0 && i16::from(precision) - i16::from(scale) >= 10
+                    scale >= 0 && precision <= DECIMAL128_MAX_PRECISION
+                        && i16::from(precision) - i16::from(scale) >= 10
                 }
                 _ => false,
             };
@@ -2090,7 +2092,11 @@ pub(crate) fn guard_cast_arithmetic(
     }
     let args = match &expr {
         Expr::BinaryExpr(binary) if matches!(binary.op, Operator::Divide | Operator::Modulo) => {
-            Some((binary.left.as_ref(), binary.right.as_ref()))
+            Some((
+                binary.left.as_ref(),
+                binary.right.as_ref(),
+                binary.op == Operator::Divide,
+            ))
         }
         Expr::BinaryExpr(binary)
             if matches!(
@@ -2098,7 +2104,7 @@ pub(crate) fn guard_cast_arithmetic(
                 Operator::Plus | Operator::Minus | Operator::Multiply
             ) =>
         {
-            Some((binary.right.as_ref(), binary.left.as_ref()))
+            Some((binary.right.as_ref(), binary.left.as_ref(), true))
         }
         Expr::ScalarFunction(f)
             if f.func.inner().is::<SparkCheckedDivide>()
@@ -2106,18 +2112,25 @@ pub(crate) fn guard_cast_arithmetic(
                 || f.func.inner().is::<SparkCheckedModulo>()
                 || f.func.inner().is::<SparkIntegerDivide>() =>
         {
-            Some((&f.args[0], &f.args[1]))
+            Some((
+                &f.args[0],
+                &f.args[1],
+                f.func.inner().is::<SparkCheckedDivide>()
+                    || f.func.inner().is::<FusedDecimalDivide>(),
+            ))
         }
         _ => None,
     };
-    if let Some((left, right)) = args {
+    if let Some((left, right, supports_scan_guard_elision)) = args {
         let cast = column_cast(left, schema);
         if cast && (simple(right) || column_cast(right, schema)) && right.nullable(schema)? {
             // A scan column and a widening cast cannot hide a deferred expression error.
-            if projection_input.is_some_and(|input| {
-                is_infallible_scan_operand(left, input, schema)
-                    && is_infallible_scan_operand(right, input, schema)
-            }) {
+            if supports_scan_guard_elision
+                && projection_input.is_some_and(|input| {
+                    is_infallible_scan_operand(left, input, schema)
+                        && is_infallible_scan_operand(right, input, schema)
+                })
+            {
                 return Ok(Transformed::no(expr));
             }
             let data_type = expr.get_type(schema)?;

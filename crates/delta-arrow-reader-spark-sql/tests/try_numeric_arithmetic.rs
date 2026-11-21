@@ -280,3 +280,70 @@ async fn native_sql_keeps_its_arithmetic_behavior() -> TestResult {
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }
+
+#[tokio::test]
+async fn stored_integer_division_preserves_nullable_zero_divisors() -> TestResult {
+    use std::sync::Arc;
+
+    use arrow::array::{ArrayRef, Float64Array, Int32Array, Int64Array, RecordBatch};
+
+    let session = SessionContext::new_with_state(
+        configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
+    );
+    session.register_batch(
+        "stored",
+        RecordBatch::try_from_iter([
+            (
+                "id",
+                Arc::new(Int64Array::from(vec![0, 1, 2, 3])) as ArrayRef,
+            ),
+            (
+                "dividend",
+                Arc::new(Int64Array::from(vec![None, Some(4), Some(5), Some(6)])),
+            ),
+            (
+                "divisor",
+                Arc::new(Int32Array::from(vec![Some(0), Some(2), Some(0), None])),
+            ),
+        ])?,
+    )?;
+    for ansi_mode in [false, true] {
+        for filter in [" WHERE id < 2", ""] {
+            let sql =
+                format!("SELECT dividend / CAST(divisor AS BIGINT) AS result FROM stored{filter}");
+            let query = plan_query(
+                &session,
+                &sql,
+                &SparkSqlOptions {
+                    ansi_mode,
+                    ..Default::default()
+                },
+            )
+            .await?;
+            let physical = query.create_physical_plan(&session).await?;
+            let result = collect(physical, session.task_ctx()).await;
+            if ansi_mode && filter.is_empty() {
+                assert!(result.unwrap_err().to_string().contains("Divide by zero"));
+            } else {
+                let values = result?
+                    .iter()
+                    .flat_map(|batch| {
+                        batch
+                            .column(0)
+                            .as_any()
+                            .downcast_ref::<Float64Array>()
+                            .expect("executed FLOAT64 division")
+                            .iter()
+                    })
+                    .collect::<Vec<_>>();
+                let expected = if filter.is_empty() {
+                    vec![None, Some(2.0), None, None]
+                } else {
+                    vec![None, Some(2.0)]
+                };
+                assert_eq!(values, expected, "{sql}, ANSI={ansi_mode}");
+            }
+        }
+    }
+    Ok(())
+}
