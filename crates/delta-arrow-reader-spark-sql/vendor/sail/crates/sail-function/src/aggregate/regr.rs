@@ -470,6 +470,8 @@ impl Accumulator for RegrAccumulator {
 
 #[cfg(test)]
 mod tests {
+    use arrow::array::Int32Array;
+
     use super::*;
 
     fn result_bits(accumulator: &mut RegrAccumulator) -> Result<Option<u64>> {
@@ -488,10 +490,11 @@ mod tests {
                 None,
                 Some(4.0),
                 Some(-0.0),
+                Some(f64::MAX),
+                Some(f64::MIN),
                 Some(f64::INFINITY),
                 Some(1.0),
                 Some(f64::NAN),
-                Some(f64::MAX),
             ])),
             Arc::new(Float64Array::from(vec![
                 Some(1.0),
@@ -499,10 +502,11 @@ mod tests {
                 Some(5.0),
                 None,
                 Some(f64::MIN_POSITIVE),
+                Some(f64::MIN),
+                Some(f64::MAX),
                 Some(-2.0),
                 Some(f64::NEG_INFINITY),
                 Some(0.0),
-                Some(f64::MIN),
             ])),
         ];
         for variant in [
@@ -511,7 +515,7 @@ mod tests {
             RegrType::Slope,
             RegrType::Intercept,
         ] {
-            for (offset, length) in [(0, 0), (0, 1), (0, 2), (2, 2), (0, 5), (4, 5)] {
+            for (offset, length) in [(0, 0), (0, 1), (0, 2), (2, 2), (0, 5), (5, 2), (7, 3)] {
                 let batch = data.each_ref().map(|array| array.slice(offset, length));
                 let mut previous = RegrAccumulator::try_new(&variant)?;
                 let mut candidate = RegrAccumulator::for_sql_result(&variant)?;
@@ -526,23 +530,37 @@ mod tests {
                         .map(|field| field.to_array_of_size(1))
                         .collect::<Result<Vec<_>>>()
                 };
-                let mut previous_merge = RegrAccumulator::try_new(&variant)?;
-                let mut candidate_merge = RegrAccumulator::for_sql_result(&variant)?;
-                previous_merge.update_batch(&batch)?;
-                candidate_merge.update_batch(&batch)?;
-                previous_merge.merge_batch(&partial_state(&mut previous)?)?;
-                candidate_merge.merge_batch(&partial_state(&mut candidate)?)?;
-                assert_eq!(
-                    result_bits(&mut candidate_merge)?,
-                    result_bits(&mut previous_merge)?
-                );
+                for merge_into_populated in [false, true] {
+                    let mut previous_merge = RegrAccumulator::try_new(&variant)?;
+                    let mut candidate_merge = RegrAccumulator::for_sql_result(&variant)?;
+                    if merge_into_populated {
+                        previous_merge.update_batch(&batch)?;
+                        candidate_merge.update_batch(&batch)?;
+                    }
+                    previous_merge.merge_batch(&partial_state(&mut previous)?)?;
+                    candidate_merge.merge_batch(&partial_state(&mut candidate)?)?;
+                    assert_eq!(
+                        result_bits(&mut candidate_merge)?,
+                        result_bits(&mut previous_merge)?
+                    );
+                }
 
-                if length > 0 {
-                    let head = batch.each_ref().map(|array| array.slice(0, 1));
-                    previous.retract_batch(&head)?;
-                    candidate.retract_batch(&head)?;
+                for row in 0..length {
+                    let outgoing = batch.each_ref().map(|array| array.slice(row, 1));
+                    previous.retract_batch(&outgoing)?;
+                    candidate.retract_batch(&outgoing)?;
                     assert_eq!(result_bits(&mut candidate)?, result_bits(&mut previous)?);
                 }
+                previous.update_batch(&batch)?;
+                candidate.update_batch(&batch)?;
+                assert_eq!(result_bits(&mut candidate)?, result_bits(&mut previous)?);
+
+                let wrong_type: [ArrayRef; 2] =
+                    [data[0].slice(0, 1), Arc::new(Int32Array::from(vec![1]))];
+                assert_eq!(
+                    candidate.update_batch(&wrong_type).unwrap_err().to_string(),
+                    previous.update_batch(&wrong_type).unwrap_err().to_string()
+                );
             }
         }
         Ok(())

@@ -6,7 +6,7 @@ and the same physical plan. Compare all executed rows and types before
 clocks. Local differential tests compare bit patterns for direct,
 merged and retracted results against the full accumulation path.
 
-Run the [matched schedule](protocol.md) with the
+Run the [matched schedule](../window_aggregates_1408/string-aggregation-protocol.md#schedule-and-pass-rule) with the
 [pinned comparison](regr-moments-comparison.json). Retain the shared
 update only if all four functions improve in at least two of three
 paired processes in each ANSI mode, and each paired median reduction
