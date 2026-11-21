@@ -182,12 +182,24 @@ mod tests {
             left: GenericListArray<O>,
             right: GenericListArray<O>,
         ) -> Result<()> {
+            let child_null = right.slice(right.len() - 1, 1);
             let left = left.slice(1, left.len() - 2);
             let right = right.slice(1, right.len() - 2);
             // The final NULL lies outside the compared rows and forces the row-slice path.
             let (field, offsets, children, nulls) = right.clone().into_parts();
             let last = offsets.last().unwrap().as_usize();
-            let direct = GenericListArray::try_new(field, offsets, children.slice(0, last), nulls)?;
+            let prefix = Float32Array::from(vec![0.0]);
+            let shifted = datafusion::arrow::compute::concat(&[&prefix, children.as_ref()])?;
+            let direct = GenericListArray::try_new(field, offsets, shifted.slice(1, last), nulls)?;
+
+            let one_value = left.slice(5, 1);
+            let empty = direct.slice(2, 1);
+            let mismatch = compute_inner_product(&one_value, &empty).unwrap_err();
+            let fallback = compute_inner_product(&one_value, &right.slice(2, 1)).unwrap_err();
+            assert_eq!(mismatch.to_string(), fallback.to_string());
+            let no_child_null = direct.slice(4, 1);
+            let error_before_null = compute_inner_product(&no_child_null, &child_null).unwrap_err();
+            assert!(error_before_null.to_string().ends_with("got 2 and 1"));
 
             let direct = compute_inner_product(&left, &direct)?;
             let sliced = compute_inner_product(&left, &right)?;
@@ -199,6 +211,7 @@ mod tests {
                     .collect::<Vec<_>>()
             };
             assert_eq!(bits(&direct), bits(&sliced));
+            assert!(direct.is_null(1) && direct.is_null(5));
             assert!(compute_inner_product(&left.slice(0, 0), &right.slice(0, 0))?.is_empty());
             Ok(())
         }
@@ -215,6 +228,7 @@ mod tests {
             Some(vec![]),
             Some(vec![Some(-0.0), Some(0.0)]),
             Some(vec![Some(f32::INFINITY), Some(payload_nan)]),
+            Some(vec![Some(5.0)]),
             Some(vec![]),
         ];
         let right = vec![
@@ -224,6 +238,7 @@ mod tests {
             Some(vec![]),
             Some(vec![Some(1.0), Some(-1.0)]),
             Some(vec![Some(1.0), Some(f32::INFINITY)]),
+            None,
             Some(vec![None]),
         ];
         compare(
