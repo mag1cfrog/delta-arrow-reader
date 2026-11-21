@@ -111,6 +111,7 @@ def observe(binary, case, work, settings, deadline, manifest=MANIFEST):
     observed = result["records"][-1]
     rows = settings["input_rows"]
     output_rows = 1 if case["id"].startswith("aggregate.") else rows
+    output_rows = runner.read(manifest).get("output_rows_by_case", {}).get(case["id"], output_rows)
     outcomes = {row["configuration"]: row for row in observed["results"]}
     if (
         tuple(outcomes) != modes
