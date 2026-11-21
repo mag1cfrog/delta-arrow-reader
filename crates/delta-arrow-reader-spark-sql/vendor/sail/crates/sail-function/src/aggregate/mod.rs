@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 /// Utility macro to match string data types and create corresponding ScalarValue.
 ///
 /// This macro handles the three string type variants (Utf8View, LargeUtf8, Utf8)
@@ -93,4 +94,5 @@ pub mod schema_of_variant_agg;
 pub mod skewness;
 pub mod theta_sketch;
 pub mod try_avg;
+pub mod try_sum;
 pub mod utils;

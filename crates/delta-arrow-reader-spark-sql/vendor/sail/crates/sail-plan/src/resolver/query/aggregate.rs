@@ -25,6 +25,7 @@ use datafusion_spark::function::aggregate::try_sum::SparkTrySum;
 use sail_common::spec;
 use sail_common_datafusion::utils::items::ItemTaker;
 use sail_function::aggregate::try_avg::TryAvgFunction;
+use sail_function::aggregate::try_sum::TrySumWithBatchReduction;
 use sail_function::scalar::explode::Explode;
 use sail_logical_plan::monotonic_id::{MonotonicIdNode, MonotonicIdPurpose};
 use sail_logical_plan::sort::{RequiredSortNode, SortWithinPartitionsNode};
@@ -652,6 +653,7 @@ impl PlanResolver<'_> {
         if udf == sum::sum_udaf().as_ref()
             || udf == average::avg_udaf().as_ref()
             || udf.inner().is::<SparkTrySum>()
+            || udf.inner().is::<TrySumWithBatchReduction>()
             || udf.inner().is::<TryAvgFunction>()
         {
             let Some(arg) = args.first() else {
