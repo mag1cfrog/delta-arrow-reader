@@ -17,3 +17,10 @@ modes. Keep the candidate if both medians decrease and all correctness
 checks pass. The native projection is a cost reference for this fixture.
 Report its repeat floor alongside the Spark measurements and describe the
 cost of the remaining row selection, field projection and expansion.
+
+Before clocks, run the
+[boundary SQL](inline-outer-validation.json) independently on both
+executables. In both ANSI modes, it must return 32 rows with INT64
+fields `id`, `x` and `y`. Compare by ID and field values. The probe
+checks outer padding for NULL and empty lists, a NULL STRUCT and a NULL
+field, plus one- and two-element expansion.
