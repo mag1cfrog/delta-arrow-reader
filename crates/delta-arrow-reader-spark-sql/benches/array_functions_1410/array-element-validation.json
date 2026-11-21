@@ -1,0 +1,28 @@
+{
+  "functions": [
+    {
+      "id": "scalar.collection.derived_null_empty_then_bad",
+      "spark_sql": "SELECT id, element_at(items,1) AS value FROM (SELECT id, CASE WHEN id=0 THEN arr WHEN id=1 THEN CAST(ARRAY() AS ARRAY<BIGINT>) ELSE ARRAY(CAST(COALESCE(json_s,'bad') AS BIGINT)) END AS items FROM bench WHERE id IN (0,1,2,3,4)) t",
+      "native_sql": null,
+      "projection_sql": "SELECT id, arr, json_s FROM bench"
+    },
+    {
+      "id": "scalar.collection.competing_projection_errors",
+      "spark_sql": "SELECT id, element_at(items,1) AS value, CASE WHEN id=2 THEN CAST(COALESCE(json_s,'bad') AS BIGINT) ELSE 0 END AS competing FROM (SELECT id, json_s, CASE WHEN id=3 THEN CAST(ARRAY() AS ARRAY<BIGINT>) ELSE arr END AS items FROM bench WHERE id IN (0,1,2,3,4)) t",
+      "native_sql": null,
+      "projection_sql": "SELECT id, arr, json_s FROM bench"
+    },
+    {
+      "id": "scalar.collection.outside_lookup_branch",
+      "spark_sql": "SELECT id, CASE WHEN id=1 THEN 7 ELSE element_at(items,1) END AS value FROM (SELECT id, CASE WHEN id=1 THEN ARRAY(CAST(COALESCE(json_s,'bad') AS BIGINT)) ELSE arr END AS items FROM bench WHERE id IN (1,2,3,4)) t",
+      "native_sql": null,
+      "projection_sql": "SELECT id, arr, json_s FROM bench"
+    },
+    {
+      "id": "scalar.collection.coalesce_lookup_branch",
+      "spark_sql": "SELECT id, COALESCE(CASE WHEN id=1 THEN CAST(7 AS BIGINT) END, element_at(items,1)) AS value FROM (SELECT id, CASE WHEN id=1 THEN ARRAY(CAST(COALESCE(json_s,'bad') AS BIGINT)) ELSE arr END AS items FROM bench WHERE id IN (1,2,3,4)) t",
+      "native_sql": null,
+      "projection_sql": "SELECT id, arr, json_s FROM bench"
+    }
+  ]
+}
