@@ -737,7 +737,16 @@ fn count_if(input: AggFunctionInput) -> PlanResult<expr::Expr> {
         input.filter.as_deref(),
         &input.function_context,
     )?;
-    let (argument, filter) = if counts_no_rows {
+    let plain_boolean_column = input.filter.is_none()
+        && !input.distinct
+        && input.order_by.is_empty()
+        && input.ignore_nulls.is_none()
+        && matches!(predicate, expr::Expr::Column(_))
+        && predicate.get_type(schema)? == DataType::Boolean;
+    let (argument, filter) = if plain_boolean_column {
+        // The native filter skips false and NULL without materializing a count argument.
+        (lit(1_i64), Some(Box::new(predicate)))
+    } else if counts_no_rows {
         (lit(ScalarValue::Boolean(None)), None)
     } else {
         // Match Spark's NULLIF shape so native CSE evaluates complex predicates before FILTER.

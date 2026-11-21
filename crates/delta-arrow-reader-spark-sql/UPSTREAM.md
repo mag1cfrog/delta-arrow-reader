@@ -2777,3 +2777,10 @@ A single Boolean column guard and BIGINT column result without ELSE
 use the native searched CASE mask. The output keeps its nullable BIGINT
 type. Conditions or results resolved as expressions, additional arms and
 explicit ELSE keep the Spark searched CASE planning path.
+
+### Native filter for a plain COUNT_IF column (#1411)
+
+A plain Boolean column in COUNT_IF becomes the predicate of a native
+filtered count. The filter counts true rows and skips false and NULL
+rows. The existing COUNT_IF plan handles other arguments and modifiers,
+and the original admission checks run before choosing either shape.
