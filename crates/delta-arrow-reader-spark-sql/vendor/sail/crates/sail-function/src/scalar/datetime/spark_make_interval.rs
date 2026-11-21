@@ -10,7 +10,7 @@
 use std::sync::Arc;
 
 use datafusion::arrow::array::types::{Decimal128Type, Int32Type};
-use datafusion::arrow::array::{Array, ArrayRef, AsArray, IntervalMonthDayNanoArray};
+use datafusion::arrow::array::{Array, ArrayRef, AsArray, Int32Array, IntervalMonthDayNanoArray};
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef, IntervalMonthDayNano, IntervalUnit};
 use datafusion_common::{Result, ScalarValue, exec_err, internal_err};
 use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
@@ -40,6 +40,61 @@ impl SparkMakeInterval {
             fail_on_error,
             signature: Signature::any(7, Volatility::Immutable),
         }
+    }
+
+    fn arithmetic_overflow(&self) -> Result<Option<IntervalMonthDayNano>> {
+        if self.fail_on_error {
+            exec_err!(
+                "[ARITHMETIC_OVERFLOW] overflow. If necessary set \
+                 \"spark.sql.ansi.enabled\" to \"false\" to bypass this error. \
+                 SQLSTATE: 22003"
+            )
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Combine constant interval fields once when only the year varies.
+    fn intervals_for_year_column(
+        &self,
+        args: &ScalarFunctionArgs,
+    ) -> Option<Result<ColumnarValue>> {
+        let [
+            ColumnarValue::Array(years),
+            ColumnarValue::Scalar(ScalarValue::Int32(Some(months))),
+            ColumnarValue::Scalar(ScalarValue::Int32(Some(weeks))),
+            ColumnarValue::Scalar(ScalarValue::Int32(Some(days))),
+            ColumnarValue::Scalar(ScalarValue::Int32(Some(hours))),
+            ColumnarValue::Scalar(ScalarValue::Int32(Some(minutes))),
+            ColumnarValue::Scalar(ScalarValue::Decimal128(Some(seconds), 18, 6)),
+        ] = args.args.as_slice()
+        else {
+            return None;
+        };
+        let years = years.as_any().downcast_ref::<Int32Array>()?;
+        if years.len() != args.number_rows {
+            return None;
+        }
+        // Keep the original error order when any constant part is out of range.
+        let fixed = interval_parts(
+            [0, *months, *weeks, *days, *hours, *minutes],
+            i64::try_from(*seconds).ok()?,
+        )?;
+        let nanos = fixed.micros.checked_mul(1_000)?;
+        let result = years
+            .iter()
+            .map(|year| match year {
+                None => Ok(None),
+                Some(year) => match year
+                    .checked_mul(MONTHS_PER_YEAR)
+                    .and_then(|year_months| fixed.months.checked_add(year_months))
+                {
+                    Some(months) => Ok(Some(IntervalMonthDayNano::new(months, fixed.days, nanos))),
+                    None => self.arithmetic_overflow(),
+                },
+            })
+            .collect::<Result<IntervalMonthDayNanoArray>>();
+        Some(result.map(|array| ColumnarValue::Array(Arc::new(array))))
     }
 }
 
@@ -144,6 +199,9 @@ impl ScalarUDFImpl for SparkMakeInterval {
         if args.args.len() != 7 {
             return internal_err!("{} requires seven arguments", self.name());
         }
+        if let Some(result) = self.intervals_for_year_column(&args) {
+            return result;
+        }
         let scalar = args
             .args
             .iter()
@@ -181,12 +239,7 @@ impl ScalarUDFImpl for SparkMakeInterval {
                              interval range of Arrow's nanoseconds"
                         ),
                     },
-                    None if self.fail_on_error => exec_err!(
-                        "[ARITHMETIC_OVERFLOW] overflow. If necessary set \
-                         \"spark.sql.ansi.enabled\" to \"false\" to bypass this error. \
-                         SQLSTATE: 22003"
-                    ),
-                    None => Ok(None),
+                    None => self.arithmetic_overflow(),
                 }
             })
             .collect::<Result<IntervalMonthDayNanoArray>>()?;
@@ -203,6 +256,74 @@ impl ScalarUDFImpl for SparkMakeInterval {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn literal_interval_fields_match_broadcast_fields() -> Result<()> {
+        let years = Int32Array::from(vec![
+            None,
+            Some(0),
+            Some(-2),
+            Some(178_956_970),
+            Some(178_956_971),
+            Some(i32::MIN),
+        ]);
+        for fail_on_error in [false, true] {
+            let function = SparkMakeInterval::new(fail_on_error);
+            for length in 0..=years.len() {
+                let invoke = |args: Vec<ColumnarValue>| {
+                    function.invoke_with_args(ScalarFunctionArgs {
+                        arg_fields: args
+                            .iter()
+                            .map(|arg| Arc::new(Field::new("arg", arg.data_type(), true)))
+                            .collect(),
+                        args,
+                        number_rows: length,
+                        return_field: Arc::new(Field::new(
+                            "interval",
+                            DataType::Interval(IntervalUnit::MonthDayNano),
+                            true,
+                        )),
+                        config_options: Arc::new(Default::default()),
+                    })
+                };
+                for (parts, seconds) in [
+                    ([0, 0, 0, 0, 0], 0),
+                    ([1, -2, 3, -4, 5], 6_000_007),
+                    ([i32::MAX, 0, 0, 0, 0], 0),
+                    ([0, i32::MAX, 0, 0, 0], 0),
+                    ([0, 0, 0, 3_000_000, 0], 0),
+                ] {
+                    let mut args = vec![ColumnarValue::Array(Arc::new(years.slice(0, length)))];
+                    args.extend(
+                        parts
+                            .into_iter()
+                            .map(|part| ColumnarValue::Scalar(ScalarValue::Int32(Some(part)))),
+                    );
+                    args.push(ColumnarValue::Scalar(ScalarValue::Decimal128(
+                        Some(seconds),
+                        18,
+                        6,
+                    )));
+                    let expanded = args
+                        .iter()
+                        .map(|arg| arg.to_array(length).map(ColumnarValue::Array))
+                        .collect::<Result<Vec<_>>>()?;
+                    let expected = invoke(expanded);
+                    let actual = invoke(args);
+                    match (actual, expected) {
+                        (Ok(ColumnarValue::Array(actual)), Ok(ColumnarValue::Array(expected))) => {
+                            assert_eq!(actual.to_data(), expected.to_data());
+                        }
+                        (Err(actual), Err(expected)) => {
+                            assert_eq!(actual.to_string(), expected.to_string())
+                        }
+                        outcomes => panic!("different interval outcomes: {outcomes:?}"),
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
 
     #[test]
     fn intervals_add_exactly_and_overflow_at_java_limits() {
