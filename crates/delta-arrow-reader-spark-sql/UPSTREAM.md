@@ -2813,3 +2813,10 @@ SHIFTRIGHTUNSIGNED and its operator alias use an unsigned view of
 a plain BIGINT column for the existing shift and final cast. The
 signed minimum still follows the original ABS error path. Other
 operands retain the signed-to-unsigned CASE and DECIMAL conversion.
+
+### One remainder for positive BIGINT PMOD divisors (#1412)
+
+Two BIGINT arrays use one remainder and adjust negative results when
+every visible divisor is positive. The Arrow kernel retains combined
+validity. Other inputs use the original Spark PMOD kernel, including
+zero and negative divisors and the existing ANSI behavior.
