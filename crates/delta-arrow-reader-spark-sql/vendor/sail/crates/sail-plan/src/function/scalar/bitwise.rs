@@ -156,5 +156,19 @@ fn unsigned_shift_bits_preserve_sliced_values_and_validity() -> Result<()> {
         scalar,
         ColumnarValue::Scalar(ScalarValue::UInt64(Some(u64::MAX)))
     ));
+    let null = invoke(ColumnarValue::Scalar(ScalarValue::Int64(None)), 1)?;
+    assert!(matches!(
+        null,
+        ColumnarValue::Scalar(ScalarValue::UInt64(None))
+    ));
+    assert!(
+        invoke(ColumnarValue::Scalar(ScalarValue::Int64(Some(i64::MIN))), 1)
+            .unwrap_err()
+            .to_string()
+            .contains("Int64Array overflow on abs(")
+    );
+    let empty = invoke(ColumnarValue::Array(Arc::new(sliced.slice(0, 0))), 0)?.into_array(0)?;
+    assert!(empty.is_empty());
+    assert_eq!(empty.data_type(), &DataType::UInt64);
     Ok(())
 }
