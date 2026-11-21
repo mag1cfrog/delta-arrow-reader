@@ -58,7 +58,7 @@ and their executed Arrow types across both builds, both ANSI modes and native.
 The differential controls matched full result schemas, repeated names, NULLs, empty inputs and errors in both ANSI modes. Prefix producers, non-projection roots and name-count mismatches used the existing route.
 All 727 selected workspace tests, formatting and Spark-root Clippy passed.
 
-The [protocol](../remaining_functions_1413/result-alias-comparison.json) was
+The [protocol](https://github.com/mag1cfrog/delta-arrow-reader/blob/7560b67bf4eed0e274c1808daa8462281bfd279b/crates/delta-arrow-reader-spark-sql/benches/remaining_functions_1413/result-alias-protocol.md) was
 committed at `7560b67bf4eed0e274c1808daa8462281bfd279b` before clocks.
 The Linux release session ran 2026-11-21T17:16:44Z to 2026-11-21T17:20:26Z.
 The 108 comparison processes and 36 native controls retained 432 pairs.
