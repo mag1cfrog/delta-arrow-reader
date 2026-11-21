@@ -2680,3 +2680,10 @@ The default second-resolution format resolves a valid array time zone once
 per batch and uses it to produce the original local clock fields. The default
 pattern has no zone fields. Custom patterns, scalar inputs and unresolved
 zones retain the general formatter.
+
+### Whole-second TIME strings (#1409)
+
+TIME, TO_TIME and TRY_TO_TIME reuse Arrow's checked parser for whole-second
+clock strings in the default format. The existing Chrono parser still
+handles other layouts, leap seconds and failures. Explicit patterns and
+nonstring casts keep their existing dispatch.
