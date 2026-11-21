@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use datafusion::arrow::array::{ArrayRef, ArrowNativeTypeOp, ArrowPrimitiveType, AsArray};
-use datafusion::arrow::compute::kernels::numeric::{add, mul, sub};
+use datafusion::arrow::compute::kernels::numeric::{
+    add, add_wrapping, mul, mul_wrapping, sub, sub_wrapping,
+};
 use datafusion::arrow::datatypes::{
     DataType, Field, FieldRef, Int8Type, Int16Type, Int32Type, Int64Type,
 };
@@ -166,6 +168,28 @@ impl ScalarUDFImpl for SparkCheckedArithmetic {
         let [left, right] = args.args.as_slice() else {
             return internal_err!("{} requires two arguments", self.name());
         };
+        if let (ColumnarValue::Array(left_array), ColumnarValue::Array(right_array)) = (left, right)
+            && let (Some(left_values), Some(right_values)) = (
+                left_array.as_primitive_opt::<Int64Type>(),
+                right_array.as_primitive_opt::<Int64Type>(),
+            )
+            && left_values.len() == right_values.len()
+            && [left_values, right_values].into_iter().all(|array| {
+                array
+                    .values()
+                    .iter()
+                    .all(|&value| i32::try_from(value).is_ok())
+            })
+        {
+            // Any sum, difference or product of two signed INT values fits BIGINT.
+            let wrapping = match self.op {
+                Operator::Plus => add_wrapping,
+                Operator::Minus => sub_wrapping,
+                Operator::Multiply => mul_wrapping,
+                _ => unreachable!("constructor validates the operator"),
+            };
+            return apply(left, right, wrapping);
+        }
         match apply(left, right, kernel) {
             Err(DataFusionError::ArrowError(error, _))
                 if matches!(error.as_ref(), ArrowError::ArithmeticOverflow(_)) =>

@@ -2841,3 +2841,10 @@ directly when its only conversions are the proven widening integer,
 DOUBLE or DECIMAL casts. Column lineage must reach a table scan without
 a logical view definition. Computed inputs and other conversions retain
 their original arithmetic NULL guards.
+
+### Bounded ANSI BIGINT arithmetic (#1412)
+
+The checked integer operators can use Arrow wrapping arithmetic on
+two BIGINT arrays when every stored operand fits INT. Every sum,
+difference and product of two signed INT values fits BIGINT.
+Full-width operands and scalar forms retain checked execution.
