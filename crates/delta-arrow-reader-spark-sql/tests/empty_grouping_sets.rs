@@ -13,6 +13,53 @@ mod spark_results;
 use spark_results::TestResult;
 
 #[tokio::test]
+async fn grouping_presence_filter_matches_the_conditional_filter() -> TestResult {
+    use arrow::compute::concat_batches;
+    use datafusion::physical_plan::collect;
+    use delta_arrow_reader_spark_sql::{SparkSqlOptions, plan_query};
+
+    let session = SessionContext::new_with_state(
+        configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
+    );
+    let metadata: Value = serde_json::from_str(
+        include_str!("fixtures/empty-grouping-sets/spark-results.jsonl")
+            .lines()
+            .next()
+            .ok_or("missing grouping input metadata")?,
+    )?;
+    spark_inputs::register_recorded_inputs(&session, &metadata, 2)?;
+    for ansi_mode in [false, true] {
+        let options = SparkSqlOptions {
+            ansi_mode,
+            ..Default::default()
+        };
+        for table in ["samples", "empty_samples"] {
+            for grouping in ["GROUPING SETS((g),())", "ROLLUP(g)", "CUBE(g)"] {
+                let mut results = Vec::new();
+                for having in ["", " HAVING TRUE"] {
+                    let sql = format!(
+                        "SELECT g, GROUPING(g) AS gr, GROUPING_ID(g) AS gid \
+                         FROM {table} GROUP BY {grouping}{having} ORDER BY gid, g NULLS FIRST"
+                    );
+                    let query = plan_query(&session, &sql, &options).await?;
+                    let display = query.logical_plan.display_indent().to_string();
+                    assert_eq!(display.contains("CASE WHEN"), !having.is_empty(), "{sql}");
+                    let plan = query.create_physical_plan(&session).await?;
+                    let schema = plan.schema();
+                    let batches = collect(plan, session.task_ctx()).await?;
+                    results.push(concat_batches(&schema, &batches)?);
+                }
+                assert_eq!(
+                    results[0], results[1],
+                    "{table} {grouping}; ANSI={ansi_mode}"
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn grouping_sets_match_spark_on_empty_and_nonempty_input() -> TestResult {
     let references = include_str!("fixtures/empty-grouping-sets/spark-results.jsonl")
         .lines()

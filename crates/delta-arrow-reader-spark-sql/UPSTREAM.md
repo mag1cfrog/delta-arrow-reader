@@ -2666,6 +2666,15 @@ same Base64 engine and filters nonalphabet bytes after a decode
 failure as before. Scalar decoding, output types and error messages
 retain their existing behavior.
 
+### Grouping-set presence filter (#1413)
+
+Mixed grouping sets still count input rows so they can suppress the
+synthetic total on empty input. Without HAVING, the filter only
+checks whether that count is positive. A user HAVING expression
+retains the conditional evaluation after the presence check.
+The [differential test](tests/empty_grouping_sets.rs) compares
+both forms and the independent Spark fixtures cover empty inputs.
+
 ### AES scalar and column arguments (#1405)
 
 The local Sail AES functions evaluate inputs, keys, modes, padding, IVs and

@@ -404,16 +404,13 @@ impl PlanResolver<'_> {
             .map(|having| Self::rebase_expression(having, &aggregate_or_grouping_exprs, &plan))
             .transpose()?;
         let having = if let Some(input_row_count) = input_row_count {
-            // Check input presence before HAVING, then normalize NULL to a false filter.
-            // A plain AND can break ORDER BY a constant GROUPING(k).
-            Some(
-                when(
-                    ident(input_row_count).gt(lit(0_i64)),
-                    having.unwrap_or(lit(true)),
-                )
-                .end()?
-                .is_true(),
-            )
+            let has_input = ident(input_row_count).gt(lit(0_i64));
+            Some(match having {
+                // Check input presence before HAVING. A plain AND can break
+                // ORDER BY a constant GROUPING(k).
+                Some(having) => when(has_input, having).end()?.is_true(),
+                None => has_input,
+            })
         } else {
             having
         };
