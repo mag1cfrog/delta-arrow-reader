@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
 use datafusion::arrow::array::ArrayRef;
@@ -8,7 +9,9 @@ use datafusion_expr_common::columnar_value::ColumnarValue;
 use datafusion_expr_common::signature::{Signature, Volatility};
 
 use crate::functions_utils::make_scalar_function;
-use crate::scalar::url::parse_url::{ParseUrl, parse_url_return_type, spark_handled_parse_url};
+use crate::scalar::url::parse_url::{
+    ParseUrl, parse_url_return_type, parse_url_with_literal_part, spark_handled_parse_url,
+};
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkTryParseUrl {
@@ -64,13 +67,15 @@ impl ScalarUDFImpl for SparkTryParseUrl {
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
         let ScalarFunctionArgs { args, .. } = args;
-        make_scalar_function(spark_try_parse_url, vec![])(&args)
+        parse_url_with_literal_part(&args, null_on_parse_error)
+            .unwrap_or_else(|| make_scalar_function(spark_try_parse_url, vec![])(&args))
     }
 }
 
 fn spark_try_parse_url(args: &[ArrayRef]) -> Result<ArrayRef> {
-    spark_handled_parse_url(args, |x| match x {
-        Err(_) => Ok(None),
-        result => result,
-    })
+    spark_handled_parse_url(args, null_on_parse_error)
+}
+
+fn null_on_parse_error(result: Result<Option<String>>) -> Result<Option<String>> {
+    Ok(result.unwrap_or_default())
 }
