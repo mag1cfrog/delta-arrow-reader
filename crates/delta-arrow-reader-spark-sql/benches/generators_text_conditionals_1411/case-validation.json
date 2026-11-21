@@ -1,0 +1,166 @@
+{
+  "functions": [
+    {
+      "kind": "scalar",
+      "category": "conditional",
+      "name": "case",
+      "registration": "F::custom(case)",
+      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional.rs:229",
+      "implementation_anchors": [
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional.rs:229",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional.rs:24"
+      ],
+      "id": "scalar.conditional.case_bigint_bounds",
+      "aliases": [
+        "when"
+      ],
+      "spark_sql": "WITH operands AS (\n    SELECT id,\n        CASE id % 4 WHEN 1 THEN false WHEN 2 THEN CAST(NULL AS BOOLEAN) ELSE true END AS flag,\n        CASE id WHEN 0 THEN CAST('-9223372036854775808' AS BIGINT)\n                WHEN 3 THEN CAST(NULL AS BIGINT)\n                ELSE CAST('9223372036854775807' AS BIGINT) END AS wide,\n        CASE id % 4 WHEN 1 THEN CAST('-2147483648' AS INT)\n                     WHEN 2 THEN CAST('2147483647' AS INT) ELSE CAST(NULL AS INT) END AS narrow\n    FROM bench WHERE id < 8\n)\nSELECT id, CASE WHEN flag THEN wide ELSE CAST(narrow AS BIGINT) END AS result FROM operands",
+      "native_sql": null,
+      "input_columns": [
+        "id",
+        "i",
+        "p",
+        "flag"
+      ],
+      "projection_sql": "SELECT id,i,p,flag FROM bench",
+      "exclusion": null,
+      "class": "paired",
+      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+    },
+    {
+      "kind": "scalar",
+      "category": "conditional",
+      "name": "case",
+      "registration": "F::custom(case)",
+      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional.rs:229",
+      "implementation_anchors": [
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional.rs:229",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional.rs:24"
+      ],
+      "id": "scalar.conditional.case_unselected_cast",
+      "aliases": [
+        "when"
+      ],
+      "spark_sql": "WITH operands AS (\n    SELECT id, i, id % 4 = 1 AS flag,\n        CASE WHEN id % 4 = 1 THEN 'bad' ELSE '13' END AS raw\n    FROM bench WHERE id < 24\n)\nSELECT id, CASE WHEN flag THEN i ELSE CAST(raw AS BIGINT) END AS result FROM operands",
+      "native_sql": null,
+      "input_columns": [
+        "id",
+        "i",
+        "p",
+        "flag"
+      ],
+      "projection_sql": "SELECT id,i,p,flag FROM bench",
+      "exclusion": null,
+      "class": "paired",
+      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+    },
+    {
+      "kind": "scalar",
+      "category": "conditional",
+      "name": "case",
+      "registration": "F::custom(case)",
+      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional.rs:229",
+      "implementation_anchors": [
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional.rs:229",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional.rs:24"
+      ],
+      "id": "scalar.conditional.case_selected_cast",
+      "aliases": [
+        "when"
+      ],
+      "spark_sql": "WITH operands AS (\n    SELECT id, i, id % 4 = 1 AS flag,\n        CASE WHEN id % 4 = 1 THEN '13' ELSE 'bad' END AS raw\n    FROM bench WHERE id < 24\n)\nSELECT id, CASE WHEN flag THEN i ELSE CAST(raw AS BIGINT) END AS result FROM operands",
+      "native_sql": null,
+      "input_columns": [
+        "id",
+        "i",
+        "p",
+        "flag"
+      ],
+      "projection_sql": "SELECT id,i,p,flag FROM bench",
+      "exclusion": null,
+      "class": "paired",
+      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+    },
+    {
+      "kind": "scalar",
+      "category": "conditional",
+      "name": "case",
+      "registration": "F::custom(case)",
+      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional.rs:229",
+      "implementation_anchors": [
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional.rs:229",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional.rs:24"
+      ],
+      "id": "scalar.conditional.case_derived_widening_input",
+      "aliases": [
+        "when"
+      ],
+      "spark_sql": "WITH operands AS (\n    SELECT id, i, id % 4 = 1 AS flag,\n        CAST(CASE WHEN id % 4 = 1 THEN 'bad' ELSE '13' END AS INT) AS narrow\n    FROM bench WHERE id < 24\n)\nSELECT id, CASE WHEN flag THEN i ELSE CAST(narrow AS BIGINT) END AS result FROM operands",
+      "native_sql": null,
+      "input_columns": [
+        "id",
+        "i",
+        "p",
+        "flag"
+      ],
+      "projection_sql": "SELECT id,i,p,flag FROM bench",
+      "exclusion": null,
+      "class": "paired",
+      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+    },
+    {
+      "kind": "scalar",
+      "category": "conditional",
+      "name": "case",
+      "registration": "F::custom(case)",
+      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional.rs:229",
+      "implementation_anchors": [
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional.rs:229",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional.rs:24"
+      ],
+      "id": "scalar.conditional.case_empty",
+      "aliases": [
+        "when"
+      ],
+      "spark_sql": "SELECT id,CASE WHEN flag THEN i ELSE CAST(p AS BIGINT) END AS value FROM bench WHERE id < 0",
+      "native_sql": null,
+      "input_columns": [
+        "id",
+        "i",
+        "p",
+        "flag"
+      ],
+      "projection_sql": "SELECT id,i,p,flag FROM bench",
+      "exclusion": null,
+      "class": "paired",
+      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+    },
+    {
+      "kind": "scalar",
+      "category": "conditional",
+      "name": "case",
+      "registration": "F::custom(case)",
+      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional.rs:229",
+      "implementation_anchors": [
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional.rs:229",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional.rs:24"
+      ],
+      "id": "scalar.conditional.case_correlated_flag",
+      "aliases": [
+        "when"
+      ],
+      "spark_sql": "WITH operands AS (\n    SELECT id, i IS NOT NULL AS flag, i AS wide, CAST(7 AS INT) AS narrow\n    FROM bench WHERE id < 8\n)\nSELECT id, CASE WHEN flag THEN wide ELSE CAST(narrow AS BIGINT) END AS result FROM operands",
+      "native_sql": null,
+      "input_columns": [
+        "id",
+        "i",
+        "p",
+        "flag"
+      ],
+      "projection_sql": "SELECT id,i,p,flag FROM bench",
+      "exclusion": null,
+      "class": "paired",
+      "class_evidence": "Explicit native reference candidate; both ANSI comparisons and native registry/physical evidence must pass before any timing. Same spelling alone supplies no equivalence evidence."
+    }
+  ]
+}
