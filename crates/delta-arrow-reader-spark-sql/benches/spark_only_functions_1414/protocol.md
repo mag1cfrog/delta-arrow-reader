@@ -1,6 +1,6 @@
 # Constant argument work in Spark-only functions (#1414)
 
-The statement manifest selects the SQL and projection controls from #1391.
+Each trial selects SQL and projection controls from the frozen #1391 manifest.
 Both builds use the same million-row fixture, release flags, CPU affinity,
 batch size and memory bounds. The linked [source inventory](../reports/functions-1414-inventory.md)
 names the repeated operation for each candidate. The per-trial configuration
