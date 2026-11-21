@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
 use datafusion::arrow::array::{
-    Array, ArrayRef, AsArray, BinaryArrayType, BinaryBuilder, GenericBinaryBuilder,
-    GenericStringBuilder, LargeBinaryBuilder, OffsetSizeTrait, StringArrayType,
+    Array, ArrayRef, AsArray, BinaryArrayType, BinaryBuilder, GenericBinaryArray,
+    GenericBinaryBuilder, GenericStringBuilder, LargeBinaryBuilder, OffsetSizeTrait,
+    StringArrayType,
 };
 use datafusion::arrow::compute::{CastOptions, cast_with_options};
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
@@ -392,23 +393,36 @@ impl ScalarUDFImpl for SparkDecode {
                         | ScalarValue::LargeUtf8(Some(char_set))
                         | ScalarValue::Utf8View(Some(char_set)),
                     ) => {
-                        let string_type = match binary_array.data_type() {
-                            DataType::Binary => Some(DataType::Utf8),
-                            DataType::LargeBinary => Some(DataType::LargeUtf8),
-                            _ => None,
-                        };
-                        if let Some(string_type) = string_type
-                            && char_set.trim().eq_ignore_ascii_case("UTF-8")
-                            && let Ok(decoded) = cast_with_options(
-                                binary_array.as_ref(),
-                                &string_type,
-                                &CastOptions {
-                                    safe: false,
-                                    ..Default::default()
-                                },
-                            )
-                        {
-                            return Ok(ColumnarValue::Array(decoded));
+                        if char_set.trim().eq_ignore_ascii_case("UTF-8") {
+                            let string_type = match binary_array.data_type() {
+                                DataType::Binary
+                                    if null_byte_ranges_are_empty(
+                                        binary_array.as_binary::<i32>(),
+                                    ) =>
+                                {
+                                    Some(DataType::Utf8)
+                                }
+                                DataType::LargeBinary
+                                    if null_byte_ranges_are_empty(
+                                        binary_array.as_binary::<i64>(),
+                                    ) =>
+                                {
+                                    Some(DataType::LargeUtf8)
+                                }
+                                _ => None,
+                            };
+                            if let Some(string_type) = string_type
+                                && let Ok(decoded) = cast_with_options(
+                                    binary_array.as_ref(),
+                                    &string_type,
+                                    &CastOptions {
+                                        safe: false,
+                                        ..Default::default()
+                                    },
+                                )
+                            {
+                                return Ok(ColumnarValue::Array(decoded));
+                            }
                         }
 
                         let result = match binary_array.data_type() {
@@ -628,6 +642,17 @@ where
     Ok(Arc::new(builder.finish()) as ArrayRef)
 }
 
+// STR_TO_MAP reads the stored delimiter bytes even when the delimiter is NULL.
+fn null_byte_ranges_are_empty<O: OffsetSizeTrait>(array: &GenericBinaryArray<O>) -> bool {
+    array.nulls().is_none_or(|nulls| {
+        nulls.null_count() == 0
+            || nulls
+                .iter()
+                .zip(array.value_offsets().windows(2))
+                .all(|(valid, offsets)| valid || offsets[0] == offsets[1])
+    })
+}
+
 fn decode(bytes: &[u8], char_set: &str) -> Result<String> {
     match char_set.trim().to_uppercase().as_str() {
         "US-ASCII" => {
@@ -750,7 +775,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use datafusion::arrow::array::{GenericBinaryArray, StringArray};
+    use datafusion::arrow::array::StringArray;
     use datafusion::arrow::buffer::{Buffer, NullBuffer, OffsetBuffer};
     use datafusion_common::config::ConfigOptions;
 

@@ -2758,7 +2758,8 @@ project their STRUCT fields. Other inputs use native emptiness.
 ### Validated UTF-8 buffers in DECODE (#1411)
 
 DECODE can share contiguous binary buffers for a scalar UTF-8 charset
-after Arrow validates the bytes and offsets. Arrow can rebuild valid
+when NULL slots already have empty byte ranges and Arrow validates the
+bytes and offsets. Arrow can rebuild valid
 visible rows when the surrounding bytes prevent buffer sharing. A
 malformed visible value uses the original decoder and Spark error.
 Other charsets, scalar input and binary views use their existing paths.
