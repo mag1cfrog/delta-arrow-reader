@@ -151,7 +151,7 @@ Both builds matched release output values and executed types over all 18
 statements. The paired cases matched native in both ANSI modes. The
 Spark-only cases agreed across builds and ANSI modes. The observer kept
 exact floating bits and recorded physical plans. All 214 timing and
-profile processes completed, retaining 642 executions.
+profile processes completed, retaining 642 query/projection pairs.
 
 The [protocol](../window_aggregates_1408/protocol.md) was committed before
 the session at `56cf7b35b01936a22a0ce84f199517ddf047be4b`.
