@@ -19,7 +19,6 @@ use datafusion_expr::utils::{find_aggregate_exprs, find_window_exprs};
 use datafusion_expr::{
     AggregateUDF, BinaryExpr, ExprSchemable, Operator, ScalarUDF, cast, expr, lit, when,
 };
-use datafusion_spark::function::aggregate::try_sum::SparkTrySum;
 use lazy_static::lazy_static;
 use sail_common::spec::SAIL_LIST_FIELD_NAME;
 use sail_common_datafusion::utils::items::ItemTaker;
@@ -44,6 +43,7 @@ use sail_function::aggregate::theta_sketch::{
     ThetaIntersectionAggFunction, ThetaSketchAggFunction, ThetaUnionAggFunction,
 };
 use sail_function::aggregate::try_avg::TryAvgFunction;
+use sail_function::aggregate::try_sum::TrySumWithBatchReduction;
 use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
 use sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat;
 use sail_function::scalar::struct_function::StructFunction;
@@ -469,7 +469,7 @@ fn try_sum(input: AggFunctionInput) -> PlanResult<expr::Expr> {
     let args = input.arguments;
 
     Ok(expr::Expr::AggregateFunction(AggregateFunction {
-        func: Arc::new(AggregateUDF::from(SparkTrySum::new())),
+        func: Arc::new(AggregateUDF::from(TrySumWithBatchReduction::default())),
         params: AggregateFunctionParams {
             args,
             distinct: input.distinct,

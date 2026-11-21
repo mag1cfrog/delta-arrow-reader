@@ -2848,3 +2848,12 @@ An ANSI BIGINT array without the signed minimum uses Arrow's wrapping
 negation with its original validity mask. Arrays with the minimum in
 any slot, scalar operands and other types use the existing checked
 or wrapping Spark kernel for their mode.
+
+### Bounded integer TRY_SUM batches (#1412)
+
+The Spark aggregate reduces an INT-range BIGINT batch with Arrow
+when the existing sum has headroom for every prefix. The locked
+`SparkTrySum` accumulator still owns overflow, partial state and
+merge behavior. Batches without a running sum, wider inputs, batches
+near overflow and noninteger results use its existing update path. Window TRY_SUM continues
+to use its existing accumulator directly.
