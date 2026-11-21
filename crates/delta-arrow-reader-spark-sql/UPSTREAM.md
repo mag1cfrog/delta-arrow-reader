@@ -2985,3 +2985,9 @@ input, NULL option maps and array settings keep the original expansion.
 STR_TO_MAP borrows the already-compiled scalar key/value delimiter
 inside the row loop. A delimiter column is still parsed at the row
 where it is read.
+
+### Literal FROM_JSON settings (#1414)
+
+FROM_JSON supplies one copy of literal schema and options for nonempty
+JSON columns. The parser reads schema and options once per batch. Empty
+input, NULL option maps and array settings keep the original expansion.
