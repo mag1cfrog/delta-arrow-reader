@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use chrono::{NaiveTime, Timelike};
 use datafusion::arrow::array::{Array, ArrayRef, Time64MicrosecondArray};
+use datafusion::arrow::compute::kernels::cast_utils::string_to_time_nanoseconds;
 use datafusion::arrow::compute::{CastOptions, cast_with_options};
 use datafusion::arrow::datatypes::{DataType, TimeUnit};
 use datafusion_common::cast::{as_large_string_array, as_string_array, as_string_view_array};
@@ -56,6 +57,16 @@ impl SparkTime {
     }
 
     fn string_to_time_us_default(value: &str, is_try: bool) -> Result<Option<i64>> {
+        // Keep leap seconds and alternate layouts with the original parser.
+        if matches!(value.as_bytes(), [_, _, b':', _, _, b':', b'0'..=b'5', _])
+            && let Ok(nanos) = string_to_time_nanoseconds(value)
+        {
+            return Ok(Some(nanos / 1_000));
+        }
+        Self::parse_default_time_micros_with_chrono(value, is_try)
+    }
+
+    fn parse_default_time_micros_with_chrono(value: &str, is_try: bool) -> Result<Option<i64>> {
         for fmt in DEFAULT_TIME_FORMATS {
             if let Ok(t) = NaiveTime::parse_from_str(value, fmt) {
                 return Ok(Some(Self::naive_time_to_us(t)));
@@ -248,5 +259,91 @@ impl ScalarUDFImpl for SparkTime {
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
         let is_try = self.is_try;
         make_scalar_function(move |a: &[ArrayRef]| Self::kernel(is_try, a), vec![])(&args.args)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use datafusion::arrow::array::{LargeStringArray, StringArray, StringViewArray};
+
+    #[test]
+    fn whole_second_time_strings_agree_with_chrono() -> Result<()> {
+        for hour in 0..24 {
+            for minute in 0..60 {
+                for second in 0..60 {
+                    let value = format!("{hour:02}:{minute:02}:{second:02}");
+                    assert_eq!(
+                        SparkTime::string_to_time_us_default(&value, false)?,
+                        SparkTime::parse_default_time_micros_with_chrono(&value, false)?,
+                        "{value}"
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn alternative_time_strings_keep_chrono_values_and_failures() {
+        for value in [
+            "1:02:03",
+            "01:02",
+            "01:02:03.123456789",
+            "01:02:03 PM",
+            " 01:02:03",
+            "23:59:60",
+            "24:00:00",
+            "12:60:00",
+            "12:00:61",
+            "12:00:5x",
+            "0::12:34",
+            "01-02-03",
+            "12345678",
+            "",
+            "invalid",
+        ] {
+            for is_try in [false, true] {
+                assert_eq!(
+                    SparkTime::string_to_time_us_default(value, is_try).map_err(|e| e.to_string()),
+                    SparkTime::parse_default_time_micros_with_chrono(value, is_try)
+                        .map_err(|e| e.to_string()),
+                    "{value:?}, try = {is_try}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn default_time_arrays_preserve_nulls_widths_and_empty_input() -> Result<()> {
+        for values in [
+            &[][..],
+            &[None, Some("23:59:59"), Some("01:02:03.1234")][..],
+        ] {
+            let arrays: [ArrayRef; 3] = [
+                Arc::new(StringArray::from(values.to_vec())),
+                Arc::new(LargeStringArray::from(values.to_vec())),
+                Arc::new(StringViewArray::from(values.to_vec())),
+            ];
+            let expected: Time64MicrosecondArray = values
+                .iter()
+                .map(|value| {
+                    value
+                        .map(|s| SparkTime::parse_default_time_micros_with_chrono(s, false))
+                        .transpose()
+                        .map(Option::flatten)
+                })
+                .collect::<Result<_>>()?;
+            for array in arrays {
+                for is_try in [false, true] {
+                    let actual = SparkTime::parse_value_array(&array, is_try)?;
+                    assert_eq!(
+                        actual.as_any().downcast_ref::<Time64MicrosecondArray>(),
+                        Some(&expected)
+                    );
+                }
+            }
+        }
+        Ok(())
     }
 }
