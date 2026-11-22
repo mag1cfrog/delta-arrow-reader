@@ -81,9 +81,9 @@ def compare_modes(arms):
 
 
 def correction_passed(summary):
-    required = {"timestampdiff": {"within_floor", "faster"}, "timediff": {"faster"}}
-    return all(summary.get(f"scalar.datetime.{function}/{mode}", {}).get("status") in statuses
-               for function, statuses in required.items() for mode in ("spark-off", "spark-on"))
+    return all(summary.get(f"scalar.datetime.{function}/{mode}", {}).get("status")
+               in {"within_floor", "faster"} for function in ("timestampdiff", "timediff")
+               for mode in ("spark-off", "spark-on"))
 
 
 def run_trial(trial, base, after, output):

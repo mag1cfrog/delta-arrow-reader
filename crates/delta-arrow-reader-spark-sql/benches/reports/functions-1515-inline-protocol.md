@@ -20,9 +20,9 @@ before collecting any samples for a statement. Run three fresh pairs
 per mode and three retained samples per process. Stop after one session
 with a 15-minute cap including preflight.
 
-Both TIMESTAMPDIFF modes must be within the paired floor or faster.
-Both literal-end TIMEDIFF modes must be faster. These decisions use
-the same sign and floor rules as isolation. An excluded statement,
+Both statements must be within the paired floor or faster in both
+ANSI modes. Report whether the TIMEDIFF speedup still exceeds the
+floor. Use the same sign and floor rules as isolation. An excluded statement,
 missing sample, failed process or other outcome fails the gate. Commit
 the compressed raw samples with the report regardless of the outcome.
 
