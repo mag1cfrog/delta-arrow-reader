@@ -1,0 +1,11 @@
+[
+  "window.window.regr_avgx",
+  "window.window.regr_avgy",
+  "window.window.regr_count",
+  "window.window.regr_intercept",
+  "window.window.regr_r2",
+  "window.window.regr_slope",
+  "window.window.regr_sxx",
+  "window.window.regr_sxy",
+  "window.window.regr_syy"
+]

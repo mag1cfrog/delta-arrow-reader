@@ -33,6 +33,7 @@ pub struct Regr {
     signature: Signature,
     regr_type: RegrType,
     func_name: &'static str,
+    spark_window_semantics: bool,
 }
 
 impl Regr {
@@ -44,6 +45,14 @@ impl Regr {
             ),
             regr_type,
             func_name,
+            spark_window_semantics: false,
+        }
+    }
+
+    pub fn for_spark_window(regr_type: RegrType, func_name: &'static str) -> Self {
+        Self {
+            spark_window_semantics: true,
+            ..Self::new(regr_type, func_name)
         }
     }
 }
@@ -108,7 +117,10 @@ impl AggregateUDFImpl for Regr {
     }
 
     fn accumulator(&self, _acc_args: AccumulatorArgs) -> Result<Box<dyn Accumulator>> {
-        Ok(Box::new(RegrAccumulator::try_new(&self.regr_type)?))
+        Ok(Box::new(RegrAccumulator::try_new(
+            &self.regr_type,
+            self.spark_window_semantics,
+        )?))
     }
 
     fn state_fields(&self, args: StateFieldsArgs) -> Result<Vec<FieldRef>> {
@@ -214,11 +226,12 @@ pub struct RegrAccumulator {
     /// `Average.sum` over Y from `RegrAvgY`.
     sum_y: f64,
     regr_type: RegrType,
+    spark_window_semantics: bool,
 }
 
 impl RegrAccumulator {
     /// Creates a new `RegrAccumulator`
-    pub fn try_new(regr_type: &RegrType) -> Result<Self> {
+    pub fn try_new(regr_type: &RegrType, spark_window_semantics: bool) -> Result<Self> {
         Ok(Self {
             count: 0_u64,
             mean_x: 0_f64,
@@ -232,6 +245,7 @@ impl RegrAccumulator {
             sum_x: 0_f64,
             sum_y: 0_f64,
             regr_type: regr_type.clone(),
+            spark_window_semantics,
         })
     }
 }
@@ -301,11 +315,15 @@ impl Accumulator for RegrAccumulator {
             }
             RegrType::Count => Ok(ScalarValue::UInt64(Some(self.count))),
             RegrType::R2 => {
-                // Spark `RegrR2` returns NULL when the second moment of y is
-                // zero, and 1.0 when only the second moment of x is zero.
-                if self.corr_m2_y == 0.0 {
+                // Spark windows check the independent variance first in REGR_R2(y, x).
+                let (null_if_zero, one_if_zero) = if self.spark_window_semantics {
+                    (self.corr_m2_x, self.corr_m2_y)
+                } else {
+                    (self.corr_m2_y, self.corr_m2_x)
+                };
+                if null_if_zero == 0.0 {
                     Ok(ScalarValue::Float64(None))
-                } else if self.corr_m2_x == 0.0 {
+                } else if one_if_zero == 0.0 {
                     Ok(ScalarValue::Float64(Some(1.0)))
                 } else {
                     let corr = self.corr_ck / (self.corr_m2_y * self.corr_m2_x).sqrt();
@@ -444,6 +462,7 @@ impl Accumulator for RegrAccumulator {
     }
 
     fn supports_retract_batch(&self) -> bool {
-        true
+        // Rebuilding a moving frame preserves Spark's order of floating-point updates.
+        !self.spark_window_semantics
     }
 }

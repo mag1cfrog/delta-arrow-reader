@@ -3054,3 +3054,12 @@ Three-argument TRY_AES_ENCRYPT and TRY_AES_DECRYPT prepare an ECB
 cipher once for a binary column and valid literal key and mode. Each
 row uses the same block operations, padding and NULL-on-error policy.
 Other arguments and the non-TRY functions use the existing evaluation.
+
+### Regression window frames (#1512)
+
+The seven affected Spark regression windows use DataFusion's existing frame
+rebuild path when the lower bound moves. Rebuilding accumulates the frame's
+rows in order and avoids rounding from subtracting outgoing values.
+REGR_R2 windows check independent variance before dependent variance. The
+plain aggregates, REGR_AVGX and REGR_COUNT keep their existing accumulator
+behavior. [Attribution](benches/reports/regression-windows-1512-attribution.md).

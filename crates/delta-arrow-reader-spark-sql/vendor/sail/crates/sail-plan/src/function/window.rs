@@ -776,7 +776,12 @@ fn list_built_in_window_functions() -> Vec<(&'static str, WinFunction)> {
         ),
         (
             "regr_avgy",
-            F::aggregate(|| Arc::new(AggregateUDF::from(Regr::new(RegrType::AvgY, "regr_avgy")))),
+            F::aggregate(|| {
+                Arc::new(AggregateUDF::from(Regr::for_spark_window(
+                    RegrType::AvgY,
+                    "regr_avgy",
+                )))
+            }),
         ),
         (
             "regr_count",
@@ -785,7 +790,7 @@ fn list_built_in_window_functions() -> Vec<(&'static str, WinFunction)> {
         (
             "regr_intercept",
             F::aggregate(|| {
-                Arc::new(AggregateUDF::from(Regr::new(
+                Arc::new(AggregateUDF::from(Regr::for_spark_window(
                     RegrType::Intercept,
                     "regr_intercept",
                 )))
@@ -793,23 +798,48 @@ fn list_built_in_window_functions() -> Vec<(&'static str, WinFunction)> {
         ),
         (
             "regr_r2",
-            F::aggregate(|| Arc::new(AggregateUDF::from(Regr::new(RegrType::R2, "regr_r2")))),
+            F::aggregate(|| {
+                Arc::new(AggregateUDF::from(Regr::for_spark_window(
+                    RegrType::R2,
+                    "regr_r2",
+                )))
+            }),
         ),
         (
             "regr_slope",
-            F::aggregate(|| Arc::new(AggregateUDF::from(Regr::new(RegrType::Slope, "regr_slope")))),
+            F::aggregate(|| {
+                Arc::new(AggregateUDF::from(Regr::for_spark_window(
+                    RegrType::Slope,
+                    "regr_slope",
+                )))
+            }),
         ),
         (
             "regr_sxx",
-            F::aggregate(|| Arc::new(AggregateUDF::from(Regr::new(RegrType::Sxx, "regr_sxx")))),
+            F::aggregate(|| {
+                Arc::new(AggregateUDF::from(Regr::for_spark_window(
+                    RegrType::Sxx,
+                    "regr_sxx",
+                )))
+            }),
         ),
         (
             "regr_sxy",
-            F::aggregate(|| Arc::new(AggregateUDF::from(Regr::new(RegrType::Sxy, "regr_sxy")))),
+            F::aggregate(|| {
+                Arc::new(AggregateUDF::from(Regr::for_spark_window(
+                    RegrType::Sxy,
+                    "regr_sxy",
+                )))
+            }),
         ),
         (
             "regr_syy",
-            F::aggregate(|| Arc::new(AggregateUDF::from(Regr::new(RegrType::Syy, "regr_syy")))),
+            F::aggregate(|| {
+                Arc::new(AggregateUDF::from(Regr::for_spark_window(
+                    RegrType::Syy,
+                    "regr_syy",
+                )))
+            }),
         ),
         ("skewness", F::custom(skewness)),
         ("some", F::aggregate(bool_and_or::bool_or_udaf)),
