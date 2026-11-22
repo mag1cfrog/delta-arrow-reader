@@ -1,0 +1,32 @@
+{
+  "staging": "bf7811b7b567a03f1790df252cd5ba40b2e416fe",
+  "staging_head": "d574a27d1b2e363c9cb3a046e78fb3afaebc698b",
+  "candidate": "50f83cbec75bc1760e58a70673a2c0b2ccc88918",
+  "blocks": {"nullif": 20, "checked": 20},
+  "cpus": [2, 3, 4, 5],
+  "process_seconds": 180,
+  "preflight_seconds": 1500,
+  "timing_seconds": 2100,
+  "native_gates": {
+    "nullif-columns-none-1024": "execution_ns",
+    "nullif-computed_left-none-1024": "execution_ns",
+    "nullif-column_nonzero-none-1024": "planning_ns"
+  },
+  "fallback_splits_ns": {},
+  "spark_speedup_anchors": [
+    "nullif-computed_right-none-8192",
+    "nullif-computed_right-sparse-8192",
+    "nullif-computed_right-half-8192",
+    "nullif-computed_right-sparse-262144",
+    "nullif-columns-sparse-8192",
+    "nullif-columns-half-8192",
+    "nullif-columns-sparse-262144",
+    "nullif-column_zero-sparse-8192",
+    "nullif-column_nonzero-sparse-8192",
+    "nullif-computed_left-sparse-8192"
+  ],
+  "required_gains": [
+    "nullif-computed_right-sparse-8192",
+    "nullif-computed_right-sparse-262144"
+  ]
+}
