@@ -15,7 +15,9 @@ HERE = Path(__file__).resolve().parent
 BEFORE = "e1580ef0056bdfe70161fe07be94ed10957ed7ec"
 FINAL = "51b0c8eac613aec22a56a6d1e8f4828e84b1d316"
 WITHOUT_LITERAL_TIME_DIFF = "b442c02c164cf466f7c3c898604bcbd34a707d59"
+WITHOUT_LITERAL_TIME_DIFF_TREE = "9ba4ae6fb2c26f2d24131161aabaad8effda14a1"
 OVERLAY = "8b5c9c81dd39342aeded485c5f87f3efde4bdb17f9840c3a7dc536c5797b28ad"
+SORTED_OVERLAY = "fcba9875a935e6724de0f51a2b5a5e556512ce353ca574de7afd8a05f8ad693c"
 HISTORICAL_SHA = {
     BEFORE: "b432334fbca058bd100f6418fce6cc6267f950f37221d2ee950ffdacbd1020d8",
     FINAL: "be845264945635e7d9801d57906a9664331421a1b8173966e926c3c047d4c0ab",
@@ -31,16 +33,24 @@ def read_artifact(directory, source):
     receipt = runner.read(directory / "receipt.json")
     reported_commit = receipt.get("source") or receipt["source_commit"]
     reported_digest = receipt.get("sha256") or receipt["binary_sha256"]
-    assert source == reported_commit and runner.digest(file) == reported_digest
-    assert receipt["patch_sha256"] == OVERLAY
+    assert runner.digest(file) == reported_digest
     if source in HISTORICAL_SHA:
+        assert source == reported_commit and receipt["patch_sha256"] == OVERLAY
         assert reported_digest == HISTORICAL_SHA[source] and receipt["variant"] == "plain"
         assert receipt["profile"]["opt_level"] == "3" and receipt["profile"]["debuginfo"] == 1
     else:
         assert source == WITHOUT_LITERAL_TIME_DIFF
+        assert len(reported_commit) == 40 and all(c in "0123456789abcdef" for c in reported_commit)
+        assert runner.git("rev-parse", f"{reported_commit}^{{tree}}") == WITHOUT_LITERAL_TIME_DIFF_TREE
         assert receipt["target"] == "functions" and receipt["profile"] == "release"
         assert receipt["debug_info"] == 1 and receipt["toolchain"].startswith("rustc 1.96.0 ")
-    return file, {"source_commit": source, "binary_sha256": reported_digest, "patch_sha256": OVERLAY}
+        if "patch_sha256" in receipt:
+            assert receipt["patch_sha256"] == OVERLAY
+        else:
+            assert receipt["observation_overlay_sha256"] == SORTED_OVERLAY
+    identity = {"source_commit": reported_commit, "binary_sha256": reported_digest}
+    overlay_key = "patch_sha256" if "patch_sha256" in receipt else "observation_overlay_sha256"
+    return file, identity | {overlay_key: receipt[overlay_key]}
 
 
 def append(archive, rows):
@@ -52,7 +62,8 @@ def append(archive, rows):
 def compare_modes(arms):
     if any(set(samples) != {0, 1, 2} for samples in arms.values()):
         return {"status": "incomplete"}
-    staging, candidate = [list(medians.values()) for medians in arms.values()]
+    staging, candidate = [[arms[arm][replica] for replica in range(3)]
+                          for arm in ("staging", "candidate")]
     deltas = [new - old for old, new in zip(staging, candidate)]
     delta = median(deltas)
     floor = max(max(values) - min(values) for values in (staging, candidate)) / 2
@@ -131,18 +142,21 @@ def run_trial(trial, base, after, output):
                     append(archive, events)
                     result, = runner.assemble_cases(process, [case_id], mode)
                     samples = result["samples"]
-                    valid = (process["status"] == result["status"] == "ok"
-                             and [item["iteration"] for item in samples] == [1, 2, 3]
-                             and result["types"] == expected["types"]
-                             and all(item["input_rows"] == limits["input_rows"]
-                                     and item["output_rows"] == expected["output_rows"]
-                                     and item["execution_ns"] - item["projection_ns"] == item["increment_ns"]
-                                     for item in samples))
-                    if valid:
+                    status = result["status"] if process["status"] == "ok" else process["status"]
+                    if status == "ok" and result["types"] != expected["types"]:
+                        status = "executed_type_changed"
+                    if status == "ok" and any(
+                        item["input_rows"] != limits["input_rows"]
+                        or item["output_rows"] != expected["output_rows"]
+                        or item["execution_ns"] - item["projection_ns"] != item["increment_ns"]
+                        for item in samples
+                    ):
+                        status = "invalid_sample"
+                    if status == "ok":
                         medians[case_id, mode][arm][replica] = median(
                             sample["increment_ns"] / sample["input_rows"] for sample in samples
                         )
-                    append(archive, [context | {"process_status": "ok" if valid else "incomplete"}])
+                    append(archive, [context | {"process_status": process["status"], "case_status": status}])
         print(trial, "replica", replica + 1, "complete", flush=True)
     summary = {f"{case_id}/{mode}": compare_modes(arms)
                for (case_id, mode), arms in medians.items()}

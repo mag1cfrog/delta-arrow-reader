@@ -44,8 +44,8 @@ the same historical binaries to check whether the shift recurs.
 | ELT | SparkElt in datafusion-spark | Untouched |
 | QUOTE | SparkQuote | Untouched |
 | SOUNDEX | Soundex | Untouched |
-| TRY_VALIDATE_UTF8 | Planner's string TRY_CAST | Untouched |
-| VALIDATE_UTF8 | Planner's string CAST | Untouched |
+| TRY_VALIDATE_UTF8 | Column projection. The physical TRY_CAST removes the same-type cast on the Utf8 input. | Untouched |
+| VALIDATE_UTF8 | Column projection. The physical CAST removes the same-type cast on the Utf8 input. | Untouched |
 | TRY_URL_DECODE | Dedicated URL decode UDF with tolerant error handling | Untouched |
 | URL_DECODE | Dedicated URL decode UDF with strict error handling | Untouched |
 | TRY_PARSE_JSON | SparkParseJson with tolerant error handling | Untouched |

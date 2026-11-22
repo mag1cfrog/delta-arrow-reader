@@ -25,6 +25,16 @@ scratch commit nor its changes enter the report PR. The isolation session
 times both original mode comparisons and the TIMEDIFF statement that
 benefited from the retained change.
 
+To reconstruct the scratch source, start a clean worktree at `51b0c8ea`,
+restore the file above from `e1580ef0` and commit that single change.
+The resulting Git tree must be `9ba4ae6fb2c26f2d24131161aabaad8effda14a1`.
+Run `python3 benches/time_zone_range_1513/build.py SCRATCH_CRATE OUTPUT TARGET`
+from the Spark SQL crate directory in the report checkout. It generates
+the same observation overlay with a different JSON
+encoding for the receipt. The coordinator checks both encodings against
+their recorded fingerprints. Keep the scratch commit available locally
+until the comparison finishes so the coordinator can verify its tree.
+
 ## Execution and decision
 
 Preflight every selected statement in both ANSI modes on both artifacts
