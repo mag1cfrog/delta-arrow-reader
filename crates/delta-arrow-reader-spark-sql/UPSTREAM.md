@@ -674,8 +674,8 @@ comparison. The
 [result references](tests/fixtures/README.md#nullif-result-types),
 [floating references](tests/fixtures/README.md#floating-nullif) and evaluation
 controls cover unchanged equality and short-circuit behavior.
-Opted-in functions skip NULL-left rows even when right arguments are direct
-columns or literals, because comparison conversion can occur inside the kernel.
+By default, opted-in functions skip NULL-left rows even for direct right
+columns or literals because comparison conversion can occur inside the kernel.
 For #620, the existing DataFusion expression and physical-expression forks add
 the explicit, default-false `kernel_accepts_null_first_arg` contract, including
 UDF and alias delegation. SparkNullIf opts in only for actual DOUBLE/DOUBLE
