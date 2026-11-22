@@ -1,9 +1,10 @@
-//! Lower Spark signed displacements that native frame-shape validation rejects.
+//! Plan Spark signed RANGE displacements and select their bounded search evaluator.
 
 use std::fmt;
 use std::sync::Arc;
 
 use datafusion::execution::SessionState;
+use datafusion::physical_expr::window::reuse_pending_spark_range_search;
 use datafusion::physical_expr::{
     create_physical_expr, create_physical_exprs, create_physical_sort_exprs,
 };
@@ -16,6 +17,7 @@ use datafusion_expr::expr::{NullTreatment, WindowFunction};
 use datafusion_expr::logical_plan::{Extension, Window};
 use datafusion_expr::{
     Expr, ExprSchemable, LogicalPlan, UserDefinedLogicalNodeCore, WindowFrameBound,
+    WindowFunctionDefinition,
 };
 
 pub(super) fn lower_signed_range_windows(plan: LogicalPlan) -> Result<LogicalPlan> {
@@ -25,7 +27,9 @@ pub(super) fn lower_signed_range_windows(plan: LogicalPlan) -> Result<LogicalPla
                 return Ok(Transformed::no(plan));
             };
             for expression in &window.window_expr {
-                if requires_signed_range_planning(expression, &window.schema)? {
+                if requires_signed_range_planning(expression, &window.schema)?
+                    || supports_resuming_range_search(expression, &window.schema)?
+                {
                     return Ok(Transformed::yes(LogicalPlan::Extension(Extension {
                         node: Arc::new(SparkSignedRangeWindowNode { window }),
                     })));
@@ -42,6 +46,24 @@ fn window_function(expression: &Expr) -> Option<&WindowFunction> {
         Expr::WindowFunction(function) => Some(function),
         _ => None,
     }
+}
+
+fn supports_resuming_range_search(expression: &Expr, schema: &DFSchema) -> Result<bool> {
+    let Some(function) = window_function(expression) else {
+        return Ok(false);
+    };
+    let frame = &function.params.window_frame;
+    let [order] = function.params.order_by.as_slice() else {
+        return Ok(false);
+    };
+    Ok(
+        matches!(&function.fun, WindowFunctionDefinition::AggregateUDF(_))
+            && matches!(order.expr, Expr::Column(_))
+            && frame.has_nonzero_spark_integer_range_offset()
+            && !frame.has_null_offset()
+            && !frame.end_bound.is_unbounded()
+            && order.expr.get_type(schema)?.is_signed_integer(),
+    )
 }
 
 fn requires_signed_range_planning(expression: &Expr, schema: &DFSchema) -> Result<bool> {
@@ -127,11 +149,18 @@ pub(super) fn plan_signed_range_window(
         .window_expr
         .iter()
         .map(|expression| {
-            if requires_signed_range_planning(expression, &node.window.schema)? {
+            let window = if requires_signed_range_planning(expression, &node.window.schema)? {
                 create_signed_range_window_expr(expression, &node.window.schema, state)
             } else {
                 create_window_expr(expression, &node.window.schema, state.execution_props())
-            }
+            }?;
+            Ok(
+                if supports_resuming_range_search(expression, &node.window.schema)? {
+                    reuse_pending_spark_range_search(window)
+                } else {
+                    window
+                },
+            )
         })
         .collect::<Result<Vec<_>>>()?;
     let can_repartition =
