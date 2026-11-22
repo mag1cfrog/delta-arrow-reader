@@ -1,0 +1,108 @@
+{
+  "staging": {
+    "source": "737b712200fb669a7a5fa9a0a53f5ece1ec8cc53",
+    "sha256": "c81a0a23cc40fd3d51ad85e6baeaa735d423496c95fd32a7802f73b814f3ded0"
+  },
+  "candidate": {
+    "source": "697318625c3101f3fe50dc14227fab56c1e9b94f",
+    "sha256": "36256b37da64fe5e9ec28ab57a8f52b9340ccd1b8d3850732f14c4286edcae33"
+  },
+  "merged": "02779e3884b2d4febced82fc0d1fba8f71ff1f6c",
+  "layout": {
+    "range_state": [
+      56,
+      8
+    ],
+    "aggregate_state": [
+      128,
+      8
+    ],
+    "window_state": [
+      152,
+      8
+    ],
+    "aggregate_state_field_offsets": [
+      80,
+      0,
+      96,
+      104,
+      64,
+      112,
+      120
+    ],
+    "window_state_field_offsets": [
+      24,
+      0
+    ]
+  },
+  "native_instructions": {
+    "plain_evaluate_stateful": {
+      "staging": [
+        {
+          "digest": "c5cb80900926bce096ed60771fd241e75130f73f0c5579213eed1a8be203ecbf",
+          "bytes": 3857
+        }
+      ],
+      "candidate": [
+        {
+          "digest": "c5cb80900926bce096ed60771fd241e75130f73f0c5579213eed1a8be203ecbf",
+          "bytes": 3857
+        }
+      ],
+      "identical": true
+    },
+    "sliding_evaluate_stateful": {
+      "staging": [
+        {
+          "digest": "5e6a289419ab178c6154a543d596b436e3ebcf6b43f0dc07c2390507941e4652",
+          "bytes": 3018
+        }
+      ],
+      "candidate": [
+        {
+          "digest": "5e6a289419ab178c6154a543d596b436e3ebcf6b43f0dc07c2390507941e4652",
+          "bytes": 3018
+        }
+      ],
+      "identical": true
+    },
+    "aggregate_get_result_column": {
+      "staging": [
+        {
+          "digest": "30cc84c335037ea846c1d46ba6059897310a26de027e0dc1d24b091bce6cbb7d",
+          "bytes": 3936
+        },
+        {
+          "digest": "8b3ce543d9fe03d0e058f11d17e02cada5f1fd69bc46b4234237a2ab458f8af1",
+          "bytes": 4304
+        }
+      ],
+      "candidate": [
+        {
+          "digest": "30cc84c335037ea846c1d46ba6059897310a26de027e0dc1d24b091bce6cbb7d",
+          "bytes": 3936
+        },
+        {
+          "digest": "8b3ce543d9fe03d0e058f11d17e02cada5f1fd69bc46b4234237a2ab458f8af1",
+          "bytes": 4304
+        }
+      ],
+      "identical": true
+    },
+    "range_calculate": {
+      "staging": [
+        {
+          "digest": "05b5a24b311d5e18047fc30ed8c96bfbd70b19256352bf5f002cdeb019de1a59",
+          "bytes": 7611
+        }
+      ],
+      "candidate": [
+        {
+          "digest": "05b5a24b311d5e18047fc30ed8c96bfbd70b19256352bf5f002cdeb019de1a59",
+          "bytes": 7611
+        }
+      ],
+      "identical": true
+    }
+  }
+}
