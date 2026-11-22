@@ -3035,3 +3035,10 @@ Other argument shapes use the existing evaluation.
 For a nonempty year column and a literal integer month, the constructor
 uses the same checked arithmetic without expanding the month. The
 existing adapter handles all other argument types and shapes.
+
+### Literal TRY_AES ECB key and mode (#1414)
+
+Three-argument TRY_AES_ENCRYPT and TRY_AES_DECRYPT prepare an ECB
+cipher once for a binary column and valid literal key and mode. Each
+row uses the same block operations, padding and NULL-on-error policy.
+Other arguments and the non-TRY functions use the existing evaluation.

@@ -12,7 +12,7 @@ use aes::{Aes128, Aes192, Aes256};
 use aes_gcm::aead::rand_core::{OsRng, RngCore};
 use aes_gcm::aead::{Aead, KeyInit, Payload};
 use aes_gcm::{Aes128Gcm, Aes256Gcm, AesGcm, Nonce};
-use datafusion::arrow::array::BinaryBuilder;
+use datafusion::arrow::array::{ArrayRef, BinaryBuilder};
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
 use datafusion_common::{Result, ScalarValue, exec_datafusion_err, exec_err, internal_err};
 use datafusion_expr::{
@@ -142,6 +142,13 @@ where
 {
     let cipher = C::new_from_slice(key)
         .map_err(|_| exec_datafusion_err!("Spark AES ECB key length is invalid"))?;
+    apply_ecb_blocks(operation, &cipher, input)
+}
+
+fn apply_ecb_blocks<C>(operation: AesOperation, cipher: &C, input: &[u8]) -> Result<Vec<u8>>
+where
+    C: BlockCipher<BlockSize = U16> + BlockEncrypt + BlockDecrypt,
+{
     let mut bytes = input.to_vec();
     match operation {
         AesOperation::Encrypt => {
@@ -154,6 +161,9 @@ where
             }
         }
         AesOperation::Decrypt => {
+            if bytes.is_empty() {
+                return Ok(bytes);
+            }
             if !bytes.len().is_multiple_of(AES_BLOCK_BYTES) {
                 return exec_err!("Spark AES ECB ciphertext has an invalid length");
             }
@@ -294,6 +304,68 @@ fn evaluate_aes_row(
     Ok(Some(result))
 }
 
+fn evaluate_literal_ecb(
+    args: &[ColumnarValue],
+    operation: AesOperation,
+) -> Option<Result<ColumnarValue>> {
+    let [
+        ColumnarValue::Array(input),
+        ColumnarValue::Scalar(key),
+        ColumnarValue::Scalar(mode),
+    ] = args
+    else {
+        return None;
+    };
+    if input.data_type() != &DataType::Binary
+        || !matches!(
+            AesMode::parse(string_argument(mode, "mode").ok()?).ok()?,
+            AesMode::Ecb
+        )
+    {
+        return None;
+    }
+    let key = binary_argument(key, "key").ok()?;
+    let result = match key.len() {
+        16 => evaluate_ecb_column(input, &Aes128::new_from_slice(key).ok()?, operation),
+        24 => evaluate_ecb_column(input, &Aes192::new_from_slice(key).ok()?, operation),
+        32 => evaluate_ecb_column(input, &Aes256::new_from_slice(key).ok()?, operation),
+        _ => return None,
+    };
+    Some(result)
+}
+
+fn evaluate_ecb_column<C>(
+    input: &ArrayRef,
+    cipher: &C,
+    operation: AesOperation,
+) -> Result<ColumnarValue>
+where
+    C: BlockCipher<BlockSize = U16> + BlockEncrypt + BlockDecrypt,
+{
+    let mut builder = BinaryBuilder::new();
+    for row in 0..input.len() {
+        let value = ScalarValue::try_from_array(input, row)?;
+        let result = if value.is_null() {
+            None
+        } else {
+            binary_argument(&value, "input")
+                .and_then(|message| {
+                    if matches!(operation, AesOperation::Encrypt) {
+                        // ECB has an empty IV prefix. Keep the existing output assembly.
+                        let mut ciphertext = Vec::new();
+                        ciphertext.extend(apply_ecb_blocks(operation, cipher, message)?);
+                        Ok(ciphertext)
+                    } else {
+                        apply_ecb_blocks(operation, cipher, message)
+                    }
+                })
+                .ok()
+        };
+        builder.append_option(result);
+    }
+    Ok(ColumnarValue::Array(Arc::new(builder.finish())))
+}
+
 fn evaluate_aes(
     args: ScalarFunctionArgs,
     operation: AesOperation,
@@ -314,6 +386,11 @@ fn evaluate_aes(
         |value| matches!(value, ColumnarValue::Array(array) if array.len() != args.number_rows),
     ) {
         return internal_err!("AES argument length differs from the batch row count");
+    }
+    if matches!(on_error, AesErrorPolicy::ReturnNull)
+        && let Some(result) = evaluate_literal_ecb(&args.args, operation)
+    {
+        return result;
     }
     let evaluate_row = |index| {
         let values = args
@@ -542,5 +619,91 @@ impl ScalarUDFImpl for SparkTryAESDecrypt {
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
         evaluate_aes(args, AesOperation::Decrypt, AesErrorPolicy::ReturnNull)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use datafusion::arrow::array::{Array, AsArray, BinaryArray};
+
+    use super::*;
+
+    #[test]
+    fn literal_ecb_keys_match_the_existing_row_evaluation() -> Result<()> {
+        let plaintext = b"a partially filled block";
+        for key_len in [16, 24, 32] {
+            let key = vec![b'x'; key_len];
+            let ciphertext = apply_aes_mode(
+                AesOperation::Encrypt,
+                AesMode::Ecb,
+                &key,
+                &[],
+                plaintext,
+                &[],
+            )?;
+            // The first ECB block decrypts to zeros, which cannot be PKCS padding.
+            let zeros = apply_aes_mode(
+                AesOperation::Encrypt,
+                AesMode::Ecb,
+                &key,
+                &[],
+                &[0; AES_BLOCK_BYTES],
+                &[],
+            )?;
+            let data = BinaryArray::from(vec![
+                None,
+                Some(&[][..]),
+                Some(ciphertext.as_slice()),
+                Some(&[0][..]),
+                Some(&zeros[..AES_BLOCK_BYTES]),
+            ]);
+            for operation in [AesOperation::Encrypt, AesOperation::Decrypt] {
+                for length in [0, 1, data.len()] {
+                    let invoke = |mode: ColumnarValue| {
+                        let args = vec![
+                            ColumnarValue::Array(Arc::new(data.slice(0, length))),
+                            ColumnarValue::Scalar(ScalarValue::Binary(Some(key.clone()))),
+                            mode,
+                        ];
+                        evaluate_aes(
+                            ScalarFunctionArgs {
+                                arg_fields: args
+                                    .iter()
+                                    .map(|arg| Arc::new(Field::new("arg", arg.data_type(), true)))
+                                    .collect(),
+                                args,
+                                number_rows: length,
+                                return_field: Arc::new(Field::new(
+                                    "result",
+                                    DataType::Binary,
+                                    true,
+                                )),
+                                config_options: Arc::new(Default::default()),
+                            },
+                            operation,
+                            AesErrorPolicy::ReturnNull,
+                        )
+                    };
+                    let mode = ScalarValue::Utf8(Some(" eCb ".to_string()));
+                    let expected = invoke(ColumnarValue::Array(mode.to_array_of_size(length)?))?;
+                    let actual = invoke(ColumnarValue::Scalar(mode))?;
+                    let (ColumnarValue::Array(actual), ColumnarValue::Array(expected)) =
+                        (actual, expected)
+                    else {
+                        panic!("processing a binary column must return an array");
+                    };
+                    assert_eq!(actual.to_data(), expected.to_data());
+                    if matches!(operation, AesOperation::Decrypt) && length == data.len() {
+                        let decrypted = actual.as_binary::<i32>();
+                        assert!(decrypted.is_null(0));
+                        assert_eq!(decrypted.value(1), b"");
+                        assert_eq!(decrypted.value(2), plaintext);
+                        assert!(decrypted.is_null(3));
+                        assert!(decrypted.is_null(4));
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 }
