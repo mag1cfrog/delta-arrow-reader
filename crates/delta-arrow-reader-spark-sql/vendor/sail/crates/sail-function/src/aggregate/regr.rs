@@ -11,8 +11,8 @@
 //! - `Average` for `regr_avgx` and `regr_avgy`
 //!
 //! Spark regression windows rebuild moving frames when retraction changes the
-//! floating-point result. Their REGR_R2 uses Spark's zero-variance rule;
-//! plain REGR_R2 retains the existing DAR rule.
+//! floating-point result. Their REGR_R2 uses Spark's zero-variance rule.
+//! Plain REGR_R2 retains the existing DAR rule.
 //!
 //! The DataFusion formulas are algebraically equivalent, but floating-point
 //! rounding differs in the last bits whenever an expression is rearranged

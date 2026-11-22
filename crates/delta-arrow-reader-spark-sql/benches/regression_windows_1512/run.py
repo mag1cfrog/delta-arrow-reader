@@ -71,6 +71,7 @@ def main(base_receipt, candidate_receipt, archive):
         binaries[arm] = binary = path.parent / "functions"
         assert receipt["binary_sha256"] == checksum(binary)
         assert receipt["profile"] == "release" and receipt["target"] == "functions"
+    assert receipts["staging"]["binary_sha256"] != receipts["candidate"]["binary_sha256"]
     assert receipts["staging"]["toolchain"] == receipts["candidate"]["toolchain"]
     assert receipts["staging"]["debug_info"] == receipts["candidate"]["debug_info"] == 1
     protocol_commit = subprocess.check_output(
