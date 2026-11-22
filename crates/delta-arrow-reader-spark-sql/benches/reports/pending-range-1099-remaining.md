@@ -40,8 +40,8 @@ Each buffer copies that total minus b row equivalents.
 
 Constant peers remain buffered until the frame completes. The five-row
 progressive control still emits the four completed peers before input
-EOF. All 63 paired traces and 42 independent Spark observations
-agreed on outputs and executed Fields. Both ANSI modes passed.
+EOF. All 63 paired traces agreed. The 42 Spark traces matched the
+independent Spark capture across three batch sizes in both ANSI modes.
 The full [paired count records](pending-range-1099-remaining-samples.jsonl.gz)
 follow the [frozen protocol](pending-range-1099-remaining-protocol.md).
 
@@ -57,5 +57,6 @@ record these checks. Linux formatting and root Clippy passed, and
 The timed isolation campaign recorded 492.518 to 13.316 ms in Spark
 ANSI off and 491.883 to 13.368 ms in ANSI on for the 4,096-row case.
 The native cumulative control had a 4.671 ms paired increase. Its
-native instructions and layout match under the maintainer rule for
-build-layout shifts. [Timing report and raw samples](pending-range-1099-isolation.md)
+native instructions and layout match. The maintainer classified this
+as a build-layout shift. [Timing report and raw samples](pending-range-1099-isolation.md)
+[Maintainer decision](https://github.com/mag1cfrog/delta-arrow-reader/issues/1099#issuecomment-7085154960)
