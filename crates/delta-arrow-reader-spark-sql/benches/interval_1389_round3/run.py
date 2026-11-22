@@ -32,7 +32,7 @@ def workload():
     return manifest | {"queries": [queries[name] for name in IDS]}, schedule | {"runs": runs}
 
 
-def main(staging, candidate, snapshot, output):
+def main(staging, candidate, snapshot, output, staging_source):
     assert not subprocess.check_output(["git", "status", "--porcelain"], cwd=BENCHES, text=True).strip()
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=BENCHES, text=True).strip()
     manifest, schedule = workload()
@@ -45,11 +45,19 @@ def main(staging, candidate, snapshot, output):
         binaries[role], receipts[role] = binary, receipt
     assert receipts["staging"]["toolchain"] == receipts["candidate"]["toolchain"]
     assert receipts["staging"]["harness_sha256"] == receipts["candidate"]["harness_sha256"]
-    same_build = receipts["staging"] == receipts["candidate"]
+    assert receipts["staging"]["source_commit"] == staging_source
+    same_build = receipts["staging"]["sha256"] == receipts["candidate"]["sha256"]
     if same_build:
-        assert receipts["staging"]["source_commit"] == head
+        assert receipts["staging"] == receipts["candidate"]
+        repository = BENCHES.parents[2]
+        scripts = (HERE / "run.py", BENCHES / "reports/interval-1389-round3-protocol.md")
+        subprocess.run(["git", "diff", "--exit-code", staging_source, head, "--", ".",
+                        *(f":!{path.relative_to(repository)}" for path in scripts)],
+                       cwd=repository, check=True, capture_output=True)
     else:
         assert receipts["candidate"]["source_commit"] == head
+        subprocess.run(["git", "merge-base", "--is-ancestor", staging_source, head],
+                       cwd=BENCHES, check=True)
     fixture = strings.check_fixture(snapshot)
     output.mkdir()
     queries = manifest["queries"]
@@ -76,7 +84,8 @@ def main(staging, candidate, snapshot, output):
             for role in order:
                 result = strings.invoke(binaries[role], snapshot, output / role / scheduled["process"],
                                         schedule, deadline, "measure", mode, name)
-                record = dict(result, **scheduled, build=role)
+                record = dict(result, **scheduled, build=role,
+                              binary_source_commit=receipts[role]["source_commit"])
                 emit(record)
                 assert result["id"] == name and result["configuration"] == mode
                 assert len(result["samples"]) == schedule["samples"]
@@ -89,17 +98,29 @@ def main(staging, candidate, snapshot, output):
                 print(role, scheduled["process"], flush=True)
         assert len(records) == 2 * sum(run["query"] not in excluded for run in schedule["runs"])
         trends = paired_changes(records)
+        cast_failures, control_flags = timing_flags(trends)
         summary = {
             "sample_count": sum(len(record["samples"]) for record in records),
             "processes": len(records), "excluded": excluded, "same_build": same_build,
             "gaps": ORIGINAL["statistics_by_shape"](records, queries, excluded), "paired": trends,
+            "cast_failures": [] if same_build else cast_failures,
+            "controls_requiring_comparison": [] if same_build else control_flags,
         }
         emit({"kind": "summary", **summary})
     strings.write_json(output / "summary.json", summary)
-    return bool(excluded or (not same_build and any(
-        value["status"] == "regression" or ("/spark-" in key and not key.startswith("interval_day_time_input/")
-        and value["status"] != "faster") for key, value in trends.items()
-    )))
+    return bool(excluded or (not same_build and (cast_failures or control_flags)))
+
+
+def timing_flags(trends):
+    cast_failures, control_flags = [], []
+    for key, outcome in trends.items():
+        query, mode = key.split("/")
+        if mode == "native" or query == "interval_day_time_input":
+            if outcome["status"] == "regression":
+                control_flags.append(key)
+        elif outcome["status"] != "faster":
+            cast_failures.append(key)
+    return cast_failures, control_flags
 
 
 def paired_changes(records):
@@ -124,4 +145,5 @@ def paired_changes(records):
 
 
 if __name__ == "__main__":
-    sys.exit(main(*(Path(arg).resolve() for arg in sys.argv[1:])))
+    *paths, source = sys.argv[1:]
+    sys.exit(main(*(Path(arg).resolve() for arg in paths), source))

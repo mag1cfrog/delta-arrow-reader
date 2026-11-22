@@ -17,8 +17,9 @@ the original harness afterward. Each receipt pins the workspace
 source, executable, harness and statements. The earlier work files
 are unchanged.
 
-For the baseline, build the protocol commit on top of staging
-`219ba018`. Use the same executable in both arms. The baseline PR
+For the baseline, use the executable built from `310ffad9`, on top of
+staging `219ba018`, in both arms. Subsequent driver edits check the
+comparison and record its provenance. The baseline PR
 compares the four casts and reports the two sets of medians. It
 completes when the frozen schedule and all result checks complete.
 
@@ -37,22 +38,26 @@ each included case and its applicable controls. Schedule three
 replicas, each with one warmup and three retained samples. Switch
 build order across replicas for each configuration and noise arm.
 The full schedule has 162 processes and 486 retained samples.
-Use the existing 180-second process cap, a 30-minute preflight cap
-and a separate 30-minute timing cap. Run without other local builds
-or clocks. Retain every sample with the report.
+Use 300 and 180 seconds per preflight and timing process respectively,
+with separate 30-minute totals. Run without other local builds or
+clocks. Retain every sample with the report. `source_commit` in the
+samples identifies the original workload. `binary_source_commit`
+identifies the exact source of that arm's release executable.
 
 ## Comparing a correction
 
 Run the same schedule once for the correction and its staging
-baseline, using distinct binaries. Within each cell, pair the
+baseline, using distinct binaries. Pin the baseline source commit in
+the correction's protocol and pass it as `STAGING_SOURCE`. Within each cell, pair the
 candidate and staging process medians by replica. The gate uses
 the median paired change and the range of the three staging process
 medians. Require every Spark cast cell to improve by more than that
 range. A regression beyond the staging range on a native or
 projection control goes through the instruction and state layout
-check. An unresolved or changed-code regression fails the gate.
-Any missing process, sample, required correctness comparison or
-cast gain leaves the correction unmerged.
+check. The driver flags such controls before that review. Record their
+dispositions in the report. An unresolved or changed-code regression
+fails the gate. Any missing process, sample, required correctness
+comparison or cast gain leaves the correction unmerged.
 
 Report the cost above the native reference, or the same-mode
 projection for day-time, for each cast. Use each build's native
@@ -62,5 +67,5 @@ remaining cost are both reported.
 
 ```sh
 python3 -B benches/interval_1389_round3/build.py WORKSPACE BUILD TARGET_DIR
-python3 -B benches/interval_1389_round3/run.py STAGING_BUILD CANDIDATE_BUILD SNAPSHOT OUTPUT
+python3 -B benches/interval_1389_round3/run.py STAGING_BUILD CANDIDATE_BUILD SNAPSHOT OUTPUT STAGING_SOURCE
 ```
