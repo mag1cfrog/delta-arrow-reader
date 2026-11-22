@@ -12,7 +12,7 @@ arithmetic inside `difference`. The measured effect covers the complete
 literal-end edit. The follow-up will test whether inlining the shared
 arithmetic removes the regression.
 
-For the other 39 comparisons, the original whole-build comparison
+For the other 39 comparisons, the fresh whole-build repeat
 reproduced 20 slowdowns. Another 16 fell within the session floor
 and 3 became faster. The largest repeated paired increases were
 7.10 and 6.25 ns per row for JSON_OBJECT_KEYS. The
