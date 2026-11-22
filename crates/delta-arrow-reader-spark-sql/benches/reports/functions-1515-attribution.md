@@ -6,6 +6,12 @@ saved 14.64 to 14.71 ns per row for the TIMEDIFF query with a constant
 endpoint. Those paired changes exceeded the observed floors in both
 ANSI modes. Both builds returned identical rows and executed types.
 
+The final binary calls `difference_in_local_time` from `difference` for
+each valid row in the two-column query. The isolation binary keeps the
+arithmetic inside `difference`. The measured effect covers the complete
+literal-end edit. The follow-up will test whether inlining the shared
+arithmetic removes the regression.
+
 For the other 39 comparisons, the original whole-build comparison
 reproduced 20 slowdowns. Another 16 fell within the session floor
 and 3 became faster. The largest repeated paired increases were
@@ -28,8 +34,8 @@ both ANSI modes. Every scheduled process completed.
 ## All 41 original slowdowns
 
 Times and paired changes are nanoseconds per input row above the
-projection control. The before and after columns show medians.
-The change column is the median of paired changes, so it can differ from the
+projection control. The before and after times are medians.
+Each change is the median of paired changes, so it can differ from the
 difference between medians. Positive values mean slower.
 Repeat uses the exact original binaries. Isolate compares the
 same final source with and without the literal-end change.
