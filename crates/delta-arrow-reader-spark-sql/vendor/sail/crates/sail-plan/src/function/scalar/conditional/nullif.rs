@@ -921,9 +921,10 @@ mod tests {
             let a = doubles(&cases["double_left"])?;
             let b = doubles(&cases["double_right"])?;
             for ansi in [false, true] {
-                for (offset, len) in [(0, 12), (1, 9)] {
+                for (offset, len) in [(0, 12), (1, 11)] {
                     let input = batch(a.slice(offset, len), b.slice(offset, len))?;
                     let selected = len - input.column(0).null_count();
+                    assert!(selected > 0 && selected < len);
                     for literal in [None, Some(1.0), Some(f64::NEG_INFINITY)] {
                         for safe in [true, false] {
                             let right = add_literal(column(1), ScalarValue::Float64(literal));
