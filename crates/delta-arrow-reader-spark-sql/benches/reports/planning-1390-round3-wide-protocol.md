@@ -22,7 +22,8 @@ Use the span binary for timing, without the callback counters.
 Measure the wide statement in five processes per configuration,
 rotating order. Each process has two warmups and nine retained
 samples. Report the median of process medians and flag the effect
-of the intrusive span timers.
+of the intrusive span timers. Use the outer statement parser span.
+The older inner parser hooks only cover the Rich fallback.
 
 For the wide physical gap, list Spark minus native-configured
 for the analyzer, logical optimizer and physical planner.
@@ -33,6 +34,14 @@ spans when a parent is decomposed. Treat differences inside
 the native A/B noise as unresolved. Connect each selected
 piece to a specific code path and actual rule or expression
 visits before choosing a change.
+
+If a selected span combines unmeasured stages, resolve it before
+changing product code. Profile the wide statement after two warmups
+for 240 retained plans on CPU 2, with the affected ANSI mode, a
+120-second cap, a 128 MiB limit and user CPU samples at 199 Hz. Retain
+all profile samples and the span output. Report unresolved stacks.
+The default physical planner span includes lowering, physical rules
+and invariants. A whole-span time alone cannot distinguish them.
 
 ## Canonical comparison
 

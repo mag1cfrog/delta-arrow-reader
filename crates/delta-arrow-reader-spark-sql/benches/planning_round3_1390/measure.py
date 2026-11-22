@@ -1,25 +1,34 @@
 """Measure the fixed planning workload; observe wide-query stages and rule visits."""
 import argparse
+from collections import Counter
 import gzip
 import json
 from pathlib import Path
 from statistics import median
-import subprocess
+import sys
 import time
 
-from build import assemble, run
+from build import assemble, run, verify_compiler_inputs
 
 import paired
 
 HERE = Path(__file__).resolve().parent
 WIDE = "stress/wide_400"
 PHASES = ("logical_ns", "physical_ns", "total_ns")
+STAGING = "42b02929c204d9616ea250fbb06bb054c50d8dbd"
+CANONICAL_BUILD_PROTOCOL = "5db353b75c4560a85f70913c30c3268f22b1a73f"
 
 
 def load_build(directory, kind, protocol):
     receipt = run.read(directory / "receipt.json")
     binary = directory / "planning_attribution"
-    assert receipt["kind"] == kind and receipt["protocol_commit"] == protocol
+    assert receipt["kind"] == kind and receipt["source_commit"] == STAGING
+    assert receipt["assembly"]["baseline"] == STAGING
+    assert receipt["assembly"]["protocol_commit"] == receipt["protocol_commit"]
+    allowed = (protocol, CANONICAL_BUILD_PROTOCOL) if kind == "canonical" else (protocol,)
+    assert receipt["protocol_commit"] in allowed
+    verify_compiler_inputs(STAGING, receipt["protocol_commit"])
+    verify_compiler_inputs(receipt["protocol_commit"], protocol)
     assert assemble.digest(binary) == receipt["binary_sha256"]
     sealed = directory / "sealed-source"
     assert run.tree_hash(sealed) == receipt["assembly"]["tree_sha256"]
@@ -82,11 +91,22 @@ def wide_trace(canonical, instrumented, inventory, delta, output):
                 calls.append(dict(configuration=mode, stage=stage, rule=rule, index=int(index),
                                   input_projections=int(projections), input_expressions=int(expressions),
                                   root_visits=int(roots), child_visits=int(children)))
-    assert {row["configuration"] for row in calls} == set(run.CONFIGURATIONS)
+    assert {(row["configuration"], row["stage"]) for row in calls} == {
+        (mode, stage) for mode in run.CONFIGURATIONS for stage in ("analyzer", "optimizer")
+    }
     run.write(output / "rule-visits.json", calls)
+    return calls
 
 
-def stage_samples(instrumented, delta, output):
+def expected_rule_spans(calls, mode):
+    return Counter(
+        (f"physical.analyzer.rule/{row['rule']}" if row["stage"] == "analyzer"
+         else f"physical.optimizer.rule/{row['index']}/{row['rule']}/body")
+        for row in calls if row["configuration"] == mode
+    )
+
+
+def stage_samples(instrumented, delta, output, calls):
     path = output / "timings-stages"
     path.mkdir()
     deadline = time.monotonic() + 600
@@ -103,6 +123,10 @@ def stage_samples(instrumented, delta, output):
                 totals = []
                 for captured in row["events"]:
                     spans = {}
+                    rule_counts = Counter(name for name, _ in captured
+                                          if name.startswith("physical.analyzer.rule/") or
+                                          (name.startswith("physical.optimizer.rule/") and name.endswith("/body")))
+                    assert rule_counts == expected_rule_spans(calls, mode)
                     for name, ns in captured:
                         spans[name] = spans.get(name, 0) + ns
                     assert all(name in spans for name in ("physical.analyzer", "physical.optimizer"))
@@ -140,17 +164,19 @@ def paired_samples(builds, delta, output):
 
 
 def main(canonical_path, stage_path, inventory_path, delta, output):
+    if sys.flags.optimize:
+        raise SystemExit("validation requires Python assertions")
     protocol = run.protocol_commit()
     canonical = load_build(canonical_path, "canonical", protocol)
     instrumented = load_build(stage_path, "stages", protocol)
     inventory = load_build(inventory_path, "inventory", protocol)
-    assert len({b["source_commit"] for b in (canonical, instrumented, inventory)}) == 1
     assert len({b["binary_sha256"] for b in (canonical, instrumented, inventory)}) == 3
     hashes = fixture(delta)
     output.mkdir()
-    run.write(output / "builds.json", [canonical, instrumented, inventory])
-    wide_trace(canonical, instrumented, inventory, delta, output)
-    stages = stage_samples(instrumented, delta, output)
+    run.write(output / "session.json", {"builds": [canonical, instrumented, inventory], "delta_files": hashes,
+                                       "protocol_commit": protocol})
+    calls = wide_trace(canonical, instrumented, inventory, delta, output)
+    stages = stage_samples(instrumented, delta, output, calls)
     rows = paired_samples({"staging": canonical, "candidate": canonical}, delta, output)
     assert fixture(delta) == hashes
     run.write(output / "summary.json", {"process_stage_medians_ns": stages, "paired": rows})

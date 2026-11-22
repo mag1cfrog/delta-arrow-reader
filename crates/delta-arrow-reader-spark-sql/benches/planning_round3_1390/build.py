@@ -19,6 +19,14 @@ FRAME = "let frame = DataFrame::new(state, planning_input);"
 OLD_FRAME = "let frame = DataFrame::new(state, self.logical_plan.clone());"
 
 
+def verify_compiler_inputs(source, protocol):
+    current_tools = SPARK_PATH / "benches/planning_round3_1390"
+    reports = SPARK_PATH / "benches/reports"
+    subprocess.run(["git", "diff", "--exit-code", source, protocol, "--", ".",
+                    f":!{current_tools}", f":!{reports}/planning-1390-round3-*"],
+                   cwd=assemble.REPO, check=True, capture_output=True)
+
+
 def stages(workspace):
     # Reuse the frozen timing hooks with the current composed planning input.
     lib = workspace / "src/lib.rs"
@@ -38,6 +46,14 @@ def stages(workspace):
     assert driver.count("    for query in &manifest.queries {") == 1
     driver = driver.replace("    for query in &manifest.queries {",
                             '    for query in &manifest.queries {\n        if query.id != "stress/wide_400" { continue; }')
+    for anchor, replacement in (
+        ('!["trace", "measure"].contains', '!["trace", "measure", "profile"].contains'),
+        ('    let trace = args[0] == "trace";',
+         '    let trace = args[0] == "trace";\n    let samples = if args[0] == "profile" { 240 } else { SAMPLES };'),
+        ("0..WARMUPS + SAMPLES", "0..WARMUPS + samples"),
+    ):
+        assert driver.count(anchor) == 1
+        driver = driver.replace(anchor, replacement)
     before = """    let expected = if trace && configuration.starts_with("spark-") {
         309
     } else {
@@ -51,15 +67,13 @@ def stages(workspace):
 
 
 def build(kind, source_commit, worktree, target, output):
-    assert not sys.flags.optimize
+    if sys.flags.optimize:
+        raise SystemExit("validation requires Python assertions")
     assert worktree != assemble.REPO and not target.is_relative_to(worktree)
     assert not subprocess.check_output(["git", "status", "--porcelain"], cwd=worktree)
     protocol = run.protocol_commit()
-    paths = ["Cargo.toml", "Cargo.lock", "crates/delta-arrow-reader-core",
-             *map(str, (SPARK_PATH / name for name in ("Cargo.toml", "Cargo.lock", "src", "vendor")))]
     # The assembled protocol and the compiled product must use these same inputs.
-    subprocess.run(["git", "diff", "--exit-code", source_commit, protocol, "--", *paths],
-                   cwd=assemble.REPO, check=True, capture_output=True)
+    verify_compiler_inputs(source_commit, protocol)
     assemble.BASELINE = source_commit
     output.mkdir()
     assembled = output / "sealed-source"
