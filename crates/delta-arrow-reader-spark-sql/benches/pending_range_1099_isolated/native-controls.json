@@ -1,0 +1,19 @@
+{
+  "rows": 1000000,
+  "batch_rows": 8192,
+  "partition_rows": 1000,
+  "shapes": [
+    {
+      "id": "native_neighbor_range",
+      "sql": "SELECT id, count(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS n FROM ordinary_ranges"
+    },
+    {
+      "id": "native_cumulative_range",
+      "sql": "SELECT id, count(*) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS n FROM ordinary_ranges"
+    },
+    {
+      "id": "native_partitioned_range",
+      "sql": "SELECT id, count(*) OVER (PARTITION BY p ORDER BY k ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS n FROM ordinary_ranges"
+    }
+  ]
+}
