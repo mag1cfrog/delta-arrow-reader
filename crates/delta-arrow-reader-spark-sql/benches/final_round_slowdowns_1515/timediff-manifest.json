@@ -1,0 +1,40 @@
+{
+  "functions": [
+    {
+      "id": "scalar.datetime.timestampdiff",
+      "spark_sql": "SELECT id,timestampdiff(DAY,ts,ts) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,ts FROM bench"
+    },
+    {
+      "kind": "scalar",
+      "category": "datetime",
+      "name": "timediff",
+      "registration": "F::custom(timediff)",
+      "anchor": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/datetime.rs:2308",
+      "implementation_anchors": [
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-function/src/scalar/spark_known_not_null.rs:18",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-function/src/scalar/spark_known_nullable.rs:21",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-function/src/scalar/spark_with_inputs.rs:19",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/datetime.rs:2308",
+        "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/datetime.rs:966"
+      ],
+      "id": "scalar.datetime.timediff",
+      "aliases": [],
+      "spark_sql": "SELECT id,timediff(SECOND,ts,CAST('2020-01-01 12:00:00' AS TIMESTAMP)) AS value FROM bench",
+      "native_sql": null,
+      "native_unavailable": [
+        "timediff"
+      ],
+      "native_rationale": "Native catalogue has no matching column implementation for the Spark datetime behavior; rejected native calls: timediff. This is a source/registry classification, not a failed semantic comparison.",
+      "input_columns": [
+        "id",
+        "ts"
+      ],
+      "projection_sql": "SELECT id,ts FROM bench",
+      "exclusion": null,
+      "class": "Spark only",
+      "class_evidence": "Native catalogue has no matching column implementation for the Spark datetime behavior; rejected native calls: timediff. This is a source/registry classification, not a failed semantic comparison."
+    }
+  ]
+}
