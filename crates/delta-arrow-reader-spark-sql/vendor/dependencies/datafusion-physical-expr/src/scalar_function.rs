@@ -325,6 +325,28 @@ impl ScalarFunctionExpr {
                                 array.len(),
                             )));
                         }
+                        if array.len() == batch.num_rows() && self.args.len() == 2 {
+                            let right = &self.args[1];
+                            let right_type = if let Some(column) = right.downcast_ref::<Column>() {
+                                batch
+                                    .columns()
+                                    .get(column.index())
+                                    .map(|a| a.data_type().clone())
+                            } else {
+                                right
+                                    .downcast_ref::<Literal>()
+                                    .map(|literal| literal.value().data_type())
+                            };
+                            if right_type.is_some_and(|right_type| {
+                                self.fun.kernel_accepts_null_first_arg(&[
+                                    array.data_type().clone(),
+                                    right_type,
+                                ])
+                            }) {
+                                let right = right.evaluate(batch)?;
+                                return self.invoke_evaluated(batch, vec![first, right]);
+                            }
+                        }
                         let mask = BooleanArray::new(nulls.inner().clone(), None);
                         let selected = filter_record_batch(batch, &mask)?;
                         // A column has already been filtered with the input batch.

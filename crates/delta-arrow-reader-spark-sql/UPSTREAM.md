@@ -674,8 +674,20 @@ comparison. The
 [result references](tests/fixtures/README.md#nullif-result-types),
 [floating references](tests/fixtures/README.md#floating-nullif) and evaluation
 controls cover unchanged equality and short-circuit behavior.
-Opted-in functions skip NULL-left rows even when right arguments are direct
-columns or literals, because comparison conversion can occur inside the kernel.
+By default, opted-in functions skip NULL-left rows even for direct right
+columns or literals because comparison conversion can occur inside the kernel.
+For #620, the existing DataFusion expression and physical-expression forks add
+the explicit, default-false `kernel_accepts_null_first_arg` contract, including
+UDF and alias delegation. SparkNullIf opts in only for actual DOUBLE/DOUBLE
+operands, whose comparison needs no cast. With a valid full-length left and a
+direct right column or literal, the physical evaluator can invoke the unchanged
+kernel without selection copies. Computed right operands, other types and
+unavailable/malformed inputs retain the original selected route. Empty,
+scalar-NULL, all-NULL and no-NULL paths and invocation validation remain intact.
+The new inline NULLIF unit tests compare against the frozen
+baseline selection evaluator and check routing, exact types/bits/NULLs, errors
+and argument effects in both ANSI modes. The existing native kernels and other
+NULL-first UDF opt-ins are unchanged.
 
 IFNULL and NVL use the existing COALESCE planning path for Spark numeric inputs
 or when either argument is temporal, retaining their two-argument arity. Other

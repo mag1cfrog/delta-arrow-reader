@@ -101,6 +101,11 @@ impl ScalarUDFImpl for SparkNullIf {
         true
     }
 
+    fn kernel_accepts_null_first_arg(&self, arg_types: &[DataType]) -> bool {
+        // Equal DOUBLE inputs skip casts; normalization only changes comparison values.
+        matches!(arg_types, [DataType::Float64, DataType::Float64])
+    }
+
     fn conditional_arguments<'a>(
         &self,
         args: &'a [Expr],
@@ -450,5 +455,523 @@ mod tests {
             }
         }
         Ok(())
+    }
+
+    mod selection_620_tests {
+        use super::SparkNullIf;
+        use std::cell::RefCell;
+        use std::error::Error;
+        use std::fmt;
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        use arrow::array::{
+            Array, ArrayRef, AsArray, Decimal128Array, DictionaryArray, Float32Array, Float64Array,
+            Int8Array, Int64Array, StringArray, TimestampMicrosecondArray,
+            TimestampNanosecondArray,
+        };
+        use arrow::datatypes::{DataType, Field, Float32Type, Float64Type, Int8Type, Schema};
+        use arrow::record_batch::RecordBatch;
+        use datafusion::physical_expr::expressions::{Column, Literal};
+        use datafusion::physical_expr::{PhysicalExpr, ScalarFunctionExpr};
+        use datafusion::prelude::SessionContext;
+        use datafusion_common::{DFSchema, Result, ScalarValue, config::ConfigOptions};
+        use datafusion_expr::{
+            ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
+            col, create_udf,
+        };
+        use serde_json::{Value, json};
+
+        type TestResult<T = ()> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
+        include!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/nullif-selection-620-original.rs"
+        ));
+
+        fn corpus() -> TestResult<Value> {
+            Ok(serde_json::from_str(include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/tests/fixtures/nullif-selection-620-inputs.json"
+            )))?)
+        }
+
+        fn doubles(values: &Value) -> TestResult<ArrayRef> {
+            let values = values
+                .as_array()
+                .ok_or("missing bits")?
+                .iter()
+                .map(|v| {
+                    v.as_str()
+                        .map(|s| u64::from_str_radix(s, 16).map(f64::from_bits))
+                        .transpose()
+                })
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            Ok(Arc::new(Float64Array::from(values)))
+        }
+
+        fn batch(a: ArrayRef, b: ArrayRef) -> Result<RecordBatch> {
+            Ok(RecordBatch::try_from_iter([("a", a), ("b", b)])?)
+        }
+
+        fn column(index: usize) -> Arc<dyn PhysicalExpr> {
+            Arc::new(Column::new(if index == 0 { "a" } else { "b" }, index))
+        }
+
+        fn function(
+            ansi: bool,
+            args: Vec<Arc<dyn PhysicalExpr>>,
+            schema: &Schema,
+        ) -> Result<ScalarFunctionExpr> {
+            ScalarFunctionExpr::try_new(
+                Arc::new(ScalarUDF::from(SparkNullIf::new(
+                    ansi,
+                    "America/Phoenix".into(),
+                ))),
+                args,
+                schema,
+                Arc::new(ConfigOptions::default()),
+            )
+        }
+
+        fn encoded(array: &dyn Array) -> Result<Vec<Value>> {
+            if let DataType::Dictionary(_, value_type) = array.data_type() {
+                return encoded(arrow::compute::cast(array, value_type)?.as_ref());
+            }
+            (0..array.len())
+                .map(|row| {
+                    Ok(if array.is_null(row) {
+                        Value::Null
+                    } else {
+                        json!(match array.data_type() {
+                            DataType::Float64 => format!(
+                                "{:016x}",
+                                array.as_primitive::<Float64Type>().value(row).to_bits()
+                            ),
+                            DataType::Float32 => format!(
+                                "{:08x}",
+                                array.as_primitive::<Float32Type>().value(row).to_bits()
+                            ),
+                            _ => arrow::util::display::array_value_to_string(array, row)?,
+                        })
+                    })
+                })
+                .collect()
+        }
+
+        fn observed(result: Result<ColumnarValue>, rows: usize) -> Result<Value> {
+            match result {
+                Ok(value) => {
+                    let form = if matches!(value, ColumnarValue::Scalar(_)) {
+                        "scalar"
+                    } else {
+                        "array"
+                    };
+                    let data_type = format!("{:?}", value.data_type());
+                    Ok(
+                        json!({"form":form,"type":data_type,"values":encoded(value.into_array(rows)?.as_ref())?}),
+                    )
+                }
+                Err(error) => {
+                    Ok(json!({"error":error.to_string(),"root":format!("{:?}",error.find_root())}))
+                }
+            }
+        }
+
+        fn differential(function: &ScalarFunctionExpr, batch: &RecordBatch) -> Result<()> {
+            assert_eq!(
+                observed(original_selection(function, batch), batch.num_rows())?,
+                observed(function.evaluate(batch), batch.num_rows())?
+            );
+            Ok(())
+        }
+
+        #[test]
+        fn double_selection_preserves_original_bits_types_nulls_and_forms() -> TestResult {
+            let cases = corpus()?;
+            let a = doubles(&cases["double_left"])?;
+            let b = doubles(&cases["double_right"])?;
+            for ansi in [false, true] {
+                for left in [
+                    a.clone(),
+                    Arc::new(Float64Array::from(vec![Some(1.0); a.len()])) as ArrayRef,
+                    Arc::new(Float64Array::from(vec![None; a.len()])) as ArrayRef,
+                ] {
+                    for slice in cases["slices"].as_array().ok_or("missing slices")? {
+                        let offset = slice[0].as_u64().ok_or("offset")? as usize;
+                        let len = slice[1].as_u64().ok_or("len")? as usize;
+                        let input = batch(left.slice(offset, len), b.slice(offset, len))?;
+                        differential(
+                            &function(ansi, vec![column(0), column(1)], input.schema().as_ref())?,
+                            &input,
+                        )?;
+                        for value in cases["double_scalar_bits"]
+                            .as_array()
+                            .ok_or("missing scalar bits")?
+                        {
+                            let value = value
+                                .as_str()
+                                .map(|s| u64::from_str_radix(s, 16).map(f64::from_bits))
+                                .transpose()?;
+                            let literal: Arc<dyn PhysicalExpr> =
+                                Arc::new(Literal::new(ScalarValue::Float64(value)));
+                            for args in [vec![column(0), literal.clone()], vec![literal, column(1)]]
+                            {
+                                differential(
+                                    &function(ansi, args, input.schema().as_ref())?,
+                                    &input,
+                                )?;
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(())
+        }
+
+        #[test]
+        fn other_types_and_required_comparison_errors_keep_the_original_selection() -> TestResult {
+            let cases = corpus()?;
+            let a =
+                Arc::new(Float64Array::from(vec![None, Some(1.0), Some(2.0), None])) as ArrayRef;
+            let values: Vec<Option<i64>> = serde_json::from_value(cases["large_integers"].clone())?;
+            let keys: Vec<Option<i8>> = serde_json::from_value(cases["dictionary_keys"].clone())?;
+            let dict_values: Vec<Option<f64>> =
+                serde_json::from_value(cases["dictionary_values"].clone())?;
+            let dictionary = Arc::new(DictionaryArray::<Int8Type>::try_new(
+                Int8Array::from(keys),
+                Arc::new(Float64Array::from(dict_values)),
+            )?) as ArrayRef;
+            let decimal = Arc::new(
+                Decimal128Array::from(vec![None, Some(900719925474099300_i128), Some(125), None])
+                    .with_precision_and_scale(20, 2)?,
+            ) as ArrayRef;
+            let mut pairs = vec![
+                (
+                    a.clone(),
+                    Arc::new(Float32Array::from(vec![None, Some(1.0), Some(3.0), None]))
+                        as ArrayRef,
+                ),
+                (Arc::new(Int64Array::from(values)) as ArrayRef, a.clone()),
+                (decimal, a.clone()),
+                (dictionary.clone(), a.clone()),
+                (a.clone(), dictionary),
+                (
+                    Arc::new(TimestampNanosecondArray::from(vec![
+                        None,
+                        Some(0),
+                        Some(1001),
+                        None,
+                    ])) as ArrayRef,
+                    Arc::new(TimestampMicrosecondArray::from(vec![
+                        None,
+                        Some(0),
+                        Some(1),
+                        None,
+                    ])) as ArrayRef,
+                ),
+            ];
+            for field in ["skipped_bad_strings", "required_bad_strings"] {
+                let strings: Vec<Option<String>> = serde_json::from_value(cases[field].clone())?;
+                pairs.push((a.clone(), Arc::new(StringArray::from(strings))));
+            }
+            for ansi in [false, true] {
+                let udf = ScalarUDF::from(SparkNullIf::new(ansi, "America/Phoenix".into()));
+                assert!(udf.kernel_accepts_null_first_arg(&[DataType::Float64, DataType::Float64]));
+                assert!(
+                    udf.with_aliases(["nullif_alias"])
+                        .kernel_accepts_null_first_arg(&[DataType::Float64, DataType::Float64])
+                );
+                for (a, b) in &pairs {
+                    assert!(
+                        !SparkNullIf::new(ansi, "UTC".into()).kernel_accepts_null_first_arg(&[
+                            a.data_type().clone(),
+                            b.data_type().clone()
+                        ])
+                    );
+                    let input = batch(a.clone(), b.clone())?;
+                    for (offset, len) in [(0, 4), (1, 2), (1, 0)] {
+                        let input = input.slice(offset, len);
+                        differential(
+                            &function(ansi, vec![column(0), column(1)], input.schema().as_ref())?,
+                            &input,
+                        )?;
+                    }
+                }
+                assert!(
+                    !SparkNullIf::new(ansi, "UTC".into())
+                        .kernel_accepts_null_first_arg(&[DataType::Float32, DataType::Float32])
+                );
+                let invalid = DataType::List(Arc::new(Field::new("item", DataType::Int32, true)));
+                assert!(
+                    SparkNullIf::new(ansi, "UTC".into())
+                        .return_type(&[DataType::Float64, invalid])
+                        .is_err()
+                );
+            }
+            assert!(
+                !ScalarUDF::from(datafusion::functions::core::nullif::NullIfFunc::new())
+                    .kernel_accepts_null_first_arg(&[DataType::Float64, DataType::Float64])
+            );
+            Ok(())
+        }
+
+        fn counted(
+            name: &str,
+            column_name: &str,
+            count: Arc<AtomicUsize>,
+            schema: &Schema,
+        ) -> Result<Arc<dyn PhysicalExpr>> {
+            let udf = create_udf(
+                name,
+                vec![DataType::Float64],
+                DataType::Float64,
+                Volatility::Volatile,
+                Arc::new(move |args| {
+                    let arrays = ColumnarValue::values_to_arrays(args)?;
+                    count.fetch_add(arrays[0].len(), Ordering::SeqCst);
+                    Ok(ColumnarValue::Array(arrays[0].clone()))
+                }),
+            );
+            SessionContext::new().create_physical_expr(
+                udf.call(vec![col(column_name)]),
+                &DFSchema::try_from(schema.clone())?,
+            )
+        }
+
+        thread_local! { static KERNEL_ROWS: RefCell<Vec<usize>> = const { RefCell::new(Vec::new()) }; }
+
+        #[derive(Debug, PartialEq, Eq, Hash)]
+        struct SelectionOnlyKernelProbe {
+            ansi: bool,
+            wrong_rows: bool,
+        }
+
+        impl ScalarUDFImpl for SelectionOnlyKernelProbe {
+            fn name(&self) -> &str {
+                "nullif_probe"
+            }
+            fn signature(&self) -> &Signature {
+                static SIGNATURE: std::sync::LazyLock<Signature> =
+                    std::sync::LazyLock::new(|| Signature::any(2, Volatility::Volatile));
+                &SIGNATURE
+            }
+            fn return_type(&self, types: &[DataType]) -> Result<DataType> {
+                Ok(types[0].clone())
+            }
+            fn short_circuits(&self) -> bool {
+                true
+            }
+            fn short_circuits_on_null_first_arg(&self) -> bool {
+                true
+            }
+            fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
+                KERNEL_ROWS.with(|rows| rows.borrow_mut().push(args.number_rows));
+                if self.wrong_rows {
+                    return Ok(ColumnarValue::Array(Arc::new(Float64Array::from(vec![
+                        1.0,
+                    ]))));
+                }
+                SparkNullIf::new(self.ansi, "UTC".into()).invoke_with_args(args)
+            }
+        }
+
+        #[derive(Debug, PartialEq, Eq, Hash)]
+        struct NullFirstArgSafeKernelProbe(SelectionOnlyKernelProbe);
+
+        impl ScalarUDFImpl for NullFirstArgSafeKernelProbe {
+            fn name(&self) -> &str {
+                self.0.name()
+            }
+            fn signature(&self) -> &Signature {
+                self.0.signature()
+            }
+            fn return_type(&self, types: &[DataType]) -> Result<DataType> {
+                self.0.return_type(types)
+            }
+            fn short_circuits(&self) -> bool {
+                true
+            }
+            fn short_circuits_on_null_first_arg(&self) -> bool {
+                true
+            }
+            fn kernel_accepts_null_first_arg(&self, types: &[DataType]) -> bool {
+                matches!(types, [DataType::Float64, DataType::Float64])
+            }
+            fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
+                self.0.invoke_with_args(args)
+            }
+        }
+
+        fn probe(
+            ansi: bool,
+            safe: bool,
+            args: Vec<Arc<dyn PhysicalExpr>>,
+            wrong_rows: bool,
+        ) -> ScalarFunctionExpr {
+            let kernel = SelectionOnlyKernelProbe { ansi, wrong_rows };
+            let udf = if safe {
+                ScalarUDF::from(NullFirstArgSafeKernelProbe(kernel))
+            } else {
+                ScalarUDF::from(kernel)
+            };
+            ScalarFunctionExpr::new(
+                "nullif_probe",
+                Arc::new(udf),
+                args,
+                Arc::new(Field::new("r", DataType::Float64, true)),
+                Arc::new(ConfigOptions::default()),
+            )
+        }
+
+        #[test]
+        fn routing_and_effects_distinguish_opt_in_default_and_computed_operands() -> TestResult {
+            let input = batch(
+                Arc::new(Float64Array::from(vec![None, Some(-0.0), Some(2.0), None])),
+                Arc::new(Float64Array::from(vec![1.0, 1.0, 3.0, 4.0])),
+            )?;
+            for ansi in [false, true] {
+                for safe in [false, true] {
+                    for literal in [false, true] {
+                        let right = if literal {
+                            Arc::new(Literal::new(ScalarValue::Float64(Some(1.0))))
+                                as Arc<dyn PhysicalExpr>
+                        } else {
+                            column(1)
+                        };
+                        let expression = probe(ansi, safe, vec![column(0), right], false);
+                        KERNEL_ROWS.with(|rows| rows.borrow_mut().clear());
+                        assert_eq!(
+                            observed(expression.evaluate(&input), 4)?,
+                            observed(original_selection(&expression, &input), 4)?
+                        );
+                        KERNEL_ROWS
+                            .with(|rows| assert_eq!(*rows.borrow(), [if safe { 4 } else { 2 }, 2]));
+                    }
+                }
+                for computed_right in [false, true] {
+                    let left_count = Arc::new(AtomicUsize::new(0));
+                    let right_count = Arc::new(AtomicUsize::new(0));
+                    let left = counted(
+                        "count_left",
+                        "a",
+                        left_count.clone(),
+                        input.schema().as_ref(),
+                    )?;
+                    let right = if computed_right {
+                        counted(
+                            "count_right",
+                            "b",
+                            right_count.clone(),
+                            input.schema().as_ref(),
+                        )?
+                    } else {
+                        column(1)
+                    };
+                    let expression = probe(ansi, true, vec![left, right], false);
+                    assert_eq!(
+                        [
+                            left_count.load(Ordering::SeqCst),
+                            right_count.load(Ordering::SeqCst)
+                        ],
+                        [0, 0]
+                    );
+                    KERNEL_ROWS.with(|rows| rows.borrow_mut().clear());
+                    let actual = observed(expression.evaluate(&input), 4)?;
+                    assert_eq!(left_count.load(Ordering::SeqCst), 4);
+                    assert_eq!(
+                        right_count.load(Ordering::SeqCst),
+                        if computed_right { 2 } else { 0 }
+                    );
+                    KERNEL_ROWS.with(|rows| {
+                        assert_eq!(*rows.borrow(), [if computed_right { 2 } else { 4 }])
+                    });
+                    left_count.store(0, Ordering::SeqCst);
+                    right_count.store(0, Ordering::SeqCst);
+                    assert_eq!(
+                        actual,
+                        observed(original_selection(&expression, &input), 4)?
+                    );
+                    assert_eq!(left_count.load(Ordering::SeqCst), 4);
+                    assert_eq!(
+                        right_count.load(Ordering::SeqCst),
+                        if computed_right { 2 } else { 0 }
+                    );
+                }
+                let broken = probe(ansi, true, vec![column(0), column(1)], true);
+                let error = broken
+                    .evaluate(&input)
+                    .err()
+                    .ok_or("bad kernel result accepted")?
+                    .to_string();
+                assert!(error.contains("Expected: 4, Got: 1"), "{error}");
+            }
+            Ok(())
+        }
+
+        #[derive(Debug, PartialEq, Eq, Hash)]
+        struct WrongLengthFirstExpr;
+        impl fmt::Display for WrongLengthFirstExpr {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(f, "wrong_length_first")
+            }
+        }
+        impl PhysicalExpr for WrongLengthFirstExpr {
+            fn data_type(&self, _: &Schema) -> Result<DataType> {
+                Ok(DataType::Float64)
+            }
+            fn nullable(&self, _: &Schema) -> Result<bool> {
+                Ok(true)
+            }
+            fn evaluate(&self, _: &RecordBatch) -> Result<ColumnarValue> {
+                Ok(ColumnarValue::Array(Arc::new(Float64Array::from(vec![
+                    None,
+                    Some(1.0),
+                    Some(2.0),
+                ]))))
+            }
+            fn children(&self) -> Vec<&Arc<dyn PhysicalExpr>> {
+                vec![]
+            }
+            fn fmt_sql(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                fmt::Display::fmt(self, f)
+            }
+            fn with_new_children(
+                self: Arc<Self>,
+                _: Vec<Arc<dyn PhysicalExpr>>,
+            ) -> Result<Arc<dyn PhysicalExpr>> {
+                Ok(self)
+            }
+        }
+
+        #[test]
+        fn malformed_left_and_unavailable_right_keep_old_outcomes() -> TestResult {
+            let input = batch(
+                Arc::new(Float64Array::from(vec![None, Some(1.0), Some(2.0), None])),
+                Arc::new(Float64Array::from(vec![1.0; 4])),
+            )?;
+            for ansi in [false, true] {
+                for (args, invocation_rows, succeeds) in [
+                    (
+                        vec![
+                            Arc::new(WrongLengthFirstExpr) as Arc<dyn PhysicalExpr>,
+                            column(1),
+                        ],
+                        vec![2, 2],
+                        true,
+                    ),
+                    (vec![column(0), column(5)], vec![], false),
+                ] {
+                    let expression = probe(ansi, true, args, false);
+                    KERNEL_ROWS.with(|rows| rows.borrow_mut().clear());
+                    let old = original_selection(&expression, &input);
+                    let actual = expression.evaluate(&input);
+                    assert_eq!(old.is_ok(), succeeds);
+                    assert_eq!(actual.is_ok(), succeeds);
+                    assert_eq!(observed(old, 4)?, observed(actual, 4)?);
+                    KERNEL_ROWS.with(|rows| assert_eq!(*rows.borrow(), invocation_rows));
+                }
+            }
+            Ok(())
+        }
     }
 }

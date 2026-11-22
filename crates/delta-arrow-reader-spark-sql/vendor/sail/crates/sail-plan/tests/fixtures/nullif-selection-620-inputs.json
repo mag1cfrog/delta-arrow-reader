@@ -1,0 +1,23 @@
+{
+  "baseline": "d69d6bc3c9b50c76bd645287d28803447c864390",
+  "double_left": [null, "8000000000000000", "0000000000000000", "7ff8000000001234", "fff8000000004321", "7ff8000000005678", "8000000000000000", "7ff0000000000000", "fff0000000000000", "3ff0000000000000", "4000000000000000", null],
+  "double_right": ["7ff8000000004321", "0000000000000000", "8000000000000000", "fff8000000004321", "7ff8000000001234", "4000000000000000", "3ff0000000000000", "7ff0000000000000", "7ff0000000000000", null, "3ff0000000000000", null],
+  "double_scalar_bits": [null, "0000000000000000", "8000000000000000", "3ff0000000000000", "7ff8000000001234"],
+  "slices": [[0, 12], [1, 9], [3, 1], [7, 0]],
+  "fallback_left": [null, 1, 2, null],
+  "skipped_bad_strings": ["bad", "1", "3", "bad"],
+  "required_bad_strings": ["bad", "bad", "3", "bad"],
+  "dictionary_keys": [0, 1, null, 2],
+  "dictionary_values": [null, 1, 2],
+  "large_integers": [null, 9007199254740993, -9007199254740993, 1],
+  "sql_cases": [
+    {"name": "provider_skipped_cast", "sql": "SELECT NULLIF(a,s) AS r FROM inputs", "off": [null, null, "4000000000000000", null], "on": [null, null, "4000000000000000", null]},
+    {"name": "provider_required_cast", "sql": "SELECT NULLIF(a,bad) AS r FROM inputs", "off": [null, "3ff0000000000000", "4000000000000000", null], "on_error": "CAST_INVALID_INPUT"},
+    {"name": "literal_skipped_cast", "sql": "SELECT NULLIF(CAST(NULL AS DOUBLE),'bad') AS r", "off": [null], "on": [null]},
+    {"name": "literal_required_cast", "sql": "SELECT NULLIF(CAST(1 AS DOUBLE),'bad') AS r", "off": ["3ff0000000000000"], "on_error": "CAST_INVALID_INPUT"},
+    {"name": "local_skipped_cast", "sql": "SELECT NULLIF(a,s) AS r FROM VALUES (CAST(NULL AS DOUBLE),'bad'),(CAST(1 AS DOUBLE),'1') t(a,s)", "off": [null, null], "on": [null, null]},
+    {"name": "limit_zero", "sql": "SELECT NULLIF(a,bad) AS r FROM inputs LIMIT 0", "off": [], "on": []},
+    {"name": "guarded_required_cast", "sql": "SELECT CASE WHEN a IS NULL THEN NULLIF(a,bad) ELSE a END AS r FROM inputs", "off": [null, "3ff0000000000000", "4000000000000000", null], "on": [null, "3ff0000000000000", "4000000000000000", null]},
+    {"name": "typed_null_comparability", "sql": "SELECT NULLIF(CAST(NULL AS DOUBLE),ARRAY(1)) AS r", "off_error": "not comparable", "on_error": "not comparable"}
+  ]
+}
