@@ -515,6 +515,12 @@ mod tests {
     fn interval_lexing_collects_diagnostics_only_after_a_lexical_failure() -> SqlResult<()> {
         use super::{INTERVAL_RICH_LEXER_CALLS, create_interval_literal_parser};
 
+        fn parse_with_rich_lexer(
+            text: &str,
+        ) -> SqlResult<sail_sql_parser::ast::expression::IntervalLiteral> {
+            parse!(text, create_interval_literal_parser)
+        }
+
         INTERVAL_RICH_LEXER_CALLS.with(|calls| calls.set(0));
         let mut parse = super::interval_parser();
         for text in [
@@ -522,19 +528,21 @@ mod tests {
             "'1 year 2 months'",
             "2 DAY /* comment */ 3 hours",
         ] {
-            let expected = parse!(text, create_interval_literal_parser)?;
+            let expected = parse_with_rich_lexer(text)?;
             let expected = super::from_ast_unqualified_interval(expected)?;
             assert_result(&parse(text), &Ok(expected), text);
         }
         INTERVAL_RICH_LEXER_CALLS.with(|calls| assert_eq!(calls.get(), 0));
 
         let invalid = "'unterminated";
-        let original = parse!(invalid, create_interval_literal_parser);
+        let original = parse_with_rich_lexer(invalid);
         assert!(original.is_err());
         assert_result(&super::parse_interval_literal(invalid), &original, invalid);
         let original = original.and_then(super::from_ast_unqualified_interval);
         assert_result(&parse(invalid), &original, invalid);
-        INTERVAL_RICH_LEXER_CALLS.with(|calls| assert_eq!(calls.get(), 2));
+        let quoted_invalid = "\"'unterminated\"";
+        assert_result(&parse(quoted_invalid), &original, quoted_invalid);
+        INTERVAL_RICH_LEXER_CALLS.with(|calls| assert_eq!(calls.get(), 3));
         Ok(())
     }
 
