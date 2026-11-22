@@ -3,6 +3,7 @@
 import gzip
 import hashlib
 import json
+import os
 from pathlib import Path
 import struct
 import sys
@@ -107,6 +108,8 @@ def capture(spark, name, sql, ansi, expected_ids):
 
 
 def main(output):
+    if "PYSPARK_GATEWAY_PORT" in os.environ:
+        raise RuntimeError("Spark capture requires its own JVM gateway")
     from pyspark import SparkContext
     from pyspark.sql import SparkSession, types
 
@@ -148,7 +151,10 @@ def main(output):
             for name, sql in sql_cases():
                 observations.append(capture(spark, name, sql, ansi, expected_ids))
     finally:
-        shutdown = cleanup(spark, SparkContext._gateway)
+        gateway = SparkContext._gateway
+        if gateway is not None and getattr(gateway, "proc", None) is None:
+            raise RuntimeError("Spark capture requires its own JVM gateway")
+        shutdown = cleanup(spark, gateway)
         if sys.exc_info()[0] is None:
             assert shutdown.get("reaped") and not shutdown["errors"], "Spark JVM shutdown failed"
 

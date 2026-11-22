@@ -14,7 +14,7 @@ subtract outgoing rows. Spark's bounded sliding frame resets its aggregation
 buffer and adds the remaining rows in order when the frame changes.
 [DataFusion sliding window](../../vendor/dependencies/datafusion-physical-expr/src/window/sliding_aggregate.rs),
 [Sail regression state](../../vendor/sail/crates/sail-function/src/aggregate/regr.rs),
-[Spark sliding frame](https://github.com/apache/spark/blob/32f7299601108917fb01920a54e084595b7b3bf8/sql/core/src/main/scala/org/apache/spark/sql/execution/window/WindowFunctionFrame.scala#L395-L472).
+[Spark sliding frame](https://github.com/apache/spark/blob/32f7299601108917fb01920a54e084595b7b3bf8/sql/core/src/main/scala/org/apache/spark/sql/execution/window/WindowFunctionFrame.scala#L477-L498).
 
 The [arithmetic replay](../../tests/fixtures/regression-windows-1512/replay_original_frames.py)
 compares the current recurrence with rebuilding each frame from its member
@@ -44,7 +44,7 @@ returns NULL. Spark checks independent variance first. It returns NULL if
 that variance is zero and returns `1.0` when only dependent variance is zero.
 The replay changes the branch order separately from the frame update and
 recovers both `1.0` values.
-[Spark R2 evaluation](https://github.com/apache/spark/blob/32f7299601108917fb01920a54e084595b7b3bf8/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/aggregate/linearRegression.scala#L140-L149).
+[Spark R2 evaluation](https://github.com/apache/spark/blob/32f7299601108917fb01920a54e084595b7b3bf8/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/aggregate/linearRegression.scala#L140-L154).
 
 ## Current staging results
 
