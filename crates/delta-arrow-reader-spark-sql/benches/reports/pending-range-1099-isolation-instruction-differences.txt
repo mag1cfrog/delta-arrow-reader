@@ -1,0 +1,31 @@
+--- staging/aggregate_get_result_column/0
++++ candidate/aggregate_get_result_column/0
+@@ -346,7 +346,7 @@
+ mov    0x10(%rsp),%rax
+ mov    0x18(%rsp),%rcx
+ movdqa 0x10(%rsp),%xmm0
+-pcmpeqb relocation(%rip),%xmm0 <brotli::enc::encode::DecideOverLiteralContextModeling::lut+0x4f0>
++pcmpeqb relocation(%rip),%xmm0 <brotli::enc::encode::DecideOverLiteralContextModeling::lut+0x4e0>
+ lea    0x20(%rsp),%rsi
+ mov    0x20(%rsi),%rdx
+ mov    %rdx,0x90(%rsp)
+--- staging/aggregate_get_result_column/1
++++ candidate/aggregate_get_result_column/1
+@@ -248,7 +248,7 @@
+ mov    0x20(%rsp),%rax
+ mov    0x28(%rsp),%rcx
+ movdqa 0x20(%rsp),%xmm0
+-pcmpeqb relocation(%rip),%xmm0 <brotli::enc::encode::DecideOverLiteralContextModeling::lut+0x4f0>
++pcmpeqb relocation(%rip),%xmm0 <brotli::enc::encode::DecideOverLiteralContextModeling::lut+0x4e0>
+ mov    0x50(%rsp),%rdx
+ mov    %rdx,0x80(%rsp)
+ pmovmskb %xmm0,%edx
+@@ -446,7 +446,7 @@
+ mov    0x20(%rsp),%rax
+ mov    0x28(%rsp),%rcx
+ movdqa 0x20(%rsp),%xmm0
+-pcmpeqb relocation(%rip),%xmm0 <brotli::enc::encode::DecideOverLiteralContextModeling::lut+0x4f0>
++pcmpeqb relocation(%rip),%xmm0 <brotli::enc::encode::DecideOverLiteralContextModeling::lut+0x4e0>
+ lea    0x30(%rsp),%rsi
+ mov    0x20(%rsi),%rdx
+ mov    %rdx,0x80(%rsp)
