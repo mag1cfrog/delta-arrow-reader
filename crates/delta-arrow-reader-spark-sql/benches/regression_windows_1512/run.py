@@ -12,6 +12,7 @@ import time
 
 HERE = Path(__file__).resolve().parent
 MANIFEST = HERE.parent / "functions/manifest.json"
+CASES = HERE / "cases.json"
 
 
 def checksum(file):
@@ -58,11 +59,11 @@ def verify(records, ids, config):
     return True
 
 
-def main(base_receipt, candidate_receipt, cases, archive):
-    ids = json.loads(cases.read_text())
+def main(base_receipt, candidate_receipt, archive):
+    ids = json.loads(CASES.read_text())
     all_ids = [case["id"] for case in json.loads(MANIFEST.read_text())["functions"]
                if case["id"].startswith("window.window.regr_")]
-    assert len(all_ids) == 9 and ids and ids == [case for case in all_ids if case in ids]
+    assert len(all_ids) == 9 and ids == all_ids, "the full schedule requires all nine windows"
     receipts = {}
     binaries = {}
     for arm, path in [("staging", base_receipt), ("candidate", candidate_receipt)]:
@@ -100,7 +101,7 @@ def main(base_receipt, candidate_receipt, cases, archive):
                         status, records = "session_timeout", []
                     else:
                         command = ["taskset", "-c", "2,3,4,5", str(binaries[arm]), "measure-set",
-                                   str(MANIFEST), str(cases), mode]
+                                   str(MANIFEST), str(CASES), mode]
                         try:
                             result = subprocess.run(
                                 command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,

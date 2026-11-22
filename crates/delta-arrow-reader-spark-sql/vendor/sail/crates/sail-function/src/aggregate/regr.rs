@@ -3,14 +3,16 @@
 //! The UDAF skeleton is derived from the DataFusion implementation.
 //! [Credit]: <https://github.com/apache/datafusion/blob/db2d21e094b1be2ff27653ce58ba1317e2237b01/datafusion/functions-aggregate/src/regr.rs>
 //!
-//! The accumulator arithmetic intentionally mirrors, operation by operation, the
-//! aggregate buffers Spark uses for these functions, so that the results are
-//! bit-identical to Spark for the same input order:
+//! Each row update follows the operation order in Spark's regression buffers:
 //! - `Covariance` for `regr_slope`, `regr_intercept`, and `regr_sxy`
 //! - `CentralMomentAgg` (via `VariancePop` and `RegrReplacement`) for `regr_slope`,
 //!   `regr_intercept`, `regr_sxx`, and `regr_syy`
 //! - `PearsonCorrelation` for `regr_r2`
 //! - `Average` for `regr_avgx` and `regr_avgy`
+//!
+//! Spark regression windows rebuild moving frames when retraction changes the
+//! floating-point result. Their REGR_R2 uses Spark's zero-variance rule;
+//! plain REGR_R2 retains the existing DAR rule.
 //!
 //! The DataFusion formulas are algebraically equivalent, but floating-point
 //! rounding differs in the last bits whenever an expression is rearranged
@@ -49,6 +51,7 @@ impl Regr {
         }
     }
 
+    /// Use Spark frame and variance rules for the seven affected windows.
     pub fn for_spark_window(regr_type: RegrType, func_name: &'static str) -> Self {
         Self {
             spark_window_semantics: true,

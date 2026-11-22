@@ -3,8 +3,8 @@
 Time the nine original regression windows from the #1391 manifest on
 the local Linux host. Use the unmodified `functions` harness, its seeded
 million-row input, its projection statements and its fixed context settings.
-Use the nine original IDs in
-[cases.json](../regression_windows_1512/cases.json), in manifest order. ANSI off and on are separate configurations.
+Use the nine original IDs in [cases.json](../regression_windows_1512/cases.json),
+in manifest order. ANSI off and on are separate configurations.
 
 ## Build and correctness
 
@@ -12,8 +12,8 @@ Use the nine original IDs in
   on the staging runtime at `b78d82bf` and on the reviewed candidate, with two
   build jobs and `profile.release.debug=1` on both. The attribution merge added
   only reports and fixtures, so the staging binary has the same runtime code
-  and harness as the product PR's parent. Record the source commits, binary hashes and manifest
-  hash. Use independent copies of the executables.
+  and harness as the product PR's parent. Record the source commits, binary
+  hashes and manifest hash. Use independent copies of the executables.
 - Freeze the protocol and selected IDs before the first clock. One Linux
   session runs both binaries. Validity requires the same executed Arrow fields
   and row count for each matched timing cell, as checked against the committed
@@ -22,9 +22,10 @@ Use the nine original IDs in
   unchanged window controls must match the recorded DAR baseline. The old
   seven-window value differences are the purpose of the issue. The unchanged
   REGR_COUNT control uses its DAR baseline type.
-- If a candidate window differs from its specified reference, leave that
-  window out of both timed arms and list every mismatch by statement, ANSI
-  mode, row and magnitude. Leave #1512 open. A failure of an unrelated test
+- Run the full schedule only when all nine windows qualify. If any window
+  differs from its reference, list every mismatch by statement, ANSI mode,
+  row and magnitude and leave #1512 open. Commit a separate partial protocol
+  for the other windows before timing them. A failure of an unrelated test
   blocks the product merge.
 
 ## Schedule and decision
@@ -56,6 +57,5 @@ receipts and a new archive path.
 
 ```sh
 python3 benches/regression_windows_1512/run.py \
-  BASELINE/receipt.json CANDIDATE/receipt.json \
-  benches/regression_windows_1512/cases.json SAMPLES.jsonl.gz
+  BASELINE/receipt.json CANDIDATE/receipt.json SAMPLES.jsonl.gz
 ```
