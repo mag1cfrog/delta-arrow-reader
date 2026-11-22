@@ -3022,6 +3022,9 @@ single local-time value when the start is a microsecond timestamp column.
 Both paths use the same local difference calculation. Invalid units,
 other timestamp types and column end arguments use the original path.
 
+The shared arithmetic is inlined to avoid a call for each non-NULL row
+in the two-column path. [Measured attribution](benches/reports/functions-1515-attribution.md) (#1515).
+
 ### Literal MAKE_INTERVAL and TRY_MAKE_INTERVAL fields (#1414)
 
 With a year column and six valid literal fields, the constructor

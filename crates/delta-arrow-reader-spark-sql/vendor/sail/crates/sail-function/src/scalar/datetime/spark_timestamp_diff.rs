@@ -97,6 +97,8 @@ impl SparkTimestampDiff {
         Self::difference_in_local_time(unit, local_micros(start, zone), local_micros(end, zone))
     }
 
+    // Avoid a second call for every row in the two-column path.
+    #[inline(always)]
     fn difference_in_local_time(unit: TimestampDiffUnit, start: i128, end: i128) -> Result<i64> {
         let value = match unit.micros() {
             // Java truncates the local difference toward zero.
