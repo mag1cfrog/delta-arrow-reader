@@ -472,13 +472,13 @@ mod tests {
         };
         use arrow::datatypes::{DataType, Field, Float32Type, Float64Type, Int8Type, Schema};
         use arrow::record_batch::RecordBatch;
-        use datafusion::physical_expr::expressions::{Column, Literal};
+        use datafusion::physical_expr::expressions::{BinaryExpr, Column, Literal};
         use datafusion::physical_expr::{PhysicalExpr, ScalarFunctionExpr};
         use datafusion::prelude::SessionContext;
         use datafusion_common::{DFSchema, Result, ScalarValue, config::ConfigOptions};
         use datafusion_expr::{
-            ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
-            col, create_udf,
+            ColumnarValue, Operator, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature,
+            Volatility, col, create_udf,
         };
         use serde_json::{Value, json};
 
@@ -904,6 +904,81 @@ mod tests {
                     .ok_or("bad kernel result accepted")?
                     .to_string();
                 assert!(error.contains("Expected: 4, Got: 1"), "{error}");
+            }
+            Ok(())
+        }
+
+        fn add_literal(left: Arc<dyn PhysicalExpr>, value: ScalarValue) -> Arc<dyn PhysicalExpr> {
+            Arc::new(
+                BinaryExpr::new(left, Operator::Plus, Arc::new(Literal::new(value)))
+                    .with_fail_on_overflow(true),
+            )
+        }
+
+        #[test]
+        fn double_column_plus_literal_can_share_unfiltered_nullif_inputs() -> TestResult {
+            let cases = corpus()?;
+            let a = doubles(&cases["double_left"])?;
+            let b = doubles(&cases["double_right"])?;
+            for ansi in [false, true] {
+                for (offset, len) in [(0, 12), (1, 9)] {
+                    let input = batch(a.slice(offset, len), b.slice(offset, len))?;
+                    let selected = len - input.column(0).null_count();
+                    for literal in [None, Some(1.0), Some(f64::NEG_INFINITY)] {
+                        for safe in [true, false] {
+                            let right = add_literal(column(1), ScalarValue::Float64(literal));
+                            let expression = probe(ansi, safe, vec![column(0), right], false);
+                            KERNEL_ROWS.with(|rows| rows.borrow_mut().clear());
+                            let actual = expression.evaluate(&input)?;
+                            let original = original_selection(&expression, &input)?;
+                            assert_eq!(observed(Ok(actual), len)?, observed(Ok(original), len)?);
+                            KERNEL_ROWS.with(|rows| {
+                                assert_eq!(
+                                    *rows.borrow(),
+                                    [if safe { len } else { selected }, selected]
+                                );
+                            });
+                        }
+                    }
+                }
+            }
+            Ok(())
+        }
+
+        #[test]
+        fn additions_with_overflow_or_callbacks_still_evaluate_selected_rows() -> TestResult {
+            let left = Arc::new(Float64Array::from(vec![None, Some(1.0), Some(2.0), None]));
+            let integers = Arc::new(Int64Array::from(vec![i64::MAX, 0, 3, i64::MAX]));
+            let integer_input = batch(left.clone(), integers)?;
+            let floats = Arc::new(Float64Array::from(vec![0.0, 0.0, 3.0, 0.0]));
+            let float_input = batch(left, floats)?;
+            for ansi in [false, true] {
+                let count = Arc::new(AtomicUsize::new(0));
+                let volatile = counted(
+                    "count_addend",
+                    "b",
+                    count.clone(),
+                    float_input.schema().as_ref(),
+                )?;
+                for (input, right) in [
+                    (
+                        &integer_input,
+                        add_literal(column(1), ScalarValue::Int64(Some(1))),
+                    ),
+                    (
+                        &float_input,
+                        add_literal(volatile, ScalarValue::Float64(Some(1.0))),
+                    ),
+                ] {
+                    let expression = probe(ansi, true, vec![column(0), right], false);
+                    KERNEL_ROWS.with(|rows| rows.borrow_mut().clear());
+                    let actual = expression.evaluate(input)?;
+                    let original = original_selection(&expression, input)?;
+                    assert_eq!(observed(Ok(actual), 4)?, observed(Ok(original), 4)?);
+                    KERNEL_ROWS.with(|rows| assert_eq!(*rows.borrow(), [2, 2]));
+                }
+                // Two selected evaluations, one on each side of the differential.
+                assert_eq!(count.load(Ordering::SeqCst), 4);
             }
             Ok(())
         }

@@ -681,9 +681,11 @@ the explicit, default-false `kernel_accepts_null_first_arg` contract, including
 UDF and alias delegation. SparkNullIf opts in only for actual DOUBLE/DOUBLE
 operands, whose comparison needs no cast. With a valid full-length left and a
 direct right column or literal, the physical evaluator can invoke the unchanged
-kernel without selection copies. Computed right operands, other types and
-unavailable/malformed inputs retain the original selected route. Empty,
-scalar-NULL, all-NULL and no-NULL paths and invocation validation remain intact.
+kernel without selection copies. The same rule covers a right operand formed
+by a Float64 column plus a Float64 literal. The physical evaluator checks the
+column array and literal type. Other computed operands and unavailable or
+incompatible inputs use the original selected route. Empty, scalar-NULL,
+all-NULL and no-NULL paths and invocation validation remain intact.
 The new inline NULLIF unit tests compare against the frozen
 baseline selection evaluator and check routing, exact types/bits/NULLs, errors
 and argument effects in both ANSI modes. The existing native kernels and other
