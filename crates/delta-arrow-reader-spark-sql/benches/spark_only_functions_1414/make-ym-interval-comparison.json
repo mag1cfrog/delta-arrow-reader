@@ -1,0 +1,11 @@
+{
+  "staging_source": "5d5c03fc2247a89daa292bb4eac92fb92950a823",
+  "staging_tip": "4ed52697baf76b6dfa504046d2aa472d9ea2ff5f",
+  "candidate_source": "0b31978d1da47ae4c64ab251c1db6bcf485a0c54",
+  "statement_manifest": "../functions/manifest.json",
+  "statement_manifest_sha256": "ec6528b17cb072224aec6ea0ea3c1e910b9aa8cf6f5cadb0296f85b3f86f1f06",
+  "case_ids": [
+    "scalar.datetime.make_ym_interval"
+  ],
+  "overall_timeout_seconds": 1500
+}
