@@ -1,59 +1,89 @@
 # Attribute the remaining NULLIF execution cost (#620)
 
-Measure the saved selection path after its merge. Attribute Float64
-normalization, equality and validity work, and selection for computed
-right operands. The [manifest](../nullif_620_round3/attribution.json)
-pins the release executable from the rebase check. Changes between that
-build's source and the staging merge add the rebase protocol and report
-only. The executable passed the full release preflight for the selected
-cases, including native value and type controls.
+Measure Float64 normalization, equality and output validity, and row
+selection for computed right operands. The [manifest](../nullif_620_round3/attribution.json)
+pins the rebased release executable. The staging merge adds the rebase
+protocol and report. All selected inputs already passed value and
+executed-type checks in that release executable.
 
-## Observe the actual execution path
+Linux denied both software events for perf recording. The original
+profiler attempt collected zero benchmark samples. Use two existing
+bench entry points and a scratch build for the split below.
 
-Profile the existing `nullif_620 measure` entry point with Linux perf.
-Retain both the decoded user-space CPU samples and the unchanged bench
-samples. The profiler adds overhead, so bench times in this archive
-describe the profiled run. Use a subsequent unprofiled paired run to
-decide any candidate.
+## Observe normalization and kernel work
 
-Generate one eligibility receipt per group by rejecting every ID from
-the frozen [NULLIF manifest](../nullif_620/manifest.json) outside the
-group. Use the same synthetic DOUBLE columns and 262,144 rows. Within
-each group, the harness uses native SQL and both Spark ANSI modes with
-one warmup and three observations. Alternate which group runs first
-in each block. Run 12 blocks on CPUs 2-5 with no concurrent local
-compilation. Limit each process to 90 seconds and the session to
-15 minutes. Profile only the new child process in a minimal process
-environment.
+Apply the diagnostic-only patch below with `git apply --unidiff-zero` to the pinned release source and
+build the same `nullif_620` target. Use the same Linux release settings
+and toolchain as the rebase run. Record both binary identities. The
+patch adds per-batch timers for normalization, Arrow equality and Arrow
+output validity. It logs a row count and three durations immediately
+after the timed regions. The shipped implementation stays untouched.
 
-The recording command uses the manifest's event, frequency and stack
-depth. For each group and block, set the output paths and run:
+Run `nullif_620 measure nullif main BLOCK ELIGIBILITY` once per manifest
+cell per block, for six blocks. Give each process one eligibility receipt
+that excludes the other 71 NULLIF cell IDs from the
+[frozen manifest](../nullif_620/manifest.json). Start odd blocks with the
+direct-column cells. Start even blocks with computed-right cells.
+Retain the harness JSON and the timer lines for every process. The
+harness checks every result and includes one warmup and three retained
+observations per mode. Each Spark plan has one partition. Attribute
+records to ANSI mode using the harness's rotation and batch count.
+Confirm that the row counts match the selected or full inputs before
+assigning times. Drop warmups from the aggregate timers and retain them
+in the raw trace.
 
-```sh
-timeout 90 taskset -c 2-5 perf record -q --no-buildid-cache \
-  -e cpu-clock:u -F 1999 --call-graph dwarf,4096 -o "$profile" -- \
-  "$binary" measure nullif main "$block" "$eligibility"
-perf script --ns -i "$profile"
+The timer and per-batch output change overall execution cost. Report the
+three timer regions individually as diagnostic observations. Use fresh,
+unmodified release builds for the candidate decision. If any case
+unexpectedly changes its result or executed type, exclude it and report
+the difference.
+
+## Observe computed-right selection
+
+In the uninstrumented release executable run `nullif_620 attribute nullif`
+once in each ANSI mode. The existing stage replay verifies
+bit-for-bit result and type agreement with the actual physical
+expression. For computed-right cells, the current evaluator still
+uses the replay's selection, right evaluation and scatter steps.
+Report those stage times at the four manifest anchors. Keep the
+complete raw replay records and identify them as replay.
+Use the comparable rebase receipt for the unprofiled native/Spark
+gap, without subtracting stage medians from overall execution.
+
+Run the 48 instrumented processes and both replay processes sequentially
+on CPUs 2-5. Use a minimal process environment and UTC. Bound the
+campaign to 15 minutes and each process to 90 seconds. A timeout, failed
+process, unmatched row count or missing stage observation ends the
+campaign. Retain available raw samples and an explicit failure record.
+Commit all compressed samples with the report. The selection and
+instrumented data answer different attribution questions.
+
+## Scratch patch
+
+The scratch commit is `704f12893480fb9525269e4e551e7532e0b0b940`.
+
+```diff
+diff --git a/crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional/nullif.rs b/crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional/nullif.rs
+index 92f63063..8e013f86 100644
+--- a/crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional/nullif.rs
++++ b/crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional/nullif.rs
+@@ -233,0 +234 @@ impl ScalarUDFImpl for SparkNullIf {
++        let normalize_started = std::time::Instant::now();
+@@ -247 +248,6 @@ impl ScalarUDFImpl for SparkNullIf {
+-        match apply_cmp(Operator::Eq, &input.args[0], &input.args[1])? {
++        let normalize_ns = normalize_started.elapsed().as_nanos();
++        let compare_started = std::time::Instant::now();
++        let equal = apply_cmp(Operator::Eq, &input.args[0], &input.args[1])?;
++        let compare_ns = compare_started.elapsed().as_nanos();
++        let validity_started = std::time::Instant::now();
++        let result = match equal {
+@@ -257 +263,7 @@ impl ScalarUDFImpl for SparkNullIf {
+-        }
++        };
++        let validity_ns = validity_started.elapsed().as_nanos();
++        eprintln!(
++            "NULLIF_PARTS {} {normalize_ns} {compare_ns} {validity_ns}",
++            input.number_rows
++        );
++        result
 ```
-
-## Attribute by call stack
-
-Use frames on the actual NULLIF execution routes. Count normalization
-only for samples under `SparkComparisonFloat` within `SparkNullIf`.
-Count equality and output validity samples under the comparison and
-NULLIF kernels in the same Spark caller. For computed-right selection,
-look for batch filtering, right-expression evaluation and scattering
-under the physical evaluator. Break out those three operations when
-the frames distinguish them. Keep all other samples out of these counts.
-
-Read the code around each frame to verify that it belongs to the
-observed path. In particular, NULL-first selection also serves other
-scalar functions, so restrict the result to the profiled query shapes.
-Report the counts by group and any ambiguous frames. Treat zero matches,
-unusable call stacks or overlapping call sites as insufficient attribution
-for that cause. A positive count establishes where time is spent, with
-no claim that sample shares are elapsed-time measurements.
-
-Keep raw output from completed or partial timed processes. A timeout,
-unsuccessful process or incomplete sample series ends the run and is
-reported. Commit the compressed samples with the report.
