@@ -1,3 +1,4 @@
+// Modified for the DAR Spark SQL runtime. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -17,12 +18,14 @@
 
 mod aggregate;
 mod sliding_aggregate;
+mod spark_integer_range_aggregate;
 mod standard;
 mod standard_window_function_expr;
 mod window_expr;
 
 pub use aggregate::PlainAggregateWindowExpr;
 pub use sliding_aggregate::SlidingAggregateWindowExpr;
+pub use spark_integer_range_aggregate::reuse_pending_spark_range_search;
 pub use standard::StandardWindowExpr;
 pub use standard_window_function_expr::StandardWindowFunctionExpr;
 pub use window_expr::PartitionBatches;
