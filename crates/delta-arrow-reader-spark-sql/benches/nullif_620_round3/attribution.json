@@ -1,0 +1,25 @@
+{
+  "source": "bf7811b7b567a03f1790df252cd5ba40b2e416fe",
+  "staging": "bd7ef8d72c077e81b1ab29612b92ddc4c6756997",
+  "blocks": 12,
+  "cpus": "2-5",
+  "process_seconds": 90,
+  "session_seconds": 900,
+  "event": "cpu-clock:u",
+  "samples_per_second": 1999,
+  "stack_bytes": 4096,
+  "cells": {
+    "columns": [
+      "nullif-columns-none-8192",
+      "nullif-columns-sparse-8192",
+      "nullif-columns-half-8192",
+      "nullif-columns-sparse-262144"
+    ],
+    "computed-right": [
+      "nullif-computed_right-none-8192",
+      "nullif-computed_right-sparse-8192",
+      "nullif-computed_right-half-8192",
+      "nullif-computed_right-sparse-262144"
+    ]
+  }
+}
