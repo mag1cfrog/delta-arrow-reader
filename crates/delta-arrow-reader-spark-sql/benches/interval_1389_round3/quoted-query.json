@@ -1,0 +1,4 @@
+{
+  "id": "interval_year_month_quoted",
+  "spark_sql": "SELECT l_orderkey,l_linenumber,CAST(concat(chr(39),parser_year_month_input,chr(39)) AS INTERVAL YEAR TO MONTH) AS result FROM bench WHERE l_orderkey BETWEEN 1 AND 8192"
+}
