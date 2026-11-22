@@ -13,8 +13,11 @@ Use the same Rust 1.96.0 release settings and committed inputs as the
 [rebase run](nullif-620-rebase-protocol.md). The
 [manifest](../nullif_620_round3/computed-right-selection.json) pins
 both binary sources and the staging head. Staging differs from the
-baseline build only in the report and evidence files. Run the full
-preflight for both configurations in all three modes. Require exact
+baseline build only in the report and evidence files. The candidate's
+offset assertion in `a2df1f2e` is in the test module. The release
+benchmark compiles the runtime from `50f83cbe`.
+
+Run the full preflight for both configurations in all three modes. Require exact
 native and Spark values and executed types on the frozen inputs,
 including checked arithmetic. The full workspace tests and candidate
 differentials check failures, row selection and operand effects.
