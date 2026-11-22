@@ -35,10 +35,10 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use crate::PhysicalExpr;
-use crate::expressions::{Column, Literal};
+use crate::expressions::{BinaryExpr, Column, Literal};
 use crate::utils::plan_expression_input_projection;
 
-use arrow::array::{Array, RecordBatch};
+use arrow::array::{Array, Float64Array, RecordBatch};
 use arrow::datatypes::{DataType, FieldRef, Schema};
 use datafusion_common::config::{ConfigEntry, ConfigOptions};
 use datafusion_common::{Result, ScalarValue, internal_err};
@@ -46,9 +46,30 @@ use datafusion_expr::interval_arithmetic::Interval;
 use datafusion_expr::sort_properties::ExprProperties;
 use datafusion_expr::type_coercion::functions::fields_with_udf;
 use datafusion_expr::{
-    ColumnarValue, EvaluatedRowPrefix, ExpressionPlacement, ReturnFieldArgs,
+    ColumnarValue, EvaluatedRowPrefix, ExpressionPlacement, Operator, ReturnFieldArgs,
     ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Volatility, expr_vec_fmt,
 };
+
+// This addition has no casts, callbacks or arithmetic errors on excluded rows.
+fn is_float64_column_plus_literal(expr: &dyn PhysicalExpr, batch: &RecordBatch) -> bool {
+    let Some(addition) = expr.downcast_ref::<BinaryExpr>() else {
+        return false;
+    };
+    if addition.op() != &Operator::Plus {
+        return false;
+    }
+    let (Some(column), Some(literal)) = (
+        addition.left().downcast_ref::<Column>(),
+        addition.right().downcast_ref::<Literal>(),
+    ) else {
+        return false;
+    };
+    matches!(literal.value(), ScalarValue::Float64(_))
+        && batch
+            .columns()
+            .get(column.index())
+            .is_some_and(|array| array.as_any().is::<Float64Array>())
+}
 
 /// Physical expression of a scalar function
 pub struct ScalarFunctionExpr {
@@ -332,10 +353,14 @@ impl ScalarFunctionExpr {
                                     .columns()
                                     .get(column.index())
                                     .map(|a| a.data_type().clone())
+                            } else if let Some(literal) = right.downcast_ref::<Literal>() {
+                                Some(literal.value().data_type())
+                            } else if array.data_type() == &DataType::Float64
+                                && is_float64_column_plus_literal(right.as_ref(), batch)
+                            {
+                                Some(DataType::Float64)
                             } else {
-                                right
-                                    .downcast_ref::<Literal>()
-                                    .map(|literal| literal.value().data_type())
+                                None
                             };
                             if right_type.is_some_and(|right_type| {
                                 self.fun.kernel_accepts_null_first_arg(&[
