@@ -40,8 +40,8 @@ at the lower limit remains recorded.
 
 ## Spark reference
 
-Spark 4.2.0 executed every calendar case and public query in both ANSI
-modes. The capture reads signed microseconds and executed types from
+The Spark 4.2.0 capture recorded the outcome of every calendar and public
+SQL case in both ANSI modes. The capture reads signed microseconds and executed types from
 Spark's JVM results, which can represent these years. UTC-to-zone
 projection used the same offset as Chrono for every valid name tested.
 Spark raised INVALID_TIMEZONE for ROC, which Chrono accepts. The
