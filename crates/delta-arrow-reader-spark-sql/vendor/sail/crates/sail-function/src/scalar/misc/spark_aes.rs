@@ -349,7 +349,16 @@ where
             None
         } else {
             binary_argument(&value, "input")
-                .and_then(|message| apply_ecb_blocks(operation, cipher, message))
+                .and_then(|message| {
+                    if matches!(operation, AesOperation::Encrypt) {
+                        // ECB has an empty IV prefix. Keep the existing output assembly.
+                        let mut ciphertext = Vec::new();
+                        ciphertext.extend(apply_ecb_blocks(operation, cipher, message)?);
+                        Ok(ciphertext)
+                    } else {
+                        apply_ecb_blocks(operation, cipher, message)
+                    }
+                })
                 .ok()
         };
         builder.append_option(result);
@@ -632,11 +641,21 @@ mod tests {
                 plaintext,
                 &[],
             )?;
+            // The first ECB block decrypts to zeros, which cannot be PKCS padding.
+            let zeros = apply_aes_mode(
+                AesOperation::Encrypt,
+                AesMode::Ecb,
+                &key,
+                &[],
+                &[0; AES_BLOCK_BYTES],
+                &[],
+            )?;
             let data = BinaryArray::from(vec![
                 None,
                 Some(&[][..]),
                 Some(ciphertext.as_slice()),
                 Some(&[0][..]),
+                Some(&zeros[..AES_BLOCK_BYTES]),
             ]);
             for operation in [AesOperation::Encrypt, AesOperation::Decrypt] {
                 for length in [0, 1, data.len()] {
@@ -680,6 +699,7 @@ mod tests {
                         assert_eq!(decrypted.value(1), b"");
                         assert_eq!(decrypted.value(2), plaintext);
                         assert!(decrypted.is_null(3));
+                        assert!(decrypted.is_null(4));
                     }
                 }
             }
