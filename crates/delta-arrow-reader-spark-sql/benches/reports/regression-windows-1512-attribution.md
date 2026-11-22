@@ -14,7 +14,7 @@ subtract outgoing rows. Spark's bounded sliding frame resets its aggregation
 buffer and adds the remaining rows in order when the frame changes.
 [DataFusion sliding window](../../vendor/dependencies/datafusion-physical-expr/src/window/sliding_aggregate.rs),
 [Sail regression state](../../vendor/sail/crates/sail-function/src/aggregate/regr.rs),
-[Spark sliding frame](https://github.com/apache/spark/blob/32f7299601108917fb01920a54e084595b7b3bf8/sql/core/src/main/scala/org/apache/spark/sql/execution/window/WindowFunctionFrame.scala#L477-L498).
+[Spark sliding frame](https://github.com/apache/spark/blob/32f7299601108917fb01920a54e084595b7b3bf8/sql/core/src/main/scala/org/apache/spark/sql/execution/window/WindowFunctionFrame.scala#L435-L466).
 
 The [arithmetic replay](../../tests/fixtures/regression-windows-1512/replay_original_frames.py)
 compares the current recurrence with rebuilding each frame from its member
