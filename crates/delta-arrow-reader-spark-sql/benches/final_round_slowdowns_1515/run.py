@@ -1,4 +1,4 @@
-"""Repeat the historical shifts and isolate the one traced source change."""
+"""Repeat, isolate, and check the correction for the #1515 timing shifts."""
 
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -16,6 +16,7 @@ BEFORE = "e1580ef0056bdfe70161fe07be94ed10957ed7ec"
 FINAL = "51b0c8eac613aec22a56a6d1e8f4828e84b1d316"
 WITHOUT_LITERAL_TIME_DIFF = "b442c02c164cf466f7c3c898604bcbd34a707d59"
 WITHOUT_LITERAL_TIME_DIFF_TREE = "9ba4ae6fb2c26f2d24131161aabaad8effda14a1"
+CORRECTION = "fcc25cbd8c092e3dc908ba6cd2007938571c0238"
 OVERLAY = "8b5c9c81dd39342aeded485c5f87f3efde4bdb17f9840c3a7dc536c5797b28ad"
 SORTED_OVERLAY = "fcba9875a935e6724de0f51a2b5a5e556512ce353ca574de7afd8a05f8ad693c"
 HISTORICAL_SHA = {
@@ -39,9 +40,11 @@ def read_artifact(directory, source):
         assert reported_digest == HISTORICAL_SHA[source] and receipt["variant"] == "plain"
         assert receipt["profile"]["opt_level"] == "3" and receipt["profile"]["debuginfo"] == 1
     else:
-        assert source == WITHOUT_LITERAL_TIME_DIFF
-        assert len(reported_commit) == 40 and all(c in "0123456789abcdef" for c in reported_commit)
-        assert runner.git("rev-parse", f"{reported_commit}^{{tree}}") == WITHOUT_LITERAL_TIME_DIFF_TREE
+        if source == WITHOUT_LITERAL_TIME_DIFF:
+            assert len(reported_commit) == 40 and all(c in "0123456789abcdef" for c in reported_commit)
+            assert runner.git("rev-parse", f"{reported_commit}^{{tree}}") == WITHOUT_LITERAL_TIME_DIFF_TREE
+        else:
+            assert source == reported_commit == CORRECTION
         assert receipt["target"] == "functions" and receipt["profile"] == "release"
         assert receipt["debug_info"] == 1 and receipt["toolchain"].startswith("rustc 1.96.0 ")
         if "patch_sha256" in receipt:
@@ -77,10 +80,17 @@ def compare_modes(arms):
             "paired_increase": delta, "floor": floor}
 
 
+def correction_passed(summary):
+    required = {"timestampdiff": {"within_floor", "faster"}, "timediff": {"faster"}}
+    return all(summary.get(f"scalar.datetime.{function}/{mode}", {}).get("status") in statuses
+               for function, statuses in required.items() for mode in ("spark-off", "spark-on"))
+
+
 def run_trial(trial, base, after, output):
     assert platform.system() == "Linux" and not runner.git("status", "--porcelain")
     protocol = runner.git("rev-parse", "HEAD")
     timing_modes = defaultdict(list)
+    after_source = FINAL
     if trial == "repeat":
         manifest = HERE.parent / "spark_only_functions_1414/final-coverage-manifest.json"
         assert runner.digest(manifest) == "2ee09bc0dbb13f90cce2f14f82891e705dd9954fbdb12d32408d0338dec3769e"
@@ -92,17 +102,19 @@ def run_trial(trial, base, after, output):
         source = BEFORE
         timeout = 1800
     else:
-        assert trial == "isolate"
+        assert trial in {"isolate", "correct"}
         manifest = HERE / "timediff-manifest.json"
         for case_id in ("scalar.datetime.timestampdiff", "scalar.datetime.timediff"):
             timing_modes[case_id] = ["spark-off", "spark-on"]
         source = WITHOUT_LITERAL_TIME_DIFF
         timeout = 900
+        if trial == "correct":
+            source, after_source = BEFORE, CORRECTION
     by_id = {case["id"]: case for case in runner.read(manifest)["functions"]}
     cases = [by_id[case_id] for case_id in sorted(timing_modes)]
     assert all(case["native_sql"] is None for case in cases)
     binaries, receipts = {}, {}
-    for arm, root, commit in (("staging", base, source), ("candidate", after, FINAL)):
+    for arm, root, commit in (("staging", base, source), ("candidate", after, after_source)):
         binaries[arm], receipts[arm] = read_artifact(root, commit)
     assert receipts["staging"]["binary_sha256"] != receipts["candidate"]["binary_sha256"]
     output.mkdir()
@@ -162,7 +174,8 @@ def run_trial(trial, base, after, output):
                for (case_id, mode), arms in medians.items()}
     append(archive, [{"finished_utc": datetime.now(timezone.utc).isoformat(), "summary": summary}])
     write(output / "summary.json", summary)
-    return bool(excluded or any(item["status"] == "incomplete" for item in summary.values()))
+    return bool(excluded or any(item["status"] == "incomplete" for item in summary.values())
+                or (trial == "correct" and not correction_passed(summary)))
 
 
 if __name__ == "__main__":
