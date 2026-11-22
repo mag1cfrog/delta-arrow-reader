@@ -2400,8 +2400,8 @@ the existing bounded executor for finite upper endpoints; row-specific completio
 proofs let sparse partitions advance.
 A failed speculative target proof defers completion without creating a comparison
 error. These frames disable causal output-order inference and plan reversal.
-Bounded Spark aggregates over signed-integer RANGE keys resume a pending
-row's search from the indices already checked in its buffered prefix.
+Bounded Spark aggregates ordered by a signed-integer column resume a pending
+RANGE row's search from the indices already checked in its buffered prefix.
 The Spark expression owns that position per partition, separately from
 the range already applied to the accumulator. Pruning invalidates the
 saved indices. The shared aggregate evaluator and range-state layout

@@ -58,6 +58,7 @@ fn supports_resuming_range_search(expression: &Expr, schema: &DFSchema) -> Resul
     };
     Ok(
         matches!(&function.fun, WindowFunctionDefinition::AggregateUDF(_))
+            && matches!(order.expr, Expr::Column(_))
             && frame.has_nonzero_spark_integer_range_offset()
             && !frame.has_null_offset()
             && !frame.end_bound.is_unbounded()

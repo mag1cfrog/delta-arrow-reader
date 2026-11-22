@@ -32,6 +32,7 @@ use datafusion_expr::{Accumulator, PartitionEvaluator, WindowFrame};
 use datafusion_physical_expr_common::sort_expr::PhysicalSortExpr;
 
 use crate::PhysicalExpr;
+use crate::expressions::Column;
 use crate::window::window_expr::{
     AggregateWindowExpr, WindowFn, get_orderby_values, is_end_bound_safe,
 };
@@ -44,7 +45,12 @@ use crate::window::{
 /// The planner checks the key type before calling this function.
 pub fn reuse_pending_spark_range_search(expression: Arc<dyn WindowExpr>) -> Arc<dyn WindowExpr> {
     let frame = expression.get_window_frame();
-    if frame.has_nonzero_spark_integer_range_offset()
+    let [key] = expression.order_by() else {
+        return expression;
+    };
+    // A Column reads the same key on each retry of a buffered row.
+    if key.expr.downcast_ref::<Column>().is_some()
+        && frame.has_nonzero_spark_integer_range_offset()
         && !frame.has_null_offset()
         && expression.uses_bounded_memory()
         && (expression.as_any().is::<PlainAggregateWindowExpr>()

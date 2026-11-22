@@ -12,10 +12,10 @@ use datafusion::functions_aggregate::count::count_udaf;
 use datafusion::logical_expr::window_frame::RangeOffsetArithmetic;
 use datafusion::logical_expr::window_state::PartitionBatchState;
 use datafusion::logical_expr::{
-    WindowFrame, WindowFrameBound, WindowFrameUnits, WindowFunctionDefinition,
+    Operator, WindowFrame, WindowFrameBound, WindowFrameUnits, WindowFunctionDefinition,
 };
 use datafusion::physical_expr::PhysicalSortExpr;
-use datafusion::physical_expr::expressions::col;
+use datafusion::physical_expr::expressions::{binary, col, lit};
 use datafusion::physical_expr::window::{
     PartitionBatches, PartitionWindowAggStates, WindowExpr, reuse_pending_spark_range_search,
 };
@@ -53,9 +53,15 @@ fn batch(keys: &[Option<i32>], start: usize) -> TestResult<RecordBatch> {
 fn count_window(
     case: &PendingRangeCase,
     arithmetic: RangeOffsetArithmetic,
+    computed_key: bool,
 ) -> TestResult<Arc<dyn WindowExpr>> {
     let schema = batch(&[], 0)?.schema();
     let key = col("k", &schema)?;
+    let key = if computed_key {
+        binary(key, Operator::Plus, lit(0_i32), &schema)?
+    } else {
+        key
+    };
     Ok(create_window_expr(
         &WindowFunctionDefinition::AggregateUDF(count_udaf()),
         "n".into(),
@@ -110,7 +116,7 @@ fn compare_retries(
     batch_size: usize,
     prune: bool,
 ) -> TestResult<bool> {
-    let baseline = count_window(case, arithmetic)?;
+    let baseline = count_window(case, arithmetic, false)?;
     let windows = [
         reuse_pending_spark_range_search(Arc::clone(&baseline)),
         baseline,
@@ -218,6 +224,21 @@ fn resumed_range_search_matches_baseline_across_appends_and_pruning() -> TestRes
                 true
             )?);
         }
+    }
+    Ok(())
+}
+
+#[test]
+fn resumable_search_requires_a_spark_frame_and_materialized_order_key() -> TestResult {
+    let spark = RangeOffsetArithmetic::Spark { ansi_mode: false };
+    for (arithmetic, computed_key, use_resumable) in [
+        (spark, false, true),
+        (spark, true, false),
+        (RangeOffsetArithmetic::DataFusion, false, false),
+    ] {
+        let expression = count_window(&CASES[0], arithmetic, computed_key)?;
+        let selected = reuse_pending_spark_range_search(Arc::clone(&expression));
+        assert_eq!(!Arc::ptr_eq(&selected, &expression), use_resumable);
     }
     Ok(())
 }
