@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use datafusion::arrow::array::{ArrayRef, AsArray, IntervalYearMonthArray};
+use datafusion::arrow::array::{Array, ArrayRef, AsArray, Int32Array, IntervalYearMonthArray};
 use datafusion::arrow::compute::try_binary;
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef, Int32Type, IntervalUnit};
 use datafusion::arrow::error::ArrowError;
@@ -126,6 +126,18 @@ impl ScalarUDFImpl for SparkMakeYmInterval {
             return Ok(ColumnarValue::Scalar(ScalarValue::IntervalYearMonth(None)));
         }
 
+        if let (
+            ColumnarValue::Array(years),
+            ColumnarValue::Scalar(ScalarValue::Int32(Some(months))),
+        ) = (&year, &month)
+            && let Some(years) = years.as_any().downcast_ref::<Int32Array>()
+            && years.len() == number_rows
+            && !years.is_empty()
+        {
+            let result: IntervalYearMonthArray =
+                years.try_unary(|year| checked_ym_interval(year, *months))?;
+            return Ok(ColumnarValue::Array(Arc::new(result)));
+        }
         let years = year.to_array(number_rows)?;
         let months = month.to_array(number_rows)?;
         let years = years.as_primitive::<Int32Type>();
@@ -174,4 +186,61 @@ fn checked_ym_interval(years: i32, months: i32) -> std::result::Result<i32, Arro
         .checked_mul(MONTHS_PER_YEAR)
         .and_then(|total| total.checked_add(months))
         .ok_or_else(|| ArrowError::ComputeError(INTERVAL_OVERFLOW.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn literal_months_match_broadcast_months() -> Result<()> {
+        let years = Int32Array::from(vec![
+            None,
+            Some(0),
+            Some(1),
+            Some(-2),
+            Some(178_956_970),
+            Some(178_956_971),
+            Some(-178_956_970),
+            Some(-178_956_971),
+        ]);
+        let function = SparkMakeYmInterval::new();
+        for (offset, length) in (0..=6).map(|length| (0, length)).chain([(6, 1), (6, 2)]) {
+            let invoke = |months: ColumnarValue| {
+                let args = vec![
+                    ColumnarValue::Array(Arc::new(years.slice(offset, length))),
+                    months,
+                ];
+                function.invoke_with_args(ScalarFunctionArgs {
+                    arg_fields: args
+                        .iter()
+                        .map(|arg| Arc::new(Field::new("arg", arg.data_type(), true)))
+                        .collect(),
+                    args,
+                    number_rows: length,
+                    return_field: Arc::new(Field::new(
+                        "interval",
+                        DataType::Interval(IntervalUnit::YearMonth),
+                        true,
+                    )),
+                    config_options: Arc::new(Default::default()),
+                })
+            };
+            for months in [i32::MIN, -8, 0, 8, i32::MAX] {
+                let scalar = ScalarValue::Int32(Some(months));
+                let expected = invoke(ColumnarValue::Array(scalar.to_array_of_size(length)?));
+                let actual = invoke(ColumnarValue::Scalar(scalar));
+                match (actual, expected) {
+                    (Ok(ColumnarValue::Array(actual)), Ok(ColumnarValue::Array(expected))) => {
+                        assert_eq!(actual.to_data(), expected.to_data());
+                    }
+                    (Err(actual), Err(expected)) => {
+                        assert_eq!(actual.to_string(), expected.to_string())
+                    }
+                    outcomes => panic!("different year-month interval outcomes: {outcomes:?}"),
+                }
+            }
+        }
+        Ok(())
+    }
 }

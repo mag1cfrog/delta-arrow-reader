@@ -3029,3 +3029,9 @@ column path. Other argument types and shapes use the original adapter.
 With a literal unit and end time, TIME_DIFF applies the existing
 subtraction and division to the start column without expanding the end.
 Other argument shapes use the existing evaluation.
+
+### Literal MAKE_YM_INTERVAL months (#1414)
+
+For a nonempty year column and a literal integer month, the constructor
+uses the same checked arithmetic without expanding the month. The
+existing adapter handles all other argument types and shapes.
