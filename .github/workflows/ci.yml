@@ -103,7 +103,7 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
       - name: Check Spark SQL formatting
-        run: python ci/check-rustfmt.py
+        run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} ci/check-rustfmt.py
       - run: cargo clippy --locked -p delta-arrow-reader-spark-sql --all-targets --no-deps -- -D warnings
       - run: cargo test --locked --workspace
 
