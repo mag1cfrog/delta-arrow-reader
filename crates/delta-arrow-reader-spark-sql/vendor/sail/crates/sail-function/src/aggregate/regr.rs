@@ -3,14 +3,16 @@
 //! The UDAF skeleton is derived from the DataFusion implementation.
 //! [Credit]: <https://github.com/apache/datafusion/blob/db2d21e094b1be2ff27653ce58ba1317e2237b01/datafusion/functions-aggregate/src/regr.rs>
 //!
-//! The accumulator arithmetic intentionally mirrors, operation by operation, the
-//! aggregate buffers Spark uses for these functions, so that the results are
-//! bit-identical to Spark for the same input order:
+//! Each row update follows the operation order in Spark's regression buffers:
 //! - `Covariance` for `regr_slope`, `regr_intercept`, and `regr_sxy`
 //! - `CentralMomentAgg` (via `VariancePop` and `RegrReplacement`) for `regr_slope`,
 //!   `regr_intercept`, `regr_sxx`, and `regr_syy`
 //! - `PearsonCorrelation` for `regr_r2`
 //! - `Average` for `regr_avgx` and `regr_avgy`
+//!
+//! Spark regression windows rebuild moving frames when retraction changes the
+//! floating-point result. Their REGR_R2 uses Spark's zero-variance rule.
+//! Plain REGR_R2 retains the existing DAR rule.
 //!
 //! The DataFusion formulas are algebraically equivalent, but floating-point
 //! rounding differs in the last bits whenever an expression is rearranged
@@ -33,6 +35,7 @@ pub struct Regr {
     signature: Signature,
     regr_type: RegrType,
     func_name: &'static str,
+    spark_window_semantics: bool,
 }
 
 impl Regr {
@@ -44,6 +47,15 @@ impl Regr {
             ),
             regr_type,
             func_name,
+            spark_window_semantics: false,
+        }
+    }
+
+    /// Use Spark frame and variance rules for the seven affected windows.
+    pub fn for_spark_window(regr_type: RegrType, func_name: &'static str) -> Self {
+        Self {
+            spark_window_semantics: true,
+            ..Self::new(regr_type, func_name)
         }
     }
 }
@@ -108,7 +120,10 @@ impl AggregateUDFImpl for Regr {
     }
 
     fn accumulator(&self, _acc_args: AccumulatorArgs) -> Result<Box<dyn Accumulator>> {
-        Ok(Box::new(RegrAccumulator::try_new(&self.regr_type)?))
+        Ok(Box::new(RegrAccumulator::try_new(
+            &self.regr_type,
+            self.spark_window_semantics,
+        )?))
     }
 
     fn state_fields(&self, args: StateFieldsArgs) -> Result<Vec<FieldRef>> {
@@ -214,11 +229,12 @@ pub struct RegrAccumulator {
     /// `Average.sum` over Y from `RegrAvgY`.
     sum_y: f64,
     regr_type: RegrType,
+    spark_window_semantics: bool,
 }
 
 impl RegrAccumulator {
     /// Creates a new `RegrAccumulator`
-    pub fn try_new(regr_type: &RegrType) -> Result<Self> {
+    pub fn try_new(regr_type: &RegrType, spark_window_semantics: bool) -> Result<Self> {
         Ok(Self {
             count: 0_u64,
             mean_x: 0_f64,
@@ -232,6 +248,7 @@ impl RegrAccumulator {
             sum_x: 0_f64,
             sum_y: 0_f64,
             regr_type: regr_type.clone(),
+            spark_window_semantics,
         })
     }
 }
@@ -301,11 +318,15 @@ impl Accumulator for RegrAccumulator {
             }
             RegrType::Count => Ok(ScalarValue::UInt64(Some(self.count))),
             RegrType::R2 => {
-                // Spark `RegrR2` returns NULL when the second moment of y is
-                // zero, and 1.0 when only the second moment of x is zero.
-                if self.corr_m2_y == 0.0 {
+                // Spark windows check the independent variance first in REGR_R2(y, x).
+                let (null_if_zero, one_if_zero) = if self.spark_window_semantics {
+                    (self.corr_m2_x, self.corr_m2_y)
+                } else {
+                    (self.corr_m2_y, self.corr_m2_x)
+                };
+                if null_if_zero == 0.0 {
                     Ok(ScalarValue::Float64(None))
-                } else if self.corr_m2_x == 0.0 {
+                } else if one_if_zero == 0.0 {
                     Ok(ScalarValue::Float64(Some(1.0)))
                 } else {
                     let corr = self.corr_ck / (self.corr_m2_y * self.corr_m2_x).sqrt();
@@ -444,6 +465,7 @@ impl Accumulator for RegrAccumulator {
     }
 
     fn supports_retract_batch(&self) -> bool {
-        true
+        // Rebuilding a moving frame preserves Spark's order of floating-point updates.
+        !self.spark_window_semantics
     }
 }
