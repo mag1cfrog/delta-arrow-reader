@@ -2517,6 +2517,15 @@ against the original Rich parser over the committed interval corpus. The
 existing row conversion tests cover values, NULLs, failures and executed types
 through CAST and TRY_CAST in both ANSI modes.
 
+### STRING interval lexer diagnostics (#1389, third round)
+
+Both runtime interval lexer entry points first use the existing lexer with
+`EmptyErr`. A complete lex supplies the same tokens and spans to the existing
+interval grammars. A lexical failure runs the same lexer with Rich diagnostics
+again. The batch path keeps both lexer instances lazy. Decoded quoted intervals
+use the same rule in the scoped parser. Tests compare the original Rich results
+and error chain and verify the diagnostic lexer stays idle on valid inputs.
+
 ### Unpadded STRING DATE casts (#1389, second round)
 
 Unformatted Spark DATE casts accept a complete four-digit ASCII year with a
