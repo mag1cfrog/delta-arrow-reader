@@ -31,6 +31,7 @@ use crate::literal::interval::{
 #[cfg(test)]
 thread_local! {
     static INTERVAL_LITERAL_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static INTERVAL_RICH_LEXER_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     static STATEMENT_RICH_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
@@ -194,8 +195,18 @@ pub(crate) fn parse_interval_literal(s: &str) -> SqlResult<IntervalLiteral> {
     #[cfg(test)]
     INTERVAL_LITERAL_CALLS.with(|calls| calls.set(calls.get() + 1));
     let options = ParserOptions::default();
-    let lexer = create_lexer::<_, Err<Rich<_, _>>>(&options);
-    let tokens = lexer.parse(s).into_result().map_err(SqlError::parser)?;
+    let lexer_without_diagnostics = create_lexer::<_, Err<EmptyErr>>(&options);
+    let tokens = match lexer_without_diagnostics.parse(s).into_result() {
+        Ok(tokens) => tokens,
+        Err(_) => {
+            #[cfg(test)]
+            INTERVAL_RICH_LEXER_CALLS.with(|calls| calls.set(calls.get() + 1));
+            create_lexer::<_, Err<Rich<_, _>>>(&options)
+                .parse(s)
+                .into_result()
+                .map_err(SqlError::parser)?
+        }
+    };
     let input = || {
         tokens
             .as_slice()
@@ -248,17 +259,27 @@ pub fn timestamp_parser<'a>() -> impl FnMut(&'a str) -> SqlResult<TimestampValue
 pub fn interval_parser<'a>() -> impl FnMut(&'a str) -> SqlResult<IntervalValue> {
     static OPTIONS: LazyLock<ParserOptions> = LazyLock::new(ParserOptions::default);
     let options = &*OPTIONS;
-    let mut lexer = None;
+    let mut lexer_without_diagnostics = None;
+    let mut diagnostic_lexer = None;
     let mut numeric_parser = None;
     let mut parser = None;
     move |s| {
-        let tokens = lexer
-            .get_or_insert_with(|| {
-                create_lexer::<_, chumsky::extra::Err<chumsky::error::Rich<_, _>>>(options)
-            })
+        let tokens = match lexer_without_diagnostics
+            .get_or_insert_with(|| create_lexer::<_, Err<EmptyErr>>(options))
             .parse(s)
             .into_result()
-            .map_err(SqlError::parser)?;
+        {
+            Ok(tokens) => tokens,
+            Err(_) => {
+                #[cfg(test)]
+                INTERVAL_RICH_LEXER_CALLS.with(|calls| calls.set(calls.get() + 1));
+                diagnostic_lexer
+                    .get_or_insert_with(|| create_lexer::<_, Err<Rich<_, _>>>(options))
+                    .parse(s)
+                    .into_result()
+                    .map_err(SqlError::parser)?
+            }
+        };
         // Owning the token vector avoids tying these parsers to a row-local slice.
         let input = |tokens| {
             Stream::from_iter(tokens).map((s.len()..s.len()).into(), |(token, span)| (token, span))
@@ -487,6 +508,41 @@ mod tests {
             ));
             super::INTERVAL_LITERAL_CALLS.with(|calls| assert_eq!(calls.get(), scoped_calls));
         }
+        Ok(())
+    }
+
+    #[test]
+    fn interval_lexing_collects_diagnostics_only_after_a_lexical_failure() -> SqlResult<()> {
+        use super::{INTERVAL_RICH_LEXER_CALLS, create_interval_literal_parser};
+
+        fn parse_with_rich_lexer(
+            text: &str,
+        ) -> SqlResult<sail_sql_parser::ast::expression::IntervalLiteral> {
+            parse!(text, create_interval_literal_parser)
+        }
+
+        INTERVAL_RICH_LEXER_CALLS.with(|calls| calls.set(0));
+        let mut parse = super::interval_parser();
+        for text in [
+            "1 year 2 months",
+            "'1 year 2 months'",
+            "2 DAY /* comment */ 3 hours",
+        ] {
+            let expected = parse_with_rich_lexer(text)?;
+            let expected = super::from_ast_unqualified_interval(expected)?;
+            assert_result(&parse(text), &Ok(expected), text);
+        }
+        INTERVAL_RICH_LEXER_CALLS.with(|calls| assert_eq!(calls.get(), 0));
+
+        let invalid = "'unterminated";
+        let original = parse_with_rich_lexer(invalid);
+        assert!(original.is_err());
+        assert_result(&super::parse_interval_literal(invalid), &original, invalid);
+        let original = original.and_then(super::from_ast_unqualified_interval);
+        assert_result(&parse(invalid), &original, invalid);
+        let quoted_invalid = "\"'unterminated\"";
+        assert_result(&parse(quoted_invalid), &original, quoted_invalid);
+        INTERVAL_RICH_LEXER_CALLS.with(|calls| assert_eq!(calls.get(), 3));
         Ok(())
     }
 
