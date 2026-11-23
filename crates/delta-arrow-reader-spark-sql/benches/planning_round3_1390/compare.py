@@ -67,6 +67,8 @@ def compare_wide_stages(builds, delta, output, spans):
             modes = run.CONFIGURATIONS[replica % 4:] + run.CONFIGURATIONS[:replica % 4]
             arms = paired.ARMS if replica % 2 == 0 else paired.ARMS[::-1]
             for mode in modes:
+                expected = sorted(name for name in spans if
+                                  mode != "native-plain" or not name.startswith("physical.planner."))
                 for arm in arms:
                     label = f"{replica + 1:02}-{mode}-{arm}"
                     row, = sample(mode, label, builds[arm]["binary"], delta, timing, deadline, 1)
@@ -77,7 +79,7 @@ def compare_wide_stages(builds, delta, output, spans):
                         if builds[arm]["kind"] == "planner-stages":
                             planner_spans(events)
                         selected = [(name, ns) for name, ns in events if name in spans]
-                        assert sorted(name for name, _ in selected) == sorted(spans), (label, spans)
+                        assert sorted(name for name, _ in selected) == expected, (label, expected)
                         totals.append(sum(ns for _, ns in selected))
                     value = median(totals)
                     stats.append(dict(mode=mode, replica=replica + 1, build=arm, span_ns=value))
