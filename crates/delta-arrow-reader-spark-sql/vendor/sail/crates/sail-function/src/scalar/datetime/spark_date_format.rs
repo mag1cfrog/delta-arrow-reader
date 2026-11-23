@@ -901,7 +901,7 @@ mod tests {
     #[test]
     fn default_second_builder_skips_value_allocation_for_nulls() -> Result<()> {
         let input = TimestampSecondArray::new_null(8_192);
-        let output = format_default_second_array(&input, Tz::UTC)?;
+        let output = format_default_second_array(&input, "UTC".parse::<Tz>()?)?;
         assert_eq!(output.null_count(), input.len());
         assert_eq!(output.values().capacity(), 0);
         Ok(())
