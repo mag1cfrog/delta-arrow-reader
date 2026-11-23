@@ -38,8 +38,8 @@ the whole expressions.
 ## Native window control
 
 The native PERCENTILE_APPROX reference had three positive paired
-differences of 8.090, 15.465 and 24.023 ns per row. The latter
-case crossed the predeclared native timing gate. The untimed
+differences of 8.090, 15.465 and 24.023 ns per row. This crossed
+the predeclared native timing gate. The untimed
 traces reached the same native approximate-percentile accumulator,
 TDigest operations, sliding replay, bounded window and sort
 routines in both sealed binaries. Six linked state layouts agree,
