@@ -82,7 +82,7 @@ def wide_trace(canonical, instrumented, inventory, delta, output):
                                 trace_root, label)
             assert len(traces) == 1 and traces[0]["id"] == WIDE
             diagnostic = (trace_root / (label + ".stderr")).read_text()
-            if build["kind"] == "stages":
+            if build is instrumented:
                 assert not diagnostic
                 continue
             for line in diagnostic.splitlines():
