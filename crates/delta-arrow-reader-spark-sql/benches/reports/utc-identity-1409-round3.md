@@ -21,18 +21,20 @@ candidate-minus-staging process differences. The three held cells
 had a slower candidate in at least one block. Their increases were
 1.100, 0.067 and 0.011 ns per row, respectively.
 
-| Native control | Staging median | Candidate median | A/A floor | Paired changes |
+| Native control | Staging median [range] | Candidate median [range] | A/A floor | Paired changes |
 | --- | ---: | ---: | ---: | --- |
-| CONVERT_TIMEZONE | 0.083 | 0.080 | 0.006 | -0.003, -0.007, +0.013 |
-| FROM_UTC_TIMESTAMP | 0.055 | 0.046 | 0.006 | -0.009, -0.004, -0.007 |
-| TO_UTC_TIMESTAMP | 0.051 | 0.050 | 0.007 | +0.004, -0.007, +0.010 |
+| CONVERT_TIMEZONE | 0.083 [0.073, 0.088] | 0.080 [0.075, 0.090] | 0.006 | -0.003, -0.007, +0.013 |
+| FROM_UTC_TIMESTAMP | 0.055 [0.046, 0.073] | 0.046 [0.045, 0.064] | 0.006 | -0.009, -0.004, -0.007 |
+| TO_UTC_TIMESTAMP | 0.051 [0.039, 0.070] | 0.050 [0.043, 0.059] | 0.007 | +0.004, -0.007, +0.010 |
 
 All native controls passed without a layout exception. The two
 UTC timestamp functions retained their input coercion and output
 Arrow casts. Removing the converter left their measured cost
 essentially unchanged. CONVERT_TIMEZONE removed per-batch
-argument selection and scattering, with about 24 ns per row
-remaining on the timestamp evaluation path.
+argument selection and scattering. Candidate excess over paired
+native was 23.564-23.696 ns per row for CONVERT_TIMEZONE,
+39.227-39.377 for FROM_UTC_TIMESTAMP, and 39.202-39.239 for
+TO_UTC_TIMESTAMP. All three exceed their native A/A floors.
 
 ## Validation and reproduction
 
