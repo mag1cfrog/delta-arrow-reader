@@ -30,6 +30,11 @@ def frames(thread):
 def sample_stacks(debugger, command, result, _):
     output, *arguments = shlex.split(command)
     directory = Path(output)
+    try:
+        directory.mkdir()
+    except OSError as error:
+        result.SetError(str(error))
+        return
     launch = lldb.SBLaunchInfo(arguments)
     launch.SetLaunchFlags(launch.GetLaunchFlags() & ~lldb.eLaunchFlagDisableASLR)
     for fd, name in ((1, "stdout.jsonl"), (2, "stderr.log")):
@@ -67,7 +72,7 @@ def sample_stacks(debugger, command, result, _):
         wait_for_state(process, (exited,), deadline)
         if process.GetExitStatus() != 0:
             raise RuntimeError(f"benchmark exited with {process.GetExitStatus()}")
-    except (OSError, RuntimeError, TimeoutError) as error:
+    except (OSError, RuntimeError) as error:
         if process.GetState() != exited:
             process.Kill()
         result.SetError(str(error))

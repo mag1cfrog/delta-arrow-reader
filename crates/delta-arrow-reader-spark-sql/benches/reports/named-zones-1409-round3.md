@@ -34,7 +34,7 @@ the resolved zone and could be moved outside the row loop.
 The host denied the perf event before SQL started. The local
 LLDB sampler captured 128 snapshots from the fixed release build
 in ANSI off. There were 37 snapshots with a conversion-path
-frame: 26 contained the classic calculation and eight the
+frame. Of those, 26 contained the classic calculation and eight the
 nonclassic calculation. The other three captured the surrounding
 conversion work. These are stack hits and the elapsed-time
 comparison above comes from the separate release session.

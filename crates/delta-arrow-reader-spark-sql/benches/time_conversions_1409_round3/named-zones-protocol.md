@@ -54,9 +54,25 @@ The paired timing completed at `f7421fe2`. The host denied the
 perf event before it collected any samples or started SQL. Use
 the [LLDB stack sampler](sample_stacks.py) for the single profile,
 with the same executable, fixture, cases, ANSI mode and CPUs.
-It launches the benchmark as its own child, captures up to 128
-stack snapshots spaced 11-17 ms apart, then waits for completion
-within the 390-second bound. Keep the original stacks and profiled
-result records. Samples show active call paths and include paused
-threads, so use them to identify work and use the earlier paired
-release run for elapsed time.
+It launches the benchmark as its own child and captures up to
+128 stack snapshots, requesting an 11-17 ms delay before each
+interrupt. The child has a 390-second completion bound and the
+outer command has a 400-second watchdog. Keep the original stacks
+and profiled result records. Samples show active call paths and
+include paused threads. Use the paired release run for elapsed time.
+
+Use the frozen session's comma-separated CPU list, the current
+release binary and a JSON file with the pinned case IDs. Run from
+the Spark crate with an empty process environment apart from the
+system executable path and UTC timezone.
+
+```sh
+timeout --kill-after=5 400 taskset -c "$profile_cpus" \
+  lldb --no-lldbinit --batch "$current_binary" \
+  -o 'command script import benches/time_conversions_1409_round3/sample_stacks.py' \
+  -o "sample-stacks $new_profile_dir measure-set $statement_manifest $case_ids spark-off"
+```
+
+The sampler creates a fresh output directory before starting SQL.
+The original run used `22cb1e77` and supplied a fresh directory
+created by the launcher.
