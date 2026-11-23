@@ -1,10 +1,12 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::fmt::Write;
 use std::sync::Arc;
 
-use chrono::{NaiveDateTime, Offset, TimeZone};
+use chrono::{Datelike, NaiveDateTime, Offset, TimeZone, Timelike};
 use chrono_tz::OffsetName;
+use datafusion::arrow::array::builder::StringBuilder;
 use datafusion::arrow::array::timezone::Tz;
 use datafusion::arrow::array::{
     Array, Date32Array, Date64Array, StringArray, TimestampMicrosecondArray,
@@ -814,6 +816,13 @@ fn format_timestamp_array_second(
     } else {
         None
     };
+    // Keep the existing error ordering if the result could overflow Utf8 offsets.
+    // The pattern uses at most ten year digits and fifteen more bytes.
+    if let Some(zone) = prepared_zone
+        && ts_array.len() <= (i32::MAX as usize) / 25
+    {
+        return format_default_second_array(ts_array, zone);
+    }
     let format_second = |value| {
         let Some(zone) = prepared_zone else {
             return format_timestamp_value(value, &TimeUnit::Second, tz, format);
@@ -831,6 +840,32 @@ fn format_timestamp_array_second(
         .collect::<Result<Vec<_>>>()?;
 
     Ok(StringArray::from(result))
+}
+
+fn format_default_second_array(array: &TimestampSecondArray, zone: Tz) -> Result<StringArray> {
+    let mut output = StringBuilder::with_capacity(array.len(), array.len() * 19);
+    for value in array {
+        let Some(value) = value else {
+            output.append_null();
+            continue;
+        };
+        let utc = timestamp_to_naive_datetime(value, &TimeUnit::Second)?;
+        let datetime = zone.from_utc_datetime(&utc).naive_local();
+        let year = datetime.year();
+        let year_of_era = if year <= 0 { 1 - year } else { year };
+        write!(
+            output,
+            "{year_of_era:04}-{:02}-{:02} {:02}:{:02}:{:02}",
+            datetime.month(),
+            datetime.day(),
+            datetime.hour(),
+            datetime.minute(),
+            datetime.second(),
+        )
+        .map_err(|_| exec_datafusion_err!("spark_date_format: failed to write a timestamp"))?;
+        output.append_value("");
+    }
+    Ok(output.finish())
 }
 
 fn format_timestamp_array_nanosecond(
@@ -861,6 +896,41 @@ fn format_timestamp_array_nanosecond(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn default_second_builder_matches_the_formatter_at_year_boundaries() -> Result<()> {
+        let format = DateTimeFormat::for_formatting("yyyy-MM-dd HH:mm:ss")?;
+        let seconds = [
+            Some(NaiveDateTime::MIN.and_utc().timestamp() + 172_800),
+            None,
+            Some(-62_167_219_201),
+            Some(-62_167_219_200),
+            Some(0),
+            Some(253_402_300_800),
+            Some(NaiveDateTime::MAX.and_utc().timestamp() - 172_800),
+        ];
+        for timezone in ["UTC", "America/Los_Angeles", "+05:45"] {
+            let timezone: Arc<str> = timezone.into();
+            let format_seconds = |input: &[Option<i64>], use_builder| {
+                let array: Arc<dyn Array> = Arc::new(
+                    TimestampSecondArray::from(input.to_vec()).with_timezone(Arc::clone(&timezone)),
+                );
+                format_timestamp_array_second(&array, Some(&timezone), &format, use_builder)
+            };
+            assert_eq!(
+                format_seconds(&seconds, true)?,
+                format_seconds(&seconds, false)?
+            );
+
+            let mut invalid = seconds.to_vec();
+            invalid.extend([Some(i64::MAX), Some(i64::MIN)]);
+            assert_eq!(
+                format_seconds(&invalid, true).unwrap_err().to_string(),
+                format_seconds(&invalid, false).unwrap_err().to_string(),
+            );
+        }
+        Ok(())
+    }
 
     #[test]
     fn ordinary_date_format_timestamps_preserve_fallback_localization() -> Result<()> {
