@@ -2824,6 +2824,11 @@ per batch and uses it to produce the original local clock fields. The default
 pattern has no zone fields. Custom patterns, scalar inputs and unresolved
 zones retain the general formatter.
 
+The default array formatter writes the local calendar fields directly into
+the Utf8 builder. The original String formatter handles batches whose
+possible output exceeds the Utf8 offset limit, preserving the order of
+timestamp validation and array construction.
+
 ### Whole-second TIME strings (#1409)
 
 TIME, TO_TIME and TRY_TO_TIME reuse Arrow's checked parser for whole-second
