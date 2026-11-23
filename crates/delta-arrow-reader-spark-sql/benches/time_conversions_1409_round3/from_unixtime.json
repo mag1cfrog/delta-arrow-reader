@@ -1,9 +1,9 @@
 {
   "staging_source": "f608f17e45333956164052b9879e80a2d31aba0d",
   "staging_tip": "f608f17e45333956164052b9879e80a2d31aba0d",
-  "candidate_source": "56cbac8eeaa2f9ad62a0bda427234c508cf825b7",
+  "candidate_source": "050dce4b1631a4add814017b0f95d7bebf563755",
   "staging_build_protocol": "56cbac8eeaa2f9ad62a0bda427234c508cf825b7",
-  "candidate_build_protocol": "56cbac8eeaa2f9ad62a0bda427234c508cf825b7",
+  "candidate_build_protocol": "050dce4b1631a4add814017b0f95d7bebf563755",
   "statement_manifest": "../time_conversions_1409/manifest.json",
   "statement_manifest_sha256": "f79bbdb2e8920f590a13ccaa153d8dd9244fd5856253130b29cc0db38d4f46f6",
   "case_ids": ["scalar.datetime.from_unixtime"],
