@@ -38,10 +38,11 @@ use crate::function::scalar::math::{
     FusedDecimalDivide, SparkCheckedDivide, SparkCheckedModulo, SparkIntegerDivide,
     SparkNullIfZero, guard_cast_arithmetic, integer_divide_args,
 };
-use crate::function::scalar::{lower_runtime_regexp_extract, lower_runtime_substring};
 use crate::function::scalar::{
-    preserve_local_case_conversion, simplify_projected_case_conversions,
+    fuse_scanned_bigint_array_overlap, preserve_local_case_conversion,
+    simplify_projected_case_conversions,
 };
+use crate::function::scalar::{lower_runtime_regexp_extract, lower_runtime_substring};
 use datafusion::functions::math::round::RoundFunc;
 use datafusion_expr::simplify::SparkArrayIndexError;
 use sail_function::scalar::array::array_contains::ArrayContains;
@@ -428,6 +429,7 @@ impl AnalyzerRule for PrepareSparkExpressions {
             .is_some();
         Ok(plan
             .transform_up_with_subqueries(|node| {
+                let is_projection = matches!(&node, LogicalPlan::Projection(_));
                 let input = if spark_query {
                     match &node {
                         LogicalPlan::Projection(project) => Some(Arc::clone(&project.input)),
@@ -445,9 +447,16 @@ impl AnalyzerRule for PrepareSparkExpressions {
                     let folded =
                         expr.transform_up(|expr| fold_rand_comparison(expr, &simplifier))?;
                     let canonical = if let Some(input) = &input {
-                        folded
-                            .data
-                            .transform_up(|expr| canonicalize_case_result_columns(expr, input))?
+                        folded.data.transform_up(|expr| {
+                            let canonical = canonicalize_case_result_columns(expr, input)?;
+                            if is_projection {
+                                canonical.transform_data(|expr| {
+                                    Ok(fuse_scanned_bigint_array_overlap(expr, input))
+                                })
+                            } else {
+                                Ok(canonical)
+                            }
+                        })?
                     } else {
                         Transformed::no(folded.data)
                     };
