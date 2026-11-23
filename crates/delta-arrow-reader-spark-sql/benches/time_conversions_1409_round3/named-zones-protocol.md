@@ -49,3 +49,14 @@ IDs from the build pins. Use `spark-off` and the frozen CPU list.
 Decode the captured stacks with `perf script` and store them
 alongside the 108 unprofiled samples. Verify each profiled case
 completed successfully and retained three samples.
+
+The paired timing completed at `f7421fe2`. The host denied the
+perf event before it collected any samples or started SQL. Use
+the [LLDB stack sampler](sample_stacks.py) for the single profile,
+with the same executable, fixture, cases, ANSI mode and CPUs.
+It launches the benchmark as its own child, captures up to 128
+stack snapshots spaced 11-17 ms apart, then waits for completion
+within the 390-second bound. Keep the original stacks and profiled
+result records. Samples show active call paths and include paused
+threads, so use them to identify work and use the earlier paired
+release run for elapsed time.
