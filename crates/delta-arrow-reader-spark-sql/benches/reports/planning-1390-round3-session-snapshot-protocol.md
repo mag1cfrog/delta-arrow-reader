@@ -7,7 +7,8 @@ The earlier session flagged native-configured EXCEPT physical time
 and native-configured INTERSECT total time.
 
 Run the [paired controller](../planning_round3_1390/compare.py) with the
-committed build settings, the frozen #1379 fixture and CPU 2 on Linux.
+[committed build settings](../planning_round3_1390/session-snapshot.json),
+the frozen #1379 fixture and CPU 2 on Linux.
 Before clocks, require formatting, Spark-crate Clippy, the full local
 Spark workspace and independent review. Require exact Arrow schemas,
 logical and physical plans, properties and zero Delta data reads for

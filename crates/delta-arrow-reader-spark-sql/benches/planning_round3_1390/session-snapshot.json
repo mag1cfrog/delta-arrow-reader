@@ -1,0 +1,5 @@
+{
+  "staging_head": "9433cb49336aaa7d2477666446b6f194286fbc80",
+  "staging": {"canonical_protocol": "7790b47d0f164091b8c045c407f2de3ce48aedea"},
+  "candidate": {"canonical_protocol": "8387d18ec40a3d066a0545718b6f085eca075735"}
+}
