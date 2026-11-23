@@ -48,6 +48,8 @@ def verify_full(builds, cases, output):
 
 
 def main():
+    if sys.platform != "linux" or not __debug__:
+        raise SystemExit("Run on Linux with Python validation enabled.")
     cli = argparse.ArgumentParser(description=__doc__)
     for name in ("pins", "staging", "candidate", "output"):
         cli.add_argument(name, type=lambda v: Path(v).resolve())
