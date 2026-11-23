@@ -8,7 +8,8 @@ without alias metadata, functional dependencies or scan filters.
 The existing alignment handles all other shapes.
 
 Use the [paired controller](../planning_round3_1390/compare.py), the
-committed build settings, the frozen #1379 fixture and CPU 2. Before
+[committed build settings](../planning_round3_1390/rename-metadata.json),
+the frozen #1379 fixture and CPU 2. Before
 timing, require formatting, Spark-crate Clippy, the full local Linux
 workspace and independent review. Require exact Arrow schemas, logical
 and physical plans, properties and zero Delta data reads for all 678
