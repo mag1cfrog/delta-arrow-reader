@@ -74,16 +74,19 @@ def preflight(binary, cases, output, tuning, deadline):
 def measure(binary, cases, output, tuning, deadline, observations):
     samples = {case_id: {mode: [] for mode in MODES} for case_id in observations}
     repeats = {case_id: [] for case_id in observations}
+    failures = {}
     for block in range(tuning["replicas"]):
         ordered = tuple(cases) if block != 1 else tuple(reversed(cases))
         modes = MODES if block != 1 else MODES[::-1]
         for case in ordered:
             case_id = case["id"]
-            if case_id not in observations:
+            if case_id not in observations or case_id in failures:
                 continue
             expected = observations[case_id]
             settings = dict(tuning, input_rows=expected["input_rows"])
             for mode in modes:
+                if case_id in failures:
+                    break
                 primary = ("paired", samples[case_id][mode])
                 extra = ("noise", repeats[case_id])
                 if mode != "native":
@@ -92,8 +95,13 @@ def measure(binary, cases, output, tuning, deadline, observations):
                     arms = (extra, primary) if block == 1 else (primary, extra)
                 for arm, records in arms:
                     work = output / arm / str(block) / case_id / mode
-                    records.append(one_process(binary, case_id, mode, work, expected, settings,
-                                               deadline, MANIFEST))
+                    observed = one_process(binary, case_id, mode, work, expected, settings,
+                                           deadline, MANIFEST)
+                    records.append(observed)
+                    if observed["status"] != "ok":
+                        failures[case_id] = dict(block=block, mode=mode, arm=arm,
+                                                 status=observed["status"])
+                        break
     summary = {}
     for case_id, outcomes in samples.items():
         modes = {mode: runner.signed_stats(increments(rows)) if completed(rows) else {
@@ -102,6 +110,8 @@ def measure(binary, cases, output, tuning, deadline, observations):
         if completed(outcomes["native"]) and completed(repeats[case_id]):
             modes["native_floor"] = runner.noise(process_medians(outcomes["native"]),
                                                   process_medians(repeats[case_id]))
+        if case_id in failures:
+            modes["incomplete"] = failures[case_id]
         summary[case_id] = modes
     write(output / "summary.json", summary)
 
