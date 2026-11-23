@@ -7,6 +7,7 @@
 
 mod array_constructor_storage;
 mod array_contains;
+mod array_insert_second_position;
 mod array_map_explode;
 mod array_result_fields;
 mod array_sort_join;

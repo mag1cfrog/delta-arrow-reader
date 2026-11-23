@@ -2,6 +2,7 @@
 mod bigint_arrays_overlap;
 mod flatten_nullable_inner_lists;
 mod has_null_inner_array;
+mod insert_bigint_at_second_position;
 
 use std::sync::Arc;
 
@@ -45,6 +46,7 @@ use sail_function::scalar::misc::raise_error::RaiseError;
 use self::bigint_arrays_overlap::BigIntArraysOverlap;
 use self::flatten_nullable_inner_lists::FlattenNullableInnerLists;
 use self::has_null_inner_array::HasNullInnerArray;
+use self::insert_bigint_at_second_position::InsertBigIntAtSecondPosition;
 use super::lambda::lambda_with_fresh_parameter;
 use crate::error::{PlanError, PlanResult};
 use crate::expression_errors::passthrough_column_origin;
@@ -640,6 +642,19 @@ fn array_insert(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let array_input = cast_list_value_nullability(array.clone(), schema, true)?;
     let output_type = array_update_output_type(&array_input, &value, schema)?;
     let array_input = cast(array_input, output_type.clone());
+    if matches!(
+        &position,
+        expr::Expr::Literal(ScalarValue::Int32(Some(2)) | ScalarValue::Int64(Some(2)), _)
+    ) && matches!(
+        (&array, &value),
+        (expr::Expr::Column(_), expr::Expr::Column(_))
+    ) && matches!(array.get_type(schema)?, DataType::List(field) if field.data_type() == &DataType::Int64)
+        && value.get_type(schema)? == DataType::Int64
+    {
+        let insert =
+            ScalarUDF::from(InsertBigIntAtSecondPosition::default()).call(vec![array_input, value]);
+        return Ok(when(array.clone().is_null(), cast(array, output_type)).otherwise(insert)?);
+    }
     let array_len = cast(expr_fn::array_length(array.clone()), DataType::Int64);
 
     let pos_from_zero = when(position.clone().gt(lit(0)), position.clone() - lit(1))
