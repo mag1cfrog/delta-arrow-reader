@@ -2437,6 +2437,12 @@ volatile nodes, so a constant RAND seed cannot make its output column constant
 or remove a required sort. Nonvolatile constant inference retains its existing
 rules.
 
+### Scalar approximate percentile preparation (#1516)
+
+Read valid physical numeric literals without creating an empty input batch.
+Computed or invalid arguments keep the existing extraction. The single result
+uses the same quantile query and cast without building a result vector.
+
 ### Approximate percentile ranks
 
 Spark APPROX_PERCENTILE and PERCENTILE_APPROX use a local Rust adaptation of

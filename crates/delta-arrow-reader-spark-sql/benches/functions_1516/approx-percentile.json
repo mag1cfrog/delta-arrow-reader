@@ -1,0 +1,35 @@
+{
+  "staging_source": "6dcf299c19878bba614365d7097884d22c33bf98",
+  "staging_tip": "3d31e4676ea3e3bba7e84c6fc4c8092b8503ccf6",
+  "candidate_source": "f80ea0275277e51a896991c18b0b2ec475c706d5",
+  "staging_build_protocol": "6dcf299c19878bba614365d7097884d22c33bf98",
+  "candidate_build_protocol": "f80ea0275277e51a896991c18b0b2ec475c706d5",
+  "statement_manifest": "manifest.json",
+  "statement_manifest_sha256": "f9116c6ce9385847ef368ca41125fc85d1e0f2fbbca976e7b461a86ebbbcf160",
+  "case_ids": [
+    "aggregate.aggregate.approx_percentile",
+    "aggregate.aggregate.percentile_approx",
+    "window.window.approx_percentile",
+    "window.window.percentile_approx"
+  ],
+  "restricted_input_rows": 1000000,
+  "spark_plan_contains": {
+    "staging": {
+      "aggregate": [
+        "approx_percentile("
+      ],
+      "window": [
+        "approx_percentile("
+      ]
+    },
+    "candidate": {
+      "aggregate": [
+        "approx_percentile("
+      ],
+      "window": [
+        "approx_percentile("
+      ]
+    }
+  },
+  "overall_timeout_seconds": 3600
+}
