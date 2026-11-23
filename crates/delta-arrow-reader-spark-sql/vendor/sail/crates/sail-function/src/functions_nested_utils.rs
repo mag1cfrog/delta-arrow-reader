@@ -92,38 +92,93 @@ pub(crate) fn evaluate_lambdas_until_null(
     lambdas: &[&LambdaArgument],
     number_rows: usize,
 ) -> Result<(Vec<ArrayRef>, Vec<u64>)> {
+    evaluate_selected_lambdas(
+        lambdas,
+        all_lambda_rows(number_rows)?,
+        Vec::with_capacity(lambdas.len()),
+    )
+}
+
+fn all_lambda_rows(number_rows: usize) -> Result<Vec<u64>> {
     let row_count = u64::try_from(number_rows)
         .map_err(|_| exec_datafusion_err!("sequence row count does not fit in u64"))?;
-    let mut active_rows = (0..row_count).collect::<Vec<_>>();
-    let mut values = Vec::with_capacity(lambdas.len());
+    Ok((0..row_count).collect())
+}
 
+fn evaluate_selected_lambdas(
+    lambdas: &[&LambdaArgument],
+    mut active_rows: Vec<u64>,
+    mut values: Vec<ArrayRef>,
+) -> Result<(Vec<ArrayRef>, Vec<u64>)> {
     for lambda in lambdas {
         if active_rows.is_empty() {
             break;
         }
         let value = evaluate_lambda_rows(lambda, &active_rows)?;
-        let nulls = value.logical_nulls();
-        let mut retained_positions = Vec::with_capacity(value.len());
-        let mut retained_rows = Vec::with_capacity(value.len());
-        for (position, row) in active_rows.iter().copied().enumerate() {
-            if nulls.as_ref().is_none_or(|nulls| nulls.is_valid(position)) {
-                retained_positions.push(
-                    u64::try_from(position).map_err(|_| {
-                        exec_datafusion_err!("sequence row index does not fit in u64")
-                    })?,
-                );
-                retained_rows.push(row);
-            }
-        }
-
-        values.push(value);
-        if retained_rows.len() != active_rows.len() {
-            let indices = UInt64Array::from(retained_positions);
-            values = take_arrays(&values, &indices, None)?;
-            active_rows = retained_rows;
-        }
+        retain_non_null_lambda_rows(value, &mut values, &mut active_rows)?;
     }
     Ok((values, active_rows))
+}
+
+fn retain_non_null_lambda_rows(
+    value: ArrayRef,
+    values: &mut Vec<ArrayRef>,
+    active_rows: &mut Vec<u64>,
+) -> Result<()> {
+    let nulls = value.logical_nulls();
+    let mut retained_positions = Vec::with_capacity(value.len());
+    let mut retained_rows = Vec::with_capacity(value.len());
+    for (position, row) in active_rows.iter().copied().enumerate() {
+        if nulls.as_ref().is_none_or(|nulls| nulls.is_valid(position)) {
+            retained_positions.push(
+                u64::try_from(position)
+                    .map_err(|_| exec_datafusion_err!("sequence row index does not fit in u64"))?,
+            );
+            retained_rows.push(row);
+        }
+    }
+
+    values.push(value);
+    if retained_rows.len() != active_rows.len() {
+        let indices = UInt64Array::from(retained_positions);
+        *values = take_arrays(values, &indices, None)?;
+        *active_rows = retained_rows;
+    }
+    Ok(())
+}
+
+/// None means every row reached the final endpoint.
+pub(crate) fn evaluate_int_sequence_lambdas(
+    lambdas: &[&LambdaArgument],
+    number_rows: usize,
+) -> Result<(Vec<ArrayRef>, Option<Vec<u64>>)> {
+    if number_rows == 0 {
+        return Ok((Vec::new(), Some(Vec::new())));
+    }
+    let mut values = Vec::with_capacity(lambdas.len());
+    let dummy = || Ok(Arc::new(NullArray::new(number_rows)) as ArrayRef);
+    for (index, lambda) in lambdas.iter().enumerate() {
+        let value = lambda
+            .evaluate(&[&dummy], |captures| {
+                if captures.iter().all(|array| {
+                    array.data_type() == &DataType::Int32 && array.len() == number_rows
+                }) {
+                    return Ok(captures.to_vec());
+                }
+                let indices = UInt64Array::from(all_lambda_rows(number_rows)?);
+                Ok(take_arrays(captures, &indices, None)?)
+            })?
+            .into_array(number_rows)?;
+        if value.logical_null_count() > 0 {
+            let mut active_rows = all_lambda_rows(number_rows)?;
+            retain_non_null_lambda_rows(value, &mut values, &mut active_rows)?;
+            let (values, active_rows) =
+                evaluate_selected_lambdas(&lambdas[index + 1..], active_rows, values)?;
+            return Ok((values, Some(active_rows)));
+        }
+        values.push(value);
+    }
+    Ok((values, None))
 }
 
 pub(crate) fn scatter_active_rows(
@@ -158,6 +213,99 @@ mod tests {
     use arrow::array::{Int32Array, LargeListArray, ListArray, StructArray, new_null_array};
     use arrow::buffer::{NullBuffer, OffsetBuffer};
     use arrow::datatypes::{Field, Fields};
+
+    #[test]
+    fn int_sequence_lambdas_match_selected_evaluation() -> Result<()> {
+        use arrow::datatypes::Schema;
+        use arrow::record_batch::RecordBatch;
+        use datafusion_expr::Operator;
+        use datafusion_physical_expr::PhysicalExpr;
+        use datafusion_physical_expr::expressions::{BinaryExpr, Column, Literal};
+
+        let field = Arc::new(Field::new("value", DataType::Int32, true));
+        let schema = Arc::new(Schema::new(vec![field]));
+        let dummy = Arc::new(Field::new("", DataType::Null, true));
+        let column: Arc<dyn PhysicalExpr> = Arc::new(Column::new("value", 0));
+        let literal = |value| Arc::new(Literal::new(ScalarValue::Int32(Some(value))));
+        let divide = Arc::new(BinaryExpr::new(
+            literal(12),
+            Operator::Divide,
+            column.clone(),
+        ));
+        let make_batch =
+            |values: Int32Array| RecordBatch::try_new(schema.clone(), vec![Arc::new(values)]);
+
+        for (starts, denominators, offsets, length, expected_rows) in [
+            (
+                vec![Some(90), Some(1), Some(3), Some(80)],
+                vec![Some(0), Some(2), Some(3), Some(0)],
+                1,
+                2,
+                None,
+            ),
+            (
+                vec![Some(1), None, Some(3)],
+                vec![Some(2), Some(0), None],
+                0,
+                3,
+                Some(vec![0]),
+            ),
+            (
+                vec![Some(1), Some(2), Some(3)],
+                vec![Some(2), None, Some(3)],
+                0,
+                3,
+                Some(vec![0, 2]),
+            ),
+            (
+                vec![None, None, None],
+                vec![Some(0), Some(0), Some(0)],
+                0,
+                3,
+                Some(vec![]),
+            ),
+            (vec![Some(9)], vec![Some(0)], 0, 0, Some(vec![])),
+        ] {
+            let start = LambdaArgument::new(
+                vec![Arc::clone(&dummy)],
+                column.clone(),
+                Some(make_batch(Int32Array::from(starts).slice(offsets, length))?),
+            );
+            let stop = LambdaArgument::new(
+                vec![Arc::clone(&dummy)],
+                divide.clone(),
+                Some(make_batch(
+                    Int32Array::from(denominators).slice(offsets, length),
+                )?),
+            );
+            let step = LambdaArgument::new(vec![Arc::clone(&dummy)], literal(2), None);
+            let lambdas = [&start, &stop, &step];
+            let (expected, original_rows) = evaluate_lambdas_until_null(&lambdas, length)?;
+            let (actual, selected_rows) = evaluate_int_sequence_lambdas(&lambdas, length)?;
+            assert_eq!(selected_rows, expected_rows);
+            assert_eq!(
+                selected_rows.unwrap_or(all_lambda_rows(length)?),
+                original_rows
+            );
+            assert_eq!(actual, expected);
+        }
+
+        let reachable_failure = LambdaArgument::new(
+            vec![dummy],
+            divide,
+            Some(make_batch(Int32Array::from(vec![0]))?),
+        );
+        let lambdas = [&reachable_failure];
+        assert_eq!(
+            evaluate_int_sequence_lambdas(&lambdas, 1)
+                .unwrap_err()
+                .to_string(),
+            evaluate_lambdas_until_null(&lambdas, 1)
+                .unwrap_err()
+                .to_string(),
+        );
+        Ok(())
+    }
 
     #[test]
     fn list_scalar_adapter_preserves_fields_nulls_and_storage() -> Result<()> {
