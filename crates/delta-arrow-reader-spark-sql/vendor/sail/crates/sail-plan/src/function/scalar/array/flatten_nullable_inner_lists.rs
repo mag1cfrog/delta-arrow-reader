@@ -57,6 +57,11 @@ impl HigherOrderUDFImpl for FlattenNullableInnerLists {
         true
     }
 
+    fn clear_null_values(&self) -> bool {
+        // Native flatten carries the parent mask and can share the child buffer.
+        false
+    }
+
     fn invoke_with_args(&self, args: HigherOrderFunctionArgs) -> Result<ColumnarValue> {
         let [ValueOrLambda::Value(array), ValueOrLambda::Lambda(fallback)] = args.args.as_slice()
         else {

@@ -222,9 +222,9 @@ async fn spark_configuration_preserves_native_flatten() -> TestResult {
 async fn flatten_whole_batches_match_guarded_projection() -> TestResult {
     use std::sync::Arc;
 
-    use arrow::array::{Array, ArrayRef, LargeListArray, ListArray};
+    use arrow::array::{Array, ArrayRef, AsArray, LargeListArray, ListArray};
     use arrow::buffer::{NullBuffer, OffsetBuffer};
-    use arrow::datatypes::{Field, Int64Type};
+    use arrow::datatypes::{DataType, Field, Int64Type};
     use arrow::record_batch::RecordBatch;
     use datafusion::physical_plan::{collect, displayable};
     use delta_arrow_reader_spark_sql::{SparkSqlOptions, plan_query};
@@ -241,21 +241,40 @@ async fn flatten_whole_batches_match_guarded_projection() -> TestResult {
         None,
         Some(vec![Some(10), None]),
         Some(vec![]),
-        None,
+        Some(vec![Some(99)]),
         Some(vec![Some(20)]),
         None,
         Some(vec![Some(30)]),
     ];
+    let leaf = Arc::new(
+        Field::new("reading", DataType::Int64, true)
+            .with_metadata([("origin".into(), "flatten-test".into())].into()),
+    );
     for outer_large in [false, true] {
         for inner_large in [false, true] {
+            let inner_nulls = Some(NullBuffer::from(vec![
+                false, true, true, false, true, false, true,
+            ]));
             let inner: ArrayRef = if inner_large {
-                Arc::new(LargeListArray::from_iter_primitive::<Int64Type, _, _>(
-                    inner_rows.clone(),
+                let (_, offsets, values, _) =
+                    LargeListArray::from_iter_primitive::<Int64Type, _, _>(inner_rows.clone())
+                        .into_parts();
+                Arc::new(LargeListArray::new(
+                    leaf.clone(),
+                    offsets,
+                    values,
+                    inner_nulls,
                 ))
             } else {
-                Arc::new(ListArray::from_iter_primitive::<Int64Type, _, _>(
-                    inner_rows.clone(),
-                ))
+                let (_, offsets, values, _) =
+                    ListArray::from_iter_primitive::<Int64Type, _, _>(inner_rows.clone())
+                        .into_parts();
+                Arc::new(ListArray::new(leaf.clone(), offsets, values, inner_nulls))
+            };
+            let expected_type = if outer_large || inner_large {
+                DataType::LargeList(leaf.clone())
+            } else {
+                DataType::List(leaf.clone())
             };
             let field = Arc::new(Field::new_list_field(inner.data_type().clone(), true));
             let lengths = [1, 2, 1, 0, 1, 2];
@@ -307,7 +326,18 @@ async fn flatten_whole_batches_match_guarded_projection() -> TestResult {
                             uses_batch_path,
                             "{display}"
                         );
+                        assert_eq!(plan.schema().field(0).data_type(), &expected_type);
                         let batches = collect(plan, session.task_ctx()).await?;
+                        if uses_batch_path && offset == 1 {
+                            let column = batches[0].column(0);
+                            assert!(column.is_null(1));
+                            // A whole-batch projection shares the hidden child range.
+                            if outer_large || inner_large {
+                                assert_eq!(column.as_list::<i64>().value_length(1), 1);
+                            } else {
+                                assert_eq!(column.as_list::<i32>().value_length(1), 1);
+                            }
+                        }
                         let columns = batches
                             .iter()
                             .map(|batch| batch.column(0).as_ref())

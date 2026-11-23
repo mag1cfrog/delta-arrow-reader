@@ -854,7 +854,7 @@ pub(crate) fn prepare_stored_array_projection(
     input: &LogicalPlan,
 ) -> PlanResult<Transformed<expr::Expr>> {
     match &expression {
-        expr::Expr::Case(_) => flatten_valid_inner_batches(expression, input),
+        expr::Expr::Case(_) => wrap_stored_flatten_case(expression, input),
         _ => Ok(fuse_scanned_bigint_array_overlap(expression, input)),
     }
 }
@@ -1064,7 +1064,7 @@ fn flatten(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     }))
 }
 
-fn flatten_valid_inner_batches(
+fn wrap_stored_flatten_case(
     expression: expr::Expr,
     input: &LogicalPlan,
 ) -> PlanResult<Transformed<expr::Expr>> {
