@@ -843,7 +843,8 @@ fn format_timestamp_array_second(
 }
 
 fn format_default_second_array(array: &TimestampSecondArray, zone: Tz) -> Result<StringArray> {
-    let mut output = StringBuilder::with_capacity(array.len(), array.len() * 19);
+    let value_capacity = (array.len() - array.null_count()) * 19;
+    let mut output = StringBuilder::with_capacity(array.len(), value_capacity);
     for value in array {
         let Some(value) = value else {
             output.append_null();
@@ -896,6 +897,15 @@ fn format_timestamp_array_nanosecond(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn default_second_builder_skips_value_allocation_for_nulls() -> Result<()> {
+        let input = TimestampSecondArray::new_null(8_192);
+        let output = format_default_second_array(&input, Tz::UTC)?;
+        assert_eq!(output.null_count(), input.len());
+        assert_eq!(output.values().capacity(), 0);
+        Ok(())
+    }
 
     #[test]
     fn default_second_builder_matches_the_formatter_at_year_boundaries() -> Result<()> {
