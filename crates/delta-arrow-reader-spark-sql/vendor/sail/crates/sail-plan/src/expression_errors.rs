@@ -38,11 +38,11 @@ use crate::function::scalar::math::{
     FusedDecimalDivide, SparkCheckedDivide, SparkCheckedModulo, SparkIntegerDivide,
     SparkNullIfZero, guard_cast_arithmetic, integer_divide_args,
 };
+use crate::function::scalar::{lower_runtime_regexp_extract, lower_runtime_substring};
 use crate::function::scalar::{
-    fuse_scanned_bigint_array_overlap, preserve_local_case_conversion,
+    prepare_stored_array_projection, preserve_local_case_conversion,
     simplify_projected_case_conversions,
 };
-use crate::function::scalar::{lower_runtime_regexp_extract, lower_runtime_substring};
 use datafusion::functions::math::round::RoundFunc;
 use datafusion_expr::simplify::SparkArrayIndexError;
 use sail_function::scalar::array::array_contains::ArrayContains;
@@ -451,7 +451,11 @@ impl AnalyzerRule for PrepareSparkExpressions {
                             let canonical = canonicalize_case_result_columns(expr, input)?;
                             if is_projection {
                                 canonical.transform_data(|expr| {
-                                    Ok(fuse_scanned_bigint_array_overlap(expr, input))
+                                    prepare_stored_array_projection(expr, input).map_err(|error| {
+                                        datafusion_common::DataFusionError::External(Box::new(
+                                            error,
+                                        ))
+                                    })
                                 })
                             } else {
                                 Ok(canonical)

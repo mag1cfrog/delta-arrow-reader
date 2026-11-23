@@ -2873,9 +2873,11 @@ retain the existing lowering.
 ### Inner-array validity in FLATTEN (#1410)
 
 FLATTEN checks the inner list validity bitmap for canonical nested BIGINT
-List and LargeList columns. The existing CASE still selects rows for native
-flattening, so NULL parents, NULL inner arrays and NULL scalar elements
-keep their original behavior. Other shapes keep the membership probe.
+List and LargeList columns. For stored columns, a batch with valid visible
+inner lists goes directly to native offset projection, which carries the
+outer validity bitmap. The original CASE selects rows when a visible
+inner list is NULL. Derived columns and other shapes keep their original
+evaluation, including the generic membership probe where used.
 
 ### Flat FLOAT buffers in VECTOR_INNER_PRODUCT (#1410)
 
