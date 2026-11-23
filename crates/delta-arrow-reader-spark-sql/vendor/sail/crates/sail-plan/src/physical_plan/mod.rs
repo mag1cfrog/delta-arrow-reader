@@ -384,8 +384,8 @@ mod tests {
     use std::collections::HashMap;
 
     use arrow::datatypes::{DataType, Field, Schema};
-    use datafusion_common::TableReference;
-    use datafusion_expr::{EmptyRelation, logical_plan::table_scan};
+    use datafusion_common::{FunctionalDependence, FunctionalDependencies, TableReference};
+    use datafusion_expr::{EmptyRelation, lit, logical_plan::table_scan};
 
     use super::*;
 
@@ -435,6 +435,30 @@ mod tests {
         let actual = align_result_metadata_for_execution(LogicalPlan::Projection(stale))?;
         assert_eq!(actual.schema(), &expected.schema);
         assert_eq!(actual, LogicalPlan::Projection(expected));
+
+        let LogicalPlan::TableScan(mut dependent) = scan.as_ref().clone() else {
+            return internal_err!("Expected a table scan");
+        };
+        let mut filtered = dependent.clone();
+        filtered.filters.push(lit(true));
+        dependent.projected_schema = Arc::new(
+            dependent
+                .projected_schema
+                .as_ref()
+                .clone()
+                .with_functional_dependencies(FunctionalDependencies::new(vec![
+                    FunctionalDependence::new(vec![0], vec![1], true),
+                ]))?,
+        );
+        for input in [filtered, dependent] {
+            let projection =
+                Projection::try_new(aliases.clone(), Arc::new(LogicalPlan::TableScan(input)))?;
+            assert!(rebuild_ordered_scan_rename_schema(&projection)?.is_none());
+            let expected = LogicalPlan::Projection(projection);
+            let actual = align_result_metadata_for_execution(expected.clone())?;
+            assert_eq!(actual.schema(), expected.schema());
+            assert_eq!(actual, expected);
+        }
 
         let mut with_metadata = aliases;
         let Expr::Alias(first) = &mut with_metadata[0] else {

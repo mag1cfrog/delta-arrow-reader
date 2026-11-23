@@ -22,12 +22,12 @@ all 13,500 paired observations. Use the same bounded 40-process wide
 observer comparison with 360 retained plans, requiring exact physical
 rule and schema-check pairs. Observe `physical.planner.align_result_metadata`,
 which is present once per wide plan in Spark and native-configured and
-absent in native-plain. The ordinary alias-walk and schema-recompute
-events are present in staging Spark and absent when the candidate
-takes the narrow branch. Capture the overhead of the new branch in
+absent in native-plain. Each ordinary alias-walk and schema-recompute
+event appears twice per staging Spark sample and is absent from both
+native modes and the candidate's Spark samples. Capture the overhead of the new branch in
 the entire alignment span and in canonical physical time.
 
-Retain the change if both modes improve canonical wide physical time
+Retain the change if both Spark modes improve canonical wide physical time
 and the observed alignment span in at least four of five pairs. The
 canonical median paired drop must exceed that query's native A/B
 floor. Any canonical regression blocks acceptance when all five paired
