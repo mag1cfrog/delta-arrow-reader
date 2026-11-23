@@ -16,8 +16,8 @@ use datafusion_common::{DataFusionError, ScalarValue, exec_err, internal_err};
 use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
 use datafusion_expr::{
     ColumnarValue, EvaluatedRowPrefix, ExprSchemable, HigherOrderUDF, LogicalPlan, ReturnFieldArgs,
-    RowEvaluationFailure, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
-    cast, expr, is_null, lit, not, or, when,
+    RowEvaluationFailure, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, TableType,
+    Volatility, cast, expr, is_null, lit, not, or, when,
 };
 use datafusion_functions_nested::extract::array_slice_udf;
 use datafusion_functions_nested::flatten::Flatten;
@@ -839,7 +839,12 @@ fn scanned_overlap_operand<'a>(
         return None;
     };
     let (origin, _) = passthrough_column_origin(input, reference).ok()?;
-    matches!(origin, LogicalPlan::TableScan(_)).then_some(column)
+    let LogicalPlan::TableScan(scan) = origin else {
+        return None;
+    };
+    let is_stored_column =
+        scan.source.table_type() != TableType::View && scan.source.get_logical_plan().is_none();
+    is_stored_column.then_some(column)
 }
 
 pub(crate) fn fuse_scanned_bigint_array_overlap(

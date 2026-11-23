@@ -170,6 +170,16 @@ async fn arrays_overlap_fuses_only_scanned_bigint_lists() -> TestResult {
                 ("r", arrays(large, right.clone())),
             ])?,
         )?;
+        let view = format!("view_{table}");
+        session.register_table(
+            view.as_str(),
+            session
+                .sql(&format!(
+                    "SELECT CASE WHEN l IS NULL THEN NULL ELSE l END AS l, r FROM {table}"
+                ))
+                .await?
+                .into_view(),
+        )?;
         for ansi_mode in [false, true] {
             let options = SparkSqlOptions {
                 ansi_mode,
@@ -183,6 +193,7 @@ async fn arrays_overlap_fuses_only_scanned_bigint_lists() -> TestResult {
                     ),
                     false,
                 ),
+                (view.clone(), false),
             ] {
                 let sql = format!("SELECT arrays_overlap(l, r) AS value FROM {relation}");
                 let query = plan_query(&session, &sql, &options).await?;
