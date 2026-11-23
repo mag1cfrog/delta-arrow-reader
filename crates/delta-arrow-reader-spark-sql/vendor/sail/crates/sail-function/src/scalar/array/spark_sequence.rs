@@ -28,7 +28,8 @@ use sail_common_datafusion::formatter::IntervalMonthDayNanoFormatter;
 use sail_common_datafusion::utils::datetime::localize_with_fallback;
 
 use crate::functions_nested_utils::{
-    evaluate_lambda_rows, evaluate_lambdas_until_null, make_scalar_function, scatter_active_rows,
+    evaluate_int_sequence_lambdas, evaluate_lambda_rows, evaluate_lambdas_until_null,
+    make_scalar_function, scatter_active_rows,
 };
 
 const MAX_ROUNDED_ARRAY_LENGTH: i64 = i32::MAX as i64 - 15;
@@ -157,9 +158,19 @@ impl HigherOrderUDFImpl for SparkSequenceLazy {
 
         // Evaluate each child only for rows whose preceding children were non-null.
         // This preserves Spark's short-circuiting while retaining batched evaluation.
-        let batch_error = match evaluate_lambdas_until_null(&lambdas, args.number_rows) {
+        let evaluated = if arg_fields
+            .iter()
+            .all(|field| field.data_type() == &DataType::Int32)
+        {
+            evaluate_int_sequence_lambdas(&lambdas, args.number_rows)
+        } else {
+            evaluate_lambdas_until_null(&lambdas, args.number_rows)
+                .map(|(values, active_rows)| (values, Some(active_rows)))
+        };
+        let batch_error = match evaluated {
             Ok((values, active_rows)) => {
-                if active_rows.is_empty() {
+                let active_count = active_rows.as_ref().map_or(args.number_rows, Vec::len);
+                if active_count == 0 {
                     return Ok(ColumnarValue::Array(new_null_array(
                         args.return_type(),
                         args.number_rows,
@@ -170,17 +181,17 @@ impl HigherOrderUDFImpl for SparkSequenceLazy {
                     ScalarFunctionArgs {
                         args: values.into_iter().map(ColumnarValue::Array).collect(),
                         arg_fields: arg_fields.clone(),
-                        number_rows: active_rows.len(),
+                        number_rows: active_count,
                         return_field: Arc::clone(&args.return_field),
                         config_options: Arc::clone(&args.config_options),
                     },
                 )?
-                .into_array(active_rows.len())?;
-                return Ok(ColumnarValue::Array(scatter_active_rows(
-                    value,
-                    &active_rows,
-                    args.number_rows,
-                )?));
+                .into_array(active_count)?;
+                let value = match active_rows {
+                    Some(rows) => scatter_active_rows(value, &rows, args.number_rows)?,
+                    None => value,
+                };
+                return Ok(ColumnarValue::Array(value));
             }
             Err(error) => error,
         };

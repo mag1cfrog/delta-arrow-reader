@@ -2886,6 +2886,14 @@ neither buffer contains NULLs. It retains the Spark-order dot product and
 checks parent validity and dimensions before reading a row. Child buffers
 with NULLs retain the per-row slices and validity checks.
 
+### Whole-batch INT SEQUENCE endpoints (#1410)
+
+The lazy INT SEQUENCE evaluator borrows full-batch INT captures and
+checks each result for logical NULLs before evaluating the next
+endpoint. The original selection resumes at the first NULL endpoint,
+with earlier values already computed. Other endpoint types, reachable
+failures and compacted rows keep the original evaluation and generator.
+
 ### Positive scalar coordinates in SLICE (#1410)
 
 SLICE can pass positive scalar bounds to native slicing for List and

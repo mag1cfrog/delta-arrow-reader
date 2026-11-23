@@ -1,0 +1,15 @@
+{
+  "staging_source": "b9af4664f63a368fec0e27613d4e1cbe7ec55dcb",
+  "staging_tip": "10f464ad0f8a42ae1cd4ec216c21f9a438acf589",
+  "candidate_source": "f5ea78cb8485523738775056d28a2232e9c32762",
+  "staging_build_protocol": "b9af4664f63a368fec0e27613d4e1cbe7ec55dcb",
+  "candidate_build_protocol": "f5ea78cb8485523738775056d28a2232e9c32762",
+  "statement_manifest": "../array_functions_1410/manifest.json",
+  "statement_manifest_sha256": "e7957ec6dccaa03433d265eadd65c412a6d71e88aac5f280e80863ed9d2a658e",
+  "case_ids": ["scalar.array.sequence"],
+  "spark_plan_contains": {
+    "staging": {"scalar": ["spark_sequence_lazy"]},
+    "candidate": {"scalar": ["spark_sequence_lazy"]}
+  },
+  "overall_timeout_seconds": 3600
+}
