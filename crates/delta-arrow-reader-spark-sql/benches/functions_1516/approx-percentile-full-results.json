@@ -1,0 +1,206 @@
+{
+  "aggregate.aggregate.approx_percentile": {
+    "staging": {
+      "native": {
+        "rows": 1,
+        "types": [
+          "Float64"
+        ],
+        "result_sha256": "00e22db741399a92ace8bac25ec837beb180dd2f88f917245f34f357c03ed83d"
+      },
+      "spark-off": {
+        "rows": 1,
+        "types": [
+          "Float64"
+        ],
+        "result_sha256": "9f10ceb236f3f570f4fc1834ec489fddbca2ca8fa221658208daac330c0c52e7"
+      },
+      "spark-on": {
+        "rows": 1,
+        "types": [
+          "Float64"
+        ],
+        "result_sha256": "9f10ceb236f3f570f4fc1834ec489fddbca2ca8fa221658208daac330c0c52e7"
+      }
+    },
+    "candidate": {
+      "native": {
+        "rows": 1,
+        "types": [
+          "Float64"
+        ],
+        "result_sha256": "00e22db741399a92ace8bac25ec837beb180dd2f88f917245f34f357c03ed83d"
+      },
+      "spark-off": {
+        "rows": 1,
+        "types": [
+          "Float64"
+        ],
+        "result_sha256": "9f10ceb236f3f570f4fc1834ec489fddbca2ca8fa221658208daac330c0c52e7"
+      },
+      "spark-on": {
+        "rows": 1,
+        "types": [
+          "Float64"
+        ],
+        "result_sha256": "9f10ceb236f3f570f4fc1834ec489fddbca2ca8fa221658208daac330c0c52e7"
+      }
+    }
+  },
+  "aggregate.aggregate.percentile_approx": {
+    "staging": {
+      "native": {
+        "rows": 1,
+        "types": [
+          "Float64"
+        ],
+        "result_sha256": "00e22db741399a92ace8bac25ec837beb180dd2f88f917245f34f357c03ed83d"
+      },
+      "spark-off": {
+        "rows": 1,
+        "types": [
+          "Float64"
+        ],
+        "result_sha256": "9f10ceb236f3f570f4fc1834ec489fddbca2ca8fa221658208daac330c0c52e7"
+      },
+      "spark-on": {
+        "rows": 1,
+        "types": [
+          "Float64"
+        ],
+        "result_sha256": "9f10ceb236f3f570f4fc1834ec489fddbca2ca8fa221658208daac330c0c52e7"
+      }
+    },
+    "candidate": {
+      "native": {
+        "rows": 1,
+        "types": [
+          "Float64"
+        ],
+        "result_sha256": "00e22db741399a92ace8bac25ec837beb180dd2f88f917245f34f357c03ed83d"
+      },
+      "spark-off": {
+        "rows": 1,
+        "types": [
+          "Float64"
+        ],
+        "result_sha256": "9f10ceb236f3f570f4fc1834ec489fddbca2ca8fa221658208daac330c0c52e7"
+      },
+      "spark-on": {
+        "rows": 1,
+        "types": [
+          "Float64"
+        ],
+        "result_sha256": "9f10ceb236f3f570f4fc1834ec489fddbca2ca8fa221658208daac330c0c52e7"
+      }
+    }
+  },
+  "window.window.approx_percentile": {
+    "staging": {
+      "native": {
+        "rows": 1000000,
+        "types": [
+          "Int64",
+          "Float64"
+        ],
+        "result_sha256": "9ba1c801415e934f37ea04dd8ef88d783888bf33b8f43cf6d5d071e8e3fd2b31"
+      },
+      "spark-off": {
+        "rows": 1000000,
+        "types": [
+          "Int64",
+          "Float64"
+        ],
+        "result_sha256": "1de3cb7a12a9f77f4c216fce2971a9e853d65ca446f1ee65fd91532cbff374a0"
+      },
+      "spark-on": {
+        "rows": 1000000,
+        "types": [
+          "Int64",
+          "Float64"
+        ],
+        "result_sha256": "1de3cb7a12a9f77f4c216fce2971a9e853d65ca446f1ee65fd91532cbff374a0"
+      }
+    },
+    "candidate": {
+      "native": {
+        "rows": 1000000,
+        "types": [
+          "Int64",
+          "Float64"
+        ],
+        "result_sha256": "9ba1c801415e934f37ea04dd8ef88d783888bf33b8f43cf6d5d071e8e3fd2b31"
+      },
+      "spark-off": {
+        "rows": 1000000,
+        "types": [
+          "Int64",
+          "Float64"
+        ],
+        "result_sha256": "1de3cb7a12a9f77f4c216fce2971a9e853d65ca446f1ee65fd91532cbff374a0"
+      },
+      "spark-on": {
+        "rows": 1000000,
+        "types": [
+          "Int64",
+          "Float64"
+        ],
+        "result_sha256": "1de3cb7a12a9f77f4c216fce2971a9e853d65ca446f1ee65fd91532cbff374a0"
+      }
+    }
+  },
+  "window.window.percentile_approx": {
+    "staging": {
+      "native": {
+        "rows": 1000000,
+        "types": [
+          "Int64",
+          "Float64"
+        ],
+        "result_sha256": "9ba1c801415e934f37ea04dd8ef88d783888bf33b8f43cf6d5d071e8e3fd2b31"
+      },
+      "spark-off": {
+        "rows": 1000000,
+        "types": [
+          "Int64",
+          "Float64"
+        ],
+        "result_sha256": "1de3cb7a12a9f77f4c216fce2971a9e853d65ca446f1ee65fd91532cbff374a0"
+      },
+      "spark-on": {
+        "rows": 1000000,
+        "types": [
+          "Int64",
+          "Float64"
+        ],
+        "result_sha256": "1de3cb7a12a9f77f4c216fce2971a9e853d65ca446f1ee65fd91532cbff374a0"
+      }
+    },
+    "candidate": {
+      "native": {
+        "rows": 1000000,
+        "types": [
+          "Int64",
+          "Float64"
+        ],
+        "result_sha256": "9ba1c801415e934f37ea04dd8ef88d783888bf33b8f43cf6d5d071e8e3fd2b31"
+      },
+      "spark-off": {
+        "rows": 1000000,
+        "types": [
+          "Int64",
+          "Float64"
+        ],
+        "result_sha256": "1de3cb7a12a9f77f4c216fce2971a9e853d65ca446f1ee65fd91532cbff374a0"
+      },
+      "spark-on": {
+        "rows": 1000000,
+        "types": [
+          "Int64",
+          "Float64"
+        ],
+        "result_sha256": "1de3cb7a12a9f77f4c216fce2971a9e853d65ca446f1ee65fd91532cbff374a0"
+      }
+    }
+  }
+}
