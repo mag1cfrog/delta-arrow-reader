@@ -1,0 +1,15 @@
+{
+  "staging_head": "fe405fb8c51ee6c83c761a7512d381ce74af9c1b",
+  "staging": {
+    "canonical_protocol": "5db353b75c4560a85f70913c30c3268f22b1a73f",
+    "stages_protocol": "837e6780c923a2a7a2bd542ab824c8349465d311"
+  },
+  "candidate": {
+    "canonical_protocol": "e6da2697628f37ccf8a41335ebbf9e6e70996a72",
+    "stages_protocol": "0e3c5e493feb9eaec6c411e2d1bbcf2cc06adda6"
+  },
+  "observer_spans": [
+    "physical.optimizer.rule/0/optimize_projections/body",
+    "physical.optimizer.rule/1/optimize_projections/body"
+  ]
+}
