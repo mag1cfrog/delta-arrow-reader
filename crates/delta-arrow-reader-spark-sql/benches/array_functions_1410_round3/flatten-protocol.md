@@ -23,7 +23,8 @@ formatting, root Clippy, full Spark workspace tests and an
 independent review.
 
 Run three alternating release blocks with the
-[paired driver](../time_conversions_1409_round3/run_pair.py).
+[paired driver](../time_conversions_1409_round3/run_pair.py)
+and the [sealed build pins](flatten.json).
 Preflight checks every row and executed type on one million
 inputs in native and both ANSI modes. Exclude a mismatch.
 Require 24 successful processes with 72 retained samples,
