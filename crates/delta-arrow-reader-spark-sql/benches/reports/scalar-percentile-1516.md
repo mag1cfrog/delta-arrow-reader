@@ -44,11 +44,12 @@ traces reached the same native approximate-percentile accumulator,
 TDigest operations, sliding replay, bounded window and sort
 routines in both sealed binaries. Six linked state layouts agree,
 including the 96-byte accumulator, 80-byte sliding expression
-and 264-byte window stream, each aligned to 8 bytes. Sixteen
-normalized routine bodies, including the UDAF constructor, and
-424 linked references match. Reference resolution covers the
-eight relative jump targets, scalar literal widths and the two
-zero-initialized statics. Apply the build-layout rule to this
+and 264-byte window stream, each aligned to 8 bytes. Nineteen
+normalized routine bodies and 653 linked references match.
+Those include the executed result-column instantiation, bounded
+aggregate processing and frame calculation. Resolve jump-table
+entries to their relative code targets and compare scalar data
+at the load width, along with linked statics. Apply the build-layout rule to this
 control. The other native window control has mixed-sign pairs.
 [Native instruction, layout and trace evidence](../functions_1516/approx-percentile-native-layout.json.gz)
 
