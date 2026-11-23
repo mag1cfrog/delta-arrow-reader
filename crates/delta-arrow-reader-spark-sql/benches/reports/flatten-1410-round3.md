@@ -27,7 +27,7 @@ Native and both ANSI modes agreed on all one million rows and the
 executed Int64 and List(Int64) types across both builds. The committed
 cases check all four List and LargeList width pairs, slices, empty lists,
 outer and inner NULLs, NULL child values and the original result field.
-A NULL parent with a nonempty range retains its offsets and child buffers
+A NULL parent with a nonempty range retains that offset range
 before concatenation. Mixed batches with visible NULL inner lists agree
 with the original CASE. Formatting, root Clippy and the full Spark
 workspace passed with 3,304 tests passed and three ignored. An independent
