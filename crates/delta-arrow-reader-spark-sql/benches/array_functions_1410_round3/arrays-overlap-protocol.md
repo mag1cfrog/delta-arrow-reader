@@ -28,7 +28,8 @@ Keep the existing floating-point, FixedSizeList and failing
 operand tests. Require formatting, root Clippy, the Spark
 workspace suite and an independent review.
 
-Freeze the exact candidate and use the [paired driver](../time_conversions_1409_round3/run_pair.py)
+Use the [sealed build pins](arrays-overlap.json) and the
+[paired driver](../time_conversions_1409_round3/run_pair.py)
 for three alternating blocks. Each block runs staging and
 candidate in native and both ANSI modes, plus native A/A,
 for 24 processes and 72 retained samples within 3,600 seconds.

@@ -1,0 +1,15 @@
+{
+  "staging_source": "74503100ad7970eba660c2e1a026f7daab479893",
+  "staging_tip": "7ad81eb722ef33a869d7b4a49f26488546b3bad2",
+  "candidate_source": "034d79b5d7480d5ccf58a51e88be852fd1e008fb",
+  "staging_build_protocol": "716c8b854d170530a619b004dfed25710190fa83",
+  "candidate_build_protocol": "034d79b5d7480d5ccf58a51e88be852fd1e008fb",
+  "statement_manifest": "../array_functions_1410/manifest.json",
+  "statement_manifest_sha256": "e7957ec6dccaa03433d265eadd65c412a6d71e88aac5f280e80863ed9d2a658e",
+  "case_ids": ["scalar.array.arrays_overlap"],
+  "spark_plan_contains": {
+    "staging": {"scalar": ["spark_bigint_arrays_overlap", "array_length", "spark_nested_result_cast"]},
+    "candidate": {"scalar": ["spark_bigint_arrays_overlap"]}
+  },
+  "overall_timeout_seconds": 3600
+}
