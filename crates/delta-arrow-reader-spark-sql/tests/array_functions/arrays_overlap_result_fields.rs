@@ -136,31 +136,48 @@ async fn arrays_overlap_fuses_only_scanned_bigint_lists() -> TestResult {
         .build(),
     );
     let left = [
+        Some(vec![Some(50)]),
         None,
         Some(vec![]),
         Some(vec![None, Some(1)]),
         Some(vec![None, Some(i64::MIN)]),
         Some(vec![Some(i64::MIN)]),
         Some(vec![Some(i64::MAX)]),
+        Some((0..18).map(Some).collect()),
+        Some((0..17).map(Some).collect()),
     ];
     let right = [
+        Some(vec![Some(50)]),
         Some(vec![Some(1)]),
         Some(vec![None]),
         Some(vec![Some(2)]),
         Some(vec![Some(i64::MIN)]),
         Some(vec![Some(i64::MAX)]),
         Some(vec![Some(i64::MAX)]),
+        Some((18..35).map(Some).collect()),
+        Some((16..36).map(Some).collect()),
     ];
-    let arrays = |large, values: [Option<Vec<Option<i64>>>; 6]| -> ArrayRef {
-        if large {
+    let arrays = |large, values: [Option<Vec<Option<i64>>>; 9]| {
+        let rows = values.len() - 1;
+        let array: ArrayRef = if large {
             Arc::new(LargeListArray::from_iter_primitive::<Int64Type, _, _>(
                 values,
             ))
         } else {
             Arc::new(ListArray::from_iter_primitive::<Int64Type, _, _>(values))
-        }
+        };
+        array.slice(1, rows)
     };
-    let expected = vec![None, Some(false), None, Some(true), Some(false), Some(true)];
+    let expected = vec![
+        None,
+        Some(false),
+        None,
+        Some(true),
+        Some(false),
+        Some(true),
+        Some(false),
+        Some(true),
+    ];
     for large in [false, true] {
         let table = if large { "large_lists" } else { "lists" };
         session.register_batch(
@@ -200,6 +217,10 @@ async fn arrays_overlap_fuses_only_scanned_bigint_lists() -> TestResult {
                 let plan = query.create_physical_plan(&session).await?;
                 let display = displayable(plan.as_ref()).indent(false).to_string();
                 assert_eq!(display.contains("array_length"), !fused, "{display}");
+                if fused {
+                    assert!(display.contains("spark_bigint_arrays_overlap"), "{display}");
+                    assert!(!display.contains("spark_nested_result_cast"), "{display}");
+                }
                 assert_eq!(plan.schema().field(0).data_type(), &DataType::Boolean);
                 let mut values = Vec::new();
                 for batch in collect(plan, session.task_ctx()).await? {

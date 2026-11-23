@@ -743,7 +743,7 @@ fn arrays_overlap(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let use_bigint_membership = matches!(
         (&left, &right),
         (expr::Expr::Column(_), expr::Expr::Column(_))
-    ) && same_bigint_list_storage(&left_type, &right_type);
+    ) && same_bigint_list_offset_width(&left_type, &right_type);
 
     let left_needs_value_cast =
         !same_positional_logical_type(left_element.data_type(), &element_type);
@@ -820,7 +820,7 @@ fn arrays_overlap(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     Ok(ScalarUDF::from(ArraysOverlapResultField { operand_nullable }).call(vec![result]))
 }
 
-fn same_bigint_list_storage(left: &DataType, right: &DataType) -> bool {
+fn same_bigint_list_offset_width(left: &DataType, right: &DataType) -> bool {
     match (left, right) {
         (DataType::List(left), DataType::List(right))
         | (DataType::LargeList(left), DataType::LargeList(right)) => {
@@ -863,7 +863,7 @@ pub(crate) fn fuse_scanned_bigint_array_overlap(
             left.get_type(input.schema()),
             right.get_type(input.schema()),
         )
-        && same_bigint_list_storage(&left_type, &right_type)
+        && same_bigint_list_offset_width(&left_type, &right_type)
     {
         // The kernel handles the parent and child NULLs and empty offsets itself.
         // Only stored columns can skip operand preparation without changing evaluation.
