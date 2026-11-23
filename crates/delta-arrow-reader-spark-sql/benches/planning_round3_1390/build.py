@@ -6,6 +6,8 @@ import os
 import shutil
 import subprocess
 import sys
+import tarfile
+import tomllib
 
 sys.dont_write_bytecode = True
 HERE = Path(__file__).resolve().parent
@@ -13,6 +15,7 @@ sys.path[:0] = [str(HERE.parent / name) for name in ("planning_attribution", "pl
 import assemble
 import inventory
 import run
+from observe_default_planner import observe
 
 SPARK_PATH = assemble.WORKSPACE.relative_to(assemble.REPO)
 FRAME = "let frame = DataFrame::new(state, planning_input);"
@@ -66,6 +69,21 @@ def stages(workspace):
     return changed.keys(), anchors
 
 
+def observe_registry_planner(assembled, workspace):
+    lock = tomllib.loads((workspace / "Cargo.lock").read_text())
+    entry, = [entry for entry in lock["package"] if entry["name"] == "datafusion"]
+    name = f"datafusion-{entry['version']}"
+    archive, = (Path.home() / ".cargo/registry/cache").glob(f"*/{name}.crate")
+    assert assemble.digest(archive) == entry["checksum"]
+    with tarfile.open(archive) as source:
+        source.extractall(assembled, filter="data")
+    package = assembled / name
+    observe(package, workspace / "benches/planning_attribution/driver.rs",
+            assemble.HERE / "events.rs", workspace / (assemble.SAIL + "sail-plan/src/physical_plan/mod.rs"))
+    return package, {"name": name, "registry_sha256": entry["checksum"],
+                     "observed_source_sha256": run.tree_hash(package)}
+
+
 def build(kind, source_commit, worktree, target, output):
     if sys.flags.optimize:
         raise SystemExit("validation requires Python assertions")
@@ -79,9 +97,12 @@ def build(kind, source_commit, worktree, target, output):
     assembled = output / "sealed-source"
     description = assemble.assemble(assembled, observed=False)
     staged = assembled / SPARK_PATH
-    if kind == "stages":
+    override = None
+    if kind in ("stages", "planner-stages"):
         names, description["anchors"] = stages(staged)
         description["observed"] = True
+        if kind == "planner-stages":
+            override, description["registry_observer"] = observe_registry_planner(assembled, staged)
     elif kind == "inventory":
         names = inventory.patch(staged, "stress/wide_400")
     else:
@@ -94,6 +115,8 @@ def build(kind, source_commit, worktree, target, output):
     command = ["cargo", "+1.96.0", "build", "--offline", "--locked", "--release", "--jobs", "2",
                "--config", "profile.release.debug=1", "--target-dir", str(target),
                "--bench", "planning_attribution", "--message-format=json"]
+    if override is not None:
+        command.extend(["--config", "paths=" + json.dumps([str(override)])])
     settings = {"PATH": os.environ["PATH"], "HOME": str(Path.home()), "TZ": "UTC"}
     original = {}
     try:
@@ -129,7 +152,7 @@ def build(kind, source_commit, worktree, target, output):
 
 if __name__ == "__main__":
     cli = argparse.ArgumentParser(description=__doc__)
-    cli.add_argument("kind", choices=("canonical", "inventory", "stages"))
+    cli.add_argument("kind", choices=("canonical", "inventory", "stages", "planner-stages"))
     cli.add_argument("source_commit")
     for name in ("worktree", "target", "output"):
         cli.add_argument(name, type=lambda value: Path(value).resolve())
