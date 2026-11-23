@@ -1,0 +1,207 @@
+{
+  "functions": [
+    {
+      "id": "aggregate.aggregate.approx_percentile",
+      "spark_sql": "SELECT approx_percentile(d,0.5) AS value FROM bench",
+      "native_sql": "SELECT approx_percentile_cont(d,0.5) AS value FROM bench",
+      "projection_sql": "SELECT d FROM bench",
+      "restricted_input_sql": "SELECT id,grp,CASE WHEN d IS NOT NULL THEN CAST(0.5 AS DOUBLE) END AS d FROM bench"
+    },
+    {
+      "id": "aggregate.aggregate.percentile_approx",
+      "spark_sql": "SELECT percentile_approx(d,0.5) AS value FROM bench",
+      "native_sql": "SELECT approx_percentile_cont(d,0.5) AS value FROM bench",
+      "projection_sql": "SELECT d FROM bench",
+      "restricted_input_sql": "SELECT id,grp,CASE WHEN d IS NOT NULL THEN CAST(0.5 AS DOUBLE) END AS d FROM bench"
+    },
+    {
+      "id": "aggregate.aggregate.regr_avgx",
+      "spark_sql": "SELECT regr_avgx(d,CAST(p AS DOUBLE)) AS value FROM bench",
+      "native_sql": "SELECT regr_avgx(d,CAST(p AS DOUBLE)) AS value FROM bench",
+      "projection_sql": "SELECT p,d FROM bench",
+      "restricted_input_sql": "SELECT id,grp,d,CASE WHEN p IS NOT NULL THEN 8 END AS p FROM bench"
+    },
+    {
+      "id": "aggregate.aggregate.regr_avgy",
+      "spark_sql": "SELECT regr_avgy(d,CAST(p AS DOUBLE)) AS value FROM bench",
+      "native_sql": "SELECT regr_avgy(d,CAST(p AS DOUBLE)) AS value FROM bench",
+      "projection_sql": "SELECT p,d FROM bench",
+      "restricted_input_sql": "SELECT id,grp,CASE WHEN d IS NOT NULL THEN CAST(0.5 AS DOUBLE) END AS d,p FROM bench"
+    },
+    {
+      "id": "aggregate.aggregate.regr_r2",
+      "spark_sql": "SELECT regr_r2(d,CAST(p AS DOUBLE)) AS value FROM bench",
+      "native_sql": "SELECT regr_r2(d,CAST(p AS DOUBLE)) AS value FROM bench",
+      "projection_sql": "SELECT p,d FROM bench",
+      "restricted_input_sql": "SELECT id,grp,CAST(p AS DOUBLE) AS d,p FROM bench"
+    },
+    {
+      "id": "aggregate.aggregate.regr_sxy",
+      "spark_sql": "SELECT regr_sxy(d,CAST(p AS DOUBLE)) AS value FROM bench",
+      "native_sql": "SELECT regr_sxy(d,CAST(p AS DOUBLE)) AS value FROM bench",
+      "projection_sql": "SELECT p,d FROM bench",
+      "restricted_input_sql": "SELECT id,grp,CASE WHEN d IS NOT NULL THEN CAST(0.5 AS DOUBLE) END AS d,p FROM bench"
+    },
+    {
+      "id": "aggregate.aggregate.try_avg",
+      "spark_sql": "SELECT try_avg(d) AS value FROM bench",
+      "native_sql": "SELECT avg(d) AS value FROM bench",
+      "projection_sql": "SELECT d FROM bench",
+      "restricted_input_sql": "SELECT id,grp,CASE WHEN d IS NOT NULL THEN CAST(0.5 AS DOUBLE) END AS d FROM bench"
+    },
+    {
+      "id": "scalar.array.array_append",
+      "spark_sql": "SELECT id,array_append(arr,i) AS value FROM bench",
+      "native_sql": "SELECT id,array_append(arr,i) AS value FROM bench",
+      "projection_sql": "SELECT id,i,arr FROM bench",
+      "restricted_input_sql": "SELECT id,arr,i FROM bench WHERE arr IS NOT NULL AND i IS NOT NULL"
+    },
+    {
+      "id": "scalar.array.array_compact",
+      "spark_sql": "SELECT id,array_compact(arr) AS value FROM bench",
+      "native_sql": "SELECT id,arrow_cast(array_remove_all(arr,CAST(NULL AS BIGINT)),'List(non-null Int64)') AS value FROM bench",
+      "projection_sql": "SELECT id,arr FROM bench",
+      "restricted_input_sql": "SELECT id,make_array(array_element(arr,1),array_element(arr,3)) AS arr FROM bench WHERE arr IS NOT NULL"
+    },
+    {
+      "id": "scalar.array.array_insert",
+      "spark_sql": "SELECT id,array_insert(arr,2,i) AS value FROM bench",
+      "native_sql": "SELECT id,array_concat(array_slice(arr,1,1),make_array(i),array_slice(arr,2,3)) AS value FROM bench",
+      "projection_sql": "SELECT id,i,arr FROM bench",
+      "restricted_input_sql": "SELECT id,arr,i FROM bench WHERE arr IS NOT NULL AND i IS NOT NULL"
+    },
+    {
+      "id": "scalar.array.array_prepend",
+      "spark_sql": "SELECT id,array_prepend(arr,i) AS value FROM bench",
+      "native_sql": "SELECT id,array_prepend(i,arr) AS value FROM bench",
+      "projection_sql": "SELECT id,i,arr FROM bench",
+      "restricted_input_sql": "SELECT id,arr,i FROM bench WHERE arr IS NOT NULL AND i IS NOT NULL"
+    },
+    {
+      "id": "scalar.array.arrays_zip",
+      "spark_sql": "SELECT id,arrays_zip(arr,arr) AS value FROM bench",
+      "native_sql": "SELECT id,arrays_zip(arr,arr) AS value FROM bench",
+      "projection_sql": "SELECT id,arr FROM bench",
+      "source_review": "Native and Spark use different nested field names and nullability."
+    },
+    {
+      "id": "scalar.collection.cardinality",
+      "spark_sql": "SELECT id,cardinality(arr) AS value FROM bench",
+      "native_sql": "SELECT id,CAST(array_length(arr) AS INT) AS value FROM bench",
+      "projection_sql": "SELECT id,arr FROM bench",
+      "restricted_input_sql": "SELECT id,arr FROM bench WHERE arr IS NOT NULL"
+    },
+    {
+      "id": "scalar.collection.concat",
+      "spark_sql": "SELECT id,concat(s,s2) AS value FROM bench",
+      "native_sql": "SELECT id,concat(s,s2) AS value FROM bench",
+      "projection_sql": "SELECT id,s,s2 FROM bench",
+      "restricted_input_sql": "SELECT id,s,s2 FROM bench WHERE s IS NOT NULL AND s2 IS NOT NULL"
+    },
+    {
+      "id": "scalar.collection.size",
+      "spark_sql": "SELECT id,size(arr) AS value FROM bench",
+      "native_sql": "SELECT id,CAST(array_length(arr) AS INT) AS value FROM bench",
+      "projection_sql": "SELECT id,arr FROM bench",
+      "restricted_input_sql": "SELECT id,arr FROM bench WHERE arr IS NOT NULL"
+    },
+    {
+      "id": "scalar.datetime.date_format",
+      "spark_sql": "SELECT id,date_format(ts,'yyyy-MM-dd') AS value FROM bench",
+      "native_sql": "SELECT id,date_format(ts,'yyyy-MM-dd') AS value FROM bench",
+      "projection_sql": "SELECT id,ts FROM bench",
+      "source_review": "The native statement interprets the fixed pattern as Chrono text."
+    },
+    {
+      "id": "scalar.math.expm1",
+      "spark_sql": "SELECT id,expm1(d) AS value FROM bench",
+      "native_sql": "SELECT id,exp(d)-1.0 AS value FROM bench",
+      "projection_sql": "SELECT id,d FROM bench",
+      "restricted_input_sql": "SELECT id,CASE WHEN d IS NOT NULL THEN CAST(0.5 AS DOUBLE) END AS d FROM bench"
+    },
+    {
+      "id": "scalar.string.base64",
+      "spark_sql": "SELECT id,base64(b) AS value FROM bench",
+      "native_sql": "SELECT id,encode(b,'base64') AS value FROM bench",
+      "projection_sql": "SELECT id,b FROM bench",
+      "restricted_input_sql": "SELECT id,CAST(substring(s,1,6) AS BINARY) AS b FROM bench"
+    },
+    {
+      "id": "scalar.string.regexp_replace",
+      "spark_sql": "SELECT id,regexp_replace(s,'[0-9]','x') AS value FROM bench",
+      "native_sql": "SELECT id,regexp_replace(s,'[0-9]','x') AS value FROM bench",
+      "projection_sql": "SELECT id,s FROM bench",
+      "restricted_input_sql": "SELECT id,substring(s,1,6) AS s FROM bench"
+    },
+    {
+      "id": "window.window.approx_percentile",
+      "spark_sql": "SELECT id,approx_percentile(d,0.5) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "native_sql": "SELECT id,approx_percentile_cont(d,0.5) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "projection_sql": "SELECT id,grp,d FROM bench",
+      "restricted_input_sql": "SELECT id,grp,CASE WHEN d IS NOT NULL THEN CAST(0.5 AS DOUBLE) END AS d FROM bench"
+    },
+    {
+      "id": "window.window.array_agg",
+      "spark_sql": "SELECT id,sort_array(array_agg(i) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW)) AS value FROM bench",
+      "native_sql": "SELECT id,arrow_cast(array_sort(array_agg(i) FILTER (WHERE i IS NOT NULL) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW),'ASC','NULLS FIRST'),'List(non-null Int64)') AS value FROM bench",
+      "projection_sql": "SELECT id,grp,i FROM bench",
+      "restricted_input_sql": "SELECT id,grp,i FROM bench WHERE i IS NOT NULL"
+    },
+    {
+      "id": "window.window.collect_list",
+      "spark_sql": "SELECT id,sort_array(collect_list(i) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW)) AS value FROM bench",
+      "native_sql": "SELECT id,arrow_cast(array_sort(array_agg(i) FILTER (WHERE i IS NOT NULL) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW),'ASC','NULLS FIRST'),'List(non-null Int64)') AS value FROM bench",
+      "projection_sql": "SELECT id,grp,i FROM bench",
+      "restricted_input_sql": "SELECT id,grp,i FROM bench WHERE i IS NOT NULL"
+    },
+    {
+      "id": "window.window.collect_set",
+      "spark_sql": "SELECT id,sort_array(collect_set(i) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW)) AS value FROM bench",
+      "native_sql": "SELECT id,arrow_cast(array_sort(array_agg(DISTINCT i) FILTER (WHERE i IS NOT NULL) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW),'ASC','NULLS FIRST'),'List(non-null Int64)') AS value FROM bench",
+      "projection_sql": "SELECT id,grp,i FROM bench",
+      "restricted_input_sql": "SELECT id,grp,i FROM bench WHERE i IS NOT NULL"
+    },
+    {
+      "id": "window.window.percentile_approx",
+      "spark_sql": "SELECT id,percentile_approx(d,0.5) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "native_sql": "SELECT id,approx_percentile_cont(d,0.5) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "projection_sql": "SELECT id,grp,d FROM bench",
+      "restricted_input_sql": "SELECT id,grp,CASE WHEN d IS NOT NULL THEN CAST(0.5 AS DOUBLE) END AS d FROM bench"
+    },
+    {
+      "id": "window.window.regr_avgx",
+      "spark_sql": "SELECT id,regr_avgx(d,CAST(p AS DOUBLE)) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "native_sql": "SELECT id,regr_avgx(d,CAST(p AS DOUBLE)) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "projection_sql": "SELECT id,grp,p,d FROM bench",
+      "restricted_input_sql": "SELECT id,grp,d,CASE WHEN p IS NOT NULL THEN 8 END AS p FROM bench"
+    },
+    {
+      "id": "window.window.try_avg",
+      "spark_sql": "SELECT id,try_avg(d) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "native_sql": "SELECT id,avg(d) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "projection_sql": "SELECT id,grp,d FROM bench",
+      "restricted_input_sql": "SELECT id,grp,CASE WHEN d IS NOT NULL THEN CAST(0.5 AS DOUBLE) END AS d FROM bench"
+    },
+    {
+      "id": "window.window.bitmap_and_agg",
+      "spark_sql": "SELECT id,bitmap_and_agg(b) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,grp,b FROM bench",
+      "source_review": "No native reference in #1391."
+    },
+    {
+      "id": "window.window.bitmap_construct_agg",
+      "spark_sql": "SELECT id,bitmap_construct_agg(CAST(p AS BIGINT)) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,grp,p FROM bench",
+      "source_review": "No native reference in #1391."
+    },
+    {
+      "id": "window.window.bitmap_or_agg",
+      "spark_sql": "SELECT id,bitmap_or_agg(b) OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS value FROM bench",
+      "native_sql": null,
+      "projection_sql": "SELECT id,grp,b FROM bench",
+      "source_review": "No native reference in #1391."
+    }
+  ]
+}
