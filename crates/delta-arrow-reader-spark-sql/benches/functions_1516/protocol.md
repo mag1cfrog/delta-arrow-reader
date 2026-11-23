@@ -35,7 +35,7 @@ The executable SHA256 is
 `145c2cd1c0538bbe1de4f1273f21f570807f83a1e2ae8b539d4c231344583c8c`.
 Use [compare_restricted.py](compare_restricted.py) and the frozen
 manifest SHA256
-`b5b2c5befefc0b254ab65ef4443cb9ff44be10365a515a61a651f758dfbd8f96`.
+`f9116c6ce9385847ef368ca41125fc85d1e0f2fbbca976e7b461a86ebbbcf160`.
 
 Use three timing blocks, reversing the case order, modes and native
 repeat order in the middle block. Each eligible case has one Spark

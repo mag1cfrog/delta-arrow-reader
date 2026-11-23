@@ -124,7 +124,7 @@
       "spark_sql": "SELECT id,base64(b) AS value FROM bench",
       "native_sql": "SELECT id,encode(b,'base64') AS value FROM bench",
       "projection_sql": "SELECT id,b FROM bench",
-      "restricted_input_sql": "SELECT id,CAST(substring(s,1,6) AS BINARY) AS b FROM bench"
+      "restricted_input_sql": "SELECT id,CAST(substring(s,1,6) AS BYTEA) AS b FROM bench"
     },
     {
       "id": "scalar.string.regexp_replace",
