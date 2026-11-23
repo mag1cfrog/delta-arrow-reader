@@ -2609,6 +2609,13 @@ constructor still handles other schemas. The
 [planning report](benches/reports/planning-1390-round2-wide-resolution.md)
 records the scan alias cost and matched comparison.
 
+Runtime metadata alignment rebuilds the schema directly for an ordered
+root projection of wide scan renames. It copies the scanned fields by
+ordinal and uses the actual output aliases and qualifiers. The ordinary
+metadata walk still handles filters, alias metadata, constraints and
+other plans. The [planner profile](benches/reports/planning-1390-round3-planner-split.md)
+measured the repeated schema work in this step.
+
 ### SPLIT with one ASCII delimiter (#1413)
 
 A nonnull scalar pattern consisting of one literal ASCII graphic or space

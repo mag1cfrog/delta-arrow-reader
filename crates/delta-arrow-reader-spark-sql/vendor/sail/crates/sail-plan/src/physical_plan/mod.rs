@@ -1,5 +1,5 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
-use std::{borrow::Cow, sync::Arc};
+use std::{borrow::Cow, collections::HashSet, sync::Arc};
 
 use async_trait::async_trait;
 use datafusion::execution::SessionState;
@@ -13,9 +13,12 @@ use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_plan::projection::ProjectionExec;
 use datafusion::physical_plan::sorts::sort::SortExec;
 use datafusion::physical_planner::{DefaultPhysicalPlanner, ExtensionPlanner, PhysicalPlanner};
+use datafusion_common::datatype::FieldExt;
 use datafusion_common::tree_node::{Transformed, TreeNode, TreeNodeRecursion};
 use datafusion_common::{DFSchema, DataFusionError, Result, internal_err};
-use datafusion_expr::{Expr, LogicalPlan, LogicalPlanBuilder, Union, UserDefinedLogicalNode};
+use datafusion_expr::{
+    Expr, LogicalPlan, LogicalPlanBuilder, Projection, Union, UserDefinedLogicalNode,
+};
 use sail_logical_plan::monotonic_id::MonotonicIdNode;
 use sail_logical_plan::repartition::RequiredDistributionNode;
 use sail_logical_plan::sort::{RequiredSortNode, SortWithinPartitionsNode};
@@ -114,7 +117,13 @@ impl QueryPlanner for SparkQueryPlanner {
     }
 }
 
-fn align_result_metadata_for_execution(plan: LogicalPlan) -> Result<LogicalPlan> {
+fn align_result_metadata_for_execution(mut plan: LogicalPlan) -> Result<LogicalPlan> {
+    if let LogicalPlan::Projection(projection) = &mut plan
+        && let Some(schema) = rebuild_ordered_scan_rename_schema(projection)?
+    {
+        projection.schema = schema;
+        return Ok(plan);
+    }
     // Annotate after logical optimization so logical field pruning sees the original expressions.
     Ok(plan
         .transform_up_with_subqueries(|node| {
@@ -138,6 +147,50 @@ fn align_result_metadata_for_execution(plan: LogicalPlan) -> Result<LogicalPlan>
             Ok(Transformed::yes(node))
         })?
         .data)
+}
+
+fn rebuild_ordered_scan_rename_schema(projection: &Projection) -> Result<Option<Arc<DFSchema>>> {
+    let width = projection.expr.len();
+    let LogicalPlan::TableScan(scan) = projection.input.as_ref() else {
+        return Ok(None);
+    };
+    let input = &scan.projected_schema;
+    if width < 64
+        || width != input.fields().len()
+        || !scan.filters.is_empty()
+        || !input.functional_dependencies().is_empty()
+    {
+        return Ok(None);
+    }
+
+    // A direct rename with no alias metadata keeps the complete input field other than its name.
+    let mut names = HashSet::with_capacity(width);
+    let mut fields = Vec::with_capacity(width);
+    for ((qualifier, field), expression) in input.iter().zip(&projection.expr) {
+        let Expr::Alias(alias) = expression else {
+            return Ok(None);
+        };
+        let Expr::Column(column) = alias.expr.as_ref() else {
+            return Ok(None);
+        };
+        if alias.metadata.is_some()
+            || qualifier != Some(&scan.table_name)
+            || qualifier != column.relation.as_ref()
+            || field.name() != &column.name
+            || !names.insert(field.name())
+        {
+            return Ok(None);
+        }
+        fields.push((
+            alias.relation.clone(),
+            Arc::clone(field).renamed(&alias.name),
+        ));
+    }
+    if fields.len() != width {
+        return Ok(None);
+    }
+    let schema = DFSchema::new_with_metadata(fields, input.metadata().clone())?;
+    Ok(Some(Arc::new(schema)))
 }
 
 fn remove_alias_result_metadata(mut expression: Expr) -> Result<Transformed<Expr>> {
@@ -331,9 +384,102 @@ mod tests {
     use std::collections::HashMap;
 
     use arrow::datatypes::{DataType, Field, Schema};
-    use datafusion_expr::EmptyRelation;
+    use datafusion_common::{FunctionalDependence, FunctionalDependencies, TableReference};
+    use datafusion_expr::{EmptyRelation, lit, logical_plan::table_scan};
 
     use super::*;
+
+    #[test]
+    fn ordered_scan_rename_metadata_matches_standard_projection() -> Result<()> {
+        let input = Schema::new_with_metadata(
+            (0..64)
+                .map(|index| {
+                    Field::new(
+                        format!("c{index}"),
+                        if index % 2 == 0 {
+                            DataType::Int64
+                        } else {
+                            DataType::Utf8View
+                        },
+                        index % 3 == 0,
+                    )
+                    .with_metadata(HashMap::from([("source_field".into(), index.to_string())]))
+                })
+                .collect::<Vec<_>>(),
+            HashMap::from([("source".into(), "wide".into())]),
+        );
+        let scan =
+            Arc::new(table_scan(Some("wide"), &input, Some((0..64).rev().collect()))?.build()?);
+        let aliases = scan
+            .schema()
+            .columns()
+            .into_iter()
+            .enumerate()
+            .map(|(index, column)| {
+                Expr::Column(column).alias_qualified(
+                    (index % 2 == 0).then(|| TableReference::bare("output")),
+                    format!("renamed{index}"),
+                )
+            })
+            .collect::<Vec<_>>();
+        let expected = Projection::try_new(aliases.clone(), Arc::clone(&scan))?;
+        let stale = Projection::try_new_with_schema(
+            aliases.clone(),
+            Arc::clone(&scan),
+            Arc::clone(scan.schema()),
+        )?;
+        assert_eq!(
+            rebuild_ordered_scan_rename_schema(&stale)?,
+            Some(Arc::clone(&expected.schema))
+        );
+        let actual = align_result_metadata_for_execution(LogicalPlan::Projection(stale))?;
+        assert_eq!(actual.schema(), &expected.schema);
+        assert_eq!(actual, LogicalPlan::Projection(expected));
+
+        let LogicalPlan::TableScan(mut dependent) = scan.as_ref().clone() else {
+            return internal_err!("Expected a table scan");
+        };
+        let mut filtered = dependent.clone();
+        filtered.filters.push(lit(true));
+        dependent.projected_schema = Arc::new(
+            dependent
+                .projected_schema
+                .as_ref()
+                .clone()
+                .with_functional_dependencies(FunctionalDependencies::new(vec![
+                    FunctionalDependence::new(vec![0], vec![1], true),
+                ]))?,
+        );
+        for input in [filtered, dependent] {
+            let projection =
+                Projection::try_new(aliases.clone(), Arc::new(LogicalPlan::TableScan(input)))?;
+            assert!(rebuild_ordered_scan_rename_schema(&projection)?.is_none());
+            let expected = LogicalPlan::Projection(projection);
+            let actual = align_result_metadata_for_execution(expected.clone())?;
+            assert_eq!(actual.schema(), expected.schema());
+            assert_eq!(actual, expected);
+        }
+
+        let mut with_metadata = aliases;
+        let Expr::Alias(first) = &mut with_metadata[0] else {
+            return internal_err!("Expected a column rename");
+        };
+        let extension = HashMap::from([("ARROW:extension:name".into(), "dar.test".into())]);
+        let mut extras = extension.clone();
+        extras.insert("note".into(), "marked by the alias".into());
+        first.metadata = Some(extras.into());
+        let fallback = Projection::try_new(with_metadata.clone(), Arc::clone(&scan))?;
+        assert!(rebuild_ordered_scan_rename_schema(&fallback)?.is_none());
+        let Expr::Alias(first) = &mut with_metadata[0] else {
+            return internal_err!("Expected a column rename");
+        };
+        first.metadata = Some(extension.into());
+        let expected = Projection::try_new(with_metadata, scan)?;
+        let actual = align_result_metadata_for_execution(LogicalPlan::Projection(fallback))?;
+        assert_eq!(actual.schema(), &expected.schema);
+        assert_eq!(actual, LogicalPlan::Projection(expected));
+        Ok(())
+    }
 
     #[test]
     fn arrow_extension_metadata_keeps_the_input_plan() -> Result<()> {
