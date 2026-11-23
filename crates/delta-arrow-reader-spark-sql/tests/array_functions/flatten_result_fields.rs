@@ -241,7 +241,7 @@ async fn flatten_whole_batches_match_guarded_projection() -> TestResult {
         None,
         Some(vec![Some(10), None]),
         Some(vec![]),
-        Some(vec![Some(99)]),
+        None,
         Some(vec![Some(20)]),
         None,
         Some(vec![Some(30)]),
@@ -275,7 +275,7 @@ async fn flatten_whole_batches_match_guarded_projection() -> TestResult {
                     parents,
                 )?)
             };
-            // The first slice has NULL inner lists on both sides of its visible range.
+            // The first slice excludes or masks every inner NULL.
             for (offset, len) in [(1, 4), (4, 2)] {
                 let name = format!("lists_{outer_large}_{inner_large}_{offset}");
                 session.register_batch(

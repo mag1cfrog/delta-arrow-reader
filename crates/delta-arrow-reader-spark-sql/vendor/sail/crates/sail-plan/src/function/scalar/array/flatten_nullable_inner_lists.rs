@@ -85,11 +85,53 @@ impl HigherOrderUDFImpl for FlattenNullableInnerLists {
 }
 
 fn inner_lists_are_valid<O: OffsetSizeTrait>(array: &GenericListArray<O>) -> bool {
-    let Some(nulls) = array.values().nulls() else {
+    let Some(nulls) = array
+        .values()
+        .nulls()
+        .filter(|nulls| nulls.null_count() > 0)
+    else {
         return true;
     };
     let offsets = array.value_offsets();
-    let start = offsets[0].as_usize();
-    let end = offsets[array.len()].as_usize();
-    nulls.null_count() == 0 || nulls.slice(start, end - start).null_count() == 0
+    let range_is_valid = |(first, last): (usize, usize)| {
+        let start = offsets[first].as_usize();
+        let end = offsets[last].as_usize();
+        nulls.slice(start, end - start).null_count() == 0
+    };
+    // A NULL parent can hide an inner NULL without changing the flattened row.
+    range_is_valid((0, array.len()))
+        || array
+            .nulls()
+            .filter(|parents| parents.null_count() > 0)
+            .is_some_and(|parents| parents.valid_slices().all(range_is_valid))
+}
+
+#[cfg(test)]
+mod tests {
+    use datafusion::arrow::array::ListArray;
+    use datafusion::arrow::buffer::{NullBuffer, OffsetBuffer};
+    use datafusion::arrow::datatypes::Int64Type;
+
+    use super::*;
+
+    #[test]
+    fn visible_inner_lists_ignore_null_parents_and_unused_offsets() {
+        let inner = ListArray::from_iter_primitive::<Int64Type, _, _>([
+            None,
+            Some(vec![Some(1)]),
+            None,
+            Some(vec![Some(3)]),
+            None,
+        ]);
+        let outer = ListArray::new(
+            Arc::new(Field::new_list_field(inner.data_type().clone(), true)),
+            OffsetBuffer::from_lengths([1; 5]),
+            Arc::new(inner),
+            Some(NullBuffer::from(vec![true, true, false, true, true])),
+        );
+        assert!(inner_lists_are_valid(&outer.slice(1, 3)));
+        assert!(inner_lists_are_valid(&outer.slice(1, 0)));
+        assert!(!inner_lists_are_valid(&outer));
+        assert!(!inner_lists_are_valid(&outer.slice(2, 3)));
+    }
 }
