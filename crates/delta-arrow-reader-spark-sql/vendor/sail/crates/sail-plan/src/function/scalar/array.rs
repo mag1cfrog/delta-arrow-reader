@@ -11,10 +11,11 @@ use datafusion::arrow::datatypes::{DataType, Field, FieldRef, TimeUnit};
 use datafusion::functions::expr_fn::{btrim, nvl};
 use datafusion::functions_nested::expr_fn;
 use datafusion_common::cast::as_int64_array;
+use datafusion_common::tree_node::Transformed;
 use datafusion_common::{DataFusionError, ScalarValue, exec_err, internal_err};
 use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
 use datafusion_expr::{
-    ColumnarValue, EvaluatedRowPrefix, ExprSchemable, HigherOrderUDF, ReturnFieldArgs,
+    ColumnarValue, EvaluatedRowPrefix, ExprSchemable, HigherOrderUDF, LogicalPlan, ReturnFieldArgs,
     RowEvaluationFailure, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
     cast, expr, is_null, lit, not, or, when,
 };
@@ -44,6 +45,7 @@ use self::bigint_arrays_overlap::BigIntArraysOverlap;
 use self::has_null_inner_array::HasNullInnerArray;
 use super::lambda::lambda_with_fresh_parameter;
 use crate::error::{PlanError, PlanResult};
+use crate::expression_errors::passthrough_column_origin;
 use crate::function::common::{
     NormalizeFloatArrayForSparkComparison, ScalarFunction, ScalarFunctionInput,
     SparkComparisonFloat,
@@ -741,11 +743,7 @@ fn arrays_overlap(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let use_bigint_membership = matches!(
         (&left, &right),
         (expr::Expr::Column(_), expr::Expr::Column(_))
-    ) && matches!(
-        (&left_type, &right_type),
-        (DataType::List(_), DataType::List(_)) | (DataType::LargeList(_), DataType::LargeList(_))
-    ) && left_element.data_type() == &DataType::Int64
-        && right_element.data_type() == &DataType::Int64;
+    ) && same_bigint_list_storage(&left_type, &right_type);
 
     let left_needs_value_cast =
         !same_positional_logical_type(left_element.data_type(), &element_type);
@@ -820,6 +818,54 @@ fn arrays_overlap(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
             .end()?
     };
     Ok(ScalarUDF::from(ArraysOverlapResultField { operand_nullable }).call(vec![result]))
+}
+
+fn same_bigint_list_storage(left: &DataType, right: &DataType) -> bool {
+    match (left, right) {
+        (DataType::List(left), DataType::List(right))
+        | (DataType::LargeList(left), DataType::LargeList(right)) => {
+            left.data_type() == &DataType::Int64 && right.data_type() == &DataType::Int64
+        }
+        _ => false,
+    }
+}
+
+fn scanned_overlap_operand<'a>(
+    operand: &'a expr::Expr,
+    input: &LogicalPlan,
+) -> Option<&'a expr::Expr> {
+    let column = nested_result_cast_input(operand)?;
+    let expr::Expr::Column(reference) = column else {
+        return None;
+    };
+    let (origin, _) = passthrough_column_origin(input, reference).ok()?;
+    matches!(origin, LogicalPlan::TableScan(_)).then_some(column)
+}
+
+pub(crate) fn fuse_scanned_bigint_array_overlap(
+    mut expression: expr::Expr,
+    input: &LogicalPlan,
+) -> Transformed<expr::Expr> {
+    if let expr::Expr::ScalarFunction(result) = &mut expression
+        && result.func.inner().is::<ArraysOverlapResultField>()
+        && let [expr::Expr::Case(case)] = result.args.as_slice()
+        && let Some(expr::Expr::ScalarFunction(overlap)) = case.else_expr.as_deref()
+        && overlap.func.inner().is::<BigIntArraysOverlap>()
+        && let [left, right] = overlap.args.as_slice()
+        && let Some(left) = scanned_overlap_operand(left, input)
+        && let Some(right) = scanned_overlap_operand(right, input)
+        && let (Ok(left_type), Ok(right_type)) = (
+            left.get_type(input.schema()),
+            right.get_type(input.schema()),
+        )
+        && same_bigint_list_storage(&left_type, &right_type)
+    {
+        // The kernel handles the parent and child NULLs and empty offsets itself.
+        // Only stored columns can skip operand preparation without changing evaluation.
+        result.args[0] = overlap.func.call(vec![left.clone(), right.clone()]);
+        return Transformed::yes(expression);
+    }
+    Transformed::no(expression)
 }
 
 // Preserve the operands' declaration across the nullable CASE and singleton NULL probes.

@@ -117,6 +117,91 @@ async fn arrays_overlap_retains_evaluation_of_derived_array_columns() -> TestRes
 }
 
 #[tokio::test]
+async fn arrays_overlap_fuses_only_scanned_bigint_lists() -> TestResult {
+    use std::sync::Arc;
+
+    use arrow::array::{ArrayRef, LargeListArray, ListArray};
+    use arrow::datatypes::{DataType, Int64Type};
+    use arrow::record_batch::RecordBatch;
+    use datafusion::common::cast::as_boolean_array;
+    use datafusion::physical_plan::{collect, displayable};
+    use delta_arrow_reader_spark_sql::{SparkSqlOptions, plan_query};
+
+    let session = SessionContext::new_with_state(
+        configure_spark_sql(
+            SessionStateBuilder::new()
+                .with_default_features()
+                .with_config(SessionConfig::new().with_target_partitions(1)),
+        )
+        .build(),
+    );
+    let left = [
+        None,
+        Some(vec![]),
+        Some(vec![None, Some(1)]),
+        Some(vec![None, Some(i64::MIN)]),
+        Some(vec![Some(i64::MIN)]),
+        Some(vec![Some(i64::MAX)]),
+    ];
+    let right = [
+        Some(vec![Some(1)]),
+        Some(vec![None]),
+        Some(vec![Some(2)]),
+        Some(vec![Some(i64::MIN)]),
+        Some(vec![Some(i64::MAX)]),
+        Some(vec![Some(i64::MAX)]),
+    ];
+    let arrays = |large, values: [Option<Vec<Option<i64>>>; 6]| -> ArrayRef {
+        if large {
+            Arc::new(LargeListArray::from_iter_primitive::<Int64Type, _, _>(
+                values,
+            ))
+        } else {
+            Arc::new(ListArray::from_iter_primitive::<Int64Type, _, _>(values))
+        }
+    };
+    let expected = vec![None, Some(false), None, Some(true), Some(false), Some(true)];
+    for large in [false, true] {
+        let table = if large { "large_lists" } else { "lists" };
+        session.register_batch(
+            table,
+            RecordBatch::try_from_iter([
+                ("l", arrays(large, left.clone())),
+                ("r", arrays(large, right.clone())),
+            ])?,
+        )?;
+        for ansi_mode in [false, true] {
+            let options = SparkSqlOptions {
+                ansi_mode,
+                ..Default::default()
+            };
+            for (relation, fused) in [
+                (table.to_owned(), true),
+                (
+                    format!(
+                        "(SELECT transform(l, x -> x) AS l, transform(r, x -> x) AS r FROM {table}) AS derived"
+                    ),
+                    false,
+                ),
+            ] {
+                let sql = format!("SELECT arrays_overlap(l, r) AS value FROM {relation}");
+                let query = plan_query(&session, &sql, &options).await?;
+                let plan = query.create_physical_plan(&session).await?;
+                let display = displayable(plan.as_ref()).indent(false).to_string();
+                assert_eq!(display.contains("array_length"), !fused, "{display}");
+                assert_eq!(plan.schema().field(0).data_type(), &DataType::Boolean);
+                let mut values = Vec::new();
+                for batch in collect(plan, session.task_ctx()).await? {
+                    values.extend(as_boolean_array(batch.column(0))?.iter());
+                }
+                assert_eq!(values, expected, "{sql}");
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn arrays_overlap_result_fields_match_spark() -> TestResult {
     assert_arrays_overlap_result_fields(
         include_str!("../fixtures/arrays-overlap-result-fields-spark.jsonl"),

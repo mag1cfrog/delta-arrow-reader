@@ -2853,11 +2853,14 @@ Other types, scalar values and empty arrays use the original accumulator.
 
 ### Direct BIGINT ARRAYS_OVERLAP (#1410)
 
-Matching List or LargeList BIGINT columns use typed child values and offsets
-for three-valued membership inside the original operand preparation and
-CASE gates for NULL and empty arrays. Those gates retain evaluation of
-derived operands and their failures. Other expressions, storage pairs and
-element conversions retain the original membership lowering.
+Matching List or LargeList BIGINT columns use typed child values and
+offsets for three-valued membership. After Spark resolves the expression,
+projection preparation uses the kernel directly when both columns
+trace to a scan. The kernel reads parent validity, empty ranges and
+child validity. Computed columns keep the operand preparation and
+CASE gates, including their original failure behavior. Other expressions,
+storage pairs and element conversions keep their original lowering.
+The result-field declaration stays in place in each path.
 
 ### Positive literal BIGINT array lookup (#1410)
 
