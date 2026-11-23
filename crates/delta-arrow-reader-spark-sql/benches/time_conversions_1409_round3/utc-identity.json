@@ -1,0 +1,15 @@
+{
+  "staging_source": "74503100ad7970eba660c2e1a026f7daab479893",
+  "staging_tip": "74503100ad7970eba660c2e1a026f7daab479893",
+  "candidate_source": "34a56e60bedf1532339c74740c6ddb8a053c1351",
+  "staging_build_protocol": "716c8b854d170530a619b004dfed25710190fa83",
+  "candidate_build_protocol": "34a56e60bedf1532339c74740c6ddb8a053c1351",
+  "statement_manifest": "../time_conversions_1409/manifest.json",
+  "statement_manifest_sha256": "f79bbdb2e8920f590a13ccaa153d8dd9244fd5856253130b29cc0db38d4f46f6",
+  "case_ids": [
+    "scalar.datetime.convert_timezone",
+    "scalar.datetime.from_utc_timestamp",
+    "scalar.datetime.to_utc_timestamp"
+  ],
+  "overall_timeout_seconds": 3600
+}
