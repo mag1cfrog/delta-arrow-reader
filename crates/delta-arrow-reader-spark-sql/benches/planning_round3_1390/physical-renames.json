@@ -1,0 +1,13 @@
+{
+  "staging_head": "b0de2e2b73258551c2088a8358c2d15b6365fb2f",
+  "staging": {
+    "canonical_protocol": "5db353b75c4560a85f70913c30c3268f22b1a73f",
+    "stages_protocol": "e115b11b95143ac0f6bdc44225eb08da6aa454fa"
+  },
+  "candidate": {
+    "canonical_protocol": "714a0504feff00ebd042b3e10f7997a3318d686b",
+    "stages_protocol": "dc150e234a5bd27f546cc32c7378e3b857a8e342"
+  },
+  "observer_kind": "planner-stages",
+  "observer_spans": ["default.lowering", "default.optimization"]
+}

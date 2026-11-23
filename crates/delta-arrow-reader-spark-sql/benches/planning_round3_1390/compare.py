@@ -12,6 +12,7 @@ import time
 sys.dont_write_bytecode = True
 from build import verify_compiler_inputs
 from measure import WIDE, archive, assemble, emit, fixture, paired, paired_samples, run, sample
+from measure_default_planner import planner_spans
 
 
 def load(directory, kind, protocol):
@@ -29,23 +30,36 @@ def load(directory, kind, protocol):
 def verify_pair(builds):
     before, after = (builds[arm] for arm in paired.ARMS)
     assert before["toolchain"] == after["toolchain"]
-    assert before["assembly"]["assembly"] == after["assembly"]["assembly"]
+    before_overlay, after_overlay = (build["assembly"]["assembly"] for build in (before, after))
+    if before["kind"] == "planner-stages":
+        # Both builds have identical hooks. The Sail wrapper can contain the trial edit.
+        sail_planner = assemble.SAIL + "sail-plan/src/physical_plan/mod.rs"
+        assert before["assembly"]["anchors"] == after["assembly"]["anchors"]
+        assert before["assembly"]["registry_observer"] == after["assembly"]["registry_observer"]
+        before_overlay = {name: value for name, value in before_overlay.items() if name != sail_planner}
+        after_overlay = {name: value for name, value in after_overlay.items() if name != sail_planner}
+    assert before_overlay == after_overlay
     assert before["binary_sha256"] != after["binary_sha256"]
+
+
+def capture_wide_traces(builds, delta, output):
+    traces = output / "stage-traces"
+    traces.mkdir()
+    for mode in run.CONFIGURATIONS:
+        trace = output / "traces" / f"staging-{mode}.jsonl"
+        expected, = [row for row in map(json.loads, trace.read_text().splitlines()) if row["id"] == WIDE]
+        reference = traces / (mode + "-reference.jsonl")
+        reference.write_text(json.dumps(expected) + "\n")
+        for arm in paired.ARMS:
+            label = f"trace-{mode}-{arm}"
+            result = run.invoke(builds[arm]["binary"], ["trace", str(delta), mode, label, str(reference)], traces, label)
+            assert len(result) == 1 and result[0]["id"] == WIDE
+            assert not (traces / (label + ".stderr")).stat().st_size
 
 
 def compare_wide_stages(builds, delta, output, spans):
     timing = output / "stage-timings"
     timing.mkdir()
-    for mode in run.CONFIGURATIONS:
-        trace = output / "traces" / f"staging-{mode}.jsonl"
-        expected, = [row for row in map(json.loads, trace.read_text().splitlines()) if row["id"] == WIDE]
-        reference = timing / (mode + "-reference.jsonl")
-        reference.write_text(json.dumps(expected) + "\n")
-        for arm in paired.ARMS:
-            label = f"trace-{mode}-{arm}"
-            result = run.invoke(builds[arm]["binary"], ["trace", str(delta), mode, label, str(reference)], timing, label)
-            assert len(result) == 1 and result[0]["id"] == WIDE
-            assert not (timing / (label + ".stderr")).stat().st_size
     deadline = time.monotonic() + 600
     stats = []
     with archive(output, "stage-samples") as stream:
@@ -60,6 +74,8 @@ def compare_wide_stages(builds, delta, output, spans):
                     emit(stream, row | {"replica": replica + 1, "build": arm})
                     totals = []
                     for events in row["events"]:
+                        if builds[arm]["kind"] == "planner-stages":
+                            planner_spans(events)
                         selected = [(name, ns) for name, ns in events if name in spans]
                         assert sorted(name for name, _ in selected) == sorted(spans), (label, spans)
                         totals.append(sum(ns for _, ns in selected))
@@ -90,10 +106,12 @@ def main():
     verify_compiler_inputs(builds["candidate"]["source_commit"], protocol)
     stages = None
     if args.stages:
-        stages = {arm: load(path, "stages", settings[arm]["stages_protocol"])
+        kind = settings.get("observer_kind", "stages")
+        stages = {arm: load(path, kind, settings[arm]["stages_protocol"])
                   for arm, path in zip(paired.ARMS, args.stages, strict=True)}
         verify_pair(stages)
-        assert all(stages[arm]["source_commit"] == builds[arm]["source_commit"] for arm in paired.ARMS)
+        for arm in paired.ARMS:
+            verify_compiler_inputs(stages[arm]["source_commit"], builds[arm]["source_commit"])
     recipe = str(Path(__file__).with_name("build.py").relative_to(assemble.REPO))
     for release in (builds, stages) if stages else (builds,):
         subprocess.run(["git", "diff", "--exit-code", release["candidate"]["protocol_commit"],
@@ -102,6 +120,8 @@ def main():
     run.write(args.output / "metadata.json", dict(protocol_commit=protocol, builds=builds,
               settings_sha256=assemble.digest(args.settings), delta_files=expected_delta))
     paired.capture_traces(builds, args.delta, args.output / "traces")
+    if stages:
+        capture_wide_traces(stages, args.delta, args.output)
     run.write(args.output / "paired-summary.json", paired_samples(builds, args.delta, args.output))
     if stages:
         run.write(args.output / "stages.json", stages)

@@ -10,7 +10,6 @@ import subprocess
 import sys
 
 sys.dont_write_bytecode = True
-from compare import load
 from measure import (
     CANONICAL_BUILD_PROTOCOL, assemble, fixture, run, stage_samples,
     verify_compiler_inputs, wide_trace,
@@ -79,6 +78,8 @@ def summarize(processes):
 
 
 def main():
+    from compare import load
+
     cli = argparse.ArgumentParser(description=__doc__)
     for argument in ("canonical", "observer", "inventory", "delta", "output"):
         cli.add_argument(argument, type=lambda path: Path(path).resolve())

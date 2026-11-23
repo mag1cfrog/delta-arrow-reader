@@ -2,7 +2,7 @@
 
 The default planner adds about 1.60 ms to Spark's wide physical
 planning over native-configured. Projection name and expression
-resolution is the largest measured child span. Its 0.44 ms is enough
+resolution shows the largest measured child increase. Its 0.44 ms is enough
 to test a narrower lowering path for ordered column aliases.
 
 | Observed span | Native configured, us | Spark ANSI off, us | Spark ANSI on, us |
@@ -28,8 +28,8 @@ while parent spans include that overhead.
 
 Native planning eliminates the `SELECT *` projection. Spark keeps
 qualified column aliases to preserve the bindings of its resolved
-plan. The default planner walks those aliases to calculate physical
-names and resolves their underlying columns again by name. Ordered
+plan. The default planner copies each alias name and resolves its
+underlying column again by name. Ordered
 scan renames allow those columns to be bound by their proven ordinals.
 The paired trial will keep the same `ProjectionExec` output and full
 physical optimizer schedule. The remaining child costs stay measured.
