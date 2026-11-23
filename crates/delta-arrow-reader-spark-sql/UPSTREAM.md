@@ -2904,9 +2904,9 @@ failures and compacted rows keep the original evaluation and generator.
 
 For BIGINT List columns and a BIGINT value column, ARRAY_INSERT at
 literal position 2 copies the first element, inserts the new value
-and copies the suffix directly. Empty lists retain the leading
-NULL fill. The parent NULL guard and other inputs keep their
-existing evaluation.
+and copies the suffix directly on the interior insertion branch.
+The original CASE still selects the value expression and handles
+NULL parents, empty arrays and appends.
 
 ### Positive scalar coordinates in SLICE (#1410)
 

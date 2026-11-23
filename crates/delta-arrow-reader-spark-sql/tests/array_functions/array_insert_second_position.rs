@@ -74,3 +74,61 @@ async fn literal_second_position_matches_dynamic_position_for_bigint_lists()
     }
     Ok(())
 }
+
+#[tokio::test]
+async fn literal_second_position_preserves_derived_value_failure()
+-> Result<(), Box<dyn std::error::Error>> {
+    use arrow::array::StringArray;
+
+    let session = SessionContext::new_with_state(
+        configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
+    );
+    session.register_batch(
+        "bad_input",
+        RecordBatch::try_from_iter([
+            (
+                "arr",
+                Arc::new(ListArray::from_iter_primitive::<
+                    Int64Type,
+                    Vec<Option<i64>>,
+                    _,
+                >([None])) as Arc<dyn Array>,
+            ),
+            (
+                "slot",
+                Arc::new(Int32Array::from(vec![2])) as Arc<dyn Array>,
+            ),
+            (
+                "raw",
+                Arc::new(StringArray::from(vec!["not an integer"])) as Arc<dyn Array>,
+            ),
+        ])?,
+    )?;
+    for ansi_mode in [false, true] {
+        for position in ["2", "slot"] {
+            let sql = format!(
+                "SELECT array_insert(arr, {position}, value) FROM \
+                 (SELECT arr, slot, CAST(raw AS BIGINT) AS value FROM bad_input) AS derived"
+            );
+            let query = plan_query(
+                &session,
+                &sql,
+                &SparkSqlOptions {
+                    ansi_mode,
+                    ..SparkSqlOptions::default()
+                },
+            )
+            .await?;
+            let plan = query.create_physical_plan(&session).await?;
+            let result = collect(plan, session.task_ctx()).await;
+            if ansi_mode {
+                assert!(result.is_err(), "{sql}");
+            } else {
+                let batches = result?;
+                assert_eq!(batches[0].num_rows(), 1, "{sql}");
+                assert!(batches[0].column(0).is_null(0), "{sql}");
+            }
+        }
+    }
+    Ok(())
+}

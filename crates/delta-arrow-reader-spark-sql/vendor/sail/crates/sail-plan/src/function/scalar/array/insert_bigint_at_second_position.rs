@@ -100,3 +100,61 @@ impl ScalarUDFImpl for InsertBigIntAtSecondPosition {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use datafusion::arrow::array::Int64Array;
+    use datafusion::arrow::datatypes::{Field, Int64Type};
+    use datafusion_common::config::ConfigOptions;
+
+    #[test]
+    fn offset_copy_uses_the_sliced_rows_and_preserves_the_child_field() -> Result<()> {
+        let source = ListArray::from_iter_primitive::<Int64Type, _, _>([
+            Some(vec![Some(90)]),
+            Some(vec![Some(1), None, Some(3)]),
+            Some(vec![Some(4), Some(5)]),
+            Some(vec![Some(91)]),
+        ]);
+        let field = Arc::new(
+            Field::new("member", DataType::Int64, true)
+                .with_metadata([("unit".to_owned(), "items".to_owned())].into()),
+        );
+        let lists = ListArray::try_new(
+            Arc::clone(&field),
+            source.offsets().clone(),
+            Arc::clone(source.values()),
+            source.nulls().cloned(),
+        )?
+        .slice(1, 2);
+        assert_eq!(lists.value_offsets(), [1, 4, 6]);
+
+        let output_field = Arc::new(Field::new("out", lists.data_type().clone(), true));
+        let result = InsertBigIntAtSecondPosition::default()
+            .invoke_with_args(ScalarFunctionArgs {
+                arg_fields: vec![
+                    Arc::clone(&output_field),
+                    Arc::new(Field::new("value", DataType::Int64, true)),
+                ],
+                args: vec![
+                    ColumnarValue::Array(Arc::new(lists)),
+                    ColumnarValue::Array(Arc::new(Int64Array::from(vec![None, Some(-1)]))),
+                ],
+                number_rows: 2,
+                return_field: Arc::clone(&output_field),
+                config_options: Arc::new(ConfigOptions::new()),
+            })?
+            .into_array(2)?;
+        let list = as_list_array(result.as_ref())?;
+        assert_eq!(list.data_type(), &DataType::List(field));
+        assert_eq!(list.value_offsets(), [0, 4, 7]);
+        assert_eq!(
+            as_int64_array(list.values().as_ref())?
+                .iter()
+                .collect::<Vec<_>>(),
+            vec![Some(1), None, None, Some(3), Some(4), Some(-1), Some(5)],
+        );
+        list.to_data().validate_full()?;
+        Ok(())
+    }
+}
