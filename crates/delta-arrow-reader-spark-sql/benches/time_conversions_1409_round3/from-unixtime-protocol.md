@@ -5,8 +5,9 @@ found row String allocation after zone resolution. The candidate writes
 the same year-of-era and local clock fields into the Utf8 builder.
 The existing formatter handles other patterns and oversized batches.
 
-Use [the paired function driver](run_pair.py) with committed build
-settings and the unchanged #1409 `scalar.datetime.from_unixtime` case.
+Use [the paired function driver](run_pair.py) with the [committed build
+settings](from_unixtime.json) and the unchanged #1409
+`scalar.datetime.from_unixtime` case.
 Use the fixed million-row input, projection reference, affinity, batch
 size and Linux release settings from #1391. Before timing, compare
 every result and its executed Utf8 type in both builds and all three
