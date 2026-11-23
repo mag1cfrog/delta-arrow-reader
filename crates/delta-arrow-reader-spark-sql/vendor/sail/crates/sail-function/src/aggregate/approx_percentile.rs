@@ -30,8 +30,11 @@ use datafusion::logical_expr::{
     Accumulator, AggregateUDF, AggregateUDFImpl, Signature, Volatility,
 };
 
+use datafusion_physical_expr::PhysicalExpr;
+use datafusion_physical_expr::expressions::Literal;
+
 use crate::aggregate::utils::{
-    extract_percentile_literal, extract_percentiles_array, get_scalar_value,
+    extract_percentile_literal, extract_percentiles_array, get_scalar_value, scalar_to_f64,
 };
 
 const PENDING_VALUES_LIMIT: usize = 50_000;
@@ -89,7 +92,7 @@ impl AggregateUDFImpl for ApproxPercentile {
         let percentiles = if returns_array {
             extract_percentiles_array(&args.exprs[1])?
         } else {
-            vec![extract_percentile_literal(&args.exprs[1])?]
+            vec![scalar_percentile_value(&args.exprs[1])?]
         };
         let accuracy = if args.exprs.len() == 3 {
             match get_scalar_value(&args.exprs[2])?.cast_to(&DataType::Int64)? {
@@ -137,6 +140,16 @@ impl AggregateUDFImpl for ApproxPercentile {
     }
 }
 
+fn scalar_percentile_value(expr: &Arc<dyn PhysicalExpr>) -> Result<f64> {
+    if let Some(literal) = expr.downcast_ref::<Literal>()
+        && let Ok(percentile) = scalar_to_f64(literal.value())
+        && (0.0..=1.0).contains(&percentile)
+    {
+        return Ok(percentile);
+    }
+    extract_percentile_literal(expr)
+}
+
 #[derive(Debug)]
 struct ApproxPercentileAccumulator {
     summary: QuantileSummary,
@@ -167,19 +180,23 @@ impl Accumulator for ApproxPercentileAccumulator {
                 self.value_type.clone()
             });
         }
-        let values = self
-            .percentiles
-            .iter()
-            .map(|&p| ScalarValue::Float64(Some(self.summary.query(p))).cast_to(&self.value_type))
-            .collect::<Result<Vec<_>>>()?;
+        let cast_percentile = |percentile| {
+            ScalarValue::Float64(Some(self.summary.query(percentile))).cast_to(&self.value_type)
+        };
         if self.returns_array {
+            let values = self
+                .percentiles
+                .iter()
+                .copied()
+                .map(cast_percentile)
+                .collect::<Result<Vec<_>>>()?;
             Ok(ScalarValue::List(ScalarValue::new_list(
                 &values,
                 &self.value_type,
                 false,
             )))
         } else {
-            Ok(values[0].clone())
+            cast_percentile(self.percentiles[0])
         }
     }
 
@@ -460,6 +477,73 @@ mod tests {
             returns_array: true,
             value_type: DataType::Float64,
         }
+    }
+
+    #[test]
+    fn scalar_percentile_literals_match_expression_evaluation() {
+        use datafusion::logical_expr::Operator;
+        use datafusion_physical_expr::expressions::BinaryExpr;
+
+        let mut expressions: Vec<Arc<dyn PhysicalExpr>> = [
+            ScalarValue::Float64(Some(0.5)),
+            ScalarValue::Float64(Some(-0.0)),
+            ScalarValue::Float64(Some(f64::NAN)),
+            ScalarValue::Float64(None),
+            ScalarValue::Int32(Some(0)),
+            ScalarValue::Int64(Some(2)),
+            ScalarValue::Decimal128(Some(51), 3, 2),
+            ScalarValue::Utf8(Some("0.5".into())),
+        ]
+        .into_iter()
+        .map(|value| Arc::new(Literal::new(value)) as Arc<dyn PhysicalExpr>)
+        .collect();
+        expressions.push(Arc::new(BinaryExpr::new(
+            Arc::new(Literal::new(ScalarValue::Float64(Some(0.25)))),
+            Operator::Plus,
+            Arc::new(Literal::new(ScalarValue::Float64(Some(0.25)))),
+        )));
+        for expression in expressions {
+            let expected = extract_percentile_literal(&expression)
+                .map(f64::to_bits)
+                .map_err(|error| error.to_string());
+            let actual = scalar_percentile_value(&expression)
+                .map(f64::to_bits)
+                .map_err(|error| error.to_string());
+            assert_eq!(actual, expected, "{expression}");
+        }
+    }
+
+    #[test]
+    fn scalar_percentile_result_matches_single_item_list_cast() -> Result<()> {
+        for value_type in [
+            DataType::Float64,
+            DataType::Int64,
+            DataType::Decimal128(5, 2),
+        ] {
+            for values in [vec![], vec![None], vec![Some(-0.0), None, Some(2.5)]] {
+                let input = Arc::new(Float64Array::from(values)) as ArrayRef;
+                let mut scalar = accumulator(10_000.0);
+                scalar.percentiles = vec![0.5];
+                scalar.returns_array = false;
+                scalar.value_type = value_type.clone();
+                scalar.update_batch(&[Arc::clone(&input)])?;
+
+                let mut list = accumulator(10_000.0);
+                list.percentiles = vec![0.5];
+                list.value_type = value_type.clone();
+                list.update_batch(&[input])?;
+                let ScalarValue::List(expected) = list.evaluate()? else {
+                    unreachable!("the reference has a List result");
+                };
+                let expected = if expected.is_null(0) {
+                    ScalarValue::try_from(&value_type)?
+                } else {
+                    ScalarValue::try_from_array(expected.value(0).as_ref(), 0)?
+                };
+                assert_eq!(scalar.evaluate()?, expected);
+            }
+        }
+        Ok(())
     }
 
     #[test]
