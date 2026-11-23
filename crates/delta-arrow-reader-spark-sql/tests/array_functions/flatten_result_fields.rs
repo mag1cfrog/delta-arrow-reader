@@ -217,3 +217,108 @@ async fn spark_configuration_preserves_native_flatten() -> TestResult {
     }
     Ok(())
 }
+
+#[tokio::test]
+async fn flatten_whole_batches_match_guarded_projection() -> TestResult {
+    use std::sync::Arc;
+
+    use arrow::array::{Array, ArrayRef, LargeListArray, ListArray};
+    use arrow::buffer::{NullBuffer, OffsetBuffer};
+    use arrow::datatypes::{Field, Int64Type};
+    use arrow::record_batch::RecordBatch;
+    use datafusion::physical_plan::{collect, displayable};
+    use delta_arrow_reader_spark_sql::{SparkSqlOptions, plan_query};
+
+    let session = SessionContext::new_with_state(
+        configure_spark_sql(
+            SessionStateBuilder::new()
+                .with_default_features()
+                .with_config(SessionConfig::new().with_target_partitions(1)),
+        )
+        .build(),
+    );
+    let inner_rows = [
+        None,
+        Some(vec![Some(10), None]),
+        Some(vec![]),
+        Some(vec![Some(99)]),
+        Some(vec![Some(20)]),
+        None,
+        Some(vec![Some(30)]),
+    ];
+    for outer_large in [false, true] {
+        for inner_large in [false, true] {
+            let inner: ArrayRef = if inner_large {
+                Arc::new(LargeListArray::from_iter_primitive::<Int64Type, _, _>(
+                    inner_rows.clone(),
+                ))
+            } else {
+                Arc::new(ListArray::from_iter_primitive::<Int64Type, _, _>(
+                    inner_rows.clone(),
+                ))
+            };
+            let field = Arc::new(Field::new_list_field(inner.data_type().clone(), true));
+            let lengths = [1, 2, 1, 0, 1, 2];
+            let parents = Some(NullBuffer::from(vec![true, true, false, true, true, true]));
+            let outer: ArrayRef = if outer_large {
+                Arc::new(LargeListArray::try_new(
+                    field,
+                    OffsetBuffer::from_lengths(lengths),
+                    inner,
+                    parents,
+                )?)
+            } else {
+                Arc::new(ListArray::try_new(
+                    field,
+                    OffsetBuffer::from_lengths(lengths),
+                    inner,
+                    parents,
+                )?)
+            };
+            // The first slice has NULL inner lists on both sides of its visible range.
+            for (offset, len) in [(1, 4), (5, 1)] {
+                let name = format!("lists_{outer_large}_{inner_large}_{offset}");
+                session.register_batch(
+                    name.as_str(),
+                    RecordBatch::try_from_iter([("nested", outer.slice(offset, len))])?,
+                )?;
+                let view = format!("view_{name}");
+                session.register_table(
+                    view.as_str(),
+                    session
+                        .sql(&format!("SELECT nested FROM {name}"))
+                        .await?
+                        .into_view(),
+                )?;
+                for ansi_mode in [false, true] {
+                    let options = SparkSqlOptions {
+                        ansi_mode,
+                        ..Default::default()
+                    };
+                    let stored = format!("SELECT flatten(nested) AS value FROM {name}");
+                    let guarded = format!("SELECT flatten(nested) AS value FROM {view}");
+                    let mut output = Vec::new();
+                    for (sql, uses_batch_path) in [(stored, true), (guarded, false)] {
+                        let query = plan_query(&session, &sql, &options).await?;
+                        let plan = query.create_physical_plan(&session).await?;
+                        let display = displayable(plan.as_ref()).indent(false).to_string();
+                        assert_eq!(
+                            display.contains("spark_flatten_nullable_inner_lists"),
+                            uses_batch_path,
+                            "{display}"
+                        );
+                        let batches = collect(plan, session.task_ctx()).await?;
+                        let columns = batches
+                            .iter()
+                            .map(|batch| batch.column(0).as_ref())
+                            .collect::<Vec<&dyn Array>>();
+                        output.push(arrow::compute::concat(&columns)?);
+                    }
+                    assert_eq!(output[0].data_type(), output[1].data_type());
+                    assert_eq!(output[0].as_ref(), output[1].as_ref());
+                }
+            }
+        }
+    }
+    Ok(())
+}

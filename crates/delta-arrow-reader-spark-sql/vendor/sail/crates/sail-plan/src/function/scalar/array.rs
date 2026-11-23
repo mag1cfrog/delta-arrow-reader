@@ -1,5 +1,6 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 mod bigint_arrays_overlap;
+mod flatten_nullable_inner_lists;
 mod has_null_inner_array;
 
 use std::sync::Arc;
@@ -42,6 +43,7 @@ use sail_function::scalar::datetime::spark_timestamp::SparkTimestamp;
 use sail_function::scalar::misc::raise_error::RaiseError;
 
 use self::bigint_arrays_overlap::BigIntArraysOverlap;
+use self::flatten_nullable_inner_lists::FlattenNullableInnerLists;
 use self::has_null_inner_array::HasNullInnerArray;
 use super::lambda::lambda_with_fresh_parameter;
 use crate::error::{PlanError, PlanResult};
@@ -835,19 +837,29 @@ fn scanned_overlap_operand<'a>(
     input: &LogicalPlan,
 ) -> Option<&'a expr::Expr> {
     let column = nested_result_cast_input(operand)?;
-    let expr::Expr::Column(reference) = column else {
-        return None;
-    };
-    let (origin, _) = passthrough_column_origin(input, reference).ok()?;
-    let LogicalPlan::TableScan(scan) = origin else {
-        return None;
-    };
-    let is_stored_column =
-        scan.source.table_type() != TableType::View && scan.source.get_logical_plan().is_none();
-    is_stored_column.then_some(column)
+    is_stored_scan_column(column, input).then_some(column)
 }
 
-pub(crate) fn fuse_scanned_bigint_array_overlap(
+fn is_stored_scan_column(expression: &expr::Expr, input: &LogicalPlan) -> bool {
+    let expr::Expr::Column(reference) = expression else {
+        return false;
+    };
+    matches!(passthrough_column_origin(input, reference),
+        Ok((LogicalPlan::TableScan(scan), _))
+        if scan.source.table_type() != TableType::View && scan.source.get_logical_plan().is_none())
+}
+
+pub(crate) fn prepare_stored_array_projection(
+    expression: expr::Expr,
+    input: &LogicalPlan,
+) -> PlanResult<Transformed<expr::Expr>> {
+    match &expression {
+        expr::Expr::Case(_) => flatten_valid_inner_batches(expression, input),
+        _ => Ok(fuse_scanned_bigint_array_overlap(expression, input)),
+    }
+}
+
+fn fuse_scanned_bigint_array_overlap(
     mut expression: expr::Expr,
     input: &LogicalPlan,
 ) -> Transformed<expr::Expr> {
@@ -1050,6 +1062,37 @@ fn flatten(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         when_then_expr: vec![(Box::new(not(array_has_null)), Box::new(flattened))],
         else_expr: None,
     }))
+}
+
+fn flatten_valid_inner_batches(
+    expression: expr::Expr,
+    input: &LogicalPlan,
+) -> PlanResult<Transformed<expr::Expr>> {
+    if let expr::Expr::Case(case) = &expression
+        && case.expr.is_none()
+        && case.else_expr.is_none()
+        && let [(condition, flattened)] = case.when_then_expr.as_slice()
+        && let expr::Expr::Not(probe) = condition.as_ref()
+        && let expr::Expr::ScalarFunction(probe) = probe.as_ref()
+        && probe.func.inner().is::<HasNullInnerArray>()
+        && let [checked_array] = probe.args.as_slice()
+        && let expr::Expr::ScalarFunction(flatten) = flattened.as_ref()
+        && flatten.func.inner().is::<FlattenResult>()
+        && let [array] = flatten.args.as_slice()
+        && (checked_array == array
+            || matches!(checked_array, expr::Expr::Cast(cast) if cast.expr.as_ref() == array))
+        && is_stored_scan_column(array, input)
+    {
+        let arguments = vec![
+            array.clone(),
+            lambda_with_fresh_parameter(expression, "_flatten")?,
+        ];
+        let runtime = HigherOrderUDF::new_from_impl(FlattenNullableInnerLists::default());
+        return Ok(Transformed::yes(expr::Expr::HigherOrderFunction(
+            expr::HigherOrderFunction::new(Arc::new(runtime), arguments),
+        )));
+    }
+    Ok(Transformed::no(expression))
 }
 
 fn array_element_field(data_type: &DataType) -> Option<&FieldRef> {

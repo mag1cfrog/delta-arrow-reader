@@ -1,5 +1,5 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
-pub(crate) use array::{SparkArraySlice, fuse_scanned_bigint_array_overlap};
+pub(crate) use array::{SparkArraySlice, prepare_stored_array_projection};
 pub(crate) use collection::lower_runtime_concat;
 pub(crate) use lambda::{get_lambda_parameters, is_higher_order_function};
 pub(crate) use string::{
