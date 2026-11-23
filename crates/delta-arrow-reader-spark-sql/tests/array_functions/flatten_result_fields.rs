@@ -276,7 +276,7 @@ async fn flatten_whole_batches_match_guarded_projection() -> TestResult {
                 )?)
             };
             // The first slice has NULL inner lists on both sides of its visible range.
-            for (offset, len) in [(1, 4), (5, 1)] {
+            for (offset, len) in [(1, 4), (4, 2)] {
                 let name = format!("lists_{outer_large}_{inner_large}_{offset}");
                 session.register_batch(
                     name.as_str(),
