@@ -38,8 +38,9 @@ The paired changes were +0.207, +0.349 and +0.480 ns per row.
 They cross the timing gate. The untimed trace selected the same
 native UDF, membership body and three Arrow row converter
 routines in the measured builds, through the projection.
-All nine relevant native instruction bodies match after
-normalizing linked addresses. The ArrayHasAny and ProjectionExec
+Nine native kernel and physical-plan bodies and three scalar
+dispatcher bodies match after normalizing linked addresses.
+The ArrayHasAny and ProjectionExec
 state layouts match at 96 and 104 bytes, respectively, with
 8-byte alignment. Relocated routine and data references match
 after comparing the loaded literal width and linked data.
