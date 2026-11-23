@@ -2699,6 +2699,15 @@ same Base64 engine and filters nonalphabet bytes after a decode
 failure as before. Scalar decoding, output types and error messages
 retain their existing behavior.
 
+### Pending set operations during logical resolution (#1390)
+
+The resolver snapshots the DataFusion session after it finds a pending set
+operation. Queries without a pending set keep the existing plan and set
+lowering skips its snapshot. If a set is present, the existing lowering uses a
+snapshot of the session with its query execution start time cleared, including
+for sets inside subqueries. The [planning report](benches/reports/planning-1390-round2-logical.md)
+records the cost of the previous eager snapshot.
+
 ### AES scalar and column arguments (#1405)
 
 The local Sail AES functions evaluate inputs, keys, modes, padding, IVs and

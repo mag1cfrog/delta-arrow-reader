@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
 use arrow::datatypes::DataType;
@@ -35,7 +36,11 @@ impl PlanResolver<'_> {
         plan: LogicalPlan,
         state: &mut PlanResolverState,
     ) -> PlanResult<LogicalPlan> {
-        Ok(pending::lower_query_sets(&plan, self.ctx.state(), state)?)
+        Ok(pending::lower_pending_sets(
+            &plan,
+            || self.ctx.state(),
+            state,
+        )?)
     }
 
     pub(super) async fn resolve_query_set_operation(

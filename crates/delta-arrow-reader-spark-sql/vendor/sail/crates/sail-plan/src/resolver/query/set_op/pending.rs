@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 //! Keep set operations visible until their enclosing query has been resolved.
 //! A filter above an inner set can change whether Spark retains a literal -0.0.
 
@@ -21,9 +22,9 @@ use crate::function::common::SparkComparisonFloat;
 use crate::function::float_keys::NormalizeNestedFloatKeys;
 use crate::resolver::state::PlanResolverState;
 
-pub(super) fn lower_query_sets(
+pub(super) fn lower_pending_sets(
     plan: &LogicalPlan,
-    mut session: SessionState,
+    snapshot_session: impl FnOnce() -> SessionState,
     state: &mut PlanResolverState,
 ) -> Result<LogicalPlan> {
     let mut has_sets = false;
@@ -39,8 +40,34 @@ pub(super) fn lower_query_sets(
     if !has_sets {
         return Ok(plan.clone());
     }
+    let mut session = snapshot_session();
     session.execution_props_mut().query_execution_start_time = None;
     Ok(lower_sets(plan, &mut EnclosingQueryContext::default(), &session, state)?.executable)
+}
+
+#[cfg(test)]
+fn lower_query_sets(
+    plan: &LogicalPlan,
+    session: SessionState,
+    state: &mut PlanResolverState,
+) -> Result<LogicalPlan> {
+    lower_pending_sets(plan, || session, state)
+}
+
+#[cfg(test)]
+#[test]
+fn query_without_pending_sets_needs_no_session_snapshot() -> Result<()> {
+    use datafusion_expr::LogicalPlanBuilder;
+    let query = LogicalPlanBuilder::empty(false).build()?;
+    let calls = std::cell::Cell::new(0);
+    let snapshot = || {
+        calls.set(calls.get() + 1);
+        datafusion::prelude::SessionContext::new().state()
+    };
+    let lowered = lower_pending_sets(&query, snapshot, &mut PlanResolverState::new())?;
+    assert_eq!(lowered, query);
+    assert_eq!(calls.get(), 0);
+    Ok(())
 }
 
 pub(super) struct SetLoweringResult {
