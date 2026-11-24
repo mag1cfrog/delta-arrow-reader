@@ -1,0 +1,26 @@
+{
+  "staging_source": "b8b90b15ab12e19d0597f9fb715a18d601cfe9e8",
+  "staging_tip": "b8b90b15ab12e19d0597f9fb715a18d601cfe9e8",
+  "candidate_source": "0ae21bfed8c125c6c4c6a7157b3fd6b5b3d2c227",
+  "staging_build_protocol": "3d31ed33eafd8f8073922df6bcfb437b8062d288",
+  "candidate_build_protocol": "0ae21bfed8c125c6c4c6a7157b3fd6b5b3d2c227",
+  "statement_manifest": "manifest.json",
+  "statement_manifest_sha256": "f9116c6ce9385847ef368ca41125fc85d1e0f2fbbca976e7b461a86ebbbcf160",
+  "case_ids": [
+    "scalar.string.regexp_replace"
+  ],
+  "restricted_input_rows": 1000000,
+  "spark_plan_contains": {
+    "staging": {
+      "scalar": [
+        "regexp_replace("
+      ]
+    },
+    "candidate": {
+      "scalar": [
+        "regexp_replace("
+      ]
+    }
+  },
+  "overall_timeout_seconds": 3600
+}
