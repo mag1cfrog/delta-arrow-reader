@@ -5,7 +5,7 @@ use std::sync::Arc;
 use datafusion::arrow::array::{Array, ArrayRef, AsArray, GenericStringBuilder, OffsetSizeTrait};
 use datafusion::arrow::compute::cast;
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
-use datafusion_common::{Result, exec_datafusion_err, exec_err, internal_err};
+use datafusion_common::{Result, ScalarValue, exec_datafusion_err, exec_err, internal_err};
 use datafusion_expr::function::Hint;
 use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
 use datafusion_expr::{
@@ -126,6 +126,25 @@ impl ScalarUDFImpl for SparkRegexpReplace {
 }
 
 fn regexp_replace_values(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    if let [
+        ColumnarValue::Array(source),
+        ColumnarValue::Scalar(pattern),
+        ColumnarValue::Scalar(replacement),
+        ColumnarValue::Scalar(ScalarValue::Int32(Some(1))),
+    ] = args
+        && let Some(pattern) = literal_string(pattern)
+        && let Some(replacement) = literal_string(replacement)
+        && !pattern.is_empty()
+        && pattern != r"\B"
+        && !replacement.contains(['$', '\\'])
+        && matches!(
+            source.data_type(),
+            DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View
+        )
+    {
+        return regexp_replace_plain_literal(source, pattern, replacement)
+            .map(ColumnarValue::Array);
+    }
     make_scalar_function(
         regexp_replace,
         vec![
@@ -135,6 +154,91 @@ fn regexp_replace_values(args: &[ColumnarValue]) -> Result<ColumnarValue> {
             Hint::AcceptsSingular,
         ],
     )(args)
+}
+
+fn literal_string(value: &ScalarValue) -> Option<&str> {
+    match value {
+        ScalarValue::Utf8(value) | ScalarValue::LargeUtf8(value) | ScalarValue::Utf8View(value) => {
+            value.as_deref()
+        }
+        _ => None,
+    }
+}
+
+fn compile_pattern(pattern: &str) -> Result<Regex> {
+    Regex::new(pattern).map_err(|error| {
+        exec_datafusion_err!(
+            "[INVALID_PARAMETER_VALUE.PATTERN] regexp_replace pattern {pattern:?}: {error}"
+        )
+    })
+}
+
+fn regexp_replace_plain_literal(
+    source: &ArrayRef,
+    pattern: &str,
+    replacement: &str,
+) -> Result<ArrayRef> {
+    // The original loop does not compile on empty batches or NULL rows.
+    if source.len() == source.null_count() {
+        return Ok(Arc::clone(source));
+    }
+    let regex = compile_pattern(pattern)?;
+    let result = match source.data_type() {
+        DataType::Utf8 => {
+            replace_plain_strings::<i32>(source.as_string::<i32>().iter(), &regex, replacement)
+        }
+        DataType::LargeUtf8 => {
+            replace_plain_strings::<i64>(source.as_string::<i64>().iter(), &regex, replacement)
+        }
+        DataType::Utf8View => {
+            let result =
+                replace_plain_strings::<i32>(source.as_string_view().iter(), &regex, replacement);
+            cast(&result, source.data_type())?
+        }
+        other => return internal_err!("regexp_replace expected a string array, got {other}"),
+    };
+    Ok(result)
+}
+
+fn replace_plain_strings<'a, O: OffsetSizeTrait>(
+    values: impl Iterator<Item = Option<&'a str>>,
+    regex: &Regex,
+    replacement: &str,
+) -> ArrayRef {
+    let mut builder = GenericStringBuilder::<O>::new();
+    let mut output = String::new();
+    for value in values {
+        let Some(value) = value else {
+            builder.append_null();
+            continue;
+        };
+        let Some(mut matched) = regex.find(value) else {
+            builder.append_value(value);
+            continue;
+        };
+        output.clear();
+        let mut end = 0;
+        loop {
+            output.push_str(&value[end..matched.start()]);
+            output.push_str(replacement);
+            end = matched.end();
+            // Keep empty matches immediately after nonempty matches.
+            let mut search = end;
+            if matched.is_empty() {
+                let Some(next) = value[end..].chars().next() else {
+                    break;
+                };
+                search += next.len_utf8();
+            }
+            let Some(next) = regex.find_at(value, search) else {
+                break;
+            };
+            matched = next;
+        }
+        output.push_str(&value[end..]);
+        builder.append_value(&output);
+    }
+    Arc::new(builder.finish())
 }
 
 fn string_at(array: &ArrayRef, row: usize) -> Result<Option<&str>> {
@@ -186,13 +290,7 @@ fn regexp_replace_strings<O: OffsetSizeTrait>(args: &[ArrayRef]) -> Result<Array
             );
         }
         // Compile only live rows, before checking whether the region is past the end.
-        let regex = regex_memo.get_or_try_insert_ref(pattern, |pattern| {
-            Regex::new(pattern).map_err(|error| {
-                exec_datafusion_err!(
-                    "[INVALID_PARAMETER_VALUE.PATTERN] regexp_replace pattern {pattern:?}: {error}"
-                )
-            })
-        })?;
+        let regex = regex_memo.get_or_try_insert_ref(pattern, compile_pattern)?;
         let replacement_error = |cause| {
             exec_datafusion_err!(
                 "[INVALID_REGEXP_REPLACE] source={value:?}, pattern={pattern:?}, replacement={replacement:?}, position={position}: {cause}"
@@ -435,6 +533,73 @@ mod tests {
             Ok(_) => return exec_err!("prepared alias did not check its own literal kernel"),
         };
         assert!(error.ends_with("java.lang.IndexOutOfBoundsException: No group 9"));
+        Ok(())
+    }
+
+    #[test]
+    fn plain_literal_dispatch_matches_original_capture_loop() -> Result<()> {
+        let inputs = Arc::new(StringArray::from(vec![
+            Some("outside"),
+            Some("a"),
+            None,
+            Some(""),
+            Some("a😀b"),
+            Some("abc123"),
+            Some("aa12"),
+            Some("é中𐐷z"),
+            Some("outside"),
+        ])) as ArrayRef;
+        let cases = [
+            (r"[0-9]", "x", 1),
+            (r"[0-9]", "", 1),
+            (r"([0-9])", "Ω🦊", 1),
+            (r"a?", "X", 1),
+            (r"^|$", "x", 1),
+            (r"\b", "x", 1),
+            ("[", "x", 1),
+            ("", "x", 1),
+            (r"\B", "x", 1),
+            (r"(a)", "$1", 1),
+            (r"(a)", r"\$", 1),
+            (r"a?", "X", 2),
+        ];
+        for data_type in [DataType::Utf8, DataType::LargeUtf8, DataType::Utf8View] {
+            let input = cast(&inputs, &data_type)?;
+            for (offset, len) in [(1, 7), (2, 1), (2, 0)] {
+                let source = input.slice(offset, len);
+                for (pattern, replacement, position) in cases {
+                    let pattern = ScalarValue::from(pattern).cast_to(&data_type)?;
+                    let replacement = ScalarValue::from(replacement).cast_to(&data_type)?;
+                    let position = ScalarValue::Int32(Some(position));
+                    let expected = regexp_replace(&[
+                        Arc::clone(&source),
+                        pattern.to_array_of_size(1)?,
+                        replacement.to_array_of_size(1)?,
+                        position.to_array_of_size(1)?,
+                    ]);
+                    let actual = regexp_replace_values(&[
+                        ColumnarValue::Array(Arc::clone(&source)),
+                        ColumnarValue::Scalar(pattern),
+                        ColumnarValue::Scalar(replacement),
+                        ColumnarValue::Scalar(position),
+                    ]);
+                    match (actual, expected) {
+                        (Ok(ColumnarValue::Array(actual)), Ok(expected)) => {
+                            assert_eq!(actual.data_type(), &data_type);
+                            assert_eq!(actual.as_ref(), expected.as_ref());
+                        }
+                        (Err(actual), Err(expected)) => {
+                            assert_eq!(actual.to_string(), expected.to_string());
+                        }
+                        (actual, expected) => {
+                            return exec_err!(
+                                "literal replacement differed: {actual:?}, {expected:?}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
         Ok(())
     }
 

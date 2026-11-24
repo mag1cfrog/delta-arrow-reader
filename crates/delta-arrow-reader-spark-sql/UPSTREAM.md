@@ -3128,3 +3128,13 @@ rows in order and avoids rounding from subtracting outgoing values.
 REGR_R2 windows check independent variance before dependent variance. The
 plain aggregates, REGR_AVGX and REGR_COUNT keep their existing accumulator
 behavior. [Attribution](benches/reports/regression-windows-1512-attribution.md).
+
+### Plain literal REGEXP_REPLACE (#1516)
+
+For a string column, a nonempty literal pattern, a literal replacement
+without group references or escapes, and position 1, Spark prepares
+the pattern once per live batch and searches without capture groups.
+The search retains empty matches after nonempty matches and preserves
+the source's Arrow string type. The empty pattern, the exact nonword
+boundary pattern and other argument shapes use the original kernel.
+Native DataFusion SQL keeps its own function and registration.
