@@ -2,6 +2,7 @@
 mod bigint_arrays_overlap;
 mod flatten_nullable_inner_lists;
 mod has_null_inner_array;
+mod insert_bigint_at_second_position;
 
 use std::sync::Arc;
 
@@ -45,6 +46,7 @@ use sail_function::scalar::misc::raise_error::RaiseError;
 use self::bigint_arrays_overlap::BigIntArraysOverlap;
 use self::flatten_nullable_inner_lists::FlattenNullableInnerLists;
 use self::has_null_inner_array::HasNullInnerArray;
+use self::insert_bigint_at_second_position::InsertBigIntAtSecondPosition;
 use super::lambda::lambda_with_fresh_parameter;
 use crate::error::{PlanError, PlanResult};
 use crate::expression_errors::passthrough_column_origin;
@@ -642,6 +644,10 @@ fn array_insert(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let array_input = cast(array_input, output_type.clone());
     let array_len = cast(expr_fn::array_length(array.clone()), DataType::Int64);
 
+    let literal_second_position = matches!(
+        &position,
+        expr::Expr::Literal(ScalarValue::Int32(Some(2)) | ScalarValue::Int64(Some(2)), _)
+    );
     let pos_from_zero = when(position.clone().gt(lit(0)), position.clone() - lit(1))
         .when(
             position.clone().lt(lit(0)),
@@ -652,6 +658,30 @@ fn array_insert(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let zero_index_error = cast(ScalarUDF::from(RaiseError::new()).call(vec![lit(
         "array_insert: the index 0 is invalid. An index shall be either < 0 or > 0 (the first element has index 1)"
     )]), output_type.clone());
+
+    let insert_inside = if literal_second_position
+        && matches!(
+            (&array, &value),
+            (expr::Expr::Column(_), expr::Expr::Column(_))
+        )
+        && matches!(array.get_type(schema)?, DataType::List(field) if field.data_type() == &DataType::Int64)
+        && value.get_type(schema)? == DataType::Int64
+    {
+        // Keep the length branches so projected value expressions retain their evaluation.
+        ScalarUDF::from(InsertBigIntAtSecondPosition::default())
+            .call(vec![array_input.clone(), value.clone()])
+    } else {
+        expr_fn::array_concat(vec![
+            expr_fn::array_slice(array_input.clone(), lit(1), pos_from_zero.clone(), None),
+            array_repeat_with_nullable_element(value.clone(), lit(1), output_type.clone(), schema)?,
+            expr_fn::array_slice(
+                array_input.clone(),
+                pos_from_zero.clone() + lit(1),
+                array_len.clone(),
+                None,
+            ),
+        ])
+    };
 
     Ok(when(
         array.clone().is_null(),
@@ -679,16 +709,7 @@ fn array_insert(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         pos_from_zero
             .clone()
             .between(lit(1), array_len.clone() - lit(1)),
-        expr_fn::array_concat(vec![
-            expr_fn::array_slice(array_input.clone(), lit(1), pos_from_zero.clone(), None),
-            array_repeat_with_nullable_element(value.clone(), lit(1), output_type.clone(), schema)?,
-            expr_fn::array_slice(
-                array_input.clone(),
-                pos_from_zero.clone() + lit(1),
-                array_len.clone(),
-                None,
-            ),
-        ]),
+        insert_inside,
     )
     .when(
         pos_from_zero.clone().eq(array_len.clone()),

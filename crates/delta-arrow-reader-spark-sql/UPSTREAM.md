@@ -2900,6 +2900,14 @@ endpoint. The original selection resumes at the first NULL endpoint,
 with earlier values already computed. Other endpoint types, reachable
 failures and compacted rows keep the original evaluation and generator.
 
+### Literal second-position BIGINT array insert (#1516)
+
+For BIGINT List columns and a BIGINT value column, ARRAY_INSERT at
+literal position 2 copies the first element, inserts the new value
+and copies the suffix directly on the interior insertion branch.
+The original CASE still selects the value expression and handles
+NULL parents, empty arrays and appends.
+
 ### Positive scalar coordinates in SLICE (#1410)
 
 SLICE can pass positive scalar bounds to native slicing for List and

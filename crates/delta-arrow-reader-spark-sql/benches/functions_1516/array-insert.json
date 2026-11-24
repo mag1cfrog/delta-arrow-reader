@@ -1,0 +1,28 @@
+{
+  "staging_source": "f80ea0275277e51a896991c18b0b2ec475c706d5",
+  "staging_tip": "b72a9c9b129fe4ebbc306450225471b41c846384",
+  "candidate_source": "55f48e2860f45d9a5bef99f8f7b5057e5d4f7e20",
+  "staging_build_protocol": "f80ea0275277e51a896991c18b0b2ec475c706d5",
+  "candidate_build_protocol": "55f48e2860f45d9a5bef99f8f7b5057e5d4f7e20",
+  "statement_manifest": "manifest.json",
+  "statement_manifest_sha256": "f9116c6ce9385847ef368ca41125fc85d1e0f2fbbca976e7b461a86ebbbcf160",
+  "case_ids": [
+    "scalar.array.array_insert"
+  ],
+  "restricted_input_rows": 937500,
+  "spark_plan_contains": {
+    "staging": {
+      "scalar": [
+        "array_slice(",
+        "array_concat("
+      ]
+    },
+    "candidate": {
+      "scalar": [
+        "spark_insert_bigint_at_second_position(",
+        "case when"
+      ]
+    }
+  },
+  "overall_timeout_seconds": 3600
+}

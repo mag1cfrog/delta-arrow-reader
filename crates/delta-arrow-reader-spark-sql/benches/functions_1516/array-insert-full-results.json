@@ -1,0 +1,56 @@
+{
+  "scalar.array.array_insert": {
+    "staging": {
+      "native": {
+        "rows": 1000000,
+        "types": [
+          "Int64",
+          "List(Field { data_type: Int64, nullable: true })"
+        ],
+        "result_sha256": "1d6c1af97ad69a7a2f1067ada807aeedd7610e2cf15a521bdff3a2d32fb6cc94"
+      },
+      "spark-off": {
+        "rows": 1000000,
+        "types": [
+          "Int64",
+          "List(Field { data_type: Int64, nullable: true })"
+        ],
+        "result_sha256": "a58f7856e5ecec97e201d6be31f60e1c59b80d8322bc7929c424fa9495f2b6dd"
+      },
+      "spark-on": {
+        "rows": 1000000,
+        "types": [
+          "Int64",
+          "List(Field { data_type: Int64, nullable: true })"
+        ],
+        "result_sha256": "a58f7856e5ecec97e201d6be31f60e1c59b80d8322bc7929c424fa9495f2b6dd"
+      }
+    },
+    "candidate": {
+      "native": {
+        "rows": 1000000,
+        "types": [
+          "Int64",
+          "List(Field { data_type: Int64, nullable: true })"
+        ],
+        "result_sha256": "1d6c1af97ad69a7a2f1067ada807aeedd7610e2cf15a521bdff3a2d32fb6cc94"
+      },
+      "spark-off": {
+        "rows": 1000000,
+        "types": [
+          "Int64",
+          "List(Field { data_type: Int64, nullable: true })"
+        ],
+        "result_sha256": "a58f7856e5ecec97e201d6be31f60e1c59b80d8322bc7929c424fa9495f2b6dd"
+      },
+      "spark-on": {
+        "rows": 1000000,
+        "types": [
+          "Int64",
+          "List(Field { data_type: Int64, nullable: true })"
+        ],
+        "result_sha256": "a58f7856e5ecec97e201d6be31f60e1c59b80d8322bc7929c424fa9495f2b6dd"
+      }
+    }
+  }
+}
