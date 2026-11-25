@@ -3148,3 +3148,13 @@ when Arrow subtracted an offset or could not tag a recovered instant. Arrow
 still casts the other rows, including historical range failures. The changes
 apply to Spark's time zone functions and its DATE-and-TIME timestamp
 constructors. [Inventory and references](benches/reports/time-zone-range-1513-attribution.md).
+
+### Literal zero-offset CONVERT_TIMEZONE in Spark plans (#1409)
+
+The planner marks identical valid zero-offset zone literals for
+CONVERT_TIMEZONE. For microsecond timestamps, the lazy expression evaluates
+the timestamp lambda and returns its coerced value. The logical call stays
+distinct for grouping and alias resolution, and empty batches keep the
+short-circuit. Other types and zones use the original conversion path.
+FROM_UTC_TIMESTAMP and TO_UTC_TIMESTAMP use the tagged timestamp casts
+introduced by #1513 to preserve the boundary results and executed types.

@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use arrow::array::{
     Array, ArrayRef, AsArray, Date32Array, Int64Array, StringArray, Time64MicrosecondArray,
-    TimestampMicrosecondArray,
+    TimestampMicrosecondArray, TimestampNanosecondArray,
 };
 use arrow::datatypes::{DataType, Field, TimeUnit, TimestampMicrosecondType};
 use arrow::record_batch::RecordBatch;
@@ -174,9 +174,9 @@ async fn execute_conversion(
                 .columns()
                 .iter()
                 .map(|col| match ScalarValue::try_from_array(col, row)? {
-                    ScalarValue::Int64(value) | ScalarValue::TimestampMicrosecond(value, _) => {
-                        Ok(json!(value))
-                    }
+                    ScalarValue::Int64(value)
+                    | ScalarValue::TimestampMicrosecond(value, _)
+                    | ScalarValue::TimestampNanosecond(value, _) => Ok(json!(value)),
                     other => Err(DataFusionError::Internal(format!(
                         "Unexpected conversion result type {}",
                         other.data_type()
@@ -567,6 +567,118 @@ async fn time_zone_boundary_repairs_keep_ordinary_and_null_rows() -> Result<()> 
                 "{case_id} ANSI={ansi_mode}"
             );
         }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn literal_zone_identities_preserve_conversion_results() -> Result<()> {
+    let session = conversion_session()?;
+    for ansi_mode in [false, true] {
+        for session_zone in ["UTC", "America/Los_Angeles"] {
+            let options = SparkSqlOptions {
+                ansi_mode,
+                session_timezone: session_zone.into(),
+                ..SparkSqlOptions::default()
+            };
+            for (function, timestamp, zone) in [
+                ("convert_timezone", "ntz", "UTC"),
+                ("convert_timezone", "ntz", "Z"),
+                ("convert_timezone", "CAST(ltz AS TIMESTAMP_NTZ)", "UTC"),
+                ("from_utc_timestamp", "ltz", "UTC"),
+                ("to_utc_timestamp", "ltz", "UTC"),
+                ("convert_timezone", "ntz", "America/Los_Angeles"),
+            ] {
+                let query = |zone: &str| {
+                    let call = if function == "convert_timezone" {
+                        format!("{function}({zone}, {zone}, {timestamp})")
+                    } else {
+                        format!("{function}({timestamp}, {zone})")
+                    };
+                    format!(
+                        "SELECT id, {call} AS converted FROM observations WHERE id <= 5 ORDER BY id"
+                    )
+                };
+                let sql = query(&format!("'{zone}'"));
+                let runtime_zone = query(&format!(
+                    "CASE WHEN id >= 0 THEN '{zone}' ELSE zone_name END"
+                ));
+                let resolved = plan_query(&session, &sql, &options).await?;
+                let plan = resolved.logical_plan.display_indent().to_string();
+                assert!(plan.contains("convert_tz"), "{sql}\n{plan}");
+                assert_eq!(
+                    execute_conversion(&session, &sql, &options).await?,
+                    execute_conversion(&session, &runtime_zone, &options).await?,
+                    "{sql}"
+                );
+            }
+            let empty_input = "SELECT convert_timezone('UTC','UTC', ts) AS converted FROM \
+                (SELECT CAST(input_text AS TIMESTAMP_NTZ) AS ts FROM \
+                (SELECT 'not a timestamp' AS input_text FROM observations WHERE id < 0))";
+            assert_eq!(
+                execute_conversion(&session, empty_input, &options).await?,
+                json!({"types":["Timestamp(Microsecond, None)"],"rows":[]})
+            );
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn literal_zone_identity_keeps_distinct_grouping_expressions() -> Result<()> {
+    let session = conversion_session()?;
+    for ansi_mode in [false, true] {
+        let options = SparkSqlOptions {
+            ansi_mode,
+            ..SparkSqlOptions::default()
+        };
+        let sql = "SELECT grouping(ntz) FROM observations \
+                   GROUP BY ROLLUP(convert_timezone('UTC','UTC',ntz))";
+        let error = plan_query(&session, sql, &options)
+            .await
+            .err()
+            .ok_or_else(|| {
+                DataFusionError::Internal("a different expression matched the grouping key".into())
+            })?;
+        assert!(error.to_string().contains("GROUPING_COLUMN_MISMATCH"));
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn literal_zone_conversions_keep_nanosecond_rounding() -> Result<()> {
+    let session = conversion_session()?;
+    let times = TimestampNanosecondArray::from(vec![Some(1_501), Some(-1_501), None]);
+    let ntz: ArrayRef = Arc::new(times.clone());
+    let ltz: ArrayRef = Arc::new(times.with_timezone("UTC"));
+    session.register_batch(
+        "nanos",
+        RecordBatch::try_from_iter([("ntz", ntz), ("ltz", ltz)])?,
+    )?;
+    for ansi_mode in [false, true] {
+        let options = SparkSqlOptions {
+            ansi_mode,
+            ..SparkSqlOptions::default()
+        };
+        let result = execute_conversion(
+            &session,
+            "SELECT convert_timezone('UTC','UTC',ntz) AS local_time, \
+             from_utc_timestamp(ltz,'UTC') AS from_utc, \
+             to_utc_timestamp(ltz,'UTC') AS to_utc FROM nanos",
+            &options,
+        )
+        .await?;
+        assert_eq!(
+            result,
+            json!({
+                "types": [
+                    "Timestamp(Nanosecond, None)",
+                    "Timestamp(Nanosecond, Some(\"UTC\"))",
+                    "Timestamp(Nanosecond, Some(\"UTC\"))"
+                ],
+                "rows": [[1000, 1000, 1000], [-1000, -1000, -1000], [null, null, null]]
+            })
+        );
     }
     Ok(())
 }

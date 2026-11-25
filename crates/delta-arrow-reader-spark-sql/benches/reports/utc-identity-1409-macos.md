@@ -17,18 +17,38 @@ Each A/A floor comes from two repeat arms using this staging binary.
 | --- | --- | ---: | ---: | ---: | ---: | --- |
 | CONVERT_TIMEZONE | off | 57.254 | 36.231 | -20.064 | 0.884 | Faster |
 | CONVERT_TIMEZONE | on | 56.871 | 36.441 | -20.789 | 0.319 | Faster |
-| FROM_UTC_TIMESTAMP | off | 19.601 | 20.219 | +0.850 | 0.409 | Slower |
+| FROM_UTC_TIMESTAMP | off | 19.601 | 20.219 | +0.850 | 0.409 | Build-layout shift |
 | FROM_UTC_TIMESTAMP | on | 19.735 | 19.673 | +0.114 | 0.172 | Within floor |
 | TO_UTC_TIMESTAMP | off | 19.709 | 19.605 | -0.319 | 0.450 | Within floor |
 | TO_UTC_TIMESTAMP | on | 19.495 | 19.476 | -0.086 | 0.689 | Within floor |
 
-The candidate stays outside staging. CONVERT_TIMEZONE improved
-beyond the floor in both modes, but FROM_UTC_TIMESTAMP with ANSI off
-crossed its floor. Its three paired changes were -0.096, +1.008 and
-+0.850 ns per row. Both sources use #1513's tagged conversion path
-for this cell. The session measures the timing difference and leaves
-its cause unresolved. The same gate treats the other three UTC shift
-cells as within their floors.
+The original timing gate held the candidate when the ANSI-off
+FROM_UTC_TIMESTAMP cell crossed its floor. Its three paired changes
+were -0.096, +1.008 and +0.850 ns per row. CONVERT_TIMEZONE cleared
+both gain thresholds. The other three UTC shift cells stayed within
+their floors.
+
+## Instruction comparison and decision
+
+Both saved release executables matched the SHA-256 values in the
+session receipts. Their held-cell physical plans matched as well.
+The comparison covered 12,743 instructions in 28 linked bodies
+under 27 routine names. It includes the direct ConvertTz batch
+call, its Sail helpers, and the Arrow timestamp cast. Stack slots
+and field offsets matched. Seven relocated loads read identical
+bytes, 19 stub calls resolved to the same import, and the two
+linked instances of the scalar adapter's slice repeat had the
+same normalized instructions. [Executable comparison](../macos_addendum/literal-utc-layout.json)
+
+Under rule 5, the +0.850 ns per row difference is a build-layout shift.
+The cell passes and the literal UTC candidate can merge on the existing
+measurements. [Maintainer decision](https://github.com/mag1cfrog/delta-arrow-reader/issues/1409#issuecomment-7152194616)
+
+The Apple Silicon UTC-to-UTC residual after #1513 is 36.231 / 36.441 ns
+per input row above projection, ANSI off / on. The earlier Linux x86
+measurement has its own table. The other UTC shift, named-zone and TIME
+differences, and the ten #1513 costs, remain open.
+[Earlier Linux x86 report](utc-identity-1409-round3.md)
 
 The port applies the archived lazy CONVERT_TIMEZONE identity to the
 post-#1513 source. FROM_UTC_TIMESTAMP and TO_UTC_TIMESTAMP use the
