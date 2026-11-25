@@ -28,7 +28,8 @@ notices use the same pinned DataFusion commit as the other 54.1.0 forks.
 
 All 121 registered names used the same statements and input table. The
 other 120 probe records matched. The original `map_entries` statement
-returned four rows after the fix.
+returned four rows after the fix. All 327 native registry entries matched
+between the two linked executables.
 [Fixed probe records](native-registry-1559-fixed-probes.csv) and [linked proof branch](https://github.com/mag1cfrog/delta-arrow-reader/tree/chore/1559-linked-map-entries-proof)
 
 The fixed CLI SHA-256 is
@@ -43,3 +44,6 @@ fields. It compares the full executed schema and rows against Spark
 4.2.0 at revision `32f7299601108917fb01920a54e084595b7b3bf8` with ANSI on
 and off. The capture covers NULL and empty maps, a NULL value and entry
 ordering. [Spark capture](../../tests/fixtures/map-entries-native/spark-reference.json)
+
+Both focused tests passed on this Mac. Formatting, Clippy and the full
+Spark workspace tests passed before merge.
