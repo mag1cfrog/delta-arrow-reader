@@ -42,6 +42,8 @@ The stock CLI NOTICE matches byte for byte.
 | Final release configuration | `e5f3665695974d2f69a94ee15059b66d0d63cbc22208748c6a16281fb50b4111` |
 
 The ten notice unit tests and both notice integration tests passed.
+Formatting, Clippy and the full Spark workspace tests passed on this Mac
+before both merges.
 
 ## Linked NOTICE and receipt
 
