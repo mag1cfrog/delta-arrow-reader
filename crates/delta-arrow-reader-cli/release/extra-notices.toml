@@ -81,3 +81,111 @@ version = "58.4.0"
 crate_checksum = "6f37a91177e2dddb10333546952fcf2b7674b97ebd9449432f24b883d6ea8108"
 url = "https://raw.githubusercontent.com/apache/arrow-rs/0ff81c1215cc026a1de93ce3d2078df1ecba6f09/NOTICE.txt"
 sha256 = "e5b198d7f809311723889814d99a92f808c69e89a847efa7a7b65270f5fdeae6"
+
+# Published Spark dependencies with source-verified legal files.
+[[files]]
+package = "datasketches"
+version = "0.3.0"
+url = "https://raw.githubusercontent.com/apache/datasketches-rust/9a80c604bec14b14000fc20d47f9f4b3c2baa5a1/LICENSE"
+sha256 = "2a93522cc3e0d15510a70e0e7aaf33dc6a1588c39ca4a5c60c4b0121ed25eaf4"
+
+[[files]]
+package = "datasketches"
+version = "0.3.0"
+url = "https://raw.githubusercontent.com/apache/datasketches-rust/9a80c604bec14b14000fc20d47f9f4b3c2baa5a1/NOTICE"
+sha256 = "91bb25aa2f31e6fb4326f1c2f1cb993a8f4a47e827bbabefbcccc895164f617c"
+
+[[files]]
+package = "next-gen-proc_macros"
+version = "0.1.1"
+url = "https://raw.githubusercontent.com/danielhenrymantilla/next-gen-rs/5d0249723dc2955fd4633aa4a6923b2c21b304a0/LICENSE-APACHE"
+sha256 = "082d31fbdecbda9720686a2b76cee810dcd2630f2d16bc4cc9accd411b6a76fd"
+
+[[files]]
+package = "next-gen-proc_macros"
+version = "0.1.1"
+url = "https://raw.githubusercontent.com/danielhenrymantilla/next-gen-rs/5d0249723dc2955fd4633aa4a6923b2c21b304a0/LICENSE-MIT"
+sha256 = "e8d3901c28744304957435401f88b9114a73ad95f35bf569e20c4feeb7e2db35"
+
+[[files]]
+package = "next-gen-proc_macros"
+version = "0.1.1"
+url = "https://raw.githubusercontent.com/danielhenrymantilla/next-gen-rs/5d0249723dc2955fd4633aa4a6923b2c21b304a0/LICENSE-ZLIB"
+sha256 = "484f7e56d0e3178613b2f12d478a46fc2f2a6646c7ea14a7329bb805ccc2a82b"
+
+[[files]]
+package = "regexml"
+version = "0.2.2"
+url = "https://raw.githubusercontent.com/Paligo/regexml/2d113d8efe426810e076e15e1376bcc1637c9707/COPYRIGHT"
+sha256 = "9f0030c8371ef0e4ad638bb83ebd20b8186f934a7e0f1ac3e6f943caceffb290"
+
+[[files]]
+package = "regexml"
+version = "0.2.2"
+url = "https://raw.githubusercontent.com/Paligo/regexml/2d113d8efe426810e076e15e1376bcc1637c9707/LICENSE-APACHE"
+sha256 = "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+
+[[files]]
+package = "regexml"
+version = "0.2.2"
+url = "https://raw.githubusercontent.com/Paligo/regexml/2d113d8efe426810e076e15e1376bcc1637c9707/LICENSE-MPL2"
+sha256 = "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04"
+
+[[files]]
+package = "regexml"
+version = "0.2.2"
+url = "https://raw.githubusercontent.com/Paligo/regexml/2d113d8efe426810e076e15e1376bcc1637c9707/CREDITS.txt"
+sha256 = "1765cbef7c5bfb262cafea0105b7b978026a82fdab85520fcebb0374d8027d62"
+
+# Reviewed local sources selected by the linked root. The stock CLI follows
+# the registry paths and their existing original-file collection.
+
+[[local]]
+project = "Sail"
+revision = "9544c9253e981a82c5f9e493c43ce98a4d9d41b7"
+version = "0.7.1"
+directory = "crates/delta-arrow-reader-spark-sql/vendor/sail/crates"
+packages = [
+    "sail-common",
+    "sail-common-datafusion",
+    "sail-function",
+    "sail-logical-plan",
+    "sail-plan",
+    "sail-sql-analyzer",
+    "sail-sql-macro",
+    "sail-sql-parser",
+]
+shared_files = ["crates/delta-arrow-reader-spark-sql/vendor/sail/LICENSE"]
+
+[[local]]
+project = "Apache Arrow Rust"
+revision = "0ff81c1215cc026a1de93ce3d2078df1ecba6f09"
+version = "58.4.0"
+directory = "crates/delta-arrow-reader-spark-sql/vendor/dependencies"
+packages = ["arrow-arith", "arrow-array", "arrow-cast"]
+
+[[local]]
+project = "Apache DataFusion"
+revision = "0d1f2ebe2cc97c91b736bc0a160b5b73cf40437a"
+version = "54.1.0"
+directory = "crates/delta-arrow-reader-spark-sql/vendor/dependencies"
+packages = [
+    "datafusion-common",
+    "datafusion-datasource",
+    "datafusion-expr",
+    "datafusion-functions",
+    "datafusion-functions-aggregate",
+    "datafusion-optimizer",
+    "datafusion-physical-expr",
+    "datafusion-physical-expr-common",
+    "datafusion-physical-optimizer",
+    "datafusion-physical-plan",
+    "datafusion-sql",
+]
+
+[[local]]
+project = "rust-lexical"
+revision = "ddfc0f6bfcc0085ff982f567f41f24a5541a14ea"
+version = "1.0.6"
+directory = "crates/delta-arrow-reader-spark-sql/vendor/dependencies"
+packages = ["lexical-parse-float"]

@@ -1,0 +1,33 @@
+Ordinary linked scan
+
+error: failed to satisfy license requirements
+   ┌─ <cargo-registry>/index.crates.io-1949cf8c6b5b557f/ar_archive_writer-0.5.5/Cargo.toml:35:12
+   │
+35 │ license = "Apache-2.0 WITH LLVM-exception"
+   │            ----------
+
+error: unable to synthesize license expression for 'sail-common 0.7.1': no `license` specified, and no license files were found
+
+error: unable to synthesize license expression for 'sail-common-datafusion 0.7.1': no `license` specified, and no license files were found
+
+error: unable to synthesize license expression for 'sail-function 0.7.1': no `license` specified, and no license files were found
+
+error: unable to synthesize license expression for 'sail-logical-plan 0.7.1': no `license` specified, and no license files were found
+
+error: unable to synthesize license expression for 'sail-plan 0.7.1': no `license` specified, and no license files were found
+
+error: unable to synthesize license expression for 'sail-sql-analyzer 0.7.1': no `license` specified, and no license files were found
+
+error: unable to synthesize license expression for 'sail-sql-macro 0.7.1': no `license` specified, and no license files were found
+
+error: unable to synthesize license expression for 'sail-sql-parser 0.7.1': no `license` specified, and no license files were found
+
+2026-11-25T09:11:12.587257Z [[31mERROR[0m] encountered 9 errors resolving licenses, unable to generate output[0m
+
+Ordinary linked renderer
+
+Error: rustup failed: exit status: 1
+
+Renderer with the historical scan clarifications
+
+Error: unreviewed local dependency: arrow-arith

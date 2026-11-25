@@ -126,6 +126,55 @@ fn missing_original_files_require_a_verified_supplement() -> TestResult {
 }
 
 #[test]
+fn local_notices_require_the_reviewed_version_and_path() -> TestResult {
+    let mut fixture = Fixture::new()?;
+    let repository = fixture.root.path().canonicalize()?;
+    fs::create_dir(repository.join("vendor"))?;
+    fs::rename(
+        repository.join("dependency"),
+        repository.join("vendor/dependency"),
+    )?;
+    fs::write(repository.join("LICENSE"), "Shared upstream terms\n")?;
+    let manifest = repository.join("vendor/dependency/Cargo.toml");
+    let package = &mut fixture.report.crates[0].package;
+    package.manifest_path = manifest.clone();
+    package.source = None;
+    let groups = [LocalNoticeGroup {
+        project: "Upstream project".into(),
+        revision: "a".repeat(40),
+        version: "1.0.0".into(),
+        directory: "vendor".into(),
+        packages: vec!["dependency".into()],
+        shared_files: vec!["LICENSE".into()],
+    }];
+    let mut notices = ExtraNotices::new();
+    collect_local_notices(&repository, &fixture.report.crates, &groups, &mut notices)?;
+    let text = render_notices(&fixture.report, &fixture.rust_docs, &notices, "0.9.2")?;
+    assert!(text.contains(&format!("Upstream project\nCommit: {}\n", "a".repeat(40))));
+    assert!(text.contains("Original copyright attribution\r\n"));
+    assert!(text.contains("Shared upstream terms\n"));
+
+    for (path, version) in [
+        (repository.join("other/Cargo.toml"), "1.0.0"),
+        (manifest, "2.0.0"),
+    ] {
+        let package = &mut fixture.report.crates[0].package;
+        package.manifest_path = path;
+        package.version = version.into();
+        assert!(
+            collect_local_notices(
+                &repository,
+                &fixture.report.crates,
+                &groups,
+                &mut ExtraNotices::new()
+            )
+            .is_err()
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn rejects_incomplete_or_inconsistent_license_reports() -> TestResult {
     let fixture = Fixture::new()?;
     let mut reports = vec![];
