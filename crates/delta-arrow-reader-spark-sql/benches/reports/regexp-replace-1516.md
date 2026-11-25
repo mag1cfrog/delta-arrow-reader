@@ -46,18 +46,19 @@ session's staging binary for each cell.
 | --- | ---: | ---: | ---: | ---: | --- |
 | Spark ANSI off | 131.822 [129.688, 132.897] | 35.613 [35.447, 35.775] | -96.298 | 1.417 | Faster |
 | Spark ANSI on | 131.798 [131.289, 134.781] | 36.099 [35.588, 36.746] | -96.255 | 0.455 | Faster |
-| Native | 57.402 [57.134, 58.228] | 57.911 [57.682, 58.037] | +0.625 | 0.313 | Slower |
+| Native | 57.402 [57.134, 58.228] | 57.911 [57.682, 58.037] | +0.625 | 0.313 | Build-layout shift |
 
 Both Spark reductions exceeded their floors. The native paired changes
-were -0.195, +0.625 and +0.754 ns per row. The source change is in
-Spark's replacement adapter. A comparison of ten linked native
-replacement routines covered 6,177 instructions. The remaining
-operands, including stack and object field offsets, matched after
-normalizing linked addresses. Four relocated loads read matching
-bytes at their load widths, and 39 relocated stub calls resolved to
-matching imports. The comparison leaves some linked targets and the
-complete execution state unresolved, so the replay retains the native
-timing judgment. [Instruction comparison](../macos_addendum/regexp-native-layout.json)
+were -0.195, +0.625 and +0.754 ns per row. Ten linked native
+replacement routines matched across 6,177 instructions after
+relocation normalization, including stack and object field offsets.
+Four relocated loads read matching bytes at their load widths,
+and 39 relocated stub calls resolved to matching imports. The
+source change is in Spark's replacement adapter. Under rule 5,
+the +0.625 ns per row median against a 0.313 ns per row floor
+is a build-layout shift. [Instruction comparison](../macos_addendum/regexp-native-layout.json)
+
+REGEXP_REPLACE after the change has no Linux x86 measurement yet.
 
 Both executables preserved all full-input rows and executed Arrow
 types within each configuration. On the restricted input, native
