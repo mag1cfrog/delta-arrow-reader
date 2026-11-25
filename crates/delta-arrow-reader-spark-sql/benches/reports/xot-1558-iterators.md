@@ -27,3 +27,6 @@ serialized subtrees. Run it from the Spark workspace with
 The source inventory records the five modified files and the two excluded
 packaging files. The other 77 files match the published archive byte for byte,
 including the upstream whitespace and test snapshots.
+
+Formatting, Clippy and the full Spark workspace tests passed on this Mac.
+The existing Spark captures and expected outcomes stayed intact.
