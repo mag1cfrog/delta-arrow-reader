@@ -79,5 +79,20 @@
     "build": "stock CLI from the native registry proof",
     "binary_sha256": "fcd6162617766653026fe5a635afbb2c6614694bb0ec7a32c5fc700d752f3f43"
   },
-  "mode": "untimed checks"
+  "mode": "untimed checks",
+  "footprint_release_check": {
+    "status": "passed",
+    "exit_code": 0,
+    "rows": 1,
+    "source": "70a77d2df0ab6a475211a361c6e5048f01c73df3",
+    "build": "stock CLI, no Spark dependency",
+    "binary_sha256": "86a30af7f3e225482d736d248936c9d67d41165ff49cbb6d4e718a20ffafb065",
+    "overlays": {
+      "crates/delta-arrow-reader-cli/src/main.rs": "573c689c62c063ea743dd6042d662857e3277e251b7cfcc116633b854a510a64",
+      "crates/delta-arrow-reader-cli/src/runtime/discovery.rs": "9c8c167127fe048f13434d067893437e309aafcb29957a0f3890e275ecc0596a",
+      "crates/delta-arrow-reader-cli/src/runtime/table_command.rs": "9122f2d0c341f3876d9f23a62db1576cbf76ced97c6655e0cd8efc046b53ab0b",
+      "crates/delta-arrow-reader-cli/src/runtime/table_command/worker.rs": "def12c49a528ae93844b1c914d96dd8ba549861df9b91d93f3bf379e848ac209",
+      "crates/delta-arrow-reader-cli/src/output.rs": "3745499a8181f7ed17f24c952dad751231547dc537ae9eeaa58edbe9a099abda"
+    }
+  }
 }
