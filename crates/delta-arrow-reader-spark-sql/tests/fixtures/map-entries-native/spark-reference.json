@@ -1,0 +1,183 @@
+{
+  "spark_version": "4.2.0",
+  "spark_build": "4.2.0 32f7299601108917fb01920a54e084595b7b3bf8",
+  "sql": "SELECT id, map_entries(m) AS value FROM bench ORDER BY id",
+  "inputs": [
+    [
+      0,
+      null
+    ],
+    [
+      1,
+      [
+        [
+          "a",
+          4
+        ],
+        [
+          "b",
+          null
+        ]
+      ]
+    ],
+    [
+      2,
+      []
+    ],
+    [
+      3,
+      [
+        [
+          "c",
+          9
+        ]
+      ]
+    ]
+  ],
+  "observations": [
+    {
+      "ansi": false,
+      "executed_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "value",
+            "type": {
+              "type": "array",
+              "elementType": {
+                "type": "struct",
+                "fields": [
+                  {
+                    "name": "key",
+                    "type": "string",
+                    "nullable": false,
+                    "metadata": {}
+                  },
+                  {
+                    "name": "value",
+                    "type": "long",
+                    "nullable": true,
+                    "metadata": {}
+                  }
+                ]
+              },
+              "containsNull": false
+            },
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          null
+        ],
+        [
+          "1",
+          [
+            [
+              "a",
+              "4"
+            ],
+            [
+              "b",
+              null
+            ]
+          ]
+        ],
+        [
+          "2",
+          []
+        ],
+        [
+          "3",
+          [
+            [
+              "c",
+              "9"
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "ansi": true,
+      "executed_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "long",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "value",
+            "type": {
+              "type": "array",
+              "elementType": {
+                "type": "struct",
+                "fields": [
+                  {
+                    "name": "key",
+                    "type": "string",
+                    "nullable": false,
+                    "metadata": {}
+                  },
+                  {
+                    "name": "value",
+                    "type": "long",
+                    "nullable": true,
+                    "metadata": {}
+                  }
+                ]
+              },
+              "containsNull": false
+            },
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          null
+        ],
+        [
+          "1",
+          [
+            [
+              "a",
+              "4"
+            ],
+            [
+              "b",
+              null
+            ]
+          ]
+        ],
+        [
+          "2",
+          []
+        ],
+        [
+          "3",
+          [
+            [
+              "c",
+              "9"
+            ]
+          ]
+        ]
+      ]
+    }
+  ]
+}

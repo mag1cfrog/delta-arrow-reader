@@ -71,13 +71,14 @@ failures and avoiding false missing-column reports.
 
 ## Dependency forks
 
-Sixteen dependencies have local source overrides in this crate's Cargo.toml.
+Seventeen dependencies have local source overrides in this crate's Cargo.toml.
 
 | Source | Version | Retained changes |
 | --- | --- | --- |
 | DataFusion common | 54.1.0 | Preserve complete list element Fields during scalar conversion and scalar casts |
 | DataFusion expression and execution crates | 54.1.0 | Spark coercion and nullability, subquery preparation, filtering and sorting, and accepted arithmetic execution changes |
 | DataFusion aggregate functions | 54.1.0 | Clear cached sliding MIN/MAX values when no contributing value remains; expose shallow MovingMin queue buffer accounting |
+| DataFusion nested functions | 54.1.0 | Match native MAP_ENTRIES physical entry fields to the declared list type |
 | DataFusion datasource | 54.1.0 | Supply the owned complete table schema width when unprojecting filters, including custom file sources |
 | DataFusion SQL | 54.1.0 | Unparse explicit NULL RANGE bounds as typed expressions and preserve native UNBOUNDED sentinels |
 | Arrow array, arithmetic and cast crates | 58.4.0 | Accepted cast, checked arithmetic, buffer handling and logical List child validation changes |
@@ -107,9 +108,14 @@ are off.
 The xot fork starts at upstream commit `4a44505f23844d6101a8da7397e434562b1ac513`.
 Its three generator sites now use standard iterators, removing genawaiter and
 both of its macro packages. The upstream crate's traversal and serialization
-tests are retained. A linked root must select the xot override with the other
-fifteen patches.
+tests are retained. The xot change brought the linked root to sixteen patches.
 [Upstream xot source](https://github.com/faassen/xot/tree/4a44505f23844d6101a8da7397e434562b1ac513)
+
+The DataFusion nested-functions fork adds the seventeenth patch. Native
+MAP_ENTRIES keeps the declared `key` and `value` fields. When the input uses
+other entry names, it reuses the child arrays under the declared fields.
+The list keeps the original offsets and NULL bitmap. Invalid layouts return
+an Arrow error through the checked constructors.
 
 The DataFusion optimizer backports [upstream PR #23704](https://github.com/apache/datafusion/pull/23704)
 from commit `c111f0a9ff9e56da416c162257a31d3355461f56`. It applies the existing

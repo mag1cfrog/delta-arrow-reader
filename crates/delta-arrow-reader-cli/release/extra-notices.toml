@@ -175,6 +175,7 @@ packages = [
     "datafusion-expr",
     "datafusion-functions",
     "datafusion-functions-aggregate",
+    "datafusion-functions-nested",
     "datafusion-optimizer",
     "datafusion-physical-expr",
     "datafusion-physical-expr-common",
