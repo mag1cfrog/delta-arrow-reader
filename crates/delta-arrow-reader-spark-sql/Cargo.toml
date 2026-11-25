@@ -183,3 +183,4 @@ datafusion-physical-optimizer = { path = "vendor/dependencies/datafusion-physica
 datafusion-physical-plan = { path = "vendor/dependencies/datafusion-physical-plan" }
 datafusion-sql = { path = "vendor/dependencies/datafusion-sql" }
 lexical-parse-float = { path = "vendor/dependencies/lexical-parse-float" }
+xot = { path = "vendor/dependencies/xot" }
