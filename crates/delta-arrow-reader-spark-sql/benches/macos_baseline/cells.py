@@ -1,9 +1,11 @@
 """Translate macOS cell selections to the original benchmark entry points."""
 
 import json
+from pathlib import Path
 from statistics import median
 import subprocess
 
+from build import digest
 from native import BENCHES, bounded_timeout, call
 import ports
 
@@ -23,7 +25,9 @@ CONFIGURATIONS = {
     "pending_range_1099_isolated": ("native", "spark-off", "spark-on"),
     "footprint": ("native",),
 }
-PREFIX = {"execution": (), "strings": ("--strings-1388",), "parsers": ("--parsers-1389",)}
+PREFIX = {"execution": (), "strings": ("--strings-1388",), "parsers": ("--parsers-1389",),
+          "casts-date": ("--casts-1385-date",)}
+CONFIGURATIONS["casts-date"] = CONFIGURATIONS["parsers"]
 
 
 def read(path):
@@ -40,7 +44,8 @@ def process(binary_dir, cell, sample_count, destination, resources, deadline, bl
     timeout = bounded_timeout(deadline, cell.get("process_timeout_seconds", 300))
     prefix = ["--macos-samples", sample_count]
     if suite == "functions":
-        args = [*prefix, "measure", FUNCTIONS, case, config]
+        manifest = BENCHES / Path(cell.get("function_manifest", "functions/manifest.json"))
+        args = [*prefix, "measure", manifest, case, config]
     elif suite in PREFIX:
         args = [*prefix, *PREFIX[suite], "measure", resources["snapshot"], destination, config, case]
     elif suite == "planning":
@@ -65,14 +70,20 @@ def function_set(binary, ids, config, sample_count, destination, deadline, sched
                                      FUNCTIONS, id_file, config], destination, schedule, deadline)
 
 
-def function_preflight(binary, case, destination, deadline, schedule, runner):
+def function_preflight(binary, case, destination, deadline, schedule, runner, manifest=FUNCTIONS):
     if case["exclusion"]:
         return {"id": case["id"], **runner["eligibility"](case, {})}
-    result = runner["invoke"](binary, ["preflight", FUNCTIONS, case["id"], destination],
+    plans = destination / "plans"
+    result = runner["invoke"](binary, ["preflight", manifest, case["id"], plans],
                               destination, schedule, deadline, True)
-    record, = result["records"] if result["status"] == "ok" else [result]
+    if result["status"] == "ok":
+        record, = result["records"]
+        record = {**record, "status": "ok"}
+    else:
+        record = result
     verdict = runner["eligibility"](case, record)
-    return {"id": case["id"], **verdict, "results": record.get("results", [])}
+    return {"id": case["id"], **verdict, "results": record.get("results", []),
+            "plan_hashes": {path.name: digest(path) for path in sorted(plans.glob("*.plan"))}}
 
 
 def function_samples(suite, rows, cell, count):

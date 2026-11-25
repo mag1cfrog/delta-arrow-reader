@@ -219,7 +219,12 @@ def sharded(args, settings, stream, *, repeat):
                         cell = {"suite": "functions", "configuration": config, "id": case}
                         try:
                             records = result["records"]
-                            assert any(row.get("status") == "ok" and row.get("id") == case for row in records)
+                            completed, samples = cells.function_samples("functions", records, cell, count)
+                            assert completed.get("status") == "ok"
+                            expected = next((item for item in work[case]["results"] if item["configuration"] == config), None)
+                            if expected:
+                                assert completed["types"] == expected["types"]
+                                assert all(sample["output_rows"] == expected["rows"] for sample in samples)
                             ns = cells.metric(cell, records, count)
                         except (AssertionError, KeyError, ValueError):
                             row = next((r for r in result["records"] if r.get("id") == case and "status" in r), {})

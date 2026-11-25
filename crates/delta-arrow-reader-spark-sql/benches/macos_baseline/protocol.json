@@ -11,6 +11,7 @@
     "planning": 3,
     "planning_attribution": 3,
     "parsers": 3,
+    "casts-date": 3,
     "strings": 3,
     "nullif_620": 3,
     "nullif_620_recheck": 3,

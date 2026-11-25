@@ -13,7 +13,7 @@ def process(binary_dir, case, count, output, resources, timeout, block):
         assert count == 3
         with legacy_runner("functions_1406/run.py") as runner:
             rows = runner["probe"](binary_dir / "functions_1406_driver", case["input_profile"],
-                                   ["measure", BENCHES / "functions/manifest.json", name, mode], output / "samples.jsonl")
+                                   ["measure", str(BENCHES / "functions/manifest.json"), name, mode], output / "samples.jsonl")
         return "ok", rows
     if suite == "regression_windows_1512":
         from cells import function_set, read

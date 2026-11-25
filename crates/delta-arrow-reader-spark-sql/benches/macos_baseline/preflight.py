@@ -17,7 +17,7 @@ def execution(binaries, output, snapshot, specs):
     deadline = time.monotonic() + 7200
     binary = binaries / "execution"
     failures = {}
-    for suite in ("parsers", "strings"):
+    for suite in ("parsers", "strings", "casts-date"):
         prefix = cells.PREFIX[suite]
         selection = {r["id"]: r for r in specs if r["suite"] == suite}
         observed = {}
@@ -110,6 +110,27 @@ def nullif(binaries, output):
     return failures
 
 
+def function_variants(binaries, output, specs):
+    output.mkdir()
+    deadline = time.monotonic() + 1800
+    schedule = cells.read(BENCHES / "functions/schedule.json")
+    failures = {}
+    with legacy_runner("functions/run.py") as runner:
+        manifests = {row["function_manifest"] for row in specs if row["suite"] == "functions"}
+        for manifest in sorted(manifests):
+            path = BENCHES / manifest
+            cases = cells.read(path)["functions"]
+            required = {row["id"] for row in specs if row.get("function_manifest") == manifest}
+            for case in cases:
+                if case["id"] not in required:
+                    continue
+                row = cells.function_preflight(binaries / "functions", case, output / case["id"], deadline,
+                                               schedule, runner, path)
+                if row["status"] != "eligible":
+                    failures["functions", case["id"]] = [row["reason"]]
+    return failures
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("binaries", "fixture", "output"):
@@ -127,6 +148,7 @@ def main():
         ("planning", lambda: planning(args.binaries, args.output / "planning", specs)),
         ("sf1", lambda: execution(args.binaries, args.output / "sf1", args.fixture / "delta-snapshot", specs)),
         ("nullif", lambda: nullif(args.binaries, args.output / "nullif")),
+        ("time conversion variants", lambda: function_variants(args.binaries, args.output / "function-variants", specs)),
     ):
         failed.update(run())
         print(f"{name} preflight complete; {len(failed)} exclusions so far", flush=True)

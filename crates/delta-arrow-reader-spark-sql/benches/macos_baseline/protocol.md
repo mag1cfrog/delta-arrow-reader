@@ -93,8 +93,20 @@ cast and the projection, and its sample for the floor is their difference.
    samples in raw evidence. SF1 execution uses query completion time and
    retains source I/O and row counts. NULLIF uses execution time and retains
    planning separately. A parser with a differing native result is untimable
-   for the paired comparison.
+   for the paired comparison. Reuse the same planning samples for the logical
+   and physical rows in the report. The six additional time conversion SQL
+   shapes use the existing named-zone and offset manifest. Keep their current
+   Spark costs above projection and use that projection for the A/A floor.
 4. Publish one Mac-only baseline table with the issue owner of each slower
    case, the status of each historical open difference, orphans and untimable
    cases. Keep all open differences eligible for the separate Linux x86
    confirmation.
+
+`preflight.py` writes the non-function eligibility receipt and the NULLIF
+exclusion file. `run.py preflight-noise` and `run.py preflight-functions` write
+the independent function eligibility receipts. Pass the receipt for the same
+release executable to each timing command. `run.py noise`, `sweep`, `repeat`,
+and `cells` each use a fresh evidence directory and write their compressed raw
+samples and summary there. Pass the noise summary to `repeat` and `cells` to
+bind the retained sample counts. The report generator reads both function
+summaries and the non-function summary and raw samples.
