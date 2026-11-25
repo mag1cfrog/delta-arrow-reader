@@ -189,3 +189,10 @@ revision = "ddfc0f6bfcc0085ff982f567f41f24a5541a14ea"
 version = "1.0.6"
 directory = "crates/delta-arrow-reader-spark-sql/vendor/dependencies"
 packages = ["lexical-parse-float"]
+
+[[local]]
+project = "xot"
+revision = "4a44505f23844d6101a8da7397e434562b1ac513"
+version = "0.31.2"
+directory = "crates/delta-arrow-reader-spark-sql/vendor/dependencies"
+packages = ["xot"]
