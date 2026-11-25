@@ -1,0 +1,83 @@
+{
+  "source": "70a77d2df0ab6a475211a361c6e5048f01c73df3",
+  "checks": {
+    "execution": {
+      "status": "passed",
+      "result_sha256": "4c4576bf3b99e0dbe8549d27db3822483dab70a645da818555b083a8c8d602d2",
+      "rows": 6001215,
+      "executed_types": [
+        "Int64",
+        "Int32",
+        "Date32",
+        "Utf8View",
+        "Decimal128(15, 2)"
+      ]
+    },
+    "functions": {
+      "status": "passed",
+      "result_sha256": "d7c9a9f5f2ac9e86ed56c32972f4cb70d18b58f5ee1ccc4b6badcab1b4ef0b05",
+      "typed_configurations": 3
+    },
+    "functions_1406": {
+      "status": "passed",
+      "result_sha256": "d71748bf746db36ba5ad4838e6193b9b9e177665e3becf861846d46719351a9e",
+      "typed_configurations": 3
+    },
+    "nullif_620": {
+      "status": "passed",
+      "result_sha256": "a36ae0d4da6272301d7d1a7a6a1c829b19c49f0eedf39c3212c3c0c148f94771",
+      "validated_records": 3
+    },
+    "nullif_620_recheck": {
+      "status": "passed",
+      "result_sha256": "52b3894472fec4e41429e2c650601240e59ab4c7b6385633722d6cd872d0a044",
+      "validated_records": 3
+    },
+    "pending_range_1099": {
+      "status": "passed",
+      "result_sha256": "3ef110a4af322593575a07609aaf13ff5f9fbe1aaa2fed39953af4706396bd32",
+      "statements": 2,
+      "mode_records": 6
+    },
+    "pending_range_1099_isolated": {
+      "status": "passed",
+      "result_sha256": "31c03eada0d1c0e61d06a4fb63b657fd86a93f24b875a9d47104c53c4e1f673a",
+      "validated_records": 3
+    },
+    "planning": {
+      "status": "passed",
+      "result_sha256": "6ed38eab7600f5b2b66cc8caf7ec31a5864139b4aa675e92bb47c82170ada555",
+      "validated_records": 4
+    },
+    "planning_attribution": {
+      "status": "passed",
+      "result_sha256": "9d6277d91aa4b5bed2babf59c707ffd7fa49f88878f44942824aede01c2ef0fe"
+    },
+    "regression_windows_1512": {
+      "status": "passed",
+      "result_sha256": "840ee9fe76404fa1a7954295a1ec0432839da52eccd531ebd9608ffeb2a16acd",
+      "typed_configurations": 3
+    },
+    "strings": {
+      "status": "passed",
+      "result_sha256": "dcc36a2b026b422393205b32d3916cd0debd4ab1e5e2fcf160929ea503215dd2",
+      "rows": 6001215,
+      "executed_types": [
+        "Int64",
+        "Int32",
+        "Utf8View"
+      ]
+    },
+    "footprint": {
+      "status": "passed",
+      "result_sha256": "83e896febc0dbe58e14b2e05d7f8f6e3ecbac52c54b91dfde7bc32bf2c23cf89",
+      "rows": 1
+    }
+  },
+  "stock_cli": {
+    "source": "df593af2f698c64a11075eb3b5ddca8d9cdbf295",
+    "build": "stock CLI from the native registry proof",
+    "binary_sha256": "fcd6162617766653026fe5a635afbb2c6614694bb0ec7a32c5fc700d752f3f43"
+  },
+  "mode": "untimed checks"
+}
