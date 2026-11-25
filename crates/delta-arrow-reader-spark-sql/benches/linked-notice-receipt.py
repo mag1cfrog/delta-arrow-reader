@@ -69,13 +69,12 @@ def receipt(scan, notice, config):
     ]
     assert sections
     for index, (match, owner, filename) in enumerate(sections):
-        if index + 1 == len(sections):
-            assert notice.endswith(b"\n")
-            content = notice[match.end():-1]
-        else:
-            end = sections[index + 1][0].start()
-            assert notice[end - 2:end] == b"\n\n"
-            content = notice[match.end():end - 2]
+        following = index + 1 < len(sections)
+        end = sections[index + 1][0].start() if following else len(notice)
+        # The standard library HTML is appended without a footer newline.
+        separator = int(following) + int(owner != "Rust standard library")
+        assert notice[end - separator:end] == b"\n" * separator
+        content = notice[match.end():end - separator]
         assert content.strip()
         if owner in RUST:
             toolchain.append(describe_file(f"{owner}: {filename}", content))
