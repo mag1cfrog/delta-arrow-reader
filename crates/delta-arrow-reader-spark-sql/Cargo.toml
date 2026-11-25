@@ -176,6 +176,7 @@ datafusion-common = { path = "vendor/dependencies/datafusion-common" }
 datafusion-expr = { path = "vendor/dependencies/datafusion-expr" }
 datafusion-functions = { path = "vendor/dependencies/datafusion-functions" }
 datafusion-functions-aggregate = { path = "vendor/dependencies/datafusion-functions-aggregate" }
+datafusion-functions-nested = { path = "vendor/dependencies/datafusion-functions-nested" }
 datafusion-optimizer = { path = "vendor/dependencies/datafusion-optimizer" }
 datafusion-physical-expr = { path = "vendor/dependencies/datafusion-physical-expr" }
 datafusion-physical-expr-common = { path = "vendor/dependencies/datafusion-physical-expr-common" }
