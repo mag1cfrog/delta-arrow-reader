@@ -1,0 +1,99 @@
+{
+  "scope": "Linked native regexp replacement routines on the two sealed Apple Silicon executables",
+  "method": [
+    "Remove instruction addresses and resolve direct calls to linked symbols",
+    "Normalize page relocations and their low address operands",
+    "For differing direct loads, compare linked bytes at the load width",
+    "Resolve Mach-O stub branches to the same imported symbol",
+    "Keep all other operands, including stack slots and object field load/store offsets"
+  ],
+  "remaining_scope": "Page-off address materialization targets and the full query's state graph were not all independently resolved",
+  "routines": {
+    "__ZN117_$LT$datafusion_functions..regex..regexpreplace..RegexpReplaceFunc$u20$as$u20$datafusion_expr..udf..ScalarUDFImpl$GT$11return_type17h02ebe4fd4c46aed1E": {
+      "instructions": 161,
+      "address_operands": {
+        "page_relocations": 9,
+        "low_address_relocations": 9,
+        "matched_stub_symbols": 2
+      },
+      "normalized_sha256": "cb105bb1b2d5118bd81ed02d8e5252ccf094a8d3b74bc04a8274150457004d81"
+    },
+    "__ZN117_$LT$datafusion_functions..regex..regexpreplace..RegexpReplaceFunc$u20$as$u20$datafusion_expr..udf..ScalarUDFImpl$GT$16invoke_with_args17ha28f3f5c83ff0ef3E": {
+      "instructions": 3203,
+      "address_operands": {
+        "page_relocations": 126,
+        "low_address_relocations": 124,
+        "matched_constant_loads": 2,
+        "matched_stub_symbols": 7
+      },
+      "normalized_sha256": "e0e7ff94383b3262c0746154bfb46d5b3b654b8b087389fb629d45b8a4689d80"
+    },
+    "__ZN20datafusion_functions5regex13regexpreplace14OptimizedRegex3new17hf001d69d6048b2bcE": {
+      "instructions": 127,
+      "address_operands": {
+        "page_relocations": 1,
+        "low_address_relocations": 1,
+        "matched_stub_symbols": 1
+      },
+      "normalized_sha256": "cd4dc9eeabf7e2091046e70afd9e5c07ba997b805b0e5d4dc0ce72f5444d5511"
+    },
+    "__ZN20datafusion_functions5regex13regexpreplace14OptimizedRegex8replacen17hb497d404342c5bccE": {
+      "instructions": 290,
+      "address_operands": {
+        "page_relocations": 5,
+        "low_address_relocations": 5
+      },
+      "normalized_sha256": "8b57e499aa97280520caef6ae6f6b4b8bb00a75a77e52f33dad72d156b2cbd5f"
+    },
+    "__ZN20datafusion_functions5regex13regexpreplace17RegexpReplaceFunc3new17h449739433fffc6c0E": {
+      "instructions": 84,
+      "address_operands": {
+        "page_relocations": 2,
+        "matched_constant_loads": 2,
+        "matched_stub_symbols": 1
+      },
+      "normalized_sha256": "e5d0616b2685ed87152481be848c1cfc501db0213543d6ae6ce66b274fd74cd1"
+    },
+    "__ZN20datafusion_functions5regex13regexpreplace26regex_replace_posix_groups17h95be8f53c7bb4d49E": {
+      "instructions": 74,
+      "address_operands": {
+        "page_relocations": 6,
+        "low_address_relocations": 3,
+        "matched_stub_symbols": 1
+      },
+      "normalized_sha256": "36f18f10a4c21750cd820fe6212f1158fe384e9d82a59ea6002bbeb109c6b51d"
+    },
+    "__ZN4core3ptr79drop_in_place$LT$datafusion_functions..regex..regexpreplace..OptimizedRegex$GT$17h1b8ab956e4a4033dE": {
+      "instructions": 51,
+      "address_operands": {
+        "matched_stub_symbols": 2
+      },
+      "normalized_sha256": "4f636093462a3a92aabc3e431176db5857975fd3858d26dcfaaf6059e11486e5"
+    },
+    "__ZN5regex5regex6string5Regex3new17h641a55c6b8a1ae78E": {
+      "instructions": 58,
+      "address_operands": {
+        "matched_stub_symbols": 1
+      },
+      "normalized_sha256": "e6348b32bdde9abdc212a709bd721867f71f60209a5b292383398c6b9afecb83"
+    },
+    "__ZN5regex5regex6string5Regex8replacen17h21d3e8837b2f17bbE": {
+      "instructions": 633,
+      "address_operands": {
+        "page_relocations": 18,
+        "low_address_relocations": 10,
+        "matched_stub_symbols": 8
+      },
+      "normalized_sha256": "85d4a87525a68da4eb2f5c0e2f0c6216c5e649a81fefffb845d42fc99c28f374"
+    },
+    "__ZN5regex5regex6string5Regex8replacen17hb83a7f466fb10001E": {
+      "instructions": 1496,
+      "address_operands": {
+        "page_relocations": 34,
+        "matched_stub_symbols": 16,
+        "low_address_relocations": 26
+      },
+      "normalized_sha256": "dc746188413ac4ebca4900363472e49de011089a371a51228cfdc9a5b324f683"
+    }
+  }
+}
