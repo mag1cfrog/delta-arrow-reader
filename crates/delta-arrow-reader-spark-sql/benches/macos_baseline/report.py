@@ -212,6 +212,10 @@ Source `{checks['source']}`. [Committed protocol](../macos_baseline/protocol.md)
 The adapter passed {passed} of {len(checks['checks'])} end-to-end self-checks.
 The verified SF1 snapshot has {fixture['rows']:,} rows and {fixture['snapshot_columns']}
 columns, with {proof}. [Fixture proof](macos-baseline-1560-fixture.json).
+The host-specific generator executable and preparation manifest have different
+hashes. A full export through the stock CLI matched every decoded row. The
+export proof records the Parquet and executed Arrow types for all 81 columns.
+[Stock CLI export proof](macos-baseline-1560-stock-export.json).
 
 ## A/A floors
 

@@ -1,0 +1,335 @@
+{
+  "rows": 6001215,
+  "decoded_column_types": {
+    "l_orderkey": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "l_partkey": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "l_suppkey": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "l_linenumber": {
+      "parquet": "int32",
+      "stock_cli": "int32"
+    },
+    "l_quantity": {
+      "parquet": "decimal128(15, 2)",
+      "stock_cli": "decimal128(15, 2)"
+    },
+    "l_extendedprice": {
+      "parquet": "decimal128(15, 2)",
+      "stock_cli": "decimal128(15, 2)"
+    },
+    "l_discount": {
+      "parquet": "decimal128(15, 2)",
+      "stock_cli": "decimal128(15, 2)"
+    },
+    "l_tax": {
+      "parquet": "decimal128(15, 2)",
+      "stock_cli": "decimal128(15, 2)"
+    },
+    "l_returnflag": {
+      "parquet": "string",
+      "stock_cli": "string_view"
+    },
+    "l_linestatus": {
+      "parquet": "string",
+      "stock_cli": "string_view"
+    },
+    "l_shipdate": {
+      "parquet": "date32[day]",
+      "stock_cli": "date32[day]"
+    },
+    "l_commitdate": {
+      "parquet": "date32[day]",
+      "stock_cli": "date32[day]"
+    },
+    "l_receiptdate": {
+      "parquet": "date32[day]",
+      "stock_cli": "date32[day]"
+    },
+    "l_shipinstruct": {
+      "parquet": "string",
+      "stock_cli": "string_view"
+    },
+    "l_shipmode": {
+      "parquet": "string",
+      "stock_cli": "string_view"
+    },
+    "l_comment": {
+      "parquet": "string",
+      "stock_cli": "string_view"
+    },
+    "payload_00": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_01": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_02": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_03": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_04": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_05": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_06": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_07": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_08": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_09": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_10": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_11": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_12": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_13": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_14": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_15": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_16": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_17": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_18": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_19": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_20": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_21": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_22": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_23": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_24": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_25": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_26": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_27": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_28": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_29": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_30": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_31": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_32": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_33": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_34": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_35": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_36": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_37": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_38": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_39": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_40": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_41": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_42": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_43": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_44": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_45": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_46": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_47": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_48": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_49": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_50": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_51": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_52": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_53": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_54": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_55": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_56": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_57": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_58": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_59": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_60": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_61": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_62": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "payload_63": {
+      "parquet": "int64",
+      "stock_cli": "int64"
+    },
+    "file_bucket": {
+      "parquet": "int32",
+      "stock_cli": "int32"
+    }
+  },
+  "export_sha256": "21e8416d1968c339da251f0a8f92c58399e8852e92a055201e85cbc9147d517c",
+  "stock_cli": "fcd6162617766653026fe5a635afbb2c6614694bb0ec7a32c5fc700d752f3f43",
+  "stock_cli_source": "df593af2f698c64a11075eb3b5ddca8d9cdbf295",
+  "sql": "SELECT * FROM sf1 ORDER BY file_bucket, l_shipdate, l_shipmode, l_partkey, l_orderkey, l_linenumber",
+  "arrow_version": "24.0.0",
+  "fixture_proof_sha256": "5566c3ea99b3ada9817cd640d0deea31832906fccea21ac7bfaf09e68de62b87"
+}

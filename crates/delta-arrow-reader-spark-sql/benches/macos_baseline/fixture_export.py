@@ -76,12 +76,22 @@ def main():
     sql = args.output / "export.sql"
     sql.write_text("SELECT * FROM sf1 ORDER BY file_bucket, l_shipdate, l_shipmode, l_partkey, l_orderkey, l_linenumber\n")
     output = args.output / "sf1.arrow"
+    spill = args.output / "spill"
+    spill.mkdir()
     cmd = [dar, "--diagnostics=json", "query", "--tables-file", table, "--sql-file", sql, "--format", "arrow",
            "--output", output, "--memory-limit-bytes", str(4 * 1024**3),
+           "--spill-dir", spill, "--spill-limit-bytes", str(16 * 1024**3),
            "--max-output-bytes", str(32 * 1024**3), "--max-rows", str(proof["rows"]), "--deadline-ms", "1800000"]
     clean = {"PATH": os.defpath, "TZ": "UTC"}
     result = subprocess.run(cmd, env=clean, capture_output=True, timeout=1860)
-    assert result.returncode == 0 and output.is_file(), "stock CLI failed to export the complete fixture"
+    if result.returncode != 0 or not output.is_file():
+        reasons = []
+        for line in result.stderr.splitlines():
+            if line.startswith(b"{"):
+                record = json.loads(line)
+                if record.get("kind") == "diagnostic" and record.get("reason"):
+                    reasons.append(record["reason"])
+        raise RuntimeError(f"stock CLI did not finish the full export (exit {result.returncode}, {reasons})")
     with arrow.memory_map(str(output), "r") as source:
         reader = arrow.ipc.open_stream(source)
         export = compare(reader, parquet_batches(snapshot, files, arrow, parquet), arrow)
