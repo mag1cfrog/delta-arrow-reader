@@ -77,6 +77,19 @@ struct DependencyIdentity {
 #[derive(Deserialize)]
 struct ExtraNoticesConfig {
     files: Vec<ExtraNotice>,
+    #[serde(default)]
+    local: Vec<LocalNoticeGroup>,
+}
+
+#[derive(Deserialize)]
+struct LocalNoticeGroup {
+    project: String,
+    revision: String,
+    version: String,
+    directory: PathBuf,
+    packages: Vec<String>,
+    #[serde(default)]
+    shared_files: Vec<PathBuf>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -219,12 +232,13 @@ pub(crate) fn dependency_notices(
     })?;
     let config: ExtraNoticesConfig = read_toml(&release.join("extra-notices.toml"))?;
     let lock: DependencyLock = read_toml(&repository.join("Cargo.lock"))?;
-    let extra = collect_extra_notices(
+    let mut extra = collect_extra_notices(
         &report.crates,
         &lock.package,
         &config.files,
         download_notice,
     )?;
+    collect_local_notices(repository, &report.crates, &config.local, &mut extra)?;
     let sysroot = command_output(tool_command("rustc").args(["--print", "sysroot"]))?;
     let output = render_notices(
         &report,
@@ -453,6 +467,88 @@ fn is_license_filename(name: &OsStr) -> bool {
     )
 }
 
+fn collect_local_notices(
+    repository: &Path,
+    packages: &[ResolvedCrate],
+    groups: &[LocalNoticeGroup],
+    notices: &mut ExtraNotices,
+) -> Result<()> {
+    let local = packages
+        .iter()
+        .map(|item| &item.package)
+        .filter(|package| package.source.is_none() && !is_project_package(&package.name));
+    let repository = repository
+        .canonicalize()
+        .context(FileSnafu { path: repository })?;
+    for package in local {
+        let Some(group) = groups
+            .iter()
+            .find(|group| group.packages.contains(&package.name))
+        else {
+            continue;
+        };
+        ensure!(
+            package.version == group.version
+                && package.manifest_path
+                    == repository
+                        .join(&group.directory)
+                        .join(&package.name)
+                        .join("Cargo.toml")
+                && group
+                    .directory
+                    .components()
+                    .all(|part| matches!(part, Component::Normal(_)))
+                && group.revision.len() == 40
+                && group.revision.bytes().all(|byte| byte.is_ascii_hexdigit()),
+            InvalidInputSnafu {
+                message: format!(
+                    "update reviewed local notice for {} {}",
+                    package.name, package.version
+                )
+            }
+        );
+        let mut files = dependency_license_files(package)?;
+        for path in &group.shared_files {
+            ensure!(
+                path.components()
+                    .all(|part| matches!(part, Component::Normal(_))),
+                InvalidInputSnafu {
+                    message: format!("invalid shared license path: {}", path.display())
+                }
+            );
+            files.push(NoticeText {
+                name: path.to_string_lossy().into_owned(),
+                text: read_notice(&repository.join(path))?,
+            });
+        }
+        ensure!(
+            !files.is_empty(),
+            InvalidInputSnafu {
+                message: format!("no original license files for {}", package.name)
+            }
+        );
+        files.insert(
+            0,
+            NoticeText {
+                name: "Upstream source".to_owned(),
+                text: format!("{}\nCommit: {}\n", group.project, group.revision),
+            },
+        );
+        notices.insert(package.id.clone(), files);
+    }
+    Ok(())
+}
+
+fn is_project_package(name: &str) -> bool {
+    matches!(
+        name,
+        "delta-arrow-reader"
+            | "delta-arrow-reader-cli"
+            | "delta-arrow-reader-python"
+            | "delta-arrow-reader-spark-sql"
+    )
+}
+
 fn collect_extra_notices(
     packages: &[ResolvedCrate],
     locked: &[LockedDependency],
@@ -508,7 +604,7 @@ fn collect_extra_notices(
                 source.git.sha1 == parts[2]
             };
             ensure!(
-                package.version == entry.version && source_matches,
+                package.source.is_some() && package.version == entry.version && source_matches,
                 InvalidInputSnafu {
                     message: format!(
                         "update extra-notices.toml for {} {}",
@@ -615,19 +711,15 @@ fn render_notices(
     packages.sort_by(|a, b| (&a.name, &a.version).cmp(&(&b.name, &b.version)));
     // Keep original attributions and combined licenses that the scanner may omit.
     for package in packages {
-        if package.source.is_none() {
-            ensure!(
-                matches!(
-                    package.name.as_str(),
-                    "delta-arrow-reader" | "delta-arrow-reader-cli" | "delta-arrow-reader-python"
-                ),
-                InvalidInputSnafu {
-                    message: format!("unreviewed local dependency: {}", package.name)
-                }
-            );
+        let local = package.source.is_none();
+        if local && is_project_package(&package.name) {
             continue;
         }
-        let files = dependency_license_files(package)?;
+        let files = if local {
+            Vec::new()
+        } else {
+            dependency_license_files(package)?
+        };
         let files: Vec<_> = files
             .iter()
             .chain(extra.get(&package.id).into_iter().flatten())
@@ -635,7 +727,11 @@ fn render_notices(
         ensure!(
             !files.is_empty(),
             InvalidInputSnafu {
-                message: format!("no original license files for {}", package.name)
+                message: if local {
+                    format!("unreviewed local dependency: {}", package.name)
+                } else {
+                    format!("no original license files for {}", package.name)
+                }
             }
         );
         for file in files {
