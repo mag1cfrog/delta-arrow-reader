@@ -133,7 +133,7 @@ def measure(settings_path, staging, candidate, output):
     for arm, build_dir in builds.items():
         receipt = runner.read(build_dir / "receipt.json")
         assert receipt["source"] == pins[f"{arm}_source"]
-        assert receipt["protocol_commit"] == pins["build_protocol"]
+        assert receipt["protocol_commit"] == commit
         assert receipt["recipe_sha256"] == runner.digest(Path(run_pair.__file__))
         assert receipt["macos_recipe_sha256"] == runner.digest(Path(__file__))
         assert receipt["sha256"] == runner.digest(build_dir / "functions")
