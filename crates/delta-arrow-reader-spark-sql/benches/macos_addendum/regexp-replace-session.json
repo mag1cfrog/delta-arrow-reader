@@ -1,0 +1,101 @@
+{
+  "host": {
+    "model": "Mac14,6",
+    "chip": "Apple M2 Max",
+    "macos": "26.7.3",
+    "build": "25G342",
+    "power": "mains, High Power"
+  },
+  "commit": "0d737bdda9ea14863d773530df2ef63a454c0a45",
+  "pins": {
+    "staging_source": "b8b90b15ab12e19d0597f9fb715a18d601cfe9e8",
+    "candidate_source": "0ae21bfed8c125c6c4c6a7157b3fd6b5b3d2c227",
+    "statement_manifest_sha256": "f9116c6ce9385847ef368ca41125fc85d1e0f2fbbca976e7b461a86ebbbcf160",
+    "case_ids": [
+      "scalar.string.regexp_replace"
+    ],
+    "restricted_input_rows": 1000000,
+    "spark_plan_contains": {
+      "staging": {
+        "scalar": [
+          "regexp_replace("
+        ]
+      },
+      "candidate": {
+        "scalar": [
+          "regexp_replace("
+        ]
+      }
+    },
+    "overall_timeout_seconds": 3600,
+    "statement_manifest": "../functions_1516/manifest.json",
+    "timed_modes": [
+      "native",
+      "spark-off",
+      "spark-on"
+    ]
+  },
+  "receipts": {
+    "staging": {
+      "source": "b8b90b15ab12e19d0597f9fb715a18d601cfe9e8",
+      "variant": "plain",
+      "sha256": "8cd60f54745abff75b01351a847bc3cb0c97fbba50aa90cf8e4ee5e1b7145bb8",
+      "patch_sha256": "b1b600616788dbb5b986e708757ceb42cceecba02c95510c2f619159febcf83d",
+      "protocol_commit": "0d737bdda9ea14863d773530df2ef63a454c0a45",
+      "recipe_sha256": "90e81b1d54e6e34e39450de50828cdc37bba0be42f643f81f8d011524c436987",
+      "rustc": "rustc 1.96.0 (ac68faa20 2026-05-25)",
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 1,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": true
+      },
+      "macos_recipe_sha256": "a3ee0c12b9a397157b9007d8ddbbc8426f02971182d292c7b72fc7955b3bd303"
+    },
+    "candidate": {
+      "source": "0ae21bfed8c125c6c4c6a7157b3fd6b5b3d2c227",
+      "variant": "plain",
+      "sha256": "685f7f473cff9393863e8d187f17a7714cacd60f045a5e7ffe06eea00637b427",
+      "patch_sha256": "b1b600616788dbb5b986e708757ceb42cceecba02c95510c2f619159febcf83d",
+      "protocol_commit": "0d737bdda9ea14863d773530df2ef63a454c0a45",
+      "recipe_sha256": "90e81b1d54e6e34e39450de50828cdc37bba0be42f643f81f8d011524c436987",
+      "rustc": "rustc 1.96.0 (ac68faa20 2026-05-25)",
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 1,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": true
+      },
+      "macos_recipe_sha256": "a3ee0c12b9a397157b9007d8ddbbc8426f02971182d292c7b72fc7955b3bd303"
+    }
+  },
+  "schedule": {
+    "input_rows": 1000000,
+    "batch_rows": 8192,
+    "target_partitions": 1,
+    "runtime_workers": 1,
+    "pool_bytes": 2147483648,
+    "case_timeout_seconds": 120,
+    "preflight_process_timeout_seconds": 300,
+    "warmups_per_case": 1,
+    "samples_per_case": 3,
+    "replicas": 3,
+    "noise_orders": [
+      [
+        "a",
+        "b"
+      ],
+      [
+        "b",
+        "a"
+      ],
+      [
+        "a",
+        "b"
+      ]
+    ],
+    "process_timeout_seconds": 130
+  }
+}

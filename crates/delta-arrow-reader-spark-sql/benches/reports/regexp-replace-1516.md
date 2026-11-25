@@ -1,5 +1,9 @@
 # Plain literal REGEXP_REPLACE (#1516)
 
+The first session ran in an Ubuntu 26.10 aarch64 VM on Apple Silicon.
+The replay ran on a MacBook Pro Mac14,6 with an Apple M2 Max and
+macOS 26.7.3 (25G342).
+
 Spark now compiles a scalar pattern once per live batch when position
 is 1 and the scalar replacement needs no parsing. The row loop searches
 for full matches and appends the prepared replacement. It still
@@ -25,6 +29,45 @@ the 13.717 ns per row native A/A floor. The native paired changes were
 +18.544, -31.025 and +9.839 ns per row. The native control passed the
 frozen rule without a layout exception. The candidate Spark medians
 were below the native median on the restricted input.
+
+## Apple Silicon, native macOS
+
+The replay under the 2026-11-25 UTC addendum used the same two source
+commits and rebuilt both release executables on this Mac. It ran
+on mains power in High Power mode, with verified user-interactive QoS
+on the main thread and single Tokio worker. The protocol records the
+omitted Linux-only controls. [macOS protocol](../macos_addendum/regexp-replace-protocol.md)
+
+Times are median [min, max] ns per input row above projection. The
+paired change uses three process medians. Both A/A arms use this
+session's staging binary for each cell.
+
+| Path | Staging | Candidate | Paired change | Staging A/A floor | Judgment |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Spark ANSI off | 131.822 [129.688, 132.897] | 35.613 [35.447, 35.775] | -96.298 | 1.417 | Faster |
+| Spark ANSI on | 131.798 [131.289, 134.781] | 36.099 [35.588, 36.746] | -96.255 | 0.455 | Faster |
+| Native | 57.402 [57.134, 58.228] | 57.911 [57.682, 58.037] | +0.625 | 0.313 | Slower |
+
+Both Spark reductions exceeded their floors. The native paired changes
+were -0.195, +0.625 and +0.754 ns per row. The source change is in
+Spark's replacement adapter. A comparison of ten linked native
+replacement routines covered 6,177 instructions. The remaining
+operands, including stack and object field offsets, matched after
+normalizing linked addresses. Four relocated loads read matching
+bytes at their load widths, and 39 relocated stub calls resolved to
+matching imports. The comparison leaves some linked targets and the
+complete execution state unresolved, so the replay retains the native
+timing judgment. [Instruction comparison](../macos_addendum/regexp-native-layout.json)
+
+Both executables preserved all full-input rows and executed Arrow
+types within each configuration. On the restricted input, native
+and both Spark modes agreed on all 1,000,000 rows and executed
+types across the builds. The protocol and pins were committed before
+the session at `5619ec6e` and `0d737bdd`. All 36 processes completed
+from 02:20:58 to 02:22:09 UTC on November 25, 2026.
+[All 108 macOS samples](../macos_addendum/regexp-replace-samples.jsonl.gz)
+[macOS build receipts and schedule](../macos_addendum/regexp-replace-session.json)
+[macOS full-input checks](../macos_addendum/regexp-replace-full-results.json)
 
 ## Correctness and evidence
 
