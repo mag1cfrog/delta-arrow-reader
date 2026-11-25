@@ -71,7 +71,7 @@ failures and avoiding false missing-column reports.
 
 ## Dependency forks
 
-Fifteen dependencies have local source overrides in this crate's Cargo.toml:
+Sixteen dependencies have local source overrides in this crate's Cargo.toml.
 
 | Source | Version | Retained changes |
 | --- | --- | --- |
@@ -82,6 +82,7 @@ Fifteen dependencies have local source overrides in this crate's Cargo.toml:
 | DataFusion SQL | 54.1.0 | Unparse explicit NULL RANGE bounds as typed expressions and preserve native UNBOUNDED sentinels |
 | Arrow array, arithmetic and cast crates | 58.4.0 | Accepted cast, checked arithmetic, buffer handling and logical List child validation changes |
 | lexical-parse-float | 1.0.6 | Hexadecimal floating-point parsing used by Spark string casts |
+| xot | 0.31.2 | Standard iterators for level order, namespace lookup and serialization |
 
 The JSON inventory lists each package and its original crates.io archive checksum.
 Unmodified files came from those archives, rather than mutable Cargo source caches.
@@ -102,6 +103,13 @@ which lets the root resolver keep the existing Python member. Sail enables
 `num-bigint` and disables default features. The Python and new Serde features
 are off.
 [Upstream release](https://github.com/pydantic/jiter/releases/tag/v0.16.0)
+
+The xot fork starts at upstream commit `4a44505f23844d6101a8da7397e434562b1ac513`.
+Its three generator sites now use standard iterators, removing genawaiter and
+both of its macro packages. The upstream crate's traversal and serialization
+tests are retained. A linked root must select the xot override with the other
+fifteen patches.
+[Upstream xot source](https://github.com/faassen/xot/tree/4a44505f23844d6101a8da7397e434562b1ac513)
 
 The DataFusion optimizer backports [upstream PR #23704](https://github.com/apache/datafusion/pull/23704)
 from commit `c111f0a9ff9e56da416c162257a31d3355461f56`. It applies the existing

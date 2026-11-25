@@ -130,6 +130,50 @@
         "Cargo.lock",
         "Cargo.toml.orig"
       ]
+    },
+    {
+      "package": "xot",
+      "version": "0.31.2",
+      "registry_archive_sha256": "fd6d2012838b97104fc3e8d2e46c53f3d1ca98706941ff4aae37811adaa60f4e",
+      "source": "vendor/dependencies/xot",
+      "upstream_commit": "4a44505f23844d6101a8da7397e434562b1ac513",
+      "change_summary": "Replace the three generator sites with standard iterators, removing genawaiter.",
+      "modified_files": [
+        {
+          "path": "Cargo.toml",
+          "registry_source_sha256": "d4dea53798940257cded70bb4c472b62e66d58fb81fd6aab18feb918ad456196",
+          "vendored_source_sha256": "7b791c0d8bddd7995ec621875ba08fc94056a30a59da929765551bd031c99274",
+          "change": "Remove the genawaiter dependency."
+        },
+        {
+          "path": "src/levelorder.rs",
+          "registry_source_sha256": "684bba2aba81311f18d7d33c728139d221b02060dec407451048a9c4358ec031",
+          "vendored_source_sha256": "7a09e8d2966ea3487febed700892d8f35fad4b4784b2b8802601b93ef6137026",
+          "change": "Replace generator yields with a breadth-first iterator."
+        },
+        {
+          "path": "src/nameaccess.rs",
+          "registry_source_sha256": "11625ee5607591c8d1e8f940f847057da8b5386891458db31d4237c06ef147e0",
+          "vendored_source_sha256": "b62d23ef671e68e05dce0d97cc937f2c0caa4db9cb08197c4a03a82fdd06e1f4",
+          "change": "Preserve declaration order and masking in a namespace iterator."
+        },
+        {
+          "path": "src/nodemap/core.rs",
+          "registry_source_sha256": "a861407ae4292bed1ca9e34965c561487ccf98b65d6ad42e7eba727595e37f93",
+          "vendored_source_sha256": "21ac61dcc4d4ce1a4d5e6845e785dcaf6c06d820f2213b5aabf540f376329648",
+          "change": "Provide a consuming entry iterator for immutable temporary maps."
+        },
+        {
+          "path": "src/output/serializer.rs",
+          "registry_source_sha256": "ba7483841b2a47d5111ccb33c443f5b2f05d97dab133bfa506bdb0089276ac9d",
+          "vendored_source_sha256": "f6938fc51123b511078721111808b1ec732cfe1e46f797de0267bb1181c87b95",
+          "change": "Chain per-edge output iterators and preserve token order."
+        }
+      ],
+      "excluded_archive_members": [
+        "Cargo.lock",
+        "Cargo.toml.orig"
+      ]
     }
   ],
   "accepted_files": [
