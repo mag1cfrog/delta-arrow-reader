@@ -228,12 +228,15 @@ def sharded(args, settings, stream, *, repeat):
                             assert completed.get("status") == "ok"
                             expected = next((item for item in work[case]["results"] if item["configuration"] == config), None)
                             if expected:
-                                assert completed["types"] == expected["types"]
-                                assert all(sample["output_rows"] == expected["rows"] for sample in samples)
+                                assert completed["types"] == expected["types"], (
+                                    f"{config} executed types {completed['types']} differ from preflight {expected['types']}")
+                                assert all(sample["output_rows"] == expected["rows"] for sample in samples), (
+                                    f"{config} timed row count differs from the {expected['rows']} preflight rows")
                             ns = cells.metric(cell, records, count)
-                        except (AssertionError, KeyError, ValueError):
+                        except (AssertionError, KeyError, ValueError) as error:
                             row = next((r for r in result["records"] if r.get("id") == case and "status" in r), {})
-                            failure[case] = row.get("error") or result.get("error") or f"{result['status']}: incomplete or invalid timed samples"
+                            failure[case] = (row.get("error") or result.get("error") or str(error)
+                                             or f"{result['status']}: incomplete or invalid timed samples")
                         else:
                             metrics[case].setdefault(arm, []).append(ns)
             print(f"Function {'repeat' if repeat else 'sweep'} block {block + 1}/{blocks}", flush=True)
