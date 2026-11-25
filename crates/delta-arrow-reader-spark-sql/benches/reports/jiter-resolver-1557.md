@@ -8,8 +8,8 @@ Rust 1.96.0. This item is a build and correctness check.
 The first proof commit adds the Spark crate as a CLI dependency and selects the
 same fifteen dependency patches at the root. The Python member stays in the
 four-member workspace. `cargo metadata` then rejects the competing
-`links = "python"` packages: jiter 0.15.0 optionally depends on PyO3 0.28,
-and the Python member requires PyO3 0.29.
+`links = "python"` packages. The old jiter release optionally depends on
+PyO3 0.28, and the Python member requires PyO3 0.29.
 [First proof commit](https://github.com/mag1cfrog/delta-arrow-reader/commit/ae35bddffadf6caf6faef4c647ff3ae23e400581)
 and [exact stderr](https://github.com/mag1cfrog/delta-arrow-reader/blob/380e4ee3/crates/delta-arrow-reader-spark-sql/benches/reports/jiter-resolver-1557-error.txt)
 
@@ -41,6 +41,10 @@ cargo +1.96.0 test --locked -p delta-arrow-reader-python
 ```
 
 Use a Python 3.12 virtual environment with Maturin 1.14.1 and PyArrow 18.0.0.
+Use the repository's pinned cargo-about 0.9.2 for the editable wheel build.
+The first build stopped because this Mac had 0.9.3 on its path.
+[cargo-about 0.9.2 release](https://github.com/EmbarkStudios/cargo-about/releases/tag/0.9.2)
+
 On this Mac, the default temporary directory is reached through a symlink.
 The build-backend test compares the temporary archive's full path, so the
 second command resolves the directory before running the test.
@@ -49,8 +53,27 @@ second command resolves the directory before running the test.
 uv pip install maturin==1.14.1 pyarrow==18.0.0
 rustup run 1.96.0 python -I -c 'import pathlib, runpy, tempfile; tempfile.tempdir = str(pathlib.Path(tempfile.gettempdir()).resolve()); runpy.run_module("unittest", run_name="__main__")' discover -s crates/delta-arrow-reader-python/build_tests
 rustup run 1.96.0 uv pip install --no-build-isolation --no-deps --editable crates/delta-arrow-reader-python
-python -I -m unittest discover -s crates/delta-arrow-reader-python/tests
 ```
+
+The editable build with the pinned tool stops at `unreviewed local dependency:
+arrow-arith`. This is the linked workspace's license-review prerequisite in
+#1558. Build the Python extension with Maturin for the local runtime tests.
+The distribution test for generated third-party notices depends on the
+repository's packaging backend.
+
+```sh
+rustup run 1.96.0 maturin build --profile dev --locked --manifest-path crates/delta-arrow-reader-python/Cargo.toml --interpreter python --out wheel-output
+uv pip install --no-deps wheel-output/delta_arrow_reader_py-*.whl
+python -I -m unittest discover -s /tmp/dar-1557-proof/crates/delta-arrow-reader-python/tests -p 'test_[!p]*.py'
+```
+
+The Python extension built and the 72 API tests passed. For test discovery,
+use the `/tmp` alias to the proof checkout. The logging assertions check for
+the word `private` in captured records, which also include the test runner's
+source path.
+
+The linked root passed metadata resolution, the workspace check, the Python
+crate tests and the four Python build-backend tests.
 
 In the standalone Spark workspace, run the parser comparison, formatting,
 Clippy and the full tests. The runtime tests include the committed SQL captures
@@ -65,6 +88,11 @@ truncated inputs, deep nesting, and strings up to 1 MiB.
 rustfmt +1.96.0 --edition 2024 --check ci/jiter-upgrade-probe.rs
 rustup run 1.96.0 python3 ci/check-jiter-upgrade.py
 rustup run 1.96.0 python3 ci/check-rustfmt.py
+cargo +1.96.0 tree --locked -e features -i jiter
 cargo +1.96.0 test --locked --workspace --no-fail-fast
 cargo +1.96.0 clippy --locked -p delta-arrow-reader-spark-sql --all-targets --no-deps -- -D warnings
 ```
+
+The Spark workspace passed formatting, Clippy and the full test suite on this
+Mac. The accepted-runtime test checked 25,180 recorded SQL outcomes. This
+change leaves the committed inputs and expected outcomes intact.
