@@ -22,6 +22,11 @@ pub(crate) fn run() -> Option<ExitCode> {
     if action != "--proof-native-registry" && action != "--proof-native-sql" {
         return None;
     }
+    // Retain the Spark entry point in this scratch binary without calling it.
+    std::hint::black_box(
+        delta_arrow_reader_spark_sql::configure_spark_sql
+            as fn(SessionStateBuilder) -> SessionStateBuilder,
+    );
     std::panic::set_hook(Box::new(|info| {
         eprintln!(
             "{}",
