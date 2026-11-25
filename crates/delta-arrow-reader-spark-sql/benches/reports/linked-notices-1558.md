@@ -60,6 +60,10 @@ NOTICE is 4,820,402 bytes and its SHA-256 is
 `937a6dd243e3f1a20ee4116771b301fdae8ded7aec68d36be684677f48f7f7db`.
 [Full NOTICE](linked-notices-1558-dependency-notices.txt.gz) and [license receipt](linked-notices-1558-receipt.json.gz)
 
+With the linked proof's release configuration, the ordinary Python wheel
+backend built the editable package. All 73 Python tests passed, including
+the installed third-party notices check that was blocked during #1557.
+
 ## Open legal question
 
 `regexml` 0.2.2 declares `Apache-2.0 OR MPL-2.0`. The scanner selected
