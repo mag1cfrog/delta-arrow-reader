@@ -86,13 +86,16 @@ def main():
         reader = arrow.ipc.open_stream(source)
         export = compare(reader, parquet_batches(snapshot, files, arrow, parquet), arrow)
     assert export["rows"] == proof["rows"] and len(export["decoded_column_types"]) == proof["snapshot_columns"]
-    proof["stock_cli_export"] = {**export, "export_sha256": digest(output), "stock_cli": bound["binary_sha256"],
-                                  "stock_cli_source": bound["source"], "sql": sql.read_text().strip(),
-                                  "arrow_version": arrow.__version__}
+    stock_proof = {**export, "export_sha256": digest(output), "stock_cli": bound["binary_sha256"],
+                   "stock_cli_source": bound["source"], "sql": sql.read_text().strip(),
+                   "arrow_version": arrow.__version__, "fixture_proof_sha256": digest(path)}
+    (args.output / "stock-cli-proof.json").write_text(json.dumps(stock_proof, indent=2) + "\n")
     # The CLI comparison independently confirms local decoding. The Linux file hashes
     # are still needed to establish that the same Parquet values generated on that host.
-    proof["content_matches"] = all(f["match"] for f in files)
-    path.write_text(json.dumps(proof, indent=2) + "\n")
+    if not proof["snapshot_matches"]:
+        proof["stock_cli_export"] = stock_proof
+        proof["content_matches"] = all(f["match"] for f in files)
+        path.write_text(json.dumps(proof, indent=2) + "\n")
     print(f"Complete stock CLI export matched {export['rows']} rows and {len(export['decoded_column_types'])} types")
 
 

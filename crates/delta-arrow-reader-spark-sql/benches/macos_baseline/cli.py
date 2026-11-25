@@ -32,7 +32,7 @@ def build(source, scratch, target, destination):
     assert not scratch.exists() and not destination.exists() and not destination.is_relative_to(REPO)
     source = git(REPO, "rev-parse", source)
     destination.mkdir(parents=True)
-    subprocess.run(["git", "worktree", "add", "--detach", str(scratch), source], cwd=REPO, check=True,
+    subprocess.run(["git", "worktree", "add", "--quiet", "--detach", str(scratch), source], cwd=REPO, check=True,
                    stdout=subprocess.DEVNULL)
     originals = {}
     try:
@@ -42,7 +42,7 @@ def build(source, scratch, target, destination):
             path.write_text(content)
         output = destination / "dar"
         clean = {"PATH": os.environ["PATH"], "HOME": str(Path.home()), "TZ": "UTC"}
-        command = ["cargo", "+1.96.0", "build", "--release", "--locked", "-j", "3", "--bin", "dar",
+        command = ["cargo", "+1.96.0", "build", "--release", "--locked", "-j", "3", "-p", "delta-arrow-reader-cli", "--bin", "dar",
                    "--target-dir", str(target), "--message-format=json"]
         with subprocess.Popen(command, cwd=scratch, env=clean, stdout=subprocess.PIPE, text=True) as cargo:
             executable = None
