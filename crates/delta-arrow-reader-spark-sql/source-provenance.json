@@ -174,6 +174,26 @@
         "Cargo.lock",
         "Cargo.toml.orig"
       ]
+    },
+    {
+      "package": "datafusion-functions-nested",
+      "version": "54.1.0",
+      "registry_archive_sha256": "75f0bdfeef16d96417b9632ef855645376b242e9006a126dfd0bedfc54a93f5f",
+      "source": "vendor/dependencies/datafusion-functions-nested",
+      "upstream_commit": "0d1f2ebe2cc97c91b736bc0a160b5b73cf40437a",
+      "change_summary": "Match native MAP_ENTRIES physical entry fields to its declared output and use checked Arrow constructors.",
+      "modified_files": [
+        {
+          "path": "src/map_entries.rs",
+          "registry_source_sha256": "7d03540abfdce0966d99bbfab268d64a5fc8d7a72238ae45848c1cb185cdb297",
+          "vendored_source_sha256": "eb4d7bc013539dc6ecc7ff5aed8859452a7d1bd19c08060a8b11034ec9a6c690",
+          "change": "Reuse the original child arrays under the declared result fields, preserving list offsets and NULLs."
+        }
+      ],
+      "excluded_archive_members": [
+        "Cargo.lock",
+        "Cargo.toml.orig"
+      ]
     }
   ],
   "accepted_files": [
