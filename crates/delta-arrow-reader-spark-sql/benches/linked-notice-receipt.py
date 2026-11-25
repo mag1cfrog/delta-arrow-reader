@@ -114,7 +114,7 @@ def main():
         assert str(Path.home()).encode() not in text
         assert b"/private/tmp/dar-" not in text
     with args.output.open("xb") as destination:
-        with gzip.GzipFile(fileobj=destination, filename="", mtime=0) as compressed:
+        with gzip.GzipFile(fileobj=destination, filename="", mode="wb", mtime=0) as compressed:
             compressed.write(rendered)
     print(f"Verified receipt for {len(data['packages'])} packages")
 
