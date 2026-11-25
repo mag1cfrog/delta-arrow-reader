@@ -34,6 +34,11 @@ and its macro member's manifest and three source files match the published
 archives at the shared commit. All nine downloaded supplements matched
 their checksums. [Published-source evidence from #1381](footprint-1381-preparation.json)
 
+The stock CLI NOTICE matches byte for byte. Its SHA-256 before and after
+the renderer change is
+`e5f3665695974d2f69a94ee15059b66d0d63cbc22208748c6a16281fb50b4111`.
+The ten notice unit tests and both notice integration tests passed.
+
 ## Open legal question
 
 `regexml` 0.2.2 declares `Apache-2.0 OR MPL-2.0`. The scanner selected
