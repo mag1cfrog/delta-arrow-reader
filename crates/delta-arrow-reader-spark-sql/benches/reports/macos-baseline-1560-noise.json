@@ -1,0 +1,247 @@
+{
+  "first": {
+    "function-near-20": {
+      "status": "ok",
+      "before": 60.089,
+      "after": 50.382624,
+      "delta": -9.954082999999997,
+      "floor": 19.472292000000003,
+      "decision": "within floor",
+      "first_three_blocks": {
+        "before": 50.652625,
+        "after": 51.181917,
+        "delta": -2.800958999999999,
+        "floor": 9.097521,
+        "decision": "within floor"
+      },
+      "floor_fraction": 0.35253020268806773
+    },
+    "function-near-100": {
+      "status": "ok",
+      "before": 49.812334,
+      "after": 53.952042,
+      "delta": -9.434501000000004,
+      "floor": 21.735229,
+      "decision": "within floor",
+      "first_three_blocks": {
+        "before": 47.907583,
+        "after": 49.623626,
+        "delta": 13.363667,
+        "floor": 11.491854,
+        "decision": "slower"
+      },
+      "floor_fraction": 0.4189343171109129
+    },
+    "function-near-700": {
+      "status": "ok",
+      "before": 2184.918292,
+      "after": 1998.096125,
+      "delta": -71.85699999999997,
+      "floor": 340.113521,
+      "decision": "within floor",
+      "first_three_blocks": {
+        "before": 1868.226793,
+        "after": 1831.790834,
+        "delta": 58.495250999999826,
+        "floor": 91.19860399999993,
+        "decision": "within floor"
+      },
+      "floor_fraction": 0.1626164708482763
+    },
+    "wide-400-planning": {
+      "status": "ok",
+      "before": 34563250,
+      "after": 32756833,
+      "delta": -1806417,
+      "floor": 9588833.5,
+      "decision": "within floor",
+      "first_three_blocks": {
+        "before": 34563250,
+        "after": 32756833,
+        "delta": -1806417,
+        "floor": 9320729.5,
+        "decision": "within floor"
+      },
+      "floor_fraction": 0.28487289595290605
+    },
+    "interval-day-time": {
+      "status": "ok",
+      "before": 149070667,
+      "after": 146412625,
+      "delta": 4013083,
+      "floor": 37825916.5,
+      "decision": "within floor",
+      "first_three_blocks": {
+        "before": 148348333,
+        "after": 136223333,
+        "delta": -9649333,
+        "floor": 12125000,
+        "decision": "within floor"
+      },
+      "floor_fraction": 0.2560274473996316
+    },
+    "sf1-substring": {
+      "status": "ok",
+      "before": 522236750,
+      "after": 534027709,
+      "delta": 7705833,
+      "floor": 100675583.5,
+      "decision": "within floor",
+      "first_three_blocks": {
+        "before": 490721417,
+        "after": 464066958,
+        "delta": -32348292,
+        "floor": 28849020.5,
+        "decision": "faster"
+      },
+      "floor_fraction": 0.19062571431270697
+    },
+    "nullif-columns": {
+      "status": "ok",
+      "before": 1072125,
+      "after": 1170667,
+      "delta": 272000,
+      "floor": 527062.5,
+      "decision": "within floor",
+      "first_three_blocks": {
+        "before": 1232875,
+        "after": 1170667,
+        "delta": -64375,
+        "floor": 174375.5,
+        "decision": "within floor"
+      },
+      "floor_fraction": 0.470005689337219
+    }
+  },
+  "rerun": {
+    "function-near-20": {
+      "status": "ok",
+      "before": 15.379125,
+      "after": 15.440708,
+      "delta": 0.021626000000001255,
+      "floor": 26.785624999999996,
+      "decision": "within floor",
+      "first_three_blocks": {
+        "before": 62.792583,
+        "after": 52.403958,
+        "delta": 4.731666000000004,
+        "floor": 11.528562499999996,
+        "decision": "within floor"
+      },
+      "floor_fraction": 1.738207017539647
+    },
+    "function-near-100": {
+      "status": "ok",
+      "before": 12.839792,
+      "after": 12.8,
+      "delta": -0.03341700000000003,
+      "floor": 29.391479500000003,
+      "decision": "within floor",
+      "first_three_blocks": {
+        "before": 52.51175,
+        "after": 61.455791,
+        "delta": -4.9560399999999944,
+        "floor": 12.692979500000003,
+        "decision": "within floor"
+      },
+      "floor_fraction": 2.2926457047701483
+    },
+    "function-near-700": {
+      "status": "ok",
+      "before": 433.081084,
+      "after": 436.27425,
+      "delta": 2.7081680000000006,
+      "floor": 904.9100205,
+      "decision": "within floor",
+      "first_three_blocks": {
+        "before": 2076.305334,
+        "after": 2157.220751,
+        "delta": 0.40020899999990434,
+        "floor": 199.01974999999993,
+        "decision": "within floor"
+      },
+      "floor_fraction": 2.081795521599687
+    },
+    "wide-400-planning": {
+      "status": "ok",
+      "before": 11254500,
+      "after": 11263000,
+      "delta": 11208,
+      "floor": 22407000.5,
+      "decision": "within floor",
+      "first_three_blocks": {
+        "before": 51575875,
+        "after": 37491875,
+        "delta": -4104459,
+        "floor": 14084000,
+        "decision": "within floor"
+      },
+      "floor_fraction": 1.9901854557566336
+    },
+    "interval-day-time": {
+      "status": "ok",
+      "before": 37988416,
+      "after": 37882708,
+      "delta": -77792,
+      "floor": 79539416.5,
+      "decision": "within floor",
+      "first_three_blocks": {
+        "before": 143731292,
+        "after": 167814000,
+        "delta": 24082708,
+        "floor": 25206437.5,
+        "decision": "within floor"
+      },
+      "floor_fraction": 2.096697987497852
+    },
+    "sf1-substring": {
+      "status": "ok",
+      "before": 137543584,
+      "after": 137816291,
+      "delta": 272707,
+      "floor": 280055583.5,
+      "decision": "within floor",
+      "first_three_blocks": {
+        "before": 467815834,
+        "after": 541981917,
+        "delta": -27741417,
+        "floor": 117938062.5,
+        "decision": "within floor"
+      },
+      "floor_fraction": 2.0341059749536856
+    },
+    "nullif-columns": {
+      "status": "ok",
+      "before": 243083,
+      "after": 238625,
+      "delta": -3416,
+      "floor": 737833.0,
+      "decision": "within floor",
+      "first_three_blocks": {
+        "before": 1387125,
+        "after": 1464709,
+        "delta": -66208,
+        "floor": 342541.5,
+        "decision": "within floor"
+      },
+      "floor_fraction": 3.063403555681035
+    }
+  },
+  "samples": {
+    "functions": 9,
+    "execution": 3,
+    "planning": 3,
+    "planning_attribution": 9,
+    "parsers": 9,
+    "casts-date": 3,
+    "strings": 9,
+    "nullif_620": 9,
+    "nullif_620_recheck": 3,
+    "functions_1406": 3,
+    "regression_windows_1512": 3,
+    "pending_range_1099": 7,
+    "pending_range_1099_isolated": 7,
+    "footprint": 1
+  },
+  "blocks": 9
+}
