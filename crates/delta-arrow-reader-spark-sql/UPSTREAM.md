@@ -3138,3 +3138,13 @@ The search retains empty matches after nonempty matches and preserves
 the source's Arrow string type. The empty pattern, the exact nonword
 boundary pattern and other argument shapes use the original kernel.
 Native DataFusion SQL keeps its own function and registration.
+
+### Time zone conversion at Chrono's range limits (#1513)
+
+Sail retains Chrono's calendar conversion for representable dates and uses
+offset arithmetic on microseconds when projecting a local date would panic.
+The Spark time zone functions also recover the rows that previously panicked
+when Arrow subtracted an offset or could not tag a recovered instant. Arrow
+still casts the other rows, including historical range failures. The changes
+apply to Spark's time zone functions and its DATE-and-TIME timestamp
+constructors. [Inventory and references](benches/reports/time-zone-range-1513-attribution.md).
