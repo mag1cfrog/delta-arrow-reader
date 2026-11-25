@@ -41,3 +41,4 @@ datafusion-physical-optimizer = { path = "crates/delta-arrow-reader-spark-sql/ve
 datafusion-physical-plan = { path = "crates/delta-arrow-reader-spark-sql/vendor/dependencies/datafusion-physical-plan" }
 datafusion-sql = { path = "crates/delta-arrow-reader-spark-sql/vendor/dependencies/datafusion-sql" }
 lexical-parse-float = { path = "crates/delta-arrow-reader-spark-sql/vendor/dependencies/lexical-parse-float" }
+xot = { path = "crates/delta-arrow-reader-spark-sql/vendor/dependencies/xot" }
