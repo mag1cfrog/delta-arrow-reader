@@ -1,0 +1,14 @@
+---
+source: src/output/pretty.rs
+expression: "<doc><a><b/></a><a><b/><b/></a></doc>"
+---
+<doc>
+  <a>
+    <b/>
+  </a>
+  <a>
+    <b/>
+    <b/>
+  </a>
+</doc>
+

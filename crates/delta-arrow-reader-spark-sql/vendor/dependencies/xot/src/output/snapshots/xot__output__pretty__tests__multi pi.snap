@@ -1,0 +1,11 @@
+---
+source: src/output/pretty.rs
+expression: "<doc><a><?pi?><?pi?></a></doc>"
+---
+<doc>
+  <a>
+    <?pi?>
+    <?pi?>
+  </a>
+</doc>
+
