@@ -1561,6 +1561,13 @@ fn current_localtimestamp_microseconds(input: ScalarFunctionInput) -> PlanResult
     Ok(expr_fn::to_local_time(vec![expr]))
 }
 
+fn literal_time_zone(expr: &Expr) -> Option<&str> {
+    match expr {
+        Expr::Literal(value, _) => value.try_as_str().flatten(),
+        _ => None,
+    }
+}
+
 fn convert_tz(
     from_tz: Expr,
     to_tz: Expr,
@@ -1570,18 +1577,14 @@ fn convert_tz(
 ) -> PlanResult<Expr> {
     let func = ConvertTz::new(classic);
     if with_null_short_circuit {
-        let literal_zone_pair = [&from_tz, &to_tz].into_iter().all(|zone| {
-            matches!(zone, Expr::Literal(value, _) if value.try_as_str().flatten().is_some())
-        });
+        let func = ConvertTzLazy::new(func.with_null_short_circuit())
+            .with_literal_zone_pair(literal_time_zone(&from_tz), literal_time_zone(&to_tz));
         let arguments = [from_tz, to_tz, ts]
             .into_iter()
             .map(|argument| lambda_with_fresh_parameter(argument, "_convert_tz"))
             .collect::<PlanResult<Vec<_>>>()?;
         Ok(Expr::HigherOrderFunction(expr::HigherOrderFunction::new(
-            Arc::new(HigherOrderUDF::new_from_impl(
-                ConvertTzLazy::new(func.with_null_short_circuit())
-                    .with_literal_zone_pair(literal_zone_pair),
-            )),
+            Arc::new(HigherOrderUDF::new_from_impl(func)),
             arguments,
         )))
     } else {

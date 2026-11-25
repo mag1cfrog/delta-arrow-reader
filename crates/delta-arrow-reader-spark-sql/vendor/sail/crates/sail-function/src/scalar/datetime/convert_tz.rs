@@ -5,7 +5,7 @@ use chrono::{DateTime, FixedOffset, MappedLocalTime, NaiveDateTime, Offset, Time
 use chrono_tz::{GapInfo, Tz};
 use datafusion::arrow::array::timezone::Tz as ArrowTz;
 use datafusion::arrow::array::{
-    Array, ArrayRef, AsArray, BooleanArray, Int64Array, UInt64Array, new_null_array,
+    Array, ArrayRef, AsArray, BooleanArray, Int64Array, NullArray, UInt64Array, new_null_array,
 };
 use datafusion::arrow::compute::kernels::{cast, numeric, take, zip};
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef, TimeUnit};
@@ -76,6 +76,8 @@ pub struct ConvertTzLazy {
     signature: HigherOrderSignature,
     convert_tz: ConvertTz,
     literal_zone_pair: bool,
+    /// Identical valid zero-offset literals permit evaluating only the timestamp.
+    same_zero_offset: bool,
 }
 
 impl ConvertTzLazy {
@@ -84,11 +86,18 @@ impl ConvertTzLazy {
             signature: HigherOrderSignature::variadic_any(Volatility::Immutable),
             convert_tz,
             literal_zone_pair: false,
+            same_zero_offset: false,
         }
     }
 
-    pub fn with_literal_zone_pair(mut self, literal_zone_pair: bool) -> Self {
-        self.literal_zone_pair = literal_zone_pair;
+    pub fn with_literal_zone_pair(mut self, from: Option<&str>, to: Option<&str>) -> Self {
+        let zones = from.zip(to);
+        self.literal_zone_pair = zones.is_some();
+        self.same_zero_offset = zones.is_some_and(|(from, to)| {
+            from == to
+                && ResolvedTimeZone::parse(from).and_then(ResolvedTimeZone::fixed_offset_seconds)
+                    == Some(0)
+        });
         self
     }
 }
@@ -142,6 +151,18 @@ impl HigherOrderUDFImpl for ConvertTzLazy {
 
     fn invoke_with_args(&self, args: HigherOrderFunctionArgs) -> Result<ColumnarValue> {
         check_lazy_convert_tz_args(&args.args)?;
+        if self.same_zero_offset && is_microsecond_ntz(args.return_type()) {
+            if args.number_rows == 0 {
+                return Ok(ColumnarValue::Array(new_null_array(args.return_type(), 0)));
+            }
+            let ValueOrLambda::Lambda(timestamp) = &args.args[2] else {
+                return exec_err!("convert_timezone expected a timestamp lambda");
+            };
+            let dummy = || Ok(Arc::new(NullArray::new(args.number_rows)) as ArrayRef);
+            let value = timestamp.evaluate(&[&dummy], |captures| Ok(captures.to_vec()))?;
+            return Ok(ColumnarValue::Array(value.into_array(args.number_rows)?));
+        }
+
         let lambdas = args
             .args
             .iter()
@@ -372,6 +393,10 @@ fn fixed_zone_prefix(name: &str) -> Option<(&str, &str)> {
     ["UTC", "GMT", "UT"]
         .into_iter()
         .find_map(|prefix| name.strip_prefix(prefix).map(|offset| (prefix, offset)))
+}
+
+fn is_microsecond_ntz(data_type: &DataType) -> bool {
+    matches!(data_type, DataType::Timestamp(TimeUnit::Microsecond, None))
 }
 
 /// Resolve a configured Spark zone to an Arrow-compatible operational label.

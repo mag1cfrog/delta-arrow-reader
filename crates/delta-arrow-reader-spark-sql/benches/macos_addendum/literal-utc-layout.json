@@ -1,0 +1,278 @@
+{
+  "scope": "FROM_UTC_TIMESTAMP with literal UTC, ANSI off, on the two sealed Apple Silicon executables",
+  "binaries": {
+    "staging": {
+      "sha256": "7f1f3f0dee2bcde08ec92f1711bb5096c070871b9a3b50cc2ec160d928eb5eaa",
+      "source": "3f875835519e78fab2fc63aece9aecb14506ed4f"
+    },
+    "candidate": {
+      "sha256": "d16a270d2d4a984c16ebb5bd966232d163c118bdb8a109237b649f16c218ea1d",
+      "source": "8ba0b8c55d993eb9b89f1946e8b0a198f000b1e6"
+    }
+  },
+  "untimed_plan": [
+    "ProjectionExec: expr=[#36@0 as id, #37@1 as value]",
+    "  ProjectionExec: expr=[id@0 as #36, convert_tz(UTC, UTC, CAST(ts@1 AS Timestamp(\u00b5s))) as #37]",
+    "    DataSourceExec: partitions=1, partition_sizes=[123]"
+  ],
+  "disassembler": "Apple LLVM version 21.0.0",
+  "selection": [
+    "ConvertTz::invoke_with_args includes the inline convert_tz_inner batch path",
+    "Out-of-line Sail conversion helpers and closures, including singleton and recovery paths",
+    "Alloc slice::repeat instantiation used for scalar-adapter hints matched despite symbol hash changes",
+    "CastExpr::evaluate and the Arrow cast entry, dispatcher and timestamp time-zone adjustment for each unit"
+  ],
+  "method": [
+    "Remove instruction addresses and resolve direct calls to linked symbols",
+    "Normalize page relocations and their low address operands identified by the same live page register",
+    "Compare separately emitted copies of the same linked closure symbol",
+    "For differing direct loads, compare linked bytes at the load width",
+    "Resolve Mach-O stub branches to the same imported symbol",
+    "Keep all other operands, including stack slots and object field load/store offsets"
+  ],
+  "remaining_scope": "Rule 5 covers the normalized routines above. Independent resolution of each linked address and the full query state graph is outside this comparison.",
+  "matched_monomorphizations": {
+    "__ZN5alloc5slice29_$LT$impl$u20$$u5b$T$u5d$$GT$6repeat17hfe25b5601e54f09cE": "__ZN5alloc5slice29_$LT$impl$u20$$u5b$T$u5d$$GT$6repeat17h3842e9daed16b2d9E"
+  },
+  "routines": {
+    "__ZN10arrow_cast4cast17cast_with_options17hdc6ac2fc77898b54E": {
+      "instructions": 7193,
+      "linked_symbol_copies": 1,
+      "address_operands": {
+        "page_relocations": 124,
+        "low_address_relocations": 123,
+        "matched_constant_loads": 1,
+        "matched_stub_symbols": 1
+      },
+      "normalized_sha256": "546cc44ac84bd57242ff9cc79da6ea7c81829df80edd6fb17db4b05d9b00697c"
+    },
+    "__ZN10arrow_cast4cast28adjust_timestamp_to_timezone17h409cf6444278f8d4E": {
+      "instructions": 68,
+      "linked_symbol_copies": 1,
+      "address_operands": {
+        "matched_stub_symbols": 1
+      },
+      "normalized_sha256": "2133f280577bb5dfbef5c7ba75ba391b1d1d8ce73efd84f9170eb3714e751947"
+    },
+    "__ZN10arrow_cast4cast28adjust_timestamp_to_timezone17h50a0317b99f12eaaE": {
+      "instructions": 68,
+      "linked_symbol_copies": 1,
+      "address_operands": {
+        "matched_stub_symbols": 1
+      },
+      "normalized_sha256": "f82d11a47d3d71cfc0eade475c4128d8e538640c05f62dcaf17d95a45d3b1292"
+    },
+    "__ZN10arrow_cast4cast28adjust_timestamp_to_timezone17h6c2a0994ee9c6891E": {
+      "instructions": 68,
+      "linked_symbol_copies": 1,
+      "address_operands": {
+        "matched_stub_symbols": 1
+      },
+      "normalized_sha256": "86cdfe1b789a00de56d8679b299a16e9ab1fe920e08937e9400c2a490b382fd7"
+    },
+    "__ZN10arrow_cast4cast28adjust_timestamp_to_timezone17hbe3e922b5be63033E": {
+      "instructions": 68,
+      "linked_symbol_copies": 1,
+      "address_operands": {
+        "matched_stub_symbols": 1
+      },
+      "normalized_sha256": "caa317921bcbcc62b8f37f394446943e9b3103fd84cfa172bc054263d6d4b980"
+    },
+    "__ZN10arrow_cast4cast4cast17hfc6182e100d85230E": {
+      "instructions": 19,
+      "linked_symbol_copies": 1,
+      "address_operands": {},
+      "normalized_sha256": "fbd1b795cd05d45b1e484deed0361fcea3a387d81f19cdec8eb4935df660c965"
+    },
+    "__ZN110_$LT$sail_function..scalar..datetime..convert_tz..ConvertTz$u20$as$u20$datafusion_expr..udf..ScalarUDFImpl$GT$16invoke_with_args17h7df7f7ad9359c4fbE": {
+      "instructions": 1820,
+      "linked_symbol_copies": 1,
+      "address_operands": {
+        "page_relocations": 25,
+        "low_address_relocations": 25,
+        "matched_monomorphization_relocation": 1,
+        "matched_stub_symbols": 1
+      },
+      "normalized_sha256": "3c21ec100eb6597efe47d1cc0fbb5ae38c44f7e03266a478a5f96f5c64608572"
+    },
+    "__ZN134_$LT$datafusion_physical_expr..expressions..cast..CastExpr$u20$as$u20$datafusion_physical_expr_common..physical_expr..PhysicalExpr$GT$8evaluate17h51ecd8313593bbddE": {
+      "instructions": 73,
+      "linked_symbol_copies": 1,
+      "address_operands": {
+        "matched_stub_symbols": 1
+      },
+      "normalized_sha256": "cec5091adfb43a38039517d9cf29421ba63312ce918d6523c0802c7b22dd57b0"
+    },
+    "__ZN13sail_function6scalar8datetime10convert_tz16ResolvedTimeZone13project_local17hec2cec279220d488E": {
+      "instructions": 107,
+      "linked_symbol_copies": 1,
+      "address_operands": {},
+      "normalized_sha256": "a1ee01d0fe8f412bb0d59afd0f5394d7fa458be007df37b82abfcee78575aea1"
+    },
+    "__ZN13sail_function6scalar8datetime10convert_tz16ResolvedTimeZone19check_boundary_zone17h041ca717d7400706E": {
+      "instructions": 74,
+      "linked_symbol_copies": 1,
+      "address_operands": {
+        "page_relocations": 3,
+        "low_address_relocations": 3,
+        "matched_stub_symbols": 1
+      },
+      "normalized_sha256": "849b13a7a8e300bf142b8479b02f6dbe84f20271ca1e73ab4b5ffac1b639efcc"
+    },
+    "__ZN13sail_function6scalar8datetime10convert_tz16ResolvedTimeZone22resolve_local_datetime17hdc89e0a7e2c07414E": {
+      "instructions": 122,
+      "linked_symbol_copies": 1,
+      "address_operands": {},
+      "normalized_sha256": "efefe7f3d9b3ac7ea7970631631cd94083be76e8270054097094a1de745a45ea"
+    },
+    "__ZN13sail_function6scalar8datetime10convert_tz16ResolvedTimeZone5parse17h8e3fb352bca277d3E": {
+      "instructions": 103,
+      "linked_symbol_copies": 1,
+      "address_operands": {
+        "page_relocations": 1,
+        "low_address_relocations": 1
+      },
+      "normalized_sha256": "943305675a17fdf7c6ee42342886316c2f2e77bb0843d0d635033103f0f84029"
+    },
+    "__ZN13sail_function6scalar8datetime10convert_tz16convert_tz_inner28_$u7b$$u7b$closure$u7d$$u7d$17h0d1c42b1d3743a49E": {
+      "instructions": 80,
+      "linked_symbol_copies": 1,
+      "address_operands": {
+        "page_relocations": 2,
+        "matched_constant_loads": 2
+      },
+      "normalized_sha256": "9159ed86514b3fbbeed1356481ce07f27f59c0c4574110295f5292e3d927b0f5"
+    },
+    "__ZN13sail_function6scalar8datetime10convert_tz16convert_tz_inner28_$u7b$$u7b$closure$u7d$$u7d$17h2be90874f1af6163E": {
+      "instructions": 164,
+      "linked_symbol_copies": 2,
+      "address_operands": {
+        "page_relocations": 8,
+        "low_address_relocations": 8,
+        "matched_stub_symbols": 2
+      },
+      "normalized_sha256": "85071ef7d78991760274a14ea51dc3d43aa7ed46aae03aaf2eed6cad723baba6"
+    },
+    "__ZN13sail_function6scalar8datetime10convert_tz16convert_tz_inner28_$u7b$$u7b$closure$u7d$$u7d$17h642858352385e286E": {
+      "instructions": 73,
+      "linked_symbol_copies": 1,
+      "address_operands": {
+        "page_relocations": 2,
+        "low_address_relocations": 2
+      },
+      "normalized_sha256": "230897c738ca8f25feb31dea4a1bb817ea82f7aab7ae0ccc8b4f543cc5a61977"
+    },
+    "__ZN13sail_function6scalar8datetime10convert_tz16convert_tz_inner28_$u7b$$u7b$closure$u7d$$u7d$17hb9bf8dceb689d678E": {
+      "instructions": 26,
+      "linked_symbol_copies": 1,
+      "address_operands": {
+        "page_relocations": 2,
+        "low_address_relocations": 1,
+        "matched_constant_loads": 1
+      },
+      "normalized_sha256": "8a2303148b0ee0b0f0ac372d0cf3be7003b33abb560d0a71ee821179b6cb4db0"
+    },
+    "__ZN13sail_function6scalar8datetime10convert_tz16legacy_time_zone17h1762a9e58e0c810aE": {
+      "instructions": 300,
+      "linked_symbol_copies": 1,
+      "address_operands": {
+        "page_relocations": 28,
+        "low_address_relocations": 28
+      },
+      "normalized_sha256": "86bf1be78f227363a1d61857de91a263da8b5c1819604a966ac0e55a6dcd54d2"
+    },
+    "__ZN13sail_function6scalar8datetime10convert_tz18convert_tz_classic17h485bc2740999d5ffE": {
+      "instructions": 201,
+      "linked_symbol_copies": 1,
+      "address_operands": {
+        "page_relocations": 1,
+        "matched_constant_loads": 1
+      },
+      "normalized_sha256": "4b08d8c58643e03937b25e030a978b4a0297f63e07ca0c9009334755d3263b7f"
+    },
+    "__ZN13sail_function6scalar8datetime10convert_tz21cast_wall_clock_input17hee90914f1acb6e84E": {
+      "instructions": 348,
+      "linked_symbol_copies": 1,
+      "address_operands": {
+        "page_relocations": 2,
+        "low_address_relocations": 2,
+        "matched_stub_symbols": 1
+      },
+      "normalized_sha256": "676863d5dd84cc35bbcc62e4456478af094395599135dc61e1efc868377b675b"
+    },
+    "__ZN13sail_function6scalar8datetime10convert_tz21strict_timestamp_cast17h57878f0d2f447daaE": {
+      "instructions": 47,
+      "linked_symbol_copies": 1,
+      "address_operands": {},
+      "normalized_sha256": "296a44d679b74db8b9b253e91b14e167155cc181f5b47deb9b6dc4f9b7163404"
+    },
+    "__ZN13sail_function6scalar8datetime10convert_tz22convert_tz_non_classic17h2a66324f931835b9E": {
+      "instructions": 199,
+      "linked_symbol_copies": 1,
+      "address_operands": {
+        "page_relocations": 3,
+        "low_address_relocations": 2,
+        "matched_constant_loads": 1
+      },
+      "normalized_sha256": "65870e55c9a7af87c0e00c5c4c49da49cab9e201b62cd999262f8d335be3aa7e"
+    },
+    "__ZN13sail_function6scalar8datetime10convert_tz23convert_singleton_zones17h7f6af63c02c9e6dbE": {
+      "instructions": 229,
+      "linked_symbol_copies": 1,
+      "address_operands": {
+        "matched_stub_symbols": 1
+      },
+      "normalized_sha256": "3191be2f206f964aa564e70c5c1217880c494fc0651cdd0dfda47e3385024abe"
+    },
+    "__ZN13sail_function6scalar8datetime10convert_tz25microseconds_to_timestamp17h873dd1059c61877bE": {
+      "instructions": 241,
+      "linked_symbol_copies": 1,
+      "address_operands": {
+        "page_relocations": 8,
+        "low_address_relocations": 8,
+        "matched_stub_symbols": 1
+      },
+      "normalized_sha256": "28a669526737d84be748375f49c7f2020875433ed207d084bfc77f705c6da3f6"
+    },
+    "__ZN13sail_function6scalar8datetime10convert_tz25timestamp_to_microseconds17h9bc28719260b23d9E": {
+      "instructions": 359,
+      "linked_symbol_copies": 1,
+      "address_operands": {
+        "page_relocations": 13,
+        "low_address_relocations": 13,
+        "matched_stub_symbols": 1
+      },
+      "normalized_sha256": "c857cd91cdf7c181a08c80002a94ea03099763a9103f053690f0ce8f5985b0f8"
+    },
+    "__ZN13sail_function6scalar8datetime10convert_tz25timestamp_to_microseconds28_$u7b$$u7b$closure$u7d$$u7d$17ha88bd03f0b97bf1bE": {
+      "instructions": 26,
+      "linked_symbol_copies": 1,
+      "address_operands": {
+        "page_relocations": 2,
+        "low_address_relocations": 1,
+        "matched_constant_loads": 1
+      },
+      "normalized_sha256": "d2170630d23e629a5059dec480a1b129e2462df261978423945ed577a981b967"
+    },
+    "__ZN13sail_function6scalar8datetime10convert_tz28cast_with_recovered_instants17h09968fec059d6ee6E": {
+      "instructions": 566,
+      "linked_symbol_copies": 1,
+      "address_operands": {
+        "page_relocations": 2,
+        "low_address_relocations": 2,
+        "matched_stub_symbols": 1
+      },
+      "normalized_sha256": "8e59b556c0f28147b1dcf41db29d2987e3ff68b180622d40e7d7510a1115bba8"
+    },
+    "__ZN5alloc5slice29_$LT$impl$u20$$u5b$T$u5d$$GT$6repeat17hfe25b5601e54f09cE": {
+      "instructions": 101,
+      "linked_symbol_copies": 1,
+      "address_operands": {
+        "matched_stub_symbols": 4,
+        "page_relocations": 2,
+        "low_address_relocations": 2
+      },
+      "normalized_sha256": "6968bd8171618bb119ae008ec113e6382f3b94b80fab36049d33d731efe55dac"
+    }
+  }
+}
