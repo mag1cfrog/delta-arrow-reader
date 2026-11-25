@@ -34,6 +34,7 @@ datafusion-common = { path = "crates/delta-arrow-reader-spark-sql/vendor/depende
 datafusion-expr = { path = "crates/delta-arrow-reader-spark-sql/vendor/dependencies/datafusion-expr" }
 datafusion-functions = { path = "crates/delta-arrow-reader-spark-sql/vendor/dependencies/datafusion-functions" }
 datafusion-functions-aggregate = { path = "crates/delta-arrow-reader-spark-sql/vendor/dependencies/datafusion-functions-aggregate" }
+datafusion-functions-nested = { path = "crates/delta-arrow-reader-spark-sql/vendor/dependencies/datafusion-functions-nested" }
 datafusion-optimizer = { path = "crates/delta-arrow-reader-spark-sql/vendor/dependencies/datafusion-optimizer" }
 datafusion-physical-expr = { path = "crates/delta-arrow-reader-spark-sql/vendor/dependencies/datafusion-physical-expr" }
 datafusion-physical-expr-common = { path = "crates/delta-arrow-reader-spark-sql/vendor/dependencies/datafusion-physical-expr-common" }
