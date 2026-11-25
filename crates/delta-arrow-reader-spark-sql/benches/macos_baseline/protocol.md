@@ -102,8 +102,10 @@ cast and the projection, and its sample for the floor is their difference.
    cases. Keep all open differences eligible for the separate Linux x86
    confirmation.
 
-`preflight.py` writes the non-function eligibility receipt and the NULLIF
-exclusion file. `run.py preflight-noise` and `run.py preflight-functions` write
+`preflight.py --noise-only` checks the statement and NULLIF cells for the noise
+study. Without that option it writes the complete statement eligibility
+receipt and NULLIF exclusion file. `run.py preflight-noise` and
+`run.py preflight-functions` write
 the independent function eligibility receipts. Pass the receipt for the same
 release executable to each timing command. `run.py noise`, `sweep`, `repeat`,
 and `cells` each use a fresh evidence directory and write their compressed raw

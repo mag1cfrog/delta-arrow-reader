@@ -116,7 +116,7 @@ def trial(cases, args, settings, counts, stream, data, phase, *, aa_only=False):
     return safe_record(summary, bounds)
 
 
-def noise(args, settings, stream):
+def noise(args, settings, stream, receipt):
     assert not args.candidate
     data = resources(args)
     cases = settings["noise_cells"]
@@ -125,16 +125,21 @@ def noise(args, settings, stream):
     assert eligibility["binary_sha256"] == digest(args.binaries / "functions")
     assert eligibility["manifest_sha256"] == digest(cells.FUNCTIONS)
     functions = {row["id"]: row for row in eligibility["results"]}
+    statements = cells.read(args.cell_eligibility)
+    assert statements["scope"] == "noise"
+    assert statements["binaries"] == receipt["binaries"]
+    assert statements["fixture_proof_sha256"] == digest(args.fixture / "fixture-proof.json")
     exclusions = {}
     for case in cases:
         if case["suite"] == "functions":
             row = functions[case["id"]]
             if row["status"] not in ("eligible", "same_verified"):
                 exclusions[case["label"]] = row["reason"]
-        elif args.cell_eligibility:
-            excluded = cells.read(args.cell_eligibility)["excluded"]
+        else:
+            excluded = statements["excluded"]
             family = "planning" if case["suite"] == "planning_attribution" else case["suite"]
             cell_id = f"{family}/{case['id']}/{case['configuration']}"
+            assert cell_id in statements["labels"]
             if cell_id in excluded:
                 exclusions[case["label"]] = excluded[cell_id]
     selected = [case for case in cases if case["label"] not in exclusions]
@@ -281,13 +286,14 @@ def main():
                           "receipts": uses,
                           "candidate": source_receipt(args.candidate) if args.candidate else None})
             if args.operation == "noise":
-                result = noise(args, settings, stream)
+                result = noise(args, settings, stream, receipt)
             elif args.operation in ("sweep", "repeat"):
                 result = sharded(args, settings, stream, repeat=args.operation == "repeat")
             else:
                 counts = cells.read(args.frozen_noise)["samples"]
                 proof = cells.read(args.cell_eligibility)
                 assert proof["binaries"] == receipt["binaries"] and proof["manifest_sha256"] == digest(args.manifest)
+                assert proof["scope"] == "baseline" and proof["labels"] == [item["label"] for item in spec]
                 assert proof["fixture_proof_sha256"] == digest(args.fixture / "fixture-proof.json")
                 excluded = proof["excluded"]
                 selected = [item for item in spec if item["label"] not in excluded]

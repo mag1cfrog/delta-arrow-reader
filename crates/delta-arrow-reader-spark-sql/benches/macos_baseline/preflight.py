@@ -82,17 +82,23 @@ def planning(binaries, output, specs):
     return failures
 
 
-def nullif(binaries, output):
+def nullif(binaries, output, selected):
     output.mkdir()
     binary = binaries / "nullif_620"
     deadline = time.monotonic() + 2400
     failures = {}
     with legacy_runner("nullif_620/run.py") as runner:
         runner["check_space"].__globals__["EVIDENCE"] = output
-        _, records = runner["call"](binary, ["preflight", "nullif", output / "ipc"], output / "full", deadline)
+        arguments = ["preflight", "nullif", output / "ipc"]
         expected = runner["cells"]("nullif")
+        assert len(expected) == 72
+        if selected:
+            assert selected in expected
+            expected = [selected]
+            arguments += [1, "-", selected]
+        _, records = runner["call"](binary, arguments, output / "full", deadline)
         rows = {(r["id"], r["configuration"]): r for r in records if r["kind"] == "preflight"}
-        assert len(expected) == 72 and len(rows) == 72 * 3
+        assert len(rows) == len(expected) * 3
         sets = []
         for case in expected:
             native = rows[case, "native"]
@@ -135,6 +141,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("binaries", "fixture", "output"):
         parser.add_argument(name, type=lambda path: Path(path).resolve())
+    parser.add_argument("--noise-only", action="store_true")
     args = parser.parse_args()
     args.output.mkdir()
     assert not args.output.is_relative_to(REPO)
@@ -143,11 +150,18 @@ def main():
     assert fixture["snapshot_matches"] or fixture.get("content_matches")
     settings = HERE / "baseline-cells.json"
     specs = cells.read(settings)["cells"]
+    selected_nullif = None
+    if args.noise_only:
+        required = {(r["suite"], r["id"]) for r in cells.read(HERE / "protocol.json")["noise_cells"]
+                    if r["suite"] != "functions"}
+        selected_nullif, = (name for suite, name in required if suite == "nullif_620")
+        required.add(("parsers", "interval_day_time_input"))
+        specs = [r for r in specs if (r["suite"], r["id"]) in required]
     failed = {}
     for name, run in (
         ("planning", lambda: planning(args.binaries, args.output / "planning", specs)),
         ("sf1", lambda: execution(args.binaries, args.output / "sf1", args.fixture / "delta-snapshot", specs)),
-        ("nullif", lambda: nullif(args.binaries, args.output / "nullif")),
+        ("nullif", lambda: nullif(args.binaries, args.output / "nullif", selected_nullif)),
         ("time conversion variants", lambda: function_variants(args.binaries, args.output / "function-variants", specs)),
     ):
         failed.update(run())
@@ -155,6 +169,8 @@ def main():
     excluded = {row["label"]: failed[row["suite"], row["id"]]
                 for row in specs if (row["suite"], row["id"]) in failed}
     summary = {"source": build["source"], "binaries": build["binaries"], "manifest_sha256": digest(settings),
+               "scope": "noise" if args.noise_only else "baseline",
+               "labels": [r["label"] for r in specs],
                "fixture_proof_sha256": digest(args.fixture / "fixture-proof.json"), "excluded": excluded}
     cells.write(args.output / "cell-eligibility.json", summary)
 
