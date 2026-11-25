@@ -89,6 +89,14 @@ Unmodified files came from those archives, rather than mutable Cargo source cach
 Modified dependency files carry a DAR notice. The source is checked in directly;
 the historical patch files are evidence, not build-time dependencies.
 
+The release NOTICE records the upstream release commits for the local forks.
+
+| Source | Upstream commit |
+| --- | --- |
+| Arrow Rust 58.4.0 | `0ff81c1215cc026a1de93ce3d2078df1ecba6f09` |
+| DataFusion 54.1.0 | `0d1f2ebe2cc97c91b736bc0a160b5b73cf40437a` |
+| rust-lexical, lexical-parse-float 1.0.6 | `ddfc0f6bfcc0085ff982f567f41f24a5541a14ea` |
+
 Sail's `jiter` dependency uses the upstream 0.16.0 release for the linked
 workspace proof in #1557. Its optional Python dependency accepts PyO3 0.29,
 which lets the root resolver keep the existing Python member. Sail enables
