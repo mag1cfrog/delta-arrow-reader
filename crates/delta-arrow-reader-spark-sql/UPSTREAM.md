@@ -88,6 +88,13 @@ Unmodified files came from those archives, rather than mutable Cargo source cach
 Modified dependency files carry a DAR notice. The source is checked in directly;
 the historical patch files are evidence, not build-time dependencies.
 
+Sail's `jiter` dependency uses the upstream 0.16.0 release for the linked
+workspace proof in #1557. Its optional Python dependency accepts PyO3 0.29,
+which lets the root resolver keep the existing Python member. Sail enables
+`num-bigint` and disables default features. The Python and new Serde features
+are off.
+[Upstream release](https://github.com/pydantic/jiter/releases/tag/v0.16.0)
+
 The DataFusion optimizer backports [upstream PR #23704](https://github.com/apache/datafusion/pull/23704)
 from commit `c111f0a9ff9e56da416c162257a31d3355461f56`. It applies the existing
 regex coercion to `SimilarTo`, which Sail uses for REGEXP/RLIKE operators and
