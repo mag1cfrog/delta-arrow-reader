@@ -71,6 +71,7 @@ use crate::function::common::{
     dictionary_string_values, expr_contains_spark_cast_to_variant, unresolved_routine_error,
 };
 use crate::function::common::{literal_value_without_evaluation, without_metadata_annotations};
+use crate::function::is_spark_compatible_arrow_fixed_offset;
 use crate::function::temporal_coercion::{
     cast_local_timestamp_expr_to_ltz, ltz_expr_to_local_timestamp,
 };
@@ -1687,17 +1688,18 @@ fn convert_timezone(input: ScalarFunctionInput) -> PlanResult<Expr> {
 /// `from_utc_timestamp` and `to_utc_timestamp` functions.
 /// These functions expect timestamps with time zone, but consider the value
 /// relative to the UTC time zone.
-fn utc_ntz_timestamp_and_unit(
+fn utc_shift_input(
     ts: Expr,
     schema: &DFSchemaRef,
     session_tz: &Arc<str>,
     ansi_mode: bool,
-) -> PlanResult<(Expr, TimeUnit)> {
+) -> PlanResult<(Expr, TimeUnit, Option<Arc<str>>)> {
     let (ts, unit) = match ts.get_type(schema)? {
         DataType::Timestamp(unit, Some(_)) => (ts, unit),
-        // Spark casts TIMESTAMP_NTZ and DATE to TIMESTAMP in the session zone. A TIMESTAMP_NTZ
-        // skipped by a DST change moves forward and a repeated one takes its earlier instant; a
-        // DATE starts at the first instant of its day.
+        DataType::Timestamp(unit, None) if is_spark_compatible_arrow_fixed_offset(session_tz) => {
+            return Ok((ts, unit, Some(Arc::clone(session_tz))));
+        }
+        // A named-zone cast resolves skipped and repeated local times in Spark order.
         source @ DataType::Timestamp(unit, None) => (
             cast_local_timestamp_expr_to_ltz(ts, &source, session_tz),
             unit,
@@ -1722,62 +1724,83 @@ fn utc_ntz_timestamp_and_unit(
             )));
         }
     };
-    let ts = cast(ts, DataType::Timestamp(unit, None));
-    Ok((ts, unit))
+    Ok((cast(ts, DataType::Timestamp(unit, None)), unit, None))
+}
+
+enum UtcShift {
+    FromUtc,
+    ToUtc,
 }
 
 // TODO: Match Spark's foldability-aware zone eval for `from_utc_timestamp` and `to_utc_timestamp`:
 //  a foldable NULL skips the timestamp, a non-NULL foldable zone is validated eagerly,
 //  and a dynamic zone is skipped for a NULL timestamp.
-fn from_utc_timestamp(input: ScalarFunctionInput) -> PlanResult<Expr> {
-    let session_tz = input.function_context.plan_config.session_timezone.clone();
-    let (ts, to_tz) = input.arguments.two()?;
-    let (ts, unit) = utc_ntz_timestamp_and_unit(
+fn shift_utc_timestamp(input: ScalarFunctionInput, shift: UtcShift) -> PlanResult<Expr> {
+    let session_tz = &input.function_context.plan_config.session_timezone;
+    let (ts, zone) = input.arguments.two()?;
+    let (ts, unit, fixed_input_zone) = utc_shift_input(
         ts,
         input.function_context.schema,
-        &session_tz,
+        session_tz,
         input.function_context.plan_config.ansi_mode,
     )?;
-    let ts = convert_tz(lit("UTC"), to_tz, ts, false, false)?;
-    let ts = cast(ts, DataType::Timestamp(unit, Some(Arc::from("UTC"))));
-    Ok(cast(ts, DataType::Timestamp(unit, Some(session_tz))))
+    let (source, target) = match shift {
+        UtcShift::FromUtc => (lit("UTC"), zone),
+        UtcShift::ToUtc => (zone, lit("UTC")),
+    };
+    let mut conversion = ConvertTz::new(false).with_output_zone(Arc::from("UTC"));
+    if let Some(zone) = fixed_input_zone {
+        conversion = conversion.with_input_wall_clock_zone(zone);
+    }
+    let instant = ScalarUDF::from(conversion).call(vec![source, target, ts]);
+    Ok(cast(
+        instant,
+        DataType::Timestamp(unit, Some(Arc::clone(session_tz))),
+    ))
+}
+
+fn from_utc_timestamp(input: ScalarFunctionInput) -> PlanResult<Expr> {
+    shift_utc_timestamp(input, UtcShift::FromUtc)
 }
 
 fn to_utc_timestamp(input: ScalarFunctionInput) -> PlanResult<Expr> {
-    let session_tz = input.function_context.plan_config.session_timezone.clone();
-    let (ts, from_tz) = input.arguments.two()?;
-    let (ts, unit) = utc_ntz_timestamp_and_unit(
-        ts,
-        input.function_context.schema,
-        &session_tz,
-        input.function_context.plan_config.ansi_mode,
-    )?;
-    let ts = convert_tz(from_tz, lit("UTC"), ts, false, false)?;
-    let ts = cast(ts, DataType::Timestamp(unit, Some(Arc::from("UTC"))));
-    Ok(cast(ts, DataType::Timestamp(unit, Some(session_tz))))
+    shift_utc_timestamp(input, UtcShift::ToUtc)
 }
 
 fn make_timestamp_ltz(args: Vec<Expr>, session_tz: &Arc<str>, is_try: bool) -> PlanResult<Expr> {
-    let ntz_ts = if args.len() == 2 || args.len() == 6 {
-        ScalarUDF::from(SparkMakeTimestampNtz::new(is_try)).call(args)
-    } else if args.len() == 3 || args.len() == 7 {
-        let mut args = args;
-        let Some(from_tz) = args.pop() else {
-            unreachable!()
-        };
-        let ntz_ts = ScalarUDF::from(SparkMakeTimestampNtz::new(is_try)).call(args);
-        convert_tz(from_tz, lit(session_tz.to_string()), ntz_ts, true, false)?
-    } else {
-        return Err(PlanError::invalid(format!(
-            "{}make_timestamp_ltz requires 2, 3, 6 or 7 arguments, got {:?}",
+    let timestamp = SparkMakeTimestampNtz::new(is_try);
+    let output_type = DataType::Timestamp(TimeUnit::Microsecond, Some(Arc::clone(session_tz)));
+    match args.len() {
+        2 => {
+            let local = ScalarUDF::from(timestamp).call(args);
+            let conversion = ConvertTz::new(false)
+                .with_input_wall_clock_zone(Arc::clone(session_tz))
+                .with_output_zone(Arc::from("UTC"));
+            let instant = ScalarUDF::from(conversion).call(vec![lit("UTC"), lit("UTC"), local]);
+            Ok(cast(instant, output_type))
+        }
+        6 => Ok(cast(ScalarUDF::from(timestamp).call(args), output_type)),
+        7 => {
+            let mut args = args;
+            let from_tz = args.pop().expect("timestamp with an explicit time zone");
+            let local = ScalarUDF::from(timestamp).call(args);
+            Ok(cast(
+                convert_tz(from_tz, lit(session_tz.to_string()), local, true, false)?,
+                output_type,
+            ))
+        }
+        3 => {
+            let mut args = args;
+            let from_tz = args.pop().expect("timestamp with an explicit time zone");
+            let local = ScalarUDF::from(timestamp).call(args);
+            let conversion = ConvertTz::new(true).with_output_zone(Arc::clone(session_tz));
+            Ok(ScalarUDF::from(conversion).call(vec![from_tz, lit(session_tz.to_string()), local]))
+        }
+        _ => Err(PlanError::invalid(format!(
+            "{}make_timestamp_ltz requires 2, 3, 6 or 7 arguments, got {args:?}",
             if is_try { "try_" } else { "" },
-            args
-        )));
-    };
-    Ok(cast(
-        ntz_ts,
-        DataType::Timestamp(TimeUnit::Microsecond, Some(session_tz.clone())),
-    ))
+        ))),
+    }
 }
 
 fn make_timestamp_ntz(args: Vec<Expr>, is_try: bool) -> PlanResult<Expr> {
