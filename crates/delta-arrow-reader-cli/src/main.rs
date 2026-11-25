@@ -22,6 +22,7 @@ mod capabilities;
 mod cli;
 mod diagnostics;
 mod input;
+mod native_registry_proof;
 mod output;
 mod query;
 mod read;
@@ -36,6 +37,9 @@ use cli::{Cli, Command};
 use snafu::ResultExt;
 
 fn main() -> ExitCode {
+    if let Some(status) = native_registry_proof::run() {
+        return status;
+    }
     let diagnostic_format = diagnostics::DiagnosticFormat::from_cli_args();
     runtime::install_panic_hook(diagnostic_format);
     #[cfg(target_os = "linux")]

@@ -22,6 +22,7 @@ use crate::{
 
 pub(crate) use error::QueryError;
 pub(crate) use input::QueryInputArgs;
+pub(crate) use sql::native_session;
 pub(crate) use sql::{MAX_SQL_BYTES, ReadOnlySqlQuery, SQL_RECURSION_LIMIT};
 
 /// Executes a declared query within explicit result and runtime resource ceilings.

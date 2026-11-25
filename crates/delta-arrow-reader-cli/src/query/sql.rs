@@ -32,6 +32,10 @@ use crate::diagnostics::{Error, InputIoSnafu, QuerySnafu};
 pub(crate) const MAX_SQL_BYTES: u64 = 64 * 1024;
 pub(crate) const SQL_RECURSION_LIMIT: usize = 128;
 
+pub(crate) fn native_session(runtime: Arc<RuntimeEnv>) -> SessionContext {
+    SessionContext::new_with_config_rt(SessionConfig::new(), runtime)
+}
+
 /// Parsed and admitted SQL. The AST is kept private because it contains user literals.
 pub(crate) struct ReadOnlySqlQuery {
     statement: Statement,
@@ -99,7 +103,7 @@ impl ReadOnlySqlQuery {
         tables: impl IntoIterator<Item = (String, DeltaTable)>,
         runtime: Arc<RuntimeEnv>,
     ) -> Result<DataFrame, Error> {
-        let context = SessionContext::new_with_config_rt(SessionConfig::new(), runtime);
+        let context = native_session(runtime);
         for (alias, table) in tables {
             register_table(&context, alias, table, ScanOptions::default())
                 .context(crate::diagnostics::ReaderSnafu)?;
