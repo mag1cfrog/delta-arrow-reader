@@ -33,7 +33,10 @@ def adapt(source):
         body = text[start:end]
         body = replace(body, '#[cfg(target_os = "linux")]', '#[cfg(any(target_os = "linux", target_os = "macos"))]')
         body = replace(body, '#[cfg(not(target_os = "linux"))]', '#[cfg(not(any(target_os = "linux", target_os = "macos")))]')
-        if name == "peak_rss":
+        if name == "available_disk":
+            body = replace(body, "stats.f_bavail.saturating_mul(stats.f_frsize)",
+                           "u64::from(stats.f_bavail).saturating_mul(stats.f_frsize)")
+        else:
             body = replace(body, "Ok(u64::try_from(usage.ru_maxrss)? * 1024)",
                            'Ok(u64::try_from(usage.ru_maxrss)? * if cfg!(target_os = "macos") { 1 } else { 1024 })')
         text = text[:start] + body + text[end:]
@@ -103,6 +106,9 @@ def prove(actual, expected):
     keys = ("base_delta_log_sha256", "derived_delta_log_sha256", "source_manifest_sha256")
     for key in keys:
         checks[key] = {"macos": actual[key], "linux_reference": expected[key], "match": actual[key] == expected[key]}
+    for key in ("executable_sha256", "lockfile_sha256"):
+        mac, linux = (receipt["generator"][key] for receipt in (actual, expected))
+        checks[f"generator_{key}"] = {"macos": mac, "linux_reference": linux, "match": mac == linux}
     checks["files"] = []
     for mac, linux in zip(actual["files"], expected["files"], strict=True):
         assert (mac["path"], mac["file_bucket"], mac["rows"]) == (linux["path"], linux["file_bucket"], linux["rows"])
